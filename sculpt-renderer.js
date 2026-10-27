@@ -125,7 +125,11 @@ export class TerrainRenderer {
     this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
     const compile = async (label, code) => {
       const module = device.createShaderModule({label, code});
-      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+      const messages = (await module.getCompilationInfo()).messages;
+      // Warnings matter when porting a GLSL change; show them too.
+      for (const m of messages.filter(m => m.type !== 'error'))
+        console.warn(`nanolathe: ${label} ${m.type} ${m.lineNum}:${m.linePos} ${m.message}\n    ${code.split('\n')[m.lineNum - 1]?.trim() ?? ''}`);
+      const errors = messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error(`nanolathe: ${label} does not compile:\n` + errors.map(e =>
         `${e.lineNum}:${e.linePos} ${e.message}\n    ${code.split('\n')[e.lineNum - 1]?.trim() ?? ''}`).join('\n'));
       return module;
