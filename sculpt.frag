@@ -43,6 +43,7 @@ uniform vec4 uFringeSignal;
 uniform vec2 uFringeRange;
 uniform bool uTransitionBody;
 uniform float uCrackDark;
+uniform float uSandDust;
 uniform float uTransitionDetail;
 uniform float uRockStart;
 uniform float uRockFull;
@@ -502,12 +503,13 @@ void main() {
             vec3 fragment = texture(uRock, scatter / vec2(textureSize(uRock, 0))).rgb;
             fragment = mix(fragment, vec3(1.0), uSandLight * 0.45);
             vec3 sandMaterial = mix(weathered, fragment, uSandGrain);
-            // Thin sand breaks into grains between grass blades rather than
-            // fading as a veil: a per-pixel threshold against fine noise.
+            // Three stages, so sand thins into the ground over tens of
+            // pixels: fines tint what is there, then grains appear between
+            // grass blades (a per-pixel threshold against fine noise), then
+            // sand covers the ground.
+            material = mix(material, weathered, smoothstep(0.0, 0.6, sand) * uSandDust * 0.6);
             float speck = terrainNoise(p * 6.0 + vec2(17.0, 29.0)).b;
-            // A wide, grain-jittered ramp: thin sand thins into scattered
-            // grains over several pixels instead of a hard edge.
-            float cover = smoothstep(0.03, 0.5, sand + (speck - 0.5) * 0.3 * uSandEdge) * smoothstep(0.0, 0.06, sand);
+            float cover = smoothstep(0.35, 0.95, sand + (speck - 0.5) * 0.55 * uSandEdge);
             material = mix(material, sandMaterial, cover);
         }
     }

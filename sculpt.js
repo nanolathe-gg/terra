@@ -791,7 +791,7 @@ function queueWeather() {
     $('weather-state').textContent='Refining exposed slopes…';
     const profile=experiment.get('weather')==='broad'?'broad':undefined;
     weatherWorker.postMessage({job,height:weatherBase,protect:protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
-      sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
+      sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
   } catch (err) { failWeather(err.message); }
 }
 function failWeather(message) {
@@ -1227,7 +1227,7 @@ const KNOBS = [
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
   ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
-    ['wind','Wind toward (deg)',0,360,5,20],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
+    ['wind','Wind toward (deg)',0,360,5,20],['sandPatchy','Patchiness (flows and piles)',0,1,.05,.7],['sandTail','Fines carried beyond',0,1,.05,.6],['sandDust','Dusting tint',0,1,.05,.5],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
   ['Cracks', [['crackSeverity','Depth',0,1,.05,.6],['crackWidth','Width (px)',.5,3,.1,1],['crackSpacing','Spacing (px)',4,40,1,11],['crackLength','Length down the slope',1,4,.25,2.5],
     ['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Rills to plates',0,1,.05,.25],['crackReach','Reach onto gentle slopes',0,1,.05,.6],['crackDark','Floor darkness',0,1,.05,.75],
@@ -1291,7 +1291,7 @@ function setKnob(key, value) {
     return;
   }
   // Transport knobs change where sand is carried, so the worker re-runs.
-  if (['sand','sandReach','windStrength','wind'].includes(key)) { cancelWeather(); queueWeather(); }
+  if (['sand','sandReach','windStrength','wind','sandPatchy','sandTail'].includes(key)) { cancelWeather(); queueWeather(); }
 }
 async function boot() {
   try {

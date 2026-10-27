@@ -273,13 +273,17 @@ vec2 cracks(vec2 p, vec2 fall, float slope, float mask, float h) {
     return vec2(depth, core);
 }
 
-// Sand cover from the weathering worker's transport (wind and water);
-// broken up a little so thin sand does not read as a smooth wash.
-float sandCover(vec2 p, float h, float slope) {
+// Sandiness from the weathering worker's transport (wind and water): 0
+// none, small values a dusting, 1 deep sand. Thin sand lies in hollows
+// first while ribs and lumps of the relief poke through it; deep sand
+// covers both. Steep faces shed it.
+float sandCover(vec2 p, float slope, float relief) {
     if (uSand <= 0.0) return 0.0;
     float field = texture(uWeather, p / (uSize - 1.0)).a;
-    float breakup = valueNoise(p / 24.0 + 13.0) * 0.5 + 0.5;
-    return clamp(field * (0.75 + 0.5 * breakup) * (1.0 - smoothstep(0.7, 1.3, slope)), 0.0, 1.0);
+    if (field <= 0.0) return 0.0;
+    float lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
+    float thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
+    return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.7, 1.3, slope));
 }
 
 void main() {
@@ -339,24 +343,26 @@ void main() {
     // Nor lifts the bed above it: no specks of land in shallow water.
     else height = min(height, uSea - 0.5 - h);
     height += plain;
-    float sand = sandCover(p, h, slope) * (1.0 - route);
+    float sand = sandCover(p, slope, height) * (1.0 - route);
+    // Only sand deep enough to cover the ground buries relief and stones.
+    float buried = smoothstep(0.35, 0.9, sand);
     if (sand > 0.0 && uRipple > 0.0) {
         float a = radians(uWindAngle);
         vec2 wind = vec2(cos(a), sin(a));
         float wobble = valueNoise(p / 30.0 + 2.0) * 2.0;
-        height += sin(dot(p, wind) * 6.2831 / uRipple + wobble) * uRippleHeight * smoothstep(0.2, 0.7, sand);
+        height += sin(dot(p, wind) * 6.2831 / uRipple + wobble) * uRippleHeight * smoothstep(0.5, 0.95, sand);
     }
     // Sand buries relief beneath it.
-    height *= 1.0 - 0.8 * sand;
+    height *= 1.0 - 0.8 * buried;
     // Cracks, carved into the relief; sand fills them.
-    vec2 crackAt = cracks(p, fall, slope, crackMask * (1.0 - route), h) * (1.0 - sand);
+    vec2 crackAt = cracks(p, fall, slope, crackMask * (1.0 - route), h) * (1.0 - buried);
     height -= crackAt.x;
     float crack = crackAt.y;
     vec2 rock = boulders(p, slope, h);
     vec2 scree = debrisStones(p, vec2(0.0));
     if (scree.x > rock.x) rock = scree;
     height += rock.x;
-    rock.y *= 1.0 - sand;
+    rock.y *= 1.0 - buried;
     // Blue holds rock cover, or (negative) crack darkness.
     outFields = vec4(height, route, crack > 0.02 ? -crack : rock.y, sand);
 }
