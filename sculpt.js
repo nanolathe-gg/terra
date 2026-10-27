@@ -1327,6 +1327,9 @@ function buildKnobs() {
   toggle('detail', 'Fall-line surface (off: lab look)', 'fall', 'lab', params.get('detail') !== 'lab');
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
   toggle('ground', 'Procedural ground tiles (off: lab texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
+  // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
+  const missing = KNOBS.flatMap(([, list]) => list.map(k => k[0])).filter(k => !(k in (config.defaults || {})));
+  if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
   for (const [title, knobs] of KNOBS) {
     const box = group(title, title === 'Cracks');
     if (title === 'Cracks') {

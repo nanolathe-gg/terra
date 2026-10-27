@@ -18,6 +18,40 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
                'moon': 'Moon', 'zhon': 'Zhon'}
 
 
+# Every map-wide knob's default (the World panel). A world preset is these
+# plus its own overrides below, so each world has a value for every setting;
+# a knob missing here is reported in the page's console.
+KNOB_DEFAULTS = dict(
+    groundTiles=16, undulation=10, undulationScale=200, undulationCover=.45,
+    reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
+    reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13,
+    faceVariation=.8, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
+    boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
+    debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
+    sand=0, sandReach=.6, windStrength=.5, wind=20, sandPatchy=.7, sandTail=.6, sandDust=.5, sandGrass=.6,
+    sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
+    crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
+    crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
+    craterlets=3, craterEjecta=0, craterRays=0,
+    banding=0, bandSpacing=8, bandSoftness=.35, bandLight=.5, bandWater=0,
+    strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6,
+    beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    dither=2, landDither=.25,
+)
+# Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
+# deepDepth come from each world's measured water ramp).
+WORLD_KNOBS = {
+    'green': dict(banding=.5),
+    'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.4),
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.3),
+    'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+                 craterRays=.4, undulation=4, plainRelief=.6, banding=.3),
+    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulders=.55, boulderSize=14, boulderFoot=.8, boulderCluster=.7,
+                 boulderMoss=0, boulderRound=1, beachWidth=.6, banding=.3),
+}
+
+
 def biome_config(biome, assets):
     """Prepare one biome's materials in its own asset folder and return its
     page configuration, with texture URLs under /sculpt-assets/<biome>/."""
@@ -65,8 +99,7 @@ def biome_config(biome, assets):
         # Water colour by depth measured on the retail Green coast sections.
         config['material'].update(shallowDepth=24, deepDepth=60)
     if biome == 'red':
-        config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0',
-                                  crackNetwork='0.5', crackSeverity='0.7', crackReach='0.7')
+        config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0')
         config['material'].update(rockyCoasts=True, surfaceRelief=1.25, fractureDepth=1.25,
                                   slopeStart=.06, slopeFull=.30, slopeFloor=-4.0, slopeDry=5.0)
     elif biome == 'archipelago':
@@ -95,6 +128,10 @@ def biome_config(biome, assets):
         config['defaults'].update(example='islands', material='single', fractures='20', scree='0')
         config['material'].update(rockyCoasts=False, slopeStart=.08, slopeFull=.40,
                                   slopeFloor=6.0, slopeDry=9.0)
+    knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
+             'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
+    config['defaults'].update({k: str(v) for k, v in knobs.items()})
+    config['knobs'] = sorted(knobs)
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
     config['biomes'] = BIOME_NAMES
