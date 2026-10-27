@@ -222,9 +222,46 @@ function startStroke(kind,p,options={}) {
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),northFace:options.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),northFace:options.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0),fingers:options.fingers??(experiment.has('fingers')?Number(experiment.get('fingers')):0),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
+}
+// Finger coasts (Lava): an interlocking fringe of tapered land fingers and
+// lava inlets across the waterline. Measured on the retail Lava coast
+// sections: fine lobes 11-15 px wide and ~35 px long at ~30 px spacing,
+// sparse coarse fingers 18-27 px wide reaching 70-115 px, axes straight
+// but fanned ~30 degrees off the coast normal, tips about a third of the
+// base width. Ribs come from oriented cosine kernels at jittered world
+// points (as the relief bake's gullies), with phase running along the
+// coast, so each rib is a finger along the normal; a rib's crest reaches
+// farthest, so fingers taper. Returns the waterline shift in world px
+// (+: land reaches into the water).
+function fingerRibs(x,y,tx,ty,period,salt) {
+  const qx=x/period,qy=y/period,cx=Math.floor(qx),cy=Math.floor(qy),fx=qx-cx,fy=qy-cy;
+  let sum=0,weight=0;
+  for (let j=-2;j<=1;j++) for (let i=-2;i<=1;i++) {
+    const a=hash(cx-i,cy-j,salt)*.5+.5,b=hash(cx-i,cy-j,salt^0x5bd1)*.5+.5,c=hash(cx-i,cy-j,salt^0x2f6a);
+    const px=fx+i-a*.5,py=fy+j-b*.5,w=Math.exp(-(px*px+py*py)*2);
+    // Each finger leans its own way off the normal.
+    const lean=c*.5,dx=tx*Math.cos(lean)-ty*Math.sin(lean),dy=tx*Math.sin(lean)+ty*Math.cos(lean);
+    sum+=Math.cos((px*dx+py*dy)*6.283185+c*3.1)*w; weight+=w;
+  }
+  return sum/weight;
+}
+function fingerShift(s,i,wx,wy,nx,ny,amount) {
+  s.fingerField ??= new Float32Array(heights.length).fill(NaN);
+  let v=s.fingerField[i];
+  if (Number.isNaN(v)) {
+    const tx=-ny,ty=nx;
+    // Fine lobes come and go along the coast; coarse fingers and inlets are
+    // common enough to set the fringe; lumps vary each finger's width.
+    const fine=clamp(fingerRibs(wx,wy,tx,ty,30,s.seed^0x71f3)*1.7,-1,1)*smooth(-.2,.5,valueNoise(wx/90,wy/90,s.seed^0x2d3));
+    const reach=.55+.45*valueNoise(wx/140,wy/140,s.seed^0x6a1);
+    const coarse=clamp(fingerRibs(wx,wy,tx,ty,60,s.seed^0x1c29)*1.8,-1,1)*smooth(-.35,.25,valueNoise(wx/220,wy/220,s.seed^0x4e11))*reach;
+    const lumps=valueNoise(wx/14,wy/14,s.seed^0x5c1)*7+valueNoise(wx/5,wy/5,s.seed^0x3a7)*2.5;
+    v=s.fingerField[i]=fine*13+Math.max(0,coarse)*90+Math.min(0,coarse)*75+lumps;
+  }
+  return v*amount;
 }
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
@@ -313,7 +350,12 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     // The line anchors the channel; broad world-space fields move its banks
     // independently and vary its width. Repeated dabs do not add fresh noise.
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
-    const r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
+    let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
+    if (waterTool && s.fingers>0 && r>.25 && r<1.6) {
+      // Shift the waterline across the coast band (coast near r 0.67).
+      const len=Math.sqrt(dx*dx+dy*dy)||1,band=1-smooth(.45,.9,Math.abs(r-.67));
+      if (band>0) r+=band*fingerShift(s,i,wx,wy,dx/len,dy/len,s.fingers)/(radius*width*bankScale);
+    }
     // A continuous deep core follows the unwarped stroke. Automatic shelves
     // cannot close it; an explicit later shallow-water stroke can cross it.
     const core=naturalWater?1-smooth(.20,coreEdge,Math.sqrt((wx-p.x)**2+(wy-p.y)**2)/radius):0;
@@ -543,7 +585,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,cracks:s.cracks}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -632,7 +674,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  const r=radius*reach+12*spacing;
+  const r=radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110:0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
@@ -1257,7 +1299,7 @@ const KNOBS = [
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWater','Rings in water colour',0,1,.05,0]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6]]],
   ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3],['craterEjecta','Ejecta (new craters)',0,1,.05,0],['worms','Wormy relief on slopes',0,1,.05,0]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Water', [['fingers','Finger coasts (new water strokes)',0,1.5,.05,0],['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)

@@ -36,7 +36,7 @@ KNOB_DEFAULTS = dict(
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6,
-    beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    fingers=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -60,7 +60,7 @@ WORLD_KNOBS = {
     # sections, see sculpt_section_biome.py 'lava'). Its bank ridges are
     # irregular, not banded (section measurement), so no contour bands.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=.15, banding=0, northFace=.7, fingers=1),
+                 beachWidth=0, waterSoft=0, bankRock=.15, banding=0, northFace=.7, fingers=1, worms=.9),
 }
 
 

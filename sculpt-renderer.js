@@ -380,7 +380,10 @@ export class TerrainRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.fieldsTexture);
     gl.useProgram(this.program);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0.19, 0.28, 0.14, 1);
+    // Rows above the drawn surface (raised ground is drawn north) take the
+    // world's ground colour rather than a fixed green.
+    const clear = this.means.ground || [0.19, 0.28, 0.14];
+    gl.clearColor(clear[0], clear[1], clear[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (this.timer) {
       const disjoint = gl.getParameter(this.timer.GPU_DISJOINT_EXT);

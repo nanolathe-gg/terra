@@ -57,6 +57,9 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 49 | Moon: crater ejecta (per crater) and wormy regolith relief with dark troughs | craterEjecta, worms | Lunar sections lnr512x100-104 at 1x | Kept; closer, squiggles still coarser than retail |
 | 50 | Strata beds and a Painted Desert world (Red materials, server default colours, full colour by default: the TA palette has no warm tans) | strata, strataSpacing, strataWarp, strataContrast, strata colours | Renders with palette on and off | Kept |
 | 51 | **Blind round 7**: build fb909a54f (cracks v2, contour bands 0.8), seeds 15013/16631 | | A: AUC 0.57 (5/10 caught, 0 false); B: AUC 0.71 (5/10, 3 false) | Main tell from both: our contour lines read as nested topographic outlines, dark, smooth and continuous with no shading between them, packed on steep slopes (img09, img15, img19). Cracks v2 drew no tell; one 'rectangular hatch' rock note (img15). Fixed after the round: lines are tonal steps (light on sun-facing risers, dark on others), jagged at pixel scale, broken into short dashes, gated to slopes 0.07-0.75; Green line darkness 0.45 |
+| 52 | Wider north faces on new plateaus and raise/lower areas (face starts farther in where it looks north) and fill light on shaded faces | northFace, faceFill | Round 7 crops img07/img11 re-rendered: north-edge hairlines become narrow rocky bands | Kept |
+| 53 | Lava world (sculpt_section_biome.py 'lava'): exact-index ground tiles from 11,554 level blocks, ridged bank slope texture, striated dark cliff rock, flat molten-sea ramp (colour does not vary with depth) | | Ground and lava colours match the sections to 0.1; cliffs match | Kept |
+| 54 | Finger coasts: waterline shifted by oriented ribs (kernels at world points, phase along the coast) at two scales, measured on the Lava coast sections (fine lobes 11-15 px wide, ~35 px long; coarse fingers 18-27 px wide, 70-115 px; fanned ~30 degrees; tips ~1/3 base); lumpy widths; kept per stroke | fingers (Lava 1), worms on Lava banks | Lava coast section l-pcs-06 at 1x: interlocking fringe of fingers and inlets | Kept; retail fingers stay attached and banks carry stronger dark ridge lines |
 
 Open tells and gaps:
 
@@ -78,6 +81,6 @@ Open tells and gaps:
 - Ridges and cliff bands of even width with regularly repeating rock ribs
   (round 6, reviewer B): vary band width and rib spacing along a face.
 - Dragging a map-wide lake is still about 80 ms a frame (TODO in sculpt.js).
-- Zhon's rock reads as streaked faces on narrow bands; the sections have rounded grey boulders on sand aprons.
-- Moon craters have smooth walls; the lunar sections have rough ejecta and nested craterlets.
+- Moon crater squiggles are still coarser than the lunar sections'.
+- Lava: some finger tips detach as islets; retail banks carry stronger dark ridge lines.
 - The section-biome module reads catalogs from this session's scratchpad (SCRATCH); sculpt.py cannot pass another root yet.
