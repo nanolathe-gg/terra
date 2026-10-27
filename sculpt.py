@@ -67,9 +67,11 @@ WORLD_KNOBS = {
     # polygonal crack web, plates rather than rills by eye, and no sand or
     # beach (authored from the sections, see
     # sculpt_section_biome.py 'crystal'). Its column fields are a separate
-    # brush, not these knobs.
+    # brush, not these knobs. The web's plates on the rough ridges measure
+    # 14.7 px across at the median (max caliper 20; measure/
+    # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
-                    crackBlocks=.8, crackHairline=.3, crackDark=.9, beachWidth=0),
+                    crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0),
     # Ice: level snow (flats at exactly 85 and 170), rounded snow mounds whose
     # shaded faces are smooth slate streaks with no crack network, and a
     # pack-ice shelf instead of a beach; its banks into the water are white

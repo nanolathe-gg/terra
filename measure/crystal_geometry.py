@@ -574,6 +574,11 @@ def measure_scenes(name, scenes, light=None, flat=None, keep_scene=False):
                 hh = s.cells[cy_cell, int(np.clip(c['cx'] // 16, 0, s.cells.shape[1] - 1))]
                 gy = c['cy'] + hh / 2
             c['mound_units'] = float(hh - s.base)
+            # Facing of the mound under the top (16-px cell gradient).
+            gyc, gxc = np.gradient(s.cells.astype(np.float32), 16.0)
+            ci, cj = int(np.clip(gy // 16, 0, s.cells.shape[0] - 1)), int(np.clip(c['cx'] // 16, 0, s.cells.shape[1] - 1))
+            c['mound_slope'] = float(np.hypot(gxc[ci, cj], gyc[ci, cj]))
+            c['mound_facing'] = float(np.degrees(np.arctan2(-gyc[ci, cj], -gxc[ci, cj])) % 360)
             if light is not None:
                 c['split'] = split_contrast(s, c['xs'], c['ys'], light)
             tops.append(c)
@@ -651,6 +656,25 @@ def summarise(m, light=None, ground_split=None):
     out['face_shading_by_normal_deg'] = shade
     if faces:
         out['face_light_fit'] = fit_light([f['az'] for f in faces], [f['lum'] for f in faces])
+    # Do tops shade with the mound they sit on? Top luma by the facing of
+    # the mound cell under each top (raised, slope >= .15 units/px).
+    names = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE']
+    sel = [t for t in tops if t['mound_units'] > 3 and t['mound_slope'] >= .15]
+    if sel:
+        bins = np.array([int(((t['mound_facing'] + 22.5) % 360) // 45) for t in sel])
+        lum = np.array([t['lum'] for t in sel])
+        az = np.radians(bins * 45.0)
+        A = np.c_[np.ones(len(az)), np.cos(az), np.sin(az)]
+        coef, *_ = np.linalg.lstsq(A, lum, rcond=None)
+        level = [t['lum'] for t in tops if t['mound_units'] > 3 and t['mound_slope'] < .15]
+        out['top_luma_by_mound_facing'] = {
+            'by_facing': {names[b]: {'tops': int((bins == b).sum()), 'mean_luma': round(float(lum[bins == b].mean()), 1)}
+                          for b in range(8) if (bins == b).any()},
+            'on_level_mound_mean_luma': round(float(np.mean(level)), 1) if level else None,
+            'brightest_facing_deg': round(float(np.degrees(np.arctan2(coef[2], coef[1])) % 360), 1),
+            'amplitude_luma': round(float(np.hypot(coef[1], coef[2])), 1),
+            'residual_sd_luma': round(float((lum - A @ coef).std()), 1),
+            'note': 'tops are planes that follow the mound surface; the residual is per-column variation'}
     out['top_colour'] = colour_summary([t['rgb'] for t in tops], [t['mode_index'] for t in tops if t['mode_index'] is not None])
     out['top_luma'] = q([t['lum'] for t in tops])
     if light is not None:
