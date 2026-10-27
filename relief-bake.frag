@@ -20,6 +20,7 @@ uniform int uReliefOctaves;
 uniform float uReliefGain;      // amplitude ratio between octaves
 uniform float uReliefWarp;      // domain warp, world px
 uniform float uReliefPatchy;    // spatial variation of relief strength
+uniform float uReliefJitter;    // per-kernel phase and wavelength variation
 uniform float uBoulderDensity;   // 0 disables boulders
 uniform float uBoulderSize;      // typical diameter, world px
 uniform float uBoulderFoot;      // share of boulders sourced from cliff feet
@@ -53,10 +54,15 @@ vec3 gullies(vec2 q, vec2 dir) {
     float weight = 0.0;
     for (int j = -2; j <= 1; j++) for (int i = -2; i <= 1; i++) {
         vec2 o = vec2(i, j);
-        vec2 point = local + o - cellHash(cell - o) * 0.5;
+        vec2 jitter = cellHash(cell - o);
+        vec2 point = local + o - jitter * 0.5;
         float w = exp(-dot(point, point) * 2.0);
-        float phase = dot(point, dir) * TAU;
-        sum += vec3(cos(phase), -sin(phase) * dir * TAU) * w;
+        // A random phase and wavelength per kernel keep ribs on a straight
+        // face from settling into evenly spaced teeth.
+        vec2 extra = cellHash(cell - o + 91.7);
+        float freq = TAU * mix(1.0, 0.6 + 0.9 * extra.x, uReliefJitter);
+        float phase = dot(point, dir) * freq + extra.y * TAU * uReliefJitter;
+        sum += vec3(cos(phase), -sin(phase) * dir * freq) * w;
         weight += w;
     }
     return sum / weight;

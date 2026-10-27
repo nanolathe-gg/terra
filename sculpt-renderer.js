@@ -392,6 +392,7 @@ export class TerrainRenderer {
     set('uReliefGain', number('reliefGain', 0.55));
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
+    set('uReliefJitter', number('reliefJitter', 0.8));
     set('uWeather', 7, 'i');
     set('uBoulderDensity', preview ? 0 : number('boulders', 0));
     set('uBoulderSize', number('boulderSize', 9));
