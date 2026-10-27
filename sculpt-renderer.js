@@ -206,6 +206,7 @@ export class TerrainRenderer {
     this.v('uElevatedCover', material.elevatedCover || [5, 32, 0]);
     this.i('uSlopeOnLowBanks', material.slopeOnLowBanks !== false);
     this.f('uRampMaterial', material.rampMaterial ?? 0);
+    this.i('uSlopeSand', Boolean(material.slopeSand));
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
@@ -330,15 +331,20 @@ export class TerrainRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.grid, this.grid, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   }
 
-  setRoutes(routes, crackLines) {
-    // Red: route protection; green: the shapes' crack amount.
+  setRoutes(routes, crackLines, cover) {
+    // Red: route protection; green: the shapes' crack amount; blue: painted
+    // sand cover; alpha: painted ground cover (clears sand).
     this.fieldsDirty = true;
-    const gl = this.gl, bytes = new Uint8Array(routes.length * 2);
-    for (let i = 0; i < routes.length; i++) { bytes[i * 2] = Math.round(routes[i] * 255); bytes[i * 2 + 1] = Math.round((crackLines?.[i] || 0) * 255); }
+    const gl = this.gl, bytes = new Uint8Array(routes.length * 4);
+    for (let i = 0; i < routes.length; i++) {
+      const c = cover?.[i] || 0;
+      bytes[i * 4] = Math.round(routes[i] * 255); bytes[i * 4 + 1] = Math.round((crackLines?.[i] || 0) * 255);
+      bytes[i * 4 + 2] = Math.round(Math.max(0, c) * 255); bytes[i * 4 + 3] = Math.round(Math.max(0, -c) * 255);
+    }
     gl.activeTexture(gl.TEXTURE0 + 12);
     gl.bindTexture(gl.TEXTURE_2D, this.routeTexture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG8, this.grid, this.grid, 0, gl.RG, gl.UNSIGNED_BYTE, bytes);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.grid, this.grid, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   }
 
   setMaterialField(field) {
@@ -516,6 +522,9 @@ export class TerrainRenderer {
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandLine', number('bandLine', 0.5));
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
+    set('uHasBeach', Boolean(this.config.textures.beach), 'i');
+    set('uSandBanding', number('sandBanding', 0));
+    set('uSandBandSpacing', number('sandBandSpacing', 2));
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5), 'i');
     // The routes texture shares unit 12 with the fields; bind it for the bake.
     gl.activeTexture(gl.TEXTURE0 + 12);

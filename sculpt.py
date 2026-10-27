@@ -34,7 +34,7 @@ KNOB_DEFAULTS = dict(
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
-    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0,
+    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6,
     fingers=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25,
@@ -52,7 +52,9 @@ WORLD_KNOBS = {
                    sand=.6, undulation=6),
     'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=.8, undulation=4, plainRelief=.6, banding=.3),
-    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=50,
+    # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
+    # and hills set in sand get sandy feet.
+    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=.6,
                  beachWidth=.6, banding=.3, bandLine=.3),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
@@ -139,8 +141,10 @@ def biome_config(biome, assets):
         # as Archipelago's authored base does.
         config['baseHeight'] = 8
         config['defaults'].update(example='islands', material='single', fractures='20', scree='0')
+        # Its slope art is sandy (streaked dune slopes): shown where sand
+        # lies beneath and on ramps, which are sand in its sections.
         config['material'].update(rockyCoasts=False, slopeStart=.08, slopeFull=.40,
-                                  slopeFloor=6.0, slopeDry=9.0)
+                                  slopeFloor=6.0, slopeDry=9.0, slopeSand=True, rampMaterial=1.0)
     elif biome == 'lava':
         # Lava's land stands ~21 units above its measured shoreline (sea 24,
         # flats 45), close to the default base of 24, which stays. Its coasts
@@ -154,6 +158,11 @@ def biome_config(biome, assets):
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['knobs'] = sorted(knobs)
+    if biome == 'zhon':
+        # Zhon's domes are blue-grey (retail sections: mean (43,57,81), median
+        # luminance 52); its rock art renders neutral grey, so the world
+        # defaults its rock colour to match.
+        config['colors'] = {'rock': '#3d5174'}
     if biome == 'desert':
         # Default base colours (editable per world in the page): pale ground
         # and slopes so the beds carry the colour.

@@ -47,6 +47,8 @@ uniform float uRipple;           // ripple wavelength, world px (0: none)
 uniform float uRippleHeight;     // ripple amplitude, height units
 uniform float uBeachDistance;    // beach reach from the waterline, world px (0: none)
 uniform float uBanding;          // contour banding strength (0: none)
+uniform bool uHasBeach;
+uniform float uSandBanding, uSandBandSpacing; // streaks on sand and ramps           // the world has beach-sand art: painted sand uses it
 uniform float uApron;            // sand apron reach round raised ground, world px (0: none)
 uniform float uWorms;            // wormy regolith relief on slopes (lunar)
 uniform float uBoulderRound;     // 0: angular boulders; 1: rounded domes
@@ -395,6 +397,22 @@ vec3 contourBands(vec2 p, float h, float slope, vec2 fall) {
     return vec3(offset * strength, line, facing);
 }
 
+// Sand streaks, as on Zhon's sandy slopes and ramps: fine continuous lines
+// along the contours, a few px apart, curving with the ground (retail ramp
+// sections). Tonal only: a dark line, deeper where the slope faces away
+// from the sun. Returns (line strength, facing).
+vec2 sandStreaks(vec2 p, float h, float slope, vec2 fall, float strength) {
+    float gate = smoothstep(0.03, 0.10, slope) * (1.0 - smoothstep(0.8, 1.4, slope));
+    if (gate <= 0.0 || strength <= 0.0) return vec2(0.0);
+    float S = max(uSandBandSpacing, 0.2);
+    float u = (h + valueNoise(p / 55.0 + 3.0) * S * 2.2 + valueNoise(p / 14.0 + 11.0) * S * 0.45) / S;
+    float v = fract(u);
+    float px = min(v, 1.0 - v) * S / max(slope, 0.02);
+    float line = (1.0 - smoothstep(0.35, 1.2, px)) * strength * gate
+               * (0.7 + 0.3 * smoothstep(-0.6, 0.2, valueNoise(p / 15.0 + 61.0)));
+    return vec2(line, dot(-fall, normalize(uSun.xy + 1e-6)));
+}
+
 // Sandiness from the weathering worker's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
@@ -479,6 +497,15 @@ void main() {
     float bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     float bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
     float sand = sandCover(p, slope, height) * (1.0 - route);
+    // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
+    // so a hill set in sand has sandy feet; steep faces still shed it.
+    // Ground cover clears weathered and painted sand alike.
+    vec4 paint = texture(uRoutes, (p / (uSize - 1.0) * (uGrid - 1.0) + 0.5) / uGrid);
+    float paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
+    float paintSand = smoothstep(0.30, 0.70, paint.b + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope)) * (1.0 - route);
+    float paintGround = smoothstep(0.30, 0.70, paint.a + paintEdge);
+    if (!uHasBeach) sand = max(sand, paintSand);
+    sand *= 1.0 - paintGround;
     // Only sand deep enough to cover the ground buries relief and stones.
     float buried = smoothstep(0.35, 0.9, sand);
     if (sand > 0.0 && uRipple > 0.0) {
@@ -508,9 +535,15 @@ void main() {
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
     float lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
+    if (uSandBanding > 0.0) {
+        vec2 streak = sandStreaks(p, h, slope, fall, uSandBanding * max(max(paintSand, smoothstep(0.3, 0.8, sand)), route * 0.6));
+        lineDark = max(lineDark, streak.x * (0.55 + 0.45 * smoothstep(-0.3, 0.4, -streak.y)));
+    }
     crackAt.z = max(crackAt.z, bandLit * (1.0 - buried));
     float crackCode = lineDark > 0.02 ? -lineDark : crackAt.z > 0.02 ? 1.0 + crackAt.z : rock.y;
     // Green holds route protection, or (negative) beach cover off routes.
     float beach = beachCover(p, h, slope);
+    if (uHasBeach) beach = max(beach, paintSand);
+    beach *= 1.0 - paintGround;
     outFields = vec4(height, route > 0.01 || beach <= 0.0 ? route : -beach, crackCode, sand);
 }

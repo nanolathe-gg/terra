@@ -49,6 +49,9 @@ uniform vec3 uGroundTexMean, uSlopeTexMean, uRockTexMean, uBeachTexMean;
 uniform bool uBeach;
 uniform vec4 uWaterMid;   // rgb mid-depth colour, a: its depth (0: two stops)
 uniform float uBeachHeight, uBeachWidth;
+// The slope material is the world's sandy slope (Zhon): it shows only where
+// the ground beneath is sand, and on graded routes.
+uniform bool uSlopeSand;
 // Move a texture to a new base colour, keeping its grain.
 vec3 based(vec3 c, vec3 mean, vec4 base) { return base.a > 0.5 ? clamp(c - mean + base.rgb, 0.0, 1.0) : c; }
 // Ground pattern: its grain scaled about its mean, then moved to the base.
@@ -258,6 +261,7 @@ void main() {
     float transitionPower=1.0;
     float transitionCore=0.0;
     bool sharedTransition=false;
+    float slopeShare=0.0;
     if (uSlopeMaterial) {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
@@ -382,7 +386,11 @@ void main() {
         slopeCover *= 1.0 - route * (1.0 - uRampMaterial);
         // The sampled slope texture carries baked shading that reads as
         // smudges on gentle ground; the fall-line surface lights grass itself.
-        if (uReliefMode == 1) slopeCover *= uSlopeTexture;
+        // A sandy slope's streaks are the world's look (Zhon dune slopes),
+        // not baked shading, so they keep full strength.
+        if (uReliefMode == 1 && !uSlopeSand) slopeCover *= uSlopeTexture;
+        if (uSlopeSand) slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + bakedFields(p).a), route);
+        slopeShare = slopeCover;
         grass = mix(grass, slopeGrass, slopeCover);
     }
     // Small mineral interiors supply pixel structure; the whole crown/face/
@@ -470,7 +478,11 @@ void main() {
         float speck = terrainNoise(p * 6.0 + vec2(61.0, 3.0)).b;
         float beach = smoothstep(0.25, 0.75, beachField(p) + (speck - 0.5) * 0.5);
         float top = uBeachHeight * uBeachWidth * (0.65 + 0.7 * terrainNoise(p * 0.45 + vec2(29.0, 5.0)).g);
-        beach = max(beach, (1.0 - smoothstep(top * 0.6, top, h - uSea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)));
+        // The low band only within the water's reach: inland hollows of a
+        // low world are not beaches.
+        beach = max(beach, (1.0 - smoothstep(top * 0.6, top, h - uSea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)) * smoothstep(0.0, 0.15, beachField(p)));
+        // A sandy slope keeps its own streaked material over the beach sand.
+        if (uSlopeSand) beach *= 1.0 - slopeShare;
         material = mix(material, sandBeach, beach * (1.0 - exposed * 0.7));
     }
     if (sharedTransition) {
