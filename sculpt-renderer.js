@@ -161,7 +161,7 @@ export class TerrainRenderer {
     this.i('uMineralMargins', variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope');
     this.i('uRockLayers', rockLayers);
     this.applyKnobs();
-    this.i('uDiagnostic', ['diffuse','occlusion','shadow','exposure','shading','material'].indexOf(variant.get('view')) + 1);
+    this.i('uDiagnostic', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
     this.i('uCoastalDetail', variant.get('shore') !== 'smooth');
@@ -278,7 +278,7 @@ export class TerrainRenderer {
   }
 
   setRoutes(routes, crackLines) {
-    // Red: route protection; green: traced crack lines.
+    // Red: route protection; green: the shapes' crack amount.
     this.fieldsDirty = true;
     const gl = this.gl, bytes = new Uint8Array(routes.length * 2);
     for (let i = 0; i < routes.length; i++) { bytes[i * 2] = Math.round(routes[i] * 255); bytes[i * 2 + 1] = Math.round((crackLines?.[i] || 0) * 255); }
@@ -383,6 +383,7 @@ export class TerrainRenderer {
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
     this.f('uGullyRock', variant.has('gullyRock') ? Number(variant.get('gullyRock')) : 0.5);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
+    this.f('uCrackDark', variant.has('crackDark') ? Number(variant.get('crackDark')) : 0.75);
     this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
@@ -420,8 +421,15 @@ export class TerrainRenderer {
     set('uSand', number('sand', 0));
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
-    set('uCrackSpacing', number('crackSpacing', 30));
-    set('uCrackLength', number('crackLength', 5));
+    set('uCrackSpacing', number('crackSpacing', 11));
+    set('uCrackLength', number('crackLength', 2.5));
+    set('uCrackWidth', number('crackWidth', 1));
+    set('uCrackJagged', number('crackJagged', 0.6));
+    set('uCrackNetwork', number('crackNetwork', 0.25));
+    set('uCrackReach', number('crackReach', 0.6));
+    set('uFissures', number('fissures', 0.5));
+    set('uFissureSpacing', number('fissureSpacing', 36));
+    set('uCracksOn', preview && v.get('previewCracks') !== '1' ? 0 : 1, 'i');
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));

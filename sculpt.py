@@ -60,7 +60,8 @@ def biome_config(biome, assets):
         # Water colour by depth measured on the retail Green coast sections.
         config['material'].update(shallowDepth=24, deepDepth=60)
     if biome == 'red':
-        config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0')
+        config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0',
+                                  crackNetwork='0.5', crackSeverity='0.7', crackReach='0.7')
         config['material'].update(rockyCoasts=True, surfaceRelief=1.25, fractureDepth=1.25,
                                   slopeStart=.06, slopeFull=.30, slopeFloor=-4.0, slopeDry=5.0)
     elif biome == 'archipelago':

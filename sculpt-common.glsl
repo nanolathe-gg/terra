@@ -128,7 +128,8 @@ float surfaceHeight(vec2 p) {
 #ifndef BAKE
     // Baked relief applies at every slope, level ground included: it carries
     // its own slope gain (gentle-slope relief and level-ground lumps).
-    if (uReliefMode == 1) return h + bakedFields(p).r * uDetail + debris - fractureDepth(p, h, slope);
+    // The bake carries the cracks in this mode (relief-bake.frag cracks()).
+    if (uReliefMode == 1) return h + bakedFields(p).r * uDetail + debris;
 #endif
     if (slope < 0.10) return h + debris;
     vec4 n = terrainNoise(p);

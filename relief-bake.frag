@@ -33,10 +33,17 @@ uniform float uDebrisSize;       // largest debris stone, world px
 uniform float uDebrisSort;       // 1: coarse near the source, fine far away
 uniform float uRepose;           // slope below which debris comes to rest
 uniform float uSand;             // 0 disables sand
-uniform float uCrackSeverity;    // depth and width of large hill cracks
+uniform float uCrackSeverity;    // crack depth
+uniform float uCrackWidth;       // crack core width, world px
+uniform float uCrackJagged;      // kinks and bends along a crack
+uniform float uCrackNetwork;     // 0: rills down the slope; 1: polygonal plates
+uniform float uCrackReach;       // 0: steep faces only; 1: onto gentle slopes
+uniform float uFissures;         // share of large fissures
+uniform float uFissureSpacing;   // typical spacing of large fissures, world px
+uniform int uCracksOn;           // the full bake computes cracks; previews skip them
 uniform float uPlainRelief;      // faint lit lumps on level ground (appearance only)
 uniform float uCrackSpacing;     // typical spacing between cracks, world px
-uniform float uCrackLength;      // elongation along the fall line
+uniform float uCrackLength;      // elongation of crack cells along the fall line
 uniform float uWindAngle;        // direction the wind blows toward, degrees (0 = east)
 uniform float uRipple;           // ripple wavelength, world px (0: none)
 uniform float uRippleHeight;     // ripple amplitude, height units
@@ -174,6 +181,98 @@ vec2 debrisStones(vec2 p, vec2 arrival) {
     return vec2(best, cover);
 }
 
+// Cracks: the cracked edges of an anisotropic cellular network. Cells are
+// jittered world-space points; distances use a metric stretched along the
+// local fall line, so cells are long down the slope and most edges run down
+// it, as retail hill fissures and Gaea's eroded rock do. The domain is warped
+// at two scales for bends and kinks. Each edge (a pair of cells) is cracked
+// or not by its own hash, so cracks end at junctions; a noise taper lets
+// some end mid-edge. Returns (distance to the nearest cracked edge in world
+// px, 0..1 strength at that edge).
+vec2 crackNet(vec2 p, vec2 fall, float cell, float stretch, float share, float network, float jag, float salt) {
+    vec2 across = vec2(-fall.y, fall.x);
+    vec2 w = p + jag * cell * (0.45 * vec2(valueNoise(p / (cell * 1.3) + salt), valueNoise(p / (cell * 1.3) + salt + 19.1))
+                                      + 0.10 * vec2(valueNoise(p / (cell * 0.18) + salt + 3.3), valueNoise(p / (cell * 0.18) + salt + 7.7)));
+    vec2 g = floor(w / cell);
+    // Metric-space position relative to a point: along the fall line is
+    // compressed by the stretch, across is kept in world px.
+    float best = 1e9, second = 1e9;
+    vec2 bestCell = vec2(0.0), bestPoint = vec2(0.0);
+    int reach = int(ceil(stretch)) + 1;
+    for (int j = -4; j <= 4; j++) for (int i = -4; i <= 4; i++) {
+        if (abs(i) > reach || abs(j) > reach) continue;
+        vec2 c = g + vec2(i, j);
+        vec2 point = (c + 0.1 + 0.8 * cellHash(c + salt)) * cell;
+        vec2 d = point - w;
+        vec2 m = vec2(dot(d, fall) / stretch, dot(d, across));
+        float dist = dot(m, m);
+        if (dist < best) { second = best; best = dist; bestCell = c; bestPoint = point; }
+        else if (dist < second) second = dist;
+    }
+    // Distance to each cracked bisector of the nearest cell, in metric space.
+    vec2 ma = vec2(dot(bestPoint - w, fall) / stretch, dot(bestPoint - w, across));
+    float edge = 1e9, strength = 0.0;
+    for (int j = -4; j <= 4; j++) for (int i = -4; i <= 4; i++) {
+        if (abs(i) > reach || abs(j) > reach) continue;
+        vec2 c = g + vec2(i, j);
+        if (c == bestCell) continue;
+        vec2 point = (c + 0.1 + 0.8 * cellHash(c + salt)) * cell;
+        vec2 mb = vec2(dot(point - w, fall) / stretch, dot(point - w, across));
+        vec2 n = mb - ma;
+        float len = length(n);
+        if (len < 1e-4) continue;
+        n /= len;
+        // The bisector seen in the world: normal (n.x / stretch, n.y) in
+        // the (fall, across) basis; the pixel sits at the origin.
+        vec2 seen = vec2(n.x / stretch, n.y);
+        float d = dot(0.5 * (ma + mb), n) / length(seen);
+        if (d > edge) continue;
+        // A normal along the fall line means the crack runs across the
+        // slope. Rills keep only edges that run down it; plates keep all.
+        vec2 worldNormal = normalize(fall * seen.x + across * seen.y);
+        float acrossSlope = abs(dot(worldNormal, fall));
+        float keep = 1.0 - smoothstep(mix(0.45, 1.05, network), mix(0.65, 1.25, network), acrossSlope);
+        vec2 lo = min(bestCell, c), hi = max(bestCell, c);
+        float ticket = cellHash(lo * 1.31 + hi * 7.77 + salt + 0.5).x;
+        float open = keep * smoothstep(ticket - 0.08, ticket + 0.08, share);
+        if (open <= 0.01) continue;
+        edge = d; strength = open;
+    }
+    // Some cracks fade out partway along their length.
+    float taper = smoothstep(-0.35, 0.25, valueNoise(p / (cell * (0.6 + 0.4 * stretch)) + salt + 41.0));
+    return vec2(edge, strength * taper);
+}
+
+// Crack groove depth at p (height units) and core darkness, from the shape's
+// crack amount (mask), the slope, and the crack knobs.
+vec2 cracks(vec2 p, vec2 fall, float slope, float mask, float h) {
+    if (uCracksOn == 0 || mask <= 0.0 || uCrackSeverity <= 0.0 || h < uSea + 1.0) return vec2(0.0);
+    float start = mix(0.95, 0.10, uCrackReach);
+    float halfWidth = uCrackWidth * 0.5;
+    float depth = 0.0, core = 0.0;
+    // Fine cracks: dense, short, on the steeper ground.
+    float onSlope = smoothstep(start, start * 1.9, slope);
+    if (onSlope > 0.0) {
+        vec2 fine = crackNet(p, fall, uCrackSpacing, uCrackLength, clamp(mask, 0.0, 1.0) * onSlope, uCrackNetwork, uCrackJagged, 3.7);
+        // A narrow V: the lighting gives one lit and one dark wall.
+        float groove = max(0.0, 1.0 - max(0.0, fine.x - halfWidth * 0.5) / (halfWidth + 1.1)) * fine.y;
+        depth = groove * mix(1.0, 4.0, uCrackSeverity);
+        core = (1.0 - smoothstep(halfWidth * 0.6, halfWidth + 0.6, fine.x)) * fine.y;
+    }
+    // Large fissures: long lines down the slope that reach well onto gentle
+    // ground, as on retail Green hills.
+    float bigSlope = smoothstep(start * 0.35, start * 1.1, slope);
+    if (uFissures > 0.0 && bigSlope > 0.0) {
+        vec2 big = crackNet(p, fall, uFissureSpacing, uCrackLength * 2.0, clamp(mask, 0.0, 1.0) * bigSlope * min(1.0, uFissures * 1.6), 0.0, uCrackJagged * 0.6, 17.3);
+        float wide = halfWidth + 0.35;
+        float bigGroove = max(0.0, 1.0 - max(0.0, big.x - wide * 0.5) / (wide + 0.9)) * big.y;
+        // Shallower on gentle ground, where a deep groove reads as a gash.
+        depth = max(depth, bigGroove * mix(1.5, 5.0, uCrackSeverity) * mix(0.35, 1.0, smoothstep(0.3, 1.0, slope)));
+        core = max(core, (1.0 - smoothstep(wide * 0.6, wide + 0.6, big.x)) * big.y);
+    }
+    return vec2(depth, core);
+}
+
 // Sand cover from the weathering worker's transport (wind and water);
 // broken up a little so thin sand does not read as a smooth wash.
 float sandCover(vec2 p, float h, float slope) {
@@ -249,9 +348,10 @@ void main() {
     }
     // Sand buries relief beneath it.
     height *= 1.0 - 0.8 * sand;
-    // Traced crack lines (sculpt.js), carved and darkened here.
-    float crack = crackMask * (1.0 - route) * step(0.0, uCrackSeverity);
-    height -= crack * mix(3.0, 9.0, uCrackSeverity);
+    // Cracks, carved into the relief; sand fills them.
+    vec2 crackAt = cracks(p, fall, slope, crackMask * (1.0 - route), h) * (1.0 - sand);
+    height -= crackAt.x;
+    float crack = crackAt.y;
     vec2 rock = boulders(p, slope, h);
     vec2 scree = debrisStones(p, vec2(0.0));
     if (scree.x > rock.x) rock = scree;

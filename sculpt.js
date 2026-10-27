@@ -63,7 +63,7 @@ function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
 const amountRange=kind => kind==='offset'?[-80,80]:kind==='smooth'?[5,100]:[5,160];
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {cracks:kind==='hill'?40:kind==='mountain'?50:0,diameter:200,amount:kind==='offset'?20:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -99,7 +99,7 @@ function updateControls() {
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
-  $('cracks-control').hidden=!['plateau','hill','mountain','crater'].includes(tool);
+  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
@@ -565,48 +565,10 @@ function applyNode(n) {
   if (n.kind==='crater') addCraterlets(n,s);
   applyCracks(s);
 }
-// Crack lines: from jittered seeds inside each shape's cracked area, trace
-// down the steepest descent with a slight wiggle until the slope eases,
-// tapering at both ends and sometimes branching. Deterministic per map seed.
-let crackLines=null;
-function traceCrackLines() {
-  crackLines ??= new Float32Array(grid*grid); crackLines.fill(0);
-  const spacingWorld=experiment.has('crackSpacing')?Number(experiment.get('crackSpacing')):30;
-  const lengthFactor=experiment.has('crackLength')?Number(experiment.get('crackLength')):5;
-  const severity=experiment.has('crackSeverity')?Number(experiment.get('crackSeverity')):.6;
-  if (!(severity>0)) return;
-  const step=Math.max(2,Math.round(spacingWorld/spacing)),maxSteps=Math.round(lengthFactor*spacingWorld/spacing);
-  const hash=(x,y,k) => { let h=Math.imul(x,374761393)^Math.imul(y,668265263)^Math.imul(k+seed,2246822519); h=Math.imul(h^(h>>>13),1274126177); return ((h^(h>>>16))>>>0)/4294967296; };
-  const grad=(x,y) => { const ix=clamp(Math.round(x),1,grid-2),iy=clamp(Math.round(y),1,grid-2),i=iy*grid+ix; return [(heights[i+1]-heights[i-1])/(2*spacing),(heights[i+grid]-heights[i-grid])/(2*spacing)]; };
-  const trace=(x,y,len,depth,salt) => {
-    let wiggle=0;
-    for (let k=0;k<len;k++) {
-      const [gx,gy]=grad(x,y),slope=Math.hypot(gx,gy);
-      const ix=Math.round(x),iy=Math.round(y);
-      if (ix<1 || iy<1 || ix>=grid-1 || iy>=grid-1 || slope<.08) break;
-      const i=iy*grid+ix;
-      if (cracks[i]<=0 || heights[i]<=config.seaLevel+1) break;
-      const t=k/len,taper=Math.min(1,t*5)*Math.min(1,(1-t)*3);
-      crackLines[i]=Math.max(crackLines[i],taper*(.55+.45*severity));
-      // Downhill with a meander; branch now and then.
-      wiggle=wiggle*.8+(hash(ix,iy,salt)-.5)*.9;
-      const dx=-gx/slope,dy=-gy/slope,c=Math.cos(wiggle),s=Math.sin(wiggle);
-      x+=(dx*c-dy*s)*.9; y+=(dx*s+dy*c)*.9;
-      if (depth<2 && k>4 && hash(ix,iy,salt+77)<.035) trace(x,y,Math.round((len-k)*.6),depth+1,salt+k*13+1);
-    }
-  };
-  for (let cy=step>>1;cy<grid;cy+=step) for (let cx=step>>1;cx<grid;cx+=step) {
-    const x=cx+(hash(cx,cy,1)-.5)*step,y=cy+(hash(cx,cy,2)-.5)*step;
-    const i=clamp(Math.round(y),0,grid-1)*grid+clamp(Math.round(x),0,grid-1);
-    // The shape's amount is the share of seeds that open a crack.
-    if (cracks[i]<=0 || hash(cx,cy,3)>cracks[i]) continue;
-    trace(x,y,Math.round(maxSteps*(.6+.6*hash(cx,cy,4))),0,cx*7+cy*131);
-  }
-}
 function applyCracks(s) {
   // A shape marks where cracks may open: its own influence times its Cracks
   // amount. The bake carves the fissures from this field.
-  if (!(s.cracks>0) || !['hill','mountain','plateau','crater'].includes(s.kind)) return;
+  if (!(s.cracks>0) || !['hill','mountain','plateau','crater','offset'].includes(s.kind)) return;
   for (const i of clipCells()) if (s.weights[i]>0) cracks[i]=Math.max(cracks[i],Math.min(1,s.weights[i]*1.6)*s.cracks);
 }
 const craterletKeys=new WeakMap();
@@ -847,7 +809,7 @@ function startWeatherWorker() {
     if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
     if (data.error) { failWeather(data.error); return; }
     refined=data.height; refinedBase=weatherBase;
-    renderer.setHeight(refined,grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
+    renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
     if (data.materialField) renderer.setMaterialField(data.materialField);
     heightDirty=false;
     if (data.done) { weatherState='ready'; renderedRevision=-1; updateControls(); }
@@ -869,7 +831,7 @@ function frame(timestamp) {
   else lastPaintingRAF=null;
   try {
     flushEval();
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); if ((stroke || moving) && materialPreview()) quickMaterials(); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks); if ((stroke || moving) && materialPreview()) quickMaterials(); heightDirty=false; }
     if (needsDraw || stroke || moving) {
       const quality=stroke||moving?'preview':'full',start=performance.now();
       const stats=renderer.draw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
@@ -1227,7 +1189,7 @@ $('file').addEventListener('change',async () => {
 $('export').addEventListener('click',() => {
   if (!canExport()) return;
   try {
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks); heightDirty=false; }
     const start=performance.now(),stats=renderer.draw({quality:'full',clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),rev=revision,job=weatherJob;
     drawTiming(stats,performance.now()-start,'full');
     canvas.toBlob(blob => { if (!blob) error('PNG export is unavailable for this renderer.'); else if (revision!==rev || weatherJob!==job || !canExport()) error('The terrain changed during export. Export the finished view again.'); else download(blob,'terrain-sculpt.png'); },'image/png');
@@ -1267,13 +1229,22 @@ const KNOBS = [
   ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
     ['wind','Wind toward (deg)',0,360,5,20],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
-  ['Cracks', [['crackSeverity','Crack severity',0,1,.05,.6],['crackSpacing','Crack spacing (px)',12,80,2,30],['crackLength','Crack length',1,10,.5,5]]],
+  ['Cracks', [['crackSeverity','Depth',0,1,.05,.6],['crackWidth','Width (px)',.5,3,.1,1],['crackSpacing','Spacing (px)',4,40,1,11],['crackLength','Length down the slope',1,4,.25,2.5],
+    ['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Rills to plates',0,1,.05,.25],['crackReach','Reach onto gentle slopes',0,1,.05,.6],['crackDark','Floor darkness',0,1,.05,.75],
+    ['fissures','Large fissures',0,1,.05,.5],['fissureSpacing','Fissure spacing (px)',16,120,2,36]]],
   ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3]]],
   ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
+// Crack styles set several crack knobs at once; each stays editable.
+const CRACK_STYLES={
+  'Retail Green':{crackSeverity:.6,crackWidth:1,crackSpacing:11,crackLength:2.5,crackJagged:.6,crackNetwork:.25,crackReach:.6,crackDark:.75,fissures:.5,fissureSpacing:36},
+  'Hairline':{crackSeverity:.4,crackWidth:.6,crackSpacing:6,crackLength:3,crackJagged:.6,crackNetwork:.1,crackReach:.5,crackDark:.75,fissures:0,fissureSpacing:36},
+  'Plates (Gaea rock)':{crackSeverity:.7,crackWidth:1,crackSpacing:9,crackLength:1.25,crackJagged:.8,crackNetwork:1,crackReach:.9,crackDark:.75,fissures:.2,fissureSpacing:36},
+  'Deep fissures':{crackSeverity:.85,crackWidth:1.4,crackSpacing:14,crackLength:2.5,crackJagged:.6,crackNetwork:0,crackReach:.8,crackDark:.8,fissures:1,fissureSpacing:28},
+};
 function buildKnobs() {
-  const root = $('knobs'), params = new URLSearchParams(location.search);
+  const root = $('knobs'), params = experiment;
   const toggle = (key, label, on, off, isOn) => {
     const row = document.createElement('label'); row.className = 'small'; row.style.display = 'flex'; row.style.gap = '6px';
     const box = document.createElement('input'); box.type = 'checkbox'; box.checked = isOn;
@@ -1285,6 +1256,18 @@ function buildKnobs() {
   toggle('ground', 'Procedural ground tiles (off: lab texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
   for (const [group, knobs] of KNOBS) {
     const title = document.createElement('h3'); title.textContent = group; root.append(title);
+    if (group === 'Cracks') {
+      const wrap = document.createElement('div'); wrap.className = 'control';
+      wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select>`;
+      wrap.querySelector('select').addEventListener('change', event => {
+        const style = CRACK_STYLES[event.target.value]; if (!style) return;
+        for (const [key, value] of Object.entries(style)) {
+          const input = $('knob-' + key); if (input) { input.value = value; input.previousElementSibling.querySelector('output').textContent = value; }
+          setKnob(key, value);
+        }
+      });
+      root.append(wrap);
+    }
     for (const [key, label, min, max, step, value] of knobs) {
       const wrap = document.createElement('div'); wrap.className = 'control';
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value;
@@ -1307,7 +1290,6 @@ function setKnob(key, value) {
     else if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,seed:seed^0x9e37}); prefix=[]; cancelWeather(); evaluate(0); checkpoint(); queueWeather(); }
     return;
   }
-  if (['crackSeverity','crackSpacing','crackLength'].includes(key)) heightDirty=true;
   // Transport knobs change where sand is carried, so the worker re-runs.
   if (['sand','sandReach','windStrength','wind'].includes(key)) { cancelWeather(); queueWeather(); }
 }

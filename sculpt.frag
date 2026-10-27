@@ -42,6 +42,7 @@ uniform float uRingVariation;
 uniform vec4 uFringeSignal;
 uniform vec2 uFringeRange;
 uniform bool uTransitionBody;
+uniform float uCrackDark;
 uniform float uTransitionDetail;
 uniform float uRockStart;
 uniform float uRockFull;
@@ -514,13 +515,15 @@ void main() {
     if (uReliefMode == 1) {
         float coverOrCrack = bakedFields(p).b;
         material = mix(material, rock * 1.08, max(coverOrCrack, 0.0));
-        // Inside a crack: dark soil and rock, shaded further by its walls.
-        material = mix(material, rock * 0.3, clamp(-coverOrCrack, 0.0, 1.0) * 0.9);
+        // A crack's floor is in shadow: darken what is there, so a crack in
+        // grass stays green-black and one in rock grey-black. The walls are
+        // lit by the carved geometry.
+        material *= 1.0 - uCrackDark * clamp(-coverOrCrack, 0.0, 1.0);
     }
     float chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route));
     chip=max(chip,smoothstep(0.035,0.40,materialChipHeight(p)*(1.0-route))*0.65);
     material = mix(material, rock, chip * (1.0 - exposed));
-    float cleft = smoothstep(0.15, 1.20, fractureDepth(p, h, slope));
+    float cleft = uReliefMode == 1 ? 0.0 : smoothstep(0.15, 1.20, fractureDepth(p, h, slope));
     material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
     material *= 1.0 - nearWater * 0.17;
@@ -586,5 +589,6 @@ void main() {
     if (uDiagnostic == 4) color = vec3(exposed);
     if (uDiagnostic == 5) color = vec3(lighting, ao, shadow);
     if (uDiagnostic == 6) color = material;
+    if (uDiagnostic == 7) color = vec3(clamp(-bakedFields(p).b, 0.0, 1.0), clamp(-bakedFields(p).r * 0.25, 0.0, 1.0), 0.25 * smoothstep(0.1, 0.6, length(broad)));
     outColor = vec4(color, 1.0);
 }
