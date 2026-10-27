@@ -688,6 +688,7 @@ export class TerrainRenderer {
     set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandLine', number('bandLine', 0.5));
+    set('uBandWidth', number('bandWidth', 0));
     set('uBandStyle', number('bandStyle', 0), 'i');
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', Boolean(this.config.textures.beach));

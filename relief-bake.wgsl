@@ -422,9 +422,12 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec2f {
     let v = fract(uu);
     let px = min(v, 1.0 - v) * S / max(slope, 0.05);
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
-    // A 1 px core with half-dark neighbours (3 px wide at half depth),
-    // wider on steep shaded faces.
-    let halfWidth = mix(1.6, 2.2, smoothstep(0.8, 1.4, slope) * smoothstep(0.1, -0.4, facing));
+    // A dark V, wider on steep shaded faces. Its width at half depth is the
+    // tent's half-width: retail cores (luma 15-27 in 55-60 ground) are ~2.5
+    // px wide at half depth (measure/lava_bands.py lines profiles); 0 keeps
+    // the original 1.6.
+    let core = select(1.6, u.bandWidth, u.bandWidth > 0.0);
+    let halfWidth = core * mix(1.0, 1.375, smoothstep(0.8, 1.4, slope) * smoothstep(0.1, -0.4, facing));
     let line = clamp(1.0 - px / halfWidth, 0.0, 1.0);
     let strength = smoothstep(0.12, 0.25, slope) * (0.75 + 0.25 * smoothstep(0.3, 1.5, slope));
     return vec2f(line * strength * u.banding, facing);
