@@ -2,7 +2,7 @@
 reproduction: the picture, its heights, and a relief guide to place strokes.
 
   retail_crop.py map <export-dir> <x> <y> <out-dir> [--size 1024]
-  retail_crop.py section <art.png> <heights.png> <out-dir>
+  retail_crop.py section <art.png> <heights.png> <out-dir> [--sea <units>]
 
 <export-dir> is one map from tools/neural-terrain/export (map-indexed.bin,
 heights.bin, palette-rgb.bin, metadata.json); x and y are the window's
@@ -76,8 +76,8 @@ def from_map(args):
 
 def from_section(args):
     pic = np.asarray(Image.open(args.art).convert('RGB'))
-    cut = np.asarray(Image.open(args.heights)).astype(float)
-    return pic, cut, {'section': str(args.art), 'size': pic.shape[0], 'sea_level': 0}
+    cut = np.asarray(Image.open(args.heights)).astype(float) - args.sea
+    return pic, cut, {'section': str(args.art), 'size': pic.shape[0], 'sea_level': args.sea}
 
 
 def main():
@@ -88,6 +88,8 @@ def main():
     m.add_argument('--size', type=int, default=1024)
     s = sub.add_parser('section')
     s.add_argument('art'); s.add_argument('heights'); s.add_argument('out')
+    # Sections carry no sea level; read it off where the water pixels sit.
+    s.add_argument('--sea', type=float, default=0)
     args = ap.parse_args()
     pic, cells, info = from_map(args) if args.mode == 'map' else from_section(args)
     out = Path(args.out)
