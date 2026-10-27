@@ -1,4 +1,5 @@
 import {TerrainRenderer} from './sculpt-renderer.js';
+import {quickMaterialField} from './sculpt-material-weathering.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -711,9 +712,19 @@ function moveHistory(delta) {
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
+// While a shape is edited the material transport is too slow to rerun, so a
+// quick approximation stands in: biomes whose colours come from it (the
+// Archipelago's dark hills) keep roughly their final look instead of
+// turning pale until refinement finishes.
+const materialPreview=() => experiment.get('deposits')!=='off' && Number($('material-weathering').value)>0;
+function quickMaterials() {
+  if (!renderer || !materialPreview()) { renderer?.setMaterialField(); return; }
+  renderer.setMaterialField(quickMaterialField({height:heights,grid,size,seed:refinementSeed,baseHeight:config.baseHeight,seaLevel:config.seaLevel,
+    depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}}));
+}
 function cancelWeather() {
   weatherJob++; weatherBase=null;
-  renderer?.setMaterialField();
+  quickMaterials();
   weatherWorker?.postMessage({cancel:true,job:weatherJob});
   weatherState=$('weather').checked?'pending':'disabled';
   $('weather-state').textContent=$('weather').checked?'Refinement paused while editing.':'Weathering off · authored surface';
@@ -779,7 +790,7 @@ function frame(timestamp) {
   else lastPaintingRAF=null;
   try {
     flushEval();
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); if ((stroke || moving) && materialPreview()) quickMaterials(); heightDirty=false; }
     if (needsDraw || stroke || moving) {
       const quality=stroke||moving?'preview':'full',start=performance.now();
       const stats=renderer.draw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});

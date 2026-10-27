@@ -12,35 +12,21 @@ function noise(x,y,seed) {
   return (a+(b-a)*fx)*(1-fy)+(c+(d-c)*fx)*fy;
 }
 
-export async function weatherMaterials(request, pause) {
-  const {height,grid,size,seed=1,baseHeight=24,seaLevel=0}=request;
-  const profile=request.materialProfile||{},spread=clamp(request.depositSpread??.65,0,1);
+// Exposed material (source), slope gradient and concave resting places
+// (basin), shared by the full transport and the quick edit preview.
+function materialSources(request) {
+  const {height,grid,size,baseHeight=24,seaLevel=0}=request;
+  const profile=request.materialProfile||{};
   const spacing=(size-1)/(grid-1),n=height.length;
-  const source=new Float32Array(n),gx=new Float32Array(n),gy=new Float32Array(n);
-  const basin=new Float32Array(n),deposits=new Float32Array(n),flow=new Float32Array(n);
+  const source=new Float32Array(n),gx=new Float32Array(n),gy=new Float32Array(n),basin=new Float32Array(n);
   const floor=profile.rockyCoasts?seaLevel:baseHeight;
   const minerals=profile.mineral===true,elevated=profile.elevatedCover||[0,30,0];
-  let deadline=performance.now()+10;
-  async function checkpoint() {
-    if (performance.now()<deadline) return false;
-    const cancelled=await pause(); deadline=performance.now()+10; return cancelled;
-  }
-  function sample(a,x,y) {
-    x=clamp(x,0,grid-1.001); y=clamp(y,0,grid-1.001);
-    const xx=Math.floor(x),yy=Math.floor(y),fx=x-xx,fy=y-yy,i=yy*grid+xx;
-    return (a[i]*(1-fx)+a[i+1]*fx)*(1-fy)+(a[i+grid]*(1-fx)+a[i+grid+1]*fx)*fy;
-  }
-  function scatter(a,x,y,value) {
-    const xx=Math.floor(x),yy=Math.floor(y),fx=x-xx,fy=y-yy,i=yy*grid+xx;
-    a[i]+=value*(1-fx)*(1-fy); a[i+1]+=value*fx*(1-fy);
-    a[i+grid]+=value*(1-fx)*fy; a[i+grid+1]+=value*fx*fy;
-  }
   for (let y=0;y<grid;y++) {
     for (let x=0;x<grid;x++) {
       const i=y*grid+x,h=height[i],l=height[y*grid+Math.max(0,x-1)],r=height[y*grid+Math.min(grid-1,x+1)],
         u=height[Math.max(0,y-1)*grid+x],d=height[Math.min(grid-1,y+1)*grid+x];
       gx[i]=(r-l)/(2*spacing); gy[i]=(d-u)/(2*spacing);
-      const slope=Math.hypot(gx[i],gy[i]);
+      const slope=Math.sqrt(gx[i]*gx[i]+gy[i]*gy[i]);
       let cover=smooth(profile.transportSlopeStart??(minerals ? .07 : .60),profile.transportSlopeFull??(minerals ? .55 : 1.35),slope);
       if (minerals) {
         const raised=smooth(baseHeight+elevated[0],baseHeight+elevated[1],h);
@@ -52,7 +38,80 @@ export async function weatherMaterials(request, pause) {
       // Concave resting places favour fine ground cover between exposed ribs.
       basin[i]=smooth(.005,.12,(l+r+u+d-4*h)/(spacing*spacing));
     }
-    if ((y&7)===7 && await checkpoint()) return null;
+  }
+  return {source,gx,gy,basin,spacing,n};
+}
+
+// Three running box means approximate one Gaussian of the given sigma.
+function boxBlur(input,grid,sigma) {
+  const radius=Math.max(1,Math.round((Math.sqrt(4*sigma*sigma+1)-1)/2)),width=2*radius+1,last=grid-1;
+  let a=Float32Array.from(input),b=new Float32Array(input.length);
+  for (let pass=0;pass<3;pass++) for (let axis=0;axis<2;axis++) {
+    const along=axis?grid:1,across=axis?1:grid;
+    for (let line=0;line<grid;line++) {
+      const o=line*across;
+      let sum=0; for (let k=-radius;k<=radius;k++) sum+=a[o+(k<0?0:k>last?last:k)*along];
+      for (let k=0;k<grid;k++) {
+        b[o+k*along]=sum/width;
+        const add=k+radius+1,drop=k-radius;
+        sum+=a[o+(add>last?last:add)*along]-a[o+(drop<0?0:drop)*along];
+      }
+    }
+    [a,b]=[b,a];
+  }
+  return a;
+}
+// Cluster noise depends only on position and seed; reuse it between edits.
+let clusterCache=null;
+function clusterField(grid,spacing,seed) {
+  if (clusterCache?.grid===grid && clusterCache.seed===seed) return clusterCache.field;
+  const field=new Float32Array(grid*grid);
+  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) { const wx=x*spacing,wy=y*spacing; field[y*grid+x]=.65*noise(wx/31,wy/31,seed^0x941a)+.35*noise(wx/11,wy/11,seed^0x4b79); }
+  clusterCache={grid,seed,field}; return field;
+}
+
+// A fast stand-in for weatherMaterials while a shape is being edited: the
+// same sources and soft cover, with arrivals approximated by spreading the
+// sources downhill-agnostically over the deposit reach. Rough, but it keeps
+// a biome's exposed material in place instead of dropping it mid-edit.
+export function quickMaterialField(request) {
+  const {height,grid,seed=1,seaLevel=0}=request,spread=clamp(request.depositSpread??.65,0,1);
+  const {source,basin,spacing,n}=materialSources(request);
+  const soft=boxBlur(source,grid,(9+spread*17)/spacing);
+  const reach=boxBlur(source,grid,(14+spread*30)/spacing),cluster=clusterField(grid,spacing,seed);
+  const field=new Float32Array(n*4);
+  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+    const i=y*grid+x; if (height[i]<=seaLevel+.2) continue;
+    const clusters=cluster[i];
+    field[i*4]=1-Math.exp(-reach[i]*(1-source[i]*.5));
+    field[i*4+1]=clamp(((1-source[i])*.22+basin[i]*.6)*(.35+clusters*1.1),0,1);
+    field[i*4+2]=soft[i];
+    field[i*4+3]=source[i];
+  }
+  return field;
+}
+
+export async function weatherMaterials(request, pause) {
+  const {height,grid,size,seed=1,baseHeight=24,seaLevel=0}=request;
+  const profile=request.materialProfile||{},spread=clamp(request.depositSpread??.65,0,1);
+  const n=height.length;
+  const deposits=new Float32Array(n),flow=new Float32Array(n);
+  let deadline=performance.now()+10;
+  async function checkpoint() {
+    if (performance.now()<deadline) return false;
+    const cancelled=await pause(); deadline=performance.now()+10; return cancelled;
+  }
+  const {source,gx,gy,basin,spacing}=materialSources(request);
+  if (await checkpoint()) return null;
+  function sample(a,x,y) {
+    x=clamp(x,0,grid-1.001); y=clamp(y,0,grid-1.001);
+    const xx=Math.floor(x),yy=Math.floor(y),fx=x-xx,fy=y-yy,i=yy*grid+xx;
+    return (a[i]*(1-fx)+a[i+1]*fx)*(1-fy)+(a[i+grid]*(1-fx)+a[i+grid+1]*fx)*fy;
+  }
+  function scatter(a,x,y,value) {
+    const xx=Math.floor(x),yy=Math.floor(y),fx=x-xx,fy=y-yy,i=yy*grid+xx;
+    a[i]+=value*(1-fx)*(1-fy); a[i+1]+=value*fx*(1-fy);
+    a[i+grid]+=value*(1-fx)*fy; a[i+grid+1]+=value*fx*fy;
   }
   async function blur(input,sigmaWorld) {
     const sigma=Math.max(.6,sigmaWorld/spacing),radius=Math.ceil(sigma*2.5),kernel=[];
