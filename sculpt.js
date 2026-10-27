@@ -586,7 +586,7 @@ function demoStroke(kind,points,options) {
   // Older reviewed examples keep their authored geometry. New island scenes
   // exercise the biome's default shapes; saved maps always retain their heights.
   const island=experiment.get('example')==='islands';
-  const s=startStroke(kind,points[0],{bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:island?defaults.softness/100:.5,...options}); dab(s,points[0]); for (const p of points.slice(1)) extendStroke(s,p);
+  const s=startStroke(kind,points[0],{bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options}); dab(s,points[0]); for (const p of points.slice(1)) extendStroke(s,p);
   settleHill(s);
 }
 function demoRamp(points,options) {
@@ -834,4 +834,6 @@ async function boot() {
     updateControls(); resize(); schedule(); queueWeather();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
+// Read-only hook for capture tools: the displayed (refined) heights.
+window.sculptDebug = {heights: () => Array.from(previewHeight()), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 boot();

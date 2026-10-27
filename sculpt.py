@@ -10,7 +10,8 @@ from urllib.parse import urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt.vert',
-    'sculpt.frag', 'sculpt-common.glsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js')}
+    'sculpt.frag', 'sculpt-common.glsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
+    'relief-bake.frag')}
 
 
 def main():

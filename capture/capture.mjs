@@ -99,6 +99,11 @@ try {
     const dataURL = await evaluate(`document.getElementById('terrain').toDataURL('image/png')`);
     const png = Buffer.from(dataURL.split(',')[1], 'base64');
     writeFileSync(join(outDir, `${scene.name}.png`), png);
+    if (scene.heights) {
+      // Displayed heights for measurement; only pages with the debug hook.
+      const dump = await evaluate(`JSON.stringify({grid: window.sculptDebug.grid, size: window.sculptDebug.size, base: window.sculptDebug.base, sea: window.sculptDebug.sea, heights: window.sculptDebug.heights()})`);
+      writeFileSync(join(outDir, `${scene.name}.heights.json`), dump);
+    }
     const result = {...scene, sha256: createHash('sha256').update(png).digest('hex'),
       refinement: state.refinement, timing: state.timing, waitedMs: state.waitedMs};
     results.push(result);

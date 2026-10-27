@@ -49,6 +49,15 @@ uniform float uWetBand;
 uniform float uShallowDepth;
 uniform float uDeepDepth;
 uniform float uMineralDetail;
+uniform float uMicroRock;
+uniform vec2 uFaceSlope;
+uniform vec2 uRockShare;
+uniform vec4 uFaceScore;
+uniform float uFaceEdge;
+uniform float uMossFromGround;
+uniform float uLightCap;
+uniform float uFootRim;
+uniform float uCrevice;
 /*COMMON*/
 
 float visibility(vec2 p, float h) {
@@ -159,7 +168,7 @@ void main() {
     float route = routeProtection(p);
     float flatLight = 0.42 + 0.95 * uLight.z;
     float lighting = (0.42 + 0.95 * max(0.0, dot(normal, uLight))) / flatLight;
-    lighting = min(lighting, 1.13);
+    lighting = min(lighting, uLightCap);
     float ao = occlusion(p, h);
     float shadow = visibility(p, max(h, uSea));
     float shading = lighting * ao * shadow;
@@ -171,7 +180,7 @@ void main() {
         // hitting one dark floor. Flat ground and sunlit surfaces retain their
         // accepted response; this does not move the sculpted surface.
         float fill = uFaceFill * (1.0 - normal.z) * (1.0 - smoothstep(0.0, 0.50, direct));
-        shading = min((0.42 + fill + 0.95 * direct * shadow) / flatLight, 1.13) * ao;
+        shading = min((0.42 + fill + 0.95 * direct * shadow) / flatLight, uLightCap) * ao;
     }
     // TA's fixed camera permits a native-pixel material grain. World-XY
     // sampling stretches that grain over projected south-facing slopes.
@@ -401,6 +410,39 @@ void main() {
             refined=low+(refined-low)*gain;
         }
         material=mix(material,refined,materialWeather);
+    }
+    if (uReliefMode == 1 && uMicroRock > 0.0) {
+        // TA-style faces: moss and rock interleave at lump scale. The broad
+        // slope sets how much of the face is rock; the detailed surface
+        // decides where: rock on steep flanks and in hollows, moss on tops.
+        float micro = length(g);
+        float around = 0.25 * (surfaceHeight(p - vec2(3.0, 0.0)) + surfaceHeight(p + vec2(3.0, 0.0))
+                             + surfaceHeight(p - vec2(0.0, 3.0)) + surfaceHeight(p + vec2(0.0, 3.0)));
+        float top = clamp((h - around) / 1.5, -1.0, 1.0);
+        // Lump-scale noise breaks the face's upper and lower edges.
+        vec4 edgeNoise = terrainNoise(p * 1.5 + vec2(53.0, 11.0));
+        float faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * uFaceEdge);
+        float face = smoothstep(uFaceSlope.x, uFaceSlope.y, faceSlope) * (1.0 - route);
+        float share = mix(uRockShare.x, uRockShare.y, smoothstep(uFaceSlope.y, uFaceSlope.y * 2.2, slope));
+        vec4 fine = terrainNoise(p * 3.0 + vec2(19.0, 7.0));
+        float score = uFaceScore.x * micro / max(slope, 0.25) - uFaceScore.y * top
+                    + (fine.g - 0.5) * uFaceScore.z + (n.r - 0.5) * uFaceScore.w;
+        // Threshold so that roughly the chosen share of face pixels is rock.
+        float threshold = mix(1.4, -0.9, share);
+        float rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score);
+        vec3 moss = mix(texture(uSlopeGrass, pixel / 512.0).rgb, texture(uGrass, pixel / 512.0).rgb, uMossFromGround);
+        vec3 faceMaterial = mix(moss, rock, rockMask);
+        material = mix(material, faceMaterial, face * uMicroRock);
+        // A light, crisp grass rim where rough ground meets the level plain.
+        float rim = smoothstep(uFaceSlope.x * 0.35, uFaceSlope.x * 0.6, faceSlope)
+                  * (1.0 - smoothstep(uFaceSlope.x * 0.7, uFaceSlope.x * 1.05, faceSlope));
+        vec3 brightGrass = clamp(texture(uGrass, pixel / 512.0).rgb * vec3(1.15, 1.35, 1.05), 0.0, 1.0);
+        material = mix(material, brightGrass, rim * uFootRim * (1.0 - route));
+        exposed = max(exposed * (1.0 - face), rockMask * face);
+        // Thin dark crevices in the relief's hollows, also across mid slopes
+        // where the face material has not taken over.
+        float hollow = smoothstep(0.25, 0.9, -top) * smoothstep(uFaceSlope.x * 0.4, uFaceSlope.x, faceSlope);
+        material *= 1.0 - uCrevice * hollow * (1.0 - route);
     }
     float chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route));
     chip=max(chip,smoothstep(0.035,0.40,materialChipHeight(p)*(1.0-route))*0.65);

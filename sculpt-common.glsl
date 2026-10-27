@@ -3,7 +3,14 @@ uniform sampler2D uHeight;
 uniform sampler2D uNoise;
 uniform sampler2D uFractures;
 uniform sampler2D uWeather;
+#ifdef BAKE
 uniform sampler2D uRoutes;
+#else
+// World-resolution fields baked once per height change: r relief height,
+// g route protection, b ridge/gully value, a relief gain.
+uniform sampler2D uFields;
+uniform int uReliefMode;
+#endif
 uniform sampler2D uMaterialField;
 uniform float uMaterialWeathering;
 uniform bool uMaterialReady;
@@ -42,9 +49,14 @@ vec4 terrainNoise(vec2 p) {
     return texture(uNoise, (p + vec2(37.0, 83.0)) / 512.0);
 }
 
+#ifdef BAKE
 float routeProtection(vec2 p) {
     return texture(uRoutes, (p / (uSize - 1.0) * (uGrid - 1.0) + 0.5) / uGrid).r;
 }
+#else
+vec4 bakedFields(vec2 p) { return texture(uFields, (p + 0.5) / uSize); }
+float routeProtection(vec2 p) { return bakedFields(p).g; }
+#endif
 
 float fractureDepth(vec2 p, float h, float slope) {
     float floorHeight = uRockyCoasts ? uSea : uBase;
@@ -130,6 +142,10 @@ float surfaceHeight(vec2 p) {
     }
     float facets = 2.0 + 14.0 * smoothstep(0.9, 2.6, slope);
     float detail = (n.g - 0.5) * 6.0 + (n.b - 0.5) * facets;
+#ifndef BAKE
+    // Fall-line relief is baked with its own slope gain and route mask.
+    if (uReliefMode == 1) return h + bakedFields(p).r * uDetail + debris - fractureDepth(p, h, slope);
+#endif
     return h + detail * gain * uDetail * rough + debris - fractureDepth(p, h, slope);
 }
 

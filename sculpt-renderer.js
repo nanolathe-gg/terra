@@ -28,16 +28,39 @@ export class TerrainRenderer {
 
   async initialize() {
     const gl = this.gl;
-    const [vs, fs, common] = await Promise.all(['sculpt.vert', 'sculpt.frag', 'sculpt-common.glsl'].map(async name => {
+    const [vs, fs, common, bakeFS] = await Promise.all(['sculpt.vert', 'sculpt.frag', 'sculpt-common.glsl', 'relief-bake.frag'].map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    this.program = gl.createProgram();
-    for (const [type, source] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]])
-      gl.attachShader(this.program, shader(gl, type, source.replace('/*COMMON*/', common)));
-    gl.linkProgram(this.program);
-    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(this.program));
+    const link = (vertex, fragment) => {
+      const program = gl.createProgram();
+      for (const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]])
+        gl.attachShader(program, shader(gl, type, source.replace('/*COMMON*/', common)));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+      return program;
+    };
+    // The bake pass draws one full-screen triangle into world-resolution
+    // fields; it shares the surface functions through the common source.
+    const fullScreen = '#version 300 es\nvoid main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }';
+    if (!gl.getExtension('EXT_color_buffer_float')) throw new Error('This terrain preview requires EXT_color_buffer_float.');
+    this.bakeProgram = link(fullScreen, bakeFS);
+    this.bakeVAO = gl.createVertexArray();
+    this.fieldsTexture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + 12);
+    gl.bindTexture(gl.TEXTURE_2D, this.fieldsTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, this.size, this.size, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    this.fieldsFramebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fieldsFramebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fieldsTexture, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.fieldsDirty = true;
+    this.program = link(vs, fs);
     gl.useProgram(this.program);
     this.uniform = new Map();
     this.meshes = [this.mesh(192), this.mesh(512)];
@@ -57,7 +80,7 @@ export class TerrainRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    this.i('uRoutes', 12);
+    this.i('uFields', 12);
     this.setRoutes(new Float32Array(this.grid * this.grid));
     const variant = new URLSearchParams(location.search);
     for (const [key, value] of Object.entries(this.config.defaults || {}))
@@ -135,6 +158,16 @@ export class TerrainRenderer {
     this.i('uSoilCover', variant.get('transition') === 'soil');
     this.i('uMineralMargins', variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope');
     this.i('uRockLayers', rockLayers);
+    this.i('uReliefMode', variant.get('detail') === 'fall' ? 1 : 0);
+    this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
+    gl.uniform2fv(this.location('uFaceSlope'), (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
+    gl.uniform2fv(this.location('uRockShare'), (variant.get('rockShare') || '0.2,0.85').split(',').map(Number));
+    gl.uniform4fv(this.location('uFaceScore'), (variant.get('faceScore') || '0.2,2.0,0.5,0.3').split(',').map(Number));
+    this.f('uFaceEdge', variant.has('faceEdge') ? Number(variant.get('faceEdge')) : 0.8);
+    this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
+    this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
+    this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
+    this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
     this.i('uDiagnostic', ['diffuse','occlusion','shadow','exposure','shading','material'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -226,6 +259,7 @@ export class TerrainRenderer {
   }
 
   setHeight(height, grid) {
+    this.fieldsDirty = true;
     if (height.length !== grid * grid) throw new Error('Invalid height field dimensions.');
     this.height = height;
     this.grid = grid;
@@ -251,6 +285,7 @@ export class TerrainRenderer {
   }
 
   setRoutes(routes) {
+    this.fieldsDirty = true;
     const gl = this.gl, bytes = new Uint8Array(routes.length);
     for (let i = 0; i < routes.length; i++) bytes[i] = Math.round(routes[i] * 255);
     gl.activeTexture(gl.TEXTURE0 + 12);
@@ -291,11 +326,15 @@ export class TerrainRenderer {
     this.f('uRingSpread', ringSpread);
     this.f('uRingVariation', ringVariation);
     this.i('uScree', scree > 0);
-    this.i('uQuantize', false);
+    this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
     const front = this.variant.get('lighting') === 'front';
     const sun = [light === 'alternate' ? 0.72 : -0.72, front ? 0.38 : -0.38, 0.82];
     const length = Math.hypot(...sun);
     this.v('uLight', sun.map(v => v / length));
+    if (this.fieldsDirty) this.bakeFields();
+    gl.activeTexture(gl.TEXTURE0 + 12);
+    gl.bindTexture(gl.TEXTURE_2D, this.fieldsTexture);
+    gl.useProgram(this.program);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clearColor(0.19, 0.28, 0.14, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -319,6 +358,35 @@ export class TerrainRenderer {
     gl.bindVertexArray(null);
     if (query) { gl.endQuery(this.timer.TIME_ELAPSED_EXT); this.queries.push(query); }
     return {milliseconds: performance.now() - start, gpuMilliseconds: this.lastGPU};
+  }
+
+  bakeFields() {
+    const gl = this.gl, program = this.bakeProgram, v = this.variant;
+    const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
+    gl.useProgram(program);
+    const set = (name, value, kind = 'f') => { const at = gl.getUniformLocation(program, name); if (at) gl[kind === 'i' ? 'uniform1i' : 'uniform1f'](at, value); };
+    set('uHeight', 0, 'i'); set('uNoise', 1, 'i'); set('uRoutes', 12, 'i');
+    set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight); set('uSea', this.config.seaLevel);
+    set('uReliefScale', number('reliefScale', 28));
+    set('uReliefAmount', number('reliefAmount', 0.5));
+    set('uReliefBranch', number('reliefBranch', 2.0));
+    set('uReliefLumps', number('reliefLumps', 0.7));
+    set('uReliefGain', number('reliefGain', 0.55));
+    set('uReliefWarp', number('reliefWarp', 10));
+    set('uReliefPatchy', number('reliefPatchy', 1));
+    set('uReliefOctaves', number('reliefOctaves', 5), 'i');
+    // The routes texture shares unit 12 with the fields; bind it for the bake.
+    gl.activeTexture(gl.TEXTURE0 + 12);
+    gl.bindTexture(gl.TEXTURE_2D, this.routeTexture);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fieldsFramebuffer);
+    gl.viewport(0, 0, this.size, this.size);
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(this.bakeVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+    gl.enable(gl.DEPTH_TEST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.fieldsDirty = false;
   }
 
   sample(x, y) {
