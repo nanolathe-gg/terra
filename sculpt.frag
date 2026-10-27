@@ -63,6 +63,7 @@ uniform vec3 uSandColor;
 uniform float uSlopeTexture;
 uniform float uLandDither;
 uniform float uGullyRock;
+uniform float uWaterSoft;
 uniform float uSandGrain;
 /*COMMON*/
 
@@ -487,6 +488,17 @@ void main() {
         // Sediment mottling varies apparent water colour without changing the
         // authored bed or the level water plane.
         float colorDepth = depth;
+        if (uWaterSoft > 0.0) {
+            // Colour follows depth averaged over a disc: the authored bed
+            // stays exact, but deep water fades in over a wider, uneven band.
+            float sum = 0.0;
+            for (int k = 0; k < 8; k++) {
+                float a = float(k) * 0.785398 + 0.3;
+                vec2 o = vec2(cos(a), sin(a)) * uWaterSoft * (0.6 + 0.4 * float(k % 2));
+                sum += max(0.0, uSea - baseHeight(p + o));
+            }
+            colorDepth = mix(depth, sum / 8.0, 0.75);
+        }
         if (uCoastalDetail) colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
         float deep = smoothstep(uShallowDepth, uDeepDepth, colorDepth);
         vec3 grain = texture(uWater, pixel / vec2(textureSize(uWater, 0))).rgb - uWaterMean;

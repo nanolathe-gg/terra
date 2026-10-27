@@ -211,7 +211,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const r=Math.hypot(dx,dy)/(radius*width*bankScale);
     // A continuous deep core follows the unwarped stroke. Automatic shelves
     // cannot close it; an explicit later shallow-water stroke can cross it.
-    const core=naturalWater?1-smooth(.20,.38,Math.hypot(x*spacing-p.x,y*spacing-p.y)/radius):0;
+    const core=naturalWater?1-smooth(.20,experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,Math.hypot(x*spacing-p.x,y*spacing-p.y)/radius):0;
     if (r>=1 && !core && !shoulderedHill) continue;
     let w;
     if (s.kind==='plateau') {
@@ -810,7 +810,7 @@ const KNOBS = [
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
   ['Sand', [['sand','Amount',0,1,.05,0],['beach','Beach height',0,30,1,10],['basinSand','In hollows',0,1,.05,.6],['drift','Wind drifts',0,1,.05,.45],
     ['wind','Wind toward (deg)',0,360,5,20],['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4],['sandGrain','Grain',0,.5,.01,.22]]],
-  ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60]]],
+  ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 function buildKnobs() {
