@@ -611,14 +611,31 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     material *= 1.0 - weather.r * 0.06;
     material *= 1.0 - nearWater * 0.17;
     let crystalMask = crystalField(p);
-    if (crystalMask > 0.0) {
-        // Flat faces lit by their own normals; edges where faces meet (a
-        // ridge in the surface) catch light, valleys between crystals darken.
+    if (crystalMask > 0.05) {
+        // Retail Crystal (measure/crystal_geometry.py): flat tops take the
+        // crystal colour and the light, with a per-column brightness jitter
+        // (the field's 0.8-1.0); steep side faces are dark at every facing
+        // (luma 26-40 against tops ~60-78); outlines are black ink where the
+        // field marks a column edge (0.5) or a crystal's rim. No edge
+        // highlights.
         let crystalColor = select(u.crystalColor, u.crystalBase.rgb, u.crystalBase.a > 0.5);
-        let around = 0.25 * (baseHeight(p + vec2f(2.0, 0.0)) + baseHeight(p - vec2f(2.0, 0.0)) + baseHeight(p + vec2f(0.0, 2.0)) + baseHeight(p - vec2f(0.0, 2.0)));
-        let ridge = clamp((h - around) / 1.2, -1.0, 1.0);
-        let faces = crystalColor * (1.0 + 0.45 * max(ridge, 0.0) - 0.35 * max(-ridge, 0.0));
-        material = mix(material, faces, smoothstep(0.1, 0.6, crystalMask));
+        let jitter = clamp((crystalMask - 0.9) * 10.0, -1.0, 1.0);
+        // Tops keep the ground's own grain (Crystal's streaks), moved
+        // toward the crystal colour.
+        let grainLum = dot(material, vec3f(0.299, 0.587, 0.114)) / max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
+        var faces = mix(material, crystalColor * clamp(grainLum, 0.6, 1.5), 0.35) * (1.0 + 0.25 * jitter);
+        faces = mix(faces, crystalColor * 0.38, smoothstep(1.2, 2.5, length(g)));
+        faces = mix(faces, vec3f(0.0), (1.0 - smoothstep(0.58, 0.74, crystalMask)) * 0.92);
+        material = mix(material, faces, smoothstep(0.05, 0.3, crystalMask));
+    } else {
+        // A dark apron round a crystal formation, fading over ~16 px.
+        var near = 0.0;
+        for (var k = 0; k < 8; k++) {
+            let dir = vec2f(cos(f32(k) * 0.785398), sin(f32(k) * 0.785398));
+            near = max(near, step(0.3, crystalField(p + dir * 5.0)) * 0.75);
+            near = max(near, step(0.3, crystalField(p + dir * 11.0)) * 0.35);
+        }
+        material *= 1.0 - 0.3 * near;
     }
     var color = material * shading;
     if (h < u.sea + 1.0) {

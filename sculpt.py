@@ -35,7 +35,8 @@ KNOB_DEFAULTS = dict(
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
-    crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25, crystalVariation=.5,
+    crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
+    crystalVariation=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
@@ -84,15 +85,21 @@ WORLD_KNOBS = {
     # brush, not these knobs. The web's plates on the rough ridges measure
     # 14.7 px across at the median (max caliper 20; measure/
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
+    # Its Crystals brush makes column mounds: Voronoi columns with ~15 px
+    # tops stepped ~16 units (measure/crystal_geometry.py).
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
-                    crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0),
+                    crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
+                    crystalForm=1, crystalSize=15, crystalStep=16, crystalVariation=.35),
     # Ice: level snow (flats at exactly 85 and 170), rounded snow mounds whose
     # shaded faces are smooth slate streaks with no crack network, and a
     # pack-ice shelf instead of a beach; its banks into the water are white
     # floes, never the slate of the shaded hill faces (authored from the
     # sections, see sculpt_section_biome.py 'ice').
+    # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
+    # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
     'ice': dict(undulation=4, plainRelief=.6, crackSeverity=.2, crackMajor=.4, crackMinor=.3, crackHairline=.2,
-                crackBlocks=.2, beachWidth=0, bankRock=0),
+                crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
+                crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2),
 }
 
 
@@ -201,8 +208,9 @@ def biome_config(biome, assets):
         # cell (~.125 per px) and the crack-webbed bank runs down to the
         # shelf. Authored profile.
         config['defaults'].update(example='islands', material='single', fractures='40', scree='0')
+        # Column tops: violet palette entries 220/221 (lit ~luma 60-78).
         config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
-                                  slopeFloor=-4.0, slopeDry=2.0)
+                                  slopeFloor=-4.0, slopeDry=2.0, crystalRGB=[112, 84, 140])
     elif biome == 'ice':
         # Ice's snow stands 20 units above its measured shoreline (sea 65,
         # flats 85; retail maps set 75 and draw the floe shelf below it), so
@@ -210,8 +218,9 @@ def biome_config(biome, assets):
         # slope class from 3 units per 16-px cell (~.19 per px). Authored
         # profile.
         config['defaults'].update(example='coasts', material='single', fractures='0', scree='0')
+        # Ice blocks: snow tops (216,231,253).
         config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.1, slopeFull=.3,
-                                  slopeFloor=-4.0, slopeDry=4.0)
+                                  slopeFloor=-4.0, slopeDry=4.0, crystalRGB=[205, 220, 245])
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})

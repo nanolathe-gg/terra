@@ -462,7 +462,10 @@ fn bake(p: vec2f) -> vec4f {
     // ordinary faces and take relief like any other (no smooth dark band).
     // Crystal cells (Crystals brush) keep clean flat faces: no relief,
     // cracks, bands or sand, as on a graded route.
-    let crystalCell = smoothstep(0.15, 0.6, textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).a);
+    // The crystal channel also carries a column's brightness (0.8-1.0) and
+    // its edges (0.5); the shader reads it raw from the fields.
+    let crystalRaw = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).a;
+    let crystalCell = smoothstep(0.15, 0.6, crystalRaw);
     let route = max(routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p)))), crystalCell);
     let crackMask = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).g;
     // Retail level ground is not dead flat in the art: faint embossed lumps
@@ -583,5 +586,5 @@ fn bake(p: vec2f) -> vec4f {
     if (u.hasBeach != 0) { beach = max(beach, paintSand); }
     beach *= 1.0 - paintGround;
     // Green: 2 + crystal on crystal cells.
-    return vec4f(height, select(select(-beach, route, route > 0.01 || beach <= 0.0), 2.0 + crystalCell, crystalCell > 0.02), crackCode, sand);
+    return vec4f(height, select(select(-beach, route, route > 0.01 || beach <= 0.0), 2.0 + crystalRaw, crystalCell > 0.02), crackCode, sand);
 }
