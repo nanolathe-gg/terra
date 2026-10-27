@@ -804,14 +804,14 @@ window.addEventListener('blur',() => { space=false; cursor=null; schedule(false)
 const KNOBS = [
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefOctaves','Octaves',1,6,1,5]]],
-  ['Faces', [['faceEdge','Edge breakup',0,2,.05,.8],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
+  ['Faces', [['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
   ['Sand', [['sand','Amount',0,1,.05,0],['beach','Beach height',0,30,1,10],['basinSand','In hollows',0,1,.05,.6],['drift','Wind drifts',0,1,.05,.45],
     ['wind','Wind toward (deg)',0,360,5,20],['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4],['sandGrain','Grain',0,.5,.01,.22]]],
   ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60]]],
-  ['Palette', [['dither','Dither',0,4,.1,2]]],
+  ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 function buildKnobs() {
   const root = $('knobs'), params = new URLSearchParams(location.search);

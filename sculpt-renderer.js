@@ -357,7 +357,7 @@ export class TerrainRenderer {
     this.i('uReliefMode', variant.get('detail') === 'lab' ? 0 : 1);
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     gl.uniform2fv(this.location('uFaceSlope'), (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
-    gl.uniform2fv(this.location('uRockShare'), (variant.get('rockShare') || '0.2,0.85').split(',').map(Number));
+    gl.uniform2fv(this.location('uRockShare'), (variant.get('rockShare') || '0.2,1.0').split(',').map(Number));
     gl.uniform4fv(this.location('uFaceScore'), (variant.get('faceScore') || '0.2,2.0,0.5,0.3').split(',').map(Number));
     this.f('uFaceEdge', variant.has('faceEdge') ? Number(variant.get('faceEdge')) : 0.8);
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
@@ -367,6 +367,8 @@ export class TerrainRenderer {
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     gl.uniform3fv(this.location('uSandColor'), (variant.get('sandColor') || '196,168,104').split(',').map(v => Number(v) / 255));
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.22);
+    this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
+    this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : 24);
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : 60);
     this.fieldsDirty = true;

@@ -60,6 +60,8 @@ uniform float uFootRim;
 uniform float uCrevice;
 uniform float uDither;
 uniform vec3 uSandColor;
+uniform float uSlopeTexture;
+uniform float uLandDither;
 uniform float uSandGrain;
 /*COMMON*/
 
@@ -316,6 +318,9 @@ void main() {
         // A smooth route can retain native hill grain without inheriting
         // displaced cracks or rubble. Geometry protection remains separate.
         slopeCover *= 1.0 - route * (1.0 - uRampMaterial);
+        // The sampled slope texture carries baked shading that reads as
+        // smudges on gentle ground; the fall-line surface lights grass itself.
+        if (uReliefMode == 1) slopeCover *= uSlopeTexture;
         grass = mix(grass, slopeGrass, slopeCover);
     }
     // Small mineral interiors supply pixel structure; the whole crown/face/
@@ -426,7 +431,7 @@ void main() {
         vec4 edgeNoise = terrainNoise(p * 1.5 + vec2(53.0, 11.0));
         float faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * uFaceEdge);
         float face = smoothstep(uFaceSlope.x, uFaceSlope.y, faceSlope) * (1.0 - route);
-        float share = mix(uRockShare.x, uRockShare.y, smoothstep(uFaceSlope.y, uFaceSlope.y * 2.2, slope));
+        float share = mix(uRockShare.x, uRockShare.y, smoothstep(uFaceSlope.y, uFaceSlope.y * 1.8, slope));
         vec4 fine = terrainNoise(p * 3.0 + vec2(19.0, 7.0));
         float score = uFaceScore.x * micro / max(slope, 0.25) - uFaceScore.y * top
                     + (fine.g - 0.5) * uFaceScore.z + (n.r - 0.5) * uFaceScore.w;
@@ -502,7 +507,9 @@ void main() {
         // ground keeps a repeating pattern. Strength is in palette-LUT steps.
         vec2 fc = floor(gl_FragCoord.xy);
         float ign = fract(52.9829189 * fract(dot(fc, vec2(0.06711056, 0.00583715))));
-        color = clamp(color + (ign - 0.5) * uDither / 31.0, 0.0, 1.0);
+        // Smooth water gradients need dither; noisy ground grain does not.
+        float ditherStrength = h < uSea + 1.0 ? uDither : uDither * uLandDither;
+        color = clamp(color + (ign - 0.5) * ditherStrength / 31.0, 0.0, 1.0);
         color = paletteColor(color);
     }
     // Read-only pixel probes separate shaded form from material coverage.
