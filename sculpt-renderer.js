@@ -290,6 +290,7 @@ export class TerrainRenderer {
     this.i('uSlopeOnLowBanks', material.slopeOnLowBanks !== false);
     this.f('uRampMaterial', material.rampMaterial ?? 0);
     this.i('uSlopeSand', Boolean(material.slopeSand));
+    this.v('uCrystalColor', (material.crystalRGB || [110, 150, 225]).map(v => v / 255));
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
@@ -367,7 +368,7 @@ export class TerrainRenderer {
   }
 
   setColors(colors = {}) {
-    for (const key of ['ground', 'slope', 'rock', 'sand', 'beach', 'shallow', 'deep']) {
+    for (const key of ['ground', 'slope', 'rock', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }
@@ -375,6 +376,11 @@ export class TerrainRenderer {
     const strataDefaults = this.config.strataColors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
     this.set('uStrataColors', strata);
+    // Bed zones (start above the plain, slot A, slot B, B's share); by
+    // default two colours alternating evenly from just above the plain.
+    const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
+    this.set('uStrataZones', [...zones, ...new Array(6 - zones.length).fill([0, 0, 0, 0])]);
+    this.i('uStrataZoneCount', zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
   }
@@ -451,15 +457,16 @@ export class TerrainRenderer {
     this.device.queue.writeTexture({texture: this.weatherTexture}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
   }
 
-  setRoutes(routes, crackLines, cover) {
+  setRoutes(routes, crackLines, cover, crystal) {
     // Red: route protection; green: the shapes' crack amount; blue: painted
-    // sand cover; alpha: painted ground cover (clears sand).
+    // cover, signed about one half (above: sand, below: the world's ground);
+    // alpha: crystal cells.
     this.fieldsDirty = true;
     const bytes = new Uint8Array(routes.length * 4);
     for (let i = 0; i < routes.length; i++) {
       const c = cover?.[i] || 0;
       bytes[i * 4] = Math.round(routes[i] * 255); bytes[i * 4 + 1] = Math.round((crackLines?.[i] || 0) * 255);
-      bytes[i * 4 + 2] = Math.round(Math.max(0, c) * 255); bytes[i * 4 + 3] = Math.round(Math.max(0, -c) * 255);
+      bytes[i * 4 + 2] = Math.round((Math.max(-1, Math.min(1, c)) * 0.5 + 0.5) * 255); bytes[i * 4 + 3] = Math.round((crystal?.[i] || 0) * 255);
     }
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.routeTexture}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -543,6 +550,8 @@ export class TerrainRenderer {
     this.f('uRingVariation', ringVariation);
     this.i('uScree', scree > 0);
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
+    this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
+    this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
     const front = this.variant.get('lighting') === 'front';
     const sun = [light === 'alternate' ? 0.72 : -0.72, front ? 0.38 : -0.38, 0.82];
     const length = Math.hypot(...sun);
@@ -606,6 +615,7 @@ export class TerrainRenderer {
     this.f('uStrataSpacing', variant.has('strataSpacing') ? Number(variant.get('strataSpacing')) : 10);
     this.f('uStrataWarp', variant.has('strataWarp') ? Number(variant.get('strataWarp')) : 12);
     this.f('uStrataContrast', variant.has('strataContrast') ? Number(variant.get('strataContrast')) : 0.6);
+    this.f('uStrataGrain', variant.has('strataGrain') ? Number(variant.get('strataGrain')) : 1);
     this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
@@ -678,6 +688,7 @@ export class TerrainRenderer {
     set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandLine', number('bandLine', 0.5));
+    set('uBandStyle', number('bandStyle', 0), 'i');
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', Boolean(this.config.textures.beach));
     set('uSandBanding', number('sandBanding', 0));

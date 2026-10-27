@@ -76,6 +76,10 @@ struct Uniforms {
     beachHeight: f32,
     beachWidth: f32,
     slopeSand: i32,
+    shoreEdge: f32,   // lava coast rim, outline and lip (0: none)
+    // Crystals: their own colour (world base colour 'crystal', else the world's).
+    crystalColor: vec3f,
+    crystalBase: vec4f,
     groundContrast: f32,
     groundBorrowed: i32,
     crackLit: f32,
@@ -87,7 +91,12 @@ struct Uniforms {
     strataSpacing: f32,
     strataWarp: f32,
     strataContrast: f32,
+    strataGrain: f32,
     strataColors: array<vec4f, 5>,   // rgb; uniform arrays take a 16-byte stride
+    // Zone table: x start (height above the plain), y slot A, z slot B, w B's share.
+    strataZones: array<vec4f, 6>,
+    strataZoneCount: i32,
+    paletteMix: i32,
     transitionDetail: f32,
     rockStart: f32,
     rockFull: f32,
@@ -160,6 +169,7 @@ struct Uniforms {
     apron: f32,           // sand apron reach round raised ground, world px (0: none)
     worms: f32,           // wormy regolith relief on slopes (lunar)
     boulderRound: f32,    // 0: angular boulders; 1: rounded domes
+    bandStyle: i32,       // 0 tonal steps (Green), 1 bank lines (Lava)
     bandSpacing: f32,     // height between bands, height units
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser
@@ -180,7 +190,8 @@ struct Uniforms {
 @group(0) @binding(6) var routesTex: texture_2d<f32>;
 #else
 // World-resolution fields baked once per height change: r relief height,
-// g route protection or (negative) beach, b crack/line code, a sand.
+// g route protection, (negative) beach or 2 + crystal, b crack/line code,
+// a sand.
 @group(0) @binding(6) var fieldsTex: texture_2d<f32>;
 #endif
 // The world fields (height, routes, fields, weather, material field) are
@@ -229,8 +240,10 @@ fn routeProtection(p: vec2f) -> f32 {
 }
 #else
 fn bakedFields(p: vec2f) -> vec4f { return textureSampleLevel(fieldsTex, linearClamp, (p + 0.5) / u.size, 0.0); }
-fn routeProtection(p: vec2f) -> f32 { return max(bakedFields(p).g, 0.0); }
+// Green: route protection 0..1, beach as negative, or 2 + crystal cover.
+fn routeProtection(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(max(g, 0.0), 1.0, g > 1.5); }
 fn beachField(p: vec2f) -> f32 { return max(-bakedFields(p).g, 0.0); }
+fn crystalField(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(0.0, clamp(g - 2.0, 0.0, 1.0), g > 1.5); }
 #endif
 
 fn fractureDepth(p: vec2f, h: f32, slope: f32) -> f32 {

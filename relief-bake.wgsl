@@ -402,6 +402,34 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
     return vec2f(line, dot(-fall, normalize(u.sun.xy + 1e-6)));
 }
 
+// Lava bank lines (retail section-built Lava maps, measure/lava_*.py):
+// continuous braided dark lines along the contours, spaced by distance on
+// the ground rather than by a fixed height step (about 10 (s/0.5)^-0.3 px
+// at broad slope s), from slope 0.15 up with no upper limit, denser and
+// darker on steep ground; a dark V 3 px wide at half depth (5-6 px on steep
+// shaded faces), dark on every facing, no light lines. The broad slope sets
+// the step, so neighbouring lines converge and merge where it changes.
+// Returns (line strength, facing).
+fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec2f {
+    if (u.banding <= 0.0 || h < u.sea + 0.5 || slope < 0.12) { return vec2f(0.0); }
+    // Broad slope of the dry land only: the lava bed would steepen a bank.
+    let broad = vec2f(max(baseHeight(p + vec2f(16.0, 0.0)), u.sea) - max(baseHeight(p - vec2f(16.0, 0.0)), u.sea),
+                      max(baseHeight(p + vec2f(0.0, 16.0)), u.sea) - max(baseHeight(p - vec2f(0.0, 16.0)), u.sea)) / 32.0;
+    // On a narrow steep bank the broad slope is gentler than the face, so
+    // the steeper of the two sets the step (lines no closer than ~7 px).
+    let S = u.bandSpacing * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
+    let uu = (h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18) / S;   // GLSL: u
+    let v = fract(uu);
+    let px = min(v, 1.0 - v) * S / max(slope, 0.05);
+    let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
+    // A 1 px core with half-dark neighbours (3 px wide at half depth),
+    // wider on steep shaded faces.
+    let halfWidth = mix(1.6, 2.2, smoothstep(0.8, 1.4, slope) * smoothstep(0.1, -0.4, facing));
+    let line = clamp(1.0 - px / halfWidth, 0.0, 1.0);
+    let strength = smoothstep(0.12, 0.25, slope) * (0.75 + 0.25 * smoothstep(0.3, 1.5, slope));
+    return vec2f(line * strength * u.banding, facing);
+}
+
 // Sandiness from the weathering worker's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
@@ -432,7 +460,10 @@ fn bake(p: vec2f) -> vec4f {
     let slope = length(g);
     // Only a route's graded surface stays smooth; its steep shoulders are
     // ordinary faces and take relief like any other (no smooth dark band).
-    let route = routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p))));
+    // Crystal cells (Crystals brush) keep clean flat faces: no relief,
+    // cracks, bands or sand, as on a graded route.
+    let crystalCell = smoothstep(0.15, 0.6, textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).a);
+    let route = max(routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p)))), crystalCell);
     let crackMask = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).g;
     // Retail level ground is not dead flat in the art: faint embossed lumps
     // at 10-30 px. Appearance only; exported heights stay level.
@@ -493,19 +524,21 @@ fn bake(p: vec2f) -> vec4f {
         // The squiggles read as dark lines in the art: shade their troughs.
         wormDark = smoothstep(0.82, 0.97, max(worm, worm2 * 0.97)) * u.worms * on * 0.85;
     }
-    let bandsAt = contourBands(p, h, slope, fall);
+    var bandsAt = vec3f(0.0);
+    if (u.bandStyle != 1) { bandsAt = contourBands(p, h, slope, fall); }
     let bands = bandsAt.xy * (1.0 - route);
     height += bands.x;
-    let bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
+    var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
+    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall).x * u.bandLine * (1.0 - route); }
     var sand = sandCover(p, slope, height) * (1.0 - route);
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
     // Ground cover clears weathered and painted sand alike.
     let paint = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
     let paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
-    let paintSand = smoothstep(0.30, 0.70, paint.b + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope)) * (1.0 - route);
-    let paintGround = smoothstep(0.30, 0.70, paint.a + paintEdge);
+    let paintSand = smoothstep(0.30, 0.70, paint.b * 2.0 - 1.0 + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope)) * (1.0 - route);
+    let paintGround = smoothstep(0.30, 0.70, 1.0 - paint.b * 2.0 + paintEdge);
     if (u.hasBeach == 0) { sand = max(sand, paintSand); }
     sand *= 1.0 - paintGround;
     // Only sand deep enough to cover the ground buries relief and stones.
@@ -549,5 +582,6 @@ fn bake(p: vec2f) -> vec4f {
     var beach = beachCover(p, h, slope);
     if (u.hasBeach != 0) { beach = max(beach, paintSand); }
     beach *= 1.0 - paintGround;
-    return vec4f(height, select(-beach, route, route > 0.01 || beach <= 0.0), crackCode, sand);
+    // Green: 2 + crystal on crystal cells.
+    return vec4f(height, select(select(-beach, route, route > 0.01 || beach <= 0.0), 2.0 + crystalCell, crystalCell > 0.02), crackCode, sand);
 }

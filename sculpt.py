@@ -34,35 +34,47 @@ KNOB_DEFAULTS = dict(
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
+    crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25, crystalVariation=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0, sandBanding=0, sandBandSpacing=2,
-    strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6,
-    fingers=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
-    dither=2, landDither=.25,
+    strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
+    fingers=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    dither=2, landDither=.25, paletteMix=0,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
-    'green': dict(banding=.8, bandLine=.45),
-    'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.6),
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5),
-    # Painted Desert: rounded badland hills striped by coloured beds, rilled
-    # by runoff, few cracks.
-    'desert': dict(strata=1, strataSpacing=9, strataWarp=10, strataContrast=.75, banding=.45, crackSeverity=.3,
-                   crackMajor=.4, crackMinor=.3, crackHairline=.2, crackBlocks=.2, reliefAmount=.7, gullyRock=.2,
-                   sand=.6, undulation=6),
-    'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=.8, undulation=4, plainRelief=.6, banding=.3),
+    # Crack darkness calibrated on retail (measure/crack_lines.py, strong
+    # and long line densities on slopes): Green's lines were ~2.5x retail's.
+    # crackDark also darkens band lines, so bandLine keeps their darkness.
+    'green': dict(banding=.8, bandLine=.84, crackDark=.4),
+    'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.6, bandLine=1),
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68),
+    # Painted Desert, measured on the retail map (measure/desert_*.py): beds
+    # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
+    # slopes, not cracks; the plain carries no lighting (luma vs gradient
+    # R^2 0.000), so no undulation, lumps or occlusion; no drifts.
+    'desert': dict(paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
+                   bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
+                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
+    # Moon slopes were too dark and smeared (retail mean luminance .773 vs
+    # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
+    'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+                 worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
-    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=.6,
-                 beachWidth=.6, banding=.3, bandLine=.3),
+    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=1,
+                 beachWidth=.6, banding=.3, bandLine=.5, crackDark=.45),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
     # colour-by-depth ramp, so no depth averaging (authored from the
     # sections, see sculpt_section_biome.py 'lava'). Its bank ridges are
     # irregular, not banded (section measurement), so no contour bands.
+    # Bank lines measured on the section-built retail maps (measure/lava_*):
+    # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
+    # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=.15, banding=0, northFace=.7, fingers=1, worms=.9),
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=5, bandLine=.9,
+                 northFace=.7, fingers=1, worms=0, shoreEdge=1, slopeTexture=0),
 }
 
 
@@ -102,6 +114,11 @@ def biome_config(biome, assets):
         config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
     make_fracture_field(assets)
     config['textures']['fractures'] = '/sculpt-assets/fractures.png'
+    # Palette lookup with two-entry mixes (rows 0-31 are the nearest entry,
+    # as before); the shader uses the pair rows when Mix palette pairs is on.
+    from palette_pairs import make_pair_lut
+    make_pair_lut(assets)
+    config['textures']['palette'] = '/sculpt-assets/palette-pairs.png'
     config.update(size=1024, grid=512, baseHeight=24, seaLevel=0, biomeId=biome, biome=BIOME_NAMES[biome])
     # Accepted Green Planet authoring profile. Explicit query values still
     # select older comparisons; plain /sculpt opens the reviewed treatment.
@@ -151,9 +168,13 @@ def biome_config(biome, assets):
         # interlock land and lava fingers; the ridged slope material runs
         # down the banks to the lava's edge, and the section slope class
         # starts at 3 units per 16-px cell (~.19 per px). Authored profile.
-        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0')
+        # Faces between the bank lines keep the ground's colour; the dark
+        # striated rock is for cliffs only (measured shaded luma 51/45/38 at
+        # slopes 0.4/0.65/1.0). Lava does not wet the ground.
+        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0',
+                                  faceSlope='1.4,2.2', rockShare='0.1,0.8')
         config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
-                                  slopeFloor=-4.0, slopeDry=2.0)
+                                  slopeFloor=-4.0, slopeDry=2.0, rockSlope=2.4, wetBand=1.01)
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
@@ -164,15 +185,25 @@ def biome_config(biome, assets):
         # defaults its rock colour to match.
         config['colors'] = {'rock': '#3d5174'}
     if biome == 'desert':
-        # Default base colours (editable per world in the page): pale ground
-        # and slopes so the beds carry the colour.
-        # The shared TA palette has no warm tans (nearest are olive-creams and
-        # rose-pinks), so this world defaults to full colour; with the TA
-        # palette on it renders rose and ochre beds on olive flats.
-        config['colors'] = {'ground': '#bfa68c', 'slope': '#b0927e', 'rock': '#8e5c4c', 'sand': '#d2bc9e',
-                            'shallow': '#7b8a74', 'deep': '#3f5660'}
-        config['strataColors'] = [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]]
-        config['defaults']['palette'] = 'off'
+        # Measured on the retail map. Its tans are 50/50 mixes of two palette
+        # entries (orange 20+178, cool 84+65), which nearest-colour cannot
+        # make, so the world stays full colour until the palette stage mixes
+        # index pairs. Bed colour slots: 1 orange (189,143,105), 2 cool
+        # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
+        config['strataColors'] = [[189, 143, 105], [185, 190, 192], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
+        # Zones by height above the plain: orange with cool bands (share
+        # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
+        # rock with orange lines above ~69.
+        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 0, .3]]
+        config['defaults']['example'] = 'mesas'
+        # The plain: exact-index tiles from the retail map's level ground,
+        # when the map has been exported (see ground_tiles.py).
+        retail = Path('/private/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3')
+        if retail.is_dir():
+            from ground_tiles import make_ground_tiles
+            make_ground_tiles(assets, retail, name='ground-tiles', per_map=2000, skip=(), above_sea=0, tolerance=2,
+                              max_height=8, max_vocab=32)
+            config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
     config['biomes'] = BIOME_NAMES

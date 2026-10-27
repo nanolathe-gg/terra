@@ -51,10 +51,7 @@ fn groundBased(c: vec3f) -> vec3f {
 }
 // Strata: coloured bands by height on raised ground (painted desert).
 fn strataHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
-fn strataColor(k: f32) -> vec3f {
-    let i = i32(floor(strataHash(k) * 4.999));
-    return u.strataColors[select(4, i, i >= 0 && i <= 3)].rgb;
-}
+fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
 
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
@@ -83,6 +80,19 @@ fn occlusion(p: vec2f, h: f32) -> f32 {
     return 1.0 - result * select(0.09, 0.045, u.full != 0);
 }
 
+// Two-entry mixes: retail art shows colours the palette lacks as pixel
+// mixes of two entries (Painted Desert's tans are 50/50 pairs). The lookup's
+// rows 32-63 and 64-95 hold the colour's best pair (palette_pairs.py); the
+// mix along A-B is measured per pixel and a per-pixel threshold picks one.
+fn palettePair(rgb: vec3f, threshold: f32) -> vec3f {
+    let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
+    let at = vec2i(c.r + 32 * c.b, c.g);
+    let a = textureLoad(paletteTex, at + vec2i(0, 32), 0).rgb;
+    let b = textureLoad(paletteTex, at + vec2i(0, 64), 0).rgb;
+    let d = b - a;
+    let t = clamp(dot(rgb - a, d) / max(dot(d, d), 1e-5), 0.0, 1.0);
+    return select(a, b, threshold < t);
+}
 fn paletteColor(rgb: vec3f) -> vec3f {
     let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
     return textureLoad(paletteTex, vec2i(c.r + 32 * c.b, c.g), 0).rgb;
@@ -412,12 +422,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // A steep ground-level bank remains grassy. Only nearby elevated land
     // admits an exposed face down to water; slope alone cannot classify it.
     // This is the Green Planet authoring rule, not a recovered retail formula.
-    if (u.rockyCoasts == 0 && exposed > 0.001 && h < u.base + 1.0) {
+    // The same rule gates the lump-scale face rock below: a bank's slope
+    // includes the drop to the bed, which alone must not expose rock.
+    var lowBank = 1.0;
+    if (u.rockyCoasts == 0 && h < u.base + 1.0) {
         let uphill = broad / max(0.001, slope);
         var source = max(baseHeight(p), baseHeight(p + uphill * 16.0));
         source = max(source, baseHeight(p + uphill * 36.0));
         source = max(source, baseHeight(p + uphill * 64.0));
-        exposed *= smoothstep(u.base + 12.0, u.base + 36.0, source);
+        lowBank = smoothstep(u.base + 12.0, u.base + 36.0, source);
+        exposed *= lowBank;
     }
     if (u.mineralMargins != 0) { exposed *= smoothstep(0.45, 1.40, slope); }
     if (materialWeather > 0.0 && u.mineralMargins == 0) {
@@ -486,7 +500,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                   + (fine.g - 0.5) * u.faceScore.z + (n.r - 0.5) * u.faceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.
         let threshold = mix(1.4, -0.9, share);
-        let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score);
+        let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowBank;
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
@@ -509,27 +523,40 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         exposed = max(exposed, crown);
     }
     if (u.strata > 0.0) {
-        // Horizontal beds of colour: each band's colour and thickness come
-        // from its index; the beds wander a little, and their boundaries
-        // are soft over a few height units. The material's own grain is kept
-        // as brightness, so rock stays darker than soil within a bed.
-        let warp = (terrainNoise(p * 0.12 + vec2f(5.0, 9.0)).r - 0.5) * u.strataWarp
-                 + (terrainNoise(p * 0.55 + vec2f(17.0, 2.0)).g - 0.5) * u.strataWarp * 0.3;
-        let t = (h - u.base + warp) / u.strataSpacing;
+        // Beds by height, measured on retail Painted Desert: a zone table
+        // (start above the plain; materials A and B as colour slots; B's
+        // share of each period). Within a zone A and B alternate every
+        // uStrataSpacing units, quasi-periodically (B's share varies per
+        // bed), and B's share ramps toward the next zone when both use the
+        // same pair. Beds colour all raised ground, level tops included
+        // (retail mesa caps take their band's colour); edges are hard (~3
+        // px); bed edges wander ~1-1.5 units at 5-25 px and meander broadly.
+        let warp = (terrainNoise(p * 0.08 + vec2f(5.0, 9.0)).r - 0.5) * u.strataWarp
+                 + (terrainNoise(p * 0.7 + vec2f(17.0, 2.0)).g - 0.5) * 2.6
+                 + (terrainNoise(p * 2.1 + vec2f(3.0, 41.0)).b - 0.5) * 1.2;
+        let hr = h - u.base + warp;
+        var zone = 0;
+        for (var i = 1; i < 6; i++) { if (i < u.strataZoneCount && hr >= u.strataZones[i].x) { zone = i; } }
+        let z = u.strataZones[zone];
+        var share = z.w;
+        if (zone + 1 < u.strataZoneCount) {
+            let next = u.strataZones[zone + 1];
+            if (next.y == z.y && next.z == z.z) { share = mix(z.w, next.w, clamp((hr - z.x) / max(next.x - z.x, 0.1), 0.0, 1.0)); }
+        }
+        let S = max(u.strataSpacing, 0.5);
+        let t = hr / S;
         let k = floor(t);
         let f = fract(t);
-        // Uneven thickness: shift the boundary within each band.
-        let split = 0.25 + 0.5 * strataHash(k + 0.37);
-        let lower = strataColor(k * 2.0);
-        let upper = strataColor(k * 2.0 + 1.0);
-        var bed = mix(lower, upper, smoothstep(split - 0.06, split + 0.06, f));
-        bed = mix(strataColor(k * 2.0 - 1.0), bed, smoothstep(0.0, 0.06, f));
+        let split = clamp(1.0 - share * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
+        let edge = clamp(1.5 * max(slope, 0.05) / S, 0.01, 0.2);
+        let isB = smoothstep(split - edge, split + edge, f) * (1.0 - smoothstep(1.0 - edge, 1.0, f));
+        let bed = mix(strataSlot(z.y), strataSlot(z.z), isB);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
-        let painted = saturate(bed * clamp(lum / meanLum, 0.7, 1.15));
-        // Beds show where erosion cuts them, on slopes; level tops keep
-        // their caprock and graded routes their surface.
-        let onRaised = smoothstep(u.base + 1.0, u.base + 6.0, h) * smoothstep(0.06, 0.28, slope) * (1.0 - route);
+        // The ground's grain survives in the beds as brightness, scaled by
+        // Bed grain (retail desert bands are smooth colour).
+        let painted = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
+        let onRaised = smoothstep(u.strataZones[0].x, u.strataZones[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, painted, u.strata * u.strataContrast * onRaised);
     }
     if (u.reliefMode == 1) {
@@ -583,6 +610,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
     material *= 1.0 - nearWater * 0.17;
+    let crystalMask = crystalField(p);
+    if (crystalMask > 0.0) {
+        // Flat faces lit by their own normals; edges where faces meet (a
+        // ridge in the surface) catch light, valleys between crystals darken.
+        let crystalColor = select(u.crystalColor, u.crystalBase.rgb, u.crystalBase.a > 0.5);
+        let around = 0.25 * (baseHeight(p + vec2f(2.0, 0.0)) + baseHeight(p - vec2f(2.0, 0.0)) + baseHeight(p + vec2f(0.0, 2.0)) + baseHeight(p - vec2f(0.0, 2.0)));
+        let ridge = clamp((h - around) / 1.2, -1.0, 1.0);
+        let faces = crystalColor * (1.0 + 0.45 * max(ridge, 0.0) - 0.35 * max(-ridge, 0.0));
+        material = mix(material, faces, smoothstep(0.1, 0.6, crystalMask));
+    }
     var color = material * shading;
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
@@ -633,6 +670,32 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
     }
+    if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {
+        // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just
+        // inside the lava; on the land a dark outline on the first pixel
+        // (darkest on east and south edges), a light lip on the second (west,
+        // north and south edges), and east edges shaded a little farther in.
+        let wet = h < u.sea;
+        var nearest = 9.0;
+        var toward = vec2f(0.0);
+        for (var k = 0; k < 8; k++) {
+            let dir = vec2f(cos(f32(k) * 0.785398), sin(f32(k) * 0.785398));
+            for (var r = 1; r <= 8; r++) {
+                if (f32(r) >= nearest) { break; }
+                if ((baseHeight(p + dir * f32(r)) < u.sea) != wet) { nearest = f32(r); toward = dir; break; }
+            }
+        }
+        if (wet) {
+            if (nearest <= 1.0) { color *= mix(1.0, 0.78, u.shoreEdge); }
+        } else if (nearest < 9.0) {
+            let east = smoothstep(0.2, 0.7, toward.x);
+            let south = smoothstep(0.2, 0.7, toward.y);
+            let westNorth = clamp(smoothstep(0.2, 0.7, -toward.x) + smoothstep(0.2, 0.7, -toward.y), 0.0, 1.0);
+            if (nearest <= 1.0) { color *= mix(1.0, mix(0.8, 0.55, max(east, south)), u.shoreEdge); }
+            else if (nearest <= 2.0) { color *= mix(1.0, 1.0 + 0.15 * clamp(westNorth + south, 0.0, 1.0) * (1.0 - east), u.shoreEdge); }
+            if (nearest > 1.0) { color *= mix(1.0, 0.82, east * u.shoreEdge); }
+        }
+    }
     if (u.clay != 0) {
         color = vec3f(0.53, 0.51, 0.46) * shading;
         if (h < u.sea) { color = mix(color, vec3f(0.20, 0.32, 0.40), 0.72); }
@@ -646,8 +709,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
         let ditherStrength = select(u.dither * u.landDither, u.dither, h < u.sea + 1.0);
-        color = saturate(color + (ign - 0.5) * ditherStrength / 31.0);
-        color = paletteColor(color);
+        // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
+        // local checkerboards, which read as one colour; a noise threshold
+        // clumped them into speckles.
+        let bq = vec2i(fc) & vec2i(3);
+        var bayer = array<i32, 16>(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+        if (u.paletteMix != 0) { color = palettePair(color, (f32(bayer[bq.y * 4 + bq.x]) + 0.5) / 16.0); }
+        else {
+            color = saturate(color + (ign - 0.5) * ditherStrength / 31.0);
+            color = paletteColor(color);
+        }
     }
     // Read-only pixel probes separate shaded form from material coverage.
     if (u.diagnosticView == 1) { color = vec3f(lighting); }

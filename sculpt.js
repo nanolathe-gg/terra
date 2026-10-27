@@ -18,13 +18,14 @@ const HELP = {
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
   offset:'Paint an area to raise or lower by the chosen height. Its edge is natural and its softness sets cliff or slope; the ground keeps its own relief.',
+  crystal:'Grow a cluster of faceted crystals along the stroke: their sides, size, count, how flat their tops are and how much they lean are brush options. Height sets the tallest.',
   sand:'Paint sand cover: the ground under the brush becomes sand (on slopes too, so a hill set in sand has sandy feet). Heights do not change.',
   grass:'Paint ground cover: clears sand (painted or weathered) back to the world\'s own ground, such as grass. Heights do not change.',
   erase:'Paint plain ground: hills, water, craters and cracks under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
-let config, renderer, heights, protection, routes, cracks, cover, grid, size, spacing, noise;
+let config, renderer, heights, protection, routes, cracks, cover, crystal, grid, size, spacing, noise;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
 let history=[], historyIndex=-1, framePending=false, heightDirty=true, needsDraw=true;
@@ -36,12 +37,15 @@ let lastWaterStroke=null;
 const TOOL_PRESETS={
   green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  desert:{crater:{roughness:55,softness:55},plateau:{roughness:50,softness:55},hill:{roughness:45,softness:62},mountain:{roughness:50,softness:50},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
+  // flattening (retail coasts, measure/lava_*): wide, concave dry banks.
+  lava:{deep:{roughness:45,bankWidth:80,beachFlatness:30},shallow:{roughness:30,bankWidth:80,beachFlatness:30}},
   zhon:{crater:{roughness:55,softness:60},plateau:{roughness:45,softness:55},hill:{roughness:30,softness:35},mountain:{roughness:45,softness:55},ramp:{roughness:18},deep:{roughness:60,bankWidth:70,beachFlatness:75,shelves:70},shallow:{roughness:30,bankWidth:70,beachFlatness:75}},
   archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
-const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,400],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
+const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
 // Shape options: per-shape settings, shown for the tools they apply to and
 // kept in each shape, so a selected shape can be changed like a new stroke.
 // Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
@@ -52,6 +56,12 @@ const SHAPE_FIELDS=[
   ['faceVariation','face-variation','Face width variation',['plateau','offset','erase'],0,150,5,100,'How much the edge face widens and narrows along the outline.'],
   ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
+  ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint.'],
+  ['crystalSize','crystal-size','Crystal width (px)',['crystal'],6,96,2,1,'Typical base width; the cluster\'s edge crystals are smaller.'],
+  ['crystalCount','crystal-count','Crystals per cluster',['crystal'],1,40,1,1,'How many crystals a click grows; a longer stroke grows more.'],
+  ['crystalTop','crystal-top','Flat tops',['crystal'],0,95,5,100,'0: pointed; higher cuts the tops level (a flat-topped prism).'],
+  ['crystalLean','crystal-lean','Lean',['crystal'],0,100,5,100,'How far each apex leans off its base centre.'],
+  ['crystalVariation','crystal-variation','Variation',['crystal'],0,100,5,100,'Spread of sizes, heights and side counts.'],
 ];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
@@ -92,7 +102,7 @@ const hillLift=(s,i) => 1+s.rough*(.75*s.noise.coastWidth[i]+.30*s.noise.detail[
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
-const amountRange=kind => kind==='offset'?[-80,80]:['smooth','sand','grass'].includes(kind)?[5,100]:[5,160];
+const amountRange=kind => kind==='crystal'?[5,200]:kind==='offset'?[-80,80]:['smooth','sand','grass'].includes(kind)?[5,100]:[5,160];
 const isCover=kind => kind==='sand' || kind==='grass';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
   return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
@@ -117,7 +127,7 @@ function updateControls() {
   try {
   const fixed=['deep','shallow','ramp','erase'].includes(tool);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='lower'?'Lower by':tool==='crater'?'Depth':tool==='offset'?'Height change':'Rise';
+  $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater'?'Depth':tool==='offset'?'Height change':'Rise';
   const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
@@ -131,6 +141,7 @@ function updateControls() {
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass'].includes(tool);
+  if (tool==='crystal') $('roughness-label').textContent='Irregularity';
   $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
   for (const [,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool); $(id+'-value').textContent=scale===1?$(id).value:$(id).value+'%'; }
@@ -252,7 +263,7 @@ function blurred(field,radius) {
 // replay inside it) instead of allocating six grids per shape per frame.
 const workPool=[]; let workDepth=0;
 function borrowWork() {
-  const n=grid*grid,w=workPool[workDepth] ??= {base:new Float32Array(n),protect:new Float32Array(n),route:new Float32Array(n),crack:new Float32Array(n),weights:new Float32Array(n),distances:new Float32Array(n),cover:new Float32Array(n)};
+  const n=grid*grid,w=workPool[workDepth] ??= {base:new Float32Array(n),protect:new Float32Array(n),route:new Float32Array(n),crack:new Float32Array(n),weights:new Float32Array(n),distances:new Float32Array(n),cover:new Float32Array(n),crystal:new Float32Array(n)};
   workDepth++; return w;
 }
 function startStroke(kind,p,options={}) {
@@ -266,12 +277,13 @@ function startStroke(kind,p,options={}) {
   // Directions drawn from noise live in the authoring frame; turn them with it.
   const turn=frame?Math.atan2(frame[1],frame[0]):0;
   const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8+turn;
-  return {kind,base,protectBase:copy(protection,work?.protect),routeBase:copy(routes,work?.route),crackBase:copy(cracks,work?.crack),coverBase:copy(cover,work?.cover),node:options.node,cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
+  return {kind,base,protectBase:copy(protection,work?.protect),routeBase:copy(routes,work?.route),crackBase:copy(cracks,work?.crack),coverBase:copy(cover,work?.cover),crystalBase:copy(crystal,work?.crystal),node:options.node,cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),fingers:options.fingers??shapeValue('fingers'),faceVariation:options.faceVariation??shapeValue('faceVariation'),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),fingers:options.fingers??shapeValue('fingers'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
+    ...Object.fromEntries(['crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation'].map(k => [k,options[k]??shapeValue(k)])),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
@@ -292,7 +304,7 @@ function fingerRibs(x,y,tx,ty,period,salt) {
     const a=hash(cx-i,cy-j,salt)*.5+.5,b=hash(cx-i,cy-j,salt^0x5bd1)*.5+.5,c=hash(cx-i,cy-j,salt^0x2f6a);
     const px=fx+i-a*.5,py=fy+j-b*.5,w=Math.exp(-(px*px+py*py)*2);
     // Each finger leans its own way off the normal.
-    const lean=c*.5,dx=tx*Math.cos(lean)-ty*Math.sin(lean),dy=tx*Math.sin(lean)+ty*Math.cos(lean);
+    const lean=c*.26,dx=tx*Math.cos(lean)-ty*Math.sin(lean),dy=tx*Math.sin(lean)+ty*Math.cos(lean);
     sum+=Math.cos((px*dx+py*dy)*6.283185+c*3.1)*w; weight+=w;
   }
   return sum/weight;
@@ -321,13 +333,18 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
   let v=i>=0?field[i]:NaN;
   if (Number.isNaN(v)) {
     const tx=-ny,ty=nx;
-    // Fine lobes come and go along the coast; coarse fingers and inlets are
-    // common enough to set the fringe; lumps vary each finger's width.
-    const fine=clamp(fingerRibs(wx,wy,tx,ty,30,s.seed^0x71f3)*1.7,-1,1)*smooth(-.2,.5,valueNoise(wx/90,wy/90,s.seed^0x2d3));
-    const reach=.55+.45*valueNoise(wx/140,wy/140,s.seed^0x6a1);
-    const coarse=clamp(fingerRibs(wx,wy,tx,ty,60,s.seed^0x1c29)*1.8,-1,1)*smooth(-.35,.25,valueNoise(wx/220,wy/220,s.seed^0x4e11))*reach;
-    const lumps=valueNoise(wx/14,wy/14,s.seed^0x5c1)*7+valueNoise(wx/5,wy/5,s.seed^0x3a7)*2.5;
-    v=fine*13+Math.max(0,coarse)*90+Math.min(0,coarse)*75+lumps;
+    // Retail coasts (measure/lava_fingers): a land finger and a lava inlet
+    // every ~45 px of coast, fingers reaching 16-24 px past the coast and
+    // about one in five 40 px or more; fingers taper to blunt rounded tips
+    // (tip/middle ~0.6), inlets to points (~0.4); axes within ~15 degrees of
+    // the normal. A rib's positive half is flattened (blunt) and its negative
+    // half sharpened (pointed); small lumps vary widths.
+    const rib=clamp(fingerRibs(wx,wy,tx,ty,46,s.seed^0x71f3)*1.6,-1,1);
+    const shaped=rib>0?Math.pow(rib,.6):-Math.pow(-rib,1.5);
+    const reach=20*(.8+.4*(valueNoise(wx/120,wy/120,s.seed^0x6a1)*.5+.5));
+    const long=smooth(.3,.75,valueNoise(wx/160,wy/160,s.seed^0x4e11));
+    const lumps=valueNoise(wx/14,wy/14,s.seed^0x5c1)*2.5+valueNoise(wx/5,wy/5,s.seed^0x3a7);
+    v=(shaped>0?shaped*reach*(1+long*1.2):shaped*reach*1.1)+lumps;
     if (i>=0) field[i]=v;
   }
   return v*amount;
@@ -487,7 +504,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     else if (s.kind==='offset') value=base+s.amount*w;
     else if (s.kind==='erase') {
       // Plain ground: back to the dry base, and its cracks close.
-      value=base+(config.baseHeight-base)*w; cracks[i]=s.crackBase[i]*(1-w); cover[i]=s.coverBase[i]*(1-w);
+      value=base+(config.baseHeight-base)*w; cracks[i]=s.crackBase[i]*(1-w); cover[i]=s.coverBase[i]*(1-w); crystal[i]=s.crystalBase[i]*(1-w);
     }
     else if (isCover(s.kind)) {
       // Cover only: +1 sand, -1 the world's ground; heights stay.
@@ -561,7 +578,69 @@ function sweep(s,points) {
   }
   s.path=points.slice(); s.last=s.end=points[points.length-1];
 }
+// Crystals: clusters of faceted crystals. Each is a pyramid over a polygon
+// of n sides whose apex may lean off centre; its surface is the lowest of its
+// face planes, so faces are flat and meet at sharp edges. Flat tops cut it
+// level (0 pointed, near 1 a flat-topped prism). Crystals in a cluster join
+// by the highest; cells they cover are marked so the bake keeps faces clean.
+// Placement, sizes and sides come from the shape's seed.
+function crystalList(s) {
+  const rnd=(k,a) => { let x=Math.imul((s.seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
+  const path=simplifyPath(s.path,Math.max(1,s.radius*.05)),lengths=[0];
+  for (let k=1;k<path.length;k++) lengths.push(lengths[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
+  const total=lengths[lengths.length-1],count=Math.max(1,Math.round(s.crystalCount*(1+total/Math.max(8,s.radius*1.2))));
+  const variation=s.crystalVariation,turn=Math.atan2(s.rot[1],s.rot[0]),out=[];
+  for (let k=0;k<count;k++) {
+    // Along the path by length, then within the brush radius; denser and
+    // taller toward the middle of the cluster.
+    const along=rnd(k,1)*total; let j=1; while (j<path.length-1 && lengths[j]<along) j++;
+    const a=path[j-1],b=path[j]||a,f=lengths[j]>lengths[j-1]?(along-lengths[j-1])/(lengths[j]-lengths[j-1]):0;
+    const spread=Math.pow(rnd(k,2),.8),angle=rnd(k,3)*Math.PI*2;
+    const cx=a.x+(b.x-a.x)*f+Math.cos(angle)*spread*s.radius,cy=a.y+(b.y-a.y)*f+Math.sin(angle)*spread*s.radius;
+    const width=s.crystalSize*(1+variation*(rnd(k,4)-.5)*1.2)*(1-.4*spread);
+    const height=s.amount*(1-.45*spread)*(1+variation*(rnd(k,5)-.5))*Math.min(1.3,width/Math.max(4,s.crystalSize));
+    const sides=clamp(Math.round(s.crystalSides+variation*(rnd(k,6)-.5)*2.4),3,12);
+    const R=width/2,lean=s.crystalLean*R*.75*rnd(k,7),leanAngle=rnd(k,8)*Math.PI*2;
+    const edges=Array.from({length:sides},(_,e) => {
+      const t=turn+rnd(k,9)*Math.PI*2+(e+.5)*Math.PI*2/sides;
+      return {nx:Math.cos(t),ny:Math.sin(t),d:R*Math.cos(Math.PI/sides)*(1+s.rough*.35*(rnd(k,20+e)-.5))};
+    });
+    out.push({x:cx,y:cy,R,height:Math.max(1,height),lx:Math.cos(leanAngle)*lean,ly:Math.sin(leanAngle)*lean,edges});
+  }
+  return out;
+}
+function stampCrystals(s) {
+  // Undo this stroke's previous stamp, then stamp the whole cluster again.
+  const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
+  if (s.crystalRect) for (let y=s.crystalRect.y0;y<=s.crystalRect.y1;y++) for (let x=s.crystalRect.x0;x<=s.crystalRect.x1;x++) {
+    const i=y*grid+x; heights[i]=s.base[i]; protection[i]=s.protectBase[i]; crystal[i]=s.crystalBase[i]; s.weights[i]=0;
+  }
+  const top=clamp(s.crystalTop,0,.95),rect={x0:grid,y0:grid,x1:-1,y1:-1};
+  for (const k of crystalList(s)) {
+    const x0=Math.max(c.x0,Math.floor((k.x-k.R)/spacing)),x1=Math.min(c.x1,Math.ceil((k.x+k.R)/spacing));
+    const y0=Math.max(c.y0,Math.floor((k.y-k.R)/spacing)),y1=Math.min(c.y1,Math.ceil((k.y+k.R)/spacing));
+    rect.x0=Math.min(rect.x0,x0); rect.y0=Math.min(rect.y0,y0); rect.x1=Math.max(rect.x1,x1); rect.y1=Math.max(rect.y1,y1);
+    for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+      const qx=x*spacing-k.x,qy=y*spacing-k.y; let m=Infinity;
+      for (const e of k.edges) {
+        // This face's plane: zero along its base edge, one at the apex.
+        const rise=e.d-(k.lx*e.nx+k.ly*e.ny);
+        m=Math.min(m,(e.d-(qx*e.nx+qy*e.ny))/Math.max(rise,e.d*.2));
+      }
+      if (m<=0) continue;
+      const h=Math.min(k.height,k.height/(1-top)*m),i=y*grid+x;
+      if (h>s.weights[i]) s.weights[i]=h;
+    }
+  }
+  if (rect.x1<0) { s.crystalRect=null; heightDirty=true; return; }
+  for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
+    const i=y*grid+x,h=s.weights[i]; if (h<=0) continue;
+    heights[i]=clamp(s.base[i]+h,MIN_HEIGHT,MAX_HEIGHT); protection[i]=1; crystal[i]=Math.max(s.crystalBase[i],smooth(.2,1.5,h));
+  }
+  s.crystalRect=rect; heightDirty=true;
+}
 function extendStroke(s,p) {
+  if (s.kind==='crystal') { if (Math.hypot(p.x-s.last.x,p.y-s.last.y)>=1) { s.path.push(p); s.last=s.end=p; stampCrystals(s); } return; }
   if (s.kind==='hill' && experiment.get('forms')==='shouldered') {
     if (Math.hypot(p.x-s.last.x,p.y-s.last.y)<.2) return;
     // The first span replaces the point preview once its direction is known.
@@ -720,8 +799,8 @@ function markChanged() { markViewChanged(); heightDirty=true; error(); }
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
-const NODE_NAMES={sand:'Sand cover',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,faceVariation:s.faceVariation,cracks:s.cracks}; }
+const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,faceVariation:s.faceVariation,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -752,6 +831,7 @@ function replayShape(n,work) {
   const pts=n.points,b=nodeBounds(n),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
   const s=startStroke(n.kind,pts[0],{...shapeDefaults(),...n.params,seed:n.seed,frame:n.frame,node:n,work,
     rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
+  if (n.kind==='crystal') { s.path=pts.slice(); stampCrystals(s); return; }
   if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
   if (n.kind==='hill' && experiment.get('forms')==='shouldered' && experiment.get('replay')!=='full') {
     // The settled ridge replaces every live dab, so replay goes straight to
@@ -799,7 +879,13 @@ function addCraterlets(n,s) {
     } finally { workDepth--; }
   }
 }
-function snapshot() { return {h:heights.slice(),p:protection.slice(),r:routes.slice(),c:cracks.slice(),v:cover.slice()}; }
+// The per-cell fields every shape may write, keyed as in prefix snapshots:
+// heights, protection, routes, cracks, cover (sand/ground paint), crystal.
+const live=() => ({h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal});
+const FIELD_KEYS=['h','p','r','c','v','x'];
+function copyFields(src,dst,rect) { for (const k of FIELD_KEYS) copyRect(src[k],dst[k],rect); }
+function resetFields() { heights.fill(config.baseHeight); for (const a of [protection,routes,cracks,cover,crystal]) a.fill(0); }
+function snapshot() { const f=live(); return Object.fromEntries(FIELD_KEYS.map(k => [k,f[k].slice()])); }
 function addNode(n) { prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n); }
 let lastEvalMs=0;
 // Region-limited replay. clip is the rectangle (grid cells, inclusive) that
@@ -818,7 +904,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  const r=radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110:0);
+  const r=n.kind==='crystal'?radius+(q.crystalSize||24)*1.6+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110:0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
@@ -836,17 +922,17 @@ function evaluateRegion(from,rect) {
   // the margin is put back, so nothing outside rect changes.
   const inner=rect,margin=6;
   const outer={x0:Math.max(0,inner.x0-margin),y0:Math.max(0,inner.y0-margin),x1:Math.min(grid-1,inner.x1+margin),y1:Math.min(grid-1,inner.y1+margin)};
-  copyRect(prefix[from].h,heights,inner); copyRect(prefix[from].p,protection,inner); copyRect(prefix[from].r,routes,inner); copyRect(prefix[from].c,cracks,inner); copyRect(prefix[from].v,cover,inner);
-  const saveH=new Float32Array(heights.length),saveP=new Float32Array(heights.length),saveR=new Float32Array(heights.length),saveC=new Float32Array(heights.length),saveV=new Float32Array(heights.length);
+  const now=live(),save=Object.fromEntries(FIELD_KEYS.map(k => [k,new Float32Array(heights.length)]));
+  copyFields(prefix[from],now,inner);
   for (let i=from;i<nodes.length;i++) {
-    if (!prefix[i]) prefix[i]=snapshot(); else { copyRect(heights,prefix[i].h,inner); copyRect(protection,prefix[i].p,inner); copyRect(routes,prefix[i].r,inner); copyRect(cracks,prefix[i].c,inner); copyRect(cover,prefix[i].v,inner); }
+    if (!prefix[i]) prefix[i]=snapshot(); else copyFields(now,prefix[i],inner);
     if (!overlaps(nodeBounds(nodes[i]),outer)) continue;
-    copyRect(heights,saveH,outer); copyRect(protection,saveP,outer); copyRect(routes,saveR,outer); copyRect(cracks,saveC,outer); copyRect(cover,saveV,outer);
+    copyFields(now,save,outer);
     clip=outer; try { applyNode(nodes[i]); } finally { clip=null; }
     for (const band of [{x0:outer.x0,y0:outer.y0,x1:outer.x1,y1:inner.y0-1},{x0:outer.x0,y0:inner.y1+1,x1:outer.x1,y1:outer.y1},
                         {x0:outer.x0,y0:inner.y0,x1:inner.x0-1,y1:inner.y1},{x0:inner.x1+1,y0:inner.y0,x1:outer.x1,y1:inner.y1}]) {
       if (band.x0>band.x1 || band.y0>band.y1) continue;
-      copyRect(saveH,heights,band); copyRect(saveP,protection,band); copyRect(saveR,routes,band); copyRect(saveC,cracks,band); copyRect(saveV,cover,band);
+      copyFields(save,now,band);
     }
   }
   prefix.length=nodes.length; heightDirty=true; markChanged();
@@ -855,8 +941,8 @@ function evaluate(from=0,rect=null) {
   const evalStart=performance.now();
   if (rect && from>0 && prefix[from] && prefix.length>=nodes.length) { evaluateRegion(from,rect); lastEvalMs=performance.now()-evalStart; return; }
   from=Math.max(0,Math.min(from,nodes.length));
-  if (from>0 && prefix[from]) { heights.set(prefix[from].h); protection.set(prefix[from].p); routes.set(prefix[from].r); cracks.set(prefix[from].c); cover.set(prefix[from].v); }
-  else { from=0; heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); }
+  if (from>0 && prefix[from]) { const now=live(); for (const k of FIELD_KEYS) now[k].set(prefix[from][k]); }
+  else { from=0; resetFields(); }
   for (let i=from;i<nodes.length;i++) { prefix[i]=snapshot(); applyNode(nodes[i]); }
   prefix.length=nodes.length; heightDirty=true; markChanged();
   lastEvalMs=performance.now()-evalStart;
@@ -909,7 +995,7 @@ function selectNode(i) {
     if (tool!=='move') { rememberTool(); tool=n.kind; }
     const p=n.params;
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
-    $('diameter').value=clamp(p.radius*2,40,400); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
+    $('diameter').value=clamp(p.radius*2,40,800); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
     $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage'; $('cracks').value=Math.round((p.cracks||0)*100);
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
@@ -1024,7 +1110,7 @@ function startWeatherWorker() {
     if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
     if (data.error) { failWeather(data.error); return; }
     refined=data.height; refinedBase=weatherBase;
-    renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
+    renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
     if (data.materialField) renderer.setMaterialField(data.materialField);
     heightDirty=false;
     if (data.done) { weatherState='ready'; renderedRevision=-1; updateControls(); }
@@ -1046,7 +1132,7 @@ function frame(timestamp) {
   else lastPaintingRAF=null;
   try {
     flushEval();
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover); if ((stroke || moving) && materialPreview()) quickMaterials(); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal); if ((stroke || moving) && materialPreview()) quickMaterials(); heightDirty=false; }
     if (needsDraw || stroke || moving) {
       const quality=stroke||moving?'preview':'full',start=performance.now();
       const stats=renderer.draw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
@@ -1137,7 +1223,7 @@ overlay.addEventListener('pointerdown',event => {
     if (selected>=0) { selected=-1; renderLayers(); }
     cancelWeather();
     stroke=startStroke(tool,p); stroke.screenStart=cursor; paintingIntervals=[]; lastPaintingRAF=null; markChanged();
-    if (tool!=='ramp') dab(stroke,p);
+    if (tool==='crystal') stampCrystals(stroke); else if (tool!=='ramp') dab(stroke,p);
     status(tool==='ramp'?'Draw a curved route toward the other terrain level.':'Sculpting · preview draw every animation frame.'); updateControls();
   }
   pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule();
@@ -1157,7 +1243,7 @@ overlay.addEventListener('pointermove',event => {
         :moving.mode==='scale'?about(c,scaling(clamp(Math.hypot(p.x-c.x,p.y-c.y)/Math.max(4,Math.hypot(a.x-c.x,a.y-c.y)),.2,5)))
         :[1,0,0,1,p.x-a.x,p.y-a.y];
       transformNode(n,moving.state,m);
-      if (moving.mode==='scale') $('diameter').value=clamp(n.params.radius*2,40,400);
+      if (moving.mode==='scale') $('diameter').value=clamp(n.params.radius*2,40,800);
     }
     pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index);
     moving.rect=unionRect(moving.rect,pendingRect);
@@ -1175,7 +1261,7 @@ function endPointer(event) {
   const hadStroke=Boolean(stroke);
   const rawPath=stroke?stroke.path.map(p => ({...p})):null;
   if (stroke) { settleHill(stroke); settleRamp(stroke); if (stroke.kind==='crater') addCraterlets({points:rawPath,params:strokeParams(stroke)},stroke); }
-  if (stroke) { applyCracks(stroke); prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase,c:stroke.crackBase,v:stroke.coverBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; evaluate(nodes.length-1); renderLayers(); }
+  if (stroke) { applyCracks(stroke); prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase,c:stroke.crackBase,v:stroke.coverBase,x:stroke.crystalBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; evaluate(nodes.length-1); renderLayers(); }
   if (stroke) lastWaterStroke=['deep','shallow'].includes(stroke.kind)?stroke:null;
   stroke=null; pan=null; pointerId=null;
   if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId);
@@ -1206,7 +1292,7 @@ function demoRamp(points,options) {
 }
 function mixedScene() {
   applySeedControl(); refinementSeed=seed;
-  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0);
+  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0);
   nodes=[]; prefix=[]; selected=-1;
   addGroundNode();
   if (experiment.get('example')==='islands') {
@@ -1251,6 +1337,16 @@ function mixedScene() {
     demoStroke('hill',[{x:230,y:250},{x:310,y:275}],{radius:82,amount:35,rough:.45});
     demoStroke('deep',[{x:0,y:530},{x:320,y:500},{x:700,y:520},{x:1023,y:550}],{radius:165,rough:.45});
     demoStroke('shallow',[{x:465,y:320},{x:485,y:750}],{radius:45,rough:.22,shallowMode:'area'});
+    markChanged(); return;
+  }
+  if (experiment.get('example')==='mesas') {
+    // Painted Desert landforms at about retail proportions: a broad mesa
+    // (cap ~30% of its foot) with a spire, a lower mesa and rounded hills.
+    demoStroke('plateau',[{x:470,y:560},{x:560,y:600}],{radius:300,amount:67,rough:.18,softness:1});
+    demoStroke('mountain',[{x:530,y:570}],{radius:60,amount:60,rough:.5,softness:.3});
+    demoStroke('plateau',[{x:150,y:180},{x:260,y:220}],{radius:150,amount:45,rough:.25,softness:.9});
+    demoStroke('hill',[{x:860,y:180},{x:900,y:260}],{radius:110,amount:35,rough:.45});
+    demoStroke('hill',[{x:170,y:860}],{radius:80,amount:25,rough:.45});
     markChanged(); return;
   }
   if (experiment.get('example')==='hills') {
@@ -1312,7 +1408,7 @@ function loadSketch(s) {
     for (let i=0;i<next.length;i++) { const v=values.getFloat32(i*4,true); if (!Number.isFinite(v)||v<0||v>1) throw new Error('Invalid ramp surface value.'); nextRoutes[i]=v; }
   }
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather();
-  heights.set(next); protection.set(nextProtect); routes.set(nextRoutes); cracks.fill(0); cover.fill(0); seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; $('seed').value=seed; noise=makeNoise(seed);
+  heights.set(next); protection.set(nextProtect); routes.set(nextRoutes); cracks.fill(0); cover.fill(0); crystal.fill(0); seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; $('seed').value=seed; noise=makeNoise(seed);
   refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
   for (const kind of Object.keys(HELP)) {
@@ -1325,7 +1421,7 @@ function loadSketch(s) {
     toolSettings[kind]=restored;
   }
   showTool(toolSettings[tool]);
-  if (Number.isFinite(s.diameter)) $('diameter').value=clamp(s.diameter,40,400);
+  if (Number.isFinite(s.diameter)) $('diameter').value=clamp(s.diameter,40,800);
   if (Number.isFinite(s.amount)) $('amount').value=clamp(s.amount,...amountRange(tool));
   if (Number.isFinite(s.roughness)) $('roughness').value=clamp(s.roughness,0,100);
   if (Number.isFinite(s.shelves)) $('shelves').value=clamp(s.shelves,0,100);
@@ -1396,7 +1492,7 @@ $('demo').addEventListener('click',() => {
   experiment.set('example',$('example').value); mixedScene(); checkpoint();
   status('Example loaded · sculpt across the joins.'); schedule(); queueWeather();
 });
-$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); nodes=[]; prefix=[]; selected=-1; addGroundNode(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
+$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); nodes=[]; prefix=[]; selected=-1; addGroundNode(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
 $('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),'terrain-sculpt-v3.json'); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
@@ -1408,7 +1504,7 @@ $('file').addEventListener('change',async () => {
 $('export').addEventListener('click',() => {
   if (!canExport()) return;
   try {
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal); heightDirty=false; }
     const start=performance.now(),stats=renderer.draw({quality:'full',clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),rev=revision,job=weatherJob;
     drawTiming(stats,performance.now()-start,'full');
     canvas.toBlob(blob => { if (!blob) error('PNG export is unavailable for this renderer.'); else if (revision!==rev || weatherJob!==job || !canExport()) error('The terrain changed during export. Export the finished view again.'); else download(blob,'terrain-sculpt.png'); },'image/png');
@@ -1452,17 +1548,17 @@ const KNOBS = [
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Majors: rills to plates',0,1,.05,.35],['crackReach','Reach onto gentle slopes',0,1,.05,.6],
     ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
-  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
-  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
-  ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
+  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
+  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds
 // can be adjusted; New world copies the current one under a new name. Kept in
 // this browser (localStorage) and exportable as JSON.
 const WORLD_STORE='nanolathe-map-editor-worlds';
-const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
+const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['crystal','Crystal'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
@@ -1478,7 +1574,7 @@ function defaultColor(key) {
   const rgb=v => v&&v.map(x => x/255);
   const strata=(config.strataColors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
-    strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
+    crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id) {
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id); location.href=url.toString();
@@ -1615,7 +1711,7 @@ async function boot() {
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
     if (worldId!==config.biomeId) document.querySelector('.topbar h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
-    $('example').value=['joins','coasts','hills','intersections','islands'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
+    $('example').value=['joins','coasts','hills','intersections','islands','mesas'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
     buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);
@@ -1631,7 +1727,7 @@ async function boot() {
     $('mineral-ring').value=Math.round((config.material?.ringAmount??0)*100);
     $('ring-spread').value=Math.round((config.material?.ringSpread??.65)*100);
     $('ring-variation').value=Math.round((config.material?.ringVariation??.7)*100);
-    size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); cover=new Float32Array(grid*grid); heights.fill(config.baseHeight);
+    size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); cover=new Float32Array(grid*grid); crystal=new Float32Array(grid*grid); heights.fill(config.baseHeight);
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
     renderer.onerror=message => error(message);
@@ -1653,7 +1749,7 @@ async function boot() {
 // Read-only hook for capture tools: the displayed (refined) heights.
 // bakeMs and drawMs resolve to milliseconds from submit to GPU completion;
 // bakeGpuMs and drawMs's gpuMs are the pass's own GPU time (timestamp queries).
-window.sculptDebug = {bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; },
+window.sculptDebug = {state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 boot();
