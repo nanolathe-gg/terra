@@ -15,7 +15,7 @@ SOURCES = {name: HERE / name for name in (
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
-               'moon': 'Moon', 'zhon': 'Zhon', 'desert': 'Painted Desert'}
+               'moon': 'Moon', 'zhon': 'Zhon', 'lava': 'Lava', 'desert': 'Painted Desert'}
 
 
 # Every map-wide knob's default (the World panel). A world preset is these
@@ -54,6 +54,13 @@ WORLD_KNOBS = {
                  worms=.8, undulation=4, plainRelief=.6, banding=.3),
     'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=50,
                  beachWidth=.6, banding=.3, bandLine=.3),
+    # Lava: one dark, low-chroma brown ground with no cracks, sand or
+    # boulders on the level; striated dark cliffs; a molten sea with no
+    # colour-by-depth ramp, so no depth averaging (authored from the
+    # sections, see sculpt_section_biome.py 'lava'). Its bank ridges are
+    # irregular, not banded (section measurement), so no contour bands.
+    'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
+                 beachWidth=0, waterSoft=0, bankRock=.15, banding=0, northFace=.7, fingers=1),
 }
 
 
@@ -61,7 +68,7 @@ def biome_config(biome, assets):
     """Prepare one biome's materials in its own asset folder and return its
     page configuration, with texture URLs under /sculpt-assets/<biome>/."""
     from sculpt_fractures import make_fracture_field
-    if biome in ('moon', 'zhon'):
+    if biome in ('moon', 'zhon', 'lava'):
         # Measured from a decoded section catalog (sculpt_section_biome.py).
         from sculpt_section_biome import prepare_section_biome
         config = prepare_section_biome(biome, assets)
@@ -134,6 +141,15 @@ def biome_config(biome, assets):
         config['defaults'].update(example='islands', material='single', fractures='20', scree='0')
         config['material'].update(rockyCoasts=False, slopeStart=.08, slopeFull=.40,
                                   slopeFloor=6.0, slopeDry=9.0)
+    elif biome == 'lava':
+        # Lava's land stands ~21 units above its measured shoreline (sea 24,
+        # flats 45), close to the default base of 24, which stays. Its coasts
+        # interlock land and lava fingers; the ridged slope material runs
+        # down the banks to the lava's edge, and the section slope class
+        # starts at 3 units per 16-px cell (~.19 per px). Authored profile.
+        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0')
+        config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
+                                  slopeFloor=-4.0, slopeDry=2.0)
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
@@ -157,7 +173,7 @@ def biome_config(biome, assets):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8767)
-    parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,desert',
+    parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert',
                         help='comma-separated biomes to prepare; the first is the default')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
                         help='each biome prepares its materials in <root>/assets-<biome>')

@@ -40,6 +40,10 @@ PALETTE = Path('/private/tmp/nanolathe-neural-terrain/editor-green-sections/pale
 SCRATCH = Path(os.environ.get('NANOLATHE_SECTION_CATALOGS', '/private/tmp/nanolathe-map-editor/catalogs'))
 LUMA = np.array([.299, .587, .114])
 VERSION = 1
+# A sea whose mean colour at every measured depth lies within this RGB
+# distance of the deep flat has no ramp (authored; Lava's spread is ~5,
+# Zhon's teal-to-deep ramp is far wider).
+FLAT_RAMP_RGB = 12
 
 RECIPES = {
     # Retail Moon. The catalog holds two tonal families: light grey dust
@@ -82,8 +86,51 @@ RECIPES = {
         'rock_band': [.45, .95],
         'water': {'kinds': ['coast sandy', 'coast sandy savannah'],
                   'deep_reference': 'low flats/59f53dfd',
-                  'beach_reference': 'low flats/0717093d'},
+                  'beach_reference': 'low flats/0717093d', 'beach_kinds': ['coast sandy savannah']},
         'seed': 5590213,
+    },
+    # Retail Lava. One brown ground (flats/low-land; high-land and
+    # mtn/l-mtn-flat repeat its art) beside a molten sea that the coast kind
+    # draws on cells ~24 height units below the shoreline. Coasts interlock
+    # fingers of land and lava; their land side is a ridged flow bank on the
+    # rising cells (the slope class). Cliffs of the tall isles, mountain caps
+    # and big hills are dark and striated (the rock class).
+    'lava': {
+        'name': 'Lava',
+        'root': SCRATCH / 'sections/worlds/sections/lava',
+        'ground_kinds': ['flats', 'misc', 'mtn'],
+        'ground_reference': 'flats/low-land',
+        # Slope from the ridged coast banks and the small lumpy misc hills;
+        # rock from the high cliffs. One shared list would mix the isles'
+        # dark shoulders into the slope pool.
+        'slope_kinds': ['coast', 'misc'],
+        'rock_kinds': ['isle', 'mtn', 'misc'],
+        # The coast bank rises ~45 units over ~8 cells, so [3, 8) holds it;
+        # cliff faces are steeper and darker (lum ~35-47 against ground 66).
+        'slope_gradient': [3, 8], 'rock_gradient': 8,
+        'slope_colour': None, 'rock_colour': 'dark', 'rock_fill': .75, 'rock_band': [.2, .8],
+        # Lava's level ground carries authored micro-relief: every 4x4-cell
+        # window of the low-land flat spans 4-7 height units and its cell
+        # gradient stays under 2.2 at the 90th percentile (measured). Level
+        # therefore means a window within 7 units and a gradient below the
+        # slope class, not one exact height as on the Moon and Zhon.
+        'level_spread': 7, 'level_gradient': 3,
+        'water': {'kinds': ['coast'], 'deep_reference': 'flats/low-lava',
+                  # Molten rock shares no colour with the land, so its indices
+                  # are the lava flat's family plus two rim colours found only
+                  # at or inside the lava's edge (measured). The below-the-land
+                  # heuristic would also take the black and dark-brown
+                  # shadows of the ridged bank, which sit below the land too.
+                  'indices': 'reference', 'extra_indices': [200, 207],
+                  # No sand or lit crust: the dark band beside the lava is the
+                  # bank's ridged slope material, not a level beach.
+                  'beach_reference': None,
+                  # Lava colour does not change with depth (measured), so a
+                  # flat ramp is detected instead of fitted; these depths only
+                  # keep the renderer's shallow/deep blend out of the way
+                  # (authored).
+                  'flat_ramp': [0, 10]},
+        'seed': 7716203,
     },
 }
 
@@ -137,16 +184,17 @@ class Section:
         self.smooth = gaussian_filter(self.rgb.astype(np.float32), (2, 2, 0))
         self.sha256 = hashlib.sha256(art.read_bytes()).hexdigest()
 
-    def level_blocks(self, above):
+    def level_blocks(self, above, spread=0):
         """32-px tile-grid blocks whose 2x2 cells and their neighbours share
-        one height above `above`, cut at the rows that height is drawn on."""
+        one height (within `spread`) above `above`, cut at the rows that
+        height is drawn on."""
         h = self.cells
         for ty in range(1, h.shape[0] // 2 - 1):
             for tx in range(1, h.shape[1] // 2 - 1):
                 w = h[ty * 2 - 1:ty * 2 + 3, tx * 2 - 1:tx * 2 + 3]
-                if w.max() != w.min() or w[0, 0] <= above:
+                if w.max() - w.min() > spread or w.min() <= above:
                     continue
-                y = ty * 32 - int(w[0, 0]) // 2
+                y = ty * 32 - int(np.median(w)) // 2
                 if 0 <= y and y + 32 <= self.idx.shape[0]:
                     yield tx * 32, y
 
@@ -188,14 +236,19 @@ def measure_water(catalog, recipe, land_level):
     way to land, and the depth ramp between shallow and deep colour."""
     spec = recipe['water']
     sections = [s for kind in spec['kinds'] for s in catalog.kind(kind)]
-    below = np.zeros(256)
-    total = np.zeros(256)
-    for s in sections:
-        total += np.bincount(s.idx.ravel(), minlength=256)
-        below += np.bincount(s.idx[s.height < land_level - 4], minlength=256)
-    water_index = (below / np.maximum(total, 1)) > .5
     deep_family, _ = catalog.family(spec['deep_reference'])
-    water_index |= deep_family
+    by_colour = spec.get('indices') == 'reference'
+    if by_colour:
+        water_index = deep_family.copy()
+        water_index[spec.get('extra_indices', [])] = True
+    else:
+        below = np.zeros(256)
+        total = np.zeros(256)
+        for s in sections:
+            total += np.bincount(s.idx.ravel(), minlength=256)
+            below += np.bincount(s.idx[s.height < land_level - 4], minlength=256)
+        water_index = (below / np.maximum(total, 1)) > .5
+        water_index |= deep_family
     # Shoreline: the lowest height at which water colour no longer dominates.
     wet = np.zeros(256)
     seen = np.zeros(256)
@@ -211,17 +264,38 @@ def measure_water(catalog, recipe, land_level):
     shallow_sum, shallow_n = np.zeros(3), 0
     for s in sections:
         water = gaussian_filter(water_index[s.idx].astype(np.float32), 2) > .5
-        water &= s.height < sea
+        if not by_colour:
+            # An exact colour family needs no height cut; the heuristic one
+            # does, since its colours can also occur on land.
+            water &= s.height < sea
         masks[s.name] = water
-        band = water & (s.height >= sea - 6)
+        band = water & (s.height >= sea - 6) & (s.height < sea)
         shallow_sum += s.smooth[band].sum(axis=0)
         shallow_n += int(band.sum())
     shallow_rgb = shallow_sum / max(shallow_n, 1)
     deep_rgb = catalog.section(spec['deep_reference']).rgb.reshape(-1, 3).mean(axis=0)
+    # Mean colour by depth below the shoreline, before any ramp is fitted.
+    rgb_sum, rgb_n = np.zeros((sea + 1, 3)), np.zeros(sea + 1)
+    for s in sections:
+        water = masks[s.name] & (s.height < sea)
+        depth = (sea - s.height[water]).astype(int).clip(0, sea)
+        np.add.at(rgb_sum, depth, s.smooth[water])
+        np.add.at(rgb_n, depth, 1)
+    depth_rgb = {int(d): [round(float(v), 1) for v in rgb_sum[d] / rgb_n[d]] for d in range(sea + 1) if rgb_n[d] > 500}
+    spread = max(float(np.linalg.norm(np.array(v) - deep_rgb)) for v in depth_rgb.values())
+    common = {'water_index': water_index, 'sea': int(sea), 'masks': masks, 'sections': sections,
+              'shoreline_fraction': {int(v): round(float(fraction[v]), 3) for v in range(max(0, sea - 10), min(255, sea + 6))},
+              'depth_rgb': depth_rgb, 'depth_rgb_spread': round(spread, 1),
+              'shallow_reference_rgb': shallow_rgb.tolist()}
+    if spread < FLAT_RAMP_RGB:
+        # Colour does not change with depth: a smoothstep fitted to noise
+        # would place stops anywhere, so the recipe's authored depths stand.
+        return {**common, 'ramp': 'flat', 'shallowDepth': spec['flat_ramp'][0], 'deepDepth': spec['flat_ramp'][1],
+                'depth_curve': {}}
     axis = deep_rgb - shallow_rgb
     t_sum, t_n = np.zeros(sea + 1), np.zeros(sea + 1)
     for s in sections:
-        water = masks[s.name]
+        water = masks[s.name] & (s.height < sea)
         depth = (sea - s.height[water]).astype(int).clip(0, sea)
         t = ((s.smooth[water] - shallow_rgb) @ axis / (axis @ axis)).clip(0, 1)
         np.add.at(t_sum, depth, t)
@@ -236,11 +310,8 @@ def measure_water(catalog, recipe, land_level):
             err = float((((x * x * (3 - 2 * x)) - curve) ** 2 * t_n[used]).sum())
             if best is None or err < best[0]:
                 best = (err, a, b)
-    return {'water_index': water_index, 'sea': int(sea), 'masks': masks, 'sections': sections,
-            'shallowDepth': best[1], 'deepDepth': best[2],
-            'shoreline_fraction': {int(v): round(float(fraction[v]), 3) for v in range(max(0, sea - 10), min(255, sea + 6))},
-            'depth_curve': {int(d): round(float(c), 3) for d, c in zip(depths, curve)},
-            'shallow_reference_rgb': shallow_rgb.tolist()}
+    return {**common, 'ramp': 'fitted', 'shallowDepth': best[1], 'deepDepth': best[2],
+            'depth_curve': {int(d): round(float(c), 3) for d, c in zip(depths, curve)}}
 
 
 # --- patch pools -------------------------------------------------------------
@@ -262,17 +333,21 @@ def colour_mask(section, rule, families):
     return gaussian_filter(family[section.idx].astype(np.float32), 2) > .8
 
 
-def pool(sections, select, patch, per_section, spacing, minimum, label, fill=1., black=.02, typical=None):
+def pool(sections, select, patch, per_section, spacing, minimum, label, fill=1., black=.02, typical=None,
+         avoid=None):
     """Patches lying in the selected class (every pixel, or at least `fill`
     of them for narrow bands), preferring the ones with the most native
     mid-band texture, spread over each section. `typical` keeps only patches
     whose mean luminance lies between those quantiles of all candidates, so
-    one quilt does not mix the class's lightest and darkest patches."""
+    one quilt does not mix the class's lightest and darkest patches. `avoid`
+    marks pixels no patch may contain at all (e.g. water beside a partly
+    filled rock patch)."""
     found = []
     for s in sections:
         mask = select(s)
         if mask.sum() < patch * patch:
             continue
+        banned = None if avoid is None else avoid(s)
         # The image border counts as outside, so an all-class mask still works.
         inside = distance_transform_edt(np.pad(mask, 1))[1:-1, 1:-1]
         share = gaussian_filter(mask.astype(np.float32), patch / 4)
@@ -287,6 +362,8 @@ def pool(sections, select, patch, per_section, spacing, minimum, label, fill=1.,
                 if fill < 1 and (share[y + patch // 2, x + patch // 2] < fill or float(mask[sl].mean()) < fill):
                     continue
                 if float((lum[sl] < 10).mean()) > black:
+                    continue
+                if banned is not None and banned[sl].any():
                     continue
                 found.append((s, float(mid[sl].std()), float(lum[sl].mean()), y, x))
     if typical and found:
@@ -317,7 +394,7 @@ def ground_blocks(catalog, recipe, above):
     blocks, sources = [], {}
     for kind in recipe['ground_kinds']:
         for s in catalog.kind(kind):
-            for x, y in s.level_blocks(above):
+            for x, y in s.level_blocks(above, recipe.get('level_spread', 0)):
                 block = s.idx[y:y + 32, x:x + 32]
                 # Only blocks of the chosen ground family: no sand, water or a
                 # second grass sneaks into the neighbour statistics.
@@ -400,7 +477,8 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
     water = None
     if recipe['water']:
         water = measure_water(catalog, recipe, land_level)
-        families['beach'], _ = catalog.family(recipe['water']['beach_reference'])
+        if recipe['water']['beach_reference']:
+            families['beach'], _ = catalog.family(recipe['water']['beach_reference'])
         report['water'] = {k: v for k, v in water.items() if k not in ('water_index', 'masks', 'sections')}
         report['water']['water_indices'] = np.nonzero(water['water_index'])[0].tolist()
     sea = water['sea'] if water else -999
@@ -412,20 +490,31 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
 
     reference_mask, _ = catalog.family(recipe['ground_reference'])
     ground_sections = [catalog.section(n) for n in sorted(tiles['block_sources'], key=lambda n: -tiles['block_sources'][n])[:12]]
+    def level(s):
+        if recipe.get('level_gradient') is None:
+            return s.gradient == 0
+        return s.gradient < recipe['level_gradient']
     ground_patches, ground_records = pool(
         ground_sections,
-        lambda s: (s.gradient == 0) & (s.height > above) & (gaussian_filter(reference_mask[s.idx].astype(np.float32), 3) > .9),
+        lambda s: level(s) & (s.height > above) & (gaussian_filter(reference_mask[s.idx].astype(np.float32), 3) > .9),
         64, 6, 40, 12, 'level ground')
 
-    faces = [s for kind in recipe['face_kinds'] for s in catalog.kind(kind)]
+    # A recipe may draw slope and rock from different section kinds.
+    slope_faces = [s for kind in recipe.get('slope_kinds', recipe.get('face_kinds')) for s in catalog.kind(kind)]
+    rock_faces = [s for kind in recipe.get('rock_kinds', recipe.get('face_kinds')) for s in catalog.kind(kind)]
 
-    def dry(s):
+    def dry_by(s, margin):
         if not water:
             return np.ones(s.idx.shape, bool)
         mask = water['masks'].get(s.name)
         if mask is None:
-            mask = (gaussian_filter(water['water_index'][s.idx].astype(np.float32), 2) > .5) & (s.height < sea + 2)
-        return distance_transform_edt(~mask) > 6
+            mask = gaussian_filter(water['water_index'][s.idx].astype(np.float32), 2) > .5
+            if recipe['water'].get('indices') != 'reference':
+                mask &= s.height < sea + 2
+        return distance_transform_edt(~mask) > margin
+
+    def dry(s):
+        return dry_by(s, 6)
 
     def rock(s):
         return (s.gradient >= recipe['rock_gradient']) & colour_mask(s, recipe['rock_colour'], families) & dry(s)
@@ -437,9 +526,12 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
             mask &= ~colour_mask(s, recipe['rock_colour'], families)
         return mask
 
-    rock_patches, rock_records = pool(faces, rock, 40, 6, 28, 24, 'rock', fill=recipe['rock_fill'],
-                                      black=.10, typical=tuple(recipe['rock_band']))
-    slope_patches, slope_records = pool(faces, slope, 40, 6, 28, 24, 'slope', fill=.85)
+    # A partly filled rock patch must still hold no water (Lava's cliffs
+    # drop straight into the lava); a recipe without water avoids nothing.
+    wet = (lambda s: ~dry_by(s, 0)) if water and recipe['water'].get('indices') == 'reference' else None
+    rock_patches, rock_records = pool(rock_faces, rock, 40, 6, 28, 24, 'rock', fill=recipe['rock_fill'],
+                                      black=.10, typical=tuple(recipe['rock_band']), avoid=wet)
+    slope_patches, slope_records = pool(slope_faces, slope, 40, 6, 28, 24, 'slope', fill=.85)
 
     arrays = {}
     arrays[world + '-ground'], ground_quilt = quilt(ground_patches, size=512, patch=64, overlap=24, seed=seed)
@@ -457,48 +549,59 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
         deep_section = catalog.section(recipe['water']['deep_reference'])
         deep_patches, deep_records = pool([deep_section], lambda s: np.ones(s.idx.shape, bool), 64, 40, 32, 12, 'deep water')
         arrays[world + '-water'], deep_quilt = quilt(deep_patches, size=256, patch=64, overlap=24, seed=seed + 3)
-        # Shallow water: the band nearest the shoreline, well inside the water.
-        shallow_cut = max(4, water['shallowDepth'])
-
-        def shallow(s):
-            mask = water['masks'][s.name] & (s.height >= sea - shallow_cut)
-            return mask & (distance_transform_edt(water['masks'][s.name]) > 4)
-        shallow_patches, shallow_records = pool(water['sections'], shallow, 24, 4, 20, 16, 'shallow water',
-                                                typical=(.35, .65))
-        arrays[world + '-water-shallow'], shallow_quilt = quilt(shallow_patches, size=256, patch=24, overlap=10, seed=seed + 4)
-        # Mid-depth water: where the measured colour ramp is half way. A
-        # straight blend of the shallow and deep tiles passes through colours
-        # the art never uses (grey-blue after palette lookup); the art's own
-        # mid-depth pixels give the renderer a third stop.
-        curve = sorted((int(d), c) for d, c in water['depth_curve'].items())
-        mid_band = [d for d, c in curve if .4 <= c <= .6] or [curve[len(curve) // 2][0]]
-        mid_depth = next(d for d, c in curve if c >= .5)
-
-        def middle(s):
-            depth = sea - s.height
-            return water['masks'][s.name] & (depth >= mid_band[0]) & (depth <= mid_band[-1])
-        mid_patches, mid_records = pool(water['sections'], middle, 24, 4, 20, 16, 'mid-depth water',
-                                        typical=(.35, .65))
-        arrays[world + '-water-mid'], mid_quilt = quilt(mid_patches, size=256, patch=24, overlap=10, seed=seed + 6)
-
-        # Beach: level sand of the beach family within reach of the water.
-        def beach(s):
-            near = distance_transform_edt(~water['masks'][s.name]) <= 96
-            sand = gaussian_filter(families['beach'][s.idx].astype(np.float32), 2) > .9
-            return near & sand & (s.gradient == 0) & (s.height > sea)
-        beach_patches, beach_records = pool(water['sections'], beach, 48, 3, 40, 24, 'beach sand')
-        arrays[world + '-beach'], beach_quilt = quilt(beach_patches, size=512, patch=48, overlap=16, seed=seed + 5)
-        pools.update(shallow=shallow_patches, mid=mid_patches, beach=beach_patches)
         report['deep_water'] = {'source': recipe['water']['deep_reference'], 'sha256': deep_section.sha256,
                                 'quilt': deep_quilt, 'patches': deep_records}
-        report['shallow_water'] = {'pool_count': len(shallow_records), 'patches': shallow_records,
-                                   'quilt': shallow_quilt, 'depth_band': [0, shallow_cut]}
-        report['mid_water'] = {'pool_count': len(mid_records), 'patches': mid_records, 'quilt': mid_quilt,
-                               'depth_band': [mid_band[0], mid_band[-1]], 'half_depth': mid_depth}
-        report['beach'] = {'pool_count': len(beach_records), 'patches': beach_records, 'quilt': beach_quilt,
-                           'reach_px': 96}
-        report['beach'].update(measure_beach(water, families['beach'], reference_mask, sea))
-        material.update(shallowDepth=water['shallowDepth'], deepDepth=water['deepDepth'], midDepth=mid_depth)
+        flat = water['ramp'] == 'flat'
+        if flat:
+            # Colour does not change with depth (measured), so the shallows
+            # are the same molten texture and there is no third stop.
+            arrays[world + '-water-shallow'] = arrays[world + '-water']
+            report['shallow_water'] = {'same_as': 'deep water', 'reason': 'flat colour-by-depth ramp'}
+        else:
+            # Shallow water: the band nearest the shoreline, well inside the water.
+            shallow_cut = max(4, water['shallowDepth'])
+
+            def shallow(s):
+                mask = water['masks'][s.name] & (s.height >= sea - shallow_cut)
+                return mask & (distance_transform_edt(water['masks'][s.name]) > 4)
+            shallow_patches, shallow_records = pool(water['sections'], shallow, 24, 4, 20, 16, 'shallow water',
+                                                    typical=(.35, .65))
+            arrays[world + '-water-shallow'], shallow_quilt = quilt(shallow_patches, size=256, patch=24, overlap=10, seed=seed + 4)
+            # Mid-depth water: where the measured colour ramp is half way. A
+            # straight blend of the shallow and deep tiles passes through colours
+            # the art never uses (grey-blue after palette lookup); the art's own
+            # mid-depth pixels give the renderer a third stop.
+            curve = sorted((int(d), c) for d, c in water['depth_curve'].items())
+            mid_band = [d for d, c in curve if .4 <= c <= .6] or [curve[len(curve) // 2][0]]
+            mid_depth = next(d for d, c in curve if c >= .5)
+
+            def middle(s):
+                depth = sea - s.height
+                return water['masks'][s.name] & (depth >= mid_band[0]) & (depth <= mid_band[-1])
+            mid_patches, mid_records = pool(water['sections'], middle, 24, 4, 20, 16, 'mid-depth water',
+                                            typical=(.35, .65))
+            arrays[world + '-water-mid'], mid_quilt = quilt(mid_patches, size=256, patch=24, overlap=10, seed=seed + 6)
+            pools.update(shallow=shallow_patches, mid=mid_patches)
+            report['shallow_water'] = {'pool_count': len(shallow_records), 'patches': shallow_records,
+                                       'quilt': shallow_quilt, 'depth_band': [0, shallow_cut]}
+            report['mid_water'] = {'pool_count': len(mid_records), 'patches': mid_records, 'quilt': mid_quilt,
+                                   'depth_band': [mid_band[0], mid_band[-1]], 'half_depth': mid_depth}
+            material['midDepth'] = mid_depth
+
+        if recipe['water']['beach_reference']:
+            # Beach: level sand of the beach family within reach of the water.
+            def beach(s):
+                near = distance_transform_edt(~water['masks'][s.name]) <= 96
+                sand = gaussian_filter(families['beach'][s.idx].astype(np.float32), 2) > .9
+                return near & sand & (s.gradient == 0) & (s.height > sea)
+            beach_patches, beach_records = pool(water['sections'], beach, 48, 3, 40, 24, 'beach sand')
+            arrays[world + '-beach'], beach_quilt = quilt(beach_patches, size=512, patch=48, overlap=16, seed=seed + 5)
+            pools.update(beach=beach_patches)
+            report['beach'] = {'pool_count': len(beach_records), 'patches': beach_records, 'quilt': beach_quilt,
+                               'reach_px': 96}
+            report['beach'].update(measure_beach(water, families['beach'], reference_mask, sea,
+                                                 recipe['water']['beach_kinds']))
+        material.update(shallowDepth=water['shallowDepth'], deepDepth=water['deepDepth'])
     else:
         mare = catalog.section(recipe['mare_reference'])
         mare_patches, mare_records = pool([mare], lambda s: np.ones(s.idx.shape, bool), 64, 40, 32, 12, 'mare')
@@ -527,9 +630,10 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
                      'grassDetail': 1., 'rockDetail': 1., 'waterDetail': 1.,
                      'rockMeanRGB': mean('rock'), 'hillRockMeanRGB': mean('rock'),
                      'groundRGB': tile_mean, 'slopeRGB': mean('slope'), 'rockRGB': mean('rock')})
-    if water:
-        textures['beach'] = '/sculpt-assets/' + world + '-beach.png'
+    if water and 'midDepth' in material:
         textures['waterMid'] = '/sculpt-assets/' + world + '-water-mid.png'
+    if water and recipe['water']['beach_reference']:
+        textures['beach'] = '/sculpt-assets/' + world + '-beach.png'
         material['beachRGB'] = mean('beach')
         # The sections put sand and grass at one level just above the water,
         # so the beach is a band measured from the shore, not a height. The
@@ -547,7 +651,7 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
         'palette': {'size': 32, 'imageSize': [1024, 32], 'excludedExactBlack': True},
         'measured': {'landLevel': land_level, 'seaLevel': sea if water else None},
     }
-    if water:
+    if water and 'midDepth' in material:
         config['water']['midRGB'] = mean('water-mid')
     contact(out, world, actual, pools)
     report.update(config=config, generation_seconds=round(time.perf_counter() - start, 1),
@@ -562,13 +666,13 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
     return config
 
 
-def measure_beach(water, beach_family, ground_family, sea):
+def measure_beach(water, beach_family, ground_family, sea, kinds):
     """Sand fraction of dry ground by distance from the water and by height
     above it, in the coast kinds that carry both sand and grass."""
     by_distance = np.zeros((2, 513))
     by_height = np.zeros((2, 64))
     for s in water['sections']:
-        if s.kind != 'coast sandy savannah':
+        if s.kind not in kinds:
             continue
         dist = distance_transform_edt(~water['masks'][s.name]).astype(int).clip(0, 512)
         sand = gaussian_filter(beach_family[s.idx].astype(np.float32), 2) > .5
@@ -585,7 +689,7 @@ def measure_beach(water, beach_family, ground_family, sea):
     return {'width_px': width,
             'sand_fraction_by_distance': {d: round(float(frac[d]), 3) for d in range(0, 257, 16) if by_distance[0, d] > 0},
             'sand_fraction_by_rise': {h: round(float(hfrac[h]), 3) for h in range(64) if by_height[0, h] > 2000},
-            'scope': 'coast sandy savannah only; distance in world px from the measured water mask'}
+            'scope': ', '.join(kinds) + ' only; distance in world px from the measured water mask'}
 
 
 if __name__ == '__main__':
