@@ -97,12 +97,12 @@ export class TerrainRenderer {
       if (key === 'fractures' && !this.config.textures.fractures) { this.i(name, 1); continue; }
       let url = this.config.textures[key];
       if (key === 'rock' && variant.get('rock') === 'hill') url = this.config.textures.hillRock;
-      if (key === 'rock' && variant.get('rock') === 'structural') url = '/sculpt-assets/rock-structural.png';
+      if (key === 'rock' && variant.get('rock') === 'structural') url = this.config.assetBase + 'rock-structural.png';
       if (variant.get('surface') === 'structured') {
         if (key === 'slopeGrass' && this.config.textures.slopeStructured) url = this.config.textures.slopeStructured;
         if (key === 'rock' && this.config.textures.rockStructured) url = this.config.textures.rockStructured;
       }
-      if (key === 'noise' && variant.get('noise') === 'ridged') url = '/sculpt-assets/noise-ridged-gaussian.png';
+      if (key === 'noise' && variant.get('noise') === 'ridged') url = this.config.assetBase + 'noise-ridged-gaussian.png';
       // Procedural ground tiles replace the sampled grass when the biome has them.
       if (key === 'grass' && variant.get('ground') !== 'texture' && this.config.textures.groundTiles) url = this.config.textures.groundTiles;
       const response = await fetch(url);
@@ -380,8 +380,8 @@ export class TerrainRenderer {
     this.f('uGullyRock', variant.has('gullyRock') ? Number(variant.get('gullyRock')) : 0.5);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
     this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
-    this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : 24);
-    this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : 60);
+    this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
+    this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
     this.fieldsDirty = true;
   }
 

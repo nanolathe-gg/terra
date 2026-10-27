@@ -223,6 +223,8 @@ void main() {
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast.
     if (h > uSea) height = max(height, uSea + 0.5 - h);
+    // Nor lifts the bed above it: no specks of land in shallow water.
+    else height = min(height, uSea - 0.5 - h);
     float sand = sandCover(p, h, slope) * (1.0 - route);
     if (sand > 0.0 && uRipple > 0.0) {
         float a = radians(uWindAngle);

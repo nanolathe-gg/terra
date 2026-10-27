@@ -478,7 +478,9 @@ function applyNode(n) {
       // Retail dry land is bimodal: about half dead level, half rolling. A
       // broad mask confines the undulation to patches.
       const threshold=(.5-cover)*1.2,patch=smooth(threshold-.15,threshold+.15,valueNoise(wx/(wave*3.2),wy/(wave*3.2),s^0x7f4b));
-      heights[i]=clamp(h+amp*v*patch*(1-protection[i])*smooth(config.seaLevel+1,config.seaLevel+8,h),MIN_HEIGHT,MAX_HEIGHT);
+      // Dry ground stays dry: undulation never opens new ponds.
+      const next=h+amp*v*patch*(1-protection[i])*smooth(config.seaLevel+1,config.seaLevel+8,h);
+      heights[i]=clamp(Math.max(next,Math.min(h,config.seaLevel+1.5)),MIN_HEIGHT,MAX_HEIGHT);
     }
     return;
   }
@@ -1093,10 +1095,15 @@ function setKnob(key, value) {
 }
 async function boot() {
   try {
-    const response=await fetch('/sculpt-config.json'); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
+    const response=await fetch('/sculpt-config.json'+(experiment.has('biome')?'?biome='+encodeURIComponent(experiment.get('biome')):'')); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
     if (config.size!==1024 || !Number.isInteger(config.grid) || config.grid<2 || config.grid>1024 || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
     document.querySelector('.topbar h2').textContent=(config.biome||'Green Planet')+' terrain';
+    // Biome selector: each world has its own materials and defaults, so a
+    // change reloads the page with that biome (its own autosave).
+    const biomeSelect=$('biome-select');
+    biomeSelect.replaceChildren(...Object.entries(config.biomes||{}).map(([id,name]) => new Option(name,id,false,id===config.biomeId)));
+    biomeSelect.addEventListener('change',() => { const url=new URL(location.href); url.searchParams.set('biome',biomeSelect.value); url.searchParams.delete('example'); location.href=url.toString(); });
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
     $('example').value=['joins','coasts','hills','intersections','islands'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
