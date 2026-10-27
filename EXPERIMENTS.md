@@ -51,6 +51,11 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 43 | Beach band for worlds with a beach texture (third layer of the transition array; all 16 units in use) | beachWidth | Awaits Zhon | Kept |
 | 44 | Moon (retail) and Zhon (third party, ta-archive section pack) worlds, measured from decoded section catalogs (sculpt_section_biome.py): exact palette-index ground tiles, quilted slope/rock/water/beach textures, measured water ramp | | Side-by-side with section crops; Moon dust and craters match; Zhon ground, water and sand match | Kept |
 | 45 | Distance-based beach (baked, within reach of water, ragged inland edge; Zhon ~180 px measured) and a three-stop water ramp (shallow, mid, deep) | beachWidth | Zhon islands and coasts: wide sand beaches into savannah; the purple band from blending two water textures is gone | Kept |
+| 46 | Every World knob has a per-world default (KNOB_DEFAULTS + WORLD_KNOBS in sculpt.py); the page warns about any knob without one | | Console check | Kept |
+| 47 | Contour bands: shallow terraces with a thin dark line along each riser, wandering and dashed; measured on 12 retail Green maps, median step 3.7 height units (middle half 2.3-5.7). Optional rings in water colour | banding, bandSpacing, bandSoftness, bandLine, bandWater | Retail sherwood and barrier reef crops beside ours at 2x | Kept; Green default 0.8 |
+| 48 | Zhon: rock to the crown, sand apron round raised rock (baked, with refined crossings), round boulders, steeper rounder hills | rockCrown, apron, boulderRound | Section 'low savannah to high savannah' side by side | Kept |
+| 49 | Moon: crater ejecta (per crater) and wormy regolith relief with dark troughs | craterEjecta, worms | Lunar sections lnr512x100-104 at 1x | Kept; closer, squiggles still coarser than retail |
+| 50 | Strata beds and a Painted Desert world (Red materials, server default colours, full colour by default: the TA palette has no warm tans) | strata, strataSpacing, strataWarp, strataContrast, strata colours | Renders with palette on and off | Kept |
 
 Open tells and gaps:
 
