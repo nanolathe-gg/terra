@@ -125,6 +125,11 @@ float surfaceHeight(vec2 p) {
     }
     if (h < -12.0) return h;
     float slope = length(broadGradient(p));
+#ifndef BAKE
+    // Baked relief applies at every slope, level ground included: it carries
+    // its own slope gain (gentle-slope relief and level-ground lumps).
+    if (uReliefMode == 1) return h + bakedFields(p).r * uDetail + debris - fractureDepth(p, h, slope);
+#endif
     if (slope < 0.10) return h + debris;
     vec4 n = terrainNoise(p);
     // The same displaced surface supplies projection, normals and occlusion.
@@ -142,10 +147,6 @@ float surfaceHeight(vec2 p) {
     }
     float facets = 2.0 + 14.0 * smoothstep(0.9, 2.6, slope);
     float detail = (n.g - 0.5) * 6.0 + (n.b - 0.5) * facets;
-#ifndef BAKE
-    // Fall-line relief is baked with its own slope gain and route mask.
-    if (uReliefMode == 1) return h + bakedFields(p).r * uDetail + debris - fractureDepth(p, h, slope);
-#endif
     return h + detail * gain * uDetail * rough + debris - fractureDepth(p, h, slope);
 }
 

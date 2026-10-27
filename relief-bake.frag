@@ -34,6 +34,7 @@ uniform float uDebrisSort;       // 1: coarse near the source, fine far away
 uniform float uRepose;           // slope below which debris comes to rest
 uniform float uSand;             // 0 disables sand
 uniform float uCrackSeverity;    // depth and width of large hill cracks
+uniform float uPlainRelief;      // faint lit lumps on level ground (appearance only)
 uniform float uCrackSpacing;     // typical spacing between cracks, world px
 uniform float uCrackLength;      // elongation along the fall line
 uniform float uWindAngle;        // direction the wind blows toward, degrees (0 = east)
@@ -187,8 +188,17 @@ void main() {
     float h = baseHeight(p);
     vec2 g = broadGradient(p);
     float slope = length(g);
-    float route = routeProtection(p);
+    // Only a route's graded surface stays smooth; its steep shoulders are
+    // ordinary faces and take relief like any other (no smooth dark band).
+    float route = routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p))));
     float crackMask = texture(uRoutes, (p / (uSize - 1.0) * (uGrid - 1.0) + 0.5) / uGrid).g;
+    // Retail level ground is not dead flat in the art: faint embossed lumps
+    // at 10-30 px. Appearance only; exported heights stay level.
+    float plain = 0.0;
+    if (uPlainRelief > 0.0 && h > uSea + 1.0) {
+        plain = (valueNoise(p / 13.0 + 41.0) * 0.6 + valueNoise(p / 29.0 + 7.0) * 0.4) * uPlainRelief * 1.6
+              * (1.0 - smoothstep(0.1, 0.4, slope));
+    }
     // Level crests and graded routes stay smooth; relief grows with slope.
     // Gentle slopes carry low lumps too, so ground turned from the sun is
     // textured rather than a smooth gradient; level ground stays level.
@@ -229,6 +239,7 @@ void main() {
     if (h > uSea) height = max(height, uSea + 0.5 - h);
     // Nor lifts the bed above it: no specks of land in shallow water.
     else height = min(height, uSea - 0.5 - h);
+    height += plain;
     float sand = sandCover(p, h, slope) * (1.0 - route);
     if (sand > 0.0 && uRipple > 0.0) {
         float a = radians(uWindAngle);

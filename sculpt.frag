@@ -67,6 +67,8 @@ uniform float uSlopeTexture;
 uniform float uLandDither;
 uniform float uGullyRock;
 uniform float uWaterSoft;
+uniform float uCrispShore;
+uniform float uBankRock;
 uniform int uGroundMode;
 uniform int uGroundTiles;
 uniform float uSandGrain;
@@ -405,7 +407,7 @@ void main() {
     }
     if (uCoastalDetail) {
         float bank = 1.0 - smoothstep(1.0, 8.0, abs(h - uSea - 3.0 + (n.g - 0.5) * 4.0));
-        exposed = max(exposed, bank * smoothstep(0.3, 0.8, slope) * (0.4 + 0.6 * n.b));
+        exposed = max(exposed, bank * smoothstep(0.3, 0.8, slope) * (0.4 + 0.6 * n.b) * uBankRock);
     }
     // A steep ground-level bank remains grassy. Only nearby elevated land
     // admits an exposed face down to water; slope alone cannot classify it.
@@ -424,7 +426,7 @@ void main() {
         chipped=clamp(chipped+(0.34-stoneGrain)*0.5*4.0*chipped*(1.0-chipped),0.0,1.0);
         exposed=mix(exposed,chipped,materialWeather);
     }
-    exposed *= 1.0 - route;
+    exposed *= 1.0 - route * (1.0 - smoothstep(0.45, 0.9, slope));
     float nearWater = 1.0 - smoothstep(uSea + 1.0, uSea + uWetBand, h);
     vec3 material = mix(grass, rock, exposed);
     if (sharedTransition) {
@@ -551,6 +553,14 @@ void main() {
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
         float submerged = smoothstep(-0.2, 2.8, depth);
+        if (uCrispShore > 0.0) {
+            // Retail waterlines are hard edges with small stair-step notches,
+            // not soft fades: threshold depth against pixel-block jitter.
+            vec2 block = floor(pixel / 2.0);
+            float jitter = fract(sin(dot(block, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+            float crisp = step(0.6 + jitter * 1.4, depth);
+            submerged = mix(submerged, crisp, uCrispShore);
+        }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
     }
     if (uClay) {

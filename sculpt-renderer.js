@@ -378,6 +378,8 @@ export class TerrainRenderer {
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.8);
     this.i('uGroundMode', variant.get('ground') !== 'texture' && this.config.textures.groundTiles ? 1 : 0);
     this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
+    this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
+    this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
     this.f('uGullyRock', variant.has('gullyRock') ? Number(variant.get('gullyRock')) : 0.5);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
@@ -417,6 +419,7 @@ export class TerrainRenderer {
     set('uRepose', number('repose', 0.6));
     set('uSand', number('sand', 0));
     set('uCrackSeverity', number('crackSeverity', 0.6));
+    set('uPlainRelief', number('plainRelief', 1.2));
     set('uCrackSpacing', number('crackSpacing', 30));
     set('uCrackLength', number('crackLength', 5));
     set('uWindAngle', number('wind', 20));

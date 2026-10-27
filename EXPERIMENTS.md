@@ -33,6 +33,10 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 25 | Biomes: one server prepares Green, Red and Archipelago; World selector; per-biome water ramp | biome | Red and Archipelago beside their lab baselines | Kept |
 | 26 | Craters from retail Moon sections: lobed outlines, sector-broken rims, off-centre lumpy bowls, uneven aprons, satellite craterlets | craterlets, crater roughness 60 | Moon dark and misc section sheets; before/after | Kept |
 | 27 | Hill cracks: each shape has a Cracks amount (share of crack seeds that open; hills 40%, mountains 50% by default). Lines are traced down the steepest descent with meander, taper and branching, then carved and darkened in the bake | cracks (per shape), crackSeverity, crackSpacing, crackLength | Retail Greenhaven hill. A noise zero-crossing version gave faint or worm-like lines and was dropped | Kept |
+| 28 | Plateau face width varies along the outline (broad noise on the shoulder) | faceVariation | Round-3 tell: even-width cliff bands | Kept at 0.8 |
+| 29 | **Blind round 4**: build 563d63976, seeds 9137/9871, each seed cropped from a different half (no repeated layouts) | | A: AUC 0.93 (8/10 caught, 1 false); B: AUC 0.96 (6/10, 0 false) | Regression vs round 3. Tells: features on dead-flat featureless plains (retail plains carry faint lit lumps); an evenly dark smooth band down ramp shoulders; soft rounded waterlines with a pale fringe; beaded rock on low steps; geometric water outlines (authored example layouts) |
+| 30 | Bug: surfaceHeight returned early on near-level ground (slope < 0.1) before adding baked relief, so gentle-slope relief and any flat-ground detail never rendered. Fixed | | Lumps visible after the fix | Fixed |
+| 31 | Level-ground lumps (appearance only), crisp notched waterline, less rock on low banks, ramp shoulders take relief and rock (only the graded surface is protected) | plainRelief 1.2, crispShore, bankRock 0.25 | Round-4 tells, side by side with retail img01/img03; slope stats unchanged except level-ground gray 1.5% to 2.7% (retail 1.1%) | Kept; needs round 5 |
 
 Open tells and gaps:
 
@@ -45,3 +49,5 @@ Open tells and gaps:
 - Narrow low steps render as chains of rock lumps (round 2, img08).
 - Cliff bands keep an even width along smooth arcs (round 3, reviewer B):
   shoulder and face width need variation along the outline.
+- Archipelago crater floors drop below the biome's beach height and take the bright beach material.
+- Blind sets sample authored example layouts; geometric water outlines are partly the examples' own brush strokes.
