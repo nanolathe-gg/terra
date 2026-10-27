@@ -56,6 +56,7 @@ const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
   ['craterEjecta','crater-ejecta','Ejecta',['crater'],0,100,5,100,'Ragged patches of throw-out beyond the rim.'],
   ['faceVariation','face-variation','Face width variation',['plateau','offset','erase'],0,150,5,100,'How much the edge face widens and narrows along the outline.'],
+  ['mesaFlank','mesa-flank','Mesa flanks',['plateau'],0,100,5,100,'A narrower cap with a sharp edge and wide, even flanks to a concave foot (Painted Desert mesas).'],
   ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound)',['crystal'],0,1,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world).'],
@@ -286,7 +287,7 @@ function startStroke(kind,p,options={}) {
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),fingers:options.fingers??shapeValue('fingers'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
     ...Object.fromEntries(['crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation'].map(k => [k,options[k]??shapeValue(k)])),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
@@ -473,6 +474,14 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       const north=northWiden>0?Math.max(0,-(wy-cy))/Math.max(1e-3,Math.hypot(wx-cx,wy-cy)):0;
       const shoulder=clamp(originalShoulder-(s.softness-.5)*.6-northWiden*.32*north*north,.12,.90);
       w=1-smooth(shoulder,1,r);
+      if (s.kind==='plateau' && s.mesaFlank>0) {
+        // Retail Painted Desert mesas (repro/scenes/desert.json): a narrow
+        // cap (its edge at 0.55 of the shoulder) breaks sharply into a flank
+        // that falls almost evenly, easing only toward the foot, so the beds
+        // spread over most of the footprint. Same outline and foot.
+        const cap=shoulder*(1-.45*s.mesaFlank),t=clamp((r-cap)/(1-cap),0,1);
+        w=w+((1-t)*(1-t)+(1-smooth(0,1,t))*t-w)*s.mesaFlank;
+      }
     }
     else if (s.kind==='deep' || s.kind==='shallow') w=1-smooth(.10,1,r);
     else if (s.kind==='hill') {
@@ -858,7 +867,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,faceVariation:s.faceVariation,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,cracks:s.cracks}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,faceVariation:s.faceVariation,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
