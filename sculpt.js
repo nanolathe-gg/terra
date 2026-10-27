@@ -802,6 +802,7 @@ window.addEventListener('blur',() => { space=false; cursor=null; schedule(false)
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
 const KNOBS = [
+  ['Ground', [['groundTiles','Unique ground tiles',1,64,1,16],['groundClump','Clumping',0,.6,.02,0]]],
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['reliefOctaves','Octaves',1,6,1,5]]],
   ['Faces', [['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
@@ -823,6 +824,7 @@ function buildKnobs() {
   };
   toggle('detail', 'Fall-line surface (off: lab look)', 'fall', 'lab', params.get('detail') !== 'lab');
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
+  toggle('ground', 'Procedural ground tiles (off: lab texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
   for (const [group, knobs] of KNOBS) {
     const title = document.createElement('h3'); title.textContent = group; root.append(title);
     for (const [key, label, min, max, step, value] of knobs) {

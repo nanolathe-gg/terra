@@ -64,6 +64,10 @@ uniform float uSlopeTexture;
 uniform float uLandDither;
 uniform float uGullyRock;
 uniform float uWaterSoft;
+uniform int uGroundMode;
+uniform int uGroundTiles;
+uniform float uGroundClump;
+uniform vec3 uGroundRamp[64];
 uniform float uSandGrain;
 /*COMMON*/
 
@@ -158,6 +162,30 @@ float weatheredCover(float cover, vec4 deposits, vec4 grain) {
     return clamp(varied+(clusters-0.5)*0.30*sqrt(max(0.0,varied))*edge,0.0,1.0);
 }
 
+// Base ground from a fixed set of 32-px tiles, randomly placed on the TNT
+// tile grid, so level ground costs only uGroundTiles unique tiles. Each
+// pixel draws a colour from the measured retail distribution (quantile
+// ramp). An optional clump field repeats every 32 px, so tiles stay seamless.
+float groundHash(ivec3 q) {
+    uint n = uint(q.x) * 374761393u + uint(q.y) * 668265263u + uint(q.z) * 2246822519u;
+    n = (n ^ (n >> 13)) * 1274126177u;
+    return float(n ^ (n >> 16)) / 4294967295.0;
+}
+vec3 groundTile(vec2 pixel) {
+    ivec2 cell = ivec2(floor(pixel / 32.0));
+    ivec2 local = ivec2(mod(floor(pixel), 32.0));
+    int tile = int(groundHash(ivec3(cell, 7)) * float(uGroundTiles));
+    float v = groundHash(ivec3(local, tile + 101));
+    if (uGroundClump > 0.0) {
+        // Smooth 32-periodic field shared by all tiles: correlated grain
+        // without seams. Mixed by rank so the colour distribution holds.
+        vec2 q = vec2(local) / 32.0 * 6.2831853;
+        float c = 0.5 + 0.25 * sin(q.x * 2.0 + 1.3) * cos(q.y * 3.0 + 0.7) + 0.25 * sin((q.x + q.y) * 4.0 + 2.1);
+        v = clamp(mix(v, c, uGroundClump), 0.0, 0.9999);
+    }
+    return uGroundRamp[int(v * 64.0)];
+}
+
 void main() {
     vec2 p = vWorld;
     float h = surfaceHeight(p);
@@ -193,7 +221,7 @@ void main() {
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
     vec2 pixel = vec2(gl_FragCoord.x, uSize - gl_FragCoord.y);
-    vec3 grass = texture(uGrass, pixel / 512.0).rgb;
+    vec3 grass = uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb;
     vec3 transitionGround=grass,transitionFace=grass,transitionLow=grass;
     float transitionPower=1.0;
     float transitionCore=0.0;
@@ -444,7 +472,7 @@ void main() {
         // Threshold so that roughly the chosen share of face pixels is rock.
         float threshold = mix(1.4, -0.9, share);
         float rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score);
-        vec3 moss = mix(texture(uSlopeGrass, pixel / 512.0).rgb, texture(uGrass, pixel / 512.0).rgb, uMossFromGround);
+        vec3 moss = mix(texture(uSlopeGrass, pixel / 512.0).rgb, (uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb), uMossFromGround);
         vec3 faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * uMicroRock);
         // A light, crisp grass rim where rough ground meets the level plain.

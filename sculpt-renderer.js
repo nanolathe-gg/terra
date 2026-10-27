@@ -7,6 +7,10 @@ function shader(gl, type, source) {
   return s;
 }
 
+// Green Planet flat grass: 64 colours at evenly spaced luma quantiles,
+// measured from flat cells of the retail Green corpus maps.
+const GREEN_GROUND_RAMP = [47,43,27,51,51,23,51,51,23,51,51,23,51,51,23,31,79,11,71,59,43,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,35,91,15,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,83,83,51,15,119,63,47,119,27,47,119,27,47,119,27,47,119,27,47,119,27,47,119,27,47,119,27,107,91,23,107,91,23,107,91,23,19,139,79,55,135,39,55,135,39,55,135,39,131,111,35];
+
 export class TerrainRenderer {
   static async create(canvas, config) {
     const self = new TerrainRenderer(canvas, config);
@@ -368,6 +372,10 @@ export class TerrainRenderer {
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     gl.uniform3fv(this.location('uSandColor'), (variant.get('sandColor') || '196,168,104').split(',').map(v => Number(v) / 255));
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.22);
+    this.i('uGroundMode', variant.get('ground') === 'texture' ? 0 : 1);
+    this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
+    this.f('uGroundClump', variant.has('groundClump') ? Number(variant.get('groundClump')) : 0.0);
+    gl.uniform3fv(this.location('uGroundRamp'), GREEN_GROUND_RAMP.map(v => v / 255));
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
     this.f('uGullyRock', variant.has('gullyRock') ? Number(variant.get('gullyRock')) : 0.5);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);

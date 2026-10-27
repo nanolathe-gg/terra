@@ -19,11 +19,12 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 11 | Cheap preview bake while painting | (automatic) | Scripted stroke: 21.7 ms to 16.6 ms between frames | Kept |
 | 12 | **Blind round 1**: 10 generated crops (build 616ff965d, seeds 911/4829) and 10 retail crops (one per corpus map); one fresh reviewer | | 4/10 generated caught, 4/10 retail called generated: chance | Decisive tell was forensic (grass tiles off the 32-px grid); it misfired on retail too. Visual tell: evenly spaced "comb" ribs |
 | 13 | Random phase and wavelength per relief kernel | reliefJitter | Plateau-face A/B against the retail Wretched Ridges cliff | Kept at 0.8: ribs stay, spacing irregular |
+| 14 | Procedural base ground: a fixed set of unique 32-px tiles placed randomly on the TNT tile grid. Pixels draw from a 64-quantile colour ramp measured on retail flat grass | ground, groundTiles, groundClump | Retail flat grass is nearly uncorrelated per pixel (lag-1 0.05, lag-2 0.135); flat stats 73.8/13.1/1.6/61.4 against retail 73.7/12.9/1.1/60.9 | Kept: 16 tiles by default. This answers the user's TNT tile-budget requirement and removes the off-grid forensic tell |
 
 Open tells and gaps:
 
 - Form: our scenes have about eight times retail's share of very steep
   ground, and retail hills are broader cones (Phase 1 node kinds).
 - The steepest faces carry 56% rock against retail's 77%.
-- Grass quilts repeat retail tiles off the 32-px grid. This is forensic,
-  not visible; procedural grain (E6) removes it.
+- Faces and slopes still use the lab's sampled moss and rock textures.
+  Only level ground is procedural so far.
