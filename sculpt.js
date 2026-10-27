@@ -203,6 +203,11 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     face=[-spanY/length*sign,spanX/length*sign];
   }
   const crater=s.kind==='crater';
+  // URL knobs are read once per dab, never per cell (a lookup per cell was
+  // half the cost of moving a lake).
+  const coreEdge=experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38;
+  const faceVariation=experiment.has('faceVariation')?Number(experiment.get('faceVariation')):.8;
+  const bumpy=['hill','mountain','lower'].includes(s.kind);
   const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
@@ -252,10 +257,10 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     // The line anchors the channel; broad world-space fields move its banks
     // independently and vary its width. Repeated dabs do not add fresh noise.
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
-    const r=Math.hypot(dx,dy)/(radius*width*bankScale);
+    const r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
     // A continuous deep core follows the unwarped stroke. Automatic shelves
     // cannot close it; an explicit later shallow-water stroke can cross it.
-    const core=naturalWater?1-smooth(.20,experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,Math.hypot(x*spacing-p.x,y*spacing-p.y)/radius):0;
+    const core=naturalWater?1-smooth(.20,coreEdge,Math.sqrt((wx-p.x)**2+(wy-p.y)**2)/radius):0;
     if (r>=1 && !core && !shoulderedHill) continue;
     let w;
     if (s.kind==='plateau') {
@@ -263,7 +268,6 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       // outline with an identical cross-section still makes a uniform rim.
       // Face width varies along the outline at a broad scale too, so a cliff
       // band does not keep one width round a smooth arc (blind round 3).
-      const faceVariation=experiment.has('faceVariation')?Number(experiment.get('faceVariation')):.8;
       const broadFace=valueNoise(wx/(radius*1.3),wy/(radius*1.3),s.seed^0x5f1);
       const originalShoulder=naturalPlateau?clamp(.56+s.rough*(s.noise.detail[i]+.30*s.noise.coastWidth[i])+faceVariation*.22*broadFace,.18,.88):.62;
       const shoulder=clamp(originalShoulder-(s.softness-.5)*.6,.15,.90);
@@ -293,7 +297,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     }
     else if (s.kind==='mountain') w=(1-r*r)**(3.5*2**((.5-s.softness)*1.5));
     else w=1-smooth(0,1,r);
-    if (['hill','mountain','lower'].includes(s.kind) && !shoulderedHill) w=clamp(w*(1+s.rough*.09*s.noise.detail[i]),0,1);
+    if (bumpy && !shoulderedHill) w=clamp(w*(1+s.rough*.09*s.noise.detail[i]),0,1);
     // Most brushes union influences; the swept hill instead uses its nearest
     // curve section. Neither adds height merely because the pointer dwells.
     const influence=Math.max(w,core);
@@ -599,6 +603,11 @@ function nodeBounds(n) {
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function copyRect(src,dst,r) { for (let y=r.y0;y<=r.y1;y++) dst.set(src.subarray(y*grid+r.x0,y*grid+r.x1+1),y*grid+r.x0); }
+// TODO(perf): dragging a map-wide lake still costs ~80 ms a frame, two thirds
+// of it in dab(): swept water and plateau strokes are replayed as many
+// overlapping dabs. Settle by evaluating a stroke as one pass over the
+// distance to its path, and by moving node replay to a worker (or a coarse
+// grid while dragging) so the view never waits on it.
 function evaluateRegion(from,rect) {
   // Replays nodes from 'from' inside rect only. Each node is computed over a
   // margin (for neighbourhood steps such as the hill's softening blur) and
@@ -1105,6 +1114,7 @@ window.addEventListener('keydown',event => {
   if (typing(event.target)) return;
   if (event.code==='Space' && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); space=true; schedule(false); }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
+  if ((event.key==='Delete' || event.key==='Backspace') && selected>=0 && !stroke && !moving) { event.preventDefault(); nodeAction('delete'); status('Deleted the selected shape.'); }
 });
 window.addEventListener('keyup',event => { if (event.code==='Space') { space=false; schedule(false); } });
 window.addEventListener('blur',() => { space=false; cursor=null; schedule(false); }); new ResizeObserver(resize).observe($('viewport'));
