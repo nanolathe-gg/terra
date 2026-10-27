@@ -92,7 +92,7 @@ def biome_config(biome, assets):
         # shoreline (sea 59, flats 62); 8 leaves the editor's water tools room,
         # as Archipelago's authored base does.
         config['baseHeight'] = 8
-        config['defaults'].update(example='islands', material='single', fractures='20', scree='30')
+        config['defaults'].update(example='islands', material='single', fractures='20', scree='0')
         config['material'].update(rockyCoasts=False, slopeStart=.08, slopeFull=.40,
                                   slopeFloor=6.0, slopeDry=9.0)
     config['assetBase'] = f'/sculpt-assets/{biome}/'

@@ -53,7 +53,7 @@ RECIPES = {
         # Height units per 16-px cell. Crater shoulders and ejecta form the
         # slope band; walls steeper than the rock threshold form the rock.
         'slope_gradient': [2, 7], 'rock_gradient': 6,
-        'slope_colour': None, 'rock_colour': 'dark', 'rock_fill': .75,
+        'slope_colour': None, 'rock_colour': 'dark', 'rock_fill': .75, 'rock_band': [.2, .8],
         'water': None, 'mare_reference': 'dark/lunardk512xflatgr',
         'seed': 3341907,
     },
@@ -73,6 +73,10 @@ RECIPES = {
         # gradient alone does not separate them, so colour splits the band.
         'slope_gradient': [6, 99], 'rock_gradient': 8,
         'slope_colour': 'beach', 'rock_colour': 'grey', 'rock_fill': 1.,
+        # Boulders read as light grey-blue domes beside the sand; the class's
+        # darker half is mostly their baked shadow side, which the renderer
+        # shades again, so the brighter patches are kept (authored).
+        'rock_band': [.45, .95],
         'water': {'kinds': ['coast sandy', 'coast sandy savannah'],
                   'deep_reference': 'low flats/59f53dfd',
                   'beach_reference': 'low flats/0717093d'},
@@ -431,7 +435,7 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
         return mask
 
     rock_patches, rock_records = pool(faces, rock, 40, 6, 28, 24, 'rock', fill=recipe['rock_fill'],
-                                      black=.10, typical=(.2, .8))
+                                      black=.10, typical=tuple(recipe['rock_band']))
     slope_patches, slope_records = pool(faces, slope, 40, 6, 28, 24, 'slope', fill=.85)
 
     arrays = {}
