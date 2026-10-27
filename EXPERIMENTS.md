@@ -38,6 +38,12 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 30 | Bug: surfaceHeight returned early on near-level ground (slope < 0.1) before adding baked relief, so gentle-slope relief and any flat-ground detail never rendered. Fixed | | Lumps visible after the fix | Fixed |
 | 31 | Level-ground lumps (appearance only), crisp notched waterline, less rock on low banks, ramp shoulders take relief and rock (only the graded surface is protected) | plainRelief 1.2, crispShore, bankRock 0.25 | Round-4 tells, side by side with retail img01/img03; slope stats unchanged except level-ground gray 1.5% to 2.7% (retail 1.1%) | Kept; needs round 5 |
 | 32 | **Blind round 5**: build f2ed349b3, seeds 10457/11939, crops from different halves | | A: AUC 0.20 (0/10 caught, 6/10 retail called generated); B: AUC 0.18 (0/10, 6/10) | Inverted. By eye the sets can't be told apart, but the reviewers read retail's Bryce-rendered contour banding (terrace lines, rings round lakes) and lumpy plains as 'generated'. Ours lacks that banding, a systematic difference. One real tell: a speck of water inside rock on a coast |
+| 33 | Drag speed: dab() read two URL knobs per cell; read once per dab | | Six example scenes hash-identical; lake drag 300 to 83 ms (Green mixed), 215 to 45 ms (Archipelago islands); same shape and scene cost the same in every biome (~17 ms) | Kept; TODO for the rest (swept dabs, worker) |
+| 34 | Edit preview keeps biome materials: a quick material field (same sources and soft cover, arrivals spread by blur) stands in for the transport while editing | | Archipelago drag: hills stayed dark instead of turning pale; channels r 0.99-1.0, arrivals r 0.6 with matched mean; 12 ms | Kept |
+| 35 | Shape frames: each shape's brush noise is read through its frame, so moved, rotated and scaled shapes keep their outline; Move handles, Shift+drag height, , . [ ] PageUp/Down, Delete; Raise / lower area tool | | Frameless shapes hash-identical; region replay equals full replay (max diff 0) after rotate, move and scale | Kept |
+| 36 | Crack engine: anisotropic warped cellular network at texel resolution in the full bake (edges kept by hash, rills or plates by orientation, taper), carved as a narrow V; sparse long fissures; styles. Replaces traced 512-grid lines and the fracture texture in fall-line mode | crackSeverity, crackWidth, crackSpacing, crackLength, crackJagged, crackNetwork, crackReach, crackDark, fissures, fissureSpacing | Retail River Delta hill and sections green43/green51 at 2x; Gaea surface shots; diagnostic view=cracks | Kept |
+| 37 | Sand transport: runout length grows as slope eases and varies by place; grains keep heading on level ground; uneven shedding and gusts. Output sandiness with a wide fines tail; shader dusting, then grains, then cover; hollows fill first | sandPatchy, sandTail, sandDust | Before/after at sand 1.5, Green mixed and Red hills: band round each foot became uneven tongues and piles fading over 20-30 px | Kept |
+| 38 | **Blind round 6**: build dacc0b1b9 (cracks and sand, before the fissure-thinning tweak), seeds 12601/13877, crops from different halves, one duplicate inlet crop replaced | | A: AUC 0.28 (2/10 caught, 3/10 retail called generated); B: AUC 0.86 but low confidence (1/10 caught at 60+, means 54 vs 42) | Near chance by eye. New cracks drew no comment except one 'ruled scratch lines' note (img04, retail). Shared tell: a steep north-facing plateau face collapses to a 1-2 px dark hairline in the h/2 projection (img01, img07); also geometric water from the authored coasts layout (img10) |
 
 Open tells and gaps:
 
@@ -52,5 +58,8 @@ Open tells and gaps:
   shoulder and face width need variation along the outline.
 - Archipelago crater floors drop below the biome's beach height and take the bright beach material.
 - Blind sets sample authored example layouts; geometric water outlines are partly the examples' own brush strokes.
-- Retail slopes show contour banding from their height-banded renders; ours has none (round 5). A banding knob is the user's call.
+- Retail slopes show contour banding from their height-banded renders; ours has none (round 5). A banding knob is the user's call (asked 2026-10-27, no answer yet).
 - Specks of water inside coastal rock (round 5, coasts scene).
+- A steep north-facing plateau face projects to a 1-2 px dark line (round 6,
+  both reviewers): north faces need a wider, gentler profile, as retail's do.
+- Dragging a map-wide lake is still about 80 ms a frame (TODO in sculpt.js).
