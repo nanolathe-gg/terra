@@ -125,6 +125,11 @@ function updateControls() {
   $('fit').setAttribute('aria-pressed',String(fitView)); $('one').setAttribute('aria-pressed',String(!fitView));
   } finally { tool=activeTool; }
   if (tool==='move') { $('tool-help').textContent=HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp'].includes(nodes[selected]?.kind); }
+  // Say what the brush controls change: the next stroke, or a selected shape.
+  const editing=selected>=0 && nodes[selected]?.params;
+  $('brush-panel').classList.toggle('editing',Boolean(editing));
+  $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind} #${selected+1}`:tool==='move'?'Move':`Brush · new ${NODE_NAMES[tool]||tool}`;
+  $('brush-scope').textContent=editing?'These controls edit the selected shape. Choose a tool to draw a new one.':tool==='move'?'Click a shape to select and edit it.':'Settings for your next stroke.';
 }
 
 function canExport() {
@@ -1237,6 +1242,69 @@ const KNOBS = [
   ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
+// Worlds. A world is a biome's materials (prepared per biome by the server)
+// plus the map-wide settings and base colours chosen for it. Built-in worlds
+// can be adjusted; New world copies the current one under a new name. Kept in
+// this browser (localStorage) and exportable as JSON.
+const WORLD_STORE='nanolathe-map-editor-worlds';
+const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water']];
+let worlds={},worldId=null;
+function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
+function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
+function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{},knobs:{}}; }
+const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('');
+const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
+function worldColors() { const out={}; for (const [k,v] of Object.entries(activeWorld().colors||{})) if (/^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); return out; }
+function defaultColor(key) {
+  const m=renderer.means,w=config.water||{},mat=config.material||{};
+  const rgb=v => v&&v.map(x => x/255);
+  return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB)}[key]||[.5,.5,.5];
+}
+function goToWorld(base,id) {
+  const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id); location.href=url.toString();
+}
+function buildWorldPanel() {
+  const world=activeWorld();
+  $('world-name').textContent=world.name;
+  const select=$('biome-select');
+  const builtIn=Object.entries(config.biomes||{}).map(([id,name]) => new Option(name,'biome:'+id,false,worldId===id));
+  const custom=Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{})).map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
+  select.replaceChildren(...builtIn,...custom);
+  select.onchange=() => { const [kind,id]=select.value.split(':'); if (kind==='biome') goToWorld(id); else goToWorld(worlds[id].base,id); };
+  const rows=$('world-colors'); rows.replaceChildren();
+  for (const [key,label] of COLOR_KEYS) {
+    if (key==='beach' && !config.textures.beach) continue;
+    const row=document.createElement('div'); row.className='color-row';
+    const set=world.colors?.[key];
+    row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base colour for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base colour" value="${set||hexColor(defaultColor(key))}">`;
+    const [box,pick]=row.querySelectorAll('input');
+    const apply=() => { if (box.checked) world.colors[key]=pick.value; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); markViewChanged(); schedule(); };
+    box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
+    rows.append(row);
+  }
+  $('world-reset').onclick=() => { world.colors={}; saveWorlds(); buildWorldPanel(); renderer.setColors({}); markViewChanged(); schedule(); };
+  $('world-new').onclick=() => {
+    const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
+    const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
+    const knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
+    worlds[id]={name,base:config.biomeId,colors:{...world.colors},knobs}; saveWorlds(); goToWorld(config.biomeId,id);
+  };
+  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,knobs:{...world.knobs}}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
+  $('world-import').onclick=() => $('world-file').click();
+  $('world-file').onchange=async () => {
+    try {
+      const data=JSON.parse(await $('world-file').files[0].text()),w=data?.world;
+      if (data?.format!=='nanolathe-map-world' || !w || typeof w.name!=='string' || !(w.base in (config.biomes||{}))) throw new Error('Not a world file for a world this server has.');
+      const id=w.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
+      worlds[id]={name:w.name,base:w.base,colors:Object.fromEntries(Object.entries(w.colors||{}).filter(([,v]) => /^#[0-9a-f]{6}$/i.test(v))),knobs:Object.fromEntries(Object.entries(w.knobs||{}).map(([k,v]) => [k,String(v)]))};
+      saveWorlds(); goToWorld(w.base,id);
+    } catch (err) { error(err.message); }
+  };
+  const isCustom=!(worldId in (config.biomes||{}));
+  $('world-delete').textContent=isCustom?'Delete this world':'Restore built-in settings';
+  $('world-delete').onclick=() => { delete worlds[worldId]; saveWorlds(); goToWorld(config.biomeId); };
+}
+
 // Crack styles set several crack knobs at once; each stays editable.
 const CRACK_STYLES={
   'Retail Green':{crackSeverity:.6,crackSpacing:40,crackLength:2,crackMajor:.8,crackMinor:.75,crackHairline:.6,crackBlocks:.6,crackWidth:1,crackJagged:.6,crackNetwork:.35,crackReach:.6,crackDark:.75,crackLit:.35},
@@ -1246,20 +1314,22 @@ const CRACK_STYLES={
 };
 function buildKnobs() {
   const root = $('knobs'), params = experiment;
+  const group = (title, open = false) => { const d = document.createElement('details'); d.className = 'knobs-group'; d.open = open; const t = document.createElement('summary'); t.textContent = title; d.append(t); root.append(d); return d; };
+  const render = group('Rendering');
   const toggle = (key, label, on, off, isOn) => {
     const row = document.createElement('label'); row.className = 'small'; row.style.display = 'flex'; row.style.gap = '6px';
     const box = document.createElement('input'); box.type = 'checkbox'; box.checked = isOn;
     box.addEventListener('change', () => setKnob(key, box.checked ? on : off));
-    row.append(box, label); root.append(row);
+    row.append(box, label); render.append(row);
   };
   toggle('detail', 'Fall-line surface (off: lab look)', 'fall', 'lab', params.get('detail') !== 'lab');
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
   toggle('ground', 'Procedural ground tiles (off: lab texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
-  for (const [group, knobs] of KNOBS) {
-    const title = document.createElement('h3'); title.textContent = group; root.append(title);
-    if (group === 'Cracks') {
+  for (const [title, knobs] of KNOBS) {
+    const box = group(title, title === 'Cracks');
+    if (title === 'Cracks') {
       const wrap = document.createElement('div'); wrap.className = 'control';
-      wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select>`;
+      wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks slider (Shape panel).</p>`;
       wrap.querySelector('select').addEventListener('change', event => {
         const style = CRACK_STYLES[event.target.value]; if (!style) return;
         for (const [key, value] of Object.entries(style)) {
@@ -1267,7 +1337,7 @@ function buildKnobs() {
           setKnob(key, value);
         }
       });
-      root.append(wrap);
+      box.append(wrap);
     }
     for (const [key, label, min, max, step, value] of knobs) {
       const wrap = document.createElement('div'); wrap.className = 'control';
@@ -1275,13 +1345,14 @@ function buildKnobs() {
       wrap.innerHTML = `<label for="${id}">${label} <output>${current}</output></label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${current}">`;
       const input = wrap.querySelector('input'), out = wrap.querySelector('output');
       input.addEventListener('input', () => { out.textContent = input.value; setKnob(key, input.value); });
-      root.append(wrap);
+      box.append(wrap);
     }
   }
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
   experiment.set(key, value);
+  if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); }
   // Textures are chosen when the renderer starts, so this switch reloads.
   if (key === 'ground') { location.reload(); return; }
   renderer.variant.set(key, value); renderer.applyKnobs(); markViewChanged(); schedule();
@@ -1301,11 +1372,13 @@ async function boot() {
     if (config.size!==1024 || !Number.isInteger(config.grid) || config.grid<2 || config.grid>1024 || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
     document.querySelector('.topbar h2').textContent=(config.biome||'Green Planet')+' terrain';
-    // Biome selector: each world has its own materials and defaults, so a
-    // change reloads the page with that biome (its own autosave).
-    const biomeSelect=$('biome-select');
-    biomeSelect.replaceChildren(...Object.entries(config.biomes||{}).map(([id,name]) => new Option(name,id,false,id===config.biomeId)));
-    biomeSelect.addEventListener('change',() => { const url=new URL(location.href); url.searchParams.set('biome',biomeSelect.value); url.searchParams.delete('example'); location.href=url.toString(); });
+    // The world: built-in (the biome itself) or a custom one based on it.
+    // Its remembered settings come before the biome's own defaults.
+    loadWorlds();
+    worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
+    if (worldId!==config.biomeId) LOCAL_KEY+='-'+worldId;
+    config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
+    if (worldId!==config.biomeId) document.querySelector('.topbar h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
     $('example').value=['joins','coasts','hills','intersections','islands'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
@@ -1325,7 +1398,8 @@ async function boot() {
     size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); heights.fill(config.baseHeight);
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
-    buildKnobs();
+    renderer.setColors(worldColors());
+    buildKnobs(); buildWorldPanel();
     // The fracture texture only applies to the lab surface; the fall-line
     // surface draws its cracks in the bake (Cracks knobs).
     $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
@@ -1334,7 +1408,7 @@ async function boot() {
     let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
     if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved terrain.'); } catch (err) { mixedScene(); error('Saved sculpt sketch could not be loaded: '+err.message+' The saved copy is retained until you edit.'); status('Mixed example shown.'); } }
     else { mixedScene(); status('Mixed scene ready · paint any continuous shape.'); }
-    ready=true; $('editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed}]; historyIndex=0; renderLayers();
+    ready=true; $('editor').disabled=false; $('world-editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed}]; historyIndex=0; renderLayers();
     $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
     updateControls(); resize(); schedule(); queueWeather();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }

@@ -7,6 +7,15 @@ function shader(gl, type, source) {
   return s;
 }
 
+// Average colour of an image (0..1 RGB), from a 64x64 reduction.
+function meanColor(bitmap) {
+  const canvas = new OffscreenCanvas(64, 64), g = canvas.getContext('2d');
+  g.drawImage(bitmap, 0, 0, 64, 64);
+  const d = g.getImageData(0, 0, 64, 64).data, sum = [0, 0, 0];
+  for (let i = 0; i < d.length; i += 4) { sum[0] += d[i]; sum[1] += d[i + 1]; sum[2] += d[i + 2]; }
+  return sum.map(v => v / (d.length / 4) / 255);
+}
+
 export class TerrainRenderer {
   static async create(canvas, config) {
     const self = new TerrainRenderer(canvas, config);
@@ -89,6 +98,7 @@ export class TerrainRenderer {
     const slopeMaterial = ['slopes', 'structured'].includes(variant.get('surface'));
     const rockLayers = variant.get('material') === 'varied';
     this.fringeTextures = {};
+    this.means = {};
     for (const [key, name, unit] of [['noise','uNoise',1], ['grass','uGrass',2], ['rock','uRock',3], ['water','uWater',4], ['palette','uPalette',5], ['waterShallow','uWaterShallow',6], ['slopeGrass','uSlopeGrass',8], ['rockWeathered','uRockWeathered',9], ['rockFractured','uRockFractured',10], ['fractures','uFractures',11], ['mineralRing','uMineralRing',14], ['mineralRings','uMineralRing',14]]) {
       if (key === 'mineralRings' && !this.config.textures.mineralRings) continue;
       if (key === 'mineralRing' && !this.config.textures.mineralRing) { this.i(name, 2); continue; }
@@ -108,6 +118,10 @@ export class TerrainRenderer {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Cannot load ${key} material`);
       const bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+      // Mean colour of each base material, so a world can move it to a new
+      // base colour while keeping the texture's grain.
+      const meanOf = {grass: 'ground', slopeGrass: 'slope', rock: 'rock'}[key];
+      if (meanOf) this.means[meanOf] = meanColor(bitmap);
       gl.activeTexture(gl.TEXTURE0 + unit);
       const materialTexture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, materialTexture);
@@ -213,6 +227,19 @@ export class TerrainRenderer {
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LESS);
     gl.disable(gl.CULL_FACE);
+  }
+
+  // Base colours chosen for a world: {ground, slope, rock, sand, beach,
+  // shallow, deep} as [r,g,b] 0..1, or absent to keep the world's own.
+  setColors(colors = {}) {
+    const gl = this.gl;
+    gl.useProgram(this.program);
+    for (const key of ['ground', 'slope', 'rock', 'sand', 'beach', 'shallow', 'deep']) {
+      const c = colors[key];
+      gl.uniform4fv(this.location('u' + key[0].toUpperCase() + key.slice(1) + 'Base'), c ? [...c, 1] : [0, 0, 0, 0]);
+    }
+    for (const key of ['ground', 'slope', 'rock'])
+      this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
   }
 
   location(name) {

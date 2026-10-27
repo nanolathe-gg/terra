@@ -43,6 +43,11 @@ uniform vec4 uFringeSignal;
 uniform vec2 uFringeRange;
 uniform bool uTransitionBody;
 uniform float uCrackDark;
+// A world's chosen base colours (a = 1 when set) and its textures' means.
+uniform vec4 uGroundBase, uSlopeBase, uRockBase, uSandBase, uBeachBase, uShallowBase, uDeepBase;
+uniform vec3 uGroundTexMean, uSlopeTexMean, uRockTexMean;
+// Move a texture to a new base colour, keeping its grain.
+vec3 based(vec3 c, vec3 mean, vec4 base) { return base.a > 0.5 ? clamp(c - mean + base.rgb, 0.0, 1.0) : c; }
 uniform float uCrackLit;
 uniform float uSandDust;
 uniform float uSandGrass;
@@ -225,7 +230,7 @@ void main() {
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
     vec2 pixel = vec2(gl_FragCoord.x, uSize - gl_FragCoord.y);
-    vec3 grass = uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb;
+    vec3 grass = based(uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb, uGroundTexMean, uGroundBase);
     vec3 transitionGround=grass,transitionFace=grass,transitionLow=grass;
     float transitionPower=1.0;
     float transitionCore=0.0;
@@ -233,7 +238,7 @@ void main() {
     if (uSlopeMaterial) {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
-        vec3 slopeGrass = texture(uSlopeGrass, pixel / 512.0).rgb;
+        vec3 slopeGrass = based(texture(uSlopeGrass, pixel / 512.0).rgb, uSlopeTexMean, uSlopeBase);
         float slopeCover = smoothstep(uSlopeProfile.x, uSlopeProfile.y, slope)
                          * smoothstep(uSlopeProfile.z, uSlopeProfile.w, h);
         if (uMineralMargins) {
@@ -371,6 +376,7 @@ void main() {
         rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
         rock = mix(rock, weathered, smoothstep(0.40, 0.62, moss));
     }
+    rock = based(rock, uRockTexMean, uRockBase);
     // Deposition softens the exposed face into a connected apron. Flow and
     // deposited soil come from the same weathering that changed the surface.
     float rockScore = slope + (n.g - 0.5) * 0.55 + (n.b - 0.5) * 0.30 - weather.g * 0.55;
@@ -476,13 +482,13 @@ void main() {
         // Threshold so that roughly the chosen share of face pixels is rock.
         float threshold = mix(1.4, -0.9, share);
         float rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score);
-        vec3 moss = mix(texture(uSlopeGrass, pixel / 512.0).rgb, (uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb), uMossFromGround);
+        vec3 moss = mix(based(texture(uSlopeGrass, pixel / 512.0).rgb, uSlopeTexMean, uSlopeBase), based(uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb, uGroundTexMean, uGroundBase), uMossFromGround);
         vec3 faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * uMicroRock);
         // A light, crisp grass rim where rough ground meets the level plain.
         float rim = smoothstep(uFaceSlope.x * 0.35, uFaceSlope.x * 0.6, faceSlope)
                   * (1.0 - smoothstep(uFaceSlope.x * 0.7, uFaceSlope.x * 1.05, faceSlope));
-        vec3 brightGrass = clamp(texture(uGrass, pixel / 512.0).rgb * vec3(1.15, 1.35, 1.05), 0.0, 1.0);
+        vec3 brightGrass = clamp(based(texture(uGrass, pixel / 512.0).rgb, uGroundTexMean, uGroundBase) * vec3(1.15, 1.35, 1.05), 0.0, 1.0);
         material = mix(material, brightGrass, rim * uFootRim * (1.0 - route));
         exposed = max(exposed * (1.0 - face), rockMask * face);
         // Thin dark crevices in the relief's hollows, also across mid slopes
@@ -498,12 +504,14 @@ void main() {
             // Weathered rock: the rock's own average colour, lightened and
             // dulled by weathering, with fragments of the rock texture as
             // grains. A biome's sand therefore follows its own rock.
-            vec3 rockAverage = textureLod(uRock, vec2(0.5), 12.0).rgb;
+            vec3 rockAverage = uRockBase.a > 0.5 ? uRockBase.rgb : textureLod(uRock, vec2(0.5), 12.0).rgb;
             vec3 weathered = mix(rockAverage, vec3(dot(rockAverage, vec3(0.299, 0.587, 0.114))), 0.25);
             weathered = mix(weathered, vec3(1.0), uSandLight * 0.55);
+            if (uSandBase.a > 0.5) weathered = uSandBase.rgb;
             vec2 scatter = pixel * 1.37 + vec2(terrainNoise(p * 2.0).r, terrainNoise(p * 2.0 + 9.0).g) * 40.0;
             vec3 fragment = texture(uRock, scatter / vec2(textureSize(uRock, 0))).rgb;
             fragment = mix(fragment, vec3(1.0), uSandLight * 0.45);
+            if (uSandBase.a > 0.5) fragment = clamp(fragment - textureLod(uRock, vec2(0.5), 12.0).rgb + uSandBase.rgb, 0.0, 1.0);
             vec3 sandMaterial = mix(weathered, fragment, uSandGrain);
             // Three stages, so sand thins into the ground over tens of
             // pixels: fines tint what is there, then grains appear between
@@ -558,8 +566,8 @@ void main() {
         if (uCoastalDetail) colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
         float deep = smoothstep(uShallowDepth, uDeepDepth, colorDepth);
         vec3 grain = texture(uWater, pixel / vec2(textureSize(uWater, 0))).rgb - uWaterMean;
-        vec3 water = mix(uShallowColor, uDeepColor, deep) + grain * mix(2.3, 0.95, deep);
-        if (uNativeShallows) {
+        vec3 water = mix(uShallowBase.a > 0.5 ? uShallowBase.rgb : uShallowColor, uDeepBase.a > 0.5 ? uDeepBase.rgb : uDeepColor, deep) + grain * mix(2.3, 0.95, deep);
+        if (uNativeShallows && uShallowBase.a < 0.5 && uDeepBase.a < 0.5) {
             vec3 shallow = texture(uWaterShallow, pixel / vec2(textureSize(uWaterShallow, 0))).rgb;
             vec3 deepWater = texture(uWater, pixel / vec2(textureSize(uWater, 0))).rgb;
             water = mix(shallow, deepWater, deep);
