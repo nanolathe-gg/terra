@@ -21,6 +21,7 @@ was measured.
 import argparse
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 
@@ -34,7 +35,9 @@ from sculpt_slope_material import quilt
 
 
 PALETTE = Path('/private/tmp/nanolathe-neural-terrain/editor-green-sections/palette.pal')
-SCRATCH = Path('/private/tmp/claude-501/-Users-daniel-src-nanolathe/d3f5a820-e6ab-45a4-a10b-857ca7d6c22b/scratchpad')
+# Decoded section catalogs (cmd/sectioncat on branch sct-reader), kept
+# outside Git; override with NANOLATHE_SECTION_CATALOGS.
+SCRATCH = Path(os.environ.get('NANOLATHE_SECTION_CATALOGS', '/private/tmp/nanolathe-map-editor/catalogs'))
 LUMA = np.array([.299, .587, .114])
 VERSION = 1
 

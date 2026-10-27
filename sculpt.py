@@ -111,7 +111,15 @@ def main():
     args = parser.parse_args()
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
     assets = {b: args.assets_root / f'assets-{b}' for b in biomes}
-    configs = {b: biome_config(b, assets[b]) for b in biomes}
+    configs = {}
+    for b in biomes:
+        # A world whose source data is missing (e.g. a section catalog) is
+        # skipped with a message rather than stopping the server.
+        try:
+            configs[b] = biome_config(b, assets[b])
+        except (FileNotFoundError, OSError, ValueError) as err:
+            print(f'skipping world {b}: {err}', flush=True)
+    biomes = [b for b in biomes if b in configs]
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
 
