@@ -83,11 +83,12 @@ WORLD_KNOBS = {
                  # ~2.5 px wide at half depth (measure/lava_bands.py lines
                  # profiles); the thin 1.6 px V at 0.75 darkness read as faint
                  # grain on the ground's palette noise.
-                 bandWidth=2.6, crackDark=.95,
-                 # Faces keep near the ground's tone: luma on the height
-                 # gradient is ~6-8.5 per unit slope east to west on four
-                 # retail maps, ours 20 at full shading, 9 at 0.4.
-                 shadeDepth=.4),
+                 bandWidth=2.6, crackDark=.95),
+    # shadeDepth stays 1 on Lava: directional shading varies by map and
+    # window (luma on the east-west height gradient: 6-9 per unit slope on
+    # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle
+    # window (retail 7.6, ours 9.3) but pushed Red Hot Lava and Two Hills
+    # windows further away (retail 14.6 and 16.9; ours 12.9 and 12.3 at 1).
     # Crystal: dead-level violet ground (the flat sections sit at one height
     # or within 82-87), crater walls and rough ridges crazed by a near-black
     # polygonal crack web, plates rather than rills by eye, and no sand or
