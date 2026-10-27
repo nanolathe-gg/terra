@@ -25,6 +25,11 @@ uniform float uBoulderSize;      // typical diameter, world px
 uniform float uBoulderFoot;      // share of boulders sourced from cliff feet
 uniform float uBoulderCluster;   // how strongly boulders gather into fields
 uniform float uBoulderMoss;      // share of stones with mossy tops
+uniform float uDebris;           // 0 disables debris
+uniform float uDebrisReach;      // how far debris tumbles, world px
+uniform float uDebrisSize;       // largest debris stone, world px
+uniform float uDebrisSort;       // 1: coarse near the source, fine far away
+uniform float uRepose;           // slope below which debris comes to rest
 out vec4 outFields;
 
 const float TAU = 6.28318530718;
@@ -99,6 +104,61 @@ vec2 boulders(vec2 p, float slope, float h) {
     return vec2(best, cover);
 }
 
+// Debris arriving at p: walk uphill along steepest ascent and gather what
+// steep ground above sheds. Returns (amount, mean travelled fraction).
+vec2 debrisArrival(vec2 p, float slope) {
+    if (uDebris <= 0.0) return vec2(0.0);
+    float rest = 1.0 - smoothstep(uRepose * 0.7, uRepose * 1.3, slope);
+    vec2 q = p;
+    float amount = 0.0, travelled = 0.0, weight = 0.0;
+    const int STEPS = 14;
+    float step = uDebrisReach / float(STEPS);
+    vec2 dir = vec2(0.0);
+    for (int i = 1; i <= STEPS; i++) {
+        // Level ground below a face has no local gradient: look wider, then
+        // keep the last direction, so debris can reach the plain.
+        vec2 g = broadGradient(q);
+        if (length(g) < 0.05) {
+            const float e = 18.0;
+            g = vec2(baseHeight(q + vec2(e, 0)) - baseHeight(q - vec2(e, 0)),
+                     baseHeight(q + vec2(0, e)) - baseHeight(q - vec2(0, e))) / (2.0 * e);
+        }
+        if (length(g) > 0.01) dir = normalize(g);
+        if (dot(dir, dir) < 0.5) break;
+        q += dir * step;
+        float d = float(i) * step;
+        float shed = smoothstep(0.9, 1.7, length(broadGradient(q))) * (1.0 - routeProtection(q));
+        float w = shed * (1.0 - d / uDebrisReach);
+        amount += w; travelled += w * d / uDebrisReach; weight += w;
+    }
+    return vec2(amount / float(STEPS) * 3.0 * rest, weight > 0.0 ? travelled / weight : 1.0);
+}
+
+vec2 debrisStones(vec2 p, vec2 arrival) {
+    // Stones on a fine cell grid; presence from arrivals, size from distance.
+    float cellSize = max(3.0, uDebrisSize * 0.9);
+    vec2 cell = floor(p / cellSize);
+    float best = 0.0, cover = 0.0;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec2 c = cell + vec2(i, j);
+        vec2 r1 = cellHash(c + 5.3), r2 = cellHash(c + 61.9);
+        vec2 centre = (c + 0.15 + 0.7 * r1) * cellSize;
+        vec2 here = debrisArrival(centre, length(broadGradient(centre)));
+        if (r2.x > clamp(here.x * uDebris, 0.0, 0.95)) continue;
+        if (baseHeight(centre) < uSea + 1.0) continue;
+        float sizeAt = mix(1.0, 1.0 - 0.75 * here.y, uDebrisSort);
+        float radius = uDebrisSize * 0.5 * sizeAt * (0.5 + 0.5 * r2.y);
+        vec2 q = p - centre;
+        float a = r1.y * 6.2831;
+        q = mat2(cos(a), -sin(a), sin(a), cos(a)) * q;
+        float edge = max(max(abs(q.x), abs(q.y) * 1.15), abs(q.x * 0.7 - q.y * 0.7)) / max(radius, 0.5);
+        float lift = max(0.0, 1.0 - edge);
+        float height = lift * radius * 0.7;
+        if (height > best) { best = height; cover = smoothstep(0.0, 0.3, lift); }
+    }
+    return vec2(best, cover);
+}
+
 void main() {
     vec2 p = gl_FragCoord.xy - 0.5;
     float h = baseHeight(p);
@@ -140,6 +200,8 @@ void main() {
     // blob-shaped notches into the coast.
     if (h > uSea) height = max(height, uSea + 0.5 - h);
     vec2 rock = boulders(p, slope, h);
+    vec2 scree = debrisStones(p, vec2(0.0));
+    if (scree.x > rock.x) rock = scree;
     height += rock.x;
     outFields = vec4(height, route, rock.y, gain);
 }

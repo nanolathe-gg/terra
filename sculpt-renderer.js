@@ -382,6 +382,11 @@ export class TerrainRenderer {
     set('uBoulderFoot', number('boulderFoot', 0.5));
     set('uBoulderCluster', number('boulderCluster', 0.6));
     set('uBoulderMoss', number('boulderMoss', 0.35));
+    set('uDebris', number('debris', 0));
+    set('uDebrisReach', number('debrisReach', 48));
+    set('uDebrisSize', number('debrisSize', 6));
+    set('uDebrisSort', number('debrisSort', 0.8));
+    set('uRepose', number('repose', 0.6));
     set('uReliefOctaves', number('reliefOctaves', 5), 'i');
     // The routes texture shares unit 12 with the fields; bind it for the bake.
     gl.activeTexture(gl.TEXTURE0 + 12);
