@@ -45,7 +45,9 @@ uniform bool uTransitionBody;
 uniform float uCrackDark;
 // A world's chosen base colours (a = 1 when set) and its textures' means.
 uniform vec4 uGroundBase, uSlopeBase, uRockBase, uSandBase, uBeachBase, uShallowBase, uDeepBase;
-uniform vec3 uGroundTexMean, uSlopeTexMean, uRockTexMean;
+uniform vec3 uGroundTexMean, uSlopeTexMean, uRockTexMean, uBeachTexMean;
+uniform bool uBeach;
+uniform float uBeachHeight, uBeachWidth;
 // Move a texture to a new base colour, keeping its grain.
 vec3 based(vec3 c, vec3 mean, vec4 base) { return base.a > 0.5 ? clamp(c - mean + base.rgb, 0.0, 1.0) : c; }
 uniform float uCrackLit;
@@ -439,6 +441,16 @@ void main() {
     exposed *= 1.0 - route * (1.0 - smoothstep(0.45, 0.9, slope));
     float nearWater = 1.0 - smoothstep(uSea + 1.0, uSea + uWetBand, h);
     vec3 material = mix(grass, rock, exposed);
+    if (uBeach && h > uSea - 1.0) {
+        // Beach sand on low gentle ground above the waterline, as the
+        // world's coast sections show; its upper edge is ragged and breaks
+        // into grains, and steep banks stay bare.
+        vec3 sandBeach = based(texture(uSlopeFringe, vec3(pixel / vec2(textureSize(uSlopeFringe, 0).xy), 2.0)).rgb, uBeachTexMean, uBeachBase);
+        float top = uBeachHeight * uBeachWidth * (0.65 + 0.7 * terrainNoise(p * 0.45 + vec2(29.0, 5.0)).g);
+        float speck = terrainNoise(p * 6.0 + vec2(61.0, 3.0)).b;
+        float beach = (1.0 - smoothstep(top * 0.6, top, h - uSea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope));
+        material = mix(material, sandBeach, beach * (1.0 - exposed * 0.7));
+    }
     if (sharedTransition) {
         // Exposed rock belongs inside the face family, before its one join to
         // warm mineral and sand. It cannot repaint a second hard perimeter.

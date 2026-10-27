@@ -155,11 +155,23 @@ export class TerrainRenderer {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_WRAP_S,gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_WRAP_T,gl.REPEAT);
-    gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,fringe.width,fringe.height,2,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
-    for(const [layer,bitmap] of [fringe,body].entries()) {
+    // A third layer holds the world's beach sand, if it has one (every
+    // texture unit is in use, so it shares this array), tiled to its size.
+    let beach=fringe;
+    if(this.config.textures.beach){
+      const source=await loadFringe(this.config.textures.beach);
+      this.means.beach=meanColor(source);
+      const tile=new OffscreenCanvas(fringe.width,fringe.height),g=tile.getContext('2d');
+      for(let y=0;y<fringe.height;y+=source.height)for(let x=0;x<fringe.width;x+=source.width)g.drawImage(source,x,y);
+      source.close(); beach=tile;
+    }
+    gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,fringe.width,fringe.height,3,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    for(const [layer,bitmap] of [fringe,body,beach].entries()) {
       if(bitmap.width!==fringe.width||bitmap.height!==fringe.height) throw new Error('Transition material sizes must match');
       gl.texSubImage3D(gl.TEXTURE_2D_ARRAY,0,0,0,layer,bitmap.width,bitmap.height,1,gl.RGBA,gl.UNSIGNED_BYTE,bitmap);
     }
+    this.i('uBeach',Boolean(this.config.textures.beach));
+    this.f('uBeachHeight',this.config.material?.beachHeight??6);
     if(this.transitionBody)gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
     if(body!==fringe)body.close();fringe.close();
     this.i('uSlopeFringe',13);
@@ -238,7 +250,7 @@ export class TerrainRenderer {
       const c = colors[key];
       gl.uniform4fv(this.location('u' + key[0].toUpperCase() + key.slice(1) + 'Base'), c ? [...c, 1] : [0, 0, 0, 0]);
     }
-    for (const key of ['ground', 'slope', 'rock'])
+    for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
   }
 
@@ -405,6 +417,7 @@ export class TerrainRenderer {
     this.f('uFlatOcclusion', variant.has('flatOcclusion') ? Number(variant.get('flatOcclusion')) : 0.4);
     this.f('uSandEdge', variant.has('sandEdge') ? Number(variant.get('sandEdge')) : 1.0);
     this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
+    this.f('uBeachWidth', variant.has('beachWidth') ? Number(variant.get('beachWidth')) : 1.0);
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.8);

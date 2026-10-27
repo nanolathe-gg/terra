@@ -1239,7 +1239,7 @@ const KNOBS = [
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Majors: rills to plates',0,1,.05,.35],['crackReach','Reach onto gentle slopes',0,1,.05,.6],
     ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
   ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3]]],
-  ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,3,.05,1],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
