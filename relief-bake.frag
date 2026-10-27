@@ -47,6 +47,9 @@ uniform float uRipple;           // ripple wavelength, world px (0: none)
 uniform float uRippleHeight;     // ripple amplitude, height units
 uniform float uBeachDistance;    // beach reach from the waterline, world px (0: none)
 uniform float uBanding;          // contour banding strength (0: none)
+uniform float uApron;            // sand apron reach round raised ground, world px (0: none)
+uniform float uWorms;            // wormy regolith relief on slopes (lunar)
+uniform float uBoulderRound;     // 0: angular boulders; 1: rounded domes
 uniform float uBandSpacing;      // height between bands, height units
 uniform float uBandSoftness;     // share of each band that is riser
 uniform float uBandLine;         // darkness of the line along each riser
@@ -119,7 +122,7 @@ vec2 boulders(vec2 p, float slope, float h) {
         float a = r1.x * 6.2831;
         mat2 rot = mat2(cos(a), -sin(a), sin(a), cos(a));
         q = rot * q;
-        float edge = max(max(abs(q.x) * 0.9, abs(q.y)), abs(q.x * 0.6 + q.y * 0.8)) / radius;
+        float edge = mix(max(max(abs(q.x) * 0.9, abs(q.y)), abs(q.x * 0.6 + q.y * 0.8)), length(q * vec2(1.0, 1.15)), uBoulderRound) / radius;
         float lift = max(0.0, 1.0 - edge * edge);
         // Partly buried: the ground cuts each stone below its widest point.
         float buried = mix(0.15, 0.55, fract(r1.x * 7.31));
@@ -330,20 +333,37 @@ vec4 cracks(vec2 p, vec2 fall, float slope, float mask, float h) {
 // coast and its inland edge is ragged. Distance to water is found by
 // marching outward in 16 directions.
 float beachCover(vec2 p, float h, float slope) {
-    if (uBeachDistance <= 0.0 || h <= uSea) return 0.0;
-    float reach = uBeachDistance * (0.45 + 0.9 * (valueNoise(p / 90.0 + 31.0) * 0.5 + 0.5));
-    float nearest = 1e9;
+    if ((uBeachDistance <= 0.0 && uApron <= 0.0) || h <= uSea) return 0.0;
+    float vary = 0.45 + 0.9 * (valueNoise(p / 90.0 + 31.0) * 0.5 + 0.5);
+    float reach = uBeachDistance * vary, apron = uApron * vary;
+    float far = max(reach, apron) * 1.15;
+    float nearWater = 1e9, nearRise = 1e9;
     for (int k = 0; k < 16; k++) {
         float a = float(k) * 0.3926991 + 0.2;
         vec2 dir = vec2(cos(a), sin(a));
         for (int r = 1; r <= 8; r++) {
-            float d = reach * 1.15 * float(r) / 8.0;
-            if (d >= nearest) break;
-            if (baseHeight(p + dir * d) < uSea) { nearest = d; break; }
+            float d = far * float(r) / 8.0;
+            if (d >= min(nearWater, nearRise)) break;
+            float there = baseHeight(p + dir * d);
+            bool water = there < uSea && d <= reach * 1.15;
+            // A sand apron gathers round raised rock (Zhon's domes).
+            bool rise = there > h + 6.0 && d <= apron * 1.15;
+            if (!water && !rise) continue;
+            // Refine the crossing between this step and the last, so the
+            // band's edge is smooth rather than notched by the step.
+            float lo = far * float(r - 1) / 8.0, hi = d;
+            for (int b = 0; b < 4; b++) {
+                float mid = 0.5 * (lo + hi), t = baseHeight(p + dir * mid);
+                if (water ? t < uSea : t > h + 6.0) hi = mid; else lo = mid;
+            }
+            if (water) nearWater = hi; else nearRise = hi;
+            break;
         }
     }
-    float edge = nearest + (valueNoise(p / 9.0 + 17.0) * 0.5) * reach * 0.12;
-    return (1.0 - smoothstep(reach * 0.88, reach, edge)) * (1.0 - smoothstep(0.9, 1.5, slope));
+    float jitter = (valueNoise(p / 9.0 + 17.0) * 0.5);
+    float beach = uBeachDistance > 0.0 ? 1.0 - smoothstep(reach * 0.88, reach, nearWater + jitter * reach * 0.12) : 0.0;
+    float sandApron = uApron > 0.0 ? 1.0 - smoothstep(apron * 0.8, apron, nearRise + jitter * apron * 0.2) : 0.0;
+    return max(beach, sandApron) * (1.0 - smoothstep(0.9, 1.5, slope));
 }
 
 // Contour bands, as in retail maps rendered from height-banded terrain:
@@ -433,6 +453,19 @@ void main() {
     // Height scales with slope, with a floor so gentle lumps are visible.
     float height = value * uReliefAmount * max(clamp(slope, 0.0, 2.5), 0.25 * uGentleRelief) * uReliefScale * gain * patchy;
     height += plain;
+    // Lunar regolith: fine wormy ridges on any slope, fading onto the
+    // level dust, as on the retail Moon sections.
+    float wormDark = 0.0;
+    if (uWorms > 0.0 && h > uSea) {
+        vec2 q = p + 6.0 * vec2(valueNoise(p / 17.0 + 3.0), valueNoise(p / 17.0 + 8.0));
+        float worm = 1.0 - abs(valueNoise(q / 4.6 + 11.0));
+        float worm2 = 1.0 - abs(valueNoise(q / 2.4 + 23.0));
+        float on = smoothstep(0.03, 0.2, slope) * (0.55 + 0.45 * smoothstep(0.2, 0.8, slope));
+        float ridge = pow(worm, 5.0) * 4.0 + pow(worm2, 5.0) * 1.6;
+        height += ridge * uWorms * on * (0.6 + 0.4 * min(slope, 2.0));
+        // The squiggles read as dark lines in the art: shade their troughs.
+        wormDark = smoothstep(0.82, 0.97, max(worm, worm2 * 0.97)) * uWorms * on * 0.85;
+    }
     vec2 bands = contourBands(p, h, slope) * (1.0 - route);
     height += bands.x;
     float sand = sandCover(p, slope, height) * (1.0 - route);
@@ -464,7 +497,7 @@ void main() {
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
-    float lineDark = max(crackAt.y, bands.y * (1.0 - buried));
+    float lineDark = max(max(crackAt.y, bands.y * (1.0 - buried)), wormDark * (1.0 - buried));
     float crackCode = lineDark > 0.02 ? -lineDark : crackAt.z > 0.02 ? 1.0 + crackAt.z : rock.y;
     // Green holds route protection, or (negative) beach cover off routes.
     float beach = beachCover(p, h, slope);

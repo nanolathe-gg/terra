@@ -33,7 +33,7 @@ KNOB_DEFAULTS = dict(
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
-    craterlets=3, craterEjecta=0, craterRays=0,
+    craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6,
     beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
@@ -46,9 +46,9 @@ WORLD_KNOBS = {
     'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.6),
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5),
     'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 craterRays=.4, undulation=4, plainRelief=.6, banding=.3),
-    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulders=.55, boulderSize=14, boulderFoot=.8, boulderCluster=.7,
-                 boulderMoss=0, boulderRound=1, beachWidth=.6, banding=.3),
+                 worms=.8, undulation=4, plainRelief=.6, banding=.3),
+    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=50,
+                 beachWidth=.6, banding=.3, bandLine=.3),
 }
 
 

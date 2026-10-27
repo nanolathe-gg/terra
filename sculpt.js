@@ -34,7 +34,7 @@ const TOOL_PRESETS={
   green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
-  zhon:{crater:{roughness:55,softness:60},plateau:{roughness:45,softness:55},hill:{roughness:40,softness:70},mountain:{roughness:45,softness:55},ramp:{roughness:18},deep:{roughness:60,bankWidth:70,beachFlatness:75,shelves:70},shallow:{roughness:30,bankWidth:70,beachFlatness:75}},
+  zhon:{crater:{roughness:55,softness:60},plateau:{roughness:45,softness:55},hill:{roughness:30,softness:35},mountain:{roughness:45,softness:55},ramp:{roughness:18},deep:{roughness:60,bankWidth:70,beachFlatness:75,shelves:70},shallow:{roughness:30,bankWidth:70,beachFlatness:75}},
   archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
 const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,400],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
@@ -221,7 +221,7 @@ function startStroke(kind,p,options={}) {
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
@@ -281,10 +281,18 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       const apronReach=1-smooth(1.15+.35*n1,1.85,rr);
       const rim=rr<1?Math.exp(-(((rr-1)/rimWidth)**2)):Math.exp(-(((rr-1)/(rimWidth*2.4))**2))*apronReach;
       const lumps=s.rough*(6*n2+3*n1+2*s.noise.detail[i])*(rr<1.3?1:0);
+      // Ejecta: beyond the rim the throw-out breaks into scattered,
+      // ragged patches that thin outward (retail lunar sections).
+      let ejecta=0;
+      if (s.craterEjecta>0 && rr>.8) {
+        const e1=valueNoise(lx/(sc*.32),ly/(sc*.32),s.seed^0x6e7),e2=valueNoise(lx/(sc*.14),ly/(sc*.14),s.seed^0x1b5);
+        const reach=1.25+.45*(n0*.5+.5);
+        ejecta=s.craterEjecta*s.amount*.16*smooth(-.05,.45,e1*.7+e2*.3)*(1-smooth(1.0,reach+.25,rr))*smooth(.8,1.0,rr)*(.6+.4*e2);
+      }
       const floor=Math.max(s.baseline-s.amount,Math.min(s.baseline,config.seaLevel+4));
       const target=s.baseline+rimHeight*rim-(s.baseline-floor)*bowl+lumps*(.4+.6*bowl);
       const blend=smooth(0,.15,1-rr);
-      const value=rr<1?s.base[i]+(target-s.base[i])*blend+(rr>=.85?(rimHeight*rim+lumps*.4)*(1-blend):0):s.base[i]+rimHeight*rim+lumps*.3*apronReach;
+      const value=(rr<1?s.base[i]+(target-s.base[i])*blend+(rr>=.85?(rimHeight*rim+lumps*.4)*(1-blend):0):s.base[i]+rimHeight*rim+lumps*.3*apronReach)+ejecta;
       // A crater on dry ground stays dry: floor lumps never dip into the sea.
       heights[i]=clamp(s.base[i]>config.seaLevel+1?Math.max(value,config.seaLevel+1.5):value,MIN_HEIGHT,MAX_HEIGHT);
       protection[i]=s.protectBase[i]*(1-smooth(0,.3,influence)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,influence));
@@ -529,7 +537,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,cracks:s.cracks}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1229,9 +1237,9 @@ const KNOBS = [
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Level-ground lumps',0,3,.05,1.2],['reliefOctaves','Octaves',1,6,1,5]]],
   ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
-  ['Faces', [['faceVariation','Face width variation (new plateaus)',0,1.5,.05,.8],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
+  ['Faces', [['faceVariation','Face width variation (new plateaus)',0,1.5,.05,.8],['rockCrown','Bare rock to the crown',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
-    ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35]]],
+    ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35],['boulderRound','Roundness',0,1,.05,0]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
   ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
     ['wind','Wind toward (deg)',0,360,5,20],['sandPatchy','Patchiness (flows and piles)',0,1,.05,.7],['sandTail','Fines carried beyond',0,1,.05,.6],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Grass regrowing over sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
@@ -1241,8 +1249,8 @@ const KNOBS = [
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Majors: rills to plates',0,1,.05,.35],['crackReach','Reach onto gentle slopes',0,1,.05,.6],
     ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWater','Rings in water colour',0,1,.05,0]]],
-  ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3],['craterEjecta','Ejecta (new craters)',0,1,.05,0],['worms','Wormy relief on slopes',0,1,.05,0]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)

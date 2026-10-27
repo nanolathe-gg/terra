@@ -55,6 +55,7 @@ uniform float uCrackLit;
 uniform float uSandDust;
 uniform float uSandGrass;
 uniform float uBandWater;
+uniform float uRockCrown;
 uniform float uTransitionDetail;
 uniform float uRockStart;
 uniform float uRockFull;
@@ -510,6 +511,13 @@ void main() {
         // where the face material has not taken over.
         float hollow = smoothstep(0.25, 0.9, -top) * smoothstep(uFaceSlope.x * 0.4, uFaceSlope.x, faceSlope);
         material *= 1.0 - uCrevice * hollow * (1.0 - route);
+    }
+    if (uRockCrown > 0.0) {
+        // Some worlds' raised ground is bare rock to its crown (Zhon's
+        // domes), not only where it is steep.
+        float crown = smoothstep(uBase + 5.0, uBase + 14.0, h + (n.g - 0.5) * 6.0) * uRockCrown * (1.0 - route);
+        material = mix(material, rock, crown);
+        exposed = max(exposed, crown);
     }
     if (uReliefMode == 1) {
         // Procedural sand: a colour with two scales of grain, so it needs no

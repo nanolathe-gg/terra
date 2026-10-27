@@ -420,6 +420,7 @@ export class TerrainRenderer {
     this.f('uSandEdge', variant.has('sandEdge') ? Number(variant.get('sandEdge')) : 1.0);
     this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
     this.f('uBeachWidth', variant.has('beachWidth') ? Number(variant.get('beachWidth')) : 1.0);
+    this.f('uRockCrown', variant.has('rockCrown') ? Number(variant.get('rockCrown')) : 0);
     this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
@@ -486,6 +487,9 @@ export class TerrainRenderer {
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));
     set('uBanding', number('banding', 0));
+    set('uApron', number('apron', 0));
+    set('uWorms', number('worms', 0));
+    set('uBoulderRound', number('boulderRound', 0));
     set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandLine', number('bandLine', 0.5));
