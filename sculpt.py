@@ -62,8 +62,10 @@ WORLD_KNOBS = {
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
     # R^2 0.000), so no undulation, lumps or occlusion; no drifts. Mesa
     # flanks: a narrow cap and wide even faces (cross-sections of the retail
-    # mesa in repro/scenes/desert.json).
-    'desert': dict(mesaFlank=1, paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
+    # mesa in repro/scenes/desert.json). Sunlit faces are no brighter than
+    # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
+    # 1.07-1.14), so no highlight above level.
+    'desert': dict(mesaFlank=1, lightCap=1, paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
                    bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
