@@ -29,9 +29,9 @@ let lastWaterStroke=null;
 // Biomes choose starting values for the same brushes. These presets can be
 // borrowed independently of the canvas materials and then edited per tool.
 const TOOL_PRESETS={
-  green:{plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
-  red:{plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  archipelago:{plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
+  green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
+  red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
+  archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
 const TOOL_FIELDS={diameter:['diameter',40,400],amount:['amount',5,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
 let toolSettings={};
@@ -178,7 +178,7 @@ function startStroke(kind,p,options={}) {
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100),Math.sin(strokeSeed%628/100)],craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
@@ -201,7 +201,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     face=[-spanY/length*sign,spanX/length*sign];
   }
   const crater=s.kind==='crater';
-  const extent=crater?radius*1.8+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
+  const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
@@ -210,24 +210,31 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const t=spanLength2?clamp(((wx-p.x)*spanX+(wy-p.y)*spanY)/spanLength2,0,1):0;
     const cx=p.x+spanX*t,cy=p.y+spanY*t;
     if (crater) {
-      // A bowl below the ground it strikes, a raised rim, and a rim apron
-      // fading outward. The nearest dab of a stroke decides each sample.
-      const dx=wx-cx+amp*(s.noise.coastX[i]-sample(s.noise.coastX,cx,cy)),dy=wy-cy+amp*(s.noise.coastY[i]-sample(s.noise.coastY,cx,cy));
-      const r=Math.hypot(dx,dy)/radius;
-      if (r>=1.8) continue;
-      const influence=1-r/1.8;
+      // Retail lunar craters: a lobed outline, a rim that rises and falls
+      // (with gaps), an off-centre lumpy bowl and an uneven apron. All of the
+      // variation is position-based noise from the crater's own seed.
+      const sc=Math.max(radius*.55,8),n0=valueNoise(wx/(radius*.95),wy/(radius*.95),s.seed^0x4a7),n1=valueNoise(wx/sc,wy/sc,s.seed^0x1c3),n2=valueNoise(wx/(sc*.6),wy/(sc*.6),s.seed^0x2d9);
+      const lobe=1+s.rough*(.38*n0+.22*n1+.1*n2);
+      const off=s.craterOffset;
+      const dx=wx-cx-off[0]*radius*.32*s.rough,dy=wy-cy-off[1]*radius*.32*s.rough;
+      const rr=Math.hypot(wx-cx,wy-cy)/(radius*lobe),rb=Math.hypot(dx,dy)/(radius*lobe);
+      if (rr>=1.9) continue;
+      const influence=1-rr/1.9;
       if (influence<=s.weights[i]) continue;
       s.weights[i]=influence;
-      const floorEdge=.25+.45*(1-s.softness),rimHeight=s.amount*.32,rimWidth=.18+.2*s.softness;
-      const bowl=r<1?1-smooth(floorEdge,1,r):0;
-      // The apron fades to nothing by the footprint edge, so no step remains.
-      const rim=r<1?Math.exp(-(((r-1)/rimWidth)**2)):Math.exp(-(((r-1)/(rimWidth*2.2))**2))*(1-smooth(1.25,1.8,r));
-      const floorNoise=s.rough*3*s.noise.detail[i]*(r<floorEdge?1:0);
-      // A crater floor stays dry; paint water into it for a crater lake.
+      const floorEdge=.25+.45*(1-s.softness);
+      const rimNoise=valueNoise(wx/(sc*.8),wy/(sc*.8),s.seed^0x3e1);
+      // Low-frequency rim noise lets whole sectors of rim sink away.
+      const rimHeight=s.amount*.34*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
+      const rimWidth=(.16+.2*s.softness)*(1+.35*n2);
+      const bowl=rb<1?1-smooth(floorEdge,1,rb):0;
+      const apronReach=1-smooth(1.15+.35*n1,1.85,rr);
+      const rim=rr<1?Math.exp(-(((rr-1)/rimWidth)**2)):Math.exp(-(((rr-1)/(rimWidth*2.4))**2))*apronReach;
+      const lumps=s.rough*(6*n2+3*n1+2*s.noise.detail[i])*(rr<1.3?1:0);
       const floor=Math.max(s.baseline-s.amount,Math.min(s.baseline,config.seaLevel+4));
-      const target=s.baseline+rimHeight*rim-(s.baseline-floor)*bowl+floorNoise;
-      // Blend toward the crater only within its footprint; the apron adds.
-      const value=r<1?s.base[i]+(target-s.base[i])*smooth(0,.15,1-r)+(r>=.85?rimHeight*rim*(1-smooth(0,.15,1-r)):0):s.base[i]+rimHeight*rim;
+      const target=s.baseline+rimHeight*rim-(s.baseline-floor)*bowl+lumps*(.4+.6*bowl);
+      const blend=smooth(0,.15,1-rr);
+      const value=rr<1?s.base[i]+(target-s.base[i])*blend+(rr>=.85?(rimHeight*rim+lumps*.4)*(1-blend):0):s.base[i]+rimHeight*rim+lumps*.3*apronReach;
       heights[i]=clamp(value,MIN_HEIGHT,MAX_HEIGHT);
       protection[i]=s.protectBase[i]*(1-smooth(0,.3,influence)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,influence));
       continue;
@@ -461,7 +468,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={ground:'Ground undulation',crater:'Crater',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -499,6 +506,19 @@ function applyNode(n) {
     }
   }
   dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s);
+  if (n.kind==='crater') addCraterlets(n,s);
+}
+function addCraterlets(n,s) {
+  // Small satellite craters around the rim and apron, as on retail Moon
+  // sections. Positions, sizes and depths come from the crater's seed.
+  const count=Math.round(s.craterlets||0),c=n.points[n.points.length>>1];
+  for (let k=0;k<count;k++) {
+    const h=(a) => { let x=Math.imul((s.seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
+    const angle=h(1)*Math.PI*2,dist=s.radius*(.9+h(2)*1.1),small=s.radius*(.1+.22*h(3));
+    const p={x:clamp(c.x+Math.cos(angle)*dist,0,size-1),y:clamp(c.y+Math.sin(angle)*dist,0,size-1)};
+    const t=startStroke('crater',p,{...n.params,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0});
+    dab(t,p);
+  }
 }
 function snapshot() { return {h:heights.slice(),p:protection.slice(),r:routes.slice()}; }
 function addNode(n) { prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n); }
@@ -518,7 +538,7 @@ function nodeBounds(n) {
   const bank=['deep','shallow'].includes(n.kind)?2**(((q.bankWidth??.5)-.5)*1.3):1;
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
-    shallow:bank+.4*rough,crater:1.8+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
+    shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
   const r=radius*reach+12*spacing;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
@@ -788,7 +808,7 @@ function endPointer(event) {
   if (stroke && event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   const hadStroke=Boolean(stroke);
   const rawPath=stroke?stroke.path.map(p => ({...p})):null;
-  if (stroke) { settleHill(stroke); settleRamp(stroke); }
+  if (stroke) { settleHill(stroke); settleRamp(stroke); if (stroke.kind==='crater') addCraterlets({points:rawPath,params:strokeParams(stroke)},stroke); }
   if (stroke) { prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; renderLayers(); }
   if (stroke) lastWaterStroke=['deep','shallow'].includes(stroke.kind)?stroke:null;
   stroke=null; pan=null; pointerId=null;
@@ -1052,6 +1072,7 @@ const KNOBS = [
   ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
     ['wind','Wind toward (deg)',0,360,5,20],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
+  ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3]]],
   ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
