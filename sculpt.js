@@ -1284,6 +1284,7 @@ function setKnob(key, value) {
   // Textures are chosen when the renderer starts, so this switch reloads.
   if (key === 'ground') { location.reload(); return; }
   renderer.variant.set(key, value); renderer.applyKnobs(); markViewChanged(); schedule();
+  if (key==='detail') $('fracture-control').hidden=!config.textures.fractures || value!=='lab';
   if (key==='undulation' || key==='undulationScale' || key==='undulationCover') {
     const i=nodes.findIndex(n => n.kind==='ground');
     if (i>=0) { nodes[i][{undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage'}[key]]=Number(value); cancelWeather(); evaluate(i); checkpoint(); queueWeather(); }
@@ -1324,7 +1325,9 @@ async function boot() {
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
     buildKnobs();
-    $('fracture-control').hidden=!config.textures.fractures;
+    // The fracture texture only applies to the lab surface; the fall-line
+    // surface draws its cracks in the bake (Cracks knobs).
+    $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
     $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100);
     $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
     let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
