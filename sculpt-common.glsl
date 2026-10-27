@@ -55,8 +55,10 @@ float routeProtection(vec2 p) {
 }
 #else
 vec4 bakedFields(vec2 p) { return texture(uFields, (p + 0.5) / uSize); }
-float routeProtection(vec2 p) { return max(bakedFields(p).g, 0.0); }
+// Green: route protection 0..1, beach as negative, or 2 + crystal cover.
+float routeProtection(vec2 p) { float g = bakedFields(p).g; return g > 1.5 ? 1.0 : max(g, 0.0); }
 float beachField(vec2 p) { return max(-bakedFields(p).g, 0.0); }
+float crystalField(vec2 p) { float g = bakedFields(p).g; return g > 1.5 ? clamp(g - 2.0, 0.0, 1.0) : 0.0; }
 #endif
 
 float fractureDepth(vec2 p, float h, float slope) {

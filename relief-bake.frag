@@ -433,7 +433,10 @@ void main() {
     float slope = length(g);
     // Only a route's graded surface stays smooth; its steep shoulders are
     // ordinary faces and take relief like any other (no smooth dark band).
-    float route = routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p))));
+    // Crystal cells (Crystals brush) keep clean flat faces: no relief,
+    // cracks, bands or sand, as on a graded route.
+    float crystalCell = smoothstep(0.15, 0.6, texture(uRoutes, (p / (uSize - 1.0) * (uGrid - 1.0) + 0.5) / uGrid).a);
+    float route = max(routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p)))), crystalCell);
     float crackMask = texture(uRoutes, (p / (uSize - 1.0) * (uGrid - 1.0) + 0.5) / uGrid).g;
     // Retail level ground is not dead flat in the art: faint embossed lumps
     // at 10-30 px. Appearance only; exported heights stay level.
@@ -502,8 +505,8 @@ void main() {
     // Ground cover clears weathered and painted sand alike.
     vec4 paint = texture(uRoutes, (p / (uSize - 1.0) * (uGrid - 1.0) + 0.5) / uGrid);
     float paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
-    float paintSand = smoothstep(0.30, 0.70, paint.b + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope)) * (1.0 - route);
-    float paintGround = smoothstep(0.30, 0.70, paint.a + paintEdge);
+    float paintSand = smoothstep(0.30, 0.70, paint.b * 2.0 - 1.0 + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope)) * (1.0 - route);
+    float paintGround = smoothstep(0.30, 0.70, 1.0 - paint.b * 2.0 + paintEdge);
     if (!uHasBeach) sand = max(sand, paintSand);
     sand *= 1.0 - paintGround;
     // Only sand deep enough to cover the ground buries relief and stones.
@@ -545,5 +548,6 @@ void main() {
     float beach = beachCover(p, h, slope);
     if (uHasBeach) beach = max(beach, paintSand);
     beach *= 1.0 - paintGround;
-    outFields = vec4(height, route > 0.01 || beach <= 0.0 ? route : -beach, crackCode, sand);
+    // Green: 2 + crystal on crystal cells.
+    outFields = vec4(height, crystalCell > 0.02 ? 2.0 + crystalCell : route > 0.01 || beach <= 0.0 ? route : -beach, crackCode, sand);
 }

@@ -52,6 +52,9 @@ uniform float uBeachHeight, uBeachWidth;
 // The slope material is the world's sandy slope (Zhon): it shows only where
 // the ground beneath is sand, and on graded routes.
 uniform bool uSlopeSand;
+// Crystals: their own colour (world base colour 'crystal', else the world's).
+uniform vec3 uCrystalColor;
+uniform vec4 uCrystalBase;
 // Move a texture to a new base colour, keeping its grain.
 vec3 based(vec3 c, vec3 mean, vec4 base) { return base.a > 0.5 ? clamp(c - mean + base.rgb, 0.0, 1.0) : c; }
 // Ground pattern: its grain scaled about its mean, then moved to the base.
@@ -621,6 +624,16 @@ void main() {
     material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
     material *= 1.0 - nearWater * 0.17;
+    float crystalMask = crystalField(p);
+    if (crystalMask > 0.0) {
+        // Flat faces lit by their own normals; edges where faces meet (a
+        // ridge in the surface) catch light, valleys between crystals darken.
+        vec3 crystalColor = uCrystalBase.a > 0.5 ? uCrystalBase.rgb : uCrystalColor;
+        float around = 0.25 * (baseHeight(p + vec2(2.0, 0.0)) + baseHeight(p - vec2(2.0, 0.0)) + baseHeight(p + vec2(0.0, 2.0)) + baseHeight(p - vec2(0.0, 2.0)));
+        float ridge = clamp((h - around) / 1.2, -1.0, 1.0);
+        vec3 faces = crystalColor * (1.0 + 0.45 * max(ridge, 0.0) - 0.35 * max(-ridge, 0.0));
+        material = mix(material, faces, smoothstep(0.1, 0.6, crystalMask));
+    }
     vec3 color = material * shading;
     if (h < uSea + 1.0) {
         float depth = max(0.0, uSea - h);

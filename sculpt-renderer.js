@@ -207,6 +207,7 @@ export class TerrainRenderer {
     this.i('uSlopeOnLowBanks', material.slopeOnLowBanks !== false);
     this.f('uRampMaterial', material.rampMaterial ?? 0);
     this.i('uSlopeSand', Boolean(material.slopeSand));
+    this.v('uCrystalColor', (material.crystalRGB || [110, 150, 225]).map(v => v / 255));
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
@@ -257,7 +258,7 @@ export class TerrainRenderer {
   setColors(colors = {}) {
     const gl = this.gl;
     gl.useProgram(this.program);
-    for (const key of ['ground', 'slope', 'rock', 'sand', 'beach', 'shallow', 'deep']) {
+    for (const key of ['ground', 'slope', 'rock', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
       const c = colors[key];
       gl.uniform4fv(this.location('u' + key[0].toUpperCase() + key.slice(1) + 'Base'), c ? [...c, 1] : [0, 0, 0, 0]);
     }
@@ -331,15 +332,16 @@ export class TerrainRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.grid, this.grid, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   }
 
-  setRoutes(routes, crackLines, cover) {
+  setRoutes(routes, crackLines, cover, crystal) {
     // Red: route protection; green: the shapes' crack amount; blue: painted
-    // sand cover; alpha: painted ground cover (clears sand).
+    // cover, signed about one half (above: sand, below: the world's ground);
+    // alpha: crystal cells.
     this.fieldsDirty = true;
     const gl = this.gl, bytes = new Uint8Array(routes.length * 4);
     for (let i = 0; i < routes.length; i++) {
       const c = cover?.[i] || 0;
       bytes[i * 4] = Math.round(routes[i] * 255); bytes[i * 4 + 1] = Math.round((crackLines?.[i] || 0) * 255);
-      bytes[i * 4 + 2] = Math.round(Math.max(0, c) * 255); bytes[i * 4 + 3] = Math.round(Math.max(0, -c) * 255);
+      bytes[i * 4 + 2] = Math.round((Math.max(-1, Math.min(1, c)) * 0.5 + 0.5) * 255); bytes[i * 4 + 3] = Math.round((crystal?.[i] || 0) * 255);
     }
     gl.activeTexture(gl.TEXTURE0 + 12);
     gl.bindTexture(gl.TEXTURE_2D, this.routeTexture);
