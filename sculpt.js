@@ -260,7 +260,11 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     if (s.kind==='plateau') {
       // Independently vary shoulder width around the level core. An irregular
       // outline with an identical cross-section still makes a uniform rim.
-      const originalShoulder=naturalPlateau?clamp(.56+s.rough*(s.noise.detail[i]+.30*s.noise.coastWidth[i]),.22,.84):.62;
+      // Face width varies along the outline at a broad scale too, so a cliff
+      // band does not keep one width round a smooth arc (blind round 3).
+      const faceVariation=experiment.has('faceVariation')?Number(experiment.get('faceVariation')):.8;
+      const broadFace=valueNoise(wx/(radius*1.3),wy/(radius*1.3),s.seed^0x5f1);
+      const originalShoulder=naturalPlateau?clamp(.56+s.rough*(s.noise.detail[i]+.30*s.noise.coastWidth[i])+faceVariation*.22*broadFace,.18,.88):.62;
       const shoulder=clamp(originalShoulder-(s.softness-.5)*.6,.15,.90);
       w=1-smooth(shoulder,1,r);
     }
@@ -1112,7 +1116,7 @@ const KNOBS = [
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['reliefOctaves','Octaves',1,6,1,5]]],
   ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
-  ['Faces', [['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
+  ['Faces', [['faceVariation','Face width variation (new plateaus)',0,1.5,.05,.8],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
