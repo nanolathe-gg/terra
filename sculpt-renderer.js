@@ -371,6 +371,7 @@ export class TerrainRenderer {
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     this.f('uFlatShadow', variant.has('flatShadow') ? Number(variant.get('flatShadow')) : 0.0);
     this.f('uFlatOcclusion', variant.has('flatOcclusion') ? Number(variant.get('flatOcclusion')) : 0.4);
+    this.f('uSandEdge', variant.has('sandEdge') ? Number(variant.get('sandEdge')) : 1.0);
     this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.8);
     this.i('uGroundMode', variant.get('ground') !== 'texture' && this.config.textures.groundTiles ? 1 : 0);

@@ -60,6 +60,7 @@ uniform float uFootRim;
 uniform float uCrevice;
 uniform float uDither;
 uniform float uSandLight;
+uniform float uSandEdge;
 uniform float uFlatShadow;
 uniform float uFlatOcclusion;
 uniform float uSlopeTexture;
@@ -501,7 +502,9 @@ void main() {
             // Thin sand breaks into grains between grass blades rather than
             // fading as a veil: a per-pixel threshold against fine noise.
             float speck = terrainNoise(p * 6.0 + vec2(17.0, 29.0)).b;
-            float cover = smoothstep(-0.08, 0.08, sand * 1.3 - 0.4 - (speck - 0.5) * 0.7);
+            // A wide, grain-jittered ramp: thin sand thins into scattered
+            // grains over several pixels instead of a hard edge.
+            float cover = smoothstep(0.03, 0.5, sand + (speck - 0.5) * 0.3 * uSandEdge) * smoothstep(0.0, 0.06, sand);
             material = mix(material, sandMaterial, cover);
         }
     }

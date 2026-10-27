@@ -94,13 +94,18 @@ export async function transportSand(request, height, pause) {
       sand.set(next);
     }
   }
-  // One light blur removes single-cell speckle; then saturate to cover.
-  const out=new Float32Array(n);
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
-    const i=y*grid+x; let s=sand[i]*4,w=4;
-    if (x>0) { s+=sand[i-1]; w++; } if (x<grid-1) { s+=sand[i+1]; w++; }
-    if (y>0) { s+=sand[i-grid]; w++; } if (y<grid-1) { s+=sand[i+grid]; w++; }
-    const v=s/w; out[i]=height[i]<seaLevel-1?0:v/(v+.35);
+  // Three light blur passes soften deposit edges; then saturate to cover.
+  let src=sand,dst=new Float32Array(n);
+  for (let pass=0;pass<3;pass++) {
+    for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+      const i=y*grid+x; let s=src[i]*4,w=4;
+      if (x>0) { s+=src[i-1]; w++; } if (x<grid-1) { s+=src[i+1]; w++; }
+      if (y>0) { s+=src[i-grid]; w++; } if (y<grid-1) { s+=src[i+grid]; w++; }
+      dst[i]=s/w;
+    }
+    [src,dst]=[dst,src];
   }
+  const out=new Float32Array(n);
+  for (let i=0;i<n;i++) out[i]=height[i]<seaLevel-1?0:src[i]/(src[i]+.18);
   return out;
 }
