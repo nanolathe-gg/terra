@@ -62,6 +62,7 @@ uniform float uDither;
 uniform vec3 uSandColor;
 uniform float uSlopeTexture;
 uniform float uLandDither;
+uniform float uGullyRock;
 uniform float uSandGrain;
 /*COMMON*/
 
@@ -433,7 +434,11 @@ void main() {
         float face = smoothstep(uFaceSlope.x, uFaceSlope.y, faceSlope) * (1.0 - route);
         float share = mix(uRockShare.x, uRockShare.y, smoothstep(uFaceSlope.y, uFaceSlope.y * 1.8, slope));
         vec4 fine = terrainNoise(p * 3.0 + vec2(19.0, 7.0));
-        float score = uFaceScore.x * micro / max(slope, 0.25) - uFaceScore.y * top
+        // Gullies at channel scale expose rock in streaks down the slope.
+        float wide = 0.25 * (surfaceHeight(p - vec2(7.0, 0.0)) + surfaceHeight(p + vec2(7.0, 0.0))
+                           + surfaceHeight(p - vec2(0.0, 7.0)) + surfaceHeight(p + vec2(0.0, 7.0)));
+        float gully = smoothstep(0.3, 2.0, wide - h);
+        float score = uFaceScore.x * micro / max(slope, 0.25) - uFaceScore.y * top + uGullyRock * gully
                     + (fine.g - 0.5) * uFaceScore.z + (n.r - 0.5) * uFaceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.
         float threshold = mix(1.4, -0.9, share);
