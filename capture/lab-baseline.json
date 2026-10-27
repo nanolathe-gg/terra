@@ -1,0 +1,437 @@
+{
+ "about": "Lab baseline: tools/terrain-visual-lab at e51bbb3a1, served by sculpt.py with --biome green (8770), red (8771) and archipelago (8772) and their accepted defaults.",
+ "scenes": [
+  {
+   "name": "green-mixed-2701",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=mixed",
+   "seed": 2701,
+   "example": "mixed"
+  },
+  {
+   "name": "green-mixed-911",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=mixed",
+   "seed": 911,
+   "example": "mixed"
+  },
+  {
+   "name": "green-mixed-4829",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=mixed",
+   "seed": 4829,
+   "example": "mixed"
+  },
+  {
+   "name": "green-mixed-2701-material",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=mixed&view=material",
+   "seed": 2701,
+   "example": "mixed"
+  },
+  {
+   "name": "green-joins-2701",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=joins",
+   "seed": 2701,
+   "example": "joins"
+  },
+  {
+   "name": "green-joins-911",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=joins",
+   "seed": 911,
+   "example": "joins"
+  },
+  {
+   "name": "green-joins-4829",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=joins",
+   "seed": 4829,
+   "example": "joins"
+  },
+  {
+   "name": "green-joins-2701-material",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=joins&view=material",
+   "seed": 2701,
+   "example": "joins"
+  },
+  {
+   "name": "green-hills-2701",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=hills",
+   "seed": 2701,
+   "example": "hills"
+  },
+  {
+   "name": "green-hills-911",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=hills",
+   "seed": 911,
+   "example": "hills"
+  },
+  {
+   "name": "green-hills-4829",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=hills",
+   "seed": 4829,
+   "example": "hills"
+  },
+  {
+   "name": "green-hills-2701-material",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=hills&view=material",
+   "seed": 2701,
+   "example": "hills"
+  },
+  {
+   "name": "green-coasts-2701",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=coasts",
+   "seed": 2701,
+   "example": "coasts"
+  },
+  {
+   "name": "green-coasts-911",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=coasts",
+   "seed": 911,
+   "example": "coasts"
+  },
+  {
+   "name": "green-coasts-4829",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=coasts",
+   "seed": 4829,
+   "example": "coasts"
+  },
+  {
+   "name": "green-coasts-2701-material",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=coasts&view=material",
+   "seed": 2701,
+   "example": "coasts"
+  },
+  {
+   "name": "green-intersections-2701",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=intersections",
+   "seed": 2701,
+   "example": "intersections"
+  },
+  {
+   "name": "green-intersections-911",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=intersections",
+   "seed": 911,
+   "example": "intersections"
+  },
+  {
+   "name": "green-intersections-4829",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=intersections",
+   "seed": 4829,
+   "example": "intersections"
+  },
+  {
+   "name": "green-intersections-2701-material",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=intersections&view=material",
+   "seed": 2701,
+   "example": "intersections"
+  },
+  {
+   "name": "green-islands-2701",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=islands",
+   "seed": 2701,
+   "example": "islands"
+  },
+  {
+   "name": "green-islands-911",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=islands",
+   "seed": 911,
+   "example": "islands"
+  },
+  {
+   "name": "green-islands-4829",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=islands",
+   "seed": 4829,
+   "example": "islands"
+  },
+  {
+   "name": "green-islands-2701-material",
+   "url": "http://127.0.0.1:8770/sculpt?scratch=baseline&example=islands&view=material",
+   "seed": 2701,
+   "example": "islands"
+  },
+  {
+   "name": "red-mixed-2701",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=mixed",
+   "seed": 2701,
+   "example": "mixed"
+  },
+  {
+   "name": "red-mixed-911",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=mixed",
+   "seed": 911,
+   "example": "mixed"
+  },
+  {
+   "name": "red-mixed-4829",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=mixed",
+   "seed": 4829,
+   "example": "mixed"
+  },
+  {
+   "name": "red-mixed-2701-material",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=mixed&view=material",
+   "seed": 2701,
+   "example": "mixed"
+  },
+  {
+   "name": "red-joins-2701",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=joins",
+   "seed": 2701,
+   "example": "joins"
+  },
+  {
+   "name": "red-joins-911",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=joins",
+   "seed": 911,
+   "example": "joins"
+  },
+  {
+   "name": "red-joins-4829",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=joins",
+   "seed": 4829,
+   "example": "joins"
+  },
+  {
+   "name": "red-joins-2701-material",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=joins&view=material",
+   "seed": 2701,
+   "example": "joins"
+  },
+  {
+   "name": "red-hills-2701",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=hills",
+   "seed": 2701,
+   "example": "hills"
+  },
+  {
+   "name": "red-hills-911",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=hills",
+   "seed": 911,
+   "example": "hills"
+  },
+  {
+   "name": "red-hills-4829",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=hills",
+   "seed": 4829,
+   "example": "hills"
+  },
+  {
+   "name": "red-hills-2701-material",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=hills&view=material",
+   "seed": 2701,
+   "example": "hills"
+  },
+  {
+   "name": "red-coasts-2701",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=coasts",
+   "seed": 2701,
+   "example": "coasts"
+  },
+  {
+   "name": "red-coasts-911",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=coasts",
+   "seed": 911,
+   "example": "coasts"
+  },
+  {
+   "name": "red-coasts-4829",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=coasts",
+   "seed": 4829,
+   "example": "coasts"
+  },
+  {
+   "name": "red-coasts-2701-material",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=coasts&view=material",
+   "seed": 2701,
+   "example": "coasts"
+  },
+  {
+   "name": "red-intersections-2701",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=intersections",
+   "seed": 2701,
+   "example": "intersections"
+  },
+  {
+   "name": "red-intersections-911",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=intersections",
+   "seed": 911,
+   "example": "intersections"
+  },
+  {
+   "name": "red-intersections-4829",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=intersections",
+   "seed": 4829,
+   "example": "intersections"
+  },
+  {
+   "name": "red-intersections-2701-material",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=intersections&view=material",
+   "seed": 2701,
+   "example": "intersections"
+  },
+  {
+   "name": "red-islands-2701",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=islands",
+   "seed": 2701,
+   "example": "islands"
+  },
+  {
+   "name": "red-islands-911",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=islands",
+   "seed": 911,
+   "example": "islands"
+  },
+  {
+   "name": "red-islands-4829",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=islands",
+   "seed": 4829,
+   "example": "islands"
+  },
+  {
+   "name": "red-islands-2701-material",
+   "url": "http://127.0.0.1:8771/sculpt?scratch=baseline&example=islands&view=material",
+   "seed": 2701,
+   "example": "islands"
+  },
+  {
+   "name": "archipelago-mixed-2701",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=mixed",
+   "seed": 2701,
+   "example": "mixed"
+  },
+  {
+   "name": "archipelago-mixed-911",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=mixed",
+   "seed": 911,
+   "example": "mixed"
+  },
+  {
+   "name": "archipelago-mixed-4829",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=mixed",
+   "seed": 4829,
+   "example": "mixed"
+  },
+  {
+   "name": "archipelago-mixed-2701-material",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=mixed&view=material",
+   "seed": 2701,
+   "example": "mixed"
+  },
+  {
+   "name": "archipelago-joins-2701",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=joins",
+   "seed": 2701,
+   "example": "joins"
+  },
+  {
+   "name": "archipelago-joins-911",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=joins",
+   "seed": 911,
+   "example": "joins"
+  },
+  {
+   "name": "archipelago-joins-4829",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=joins",
+   "seed": 4829,
+   "example": "joins"
+  },
+  {
+   "name": "archipelago-joins-2701-material",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=joins&view=material",
+   "seed": 2701,
+   "example": "joins"
+  },
+  {
+   "name": "archipelago-hills-2701",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=hills",
+   "seed": 2701,
+   "example": "hills"
+  },
+  {
+   "name": "archipelago-hills-911",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=hills",
+   "seed": 911,
+   "example": "hills"
+  },
+  {
+   "name": "archipelago-hills-4829",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=hills",
+   "seed": 4829,
+   "example": "hills"
+  },
+  {
+   "name": "archipelago-hills-2701-material",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=hills&view=material",
+   "seed": 2701,
+   "example": "hills"
+  },
+  {
+   "name": "archipelago-coasts-2701",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=coasts",
+   "seed": 2701,
+   "example": "coasts"
+  },
+  {
+   "name": "archipelago-coasts-911",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=coasts",
+   "seed": 911,
+   "example": "coasts"
+  },
+  {
+   "name": "archipelago-coasts-4829",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=coasts",
+   "seed": 4829,
+   "example": "coasts"
+  },
+  {
+   "name": "archipelago-coasts-2701-material",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=coasts&view=material",
+   "seed": 2701,
+   "example": "coasts"
+  },
+  {
+   "name": "archipelago-intersections-2701",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=intersections",
+   "seed": 2701,
+   "example": "intersections"
+  },
+  {
+   "name": "archipelago-intersections-911",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=intersections",
+   "seed": 911,
+   "example": "intersections"
+  },
+  {
+   "name": "archipelago-intersections-4829",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=intersections",
+   "seed": 4829,
+   "example": "intersections"
+  },
+  {
+   "name": "archipelago-intersections-2701-material",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=intersections&view=material",
+   "seed": 2701,
+   "example": "intersections"
+  },
+  {
+   "name": "archipelago-islands-2701",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=islands",
+   "seed": 2701,
+   "example": "islands"
+  },
+  {
+   "name": "archipelago-islands-911",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=islands",
+   "seed": 911,
+   "example": "islands"
+  },
+  {
+   "name": "archipelago-islands-4829",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=islands",
+   "seed": 4829,
+   "example": "islands"
+  },
+  {
+   "name": "archipelago-islands-2701-material",
+   "url": "http://127.0.0.1:8772/sculpt?scratch=baseline&example=islands&view=material",
+   "seed": 2701,
+   "example": "islands"
+  }
+ ]
+}
