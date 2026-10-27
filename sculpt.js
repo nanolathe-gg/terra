@@ -237,7 +237,8 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       const target=s.baseline+rimHeight*rim-(s.baseline-floor)*bowl+lumps*(.4+.6*bowl);
       const blend=smooth(0,.15,1-rr);
       const value=rr<1?s.base[i]+(target-s.base[i])*blend+(rr>=.85?(rimHeight*rim+lumps*.4)*(1-blend):0):s.base[i]+rimHeight*rim+lumps*.3*apronReach;
-      heights[i]=clamp(value,MIN_HEIGHT,MAX_HEIGHT);
+      // A crater on dry ground stays dry: floor lumps never dip into the sea.
+      heights[i]=clamp(s.base[i]>config.seaLevel+1?Math.max(value,config.seaLevel+1.5):value,MIN_HEIGHT,MAX_HEIGHT);
       protection[i]=s.protectBase[i]*(1-smooth(0,.3,influence)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,influence));
       continue;
     }
