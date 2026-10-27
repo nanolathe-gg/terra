@@ -26,7 +26,7 @@ KNOB_DEFAULTS = dict(
     groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
-    flatShadow=0, flatOcclusion=.4, lightCap=1.13,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13, sunTilt=1, ambient=.42, slopeMarks=0,
     faceVariation=.8, northFace=.7, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
@@ -60,8 +60,15 @@ WORLD_KNOBS = {
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
+    # Lit from due west: brightness regressed on the height gradient puts
+    # the light at 174-190 deg on the Lunar sections and all four retail
+    # Lunar maps (ours was 152). No sky: shaded faces of the cc21 crater sit
+    # at 0.27-0.46 of level ground (ours 0.43-0.60 at ambient .42 with fill);
+    # ambient .12 gives 0.29-0.50. Crisp dark marks on slopes, measured by
+    # measure/slope_marks.py (shaded faces: ~7.5% of px in 1-40 px marks).
     'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63),
+                 worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
+                 sunTilt=0, faceFill=0, ambient=.12, slopeMarks=.6),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=1,

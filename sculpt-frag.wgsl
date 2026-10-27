@@ -173,6 +173,48 @@ fn groundTile(pixel: vec2f) -> vec3f {
     return textureLoad(grassTex, vec2i(tile * 32 + local.x, local.y), 0).rgb;
 }
 
+// Moon slope marks, measured on the retail Lunar sections and the cc21
+// crater (measure/slope_marks.py): crisp dark specks and short dashes on
+// slopes from ~0.15, about 2 px wide and 3-7 px long, their long axis within
+// ~20-30 degrees of the screen vertical, ~0.4 of the surrounding luma, and
+// flanked left and right by brighter ground (~1.15-1.25 of the local median
+// 2-3 px to either side, against ~1.05 above and below). They are drawn in
+// screen pixels, after shading and before the palette stage, so nothing
+// blurs them. One candidate mark per 9-px cell; returns 1 in a mark, -1 on
+// its flanks.
+fn markHash(c: vec2i) -> vec4f {
+    var s = vec4u(bitcast<vec2u>(c), 0x9e3779b9u, 0x85ebca6bu) * 1664525u + 1013904223u;
+    s.x += s.y * s.w; s.y += s.z * s.x; s.z += s.x * s.y; s.w += s.y * s.z;
+    s ^= s >> vec4u(16u);
+    s.x += s.y * s.w; s.y += s.z * s.x; s.z += s.x * s.y; s.w += s.y * s.z;
+    return vec4f(s) / 4294967296.0;
+}
+fn slopeMark(pixel: vec2f, density: f32) -> f32 {
+    let cell = 9.0;
+    let c = vec2i(floor(pixel / cell));
+    var mark = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let k = c + vec2i(i, j);
+            let r = markHash(k);
+            if (r.x >= density) { continue; }
+            let r2 = markHash(k + vec2i(7919, 104729));
+            let centre = (vec2f(k) + 0.1 + 0.8 * r.yz) * cell;
+            let halfLength = mix(1.3, 3.6, r.w);
+            let halfWidth = mix(0.8, 1.3, r2.x);
+            let angle = (r2.y - 0.5) * 0.9;
+            let axis = vec2f(sin(angle), cos(angle));
+            let d = pixel - centre;
+            let along = dot(d, axis) / halfLength;
+            let across = (d.x * axis.y - d.y * axis.x) / halfWidth;
+            if (along * along + across * across < 1.0) { return 1.0; }
+            let flank = across * halfWidth / (halfWidth + 2.4);
+            if (along * along + flank * flank < 1.0) { mark = -1.0; }
+        }
+    }
+    return mark;
+}
+
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -201,8 +243,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let weather = textureSampleLevel(weatherTex, linearClamp, p / (u.size - 1.0), 0.0).rg;
     let slope = length(broad);
     let route = routeProtection(p);
-    let flatLight = 0.42 + 0.95 * u.light.z;
-    var lighting = (0.42 + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
+    let flatLight = u.ambient + 0.95 * u.light.z;
+    var lighting = (u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
     lighting = min(lighting, u.lightCap);
     let ao = occlusion(p, h);
     let shadow = visibility(p, max(h, u.sea));
@@ -220,7 +262,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let onSlope = smoothstep(0.08, 0.35, slope);
         let castShadow = mix(1.0, shadow, mix(u.flatShadow, 1.0, onSlope));
         let occluded = mix(1.0, ao, mix(u.flatOcclusion, 1.0, onSlope));
-        shading = min((0.42 + fill + 0.95 * direct * castShadow) / flatLight, u.lightCap) * occluded;
+        shading = min((u.ambient + fill + 0.95 * direct * castShadow) / flatLight, u.lightCap) * occluded;
     }
     var grass = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
     var transitionGround = grass;
@@ -638,6 +680,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material *= 1.0 - 0.3 * near;
     }
     var color = material * shading;
+    if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
+        // More on faces turned from the light (sections: ~0.6 as many on
+        // lit faces of the same slope).
+        let away = smoothstep(-0.05, 0.10, dot(broad, normalize(u.light.xy)));
+        // Few on lit faces in the cc21 crater (0.5% of px against 7.5% on
+        // shaded faces of the same slope; the sections give ~0.6).
+        let density = u.slopeMarks * smoothstep(0.12, 0.45, slope) * mix(0.15, 1.0, away);
+        if (density > 0.0) {
+            let mark = slopeMark(pixel, density);
+            // The flanks brighten shaded ground only, never past the lit material.
+            if (mark > 0.0) { color *= 1.0 - 0.62 * mark; }
+            else if (mark < 0.0) { color = min(color * (1.0 + 0.32 * away), max(color, material * 0.9)); }
+        }
+    }
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
         // Sediment mottling varies apparent water colour without changing the

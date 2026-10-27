@@ -111,6 +111,8 @@ struct Uniforms {
     faceEdge: f32,
     mossFromGround: f32,
     lightCap: f32,
+    ambient: f32,       // unlit share of the light (0.42; Moon lower: no sky)
+    slopeMarks: f32,    // Moon: density of crisp dark marks on slopes (0: none)
     footRim: f32,
     crevice: f32,
     dither: f32,
