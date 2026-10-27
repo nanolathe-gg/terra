@@ -54,6 +54,7 @@ vec3 based(vec3 c, vec3 mean, vec4 base) { return base.a > 0.5 ? clamp(c - mean 
 uniform float uCrackLit;
 uniform float uSandDust;
 uniform float uSandGrass;
+uniform float uBandWater;
 uniform float uTransitionDetail;
 uniform float uRockStart;
 uniform float uRockFull;
@@ -578,6 +579,8 @@ void main() {
             colorDepth = mix(depth, sum / 8.0, 0.75);
         }
         if (uCoastalDetail) colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
+        // Optional contour rings in the water colour, every 6 depth units.
+        if (uBandWater > 0.0) colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, uBandWater * 0.7);
         float deep = smoothstep(uShallowDepth, uDeepDepth, colorDepth);
         vec3 grain = texture(uWater, pixel / vec2(textureSize(uWater, 0))).rgb - uWaterMean;
         vec3 water = mix(uShallowBase.a > 0.5 ? uShallowBase.rgb : uShallowColor, uDeepBase.a > 0.5 ? uDeepBase.rgb : uDeepColor, deep) + grain * mix(2.3, 0.95, deep);

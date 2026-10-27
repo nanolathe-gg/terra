@@ -46,6 +46,10 @@ uniform float uWindAngle;        // direction the wind blows toward, degrees (0 
 uniform float uRipple;           // ripple wavelength, world px (0: none)
 uniform float uRippleHeight;     // ripple amplitude, height units
 uniform float uBeachDistance;    // beach reach from the waterline, world px (0: none)
+uniform float uBanding;          // contour banding strength (0: none)
+uniform float uBandSpacing;      // height between bands, height units
+uniform float uBandSoftness;     // share of each band that is riser
+uniform float uBandLine;         // darkness of the line along each riser
 out vec4 outFields;
 
 const float TAU = 6.28318530718;
@@ -342,6 +346,28 @@ float beachCover(vec2 p, float h, float slope) {
     return (1.0 - smoothstep(reach * 0.88, reach, edge)) * (1.0 - smoothstep(0.9, 1.5, slope));
 }
 
+// Contour bands, as in retail maps rendered from height-banded terrain:
+// the ground steps in shallow terraces of uBandSpacing height units, so thin
+// wavy lines follow the contours (measured on retail Green: median step 3.7,
+// lines 10-20 px apart on gentle slopes, tight rings round lakes). Each
+// riser carries a thin dark line; the lines wander and break into dashes.
+// Returns (height offset, line darkness).
+vec2 contourBands(vec2 p, float h, float slope) {
+    if (uBanding <= 0.0 || h < uSea + 0.5) return vec2(0.0);
+    float gate = smoothstep(0.04, 0.12, slope) * (1.0 - smoothstep(0.9, 1.6, slope));
+    if (gate <= 0.0) return vec2(0.0);
+    float S = uBandSpacing;
+    float u = (h + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.12) / S;
+    float v = fract(u), w = clamp(uBandSoftness, 0.05, 1.0);
+    float offset = S * (floor(u) + smoothstep(1.0 - w, 1.0, v)) - u * S;
+    float dash = smoothstep(-0.6, 0.0, valueNoise(p / 22.0 + 51.0)) * (0.55 + 0.45 * (valueNoise(p / 70.0 + 9.0) * 0.5 + 0.5));
+    float strength = uBanding * gate * dash;
+    // Distance from the riser's middle, in world px along the slope.
+    float px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.02);
+    float line = (1.0 - smoothstep(0.35, 1.1, px)) * strength * uBandLine;
+    return vec2(offset * strength, line);
+}
+
 // Sandiness from the weathering worker's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
@@ -407,6 +433,8 @@ void main() {
     // Height scales with slope, with a floor so gentle lumps are visible.
     float height = value * uReliefAmount * max(clamp(slope, 0.0, 2.5), 0.25 * uGentleRelief) * uReliefScale * gain * patchy;
     height += plain;
+    vec2 bands = contourBands(p, h, slope) * (1.0 - route);
+    height += bands.x;
     float sand = sandCover(p, slope, height) * (1.0 - route);
     // Only sand deep enough to cover the ground buries relief and stones.
     float buried = smoothstep(0.35, 0.9, sand);
@@ -435,7 +463,9 @@ void main() {
     rock.y *= 1.0 - buried;
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
     // crack wall (1 + light).
-    float crackCode = crackAt.y > 0.02 ? -crackAt.y : crackAt.z > 0.02 ? 1.0 + crackAt.z : rock.y;
+    // Band lines share the crack darkness code.
+    float lineDark = max(crackAt.y, bands.y * (1.0 - buried));
+    float crackCode = lineDark > 0.02 ? -lineDark : crackAt.z > 0.02 ? 1.0 + crackAt.z : rock.y;
     // Green holds route protection, or (negative) beach cover off routes.
     float beach = beachCover(p, h, slope);
     outFields = vec4(height, route > 0.01 || beach <= 0.0 ? route : -beach, crackCode, sand);

@@ -34,7 +34,7 @@ KNOB_DEFAULTS = dict(
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     craterlets=3, craterEjecta=0, craterRays=0,
-    banding=0, bandSpacing=8, bandSoftness=.35, bandLight=.5, bandWater=0,
+    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6,
     beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25,
@@ -42,9 +42,9 @@ KNOB_DEFAULTS = dict(
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
-    'green': dict(banding=.5),
-    'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.4),
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.3),
+    'green': dict(banding=.8, bandLine=.6),
+    'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.6),
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5),
     'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  craterRays=.4, undulation=4, plainRelief=.6, banding=.3),
     'zhon': dict(crackSeverity=.4, crackMajor=.6, boulders=.55, boulderSize=14, boulderFoot=.8, boulderCluster=.7,
