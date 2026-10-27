@@ -42,7 +42,7 @@ KNOB_DEFAULTS = dict(
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
-    'green': dict(banding=.8, bandLine=.6),
+    'green': dict(banding=.8, bandLine=.45),
     'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.6),
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5),
     # Painted Desert: rounded badland hills striped by coloured beds, rilled

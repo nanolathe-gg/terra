@@ -371,21 +371,28 @@ float beachCover(vec2 p, float h, float slope) {
 // wavy lines follow the contours (measured on retail Green: median step 3.7,
 // lines 10-20 px apart on gentle slopes, tight rings round lakes). Each
 // riser carries a thin dark line; the lines wander and break into dashes.
-// Returns (height offset, line darkness).
-vec2 contourBands(vec2 p, float h, float slope) {
-    if (uBanding <= 0.0 || h < uSea + 0.5) return vec2(0.0);
-    float gate = smoothstep(0.04, 0.12, slope) * (1.0 - smoothstep(0.9, 1.6, slope));
-    if (gate <= 0.0) return vec2(0.0);
+// Returns (height offset, line strength, facing: +1 lit riser, -1 shaded).
+// Retail lines are tonal steps, not drawn lines: a riser facing the sun is
+// a light line and one facing away a dark one; they are jagged at pixel
+// scale, broken into dashes, and mostly on gentle slopes (blind round 7).
+vec3 contourBands(vec2 p, float h, float slope, vec2 fall) {
+    if (uBanding <= 0.0 || h < uSea + 0.5) return vec3(0.0);
+    float gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(0.35, 0.75, slope));
+    if (gate <= 0.0) return vec3(0.0);
     float S = uBandSpacing;
-    float u = (h + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.12) / S;
+    float u = (h + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
+                 + valueNoise(p / 3.3 + 19.0) * S * 0.06 * min(1.0, 0.3 / max(slope, 0.05))) / S;
     float v = fract(u), w = clamp(uBandSoftness, 0.05, 1.0);
     float offset = S * (floor(u) + smoothstep(1.0 - w, 1.0, v)) - u * S;
-    float dash = smoothstep(-0.6, 0.0, valueNoise(p / 22.0 + 51.0)) * (0.55 + 0.45 * (valueNoise(p / 70.0 + 9.0) * 0.5 + 0.5));
+    float dash = smoothstep(-0.55, 0.05, valueNoise(p / 22.0 + 51.0)) * smoothstep(-0.7, -0.1, valueNoise(p / 6.0 + 33.0))
+               * (0.55 + 0.45 * (valueNoise(p / 70.0 + 9.0) * 0.5 + 0.5));
     float strength = uBanding * gate * dash;
     // Distance from the riser's middle, in world px along the slope.
     float px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.02);
-    float line = (1.0 - smoothstep(0.35, 1.1, px)) * strength * uBandLine;
-    return vec2(offset * strength, line);
+    float line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * uBandLine;
+    // The riser leans downhill (-fall): lit if that faces the sun.
+    float facing = dot(-fall, normalize(uSun.xy + 1e-6));
+    return vec3(offset * strength, line, facing);
 }
 
 // Sandiness from the weathering worker's transport (wind and water): 0
@@ -466,8 +473,11 @@ void main() {
         // The squiggles read as dark lines in the art: shade their troughs.
         wormDark = smoothstep(0.82, 0.97, max(worm, worm2 * 0.97)) * uWorms * on * 0.85;
     }
-    vec2 bands = contourBands(p, h, slope) * (1.0 - route);
+    vec3 bandsAt = contourBands(p, h, slope, fall);
+    vec2 bands = bandsAt.xy * (1.0 - route);
     height += bands.x;
+    float bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
+    float bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
     float sand = sandCover(p, slope, height) * (1.0 - route);
     // Only sand deep enough to cover the ground buries relief and stones.
     float buried = smoothstep(0.35, 0.9, sand);
@@ -497,7 +507,8 @@ void main() {
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
-    float lineDark = max(max(crackAt.y, bands.y * (1.0 - buried)), wormDark * (1.0 - buried));
+    float lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
+    crackAt.z = max(crackAt.z, bandLit * (1.0 - buried));
     float crackCode = lineDark > 0.02 ? -lineDark : crackAt.z > 0.02 ? 1.0 + crackAt.z : rock.y;
     // Green holds route protection, or (negative) beach cover off routes.
     float beach = beachCover(p, h, slope);

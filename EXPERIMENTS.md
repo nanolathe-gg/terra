@@ -56,6 +56,7 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 48 | Zhon: rock to the crown, sand apron round raised rock (baked, with refined crossings), round boulders, steeper rounder hills | rockCrown, apron, boulderRound | Section 'low savannah to high savannah' side by side | Kept |
 | 49 | Moon: crater ejecta (per crater) and wormy regolith relief with dark troughs | craterEjecta, worms | Lunar sections lnr512x100-104 at 1x | Kept; closer, squiggles still coarser than retail |
 | 50 | Strata beds and a Painted Desert world (Red materials, server default colours, full colour by default: the TA palette has no warm tans) | strata, strataSpacing, strataWarp, strataContrast, strata colours | Renders with palette on and off | Kept |
+| 51 | **Blind round 7**: build fb909a54f (cracks v2, contour bands 0.8), seeds 15013/16631 | | A: AUC 0.57 (5/10 caught, 0 false); B: AUC 0.71 (5/10, 3 false) | Main tell from both: our contour lines read as nested topographic outlines, dark, smooth and continuous with no shading between them, packed on steep slopes (img09, img15, img19). Cracks v2 drew no tell; one 'rectangular hatch' rock note (img15). Fixed after the round: lines are tonal steps (light on sun-facing risers, dark on others), jagged at pixel scale, broken into short dashes, gated to slopes 0.07-0.75; Green line darkness 0.45 |
 
 Open tells and gaps:
 
