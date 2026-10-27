@@ -1,0 +1,13 @@
+{"biome": "moon", "source": {"map": "cc21", "x": 256, "y": 192}, "ground": true, "query": "",
+ "strokes": [
+  ["crater", [[592, 552]], {"card": {"diameter": 640, "amount": 43, "roughness": 30, "craterlets": 2}}],
+  ["hill", [[380, 880], [320, 800], [272, 680], [262, 560], [280, 440], [330, 340], [400, 270], [470, 240]], {"card": {"diameter": 300, "amount": 52, "roughness": 12, "softness": 88}}],
+  ["hill", [[790, 215], [880, 265], [922, 360], [930, 470], [928, 580], [925, 690], [905, 780], [850, 845], [790, 880], [745, 890]], {"card": {"diameter": 280, "amount": 50, "roughness": 12, "softness": 88}}],
+  ["hill", [[740, 895], [810, 875]], {"card": {"diameter": 200, "amount": 20, "roughness": 15, "softness": 88}}],
+  ["lower", [[640, 228]], {"card": {"diameter": 140, "amount": 15}}],
+  ["hill", [[470, -30], [545, 15], [610, 25]], {"card": {"diameter": 130, "amount": 25, "roughness": 15, "softness": 88}}],
+  ["crater", [[128, 352]], {"card": {"diameter": 80, "amount": 12, "craterlets": 0}}],
+  ["crater", [[178, 446]], {"card": {"diameter": 50, "amount": 8, "craterlets": 0}}],
+  ["crater", [[205, 596]], {"card": {"diameter": 64, "amount": 8, "craterlets": 0}}],
+  ["crater", [[812, 412]], {"card": {"diameter": 120, "amount": 10, "craterlets": 0}}]
+ ]}
