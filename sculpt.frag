@@ -43,6 +43,7 @@ uniform vec4 uFringeSignal;
 uniform vec2 uFringeRange;
 uniform bool uTransitionBody;
 uniform float uCrackDark;
+uniform float uCrackLit;
 uniform float uSandDust;
 uniform float uTransitionDetail;
 uniform float uRockStart;
@@ -516,7 +517,9 @@ void main() {
     // Baked boulders take rock material, lit by the same surface.
     if (uReliefMode == 1) {
         float coverOrCrack = bakedFields(p).b;
-        material = mix(material, rock * 1.08, max(coverOrCrack, 0.0));
+        // A crack wall facing the sun.
+        if (coverOrCrack > 1.0) material *= 1.0 + uCrackLit * (coverOrCrack - 1.0);
+        else material = mix(material, rock * 1.08, max(coverOrCrack, 0.0));
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are
         // lit by the carved geometry.
@@ -591,6 +594,6 @@ void main() {
     if (uDiagnostic == 4) color = vec3(exposed);
     if (uDiagnostic == 5) color = vec3(lighting, ao, shadow);
     if (uDiagnostic == 6) color = material;
-    if (uDiagnostic == 7) color = vec3(clamp(-bakedFields(p).b, 0.0, 1.0), clamp(-bakedFields(p).r * 0.25, 0.0, 1.0), 0.25 * smoothstep(0.1, 0.6, length(broad)));
+    if (uDiagnostic == 7) { float code = bakedFields(p).b; color = vec3(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     outColor = vec4(color, 1.0);
 }

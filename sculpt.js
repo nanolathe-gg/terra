@@ -1229,19 +1229,20 @@ const KNOBS = [
   ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
     ['wind','Wind toward (deg)',0,360,5,20],['sandPatchy','Patchiness (flows and piles)',0,1,.05,.7],['sandTail','Fines carried beyond',0,1,.05,.6],['sandDust','Dusting tint',0,1,.05,.5],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
-  ['Cracks', [['crackSeverity','Depth',0,1,.05,.6],['crackWidth','Width (px)',.5,3,.1,1],['crackSpacing','Spacing (px)',4,40,1,11],['crackLength','Length down the slope',1,4,.25,2.5],
-    ['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Rills to plates',0,1,.05,.25],['crackReach','Reach onto gentle slopes',0,1,.05,.6],['crackDark','Floor darkness',0,1,.05,.75],
-    ['fissures','Large fissures',0,1,.05,.5],['fissureSpacing','Fissure spacing (px)',16,120,2,36]]],
+  ['Cracks', [['crackSeverity','Depth',0,1,.05,.6],['crackSpacing','Block size (px)',16,96,2,40],['crackLength','Length down the slope',1,4,.25,2],
+    ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
+    ['crackWidth','Width (px)',.5,2.5,.1,1],['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Majors: rills to plates',0,1,.05,.35],['crackReach','Reach onto gentle slopes',0,1,.05,.6],
+    ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
   ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3]]],
   ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Crack styles set several crack knobs at once; each stays editable.
 const CRACK_STYLES={
-  'Retail Green':{crackSeverity:.6,crackWidth:1,crackSpacing:11,crackLength:2.5,crackJagged:.6,crackNetwork:.25,crackReach:.6,crackDark:.75,fissures:.5,fissureSpacing:36},
-  'Hairline':{crackSeverity:.4,crackWidth:.6,crackSpacing:6,crackLength:3,crackJagged:.6,crackNetwork:.1,crackReach:.5,crackDark:.75,fissures:0,fissureSpacing:36},
-  'Plates (Gaea rock)':{crackSeverity:.7,crackWidth:1,crackSpacing:9,crackLength:1.25,crackJagged:.8,crackNetwork:1,crackReach:.9,crackDark:.75,fissures:.2,fissureSpacing:36},
-  'Deep fissures':{crackSeverity:.85,crackWidth:1.4,crackSpacing:14,crackLength:2.5,crackJagged:.6,crackNetwork:0,crackReach:.8,crackDark:.8,fissures:1,fissureSpacing:28},
+  'Retail Green':{crackSeverity:.6,crackSpacing:40,crackLength:2,crackMajor:.8,crackMinor:.75,crackHairline:.6,crackBlocks:.6,crackWidth:1,crackJagged:.6,crackNetwork:.35,crackReach:.6,crackDark:.75,crackLit:.35},
+  'Hairline':{crackSeverity:.35,crackSpacing:30,crackLength:2,crackMajor:.5,crackMinor:.5,crackHairline:1,crackBlocks:.2,crackWidth:.7,crackJagged:.6,crackNetwork:.2,crackReach:.6,crackDark:.7,crackLit:.25},
+  'Plates (Gaea rock)':{crackSeverity:.7,crackSpacing:48,crackLength:1.25,crackMajor:.9,crackMinor:.9,crackHairline:.7,crackBlocks:1,crackWidth:1,crackJagged:.7,crackNetwork:1,crackReach:.9,crackDark:.8,crackLit:.45},
+  'Deep fissures':{crackSeverity:.9,crackSpacing:56,crackLength:3,crackMajor:1,crackMinor:.4,crackHairline:.3,crackBlocks:.5,crackWidth:1.5,crackJagged:.6,crackNetwork:0,crackReach:.8,crackDark:.85,crackLit:.4},
 };
 function buildKnobs() {
   const root = $('knobs'), params = experiment;

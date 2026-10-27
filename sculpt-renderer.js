@@ -326,6 +326,9 @@ export class TerrainRenderer {
     const sun = [light === 'alternate' ? 0.72 : -0.72, front ? 0.38 : -0.38, 0.82];
     const length = Math.hypot(...sun);
     this.v('uLight', sun.map(v => v / length));
+    // Lit crack walls are baked for this light.
+    const sunKey = sun.join(',');
+    if (this.sunKey !== sunKey) { this.sunKey = sunKey; this.sun = sun.map(v => v / length); this.fieldsDirty = true; }
     // Painting bakes a cheap preview; the first full draw after it re-bakes.
     if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview');
     gl.activeTexture(gl.TEXTURE0 + 12);
@@ -385,6 +388,7 @@ export class TerrainRenderer {
     this.f('uGullyRock', variant.has('gullyRock') ? Number(variant.get('gullyRock')) : 0.5);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
     this.f('uCrackDark', variant.has('crackDark') ? Number(variant.get('crackDark')) : 0.75);
+    this.f('uCrackLit', variant.has('crackLit') ? Number(variant.get('crackLit')) : 0.35);
     this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
@@ -422,14 +426,17 @@ export class TerrainRenderer {
     set('uSand', number('sand', 0));
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
-    set('uCrackSpacing', number('crackSpacing', 11));
-    set('uCrackLength', number('crackLength', 2.5));
+    set('uCrackSpacing', number('crackSpacing', 40));
+    set('uCrackLength', number('crackLength', 2));
     set('uCrackWidth', number('crackWidth', 1));
     set('uCrackJagged', number('crackJagged', 0.6));
-    set('uCrackNetwork', number('crackNetwork', 0.25));
+    set('uCrackNetwork', number('crackNetwork', 0.35));
     set('uCrackReach', number('crackReach', 0.6));
-    set('uFissures', number('fissures', 0.5));
-    set('uFissureSpacing', number('fissureSpacing', 36));
+    set('uCrackMinor', number('crackMinor', 0.75));
+    set('uCrackHairline', number('crackHairline', 0.6));
+    set('uCrackBlocks', number('crackBlocks', 0.6));
+    set('uCrackMajor', number('crackMajor', 0.8));
+    if (this.sun) gl.uniform3fv(gl.getUniformLocation(program, 'uSun'), this.sun);
     set('uCracksOn', preview && v.get('previewCracks') !== '1' ? 0 : 1, 'i');
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
