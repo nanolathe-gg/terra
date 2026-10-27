@@ -55,7 +55,8 @@ float routeProtection(vec2 p) {
 }
 #else
 vec4 bakedFields(vec2 p) { return texture(uFields, (p + 0.5) / uSize); }
-float routeProtection(vec2 p) { return bakedFields(p).g; }
+float routeProtection(vec2 p) { return max(bakedFields(p).g, 0.0); }
+float beachField(vec2 p) { return max(-bakedFields(p).g, 0.0); }
 #endif
 
 float fractureDepth(vec2 p, float h, float slope) {

@@ -45,6 +45,7 @@ uniform float uCrackLength;      // elongation of crack cells along the fall lin
 uniform float uWindAngle;        // direction the wind blows toward, degrees (0 = east)
 uniform float uRipple;           // ripple wavelength, world px (0: none)
 uniform float uRippleHeight;     // ripple amplitude, height units
+uniform float uBeachDistance;    // beach reach from the waterline, world px (0: none)
 out vec4 outFields;
 
 const float TAU = 6.28318530718;
@@ -320,6 +321,27 @@ vec4 cracks(vec2 p, vec2 fall, float slope, float mask, float h) {
     return vec4(carve, dark, lit, blocks);
 }
 
+// Beach: dry ground within reach of the water, as the world's coast
+// sections show (Zhon: sand runs ~180 px inland). The reach varies along the
+// coast and its inland edge is ragged. Distance to water is found by
+// marching outward in 16 directions.
+float beachCover(vec2 p, float h, float slope) {
+    if (uBeachDistance <= 0.0 || h <= uSea) return 0.0;
+    float reach = uBeachDistance * (0.45 + 0.9 * (valueNoise(p / 90.0 + 31.0) * 0.5 + 0.5));
+    float nearest = 1e9;
+    for (int k = 0; k < 16; k++) {
+        float a = float(k) * 0.3926991 + 0.2;
+        vec2 dir = vec2(cos(a), sin(a));
+        for (int r = 1; r <= 8; r++) {
+            float d = reach * 1.15 * float(r) / 8.0;
+            if (d >= nearest) break;
+            if (baseHeight(p + dir * d) < uSea) { nearest = d; break; }
+        }
+    }
+    float edge = nearest + (valueNoise(p / 9.0 + 17.0) * 0.5) * reach * 0.12;
+    return (1.0 - smoothstep(reach * 0.88, reach, edge)) * (1.0 - smoothstep(0.9, 1.5, slope));
+}
+
 // Sandiness from the weathering worker's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
@@ -414,5 +436,7 @@ void main() {
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
     // crack wall (1 + light).
     float crackCode = crackAt.y > 0.02 ? -crackAt.y : crackAt.z > 0.02 ? 1.0 + crackAt.z : rock.y;
-    outFields = vec4(height, route, crackCode, sand);
+    // Green holds route protection, or (negative) beach cover off routes.
+    float beach = beachCover(p, h, slope);
+    outFields = vec4(height, route > 0.01 || beach <= 0.0 ? route : -beach, crackCode, sand);
 }

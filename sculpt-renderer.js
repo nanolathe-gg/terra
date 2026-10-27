@@ -172,6 +172,8 @@ export class TerrainRenderer {
     }
     this.i('uBeach',Boolean(this.config.textures.beach));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
+    const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
+    gl.uniform4fv(this.location('uWaterMid'), mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
     if(this.transitionBody)gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
     if(body!==fringe)body.close();fringe.close();
     this.i('uSlopeFringe',13);
@@ -482,6 +484,7 @@ export class TerrainRenderer {
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));
+    set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5), 'i');
     // The routes texture shares unit 12 with the fields; bind it for the bake.
     gl.activeTexture(gl.TEXTURE0 + 12);

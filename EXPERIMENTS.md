@@ -49,6 +49,8 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 41 | UI: Shape panel (tools, brush card that says whether it edits the next stroke or a selected shape) and World panel (whole-map settings in collapsible groups) | | Screenshot | Kept |
 | 42 | Worlds: per-world remembered knobs and base colours (texture grain moved to a new mean); New world, export/import, restore built-in | world colours | 'Snowfield' test world from Green | Kept |
 | 43 | Beach band for worlds with a beach texture (third layer of the transition array; all 16 units in use) | beachWidth | Awaits Zhon | Kept |
+| 44 | Moon (retail) and Zhon (third party, ta-archive section pack) worlds, measured from decoded section catalogs (sculpt_section_biome.py): exact palette-index ground tiles, quilted slope/rock/water/beach textures, measured water ramp | | Side-by-side with section crops; Moon dust and craters match; Zhon ground, water and sand match | Kept |
+| 45 | Distance-based beach (baked, within reach of water, ragged inland edge; Zhon ~180 px measured) and a three-stop water ramp (shallow, mid, deep) | beachWidth | Zhon islands and coasts: wide sand beaches into savannah; the purple band from blending two water textures is gone | Kept |
 
 Open tells and gaps:
 
@@ -70,3 +72,6 @@ Open tells and gaps:
 - Ridges and cliff bands of even width with regularly repeating rock ribs
   (round 6, reviewer B): vary band width and rib spacing along a face.
 - Dragging a map-wide lake is still about 80 ms a frame (TODO in sculpt.js).
+- Zhon's rock reads as streaked faces on narrow bands; the sections have rounded grey boulders on sand aprons.
+- Moon craters have smooth walls; the lunar sections have rough ejecta and nested craterlets.
+- The section-biome module reads catalogs from this session's scratchpad (SCRATCH); sculpt.py cannot pass another root yet.

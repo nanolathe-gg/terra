@@ -104,7 +104,7 @@ def biome_config(biome, assets):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8767)
-    parser.add_argument('--biomes', default='green,red,archipelago',
+    parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon',
                         help='comma-separated biomes to prepare; the first is the default')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
                         help='each biome prepares its materials in <root>/assets-<biome>')

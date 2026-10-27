@@ -47,6 +47,7 @@ uniform float uCrackDark;
 uniform vec4 uGroundBase, uSlopeBase, uRockBase, uSandBase, uBeachBase, uShallowBase, uDeepBase;
 uniform vec3 uGroundTexMean, uSlopeTexMean, uRockTexMean, uBeachTexMean;
 uniform bool uBeach;
+uniform vec4 uWaterMid;   // rgb mid-depth colour, a: its depth (0: two stops)
 uniform float uBeachHeight, uBeachWidth;
 // Move a texture to a new base colour, keeping its grain.
 vec3 based(vec3 c, vec3 mean, vec4 base) { return base.a > 0.5 ? clamp(c - mean + base.rgb, 0.0, 1.0) : c; }
@@ -442,13 +443,14 @@ void main() {
     float nearWater = 1.0 - smoothstep(uSea + 1.0, uSea + uWetBand, h);
     vec3 material = mix(grass, rock, exposed);
     if (uBeach && h > uSea - 1.0) {
-        // Beach sand on low gentle ground above the waterline, as the
-        // world's coast sections show; its upper edge is ragged and breaks
+        // Beach sand: within reach of the water (baked), or failing that a
+        // low band above the waterline. Its inland edge is ragged and breaks
         // into grains, and steep banks stay bare.
         vec3 sandBeach = based(texture(uSlopeFringe, vec3(pixel / vec2(textureSize(uSlopeFringe, 0).xy), 2.0)).rgb, uBeachTexMean, uBeachBase);
-        float top = uBeachHeight * uBeachWidth * (0.65 + 0.7 * terrainNoise(p * 0.45 + vec2(29.0, 5.0)).g);
         float speck = terrainNoise(p * 6.0 + vec2(61.0, 3.0)).b;
-        float beach = (1.0 - smoothstep(top * 0.6, top, h - uSea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope));
+        float beach = smoothstep(0.25, 0.75, beachField(p) + (speck - 0.5) * 0.5);
+        float top = uBeachHeight * uBeachWidth * (0.65 + 0.7 * terrainNoise(p * 0.45 + vec2(29.0, 5.0)).g);
+        beach = max(beach, (1.0 - smoothstep(top * 0.6, top, h - uSea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)));
         material = mix(material, sandBeach, beach * (1.0 - exposed * 0.7));
     }
     if (sharedTransition) {
@@ -583,6 +585,14 @@ void main() {
             vec3 shallow = texture(uWaterShallow, pixel / vec2(textureSize(uWaterShallow, 0))).rgb;
             vec3 deepWater = texture(uWater, pixel / vec2(textureSize(uWater, 0))).rgb;
             water = mix(shallow, deepWater, deep);
+            // Some worlds' water passes through a third colour; a straight
+            // blend of the two textures lands on colours the art never uses.
+            if (uWaterMid.a > 0.0) {
+                float toMid = smoothstep(uShallowDepth, uWaterMid.a, colorDepth);
+                float toDeep = smoothstep(uWaterMid.a, uDeepDepth, colorDepth);
+                vec3 mid = uWaterMid.rgb + (deepWater - uWaterMean) * 0.9;
+                water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
+            }
         }
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
