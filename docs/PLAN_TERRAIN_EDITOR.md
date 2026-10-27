@@ -99,48 +99,15 @@ three uses (§5.3, §10):
 - sources for community-world presets;
 - a test of whether the knobs can express many different worlds.
 
-## 1a. Glossary
-
-Terms used throughout this plan:
-
-- **Shape graph.** The ordered list of drawn shapes (plateaus, hills,
-  ramps, water and so on) that the editor re-evaluates after every edit.
-- **Node.** One entry in the shape graph, or one placed object.
-- **Section.** A retail or community `.sct` file: one pre-rendered terrain
-  feature with its own heights, as used by the official map editor.
-- **Stamp.** A section placed whole into a map.
-- **Preset.** A saved set of biome parameter values, for example the TA
-  Green preset.
-- **Chunk.** A fixed block of map area in which height, masks and
-  weathering results are stored and computed.
-- **Mask.** A per-pixel map of one property, such as slope, water flow,
-  sand deposit or rock exposure, that materials and processes read.
-- **Palette stage.** The final step that reduces full colour to TA's
-  256-colour palette.
-- **Grain.** The fine pixel texture of a material, such as grass speckle or
-  rock grit.
-- **Dither.** Scattering pixels of nearby palette colours so an area reads
-  as a colour the palette lacks.
-- **Talus and scree.** Loose rock that collects at the foot of steep
-  slopes.
-- **Strata.** Rock layers of differing hardness that erode into ledges.
-- **Blind review.** Reviewers compare crops without being told which are
-  generated and which are retail, and try to pick out the generated ones.
-- **TNT, OTA, HPI.** TA's map terrain file, the map's text settings file,
-  and the archive file maps ship in.
-
 **Next three steps, ranked:**
 
-1. **Consolidate and catalog (small).**
-   - Make the accepted defaults code and delete the rejected flags.
-   - Turn the README into a current-state page plus an experiment ledger.
-   - Add the palette stage as a toggle (on by default) and a headless
-     capture harness.
-   - Lay the scale groundwork: a map record with size, world
-     coordinates, chunk storage and a pan/zoom camera.
+1. **Baseline, sections and editor skeleton (medium).**
+   - Freeze a read-only baseline capture of the lab at e51bbb3a1.
    - Write the SCT reader and a section catalog for every world.
+   - Start a new editor skeleton, built for full maps from its first line,
+     with the lab's renderer ported in and the palette stage as a toggle.
 
-   §8 Phase 0.
+   The lab's own branch is left to its owner. §8 Phase 0.
 2. **Parameter model and shape graph (medium to large).**
    - Biome presets, feature-kind behaviour and per-shape overrides as one
      schema (§5).
@@ -414,6 +381,11 @@ a rewrite.
 9. **The recipe is the map.** A save holds the shape graph, the objects,
    the parameters and the seeds, which is kilobytes even for a huge map.
    Every cache can be rebuilt.
+   - A recipe pins the versions of its schema, presets and processes.
+   - Re-rendering a recipe under newer versions is an explicit upgrade
+     the artist sees, never silent: newer processes do not reproduce old
+     pixels.
+   - The exported TNT is the artifact of record for a released map.
 
 ## 7. Hosting
 
@@ -437,58 +409,73 @@ Suggestions:
 
 ## 8. Phases
 
-Phase 0 is first. After that, Phases 1 and 2 can proceed in parallel in
-separate worktrees, because they touch different files.
+Phase 0's three units are independent and can run in parallel. After Phase
+0, Phases 1 and 2 can overlap in separate worktrees as long as each unit
+owns different files: Phase 1 owns the graph, evaluation and interface;
+Phase 2 owns the process workers and shaders.
 
-### Phase 0: Consolidate (small)
+### Phase 0: Baseline, sections and editor skeleton (medium)
 
-- Make the accepted Green, Red and Archipelago defaults plain code. Delete
-  rejected flags (`fill`, `geology=terraces`, `coverage=ledge`, the old
-  `noise`/`forms` variants and so on). Keep at most a handful of named
-  comparison presets.
-- Rewrite the README as current state plus a "tried and dropped" table.
-  Start `EXPERIMENTS.md` as a ledger: ID, hypothesis, knobs, scenes and
-  seeds, blind score, human verdict, status, commit.
-- Fix the clear-colour strip at the top edge. Add the **palette stage** as
-  a toggle, on by default, starting from plain nearest colour (the
-  `uQuantize` path exists but is never turned on; E1 replaces the method).
-  Add 2× and 4× pixel-exact zoom, and a split view against a retail
-  reference crop.
-- Commit a headless capture harness: fixed scene suite × three seeds ×
-  biome → PNGs plus a timing JSON.
-- Move asset preparation off hard-coded `/private/tmp` paths onto one
-  configured asset root.
-- **Scale groundwork (§6.1 rules 1–3).**
-  - Map size and sea level come from a map record rather than the fixed
-    `size=1024` check.
-  - Brush and noise code use world coordinates.
-  - The height grid becomes chunk storage, even if one chunk.
-  - The view becomes a camera with pan and zoom.
-- **Section catalog.** Add an SCT reader that follows [fmt tnt "SCT
-  sections"]: tile grid, tile art, and the height byte of each record only.
-  Add a tool that writes every section as an art PNG, a heights array and a
-  manifest entry: world, kind folder, size, rise, hashes. Derived files
-  stay outside Git. Contact sheets per world and kind become the feature
-  vocabulary each biome's presets must cover.
-  - The same tool reads TA Archive section packs, kept beside the retail
-    files outside Git, with provenance per pack.
-  - The page warns that files downloaded before 2026-09-30 are broken and
-    must be downloaded again.
-  - Start with Cavedog's later official worlds; add community worlds as
-    Phase 4 needs them.
+The lab branch `prototype/terrain-visual-round2` is under active
+development by another agent. Phase 0 never edits it. Removing its flags
+and rewriting its README are left to whoever owns that branch. Phase 0 has
+three independent units.
+
+- **Baseline capture (read-only).**
+  - Commit the headless capture harness (`tools/map-editor/capture/`) and a
+    scene × seed × biome manifest.
+  - Capture the lab at its pinned commit e51bbb3a1, with its accepted
+    defaults. Store the PNGs, timings and hashes outside Git.
+  - These captures are the regression target the editor's TA presets are
+    judged against. They replace "reproduce the lab pixel-exact".
+- **Section catalog (Go, from `main`).**
+  - `formats/sct.go` reads a section following [fmt tnt "SCT sections"]:
+    header, tile grid, tile art, and the height byte of each record. The
+    other record bytes stay unread (§4.6). The tests use a fixture authored
+    in `testdata/`.
+  - A catalog command walks `worlds.hpi` and any TA Archive `.hpi` packs,
+    with provenance per pack (pack, author, URL, hash).
+  - It writes each section as an art PNG, a heights array and a manifest
+    entry: world, kind folder, size, rise, hashes. Derived files stay
+    outside Git.
+  - Contact sheets per world and kind become the feature vocabulary each
+    biome's presets must cover.
+  - TA Archive files downloaded before 2026-09-30 are broken and must be
+    downloaded again. Start with Cavedog's later official worlds; add
+    community worlds as Phase 4 needs them.
+- **Editor skeleton (`tools/map-editor/`).** A new directory, built for
+  full maps from its first line (§6.1 rules 1–3, 6–7):
+  - **Map record:** size in whole tiles, sea level, biome.
+  - **World coordinates** for everything.
+  - **A camera** with pan, zoom and pixel-exact 1×/2×/4×.
+  - **Chunked field storage**, with an authored-height field per chunk.
+  - **The lab's renderer ported by copy** (`sculpt-renderer.js`, `.vert`,
+    `.frag`, `-common.glsl`) and adapted to draw visible chunks. Its
+    accepted default branches are kept and its ablation flags dropped. The
+    source commit is named in the commit message.
+  - **The palette stage** as a toggle, on by default, starting from
+    nearest colour (E1 replaces the method).
+  - **One configured asset root** instead of `/private/tmp` paths.
+  - Brushes and the shape graph arrive in Phase 1, so the skeleton shows a
+    map loaded from a simple height source: blank, or a lab v3 sketch
+    imported as a raster.
 
 Done when:
 
-- the accepted renders reproduce pixel-exact with no URL flags;
-- one command captures the suite;
-- one command decodes and catalogs every section.
+- one command captures the lab baseline;
+- one command decodes and catalogs every section;
+- the skeleton opens a blank 12800×7168 map and a lab sketch, pans and
+  zooms across them, and renders with the palette stage on or off.
 
 ### Phase 1: Parameter model and shape graph (medium to large)
 
+Phase 1 builds on the skeleton in `tools/map-editor/`.
+
 - **Schema.** The three layers of §5.1 as one versioned JSON schema. The
   shader and workers read values only; no biome names appear in code.
-  Re-express today's Green, Red and Archipelago as presets in it, then
-  check the renders match within a stated tolerance.
+  Re-express today's Green, Red and Archipelago as presets in it. Check
+  their renders against the Phase 0 baseline capture on the same scenes,
+  within a stated tolerance.
 - **Shape graph.** An ordered list of nodes. Each node has geometry (an
   open spline path or a closed outline), parameters and overrides, a seed,
   and a height mode: *absolute*, *relative to the surface below* or
@@ -496,9 +483,12 @@ Done when:
   when the plateau is raised.
 - **Evaluation.** Recompute heights from the list, coarse while dragging and
   full on release, re-evaluating only nodes whose bounds overlap the
-  change. Undo becomes graph operations. Saves become recipes (format v4,
-  kilobytes rather than megabytes). A v3 sketch loads as a raster base
-  node.
+  change. Undo becomes graph operations. Saves become recipes (kilobytes
+  rather than megabytes). A lab v3 sketch loads as a raster base node.
+- **Brushes.** Port the lab's accepted brush profiles from e51bbb3a1 as node
+  kinds: plateau, shouldered hill, mountain, graded ramp, deep and shallow
+  water, smooth and lower. Keep its world-anchored noise and protection
+  masks.
 - **Shapes.**
   - Closed-outline tools: plateau/mesa, crater/basin, lake, island,
     flatten-to-level.
@@ -756,3 +746,33 @@ Still open, later:
   support. That is a separate engine decision, owned by
   `research/extensions` and the renderer design when it comes up. Until
   then, full colour is a preview and a PNG export.
+
+## 12. Glossary
+
+Terms used throughout this plan:
+
+- **Shape graph.** The ordered list of drawn shapes (plateaus, hills,
+  ramps, water and so on) that the editor re-evaluates after every edit.
+- **Node.** One entry in the shape graph, or one placed object.
+- **Section.** A retail or community `.sct` file: one pre-rendered terrain
+  feature with its own heights, as used by the official map editor.
+- **Stamp.** A section placed whole into a map.
+- **Preset.** A saved set of biome parameter values, for example the TA
+  Green preset.
+- **Chunk.** A fixed block of map area in which height, masks and
+  weathering results are stored and computed.
+- **Mask.** A per-pixel map of one property, such as slope, water flow,
+  sand deposit or rock exposure, that materials and processes read.
+- **Palette stage.** The final step that reduces full colour to TA's
+  256-colour palette.
+- **Grain.** The fine pixel texture of a material, such as grass speckle or
+  rock grit.
+- **Dither.** Scattering pixels of nearby palette colours so an area reads
+  as a colour the palette lacks.
+- **Talus and scree.** Loose rock that collects at the foot of steep
+  slopes.
+- **Strata.** Rock layers of differing hardness that erode into ledges.
+- **Blind review.** Reviewers compare crops without being told which are
+  generated and which are retail, and try to pick out the generated ones.
+- **TNT, OTA, HPI.** TA's map terrain file, the map's text settings file,
+  and the archive file maps ship in.
