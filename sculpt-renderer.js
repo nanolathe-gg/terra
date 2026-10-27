@@ -321,7 +321,8 @@ export class TerrainRenderer {
     const sun = [light === 'alternate' ? 0.72 : -0.72, front ? 0.38 : -0.38, 0.82];
     const length = Math.hypot(...sun);
     this.v('uLight', sun.map(v => v / length));
-    if (this.fieldsDirty) this.bakeFields();
+    // Painting bakes a cheap preview; the first full draw after it re-bakes.
+    if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview');
     gl.activeTexture(gl.TEXTURE0 + 12);
     gl.bindTexture(gl.TEXTURE_2D, this.fieldsTexture);
     gl.useProgram(this.program);
@@ -376,7 +377,8 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
   }
 
-  bakeFields() {
+  bakeFields(quality = 'full') {
+    const preview = quality !== 'full';
     const gl = this.gl, program = this.bakeProgram, v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     gl.useProgram(program);
@@ -391,12 +393,12 @@ export class TerrainRenderer {
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
     set('uWeather', 7, 'i');
-    set('uBoulderDensity', number('boulders', 0));
+    set('uBoulderDensity', preview ? 0 : number('boulders', 0));
     set('uBoulderSize', number('boulderSize', 9));
     set('uBoulderFoot', number('boulderFoot', 0.5));
     set('uBoulderCluster', number('boulderCluster', 0.6));
     set('uBoulderMoss', number('boulderMoss', 0.35));
-    set('uDebris', number('debris', 0));
+    set('uDebris', preview ? 0 : number('debris', 0));
     set('uDebrisReach', number('debrisReach', 48));
     set('uDebrisSize', number('debrisSize', 6));
     set('uDebrisSort', number('debrisSort', 0.8));
@@ -408,7 +410,7 @@ export class TerrainRenderer {
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));
-    set('uReliefOctaves', number('reliefOctaves', 5), 'i');
+    set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5), 'i');
     // The routes texture shares unit 12 with the fields; bind it for the bake.
     gl.activeTexture(gl.TEXTURE0 + 12);
     gl.bindTexture(gl.TEXTURE_2D, this.routeTexture);
@@ -421,6 +423,7 @@ export class TerrainRenderer {
     gl.enable(gl.DEPTH_TEST);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fieldsDirty = false;
+    this.bakedQuality = quality;
   }
 
   sample(x, y) {
