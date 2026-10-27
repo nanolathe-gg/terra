@@ -27,7 +27,8 @@ def world_tile(m, x0, y0, x1, y1):
     """(heights, luminance, palette index, visible) for a world tile; art
     sampled at the projected row (nearest; the art is indexed)."""
     wh = world_heights(m.cells, x0, y0, x1, y1)
-    rows = np.floor(np.arange(y0, y1)[:, None] - wh / 2 + .5).astype(np.int64)
+    # Lava (and water) is drawn at its surface, the sea plane.
+    rows = np.floor(np.arange(y0, y1)[:, None] - np.maximum(wh, m.sea) / 2 + .5).astype(np.int64)
     cols = np.broadcast_to(np.arange(x0, x1)[None, :], wh.shape)
     ok = (rows >= 0) & (rows < m.H)
     idx = m.idx[np.clip(rows, 0, m.H - 1), np.clip(cols, 0, m.W - 1)]

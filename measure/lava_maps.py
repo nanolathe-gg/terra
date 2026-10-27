@@ -41,6 +41,36 @@ class RetailMap:
         return self.palette.astype(np.float32) @ LUMA
 
 
+class OurMap(RetailMap):
+    """A sculpt-page capture (PNG + heights.json from lava_strokes.mjs or
+    capture.mjs scenes with heights) in the RetailMap shape: art mapped to
+    the TA palette (the renderer quantizes to it), heights averaged into
+    16-px cells like a retail map's, measured from the page's base height
+    (the renderer projects (h - base) / 2)."""
+
+    def __init__(self, stem, palette_from):
+        stem = str(stem)
+        self.name = Path(stem).name
+        self.palette = np.fromfile(Path(palette_from) / 'palette-rgb.bin', np.uint8).reshape(256, 3)
+        rgb = np.asarray(Image.open(stem + '.png').convert('RGB')).astype(np.int32)
+        d = json.loads(Path(stem + '.heights.json').read_text())
+        self.H, self.W = rgb.shape[:2]
+        pal = self.palette.astype(np.int32)
+        flat = (rgb[..., 0] << 16) | (rgb[..., 1] << 8) | rgb[..., 2]
+        u, inv = np.unique(flat, return_inverse=True)
+        ur = np.stack([u >> 16, (u >> 8) & 255, u & 255], 1)
+        nearest = np.argmin(((ur[:, None, :] - pal[None]) ** 2).sum(-1), 1)
+        self.idx = nearest[inv].reshape(self.H, self.W).astype(np.uint8)
+        g = d['grid']
+        h = np.asarray(d['heights'], np.float32).reshape(g, g) - d['base']
+        from scipy.ndimage import zoom
+        full = zoom(h, self.W / g, order=1)[:self.H, :self.W]
+        n = self.W // 16
+        self.cells = full[:n * 16, :n * 16].reshape(n, 16, n, 16).mean(axis=(1, 3))
+        self.sea = d['sea'] - d['base']
+        self.meta = dict(name=self.name, width=self.W, height=self.H, sea_level=self.sea)
+
+
 def crop(mapdir, x, y, size=400, zoom=1, out=None):
     m = RetailMap(mapdir)
     img = Image.fromarray(m.rgb[y:y + size, x:x + size])

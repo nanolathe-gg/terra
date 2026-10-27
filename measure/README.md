@@ -15,3 +15,15 @@ stay outside Git.
 Renders with heights come from `capture/capture.mjs` scenes that set
 `"heights": true`. Pass `ours <label> <stem>...` (stems without `.png`),
 or `retail <manifest.json> <catalog root>`.
+
+Lava (retail maps exported by `tools/neural-terrain/export -planet Lava`):
+
+| Script | Measures |
+| --- | --- |
+| `lava_maps.py` | Loads exported retail maps and sculpt captures (`OurMap`); 1:1 crops |
+| `lava_world.py` | Resamples art into world space (each world point at its projected row) |
+| `lava_bands.py` | Contour bands: dark-line census by slope and facing, spacing in px and height, tonal profile, line topology, whole-face line counts |
+| `lava_coasts.py` | Finger coasts: colours across the waterline, bank height by distance from lava, finger and inlet shapes |
+| `lava_strokes.mjs` | Draws brush strokes on a blank page headlessly and saves the render and heights |
+| `lava_sheets.py` | Labelled retail-over-ours crop sheets |
+
