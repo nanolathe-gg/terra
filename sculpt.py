@@ -43,9 +43,12 @@ KNOB_DEFAULTS = dict(
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
-    'green': dict(banding=.8, bandLine=.45),
-    'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.6),
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5),
+    # Crack darkness calibrated on retail (measure/crack_lines.py, strong
+    # and long line densities on slopes): Green's lines were ~2.5x retail's.
+    # crackDark also darkens band lines, so bandLine keeps their darkness.
+    'green': dict(banding=.8, bandLine=.84, crackDark=.4),
+    'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.6, bandLine=1),
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
@@ -53,12 +56,14 @@ WORLD_KNOBS = {
     'desert': dict(paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
                    bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
-    'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=.8, undulation=4, plainRelief=.6, banding=.3),
+    # Moon slopes were too dark and smeared (retail mean luminance .773 vs
+    # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
+    'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+                 worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
-    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=.6,
-                 beachWidth=.6, banding=.3, bandLine=.3),
+    'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=1,
+                 beachWidth=.6, banding=.3, bandLine=.5, crackDark=.45),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
     # colour-by-depth ramp, so no depth averaging (authored from the
