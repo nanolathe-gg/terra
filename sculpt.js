@@ -57,7 +57,7 @@ const hillLift=(s,i) => 1+s.rough*(.75*s.noise.coastWidth[i]+.30*s.noise.detail[
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {diameter:200,amount:70,roughness:35,shelves:70,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {diameter:200,amount:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -167,7 +167,7 @@ function startStroke(kind,p,options={}) {
   return {kind,base,protectBase:protection.slice(),routeBase:routes.slice(),radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
-    shelves:options.shelves ?? Number($('shelves').value)/100,shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
+    shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise,baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,

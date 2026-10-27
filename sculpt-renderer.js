@@ -168,6 +168,7 @@ export class TerrainRenderer {
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
+    this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     this.i('uDiagnostic', ['diffuse','occlusion','shadow','exposure','shading','material'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -190,8 +191,8 @@ export class TerrainRenderer {
     this.f('uRockStart', threshold - feather * 0.5);
     this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
-    this.f('uShallowDepth', material.shallowDepth ?? 2);
-    this.f('uDeepDepth', material.deepDepth ?? 42);
+    this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : 24);
+    this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : 60);
     this.f('uMineralDetail', variant.get('grain') === 'strong' ? 2.4 : 1.0);
     const rockMean = variant.get('rock') === 'hill' ? material.hillRockMeanRGB : material.rockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));

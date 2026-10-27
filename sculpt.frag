@@ -58,6 +58,7 @@ uniform float uMossFromGround;
 uniform float uLightCap;
 uniform float uFootRim;
 uniform float uCrevice;
+uniform float uDither;
 /*COMMON*/
 
 float visibility(vec2 p, float h) {
@@ -476,7 +477,15 @@ void main() {
         if (h < uSea) color = mix(color, vec3(0.20, 0.32, 0.40), 0.72);
     }
     color = clamp(color, 0.0, 1.0);
-    if (uQuantize && !uClay) color = paletteColor(color);
+    if (uQuantize && !uClay) {
+        // Ordered dither before the palette lookup: a fixed per-pixel
+        // threshold pattern, so edits change only local pixels and level
+        // ground keeps a repeating pattern. Strength is in palette-LUT steps.
+        vec2 fc = floor(gl_FragCoord.xy);
+        float ign = fract(52.9829189 * fract(dot(fc, vec2(0.06711056, 0.00583715))));
+        color = clamp(color + (ign - 0.5) * uDither / 31.0, 0.0, 1.0);
+        color = paletteColor(color);
+    }
     // Read-only pixel probes separate shaded form from material coverage.
     if (uDiagnostic == 1) color = vec3(lighting);
     if (uDiagnostic == 2) color = vec3(ao);
