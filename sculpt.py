@@ -37,7 +37,7 @@ KNOB_DEFAULTS = dict(
     crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25, crystalVariation=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
-    fingers=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    fingers=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -64,8 +64,12 @@ WORLD_KNOBS = {
     # colour-by-depth ramp, so no depth averaging (authored from the
     # sections, see sculpt_section_biome.py 'lava'). Its bank ridges are
     # irregular, not banded (section measurement), so no contour bands.
+    # Bank lines measured on the section-built retail maps (measure/lava_*):
+    # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
+    # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=.15, banding=0, northFace=.7, fingers=1, worms=.9),
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=5, bandLine=.9,
+                 northFace=.7, fingers=1, worms=0, shoreEdge=1, slopeTexture=0),
 }
 
 
@@ -159,9 +163,13 @@ def biome_config(biome, assets):
         # interlock land and lava fingers; the ridged slope material runs
         # down the banks to the lava's edge, and the section slope class
         # starts at 3 units per 16-px cell (~.19 per px). Authored profile.
-        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0')
+        # Faces between the bank lines keep the ground's colour; the dark
+        # striated rock is for cliffs only (measured shaded luma 51/45/38 at
+        # slopes 0.4/0.65/1.0). Lava does not wet the ground.
+        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0',
+                                  faceSlope='1.4,2.2', rockShare='0.1,0.8')
         config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
-                                  slopeFloor=-4.0, slopeDry=2.0)
+                                  slopeFloor=-4.0, slopeDry=2.0, rockSlope=2.4, wetBand=1.01)
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})

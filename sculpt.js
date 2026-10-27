@@ -39,6 +39,9 @@ const TOOL_PRESETS={
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
   desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
+  // flattening (retail coasts, measure/lava_*): wide, concave dry banks.
+  lava:{deep:{roughness:45,bankWidth:80,beachFlatness:30},shallow:{roughness:30,bankWidth:80,beachFlatness:30}},
   zhon:{crater:{roughness:55,softness:60},plateau:{roughness:45,softness:55},hill:{roughness:30,softness:35},mountain:{roughness:45,softness:55},ramp:{roughness:18},deep:{roughness:60,bankWidth:70,beachFlatness:75,shelves:70},shallow:{roughness:30,bankWidth:70,beachFlatness:75}},
   archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
@@ -301,7 +304,7 @@ function fingerRibs(x,y,tx,ty,period,salt) {
     const a=hash(cx-i,cy-j,salt)*.5+.5,b=hash(cx-i,cy-j,salt^0x5bd1)*.5+.5,c=hash(cx-i,cy-j,salt^0x2f6a);
     const px=fx+i-a*.5,py=fy+j-b*.5,w=Math.exp(-(px*px+py*py)*2);
     // Each finger leans its own way off the normal.
-    const lean=c*.5,dx=tx*Math.cos(lean)-ty*Math.sin(lean),dy=tx*Math.sin(lean)+ty*Math.cos(lean);
+    const lean=c*.26,dx=tx*Math.cos(lean)-ty*Math.sin(lean),dy=tx*Math.sin(lean)+ty*Math.cos(lean);
     sum+=Math.cos((px*dx+py*dy)*6.283185+c*3.1)*w; weight+=w;
   }
   return sum/weight;
@@ -330,13 +333,18 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
   let v=i>=0?field[i]:NaN;
   if (Number.isNaN(v)) {
     const tx=-ny,ty=nx;
-    // Fine lobes come and go along the coast; coarse fingers and inlets are
-    // common enough to set the fringe; lumps vary each finger's width.
-    const fine=clamp(fingerRibs(wx,wy,tx,ty,30,s.seed^0x71f3)*1.7,-1,1)*smooth(-.2,.5,valueNoise(wx/90,wy/90,s.seed^0x2d3));
-    const reach=.55+.45*valueNoise(wx/140,wy/140,s.seed^0x6a1);
-    const coarse=clamp(fingerRibs(wx,wy,tx,ty,60,s.seed^0x1c29)*1.8,-1,1)*smooth(-.35,.25,valueNoise(wx/220,wy/220,s.seed^0x4e11))*reach;
-    const lumps=valueNoise(wx/14,wy/14,s.seed^0x5c1)*7+valueNoise(wx/5,wy/5,s.seed^0x3a7)*2.5;
-    v=fine*13+Math.max(0,coarse)*90+Math.min(0,coarse)*75+lumps;
+    // Retail coasts (measure/lava_fingers): a land finger and a lava inlet
+    // every ~45 px of coast, fingers reaching 16-24 px past the coast and
+    // about one in five 40 px or more; fingers taper to blunt rounded tips
+    // (tip/middle ~0.6), inlets to points (~0.4); axes within ~15 degrees of
+    // the normal. A rib's positive half is flattened (blunt) and its negative
+    // half sharpened (pointed); small lumps vary widths.
+    const rib=clamp(fingerRibs(wx,wy,tx,ty,46,s.seed^0x71f3)*1.6,-1,1);
+    const shaped=rib>0?Math.pow(rib,.6):-Math.pow(-rib,1.5);
+    const reach=20*(.8+.4*(valueNoise(wx/120,wy/120,s.seed^0x6a1)*.5+.5));
+    const long=smooth(.3,.75,valueNoise(wx/160,wy/160,s.seed^0x4e11));
+    const lumps=valueNoise(wx/14,wy/14,s.seed^0x5c1)*2.5+valueNoise(wx/5,wy/5,s.seed^0x3a7);
+    v=(shaped>0?shaped*reach*(1+long*1.2):shaped*reach*1.1)+lumps;
     if (i>=0) field[i]=v;
   }
   return v*amount;
@@ -1540,9 +1548,9 @@ const KNOBS = [
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Majors: rills to plates',0,1,.05,.35],['crackReach','Reach onto gentle slopes',0,1,.05,.6],
     ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
-  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
+  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
@@ -1738,5 +1746,5 @@ async function boot() {
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
 // Read-only hook for capture tools: the displayed (refined) heights.
-window.sculptDebug = {bakeMs: (quality='full') => { const gl=renderer.gl,px=new Float32Array(4),sync=() => { gl.bindFramebuffer(gl.FRAMEBUFFER,renderer.fieldsFramebuffer); gl.readPixels(0,0,1,1,gl.RGBA,gl.FLOAT,px); gl.bindFramebuffer(gl.FRAMEBUFFER,null); }; sync(); const t=performance.now(); renderer.bakeFields(quality); sync(); return performance.now()-t; }, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
+window.sculptDebug = {state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => { const gl=renderer.gl,px=new Float32Array(4),sync=() => { gl.bindFramebuffer(gl.FRAMEBUFFER,renderer.fieldsFramebuffer); gl.readPixels(0,0,1,1,gl.RGBA,gl.FLOAT,px); gl.bindFramebuffer(gl.FRAMEBUFFER,null); }; sync(); const t=performance.now(); renderer.bakeFields(quality); sync(); return performance.now()-t; }, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 boot();

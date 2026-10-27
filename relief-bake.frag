@@ -55,6 +55,7 @@ uniform float uBoulderRound;     // 0: angular boulders; 1: rounded domes
 uniform float uBandSpacing;      // height between bands, height units
 uniform float uBandSoftness;     // share of each band that is riser
 uniform float uBandLine;         // darkness of the line along each riser
+uniform int uBandStyle;          // 0 tonal steps (Green), 1 bank lines (Lava)
 out vec4 outFields;
 
 const float TAU = 6.28318530718;
@@ -413,6 +414,34 @@ vec2 sandStreaks(vec2 p, float h, float slope, vec2 fall, float strength) {
     return vec2(line, dot(-fall, normalize(uSun.xy + 1e-6)));
 }
 
+// Lava bank lines (retail section-built Lava maps, measure/lava_*.py):
+// continuous braided dark lines along the contours, spaced by distance on
+// the ground rather than by a fixed height step (about 10 (s/0.5)^-0.3 px
+// at broad slope s), from slope 0.15 up with no upper limit, denser and
+// darker on steep ground; a dark V 3 px wide at half depth (5-6 px on steep
+// shaded faces), dark on every facing, no light lines. The broad slope sets
+// the step, so neighbouring lines converge and merge where it changes.
+// Returns (line strength, facing).
+vec2 lavaLines(vec2 p, float h, float slope, vec2 fall) {
+    if (uBanding <= 0.0 || h < uSea + 0.5 || slope < 0.12) return vec2(0.0);
+    // Broad slope of the dry land only: the lava bed would steepen a bank.
+    vec2 broad = vec2(max(baseHeight(p + vec2(16.0, 0.0)), uSea) - max(baseHeight(p - vec2(16.0, 0.0)), uSea),
+                      max(baseHeight(p + vec2(0.0, 16.0)), uSea) - max(baseHeight(p - vec2(0.0, 16.0)), uSea)) / 32.0;
+    // On a narrow steep bank the broad slope is gentler than the face, so
+    // the steeper of the two sets the step (lines no closer than ~7 px).
+    float S = uBandSpacing * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
+    float u = (h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18) / S;
+    float v = fract(u);
+    float px = min(v, 1.0 - v) * S / max(slope, 0.05);
+    float facing = dot(-fall, normalize(uSun.xy + 1e-6));
+    // A 1 px core with half-dark neighbours (3 px wide at half depth),
+    // wider on steep shaded faces.
+    float halfWidth = mix(1.6, 2.2, smoothstep(0.8, 1.4, slope) * smoothstep(0.1, -0.4, facing));
+    float line = clamp(1.0 - px / halfWidth, 0.0, 1.0);
+    float strength = smoothstep(0.12, 0.25, slope) * (0.75 + 0.25 * smoothstep(0.3, 1.5, slope));
+    return vec2(line * strength * uBanding, facing);
+}
+
 // Sandiness from the weathering worker's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
@@ -494,11 +523,12 @@ void main() {
         // The squiggles read as dark lines in the art: shade their troughs.
         wormDark = smoothstep(0.82, 0.97, max(worm, worm2 * 0.97)) * uWorms * on * 0.85;
     }
-    vec3 bandsAt = contourBands(p, h, slope, fall);
+    vec3 bandsAt = uBandStyle == 1 ? vec3(0.0) : contourBands(p, h, slope, fall);
     vec2 bands = bandsAt.xy * (1.0 - route);
     height += bands.x;
     float bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     float bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
+    if (uBandStyle == 1) bandDark = lavaLines(p, h, slope, fall).x * uBandLine * (1.0 - route);
     float sand = sandCover(p, slope, height) * (1.0 - route);
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.

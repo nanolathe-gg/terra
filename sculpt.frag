@@ -52,6 +52,7 @@ uniform float uBeachHeight, uBeachWidth;
 // The slope material is the world's sandy slope (Zhon): it shows only where
 // the ground beneath is sand, and on graded routes.
 uniform bool uSlopeSand;
+uniform float uShoreEdge;   // lava coast rim, outline and lip (0: none)
 // Crystals: their own colour (world base colour 'crystal', else the world's).
 uniform vec3 uCrystalColor;
 uniform vec4 uCrystalBase;
@@ -472,12 +473,16 @@ void main() {
     // A steep ground-level bank remains grassy. Only nearby elevated land
     // admits an exposed face down to water; slope alone cannot classify it.
     // This is the Green Planet authoring rule, not a recovered retail formula.
-    if (!uRockyCoasts && exposed > 0.001 && h < uBase + 1.0) {
+    // The same rule gates the lump-scale face rock below: a bank's slope
+    // includes the drop to the bed, which alone must not expose rock.
+    float lowBank = 1.0;
+    if (!uRockyCoasts && h < uBase + 1.0) {
         vec2 uphill = broad / max(0.001, slope);
         float source = max(baseHeight(p), baseHeight(p + uphill * 16.0));
         source = max(source, baseHeight(p + uphill * 36.0));
         source = max(source, baseHeight(p + uphill * 64.0));
-        exposed *= smoothstep(uBase + 12.0, uBase + 36.0, source);
+        lowBank = smoothstep(uBase + 12.0, uBase + 36.0, source);
+        exposed *= lowBank;
     }
     if (uMineralMargins) exposed *= smoothstep(0.45, 1.40, slope);
     if (materialWeather>0.0 && !uMineralMargins) {
@@ -546,7 +551,7 @@ void main() {
                     + (fine.g - 0.5) * uFaceScore.z + (n.r - 0.5) * uFaceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.
         float threshold = mix(1.4, -0.9, share);
-        float rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score);
+        float rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowBank;
         vec3 moss = mix(based(texture(uSlopeGrass, pixel / 512.0).rgb, uSlopeTexMean, uSlopeBase), groundBased(uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb), uMossFromGround);
         vec3 faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * uMicroRock);
@@ -710,6 +715,31 @@ void main() {
             submerged = mix(submerged, crisp, uCrispShore);
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
+    }
+    if (uShoreEdge > 0.0 && abs(h - uSea) < 10.0) {
+        // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just
+        // inside the lava; on the land a dark outline on the first pixel
+        // (darkest on east and south edges), a light lip on the second (west,
+        // north and south edges), and east edges shaded a little farther in.
+        bool wet = h < uSea;
+        float nearest = 9.0;
+        vec2 toward = vec2(0.0);
+        for (int k = 0; k < 8; k++) {
+            vec2 dir = vec2(cos(float(k) * 0.785398), sin(float(k) * 0.785398));
+            for (int r = 1; r <= 8; r++) {
+                if (float(r) >= nearest) break;
+                if ((baseHeight(p + dir * float(r)) < uSea) != wet) { nearest = float(r); toward = dir; break; }
+            }
+        }
+        if (wet) {
+            if (nearest <= 1.0) color *= mix(1.0, 0.78, uShoreEdge);
+        } else if (nearest < 9.0) {
+            float east = smoothstep(0.2, 0.7, toward.x), south = smoothstep(0.2, 0.7, toward.y);
+            float westNorth = clamp(smoothstep(0.2, 0.7, -toward.x) + smoothstep(0.2, 0.7, -toward.y), 0.0, 1.0);
+            if (nearest <= 1.0) color *= mix(1.0, mix(0.8, 0.55, max(east, south)), uShoreEdge);
+            else if (nearest <= 2.0) color *= mix(1.0, 1.0 + 0.15 * clamp(westNorth + south, 0.0, 1.0) * (1.0 - east), uShoreEdge);
+            if (nearest > 1.0) color *= mix(1.0, 0.82, east * uShoreEdge);
+        }
     }
     if (uClay) {
         color = vec3(0.53, 0.51, 0.46) * shading;

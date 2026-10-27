@@ -389,6 +389,7 @@ export class TerrainRenderer {
     this.i('uScree', scree > 0);
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
     this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
+    this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
     const front = this.variant.get('lighting') === 'front';
     const sun = [light === 'alternate' ? 0.72 : -0.72, front ? 0.38 : -0.38, 0.82];
     const length = Math.hypot(...sun);
@@ -530,6 +531,7 @@ export class TerrainRenderer {
     set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandLine', number('bandLine', 0.5));
+    set('uBandStyle', number('bandStyle', 0), 'i');
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', Boolean(this.config.textures.beach), 'i');
     set('uSandBanding', number('sandBanding', 0));
