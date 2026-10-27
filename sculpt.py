@@ -244,7 +244,7 @@ def biome_config(biome, assets):
         # make, so the world stays full colour until the palette stage mixes
         # index pairs. Bed colour slots: 1 orange (189,143,105), 2 cool
         # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
-        config['strataColors'] = [[189, 143, 105], [185, 190, 192], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
+        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
         # rock with orange lines above ~69.
