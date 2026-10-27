@@ -509,7 +509,12 @@ void main() {
         }
     }
     // Baked boulders take rock material, lit by the same surface.
-    if (uReliefMode == 1) material = mix(material, rock * 1.08, bakedFields(p).b);
+    if (uReliefMode == 1) {
+        float coverOrCrack = bakedFields(p).b;
+        material = mix(material, rock * 1.08, max(coverOrCrack, 0.0));
+        // Inside a crack: dark soil and rock, shaded further by its walls.
+        material = mix(material, rock * 0.3, clamp(-coverOrCrack, 0.0, 1.0) * 0.9);
+    }
     float chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route));
     chip=max(chip,smoothstep(0.035,0.40,materialChipHeight(p)*(1.0-route))*0.65);
     material = mix(material, rock, chip * (1.0 - exposed));

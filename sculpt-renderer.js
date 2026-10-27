@@ -277,13 +277,15 @@ export class TerrainRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.grid, this.grid, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   }
 
-  setRoutes(routes) {
+  setRoutes(routes, crackLines) {
+    // Red: route protection; green: traced crack lines.
     this.fieldsDirty = true;
-    const gl = this.gl, bytes = new Uint8Array(routes.length);
-    for (let i = 0; i < routes.length; i++) bytes[i] = Math.round(routes[i] * 255);
+    const gl = this.gl, bytes = new Uint8Array(routes.length * 2);
+    for (let i = 0; i < routes.length; i++) { bytes[i * 2] = Math.round(routes[i] * 255); bytes[i * 2 + 1] = Math.round((crackLines?.[i] || 0) * 255); }
     gl.activeTexture(gl.TEXTURE0 + 12);
     gl.bindTexture(gl.TEXTURE_2D, this.routeTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, this.grid, this.grid, 0, gl.RED, gl.UNSIGNED_BYTE, bytes);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG8, this.grid, this.grid, 0, gl.RG, gl.UNSIGNED_BYTE, bytes);
   }
 
   setMaterialField(field) {
@@ -414,6 +416,9 @@ export class TerrainRenderer {
     set('uDebrisSort', number('debrisSort', 0.8));
     set('uRepose', number('repose', 0.6));
     set('uSand', number('sand', 0));
+    set('uCrackSeverity', number('crackSeverity', 0.6));
+    set('uCrackSpacing', number('crackSpacing', 30));
+    set('uCrackLength', number('crackLength', 5));
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));

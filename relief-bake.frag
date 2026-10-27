@@ -33,6 +33,9 @@ uniform float uDebrisSize;       // largest debris stone, world px
 uniform float uDebrisSort;       // 1: coarse near the source, fine far away
 uniform float uRepose;           // slope below which debris comes to rest
 uniform float uSand;             // 0 disables sand
+uniform float uCrackSeverity;    // depth and width of large hill cracks
+uniform float uCrackSpacing;     // typical spacing between cracks, world px
+uniform float uCrackLength;      // elongation along the fall line
 uniform float uWindAngle;        // direction the wind blows toward, degrees (0 = east)
 uniform float uRipple;           // ripple wavelength, world px (0: none)
 uniform float uRippleHeight;     // ripple amplitude, height units
@@ -185,6 +188,7 @@ void main() {
     vec2 g = broadGradient(p);
     float slope = length(g);
     float route = routeProtection(p);
+    float crackMask = texture(uRoutes, (p / (uSize - 1.0) * (uGrid - 1.0) + 0.5) / uGrid).g;
     // Level crests and graded routes stay smooth; relief grows with slope.
     // Gentle slopes carry low lumps too, so ground turned from the sun is
     // textured rather than a smooth gradient; level ground stays level.
@@ -234,10 +238,14 @@ void main() {
     }
     // Sand buries relief beneath it.
     height *= 1.0 - 0.8 * sand;
+    // Traced crack lines (sculpt.js), carved and darkened here.
+    float crack = crackMask * (1.0 - route) * step(0.0, uCrackSeverity);
+    height -= crack * mix(3.0, 9.0, uCrackSeverity);
     vec2 rock = boulders(p, slope, h);
     vec2 scree = debrisStones(p, vec2(0.0));
     if (scree.x > rock.x) rock = scree;
     height += rock.x;
     rock.y *= 1.0 - sand;
-    outFields = vec4(height, route, rock.y, sand);
+    // Blue holds rock cover, or (negative) crack darkness.
+    outFields = vec4(height, route, crack > 0.02 ? -crack : rock.y, sand);
 }

@@ -28,6 +28,11 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 20 | No cast shadows on level ground, less occlusion there; low relief on gentle slopes; fractures 65 to 40 | flatShadow, flatOcclusion, gentleRelief, fractures | Round-2 tells | Kept; needs round 3 |
 | 21 | **Blind round 3**: build a67dbef73, seeds 7307/8419, new retail windows, two reviewers judging by eye | | A: AUC 0.41 (1/10 caught, 4/10 retail called generated); B: AUC 0.72 (0/10 caught, 1/10 false). Pooled: 1/20 generated caught, 5/20 retail called generated | At chance by eye. B's ranking edge: cliff bands of even width along smooth arcs, and the same example layout at two seeds (a test-set flaw; use distinct layouts) |
 | 22 | Ground undulation node: broad, low noise on dry ground in patches, never on protected crests, ramps or passages; first in the shape list | undulation, undulationScale, undulationCover | Dry-land slope shares with heights rounded to whole units: level 70% to 39% (retail 48%), 0.03-0.08 4% to 31% (retail 20%), 0.08-0.2 4% to 8% (retail 12%) | Kept: 10 / 200 px / 0.45 |
+| 23 | Sand edge: three blur passes and a wide grain-jittered coverage ramp | sandEdge | User: abrupt transition | Kept |
+| 24 | Faster moves: region replay of the old and new footprints (each node computed with a margin that is restored), hill replay straight to the settled ridge (pixel-identical), preview bake while dragging | (automatic) | Drag frame time 62 ms to 18 ms (hills) and 48 ms (mixed) | Kept; the mixed scene is still bound by brush evaluation |
+| 25 | Biomes: one server prepares Green, Red and Archipelago; World selector; per-biome water ramp | biome | Red and Archipelago beside their lab baselines | Kept |
+| 26 | Craters from retail Moon sections: lobed outlines, sector-broken rims, off-centre lumpy bowls, uneven aprons, satellite craterlets | craterlets, crater roughness 60 | Moon dark and misc section sheets; before/after | Kept |
+| 27 | Hill cracks: each shape has a Cracks amount (share of crack seeds that open; hills 40%, mountains 50% by default). Lines are traced down the steepest descent with meander, taper and branching, then carved and darkened in the bake | cracks (per shape), crackSeverity, crackSpacing, crackLength | Retail Greenhaven hill. A noise zero-crossing version gave faint or worm-like lines and was dropped | Kept |
 
 Open tells and gaps:
 

@@ -19,7 +19,7 @@ const HELP = {
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it. Its brush settings appear below and edit it live.'
 };
-let config, renderer, heights, protection, routes, grid, size, spacing, noise;
+let config, renderer, heights, protection, routes, cracks, grid, size, spacing, noise;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
 let history=[], historyIndex=-1, framePending=false, heightDirty=true, needsDraw=true;
@@ -33,7 +33,7 @@ const TOOL_PRESETS={
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
   archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
-const TOOL_FIELDS={diameter:['diameter',40,400],amount:['amount',5,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
+const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,400],amount:['amount',5,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
 let toolSettings={};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
@@ -59,7 +59,7 @@ const hillLift=(s,i) => 1+s.rough*(.75*s.noise.coastWidth[i]+.30*s.noise.detail[
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {diameter:200,amount:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {cracks:kind==='hill'?40:kind==='mountain'?50:0,diameter:200,amount:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -94,6 +94,8 @@ function updateControls() {
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater'].includes(tool);
+  $('cracks-control').hidden=!['plateau','hill','mountain','crater'].includes(tool);
+  $('cracks-value').textContent=$('cracks').value+'%';
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
   $('softness-value').textContent=$('softness').value+'%';
@@ -173,7 +175,7 @@ function startStroke(kind,p,options={}) {
   const base=heights.slice();
   const strokeSeed=options.seed ?? seed, strokeNoise=noiseFor(strokeSeed);
   const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8;
-  return {kind,base,protectBase:protection.slice(),routeBase:routes.slice(),radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
+  return {kind,base,protectBase:protection.slice(),routeBase:routes.slice(),crackBase:cracks.slice(),cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
@@ -468,7 +470,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={ground:'Ground undulation',crater:'Crater',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -502,11 +504,56 @@ function applyNode(n) {
     if (path.length>=3) {
       const sx=path[1].x-path[0].x,sy=path[1].y-path[0].y;
       s.faceSide=(-sy*s.face[0]+sx*s.face[1])<0?-1:1; s.path=path; s.last=s.end=path[path.length-1];
-      settleHill(s); return;
+      settleHill(s); applyCracks(s); return;
     }
   }
   dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s);
   if (n.kind==='crater') addCraterlets(n,s);
+  applyCracks(s);
+}
+// Crack lines: from jittered seeds inside each shape's cracked area, trace
+// down the steepest descent with a slight wiggle until the slope eases,
+// tapering at both ends and sometimes branching. Deterministic per map seed.
+let crackLines=null;
+function traceCrackLines() {
+  crackLines ??= new Float32Array(grid*grid); crackLines.fill(0);
+  const spacingWorld=experiment.has('crackSpacing')?Number(experiment.get('crackSpacing')):30;
+  const lengthFactor=experiment.has('crackLength')?Number(experiment.get('crackLength')):5;
+  const severity=experiment.has('crackSeverity')?Number(experiment.get('crackSeverity')):.6;
+  if (!(severity>0)) return;
+  const step=Math.max(2,Math.round(spacingWorld/spacing)),maxSteps=Math.round(lengthFactor*spacingWorld/spacing);
+  const hash=(x,y,k) => { let h=Math.imul(x,374761393)^Math.imul(y,668265263)^Math.imul(k+seed,2246822519); h=Math.imul(h^(h>>>13),1274126177); return ((h^(h>>>16))>>>0)/4294967296; };
+  const grad=(x,y) => { const ix=clamp(Math.round(x),1,grid-2),iy=clamp(Math.round(y),1,grid-2),i=iy*grid+ix; return [(heights[i+1]-heights[i-1])/(2*spacing),(heights[i+grid]-heights[i-grid])/(2*spacing)]; };
+  const trace=(x,y,len,depth,salt) => {
+    let wiggle=0;
+    for (let k=0;k<len;k++) {
+      const [gx,gy]=grad(x,y),slope=Math.hypot(gx,gy);
+      const ix=Math.round(x),iy=Math.round(y);
+      if (ix<1 || iy<1 || ix>=grid-1 || iy>=grid-1 || slope<.08) break;
+      const i=iy*grid+ix;
+      if (cracks[i]<=0 || heights[i]<=config.seaLevel+1) break;
+      const t=k/len,taper=Math.min(1,t*5)*Math.min(1,(1-t)*3);
+      crackLines[i]=Math.max(crackLines[i],taper*(.55+.45*severity));
+      // Downhill with a meander; branch now and then.
+      wiggle=wiggle*.8+(hash(ix,iy,salt)-.5)*.9;
+      const dx=-gx/slope,dy=-gy/slope,c=Math.cos(wiggle),s=Math.sin(wiggle);
+      x+=(dx*c-dy*s)*.9; y+=(dx*s+dy*c)*.9;
+      if (depth<2 && k>4 && hash(ix,iy,salt+77)<.035) trace(x,y,Math.round((len-k)*.6),depth+1,salt+k*13+1);
+    }
+  };
+  for (let cy=step>>1;cy<grid;cy+=step) for (let cx=step>>1;cx<grid;cx+=step) {
+    const x=cx+(hash(cx,cy,1)-.5)*step,y=cy+(hash(cx,cy,2)-.5)*step;
+    const i=clamp(Math.round(y),0,grid-1)*grid+clamp(Math.round(x),0,grid-1);
+    // The shape's amount is the share of seeds that open a crack.
+    if (cracks[i]<=0 || hash(cx,cy,3)>cracks[i]) continue;
+    trace(x,y,Math.round(maxSteps*(.6+.6*hash(cx,cy,4))),0,cx*7+cy*131);
+  }
+}
+function applyCracks(s) {
+  // A shape marks where cracks may open: its own influence times its Cracks
+  // amount. The bake carves the fissures from this field.
+  if (!(s.cracks>0) || !['hill','mountain','plateau','crater'].includes(s.kind)) return;
+  for (const i of clipCells()) if (s.weights[i]>0) cracks[i]=Math.max(cracks[i],Math.min(1,s.weights[i]*1.6)*s.cracks);
 }
 function addCraterlets(n,s) {
   // Small satellite craters around the rim and apron, as on retail Moon
@@ -520,7 +567,7 @@ function addCraterlets(n,s) {
     dab(t,p);
   }
 }
-function snapshot() { return {h:heights.slice(),p:protection.slice(),r:routes.slice()}; }
+function snapshot() { return {h:heights.slice(),p:protection.slice(),r:routes.slice(),c:cracks.slice()}; }
 function addNode(n) { prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n); }
 let lastEvalMs=0;
 // Region-limited replay. clip is the rectangle (grid cells, inclusive) that
@@ -553,17 +600,17 @@ function evaluateRegion(from,rect) {
   // the margin is put back, so nothing outside rect changes.
   const inner=rect,margin=6;
   const outer={x0:Math.max(0,inner.x0-margin),y0:Math.max(0,inner.y0-margin),x1:Math.min(grid-1,inner.x1+margin),y1:Math.min(grid-1,inner.y1+margin)};
-  copyRect(prefix[from].h,heights,inner); copyRect(prefix[from].p,protection,inner); copyRect(prefix[from].r,routes,inner);
-  const saveH=new Float32Array(heights.length),saveP=new Float32Array(heights.length),saveR=new Float32Array(heights.length);
+  copyRect(prefix[from].h,heights,inner); copyRect(prefix[from].p,protection,inner); copyRect(prefix[from].r,routes,inner); copyRect(prefix[from].c,cracks,inner);
+  const saveH=new Float32Array(heights.length),saveP=new Float32Array(heights.length),saveR=new Float32Array(heights.length),saveC=new Float32Array(heights.length);
   for (let i=from;i<nodes.length;i++) {
-    if (!prefix[i]) prefix[i]=snapshot(); else { copyRect(heights,prefix[i].h,inner); copyRect(protection,prefix[i].p,inner); copyRect(routes,prefix[i].r,inner); }
+    if (!prefix[i]) prefix[i]=snapshot(); else { copyRect(heights,prefix[i].h,inner); copyRect(protection,prefix[i].p,inner); copyRect(routes,prefix[i].r,inner); copyRect(cracks,prefix[i].c,inner); }
     if (!overlaps(nodeBounds(nodes[i]),outer)) continue;
-    copyRect(heights,saveH,outer); copyRect(protection,saveP,outer); copyRect(routes,saveR,outer);
+    copyRect(heights,saveH,outer); copyRect(protection,saveP,outer); copyRect(routes,saveR,outer); copyRect(cracks,saveC,outer);
     clip=outer; try { applyNode(nodes[i]); } finally { clip=null; }
     for (const band of [{x0:outer.x0,y0:outer.y0,x1:outer.x1,y1:inner.y0-1},{x0:outer.x0,y0:inner.y1+1,x1:outer.x1,y1:outer.y1},
                         {x0:outer.x0,y0:inner.y0,x1:inner.x0-1,y1:inner.y1},{x0:inner.x1+1,y0:inner.y0,x1:outer.x1,y1:inner.y1}]) {
       if (band.x0>band.x1 || band.y0>band.y1) continue;
-      copyRect(saveH,heights,band); copyRect(saveP,protection,band); copyRect(saveR,routes,band);
+      copyRect(saveH,heights,band); copyRect(saveP,protection,band); copyRect(saveR,routes,band); copyRect(saveC,cracks,band);
     }
   }
   prefix.length=nodes.length; heightDirty=true; markChanged();
@@ -572,8 +619,8 @@ function evaluate(from=0,rect=null) {
   const evalStart=performance.now();
   if (rect && from>0 && prefix[from] && prefix.length>=nodes.length) { evaluateRegion(from,rect); lastEvalMs=performance.now()-evalStart; return; }
   from=Math.max(0,Math.min(from,nodes.length));
-  if (from>0 && prefix[from]) { heights.set(prefix[from].h); protection.set(prefix[from].p); routes.set(prefix[from].r); }
-  else { from=0; heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); }
+  if (from>0 && prefix[from]) { heights.set(prefix[from].h); protection.set(prefix[from].p); routes.set(prefix[from].r); cracks.set(prefix[from].c); }
+  else { from=0; heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); }
   for (let i=from;i<nodes.length;i++) { prefix[i]=snapshot(); applyNode(nodes[i]); }
   prefix.length=nodes.length; heightDirty=true; markChanged();
   lastEvalMs=performance.now()-evalStart;
@@ -602,7 +649,7 @@ function selectNode(i) {
     const p=n.params;
     $('diameter').value=clamp(p.radius*2,40,400); $('amount').value=clamp(p.amount,5,160); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
-    $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage';
+    $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage'; $('cracks').value=Math.round((p.cracks||0)*100);
   }
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Editing ${NODE_NAMES[n.kind]||n.kind} #${i+1}: sliders change this shape. Draw to start a new one.`);
@@ -612,7 +659,7 @@ function editSelectedFromControls() {
   const before=nodeBounds(n);
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
     softness:Number($('softness').value)/100,bankWidth:Number($('bank-width').value)/100,beachFlatness:Number($('beach-flatness').value)/100,
-    shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value};
+    shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100};
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
@@ -696,7 +743,7 @@ function startWeatherWorker() {
     if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
     if (data.error) { failWeather(data.error); return; }
     refined=data.height; refinedBase=weatherBase;
-    renderer.setHeight(refined,grid); renderer.setRoutes(routes); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
+    renderer.setHeight(refined,grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
     if (data.materialField) renderer.setMaterialField(data.materialField);
     heightDirty=false;
     if (data.done) { weatherState='ready'; renderedRevision=-1; updateControls(); }
@@ -718,7 +765,7 @@ function frame(timestamp) {
   else lastPaintingRAF=null;
   try {
     flushEval();
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); heightDirty=false; }
     if (needsDraw || stroke || moving) {
       const quality=stroke||moving?'preview':'full',start=performance.now();
       const stats=renderer.draw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
@@ -809,7 +856,7 @@ function endPointer(event) {
   const hadStroke=Boolean(stroke);
   const rawPath=stroke?stroke.path.map(p => ({...p})):null;
   if (stroke) { settleHill(stroke); settleRamp(stroke); if (stroke.kind==='crater') addCraterlets({points:rawPath,params:strokeParams(stroke)},stroke); }
-  if (stroke) { prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; renderLayers(); }
+  if (stroke) { applyCracks(stroke); prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase,c:stroke.crackBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; renderLayers(); }
   if (stroke) lastWaterStroke=['deep','shallow'].includes(stroke.kind)?stroke:null;
   stroke=null; pan=null; pointerId=null;
   if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId);
@@ -831,7 +878,7 @@ function demoStroke(kind,points,options) {
   // Older reviewed examples keep their authored geometry. New island scenes
   // exercise the biome's default shapes.
   const island=experiment.get('example')==='islands';
-  const probe=startStroke(kind,points[0],{bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options});
+  const probe=startStroke(kind,points[0],{cracks:(experiment.has('hillCracks')?Number(experiment.get('hillCracks')):1)*defaults.cracks/100,bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options});
   addNode({kind,points:points.map(p => ({...p})),params:strokeParams(probe),seed:probe.seed});
 }
 function demoRamp(points,options) {
@@ -999,8 +1046,8 @@ function deserializeNodes(list) {
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; rememberTool(); tool=b.dataset.tool; showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
-for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
-for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
+for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
 $('tool-style').addEventListener('change',() => { const preset=$('tool-style').value; if (!Object.hasOwn(TOOL_PRESETS,preset)) return; toolSettings[tool]=toolDefaults(tool,preset); showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
@@ -1042,7 +1089,7 @@ $('file').addEventListener('change',async () => {
 $('export').addEventListener('click',() => {
   if (!canExport()) return;
   try {
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,(traceCrackLines(),crackLines)); heightDirty=false; }
     const start=performance.now(),stats=renderer.draw({quality:'full',clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),rev=revision,job=weatherJob;
     drawTiming(stats,performance.now()-start,'full');
     canvas.toBlob(blob => { if (!blob) error('PNG export is unavailable for this renderer.'); else if (revision!==rev || weatherJob!==job || !canExport()) error('The terrain changed during export. Export the finished view again.'); else download(blob,'terrain-sculpt.png'); },'image/png');
@@ -1072,6 +1119,7 @@ const KNOBS = [
   ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
     ['wind','Wind toward (deg)',0,360,5,20],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
+  ['Cracks', [['crackSeverity','Crack severity',0,1,.05,.6],['crackSpacing','Crack spacing (px)',12,80,2,30],['crackLength','Crack length',1,10,.5,5]]],
   ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3]]],
   ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
@@ -1111,6 +1159,7 @@ function setKnob(key, value) {
     else if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,seed:seed^0x9e37}); prefix=[]; cancelWeather(); evaluate(0); checkpoint(); queueWeather(); }
     return;
   }
+  if (['crackSeverity','crackSpacing','crackLength'].includes(key)) heightDirty=true;
   // Transport knobs change where sand is carried, so the worker re-runs.
   if (['sand','sandReach','windStrength','wind'].includes(key)) { cancelWeather(); queueWeather(); }
 }
@@ -1141,7 +1190,7 @@ async function boot() {
     $('mineral-ring').value=Math.round((config.material?.ringAmount??0)*100);
     $('ring-spread').value=Math.round((config.material?.ringSpread??.65)*100);
     $('ring-variation').value=Math.round((config.material?.ringVariation??.7)*100);
-    size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); heights.fill(config.baseHeight);
+    size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); heights.fill(config.baseHeight);
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
     buildKnobs();
