@@ -15,7 +15,8 @@ const HELP = {
   deep:NATURAL_COAST?'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The centre stays deep until you paint over it.':'Set the bed to −55. A whole stroke has one depth; holding still does not keep digging.',
   shallow:'Set the bed to −7. Paint through deep water to make a shallow passage, or through land to make shallows.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
-  lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.'
+  lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
+  move:'Click a shape to select it; drag to move it. Its brush settings appear below and edit it live.'
 };
 let config, renderer, heights, protection, routes, grid, size, spacing, noise;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
@@ -73,6 +74,10 @@ function showTool(state) {
 }
 function updateControls() {
   for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(b.dataset.tool===tool));
+  // With Move active, show the selected shape's own controls.
+  const activeTool=tool;
+  if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
+  try {
   const fixed=['deep','shallow','ramp'].includes(tool);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=tool==='smooth'?'Strength':tool==='lower'?'Lower by':'Rise';
@@ -101,7 +106,7 @@ function updateControls() {
   $('tool-style').value=toolSettings[tool]?.preset||'custom';
   $('fractures-value').textContent=$('fractures').value+'%';
   $('scree-value').textContent=$('scree').value+'%';
-  $('water-edit').hidden=!['deep','shallow'].includes(tool);
+  $('water-edit').hidden=true;
   $('water-reapply').disabled=!lastWaterStroke || Boolean(stroke) || lastWaterStroke.kind!==tool;
   $('tool-help').textContent=tool==='shallow' && $('shallow-mode').value==='passage'
     ?'Raise the underwater bed to −7 for a shallow passage. Existing land and shallower banks keep their shape.'
@@ -110,6 +115,8 @@ function updateControls() {
   $('redo').disabled=!ready || Boolean(stroke) || historyIndex>=history.length-1;
   $('export').disabled=!canExport();
   $('fit').setAttribute('aria-pressed',String(fitView)); $('one').setAttribute('aria-pressed',String(!fitView));
+  } finally { tool=activeTool; }
+  if (tool==='move') { $('tool-help').textContent=HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp'].includes(nodes[selected]?.kind); }
 }
 
 function canExport() {
@@ -163,13 +170,14 @@ function startStroke(kind,p,options={}) {
   applySeedControl();
   const radius=options.radius ?? Number($('diameter').value)/2;
   const base=heights.slice();
-  const faceAngle=Math.PI/2+sample(noise.coastX,p.x,p.y)*1.8;
+  const strokeSeed=options.seed ?? seed, strokeNoise=noiseFor(strokeSeed);
+  const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8;
   return {kind,base,protectBase:protection.slice(),routeBase:routes.slice(),radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise,baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
@@ -416,14 +424,101 @@ function settleRamp(s) {
 
 function markViewChanged() { revision++; needsDraw=true; renderedRevision=-1; $('export').disabled=true; }
 function markChanged() { markViewChanged(); heightDirty=true; error(); }
+
+// Shapes are nodes: kind, path, parameters and seed. The map is rebuilt by
+// replaying nodes in order, so relative heights follow the ground beneath
+// (a hill on a plateau rises with it). prefix[i] keeps the surface before
+// node i, so an edit replays only from the edited node onward.
+let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1;
+const noiseCache=new Map();
+function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
+const NODE_NAMES={plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode}; }
+function applyNode(n) {
+  if (n.hidden) return;
+  if (n.kind==='raster') { heights.set(n.heights); protection.set(n.protection); routes.set(n.routes); return; }
+  if (n.kind==='compact') { for (let i=0;i<heights.length;i++) if (heights[i]>config.baseHeight) heights[i]=config.baseHeight+(heights[i]-config.baseHeight)*n.factor; return; }
+  const pts=n.points, s=startStroke(n.kind,pts[0],{...n.params,seed:n.seed});
+  if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
+  dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s);
+}
+function snapshot() { return {h:heights.slice(),p:protection.slice(),r:routes.slice()}; }
+function addNode(n) { prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n); }
+function evaluate(from=0) {
+  from=Math.max(0,Math.min(from,nodes.length));
+  if (from>0 && prefix[from]) { heights.set(prefix[from].h); protection.set(prefix[from].p); routes.set(prefix[from].r); }
+  else { from=0; heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); }
+  for (let i=from;i<nodes.length;i++) { prefix[i]=snapshot(); applyNode(nodes[i]); }
+  prefix.length=nodes.length; heightDirty=true; markChanged();
+}
+function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),params:n.params?{...n.params}:undefined})); }
+function nodeDistance(n,p) {
+  if (!n.points) return Infinity;
+  let best=Infinity;
+  for (let i=0;i<n.points.length;i++) {
+    const a=n.points[i],b=n.points[Math.min(i+1,n.points.length-1)],dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
+    const t=l2?clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/l2,0,1):0;
+    best=Math.min(best,Math.hypot(p.x-a.x-dx*t,p.y-a.y-dy*t));
+  }
+  return best;
+}
+function pickNode(p) {
+  let best=-1,bestScore=Infinity;
+  nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<bestScore) { bestScore=d/reach; best=i; } });
+  return best;
+}
+function selectNode(i) {
+  selected=i;
+  const n=nodes[i];
+  if (n && n.params && HELP[n.kind]) {
+    if (tool!=='move') { rememberTool(); tool=n.kind; }
+    const p=n.params;
+    $('diameter').value=clamp(p.radius*2,40,400); $('amount').value=clamp(p.amount,5,160); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
+    $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
+    $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage';
+  }
+  renderLayers(); updateControls(); schedule(false);
+  if (n) status(`Editing ${NODE_NAMES[n.kind]||n.kind} #${i+1}: sliders change this shape. Draw to start a new one.`);
+}
+function editSelectedFromControls() {
+  const n=nodes[selected]; if (!n || !n.params) return;
+  n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
+    softness:Number($('softness').value)/100,bankWidth:Number($('bank-width').value)/100,beachFlatness:Number($('beach-flatness').value)/100,
+    shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value};
+  cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
+}
+function renderLayers() {
+  const list=$('layers'); if (!list) return;
+  list.replaceChildren(...nodes.map((n,i) => {
+    const item=document.createElement('li');
+    item.textContent=`${NODE_NAMES[n.kind]||n.kind}${n.hidden?' (hidden)':''}`;
+    item.className=i===selected?'selected':'';
+    item.addEventListener('click',() => selectNode(i===selected?-1:i));
+    return item;
+  }));
+  for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0;
+}
+function nodeAction(kind) {
+  const i=selected; if (i<0 || stroke) return;
+  cancelWeather();
+  if (kind==='delete') { nodes.splice(i,1); selected=-1; evaluate(i); }
+  else if (kind==='hide') { nodes[i].hidden=!nodes[i].hidden; evaluate(i); }
+  else if (kind==='seed') { if (nodes[i].seed===undefined) return; nodes[i].seed=(Math.random()*4294967295)>>>0; evaluate(i); }
+  else if (kind==='up' && i>0) { [nodes[i-1],nodes[i]]=[nodes[i],nodes[i-1]]; selected=i-1; evaluate(i-1); }
+  else if (kind==='down' && i<nodes.length-1) { [nodes[i+1],nodes[i]]=[nodes[i],nodes[i+1]]; selected=i+1; evaluate(i); }
+  checkpoint(); renderLayers(); schedule(); queueWeather();
+}
+// Apply a pending node edit now, so history and refinement see it.
+function flushEval() { if (pendingEval>=0) { const from=pendingEval; pendingEval=-1; evaluate(from); } }
 function checkpoint() {
-  const current=history[historyIndex];
-  if (!current || refinementSeed!==current.refinementSeed || heights.some((v,i) => v!==current.height[i]) || routes.some((v,i) => v!==current.routes[i])) { history.splice(historyIndex+1); history.push({height:heights.slice(),protect:protection.slice(),routes:routes.slice(),refinementSeed}); if (history.length>24) history.shift(); historyIndex=history.length-1; }
-  updateControls(); persistLater();
+  flushEval();
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || next<0 || next>=history.length) return;
-  lastWaterStroke=null; cancelWeather(); heights.set(history[next].height); protection.set(history[next].protect); routes.set(history[next].routes); refinementSeed=history[next].refinementSeed; historyIndex=next; markChanged(); updateControls(); persistLater(); status(delta<0?'Undid the last sculpt stroke.':'Restored the sculpt stroke.'); schedule(); queueWeather();
+  lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next;
+  evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
 function cancelWeather() {
@@ -441,6 +536,7 @@ function previewHeight() {
   return display;
 }
 function queueWeather() {
+  flushEval();
   if (!$('weather').checked) {
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;
   }
@@ -491,6 +587,7 @@ function frame(timestamp) {
   if (stroke) { if (lastPaintingRAF!==null) { paintingIntervals.push(timestamp-lastPaintingRAF); if (paintingIntervals.length>10) paintingIntervals.shift(); } lastPaintingRAF=timestamp; }
   else lastPaintingRAF=null;
   try {
+    flushEval();
     if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes); heightDirty=false; }
     if (needsDraw || stroke) {
       const quality=stroke?'preview':'full',start=performance.now();
@@ -509,6 +606,14 @@ function drawOverlay() {
     ink.strokeStyle='#b8eef3'; ink.fillStyle='#a7e6f00c'; ink.lineWidth=1.5;
     ink.beginPath(); ink.arc(cursor.cx,cursor.cy,stroke?.radius ?? Number($('diameter').value)/2,0,Math.PI*2); ink.fill(); ink.stroke();
     ink.beginPath(); ink.moveTo(cursor.cx-4,cursor.cy); ink.lineTo(cursor.cx+4,cursor.cy); ink.moveTo(cursor.cx,cursor.cy-4); ink.lineTo(cursor.cx,cursor.cy+4); ink.stroke();
+  }
+  if (selected>=0 && nodes[selected]?.points && !stroke) {
+    ink.strokeStyle='#f3d36b'; ink.lineWidth=2; ink.beginPath();
+    for (const [i,p] of nodes[selected].points.entries()) {
+      const y=p.y-(Math.max(config.seaLevel,sample(heights,p.x,p.y))-config.baseHeight)*.5;
+      if (i) ink.lineTo(p.x,y); else ink.moveTo(p.x,y);
+    }
+    ink.stroke();
   }
   if (stroke?.kind==='ramp') {
     ink.strokeStyle='#d4eda8'; ink.lineWidth=2; ink.setLineDash([6,5]); ink.beginPath();
@@ -547,6 +652,12 @@ overlay.addEventListener('pointerdown',event => {
   if (space || event.button===1) pan={x:event.clientX,y:event.clientY,left:$('viewport').scrollLeft,top:$('viewport').scrollTop};
   else {
     const p=picked(cursor); if (!p) return;
+    if (tool==='move') {
+      const i=pickNode(p); selectNode(i);
+      if (i>=0 && nodes[i].points) { cancelWeather(); moving={index:i,start:p,points:nodes[i].points.map(q => ({...q}))}; }
+      pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule(); return;
+    }
+    if (selected>=0) { selected=-1; renderLayers(); }
     cancelWeather();
     stroke=startStroke(tool,p); stroke.screenStart=cursor; paintingIntervals=[]; lastPaintingRAF=null; markChanged();
     if (tool!=='ramp') dab(stroke,p);
@@ -557,14 +668,18 @@ overlay.addEventListener('pointerdown',event => {
 overlay.addEventListener('pointermove',event => {
   if (!ready || (pointerId!==null && event.pointerId!==pointerId)) return; cursor=screenPoint(event);
   if (pan) { $('viewport').scrollLeft=pan.left+pan.x-event.clientX; $('viewport').scrollTop=pan.top+pan.y-event.clientY; }
+  else if (moving) { const p=picked(cursor); if (p) { const dx=p.x-moving.start.x,dy=p.y-moving.start.y; nodes[moving.index].points=moving.points.map(q => ({x:clamp(q.x+dx,0,size-1),y:clamp(q.y+dy,0,size-1)})); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index); } }
   else if (stroke) { const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   schedule(Boolean(stroke));
 });
 function endPointer(event) {
   if (pointerId!==event.pointerId) return;
+  if (moving) { moving=null; pointerId=null; if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId); if (pendingEval>=0) { evaluate(pendingEval); pendingEval=-1; } checkpoint(); queueWeather(); updateControls(); schedule(); return; }
   if (stroke && event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   const hadStroke=Boolean(stroke);
+  const rawPath=stroke?stroke.path.map(p => ({...p})):null;
   if (stroke) { settleHill(stroke); settleRamp(stroke); }
+  if (stroke) { prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; renderLayers(); }
   if (stroke) lastWaterStroke=['deep','shallow'].includes(stroke.kind)?stroke:null;
   stroke=null; pan=null; pointerId=null;
   if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId);
@@ -572,7 +687,7 @@ function endPointer(event) {
   updateControls(); schedule();
 }
 overlay.addEventListener('pointerup',endPointer); overlay.addEventListener('pointercancel',endPointer);
-overlay.addEventListener('lostpointercapture',event => { if (stroke || pan) endPointer(event); });
+overlay.addEventListener('lostpointercapture',event => { if (stroke || pan || moving) endPointer(event); });
 overlay.addEventListener('pointerleave',() => { if (!stroke && !pan) cursor=null; schedule(false); }); overlay.addEventListener('contextmenu',event => event.preventDefault());
 function resize() {
   if (!config) return; const viewport=$('viewport');
@@ -584,19 +699,19 @@ function resize() {
 function demoStroke(kind,points,options) {
   const defaults=toolDefaults(kind);
   // Older reviewed examples keep their authored geometry. New island scenes
-  // exercise the biome's default shapes; saved maps always retain their heights.
+  // exercise the biome's default shapes.
   const island=experiment.get('example')==='islands';
-  const s=startStroke(kind,points[0],{bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options}); dab(s,points[0]); for (const p of points.slice(1)) extendStroke(s,p);
-  settleHill(s);
+  const probe=startStroke(kind,points[0],{bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options});
+  addNode({kind,points:points.map(p => ({...p})),params:strokeParams(probe),seed:probe.seed});
 }
 function demoRamp(points,options) {
-  const s=startStroke('ramp',points[0],options);
-  for (const p of points.slice(1)) ramp(s,p);
-  settleRamp(s);
+  const probe=startStroke('ramp',points[0],options);
+  addNode({kind:'ramp',points:points.map(p => ({...p})),params:strokeParams(probe),seed:probe.seed});
 }
 function mixedScene() {
   applySeedControl(); refinementSeed=seed;
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0);
+  nodes=[]; prefix=[]; selected=-1;
   if (experiment.get('example')==='islands') {
     demoStroke('deep',[{x:50,y:0},{x:100,y:300},{x:35,y:650},{x:150,y:1023}],{radius:150,rough:.6,shelves:.9});
     demoStroke('deep',[{x:0,y:900},{x:450,y:910},{x:1023,y:850}],{radius:165,rough:.55,shelves:.8});
@@ -655,11 +770,8 @@ function mixedScene() {
   demoStroke('hill',[{x:260,y:280},{x:275,y:295}],{radius:65,amount:40,rough:.35});
   demoStroke('hill',[{x:590,y:290},{x:680,y:340},{x:750,y:470}],{radius:115,amount:80,rough:.45});
   demoStroke('mountain',[{x:800,y:160},{x:860,y:250}],{radius:100,amount:150,rough:.5});
-  const s=startStroke('ramp',{x:280,y:350},{radius:65,rough:.22}); ramp(s,{x:430,y:535});
-  if (experiment.get('scene')==='compact') {
-    for (let i=0;i<heights.length;i++) if (heights[i]>config.baseHeight)
-      heights[i]=config.baseHeight+(heights[i]-config.baseHeight)*.60;
-  }
+  demoRamp([{x:280,y:350},{x:430,y:535}],{radius:65,rough:.22});
+  if (experiment.get('scene')==='compact') addNode({kind:'compact',factor:.60});
   markChanged();
 }
 function encodedHeights(field=heights) {
@@ -671,7 +783,7 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:3,biome:config.biomeId||'green',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),biome:config.biomeId||'green',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -681,12 +793,12 @@ function persistLater() {
   if (experiment.has('scratch')) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(() => {
     if (stroke || loading) { persistLater(); return; }
-    try { localStorage.setItem(LOCAL_KEY,JSON.stringify(sketch())); $('save-state').textContent='Sculpt sketch autosaved locally · v3. Existing painter sketches are untouched.'; }
+    try { localStorage.setItem(LOCAL_KEY,JSON.stringify(sketch())); $('save-state').textContent='Terrain recipe autosaved locally.'; }
     catch (_) { $('save-state').textContent='Local autosave unavailable. Use Save sketch to keep this heightfield.'; }
   },450);
 }
 function loadSketch(s) {
-  if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==3 || s.size!==size || s.grid!==grid || s.encoding!=='float32-le/base64' || typeof s.heights!=='string' || s.heights.length>heights.length*6) throw new Error('Load a v3 sculpt sketch with the same canvas and grid size. Painter sketches use a different format.');
+  if (!s || s.format!=='nanolathe-terrain-sculpt' || ![3,4].includes(s.version) || s.size!==size || s.grid!==grid || s.encoding!=='float32-le/base64' || typeof s.heights!=='string' || s.heights.length>heights.length*6) throw new Error('Load a v3 sculpt sketch with the same canvas and grid size. Painter sketches use a different format.');
   const binary=atob(s.heights); if (binary.length!==heights.length*4) throw new Error('The saved heightfield has the wrong length.');
   const bytes=Uint8Array.from(binary,c => c.charCodeAt(0)),view=new DataView(bytes.buffer),next=new Float32Array(heights.length);
   for (let i=0;i<next.length;i++) { const v=view.getFloat32(i*4,true); if (!Number.isFinite(v) || v<MIN_HEIGHT || v>MAX_HEIGHT) throw new Error('The sketch contains an invalid terrain height.'); next[i]=v; }
@@ -738,18 +850,30 @@ function loadSketch(s) {
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
+  // A v4 recipe rebuilds from its nodes; a v3 sketch becomes one raster node.
+  nodes=s.version===4 && Array.isArray(s.nodes)?deserializeNodes(s.nodes):[{kind:'raster',heights:heights.slice(),protection:protection.slice(),routes:routes.slice()}];
+  prefix=[]; selected=-1; evaluate(0); renderLayers();
   markChanged(); updateControls();
+}
+function serializeNodes() {
+  return nodes.map(n => n.kind==='raster'?{kind:'raster',hidden:n.hidden,heights:encodedHeights(n.heights),protection:encodedHeights(n.protection),routes:encodedHeights(n.routes)}:{...n,points:n.points?.map(p => ({x:p.x,y:p.y}))});
+}
+function deserializeNodes(list) {
+  const decode=text => { const raw=atob(text),view=new DataView(Uint8Array.from(raw,c => c.charCodeAt(0)).buffer),out=new Float32Array(raw.length/4); for (let i=0;i<out.length;i++) out[i]=view.getFloat32(i*4,true); return out; };
+  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,seed:n.seed,params:n.params,points:n.points});
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; rememberTool(); tool=b.dataset.tool; showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
-for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); });
+for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
+for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
 $('tool-style').addEventListener('change',() => { const preset=$('tool-style').value; if (!Object.hasOwn(TOOL_PRESETS,preset)) return; toolSettings[tool]=toolDefaults(tool,preset); showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for (const id of ['mineral-ring','ring-spread','ring-variation']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for(const id of ['material-weathering','deposit-spread']) $(id).addEventListener('input',()=>{markViewChanged();updateControls();schedule();queueWeather();persistLater();});
 $('fringe-style').addEventListener('change',() => { markViewChanged(); schedule(); persistLater(); });
 $('fractures').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
-$('shallow-mode').addEventListener('change',() => { rememberTool(true); updateControls(); persistLater(); });
+$('shallow-mode').addEventListener('change',() => { rememberTool(true); updateControls(); persistLater(); if (selected>=0) { editSelectedFromControls(); checkpoint(); queueWeather(); } });
 $('scree').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); queueWeather(); persistLater(); });
 $('water-reapply').addEventListener('click',reapplyWater);
 function applySeedControl() {
@@ -771,13 +895,13 @@ $('demo').addEventListener('click',() => {
   experiment.set('example',$('example').value); mixedScene(); checkpoint();
   status('Example loaded · sculpt across the joins.'); schedule(); queueWeather();
 });
-$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
+$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); nodes=[]; prefix=[]; selected=-1; markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
 $('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),'terrain-sculpt-v3.json'); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
   const file=$('file').files[0]; $('file').value=''; if (!file || stroke) return;
   loading=true; $('editor').disabled=true;
-  try { if (file.size>10000000) throw new Error('This sculpt sketch is too large to load.'); loadSketch(JSON.parse(await file.text())); checkpoint(); status('Loaded the v3 sculpt heightfield.'); schedule(); queueWeather(); } catch (err) { error(err.message); }
+  try { if (file.size>10000000) throw new Error('This sculpt sketch is too large to load.'); loadSketch(JSON.parse(await file.text())); checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather(); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
 $('export').addEventListener('click',() => {
@@ -872,9 +996,9 @@ async function boot() {
     $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100);
     $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
     let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
-    if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your v3 sculpt sketch.'); } catch (err) { mixedScene(); error('Saved sculpt sketch could not be loaded: '+err.message+' The saved copy is retained until you edit.'); status('Mixed example shown.'); } }
+    if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved terrain.'); } catch (err) { mixedScene(); error('Saved sculpt sketch could not be loaded: '+err.message+' The saved copy is retained until you edit.'); status('Mixed example shown.'); } }
     else { mixedScene(); status('Mixed scene ready · paint any continuous shape.'); }
-    ready=true; $('editor').disabled=false; history=[{height:heights.slice(),protect:protection.slice(),routes:routes.slice(),refinementSeed}]; historyIndex=0;
+    ready=true; $('editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed}]; historyIndex=0; renderLayers();
     $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
     updateControls(); resize(); schedule(); queueWeather();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }

@@ -189,7 +189,10 @@ export comes later.
    the usable range is −75…180. The editor needs a per-map sea level and a
    height budget shown while authoring. Sections can settle the unit
    question: register each section's silhouette against its own heights.
-4. **Tile budget.** Tile indices are u16 [fmt tnt], so at most 65,536
+4. **Tile budget.** Base ground comes from a limited set of unique
+   32-px tiles, randomly distributed on the TNT tile grid (user requirement,
+   2026-10-26); generation may be procedural, but the number of unique base
+   tiles is a knob. Tile indices are u16 [fmt tnt], so at most 65,536
    unique tiles. A 12800×7168 map has 89,600 tile slots, so a large map
    whose tiles are all unique won't fit; level ground has to reuse a
    periodic plain tile. Whether retail imposes a lower practical limit is
@@ -242,7 +245,7 @@ that only changes appearance.
 | Thermal and scree | Angle of repose; talus amount; scree apron reach; grain size | A (H for large aprons) |
 | Debris | Source (cliff faces, crests, fractures); release rate; tumble distance down the fall line; size distribution; sorting (coarse near the source, fine farther away); burial in sediment | A |
 | Rocks and boulders | Density; size range; clustering; embedding depth; shape (rounded or angular); source (scattered, cliff foot, riverbed, beach); light and shadow from the same sun | A |
-| Sand | Water-laid deposits in basins, on shelves and along beaches; wind direction and strength; drifts on lee sides; ripples (wavelength, amplitude, orientation); dune fields (height, spacing) | A; H for dunes |
+| Sand | Sand is weathered from the map's own rock and ground: its colour and grain come from the source materials, and it is carried by water and wind along the terrain to where they deposit it (basins, shelves, beaches, lee sides). Knobs: weathering rate, transport by water and wind, wind direction and strength, ripples (wavelength, amplitude, orientation), dune fields (height, spacing) | A; H for dunes |
 | Decay | Edge rounding; crumbling of crests and rims; pitting | A |
 | Cover | Vegetation and moss by moisture, slope, aspect and burial; snow or ash on suitable worlds; patchiness | A |
 | Materials | A layer stack. Each layer has a full-colour ramp, a grain, a coverage rule and breakup. The grain is procedural (noise type, scale, contrast, flecks and their colours) or taken from a swatch. The coverage rule reads the masks: slope, height above base, curvature, flow, wear, deposit, exposure, wetness, distance to shore. Edge character can be soft, ragged or veined | A |
