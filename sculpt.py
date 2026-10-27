@@ -11,7 +11,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt.vert',
     'sculpt.frag', 'sculpt-common.glsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.frag')}
+    'relief-bake.frag', 'sculpt-sand.js')}
 
 
 def main():
@@ -47,6 +47,9 @@ def main():
         make_rock_layers(DEFAULT_DATA, args.assets)
         config['textures']['rockWeathered'] = '/sculpt-assets/rock-weathered.png'
         config['textures']['rockFractured'] = '/sculpt-assets/rock-fractured.png'
+        from ground_tiles import make_ground_tiles
+        make_ground_tiles(args.assets, DEFAULT_DATA / 'corpus')
+        config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
     make_fracture_field(args.assets)
     config['textures']['fractures'] = '/sculpt-assets/fractures.png'
     config.update(size=1024, grid=512, baseHeight=24, seaLevel=0,
@@ -57,7 +60,7 @@ def main():
     config['defaults'] = dict(noise='ridged', coverage='form', rock='hill',
         lighting='front', forms='shouldered', surface='slopes', scene='compact',
         weather='broad', transition='soil', material='varied', edges='natural',
-        fractures='65', scree='70', shade='separate')
+        fractures='40', scree='70', shade='separate')
     config['material'].update(materialWeathering=0.0, depositSpread=.65)
     if args.biome == 'red':
         config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0')

@@ -21,6 +21,7 @@ uniform float uReliefGain;      // amplitude ratio between octaves
 uniform float uReliefWarp;      // domain warp, world px
 uniform float uReliefPatchy;    // spatial variation of relief strength
 uniform float uReliefJitter;    // per-kernel phase and wavelength variation
+uniform float uGentleRelief;    // relief on gentle slopes
 uniform float uBoulderDensity;   // 0 disables boulders
 uniform float uBoulderSize;      // typical diameter, world px
 uniform float uBoulderFoot;      // share of boulders sourced from cliff feet
@@ -32,9 +33,6 @@ uniform float uDebrisSize;       // largest debris stone, world px
 uniform float uDebrisSort;       // 1: coarse near the source, fine far away
 uniform float uRepose;           // slope below which debris comes to rest
 uniform float uSand;             // 0 disables sand
-uniform float uBeach;            // beach height above the water plane
-uniform float uBasinSand;        // water-laid sand in hollows
-uniform float uDrift;            // wind-blown sand behind obstacles
 uniform float uWindAngle;        // direction the wind blows toward, degrees (0 = east)
 uniform float uRipple;           // ripple wavelength, world px (0: none)
 uniform float uRippleHeight;     // ripple amplitude, height units
@@ -172,29 +170,13 @@ vec2 debrisStones(vec2 p, vec2 arrival) {
     return vec2(best, cover);
 }
 
-// Sand cover: beaches, water-laid hollows and wind-blown lee drifts.
+// Sand cover from the weathering worker's transport (wind and water);
+// broken up a little so thin sand does not read as a smooth wash.
 float sandCover(vec2 p, float h, float slope) {
     if (uSand <= 0.0) return 0.0;
-    float gentle = 1.0 - smoothstep(0.25, 0.6, slope);
-    float beach = uBeach > 0.0 ? smoothstep(uSea + uBeach, uSea + uBeach * 0.4, h) * step(uSea - 1.0, h) * gentle : 0.0;
-    const float e = 12.0;
-    float around = 0.25 * (baseHeight(p + vec2(e, 0)) + baseHeight(p - vec2(e, 0)) + baseHeight(p + vec2(0, e)) + baseHeight(p - vec2(0, e)));
-    float basin = smoothstep(0.5, 3.0, around - h) * gentle * uBasinSand;
-    float drift = 0.0;
-    if (uDrift > 0.0) {
-        float a = radians(uWindAngle);
-        vec2 wind = vec2(cos(a), sin(a));
-        // Sheltered when ground upwind rises above the line of the wind.
-        float shelter = 0.0;
-        for (int i = 1; i <= 8; i++) {
-            float d = float(i) * 8.0;
-            shelter = max(shelter, (baseHeight(p - wind * d) - h) / d);
-        }
-        drift = smoothstep(0.15, 0.5, shelter) * gentle * uDrift;
-    }
-    float breakup = valueNoise(p / 40.0 + 13.0) * 0.5 + 0.5;
-    float cover = max(beach, max(basin, drift));
-    return clamp(cover * smoothstep(0.2, 0.6, breakup + cover * 0.4) * uSand, 0.0, 1.0);
+    float field = texture(uWeather, p / (uSize - 1.0)).a;
+    float breakup = valueNoise(p / 24.0 + 13.0) * 0.5 + 0.5;
+    return clamp(field * (0.75 + 0.5 * breakup) * (1.0 - smoothstep(0.7, 1.3, slope)), 0.0, 1.0);
 }
 
 void main() {
@@ -204,7 +186,10 @@ void main() {
     float slope = length(g);
     float route = routeProtection(p);
     // Level crests and graded routes stay smooth; relief grows with slope.
-    float gain = smoothstep(0.08, 0.60, slope) * smoothstep(-12.0, 10.0, h) * (1.0 - route);
+    // Gentle slopes carry low lumps too, so ground turned from the sun is
+    // textured rather than a smooth gradient; level ground stays level.
+    float gain = max(smoothstep(0.08, 0.60, slope), uGentleRelief * smoothstep(0.015, 0.10, slope))
+               * smoothstep(-12.0, 10.0, h) * (1.0 - route);
     vec2 fall = slope > 1e-5 ? g / slope : vec2(0.0, 1.0);
 
     vec3 acc = vec3(0.0);
@@ -233,7 +218,8 @@ void main() {
     float value = acc.x / max(total, 1e-5);
     // Steeper ground carries proportionally taller ribs.
     float patchy = mix(1.0, 0.35 + 1.3 * (valueNoise(p / 90.0 + 5.0) * 0.5 + 0.5), uReliefPatchy);
-    float height = value * uReliefAmount * clamp(slope, 0.0, 2.5) * uReliefScale * gain * patchy;
+    // Height scales with slope, with a floor so gentle lumps are visible.
+    float height = value * uReliefAmount * max(clamp(slope, 0.0, 2.5), 0.25 * uGentleRelief) * uReliefScale * gain * patchy;
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast.
     if (h > uSea) height = max(height, uSea + 0.5 - h);

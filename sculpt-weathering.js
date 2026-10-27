@@ -10,6 +10,7 @@
  */
 
 import {weatherMaterials} from './sculpt-material-weathering.js';
+import {transportSand} from './sculpt-sand.js';
 
 const MIN_HEIGHT=-90, MAX_HEIGHT=300, CHUNK_MS=8, PUBLISH_MS=85;
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -68,7 +69,7 @@ async function weather(request) {
   rng=(rng^0x6c8e9cf5)>>>0 || 1;
   const random=() => { rng^=rng<<13; rng^=rng>>>17; rng^=rng<<5; return (rng>>>0)/4294967296; };
   const seed=(Number.isFinite(request.seed)?request.seed:1)>>>0;
-  let materialField=null;
+  let materialField=null,sandField=null;
   const cancelled=() => latestJob!==job;
   let deadline=performance.now()+CHUNK_MS,lastPublished=started;
   async function pause() {
@@ -171,7 +172,8 @@ async function weather(request) {
     if (cancelled()) return false;
     const transfers=[output.buffer,f.buffer,d.buffer,t.buffer];
     if (materialField) transfers.push(materialField.buffer);
-    self.postMessage({job,progress,height:output,flow:f,deposit:d,talus:t,materialField,milliseconds:performance.now()-started,done},transfers);
+    const sand=sandField?sandField.slice():null; if (sand) transfers.push(sand.buffer);
+    self.postMessage({job,progress,height:output,flow:f,deposit:d,talus:t,sand,materialField,milliseconds:performance.now()-started,done},transfers);
     lastPublished=performance.now(); deadline=lastPublished+CHUNK_MS; return true;
   }
 
@@ -210,6 +212,10 @@ async function weather(request) {
   }
   if (apron && !await deriveApron()) return;
   async function finish() {
+    if (request.sand>0) {
+      sandField=await transportSand(request,height,pause);
+      if (cancelled()) return;
+    }
     if (request.materialWeathering>0) {
       if (!await publish(.93)) return;
       const surface=height.slice();

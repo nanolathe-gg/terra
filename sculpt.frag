@@ -59,15 +59,15 @@ uniform float uLightCap;
 uniform float uFootRim;
 uniform float uCrevice;
 uniform float uDither;
-uniform vec3 uSandColor;
+uniform float uSandLight;
+uniform float uFlatShadow;
+uniform float uFlatOcclusion;
 uniform float uSlopeTexture;
 uniform float uLandDither;
 uniform float uGullyRock;
 uniform float uWaterSoft;
 uniform int uGroundMode;
 uniform int uGroundTiles;
-uniform float uGroundClump;
-uniform vec3 uGroundRamp[64];
 uniform float uSandGrain;
 /*COMMON*/
 
@@ -163,9 +163,9 @@ float weatheredCover(float cover, vec4 deposits, vec4 grain) {
 }
 
 // Base ground from a fixed set of 32-px tiles, randomly placed on the TNT
-// tile grid, so level ground costs only uGroundTiles unique tiles. Each
-// pixel draws a colour from the measured retail distribution (quantile
-// ramp). An optional clump field repeats every 32 px, so tiles stay seamless.
+// tile grid, so level ground costs only uGroundTiles unique tiles. The tiles
+// are sampled offline from retail neighbour statistics (ground_tiles.py) and
+// stored in the first row of the ground texture.
 float groundHash(ivec3 q) {
     uint n = uint(q.x) * 374761393u + uint(q.y) * 668265263u + uint(q.z) * 2246822519u;
     n = (n ^ (n >> 13)) * 1274126177u;
@@ -174,16 +174,8 @@ float groundHash(ivec3 q) {
 vec3 groundTile(vec2 pixel) {
     ivec2 cell = ivec2(floor(pixel / 32.0));
     ivec2 local = ivec2(mod(floor(pixel), 32.0));
-    int tile = int(groundHash(ivec3(cell, 7)) * float(uGroundTiles));
-    float v = groundHash(ivec3(local, tile + 101));
-    if (uGroundClump > 0.0) {
-        // Smooth 32-periodic field shared by all tiles: correlated grain
-        // without seams. Mixed by rank so the colour distribution holds.
-        vec2 q = vec2(local) / 32.0 * 6.2831853;
-        float c = 0.5 + 0.25 * sin(q.x * 2.0 + 1.3) * cos(q.y * 3.0 + 0.7) + 0.25 * sin((q.x + q.y) * 4.0 + 2.1);
-        v = clamp(mix(v, c, uGroundClump), 0.0, 0.9999);
-    }
-    return uGroundRamp[int(v * 64.0)];
+    int tile = min(int(groundHash(ivec3(cell, 7)) * float(uGroundTiles)), 15);
+    return texelFetch(uGrass, ivec2(tile * 32 + local.x, local.y), 0).rgb;
 }
 
 void main() {
@@ -215,7 +207,12 @@ void main() {
         // hitting one dark floor. Flat ground and sunlit surfaces retain their
         // accepted response; this does not move the sculpted surface.
         float fill = uFaceFill * (1.0 - normal.z) * (1.0 - smoothstep(0.0, 0.50, direct));
-        shading = min((0.42 + fill + 0.95 * direct * shadow) / flatLight, uLightCap) * ao;
+        // Retail Green casts no shadows onto level ground: gate cast shadow
+        // and occlusion by slope, with knobs for other looks.
+        float onSlope = smoothstep(0.08, 0.35, slope);
+        float castShadow = mix(1.0, shadow, mix(uFlatShadow, 1.0, onSlope));
+        float occluded = mix(1.0, ao, mix(uFlatOcclusion, 1.0, onSlope));
+        shading = min((0.42 + fill + 0.95 * direct * castShadow) / flatLight, uLightCap) * occluded;
     }
     // TA's fixed camera permits a native-pixel material grain. World-XY
     // sampling stretches that grain over projected south-facing slopes.
@@ -491,13 +488,20 @@ void main() {
         // sampled art. Coverage comes from the bake.
         float sand = bakedFields(p).a;
         if (sand > 0.0) {
-            vec4 g1 = terrainNoise(p * 4.0 + vec2(3.0, 41.0)), g2 = terrainNoise(p * 0.9 + vec2(61.0, 5.0));
-            float grain = (g1.r - 0.5) * 1.0 + (g2.g - 0.5) * 0.6;
-            vec3 sandMaterial = uSandColor * (1.0 + grain * uSandGrain * 2.0);
+            // Weathered rock: the rock's own average colour, lightened and
+            // dulled by weathering, with fragments of the rock texture as
+            // grains. A biome's sand therefore follows its own rock.
+            vec3 rockAverage = textureLod(uRock, vec2(0.5), 12.0).rgb;
+            vec3 weathered = mix(rockAverage, vec3(dot(rockAverage, vec3(0.299, 0.587, 0.114))), 0.25);
+            weathered = mix(weathered, vec3(1.0), uSandLight * 0.55);
+            vec2 scatter = pixel * 1.37 + vec2(terrainNoise(p * 2.0).r, terrainNoise(p * 2.0 + 9.0).g) * 40.0;
+            vec3 fragment = texture(uRock, scatter / vec2(textureSize(uRock, 0))).rgb;
+            fragment = mix(fragment, vec3(1.0), uSandLight * 0.45);
+            vec3 sandMaterial = mix(weathered, fragment, uSandGrain);
             // Thin sand breaks into grains between grass blades rather than
             // fading as a veil: a per-pixel threshold against fine noise.
             float speck = terrainNoise(p * 6.0 + vec2(17.0, 29.0)).b;
-            float cover = smoothstep(-0.08, 0.08, sand * 1.3 - 0.25 - (speck - 0.5) * 0.7);
+            float cover = smoothstep(-0.08, 0.08, sand * 1.3 - 0.4 - (speck - 0.5) * 0.7);
             material = mix(material, sandMaterial, cover);
         }
     }

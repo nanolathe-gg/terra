@@ -7,10 +7,6 @@ function shader(gl, type, source) {
   return s;
 }
 
-// Green Planet flat grass: 64 colours at evenly spaced luma quantiles,
-// measured from flat cells of the retail Green corpus maps.
-const GREEN_GROUND_RAMP = [47,43,27,51,51,23,51,51,23,51,51,23,51,51,23,31,79,11,71,59,43,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,67,67,35,35,91,15,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,43,103,19,83,83,51,15,119,63,47,119,27,47,119,27,47,119,27,47,119,27,47,119,27,47,119,27,47,119,27,107,91,23,107,91,23,107,91,23,19,139,79,55,135,39,55,135,39,55,135,39,131,111,35];
-
 export class TerrainRenderer {
   static async create(canvas, config) {
     const self = new TerrainRenderer(canvas, config);
@@ -107,6 +103,8 @@ export class TerrainRenderer {
         if (key === 'rock' && this.config.textures.rockStructured) url = this.config.textures.rockStructured;
       }
       if (key === 'noise' && variant.get('noise') === 'ridged') url = '/sculpt-assets/noise-ridged-gaussian.png';
+      // Procedural ground tiles replace the sampled grass when the biome has them.
+      if (key === 'grass' && variant.get('ground') !== 'texture' && this.config.textures.groundTiles) url = this.config.textures.groundTiles;
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Cannot load ${key} material`);
       const bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
@@ -264,7 +262,7 @@ export class TerrainRenderer {
     this.f('uGrid', grid);
   }
 
-  setWeather(flow, deposit, talus) {
+  setWeather(flow, deposit, talus, sand) {
     this.fieldsDirty = true;
     const gl = this.gl;
     const bytes = new Uint8Array(this.grid * this.grid * 4);
@@ -272,6 +270,7 @@ export class TerrainRenderer {
       bytes[i * 4] = Math.min(255, Math.max(0, Math.round(flow[i] * 255)));
       bytes[i * 4 + 1] = Math.min(255, Math.max(0, Math.round(deposit[i] * 255)));
       bytes[i * 4 + 2] = Math.min(255, Math.max(0, Math.round((talus?.[i] || 0) * 255)));
+      bytes[i * 4 + 3] = Math.min(255, Math.max(0, Math.round((sand?.[i] || 0) * 255)));
     }
     gl.activeTexture(gl.TEXTURE0 + 7);
     gl.bindTexture(gl.TEXTURE_2D, this.weatherTexture);
@@ -370,12 +369,12 @@ export class TerrainRenderer {
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
-    gl.uniform3fv(this.location('uSandColor'), (variant.get('sandColor') || '196,168,104').split(',').map(v => Number(v) / 255));
-    this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.22);
-    this.i('uGroundMode', variant.get('ground') === 'texture' ? 0 : 1);
+    this.f('uFlatShadow', variant.has('flatShadow') ? Number(variant.get('flatShadow')) : 0.0);
+    this.f('uFlatOcclusion', variant.has('flatOcclusion') ? Number(variant.get('flatOcclusion')) : 0.4);
+    this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
+    this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.8);
+    this.i('uGroundMode', variant.get('ground') !== 'texture' && this.config.textures.groundTiles ? 1 : 0);
     this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
-    this.f('uGroundClump', variant.has('groundClump') ? Number(variant.get('groundClump')) : 0.0);
-    gl.uniform3fv(this.location('uGroundRamp'), GREEN_GROUND_RAMP.map(v => v / 255));
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
     this.f('uGullyRock', variant.has('gullyRock') ? Number(variant.get('gullyRock')) : 0.5);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
@@ -401,6 +400,7 @@ export class TerrainRenderer {
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
     set('uReliefJitter', number('reliefJitter', 0.8));
+    set('uGentleRelief', number('gentleRelief', 0.6));
     set('uWeather', 7, 'i');
     set('uBoulderDensity', preview ? 0 : number('boulders', 0));
     set('uBoulderSize', number('boulderSize', 9));
@@ -413,9 +413,6 @@ export class TerrainRenderer {
     set('uDebrisSort', number('debrisSort', 0.8));
     set('uRepose', number('repose', 0.6));
     set('uSand', number('sand', 0));
-    set('uBeach', number('beach', 10));
-    set('uBasinSand', number('basinSand', 0.6));
-    set('uDrift', number('drift', 0.45));
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));

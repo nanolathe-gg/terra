@@ -22,6 +22,10 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 14 | Procedural base ground: a fixed set of unique 32-px tiles placed randomly on the TNT tile grid. Pixels draw from a 64-quantile colour ramp measured on retail flat grass | ground, groundTiles, groundClump | Retail flat grass is nearly uncorrelated per pixel (lag-1 0.05, lag-2 0.135); flat stats 73.8/13.1/1.6/61.4 against retail 73.7/12.9/1.1/60.9 | Kept: 16 tiles by default. This answers the user's TNT tile-budget requirement and removes the off-grid forensic tell |
 | 15 | Shapes as editable nodes (kind, path, parameters, own seed), replayed in order, with a snapshot before each node; Move tool; Shapes list | (editing) | Examples render identically to before; move, height edit and two undos are pixel-exact; the v4 recipe reloads pixel-exact | Kept |
 | 16 | Crater brush: bowl below the ground struck, raised rim, apron fading to nothing at 1.8 radii; dry floor (paint water for a crater lake); drag for elongated | crater: diameter, depth, roughness, softness | Click, drag and on-plateau craters; first version left a ring step and flooded the floor | Kept |
+| 17 | **Blind round 2**: build d460f375e, seeds 5113/6271, new retail windows; two reviewers told to judge by eye only | | A: AUC 1.00 (8/10 caught, 0 false); B: AUC 0.89 (4/10, 0 false) | Regression. The grass split the sets perfectly: row 14's per-pixel ground was red-speckled, retail olive. Visual tells: soft cast shadows on level grass; smooth shaded back slopes read as blurred smears; even hairline cracks with spaced blobs; narrow rock ridges as lump chains |
+| 18 | Sand from weathering: rock faces shed grains; water carries them downhill and drops them where slopes ease, in pits and at shores; wind hops them downwind into lee shelter (continuous Werner 1995 slab model). Colour from the biome's rock texture, lightened | sand, sandReach, windStrength, wind, sandLight, sandGrain | A/B with water only, water plus wind, strong opposite wind | Kept, off by default; replaces row 7's geometric sand rules (user direction) |
+| 19 | Ground tiles from a causal neighbour model of retail flat grass (left, upper-left, upper and upper-right contexts with backoff), 16 tiles, offline | groundTiles | Side by side at 2x with retail and the lab texture: olive, matching grain. A fitted pairwise model (Gibbs) fell into checkerboard phases | Kept; replaces row 14 |
+| 20 | No cast shadows on level ground, less occlusion there; low relief on gentle slopes; fractures 65 to 40 | flatShadow, flatOcclusion, gentleRelief, fractures | Round-2 tells | Kept; needs round 3 |
 
 Open tells and gaps:
 
@@ -30,3 +34,5 @@ Open tells and gaps:
 - The steepest faces carry 56% rock against retail's 77%.
 - Faces and slopes still use the lab's sampled moss and rock textures.
   Only level ground is procedural so far.
+- Retail flat grass has a little more mid-scale mottling than the tiles.
+- Narrow low steps render as chains of rock lumps (round 2, img08).

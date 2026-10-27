@@ -573,7 +573,8 @@ function queueWeather() {
     weatherBase=heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
     const profile=experiment.get('weather')==='broad'?'broad':undefined;
-    weatherWorker.postMessage({job,height:weatherBase,protect:protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}});
+    weatherWorker.postMessage({job,height:weatherBase,protect:protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
+      sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
   } catch (err) { failWeather(err.message); }
 }
 function failWeather(message) {
@@ -591,7 +592,7 @@ function startWeatherWorker() {
     if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
     if (data.error) { failWeather(data.error); return; }
     refined=data.height; refinedBase=weatherBase;
-    renderer.setHeight(refined,grid); renderer.setRoutes(routes); renderer.setWeather(data.flow,data.deposit,data.talus);
+    renderer.setHeight(refined,grid); renderer.setRoutes(routes); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
     if (data.materialField) renderer.setMaterialField(data.materialField);
     heightDirty=false;
     if (data.done) { weatherState='ready'; renderedRevision=-1; updateControls(); }
@@ -951,15 +952,17 @@ window.addEventListener('blur',() => { space=false; cursor=null; schedule(false)
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
 const KNOBS = [
-  ['Ground', [['groundTiles','Unique ground tiles',1,64,1,16],['groundClump','Clumping',0,.6,.02,0]]],
+  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16]]],
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
-    ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['reliefOctaves','Octaves',1,6,1,5]]],
-  ['Faces', [['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
+    ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['reliefOctaves','Octaves',1,6,1,5]]],
+  ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
+  ['Faces', [['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
-  ['Sand', [['sand','Amount',0,1,.05,0],['beach','Beach height',0,30,1,10],['basinSand','In hollows',0,1,.05,.6],['drift','Wind drifts',0,1,.05,.45],
-    ['wind','Wind toward (deg)',0,360,5,20],['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4],['sandGrain','Grain',0,.5,.01,.22]]],
+  ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
+    ['wind','Wind toward (deg)',0,360,5,20],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
+    ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
   ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
@@ -989,7 +992,11 @@ function buildKnobs() {
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
   experiment.set(key, value);
+  // Textures are chosen when the renderer starts, so this switch reloads.
+  if (key === 'ground') { location.reload(); return; }
   renderer.variant.set(key, value); renderer.applyKnobs(); markViewChanged(); schedule();
+  // Transport knobs change where sand is carried, so the worker re-runs.
+  if (['sand','sandReach','windStrength','wind'].includes(key)) { cancelWeather(); queueWeather(); }
 }
 async function boot() {
   try {
