@@ -113,6 +113,7 @@ struct Uniforms {
     lightCap: f32,
     footRim: f32,
     crevice: f32,
+    faceDark: f32,        // darkening of steep faces, most in hollows (0: none)
     dither: f32,
     sandLight: f32,
     sandEdge: f32,
@@ -137,6 +138,7 @@ struct Uniforms {
     reliefWarp: f32,      // domain warp, world px
     reliefPatchy: f32,    // spatial variation of relief strength
     reliefJitter: f32,    // per-kernel phase and wavelength variation
+    faceStreak: f32,      // 0: ribs down steep faces; 1: ledges along the contours
     gentleRelief: f32,    // relief on gentle slopes
     boulderDensity: f32,  // 0 disables boulders
     boulderSize: f32,     // typical diameter, world px
@@ -173,6 +175,8 @@ struct Uniforms {
     bandSpacing: f32,     // height between bands, height units
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser
+    bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
+    bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
     sun: vec3f,           // the renderer's light, for lit crack walls
     crackMinor: f32,      // share of minor cracks inside blocks
     crackHairline: f32,   // share of hairline crazing

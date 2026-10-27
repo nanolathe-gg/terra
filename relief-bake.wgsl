@@ -271,7 +271,14 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32) -> vec4f {
     // The shape's Cracks amount sets how cracked it is; the knobs set the
     // share of each level at full strength.
     let m = smoothstep(0.0, 0.5, clamp(mask, 0.0, 1.0));
-    let c0 = fractureLevel(w, fall, major, u.crackLength, m * gentle * u.crackMajor, u.crackNetwork, 3.7);
+    // With face ledges (faceStreak) the majors on steep ground follow the
+    // contours too, as the relief's wavefronts do.
+    var majorFall = fall;
+    if (u.faceStreak > 0.0) {
+        let turnBy = u.faceStreak * smoothstep(0.3, 0.7, slope) * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + 71.0), 0.0, 1.0);
+        majorFall = normalize(mix(fall, vec2f(-fall.y, fall.x), turnBy));
+    }
+    let c0 = fractureLevel(w, majorFall, major, u.crackLength, m * gentle * u.crackMajor, u.crackNetwork, 3.7);
     // Minor lattice turned and shifted per major block.
     let h0 = cellHash(c0.id + 11.1);
     let r0 = turn(h0.x * TAU);
@@ -367,16 +374,29 @@ fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
 // scale, broken into dashes, and mostly on gentle slopes (blind round 7).
 fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     if (u.banding <= 0.0 || h < u.sea + 0.5) { return vec3f(0.0); }
-    let gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(0.35, 0.75, slope));
+    // Bands fade out over slopes bandFade * 0.35 / 0.75 to bandFade (default
+    // 0.35-0.75; Green fades sooner, as retail's banded slopes are gentle).
+    let gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(u.bandFade * (0.35 / 0.75), u.bandFade, slope));
     if (gate <= 0.0) { return vec3f(0.0); }
     let S = u.bandSpacing;
-    let uu = (h + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
+    // Jag: retail's terraced slopes (Great Divide) show short dashes stacked
+    // like scales rather than long smooth lines: each small cell (~8 px,
+    // jittered) shifts its band phase, so a line breaks and steps at the
+    // cell borders.
+    var jag = 0.0;
+    if (u.bandJag > 0.0) {
+        let q = p / 8.0 + 0.6 * vec2f(valueNoise(p / 9.0 + 5.0), valueNoise(p / 9.0 + 17.0));
+        jag = (cellHash(floor(q) + 13.0).x - 0.5) * S * 0.6 * u.bandJag;
+    }
+    let uu = (h + jag + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
                 + valueNoise(p / 3.3 + 19.0) * S * 0.06 * min(1.0, 0.3 / max(slope, 0.05))) / S;   // GLSL: u
     let v = fract(uu);
     let w = clamp(u.bandSoftness, 0.05, 1.0);
     let offset = S * (floor(uu) + smoothstep(1.0 - w, 1.0, v)) - uu * S;
-    let dash = smoothstep(-0.55, 0.05, valueNoise(p / 22.0 + 51.0)) * smoothstep(-0.7, -0.1, valueNoise(p / 6.0 + 33.0))
+    var dash = smoothstep(-0.55, 0.05, valueNoise(p / 22.0 + 51.0)) * smoothstep(-0.7, -0.1, valueNoise(p / 6.0 + 33.0))
              * (0.55 + 0.45 * (valueNoise(p / 70.0 + 9.0) * 0.5 + 0.5));
+    // Jagged cells already break the lines; retail covers the whole slope.
+    dash = mix(dash, 1.0, 0.7 * clamp(u.bandJag, 0.0, 1.0));
     let strength = u.banding * gate * dash;
     // Distance from the riser's middle, in world px along the slope.
     let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.02);
@@ -495,6 +515,15 @@ fn bake(p: vec2f) -> vec4f {
         var dir = vec2f(steer.y, -steer.x);
         let len = length(dir);
         dir = select(vec2f(1.0, 0.0), dir / len, len > 1e-5);
+        // Retail escarpments (Great Divide) read as blocky rock with ledges
+        // along the contours, not ribs down the fall line: on steep ground
+        // turn the wavefronts toward the contours, by a varying amount so
+        // ledges, diagonal facets and a few ribs mix.
+        if (u.faceStreak > 0.0 && len > 1e-5) {
+            let turnBy = u.faceStreak * smoothstep(0.3, 0.7, slope)
+                       * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + f32(k) * 5.3 + 71.0), 0.0, 1.0);
+            dir = normalize(mix(dir, vec2f(-dir.y, dir.x), turnBy));
+        }
         // Domain warp varies rib spacing and width so faces are not combed.
         let warp = vec2f(valueNoise(p / 48.0 + f32(k) * 3.7), valueNoise(p / 48.0 + 11.3 + f32(k) * 3.7)) * u.reliefWarp;
         let q = (p + warp) * frequency + vec2f(f32(k) * 17.31, f32(k) * 9.13);

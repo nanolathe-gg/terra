@@ -603,6 +603,7 @@ export class TerrainRenderer {
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
+    this.f('uFaceDark', variant.has('faceDark') ? Number(variant.get('faceDark')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     this.f('uFlatShadow', variant.has('flatShadow') ? Number(variant.get('flatShadow')) : 0.0);
     this.f('uFlatOcclusion', variant.has('flatOcclusion') ? Number(variant.get('flatOcclusion')) : 0.4);
@@ -652,6 +653,7 @@ export class TerrainRenderer {
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
     set('uReliefJitter', number('reliefJitter', 0.8));
+    set('uFaceStreak', number('faceStreak', 0));
     set('uGentleRelief', number('gentleRelief', 0.6));
     set('uBoulderDensity', preview ? 0 : number('boulders', 0));
     set('uBoulderSize', number('boulderSize', 9));
@@ -688,6 +690,8 @@ export class TerrainRenderer {
     set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandLine', number('bandLine', 0.5));
+    set('uBandJag', number('bandJag', 0));
+    set('uBandFade', number('bandFade', 0.75));
     set('uBandStyle', number('bandStyle', 0), 'i');
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', Boolean(this.config.textures.beach));

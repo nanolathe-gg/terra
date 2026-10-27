@@ -41,6 +41,8 @@ KNOB_DEFAULTS = dict(
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0,
+    # Form (repro round): ledges on steep faces, darker faces, jagged bands.
+    faceStreak=0, faceDark=0, bandJag=0, bandFade=.75,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
@@ -48,7 +50,16 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(banding=.8, bandLine=.84, crackDark=.4),
+    'green': dict(banding=1, bandLine=1.6, crackDark=.4,
+                  # Repro round (Great Divide 160,1504; river delta 4608,2176): dense
+                  # jagged terrace dashes on gentle slopes (dark share .11 -> .17,
+                  # retail .22), escarpments as dark rock with ledges along the
+                  # contours (face rib anisotropy -.18 -> -.10, retail +.03).
+                  # Bands fade by slope .5, as the River Delta dome (slopes .4-.8)
+                  # shows few; rock from slope .4 is a compromise: Great Divide's
+                  # face is bare rock, the dome grass with cracks at equal slopes.
+                  bandJag=1.7, bandSpacing=2, bandSoftness=.2, bandFade=.5, faceStreak=1, faceDark=.45,
+                  faceSlope='0.4,0.65', rockShare='0.6,1.0'),
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.6, bandLine=1),
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds

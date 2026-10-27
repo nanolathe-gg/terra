@@ -502,7 +502,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let threshold = mix(1.4, -0.9, share);
         let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowBank;
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
-        let faceMaterial = mix(moss, rock, rockMask);
+        var faceMaterial = mix(moss, rock, rockMask);
+        // Retail escarpments are dark (Great Divide face: rock median luma
+        // 43 against ours 59, 10th percentile 10 against 31): darken steep
+        // faces, most in the relief's hollows, so the contrast grows too.
+        // Faces turned from the sun are already dark from the light; they
+        // take a third of it.
+        if (u.faceDark > 0.0) {
+            let steep = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope);
+            let sunlit = smoothstep(0.35, 0.8, dot(normalize(vec3f(-broad, 1.0)), u.light));
+            faceMaterial *= 1.0 - u.faceDark * steep * (0.45 + 0.55 * smoothstep(-0.3, 0.7, -top)) * mix(0.33, 1.0, sunlit);
+        }
         material = mix(material, faceMaterial, face * u.microRock);
         // A light, crisp grass rim where rough ground meets the level plain.
         let rim = smoothstep(u.faceSlope.x * 0.35, u.faceSlope.x * 0.6, faceSlope)
@@ -600,7 +610,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are
         // lit by the carved geometry.
-        material *= 1.0 - u.crackDark * clamp(-coverOrCrack, 0.0, 1.0);
+        // Codes below -1 come only from band lines with Line darkness above
+        // 1 (Green's dark terrace steps); up to -1 this is unchanged.
+        material *= 1.0 - min(u.crackDark * max(-coverOrCrack, 0.0), 1.0);
     }
     var chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route));
     chip = max(chip, smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65);
