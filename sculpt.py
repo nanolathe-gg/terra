@@ -14,14 +14,19 @@ SOURCES = {name: HERE / name for name in (
     'relief-bake.frag', 'sculpt-sand.js')}
 
 
-BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago'}
+BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
+               'moon': 'Moon', 'zhon': 'Zhon'}
 
 
 def biome_config(biome, assets):
     """Prepare one biome's materials in its own asset folder and return its
     page configuration, with texture URLs under /sculpt-assets/<biome>/."""
     from sculpt_fractures import make_fracture_field
-    if biome == 'archipelago':
+    if biome in ('moon', 'zhon'):
+        # Measured from a decoded section catalog (sculpt_section_biome.py).
+        from sculpt_section_biome import prepare_section_biome
+        config = prepare_section_biome(biome, assets)
+    elif biome == 'archipelago':
         from sculpt_archipelago_materials import prepare_archipelago_assets
         config = prepare_archipelago_assets(assets)
     elif biome == 'red':
@@ -76,6 +81,20 @@ def biome_config(biome, assets):
                                   groundFringe=True, ringAmount=.95, ringSpread=.7, ringVariation=.75,
                                   fringeSignal=[1, -1, 0, 0], fringeRange=[.08, .28], materialWeathering=1.0,
                                   transitionDetail=.65)
+    elif biome == 'moon':
+        # Craters are the Moon's feature and it has no water. Its slopes keep
+        # the light ejecta material down to the level dust (authored profile).
+        # Lunar dust is flat between craters: little broad relief, no cracks.
+        config['defaults'].update(example='hills', material='single', fractures='0', scree='40')
+        config['material'].update(rockyCoasts=False, surfaceRelief=.35, slopeFloor=-4.0, slopeDry=4.0)
+    elif biome == 'zhon':
+        # Zhon's level ground sits only ~3 height units above its measured
+        # shoreline (sea 59, flats 62); 8 leaves the editor's water tools room,
+        # as Archipelago's authored base does.
+        config['baseHeight'] = 8
+        config['defaults'].update(example='islands', material='single', fractures='20', scree='0')
+        config['material'].update(rockyCoasts=False, slopeStart=.08, slopeFull=.40,
+                                  slopeFloor=6.0, slopeDry=9.0)
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
     config['biomes'] = BIOME_NAMES
