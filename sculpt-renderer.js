@@ -191,7 +191,7 @@ export class TerrainRenderer {
     this.applyKnobs();
     this.i('uDiagnostic', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
-    this.f('uFaceFill', Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
+    this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
     this.i('uCoastalDetail', variant.get('shore') !== 'smooth');
     this.i('uNativeShallows', variant.get('water') !== 'tinted');
     this.i('uLayered', ['layers', 'terraces'].includes(variant.get('geology')));
@@ -424,6 +424,7 @@ export class TerrainRenderer {
     this.f('uSandEdge', variant.has('sandEdge') ? Number(variant.get('sandEdge')) : 1.0);
     this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
     this.f('uBeachWidth', variant.has('beachWidth') ? Number(variant.get('beachWidth')) : 1.0);
+    this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : 0);
     this.f('uRockCrown', variant.has('rockCrown') ? Number(variant.get('rockCrown')) : 0);
     this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
     this.f('uStrataSpacing', variant.has('strataSpacing') ? Number(variant.get('strataSpacing')) : 10);

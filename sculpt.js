@@ -222,7 +222,7 @@ function startStroke(kind,p,options={}) {
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),northFace:options.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
@@ -250,6 +250,8 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const coreEdge=experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38;
   const faceVariation=experiment.has('faceVariation')?Number(experiment.get('faceVariation')):.8;
   const bumpy=['hill','mountain','lower'].includes(s.kind);
+  // TA's view squashes faces that rise toward the camera; widen them (new shapes).
+  const northWiden=s.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0);
   const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
@@ -324,7 +326,10 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       // band does not keep one width round a smooth arc (blind round 3).
       const broadFace=valueNoise(lx/(radius*1.3),ly/(radius*1.3),s.seed^0x5f1);
       const originalShoulder=naturalPlateau?clamp(.56+s.rough*(s.noise.detail[i]+.30*s.noise.coastWidth[i])+faceVariation*.22*broadFace,.18,.88):.62;
-      const shoulder=clamp(originalShoulder-(s.softness-.5)*.6,.15,.90);
+      // A face whose outward side looks north (-y) is foreshortened to a
+      // hairline in the oblique view; start it farther in so it is gentler.
+      const north=northWiden>0?Math.max(0,-(wy-cy))/Math.max(1e-3,Math.hypot(wx-cx,wy-cy)):0;
+      const shoulder=clamp(originalShoulder-(s.softness-.5)*.6-northWiden*.32*north*north,.12,.90);
       w=1-smooth(shoulder,1,r);
     }
     else if (s.kind==='deep' || s.kind==='shallow') w=1-smooth(.10,1,r);
@@ -538,7 +543,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,cracks:s.cracks}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1238,7 +1243,7 @@ const KNOBS = [
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Level-ground lumps',0,3,.05,1.2],['reliefOctaves','Octaves',1,6,1,5]]],
   ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
-  ['Faces', [['faceVariation','Face width variation (new plateaus)',0,1.5,.05,.8],['rockCrown','Bare rock to the crown',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
+  ['Faces', [['faceVariation','Face width variation (new plateaus)',0,1.5,.05,.8],['northFace','Wider north faces (new plateaus)',0,1,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35],['boulderRound','Roundness',0,1,.05,0]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
