@@ -18,6 +18,7 @@ const HELP = {
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
   offset:'Paint an area to raise or lower by the chosen height. Its edge is natural and its softness sets cliff or slope; the ground keeps its own relief.',
+  erase:'Paint plain ground: hills, water, craters and cracks under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
@@ -39,6 +40,31 @@ const TOOL_PRESETS={
   archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
 const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,400],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
+// Shape options: per-shape settings, shown for the tools they apply to and
+// kept in each shape, so a selected shape can be changed like a new stroke.
+// Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
+// [key, element id, label, kinds, slider min, max, step, slider units per value, help]
+const SHAPE_FIELDS=[
+  ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
+  ['craterEjecta','crater-ejecta','Ejecta',['crater'],0,100,5,100,'Ragged patches of throw-out beyond the rim.'],
+  ['faceVariation','face-variation','Face width variation',['plateau','offset','erase'],0,150,5,100,'How much the edge face widens and narrows along the outline.'],
+  ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
+  ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
+];
+for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
+const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
+// Values a replayed shape uses for options it was drawn without.
+const shapeDefaults=() => Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,worldDefault(key)]));
+const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
+function buildShapeOptions() {
+  const root=$('shape-options');
+  root.replaceChildren(...SHAPE_FIELDS.map(([key,id,label,,lo,hi,step,,help]) => {
+    const wrap=document.createElement('div'); wrap.className='control'; wrap.id=id+'-control';
+    wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"></output></label><input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}"><p class="small">${help}</p>`;
+    return wrap;
+  }));
+  for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+}
 let toolSettings={};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
@@ -66,7 +92,7 @@ function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
 const amountRange=kind => kind==='offset'?[-80,80]:kind==='smooth'?[5,100]:[5,160];
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -86,7 +112,7 @@ function updateControls() {
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
   try {
-  const fixed=['deep','shallow','ramp'].includes(tool);
+  const fixed=['deep','shallow','ramp','erase'].includes(tool);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=tool==='smooth'?'Strength':tool==='lower'?'Lower by':tool==='crater'?'Depth':tool==='offset'?'Height change':'Rise';
   const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
@@ -95,15 +121,16 @@ function updateControls() {
   $('amount-value').textContent=tool==='smooth'?amountNow+'%':tool==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(tool==='lower'?'−':'+')+amountNow;
   $('diameter-value').textContent=$('diameter').value+' units';
   $('roughness-value').textContent=$('roughness').value+'%';
-  $('roughness-label').textContent=tool==='ramp'?'Shoulder freedom':tool==='deep' && NATURAL_COAST?'Coast freedom':tool==='plateau' && experiment.get('edges')==='natural'?'Edge freedom':'Roughness';
+  $('roughness-label').textContent=tool==='ramp'?'Shoulder freedom':tool==='deep' && NATURAL_COAST?'Coast freedom':['plateau','erase'].includes(tool) && experiment.get('edges')==='natural'?'Edge freedom':'Roughness';
   $('shelves-control').hidden=tool!=='deep' || !NATURAL_COAST;
   $('shallow-mode-control').hidden=tool!=='shallow';
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
-  $('softness-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
+  $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase'].includes(tool);
   $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
+  for (const [,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool); $(id+'-value').textContent=scale===1?$(id).value:$(id).value+'%'; }
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
   $('softness-value').textContent=$('softness').value+'%';
@@ -127,7 +154,7 @@ function updateControls() {
   $('export').disabled=!canExport();
   $('fit').setAttribute('aria-pressed',String(fitView)); $('one').setAttribute('aria-pressed',String(!fitView));
   } finally { tool=activeTool; }
-  if (tool==='move') { $('tool-help').textContent=HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp'].includes(nodes[selected]?.kind); }
+  if (tool==='move') { $('tool-help').textContent=HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase'].includes(nodes[selected]?.kind); }
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
@@ -241,7 +268,7 @@ function startStroke(kind,p,options={}) {
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),northFace:options.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0),fingers:options.fingers??(experiment.has('fingers')?Number(experiment.get('fingers')):0),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),fingers:options.fingers??shapeValue('fingers'),faceVariation:options.faceVariation??shapeValue('faceVariation'),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
@@ -304,7 +331,7 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
 }
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
-  const naturalPlateau=(s.kind==='plateau' || s.kind==='offset') && experiment.get('edges')==='natural';
+  const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase') && experiment.get('edges')==='natural';
   const shoulderedHill=s.kind==='hill' && experiment.get('forms')==='shouldered';
   const waterTool=s.kind==='deep' || s.kind==='shallow';
   const bankScale=waterTool?2**((s.bankWidth-.5)*1.3):1;
@@ -324,10 +351,10 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   // URL knobs are read once per dab, never per cell (a lookup per cell was
   // half the cost of moving a lake).
   const coreEdge=experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38;
-  const faceVariation=experiment.has('faceVariation')?Number(experiment.get('faceVariation')):.8;
+  const faceVariation=s.faceVariation??.8;
   const bumpy=['hill','mountain','lower'].includes(s.kind);
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
-  const northWiden=s.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0);
+  const northWiden=s.northFace??0;
   const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
@@ -410,7 +437,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const core=naturalWater?1-smooth(.20,coreEdge,Math.sqrt((wx-cx)**2+(wy-cy)**2)/radius):0;
     if (r>=1 && !core && !shoulderedHill) continue;
     let w;
-    if (s.kind==='plateau' || s.kind==='offset') {
+    if (s.kind==='plateau' || s.kind==='offset' || s.kind==='erase') {
       // Independently vary shoulder width around the level core. An irregular
       // outline with an identical cross-section still makes a uniform rim.
       // Face width varies along the outline at a broad scale too, so a cliff
@@ -455,6 +482,10 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     s.weights[i]=influence; const base=s.base[i]; let value=base;
     if (s.kind==='plateau') value=base+(s.baseline+s.amount+s.rough*3*s.noise.detail[i]-base)*w;
     else if (s.kind==='offset') value=base+s.amount*w;
+    else if (s.kind==='erase') {
+      // Plain ground: back to the dry base, and its cracks close.
+      value=base+(config.baseHeight-base)*w; cracks[i]=s.crackBase[i]*(1-w);
+    }
     else if (s.kind==='hill' || s.kind==='mountain') value=base+s.amount*w*(shoulderedHill?hillLift(s,i):1);
     else if (s.kind==='lower') value=base-s.amount*w;
     else if (s.kind==='deep' || s.kind==='shallow') {
@@ -681,8 +712,8 @@ function markChanged() { markViewChanged(); heightDirty=true; error(); }
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
-const NODE_NAMES={ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,cracks:s.cracks}; }
+const NODE_NAMES={erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,faceVariation:s.faceVariation,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -711,7 +742,7 @@ function applyNode(n) {
 }
 function replayShape(n,work) {
   const pts=n.points,b=nodeBounds(n),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
-  const s=startStroke(n.kind,pts[0],{...n.params,seed:n.seed,frame:n.frame,node:n,work,
+  const s=startStroke(n.kind,pts[0],{...shapeDefaults(),...n.params,seed:n.seed,frame:n.frame,node:n,work,
     rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
   if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
   if (n.kind==='hill' && experiment.get('forms')==='shouldered' && experiment.get('replay')!=='full') {
@@ -777,7 +808,7 @@ function nodeBounds(n) {
   const q=n.params||{},radius=q.radius||40,rough=q.rough??.35,soft=q.softness??.5;
   const bank=['deep','shallow'].includes(n.kind)?2**(((q.bankWidth??.5)-.5)*1.3):1;
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
-  const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
+  const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
   const r=radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110:0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
@@ -873,6 +904,7 @@ function selectNode(i) {
     $('diameter').value=clamp(p.radius*2,40,400); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
     $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage'; $('cracks').value=Math.round((p.cracks||0)*100);
+    for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
   }
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Editing ${NODE_NAMES[n.kind]||n.kind} #${i+1}: sliders change this shape. Draw to start a new one.`);
@@ -882,7 +914,8 @@ function editSelectedFromControls() {
   const before=nodeBounds(n);
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
     softness:Number($('softness').value)/100,bankWidth:Number($('bank-width').value)/100,beachFlatness:Number($('beach-flatness').value)/100,
-    shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100};
+    shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,
+    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)]))};
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
@@ -1088,7 +1121,7 @@ overlay.addEventListener('pointerdown',event => {
       }
       if (!mode) { i=pickNode(p); selectNode(i); mode=event.shiftKey?'height':'move'; }
       if (i>=0 && nodes[i].points) {
-        if (mode==='height' && (!nodes[i].params || ['deep','shallow','ramp'].includes(nodes[i].kind))) mode='move';
+        if (mode==='height' && (!nodes[i].params || ['deep','shallow','ramp','erase'].includes(nodes[i].kind))) mode='move';
         cancelWeather(); moving={index:i,mode,start:p,screen:{...cursor},pivot:nodePivot(nodes[i]),state:nodeState(nodes[i])};
       }
       pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule(); return;
@@ -1156,7 +1189,7 @@ function demoStroke(kind,points,options) {
   // Older reviewed examples keep their authored geometry. New island scenes
   // exercise the biome's default shapes.
   const island=experiment.get('example')==='islands';
-  const probe=startStroke(kind,points[0],{cracks:(experiment.has('hillCracks')?Number(experiment.get('hillCracks')):1)*defaults.cracks/100,bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options});
+  const probe=startStroke(kind,points[0],{...shapeDefaults(),cracks:(experiment.has('hillCracks')?Number(experiment.get('hillCracks')):1)*defaults.cracks/100,bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options});
   addNode({kind,points:points.map(p => ({...p})),params:strokeParams(probe),seed:probe.seed});
 }
 function demoRamp(points,options) {
@@ -1384,7 +1417,7 @@ window.addEventListener('keydown',event => {
   if (selected>=0 && nodes[selected]?.points && (turn || grow || lift) && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
     changeSelected(n => {
-      if (lift) { if (n.params && !['deep','shallow','ramp'].includes(n.kind)) n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; return; }
+      if (lift) { if (n.params && !['deep','shallow','ramp','erase'].includes(n.kind)) n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; return; }
       transformNode(n,nodeState(n),about(nodePivot(n),turn?rotation(turn):scaling(grow)));
     });
   }
@@ -1398,9 +1431,9 @@ window.addEventListener('blur',() => { space=false; cursor=null; schedule(false)
 const KNOBS = [
   ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45]]],
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
-    ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Level-ground lumps',0,3,.05,1.2],['reliefOctaves','Octaves',1,6,1,5]]],
+    ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Level-ground lumps',0,3,.05,1.2],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
-  ['Faces', [['faceVariation','Face width variation (new plateaus)',0,1.5,.05,.8],['northFace','Wider north faces (new plateaus)',0,1,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
+  ['Faces', [['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0]]],
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35],['boulderRound','Roundness',0,1,.05,0]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
@@ -1413,8 +1446,7 @@ const KNOBS = [
     ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWater','Rings in water colour',0,1,.05,0]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6]]],
-  ['Craters', [['craterlets','Craterlets per crater (new craters)',0,12,1,3],['craterEjecta','Ejecta (new craters)',0,1,.05,0],['worms','Wormy relief on slopes',0,1,.05,0]]],
-  ['Water', [['fingers','Finger coasts (new water strokes)',0,1.5,.05,0],['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
@@ -1504,7 +1536,7 @@ function buildKnobs() {
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
   toggle('ground', 'Procedural ground tiles (off: lab texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
   // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
-  const missing = KNOBS.flatMap(([, list]) => list.map(k => k[0])).filter(k => !(k in (config.defaults || {})));
+  const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
   for (const [title, knobs] of KNOBS) {
     const box = group(title, title === 'Cracks');
@@ -1562,6 +1594,7 @@ async function boot() {
     if (worldId!==config.biomeId) document.querySelector('.topbar h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
     $('example').value=['joins','coasts','hills','intersections','islands'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
+    buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);
     $('relief').value=Math.round((config.material?.surfaceRelief??1)*100);
