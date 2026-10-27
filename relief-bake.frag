@@ -265,10 +265,12 @@ vec2 cracks(vec2 p, vec2 fall, float slope, float mask, float h) {
     if (uFissures > 0.0 && bigSlope > 0.0) {
         vec2 big = crackNet(p, fall, uFissureSpacing, uCrackLength * 2.0, clamp(mask, 0.0, 1.0) * bigSlope * min(1.0, uFissures * 1.6), 0.0, uCrackJagged * 0.6, 17.3);
         float wide = halfWidth + 0.35;
-        float bigGroove = max(0.0, 1.0 - max(0.0, big.x - wide * 0.5) / (wide + 0.9)) * big.y;
-        // Shallower on gentle ground, where a deep groove reads as a gash.
-        depth = max(depth, bigGroove * mix(1.5, 5.0, uCrackSeverity) * mix(0.35, 1.0, smoothstep(0.3, 1.0, slope)));
-        core = max(core, (1.0 - smoothstep(wide * 0.6, wide + 0.6, big.x)) * big.y);
+        float bigGroove = max(0.0, 1.0 - max(0.0, big.x - wide * 0.4) / (wide + 0.6)) * big.y;
+        // Shallower, fainter and finer on gentle ground, where a deep dark
+        // groove reads as a gash rather than a crack.
+        float steep = smoothstep(0.3, 1.0, slope);
+        depth = max(depth, bigGroove * mix(1.5, 5.0, uCrackSeverity) * mix(0.35, 1.0, steep));
+        core = max(core, (1.0 - smoothstep(wide * 0.35, wide + 0.25, big.x)) * big.y * mix(0.55, 1.0, steep));
     }
     return vec2(depth, core);
 }
