@@ -222,6 +222,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let occluded = mix(1.0, ao, mix(u.flatOcclusion, 1.0, onSlope));
         shading = min((0.42 + fill + 0.95 * direct * castShadow) / flatLight, u.lightCap) * occluded;
     }
+    // Retail Lava faces stay close to the ground's tone whichever way they
+    // look (luma regressed on the height gradient: ~8 per unit slope east to
+    // west against our 20; measured on four maps), so its world keeps only
+    // part of the directional shading.
+    if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); }
     var grass = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
     var transitionGround = grass;
     var transitionFace = grass;

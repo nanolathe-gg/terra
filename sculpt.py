@@ -26,7 +26,7 @@ KNOB_DEFAULTS = dict(
     groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
-    flatShadow=0, flatOcclusion=.4, lightCap=1.13,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1,
     faceVariation=.8, northFace=.7, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
@@ -83,7 +83,11 @@ WORLD_KNOBS = {
                  # ~2.5 px wide at half depth (measure/lava_bands.py lines
                  # profiles); the thin 1.6 px V at 0.75 darkness read as faint
                  # grain on the ground's palette noise.
-                 bandWidth=2.6, crackDark=.95),
+                 bandWidth=2.6, crackDark=.95,
+                 # Faces keep near the ground's tone: luma on the height
+                 # gradient is ~6-8.5 per unit slope east to west on four
+                 # retail maps, ours 20 at full shading, 9 at 0.4.
+                 shadeDepth=.4),
     # Crystal: dead-level violet ground (the flat sections sit at one height
     # or within 82-87), crater walls and rough ridges crazed by a near-black
     # polygonal crack web, plates rather than rills by eye, and no sand or

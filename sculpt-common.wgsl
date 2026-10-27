@@ -111,6 +111,7 @@ struct Uniforms {
     faceEdge: f32,
     mossFromGround: f32,
     lightCap: f32,
+    shadeDepth: f32,      // share of the directional shading kept (1: all)
     footRim: f32,
     crevice: f32,
     dither: f32,
