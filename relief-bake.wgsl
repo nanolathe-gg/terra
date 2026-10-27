@@ -1,0 +1,551 @@
+// WGSL port of the former relief-bake.frag. The renderer builds this module
+// with BAKE defined. See sculpt-common.wgsl for naming: uniform uFoo is u.foo.
+/*COMMON*/
+// Fall-line relief, baked once per height change at one texel per world
+// pixel. Authored appearance detail: it is lit, never exported as height.
+//
+// Each octave sums oriented cosine kernels from jittered cell points. The
+// kernels' wavefronts run down the local fall line, so the sum forms ribs
+// and gullies that follow the slope. Later octaves turn toward the gullies
+// of earlier ones, so channels branch. The kernel construction follows the
+// public "eroded terrain noise" shader technique (clayjohn; Fewes); the
+// scales and gains here are this prototype's own choices.
+//
+// Its uniforms (u.reliefScale ... u.crackMajor) are listed, with their
+// meanings, in the bake section of the Uniforms struct.
+
+const TAU = 6.28318530718;
+
+fn cellHash(c: vec2f) -> vec2f {
+    let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
+    return fract(sin(q) * 43758.5453);
+}
+
+// Returns (value, d/dx, d/dy) in the octave's own coordinates.
+fn gullies(q: vec2f, dir: vec2f) -> vec3f {
+    let cell = floor(q);
+    let local = fract(q);
+    var sum = vec3f(0.0);
+    var weight = 0.0;
+    for (var j = -2; j <= 1; j++) {
+        for (var i = -2; i <= 1; i++) {
+            let o = vec2f(f32(i), f32(j));
+            let jitter = cellHash(cell - o);
+            let point = local + o - jitter * 0.5;
+            let w = exp(-dot(point, point) * 2.0);
+            // A random phase and wavelength per kernel keep ribs on a straight
+            // face from settling into evenly spaced teeth.
+            let extra = cellHash(cell - o + 91.7);
+            let freq = TAU * mix(1.0, 0.6 + 0.9 * extra.x, u.reliefJitter);
+            let phase = dot(point, dir) * freq + extra.y * TAU * u.reliefJitter;
+            sum += vec3f(cos(phase), -sin(phase) * dir * freq) * w;
+            weight += w;
+        }
+    }
+    return sum / weight;
+}
+
+fn valueNoise(q: vec2f) -> f32 {
+    let c = floor(q);
+    let f = fract(q);
+    let fade = f * f * (3.0 - 2.0 * f);   // GLSL: u
+    let a = cellHash(c).x;
+    let b = cellHash(c + vec2f(1.0, 0.0)).x;
+    let d = cellHash(c + vec2f(0.0, 1.0)).x;
+    let e = cellHash(c + vec2f(1.0, 1.0)).x;
+    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+
+// Height of the tallest boulder at p (0 if none) and its rock coverage.
+fn boulders(p: vec2f, slope: f32, h: f32) -> vec2f {
+    if (u.boulderDensity <= 0.0) { return vec2f(0.0); }
+    let cellSize = u.boulderSize * 1.6;
+    let cell = floor(p / cellSize);
+    var best = 0.0;
+    var cover = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let c = cell + vec2f(f32(i), f32(j));
+            let r1 = cellHash(c + 31.7);
+            let r2 = cellHash(c + 77.1);
+            let centre = (c + 0.2 + 0.6 * r1) * cellSize;
+            // Where boulders come from: anywhere on sloped ground, or gathered
+            // at cliff feet where the weathering pass found talus support.
+            let talus = textureSampleLevel(weatherTex, linearClamp, centre / (u.size - 1.0), 0.0).b;
+            let slopeAt = length(broadGradient(centre));
+            let scattered = smoothstep(0.15, 0.7, slopeAt) * (1.0 - smoothstep(1.6, 2.6, slopeAt));
+            var up = vec2f(0.0);
+            if (slopeAt > 1e-4) { up = -broadGradient(centre) / slopeAt; }
+            let cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(centre - up * 14.0)));
+            let foot = max(smoothstep(0.02, 0.25, talus), cliffAbove * (1.0 - smoothstep(0.5, 1.0, slopeAt)));
+            let source = mix(scattered, foot, u.boulderFoot);
+            let field = smoothstep(0.35, 0.75, valueNoise(centre / 120.0 + 9.0) * 0.5 + 0.5);
+            let chance = u.boulderDensity * source * mix(1.0, field * 2.0, u.boulderCluster);
+            if (r2.x > chance) { continue; }
+            if (routeProtection(centre) > 0.05 || baseHeight(centre) < u.sea + 1.0) { continue; }
+            // Many small stones and few large ones.
+            let radius = u.boulderSize * (0.18 + 0.82 * r2.y * r2.y * r2.y);
+            // Angular outline: the largest of three rotated plane distances.
+            var q = p - centre;
+            let a = r1.x * 6.2831;
+            let rot = mat2x2f(cos(a), -sin(a), sin(a), cos(a));
+            q = rot * q;
+            let edge = mix(max(max(abs(q.x) * 0.9, abs(q.y)), abs(q.x * 0.6 + q.y * 0.8)), length(q * vec2f(1.0, 1.15)), u.boulderRound) / radius;
+            let lift = max(0.0, 1.0 - edge * edge);
+            // Partly buried: the ground cuts each stone below its widest point.
+            let buried = mix(0.15, 0.55, fract(r1.x * 7.31));
+            let height = max(0.0, sqrt(lift) - buried) / (1.0 - buried) * radius * (0.55 + 0.35 * r1.y);
+            if (height > best) { best = height; cover = smoothstep(0.0, 0.25, height / max(radius, 1.0)) * select(1.0, 0.55, fract(r2.x * 13.7) < u.boulderMoss); }
+        }
+    }
+    return vec2f(best, cover);
+}
+
+// Debris arriving at p: walk uphill along steepest ascent and gather what
+// steep ground above sheds. Returns (amount, mean travelled fraction).
+fn debrisArrival(p: vec2f, slope: f32) -> vec2f {
+    if (u.debris <= 0.0) { return vec2f(0.0); }
+    let rest = 1.0 - smoothstep(u.repose * 0.7, u.repose * 1.3, slope);
+    var q = p;
+    var amount = 0.0;
+    var travelled = 0.0;
+    var weight = 0.0;
+    const STEPS = 14;
+    let stride = u.debrisReach / f32(STEPS);   // GLSL: step
+    var dir = vec2f(0.0);
+    for (var i = 1; i <= STEPS; i++) {
+        // Level ground below a face has no local gradient: look wider, then
+        // keep the last direction, so debris can reach the plain.
+        var g = broadGradient(q);
+        if (length(g) < 0.05) {
+            const e = 18.0;
+            g = vec2f(baseHeight(q + vec2f(e, 0.0)) - baseHeight(q - vec2f(e, 0.0)),
+                      baseHeight(q + vec2f(0.0, e)) - baseHeight(q - vec2f(0.0, e))) / (2.0 * e);
+        }
+        if (length(g) > 0.01) { dir = normalize(g); }
+        if (dot(dir, dir) < 0.5) { break; }
+        q += dir * stride;
+        let d = f32(i) * stride;
+        let shed = smoothstep(0.9, 1.7, length(broadGradient(q))) * (1.0 - routeProtection(q));
+        let w = shed * (1.0 - d / u.debrisReach);
+        amount += w;
+        travelled += w * d / u.debrisReach;
+        weight += w;
+    }
+    var mean = 1.0;
+    if (weight > 0.0) { mean = travelled / weight; }
+    return vec2f(amount / f32(STEPS) * 3.0 * rest, mean);
+}
+
+fn debrisStones(p: vec2f, arrival: vec2f) -> vec2f {
+    // Stones on a fine cell grid; presence from arrivals, size from distance.
+    let cellSize = max(3.0, u.debrisSize * 0.9);
+    let cell = floor(p / cellSize);
+    var best = 0.0;
+    var cover = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let c = cell + vec2f(f32(i), f32(j));
+            let r1 = cellHash(c + 5.3);
+            let r2 = cellHash(c + 61.9);
+            let centre = (c + 0.15 + 0.7 * r1) * cellSize;
+            let here = debrisArrival(centre, length(broadGradient(centre)));
+            if (r2.x > clamp(here.x * u.debris, 0.0, 0.95)) { continue; }
+            if (baseHeight(centre) < u.sea + 1.0) { continue; }
+            let sizeAt = mix(1.0, 1.0 - 0.75 * here.y, u.debrisSort);
+            let radius = u.debrisSize * 0.5 * sizeAt * (0.5 + 0.5 * r2.y);
+            var q = p - centre;
+            let a = r1.y * 6.2831;
+            q = mat2x2f(cos(a), -sin(a), sin(a), cos(a)) * q;
+            let edge = max(max(abs(q.x), abs(q.y) * 1.15), abs(q.x * 0.7 - q.y * 0.7)) / max(radius, 0.5);
+            let lift = max(0.0, 1.0 - edge);
+            let height = lift * radius * 0.7;
+            if (height > best) { best = height; cover = smoothstep(0.0, 0.3, lift); }
+        }
+    }
+    return vec2f(best, cover);
+}
+
+// Cracks, as a fractured surface rather than lines drawn on it. Three
+// nested cellular networks, as retail rock and Gaea's eroded surfaces show:
+//  - major cracks bound blocks; cells stretch down the fall line, so most
+//    run down the slope, and on gentle ground only these reach;
+//  - minor cracks split each block. Their lattice is turned and shifted per
+//    block, so they end against the block's major cracks (T-junctions)
+//    instead of crossing them;
+//  - hairline crazing splits each minor block the same way.
+// Blocks step and tilt a little against each other on rocky ground, which
+// gives the surface its depth. A crack's core is dark; the wall facing the
+// sun is lit and the other is in shadow.
+fn turn(a: f32) -> mat2x2f { let c = cos(a); let s = sin(a); return mat2x2f(c, s, -s, c); }
+
+struct Crack { id: vec2f, point: vec2f, dist: f32, normal: vec2f, open: f32 }
+
+// One level. q is the level's own domain (world px, perhaps turned per
+// parent block); fall is the local fall line in that domain. Cells stretch
+// along it. Finds the nearest cell, then the nearest *open* edge of that
+// cell: its distance (world px), outward normal and openness. Each edge (a
+// pair of cells) is open or not by its own hash against the share; edges
+// across the slope stay closed unless network is high.
+fn fractureLevel(q: vec2f, fall: vec2f, cell: f32, stretch: f32, share: f32, network: f32, salt: f32) -> Crack {
+    var r: Crack;
+    r.dist = 1e9; r.open = 0.0; r.normal = vec2f(0.0);
+    let across = vec2f(-fall.y, fall.x);
+    let g = floor(q / cell);
+    let reach = i32(ceil(stretch)) + 1;
+    var best = 1e9;
+    for (var j = -4; j <= 4; j++) {
+        for (var i = -4; i <= 4; i++) {
+            if (abs(i) > reach || abs(j) > reach) { continue; }
+            let c = g + vec2f(f32(i), f32(j));
+            let point = (c + 0.1 + 0.8 * cellHash(c + salt)) * cell;
+            let d = point - q;
+            let m = vec2f(dot(d, fall) / stretch, dot(d, across));
+            let dist = dot(m, m);
+            if (dist < best) { best = dist; r.id = c; r.point = point; }
+        }
+    }
+    if (share <= 0.0) { return r; }
+    let ma = vec2f(dot(r.point - q, fall) / stretch, dot(r.point - q, across));
+    for (var j = -4; j <= 4; j++) {
+        for (var i = -4; i <= 4; i++) {
+            if (abs(i) > reach || abs(j) > reach) { continue; }
+            let c = g + vec2f(f32(i), f32(j));
+            if (all(c == r.id)) { continue; }
+            let point = (c + 0.1 + 0.8 * cellHash(c + salt)) * cell;
+            let mb = vec2f(dot(point - q, fall) / stretch, dot(point - q, across));
+            var n = mb - ma;
+            let len = length(n);
+            if (len < 1e-4) { continue; }
+            n /= len;
+            // The bisector seen in the world: normal (n.x / stretch, n.y) in the
+            // (fall, across) basis; the pixel sits at the origin.
+            let seen = vec2f(n.x / stretch, n.y);
+            let d = dot(0.5 * (ma + mb), n) / length(seen);
+            if (d > r.dist) { continue; }
+            let worldNormal = normalize(fall * seen.x + across * seen.y);
+            let acrossSlope = abs(dot(worldNormal, fall));
+            let keep = 1.0 - smoothstep(mix(0.45, 1.05, network), mix(0.65, 1.25, network), acrossSlope);
+            let lo = min(r.id, c);
+            let hi = max(r.id, c);
+            let ticket = cellHash(lo * 1.31 + hi * 7.77 + salt + 0.5).x;
+            let open = keep * smoothstep(ticket - 0.06, ticket + 0.06, share);
+            if (open <= 0.01) { continue; }
+            r.dist = d; r.open = open; r.normal = worldNormal;
+        }
+    }
+    return r;
+}
+
+// Crack shading at a pixel from one level: (dark, lit). The core is dark;
+// just outside it, the wall on this side is lit if it faces the sun, else
+// in shadow. Width in world px.
+fn crackShade(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
+    if (c.open <= 0.0) { return vec2f(0.0); }
+    let half_ = width * 0.5;
+    let core = 1.0 - smoothstep(half_ - 0.45, half_ + 0.45, c.dist);
+    let side = (smoothstep(half_ - 0.3, half_ + 0.3, c.dist) - smoothstep(half_ + 0.7, half_ + 1.5, c.dist)) * wall;
+    // This pixel's wall descends toward the crack, along +normal.
+    let facing = dot(c.normal, sun);
+    let lit = side * smoothstep(0.1, 0.6, facing);
+    let shadow = side * smoothstep(0.1, 0.6, -facing) * 0.7;
+    return vec2f(max(core, shadow), lit) * c.open;
+}
+
+// Returns (carved depth, dark, lit, block relief).
+fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32) -> vec4f {
+    if (u.cracksOn == 0 || mask <= 0.0 || u.crackSeverity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
+    let start = mix(0.95, 0.10, u.crackReach);
+    // Rocky ground takes the whole hierarchy; gentle ground only majors.
+    let rocky = smoothstep(start, start * 1.9, slope);
+    let gentle = smoothstep(start * 0.35, start * 1.1, slope);
+    if (gentle <= 0.0) { return vec4f(0.0); }
+    let sun = normalize(u.sun.xy);
+    let major = u.crackSpacing;
+    let minorCell = major / 3.2;
+    let hairCell = max(3.0, major / 9.0);
+    // Shared warp: every level bends with the rock.
+    let w = p + u.crackJagged * major * (0.30 * vec2f(valueNoise(p / (major * 1.3) + 1.7), valueNoise(p / (major * 1.3) + 20.8))
+                                       + 0.07 * vec2f(valueNoise(p / (major * 0.16) + 5.0), valueNoise(p / (major * 0.16) + 9.4)));
+    // The shape's Cracks amount sets how cracked it is; the knobs set the
+    // share of each level at full strength.
+    let m = smoothstep(0.0, 0.5, clamp(mask, 0.0, 1.0));
+    let c0 = fractureLevel(w, fall, major, u.crackLength, m * gentle * u.crackMajor, u.crackNetwork, 3.7);
+    // Minor lattice turned and shifted per major block.
+    let h0 = cellHash(c0.id + 11.1);
+    let r0 = turn(h0.x * TAU);
+    let q1 = r0 * w + h0 * minorCell * 7.0 + u.crackJagged * minorCell * 0.25 * vec2f(valueNoise(p / (minorCell * 0.5) + 2.2), valueNoise(p / (minorCell * 0.5) + 6.6));
+    // Minor cracks also break gentle slopes, more sparsely (retail hill
+    // slopes carry short cracks every 10 px or so).
+    var c1 = fractureLevel(q1, r0 * fall, minorCell, 1.0 + (u.crackLength - 1.0) * 0.4, m * mix(0.5, 1.0, rocky) * gentle * u.crackMinor, 1.0, 9.1);
+    c1.normal = transpose(r0) * c1.normal;
+    let h1 = cellHash(c1.id + c0.id * 0.37 + 23.3);
+    let r1 = turn(h1.x * TAU);
+    let q2 = r1 * q1 + h1 * hairCell * 5.0;
+    var c2 = fractureLevel(q2, r1 * r0 * fall, hairCell, 1.0, m * mix(0.4, 1.0, rocky) * gentle * u.crackHairline, 1.0, 21.7);
+    c2.normal = transpose(r1 * r0) * c2.normal;
+    // Shading: majors widest, hairlines a single soft dark pixel.
+    let width = u.crackWidth;
+    let s0 = crackShade(c0, width * 1.25 * mix(0.6, 1.0, rocky), sun, 1.0);
+    let s1 = crackShade(c1, width * 0.9 * mix(0.8, 1.0, rocky), sun, 0.8);
+    let s2 = crackShade(c2, width * 0.55, sun, 0.0) * vec2f(0.6, 0.0);
+    let dark = max(s0.x, max(s1.x, s2.x));
+    let lit = max(s0.y, s1.y) * (1.0 - dark);
+    // A modest V for majors and minors, so the cracks also shade at scale.
+    let carve = c0.open * max(0.0, 1.0 - c0.dist / (width * 0.6 + 1.2)) * mix(0.8, 3.0, u.crackSeverity) * mix(0.5, 1.0, rocky)
+              + c1.open * max(0.0, 1.0 - c1.dist / (width * 0.45 + 0.9)) * mix(0.4, 1.5, u.crackSeverity);
+    // Blocks step and tilt against each other on rocky ground.
+    let b0 = cellHash(c0.id + 5.5) - 0.5;
+    let t0 = cellHash(c0.id + 8.8) - 0.5;
+    let b1 = cellHash(c1.id + c0.id + 2.9) - 0.5;
+    let t1 = cellHash(c1.id + c0.id + 4.4) - 0.5;
+    // Each block is a tilted plane, as retail rock's lit angular facets
+    // are: majors step and lean a little, minors tilt more (tilts are in
+    // slope units, so each facet catches the light differently).
+    // Tilts are measured in each level's own domain (the minor lattice is
+    // turned and shifted), from the block's own point.
+    var blocks = b0.x * mix(1.0, 3.0, u.crackSeverity) + dot(t0, w - c0.point) * 0.25
+               + (b1.x * mix(0.6, 1.6, u.crackSeverity) + dot(t1, q1 - c1.point) * 0.9) * step(0.01, u.crackMinor);
+    // Like the relief, block steps grow with the slope.
+    blocks *= u.crackBlocks * rocky * m;
+    return vec4f(carve, dark, lit, blocks);
+}
+
+// Beach: dry ground within reach of the water, as the world's coast
+// sections show (Zhon: sand runs ~180 px inland). The reach varies along the
+// coast and its inland edge is ragged. Distance to water is found by
+// marching outward in 16 directions.
+fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
+    if ((u.beachDistance <= 0.0 && u.apron <= 0.0) || h <= u.sea) { return 0.0; }
+    let vary = 0.45 + 0.9 * (valueNoise(p / 90.0 + 31.0) * 0.5 + 0.5);
+    let reach = u.beachDistance * vary;
+    let apron = u.apron * vary;
+    let far = max(reach, apron) * 1.15;
+    var nearWater = 1e9;
+    var nearRise = 1e9;
+    for (var k = 0; k < 16; k++) {
+        let a = f32(k) * 0.3926991 + 0.2;
+        let dir = vec2f(cos(a), sin(a));
+        for (var r = 1; r <= 8; r++) {
+            let d = far * f32(r) / 8.0;
+            if (d >= min(nearWater, nearRise)) { break; }
+            let there = baseHeight(p + dir * d);
+            let water = there < u.sea && d <= reach * 1.15;
+            // A sand apron gathers round raised rock (Zhon's domes).
+            let rise = there > h + 6.0 && d <= apron * 1.15;
+            if (!water && !rise) { continue; }
+            // Refine the crossing between this step and the last, so the
+            // band's edge is smooth rather than notched by the step.
+            var lo = far * f32(r - 1) / 8.0;
+            var hi = d;
+            for (var b = 0; b < 4; b++) {
+                let mid = 0.5 * (lo + hi);
+                let t = baseHeight(p + dir * mid);
+                if (select(t > h + 6.0, t < u.sea, water)) { hi = mid; } else { lo = mid; }
+            }
+            if (water) { nearWater = hi; } else { nearRise = hi; }
+            break;
+        }
+    }
+    let jitter = (valueNoise(p / 9.0 + 17.0) * 0.5);
+    var beach = 0.0;
+    if (u.beachDistance > 0.0) { beach = 1.0 - smoothstep(reach * 0.88, reach, nearWater + jitter * reach * 0.12); }
+    var sandApron = 0.0;
+    if (u.apron > 0.0) { sandApron = 1.0 - smoothstep(apron * 0.8, apron, nearRise + jitter * apron * 0.2); }
+    return max(beach, sandApron) * (1.0 - smoothstep(0.9, 1.5, slope));
+}
+
+// Contour bands, as in retail maps rendered from height-banded terrain:
+// the ground steps in shallow terraces of uBandSpacing height units, so thin
+// wavy lines follow the contours (measured on retail Green: median step 3.7,
+// lines 10-20 px apart on gentle slopes, tight rings round lakes). Each
+// riser carries a thin dark line; the lines wander and break into dashes.
+// Returns (height offset, line strength, facing: +1 lit riser, -1 shaded).
+// Retail lines are tonal steps, not drawn lines: a riser facing the sun is
+// a light line and one facing away a dark one; they are jagged at pixel
+// scale, broken into dashes, and mostly on gentle slopes (blind round 7).
+fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
+    if (u.banding <= 0.0 || h < u.sea + 0.5) { return vec3f(0.0); }
+    let gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(0.35, 0.75, slope));
+    if (gate <= 0.0) { return vec3f(0.0); }
+    let S = u.bandSpacing;
+    let uu = (h + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
+                + valueNoise(p / 3.3 + 19.0) * S * 0.06 * min(1.0, 0.3 / max(slope, 0.05))) / S;   // GLSL: u
+    let v = fract(uu);
+    let w = clamp(u.bandSoftness, 0.05, 1.0);
+    let offset = S * (floor(uu) + smoothstep(1.0 - w, 1.0, v)) - uu * S;
+    let dash = smoothstep(-0.55, 0.05, valueNoise(p / 22.0 + 51.0)) * smoothstep(-0.7, -0.1, valueNoise(p / 6.0 + 33.0))
+             * (0.55 + 0.45 * (valueNoise(p / 70.0 + 9.0) * 0.5 + 0.5));
+    let strength = u.banding * gate * dash;
+    // Distance from the riser's middle, in world px along the slope.
+    let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.02);
+    let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
+    // The riser leans downhill (-fall): lit if that faces the sun.
+    let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
+    return vec3f(offset * strength, line, facing);
+}
+
+// Sand streaks, as on Zhon's sandy slopes and ramps: fine continuous lines
+// along the contours, a few px apart, curving with the ground (retail ramp
+// sections). Tonal only: a dark line, deeper where the slope faces away
+// from the sun. Returns (line strength, facing).
+fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2f {
+    let gate = smoothstep(0.03, 0.10, slope) * (1.0 - smoothstep(0.8, 1.4, slope));
+    if (gate <= 0.0 || strength <= 0.0) { return vec2f(0.0); }
+    let S = max(u.sandBandSpacing, 0.2);
+    let uu = (h + valueNoise(p / 55.0 + 3.0) * S * 2.2 + valueNoise(p / 14.0 + 11.0) * S * 0.45) / S;   // GLSL: u
+    let v = fract(uu);
+    let px = min(v, 1.0 - v) * S / max(slope, 0.02);
+    let line = (1.0 - smoothstep(0.35, 1.2, px)) * strength * gate
+             * (0.7 + 0.3 * smoothstep(-0.6, 0.2, valueNoise(p / 15.0 + 61.0)));
+    return vec2f(line, dot(-fall, normalize(u.sun.xy + 1e-6)));
+}
+
+// Sandiness from the weathering worker's transport (wind and water): 0
+// none, small values a dusting, 1 deep sand. Thin sand lies in hollows
+// first while ribs and lumps of the relief poke through it; deep sand
+// covers both. Steep faces shed it.
+fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
+    if (u.sand <= 0.0) { return 0.0; }
+    let field = textureSampleLevel(weatherTex, linearClamp, p / (u.size - 1.0), 0.0).a;
+    if (field <= 0.0) { return 0.0; }
+    let lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
+    let thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
+    return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
+}
+
+// One full-screen triangle over the world-resolution fields texture.
+@vertex
+fn fullScreen(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+    let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+    return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn bakeMain(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
+    // Texel (x, y) of the fields is world pixel (x, y), as in GLSL.
+    let p = fragCoord.xy - 0.5;
+    let h = baseHeight(p);
+    let g = broadGradient(p);
+    let slope = length(g);
+    // Only a route's graded surface stays smooth; its steep shoulders are
+    // ordinary faces and take relief like any other (no smooth dark band).
+    let route = routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p))));
+    let crackMask = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).g;
+    // Retail level ground is not dead flat in the art: faint embossed lumps
+    // at 10-30 px. Appearance only; exported heights stay level.
+    var plain = 0.0;
+    if (u.plainRelief > 0.0 && h > u.sea + 1.0) {
+        plain = (valueNoise(p / 13.0 + 41.0) * 0.6 + valueNoise(p / 29.0 + 7.0) * 0.4) * u.plainRelief * 1.6
+              * (1.0 - smoothstep(0.1, 0.4, slope));
+    }
+    // Level crests and graded routes stay smooth; relief grows with slope.
+    // Gentle slopes carry low lumps too, so ground turned from the sun is
+    // textured rather than a smooth gradient; level ground stays level.
+    let gain = max(smoothstep(0.08, 0.60, slope), u.gentleRelief * smoothstep(0.015, 0.10, slope))
+             * smoothstep(-12.0, 10.0, h) * (1.0 - route);
+    var fall = vec2f(0.0, 1.0);
+    if (slope > 1e-5) { fall = g / slope; }
+
+    var acc = vec3f(0.0);
+    var amplitude = 1.0;
+    var frequency = 1.0 / u.reliefScale;
+    var total = 0.0;
+    var firstOctave = 0.0;
+    for (var k = 0; k < 6; k++) {
+        if (k >= u.reliefOctaves) { break; }
+        // Contour direction, bent toward the accumulated gullies.
+        let steer = fall + acc.yz * u.reliefBranch;
+        var dir = vec2f(steer.y, -steer.x);
+        let len = length(dir);
+        dir = select(vec2f(1.0, 0.0), dir / len, len > 1e-5);
+        // Domain warp varies rib spacing and width so faces are not combed.
+        let warp = vec2f(valueNoise(p / 48.0 + f32(k) * 3.7), valueNoise(p / 48.0 + 11.3 + f32(k) * 3.7)) * u.reliefWarp;
+        let q = (p + warp) * frequency + vec2f(f32(k) * 17.31, f32(k) * 9.13);
+        var e = gullies(q, dir);
+        // Lumps keep faces from reading as combed stripes.
+        let lump = valueNoise(q * 1.7 + 3.1);
+        e.x = mix(e.x, lump, u.reliefLumps);
+        acc += vec3f(e.x, e.yz * frequency) * amplitude;
+        if (k == 0) { firstOctave = e.x; }
+        total += amplitude;
+        amplitude *= u.reliefGain;
+        frequency *= 2.0;
+    }
+    let value = acc.x / max(total, 1e-5);
+    // Steeper ground carries proportionally taller ribs.
+    let patchy = mix(1.0, 0.35 + 1.3 * (valueNoise(p / 90.0 + 5.0) * 0.5 + 0.5), u.reliefPatchy);
+    // Height scales with slope, with a floor so gentle lumps are visible.
+    var height = value * u.reliefAmount * max(clamp(slope, 0.0, 2.5), 0.25 * u.gentleRelief) * u.reliefScale * gain * patchy;
+    height += plain;
+    // Lunar regolith: fine wormy ridges on any slope, fading onto the
+    // level dust, as on the retail Moon sections.
+    var wormDark = 0.0;
+    if (u.worms > 0.0 && h > u.sea) {
+        let q = p + 6.0 * vec2f(valueNoise(p / 17.0 + 3.0), valueNoise(p / 17.0 + 8.0));
+        let worm = 1.0 - abs(valueNoise(q / 4.6 + 11.0));
+        let worm2 = 1.0 - abs(valueNoise(q / 2.4 + 23.0));
+        let on = smoothstep(0.03, 0.2, slope) * (0.55 + 0.45 * smoothstep(0.2, 0.8, slope));
+        let ridge = pow(worm, 5.0) * 4.0 + pow(worm2, 5.0) * 1.6;
+        height += ridge * u.worms * on * (0.6 + 0.4 * min(slope, 2.0));
+        // The squiggles read as dark lines in the art: shade their troughs.
+        wormDark = smoothstep(0.82, 0.97, max(worm, worm2 * 0.97)) * u.worms * on * 0.85;
+    }
+    let bandsAt = contourBands(p, h, slope, fall);
+    let bands = bandsAt.xy * (1.0 - route);
+    height += bands.x;
+    let bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
+    let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
+    var sand = sandCover(p, slope, height) * (1.0 - route);
+    // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
+    // so a hill set in sand has sandy feet; steep faces still shed it.
+    // Ground cover clears weathered and painted sand alike.
+    let paint = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
+    let paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
+    let paintSand = smoothstep(0.30, 0.70, paint.b + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope)) * (1.0 - route);
+    let paintGround = smoothstep(0.30, 0.70, paint.a + paintEdge);
+    if (u.hasBeach == 0) { sand = max(sand, paintSand); }
+    sand *= 1.0 - paintGround;
+    // Only sand deep enough to cover the ground buries relief and stones.
+    let buried = smoothstep(0.35, 0.9, sand);
+    if (sand > 0.0 && u.ripple > 0.0) {
+        let a = radians(u.windAngle);
+        let wind = vec2f(cos(a), sin(a));
+        let wobble = valueNoise(p / 30.0 + 2.0) * 2.0;
+        height += sin(dot(p, wind) * 6.2831 / u.ripple + wobble) * u.rippleHeight * smoothstep(0.5, 0.95, sand);
+    }
+    // Sand buries relief beneath it.
+    height *= 1.0 - 0.8 * buried;
+    // Cracks, carved into the relief; sand fills them.
+    var crackAt = cracks(p, fall, slope, crackMask * (1.0 - route), h) * (1.0 - buried);
+    // Where rock is broken into blocks, the blocks replace part of the
+    // fall-line ribs, so faces read as fractured rock rather than combed.
+    var broken = 0.0;
+    if (u.cracksOn == 1) { broken = smoothstep(0.0, 0.5, crackMask) * u.crackBlocks * smoothstep(0.5, 1.2, slope) * (1.0 - route); }
+    height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
+    // Relief never carries dry ground below the water plane: it would cut
+    // blob-shaped notches into the coast. Nor lifts the bed above it.
+    if (h > u.sea) { height = max(height, u.sea + 0.5 - h); }
+    else { height = min(height, u.sea - 0.5 - h); }
+    var rock = boulders(p, slope, h);
+    let scree = debrisStones(p, vec2f(0.0));
+    if (scree.x > rock.x) { rock = scree; }
+    height += rock.x;
+    rock.y *= 1.0 - buried;
+    // Blue holds crack darkness (negative), rock cover (0..1), or a lit
+    // crack wall (1 + light).
+    // Band lines share the crack darkness code.
+    var lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
+    if (u.sandBanding > 0.0) {
+        let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand, smoothstep(0.3, 0.8, sand)), route * 0.6));
+        lineDark = max(lineDark, streak.x * (0.55 + 0.45 * smoothstep(-0.3, 0.4, -streak.y)));
+    }
+    crackAt.z = max(crackAt.z, bandLit * (1.0 - buried));
+    var crackCode = rock.y;
+    if (lineDark > 0.02) { crackCode = -lineDark; } else if (crackAt.z > 0.02) { crackCode = 1.0 + crackAt.z; }
+    // Green holds route protection, or (negative) beach cover off routes.
+    var beach = beachCover(p, h, slope);
+    if (u.hasBeach != 0) { beach = max(beach, paintSand); }
+    beach *= 1.0 - paintGround;
+    return vec4f(height, select(-beach, route, route > 0.01 || beach <= 0.0), crackCode, sand);
+}
