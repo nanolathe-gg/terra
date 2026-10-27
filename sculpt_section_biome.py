@@ -132,6 +132,79 @@ RECIPES = {
                   'flat_ramp': [0, 10]},
         'seed': 7716203,
     },
+    # Crystal (ta-archive section pack TASect_Crystal; Cavedog-style names,
+    # land at 85 in every file name). One violet ground streaked
+    # on the diagonal (flats/flat1_85, every cell at 85; flat2-4 repeat its
+    # art with scattered shards and 82-87 micro-relief), a navy sea on cells
+    # at 0, and a blue-violet shelf of crystal rubble below the waterline.
+    # Hills and islands are mounds tiled with flat-topped polygonal columns
+    # outlined in near-black; craters and roughs are the same violet ground
+    # crazed by a dark crack web.
+    'crystal': {
+        'name': 'Crystal',
+        'root': SCRATCH / 'sections-crystal/TASect_Crystal/sections/crystal',
+        'ground_kinds': ['flats', 'coasts', 'craters', 'roughs', 'hills'],
+        'ground_reference': 'flats/flat1_85',
+        # Slope from the crack-webbed crater walls, rough ridges and coast
+        # banks; rock from the column faces of hills and islands.
+        'slope_kinds': ['craters', 'roughs', 'coasts'],
+        'rock_kinds': ['hills', 'islands'],
+        'slope_gradient': [2, 8], 'rock_gradient': 8,
+        'slope_colour': None, 'rock_colour': 'dark', 'rock_fill': .75, 'rock_band': [.2, .8],
+        'level_spread': 5, 'level_gradient': 3,
+        # Islands are left out of the water kinds: their column flanks run
+        # down to the cells at 0 and would count as water below the shore.
+        'water': {'kinds': ['coasts', 'ponds', 'reefs'], 'deep_reference': 'islands/water512_85',
+                  # The colour heuristic finds no clean shoreline here (the
+                  # shaded banks share the shelf's dark violets, so water
+                  # colour stays near half from 69 to 79). Every retail
+                  # Crystal map (brilliant cut lake, crystal cracked, crystal
+                  # isles, crystal maze) sets sea level 65 over land at 85,
+                  # and the shelf's blue lean (blue minus red, 31-38 against
+                  # the land's 18) ends between 60 and 70 in the coast
+                  # sections (measured).
+                  'sea': 65, 'sea_source': 'retail Crystal OTA sea level, 4 of 4 maps',
+                  # The ramp's half-way depths lie on the steep outer bank,
+                  # where [.4, .6] holds 11 whole patches; [.3, .7] holds 76.
+                  'mid_curve': [.3, .7],
+                  # The shelf below the waterline is crystal rubble, not a
+                  # level beach above it.
+                  'beach_reference': None, 'flat_ramp': [0, 10]},
+        'seed': 4401877,
+    },
+    # Ice (ta-archive section pack TASect_Ice). Pale blue snow on level
+    # cells at 85 (flats/0-1) and a second plateau at 170 (flats/5-6),
+    # a saturated royal-blue sea on cells at 0 (flats/2-4), and between
+    # them a broken pack-ice shelf at ~45-60 crossed by straight pressure
+    # ridges. The cliffs kind is the 85-to-170 step drawn as a crevasse
+    # line; hills are rounded snow mounds with dark slate shaded faces.
+    'ice': {
+        'name': 'Ice',
+        'root': SCRATCH / 'sections-ice/TASect_Ice/sections/ice',
+        'ground_kinds': ['flats', 'shores', 'cliffs', 'hills', 'pools'],
+        'ground_reference': 'flats/1',
+        'slope_kinds': ['hills', 'pools', 'islands', 'cliffs'],
+        'rock_kinds': ['hills', 'cliffs', 'pools'],
+        'slope_gradient': [3, 8], 'rock_gradient': 8,
+        'slope_colour': None, 'rock_colour': 'dark', 'rock_fill': .75, 'rock_band': [.2, .8],
+        # The shoreline is measured from the art (65: white floes give way
+        # to blue below it). Retail Ice maps set 75 (5 of 7; 73 and 55 on
+        # the others), which puts the floe shelf under the game's water:
+        # pack ice drawn floating, not a different waterline.
+        'water': {'kinds': ['shores', 'islands', 'pools'], 'deep_reference': 'flats/4',
+                  # Water lightens towards the floes from ~10 units deep
+                  # (measured: blue [38,76,225] deep, [97,120,220] within 7
+                  # units), and the fitted ramp starts at the shoreline, so
+                  # the shallow pool is drawn from the first 20 units (the
+                  # first 12 hold only 2 whole 24-px water patches).
+                  'shallow_band': 20,
+                  # The measured ramp jumps from ~.38 to ~.65 between depths
+                  # 7 and 10, where the floes end, so no whole patch lies at
+                  # half way; the mid stop is the water just past the jump.
+                  'mid_curve': [.6, .85],
+                  'beach_reference': None, 'flat_ramp': [0, 10]},
+        'seed': 6120449,
+    },
 }
 
 
@@ -257,7 +330,11 @@ def measure_water(catalog, recipe, land_level):
         seen += np.bincount(h.ravel(), minlength=256)
         wet += np.bincount(h[water_index[s.idx]], minlength=256)
     fraction = wet / np.maximum(seen, 1)
-    sea = next(v for v in range(256) if seen[v] > 1000 and fraction[v] < .5)
+    detected = next(v for v in range(256) if seen[v] > 1000 and fraction[v] < .5)
+    # A recipe may fix the shoreline from the world's retail maps where the
+    # colour heuristic is ambiguous (Crystal's shaded banks share the
+    # shelf's dark violets, so water colour never clearly gives way).
+    sea = spec.get('sea', detected)
     # Depth ramp. Colour is projected on the axis from the shallowest water's
     # mean to the deep flat's mean; a smoothstep is fitted to its mean by depth.
     masks = {}
@@ -285,6 +362,7 @@ def measure_water(catalog, recipe, land_level):
     spread = max(float(np.linalg.norm(np.array(v) - deep_rgb)) for v in depth_rgb.values())
     common = {'water_index': water_index, 'sea': int(sea), 'masks': masks, 'sections': sections,
               'shoreline_fraction': {int(v): round(float(fraction[v]), 3) for v in range(max(0, sea - 10), min(255, sea + 6))},
+              **({'sea_detected': int(detected), 'sea_source': spec['sea_source']} if 'sea' in spec else {}),
               'depth_rgb': depth_rgb, 'depth_rgb_spread': round(spread, 1),
               'shallow_reference_rgb': shallow_rgb.tolist()}
     if spread < FLAT_RAMP_RGB:
@@ -559,7 +637,9 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
             report['shallow_water'] = {'same_as': 'deep water', 'reason': 'flat colour-by-depth ramp'}
         else:
             # Shallow water: the band nearest the shoreline, well inside the water.
-            shallow_cut = max(4, water['shallowDepth'])
+            # A recipe may widen the band where the measured ramp starts at
+            # the shoreline itself (Ice: lighter water among the floes).
+            shallow_cut = recipe['water'].get('shallow_band', max(4, water['shallowDepth']))
 
             def shallow(s):
                 mask = water['masks'][s.name] & (s.height >= sea - shallow_cut)
@@ -572,7 +652,10 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
             # the art never uses (grey-blue after palette lookup); the art's own
             # mid-depth pixels give the renderer a third stop.
             curve = sorted((int(d), c) for d, c in water['depth_curve'].items())
-            mid_band = [d for d, c in curve if .4 <= c <= .6] or [curve[len(curve) // 2][0]]
+            # A recipe may widen the band where a steep bank leaves too few
+            # whole patches at half way (Crystal: [.3, .7]).
+            mid_lo, mid_hi = recipe['water'].get('mid_curve', (.4, .6))
+            mid_band = [d for d, c in curve if mid_lo <= c <= mid_hi] or [curve[len(curve) // 2][0]]
             mid_depth = next(d for d, c in curve if c >= .5)
 
             def middle(s):

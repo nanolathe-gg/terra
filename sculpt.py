@@ -15,7 +15,8 @@ SOURCES = {name: HERE / name for name in (
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
-               'moon': 'Moon', 'zhon': 'Zhon', 'lava': 'Lava', 'desert': 'Painted Desert'}
+               'moon': 'Moon', 'zhon': 'Zhon', 'lava': 'Lava', 'desert': 'Painted Desert',
+               'crystal': 'Crystal', 'ice': 'Ice'}
 
 
 # Every map-wide knob's default (the World panel). A world preset is these
@@ -61,6 +62,21 @@ WORLD_KNOBS = {
     # irregular, not banded (section measurement), so no contour bands.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=.15, banding=0, northFace=.7, fingers=1, worms=.9),
+    # Crystal: dead-level violet ground (the flat sections sit at one height
+    # or within 82-87), crater walls and rough ridges crazed by a near-black
+    # polygonal crack web, plates rather than rills by eye, and no sand or
+    # beach (authored from the sections, see
+    # sculpt_section_biome.py 'crystal'). Its column fields are a separate
+    # brush, not these knobs.
+    'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
+                    crackBlocks=.8, crackHairline=.3, crackDark=.9, beachWidth=0),
+    # Ice: level snow (flats at exactly 85 and 170), rounded snow mounds whose
+    # shaded faces are smooth slate streaks with no crack network, and a
+    # pack-ice shelf instead of a beach; its banks into the water are white
+    # floes, never the slate of the shaded hill faces (authored from the
+    # sections, see sculpt_section_biome.py 'ice').
+    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=.2, crackMajor=.4, crackMinor=.3, crackHairline=.2,
+                crackBlocks=.2, beachWidth=0, bankRock=0),
 }
 
 
@@ -68,7 +84,7 @@ def biome_config(biome, assets):
     """Prepare one biome's materials in its own asset folder and return its
     page configuration, with texture URLs under /sculpt-assets/<biome>/."""
     from sculpt_fractures import make_fracture_field
-    if biome in ('moon', 'zhon', 'lava'):
+    if biome in ('moon', 'zhon', 'lava', 'crystal', 'ice'):
         # Measured from a decoded section catalog (sculpt_section_biome.py).
         from sculpt_section_biome import prepare_section_biome
         config = prepare_section_biome(biome, assets)
@@ -150,6 +166,25 @@ def biome_config(biome, assets):
         config['defaults'].update(example='coasts', material='single', fractures='0', scree='0')
         config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
                                   slopeFloor=-4.0, slopeDry=2.0)
+    elif biome == 'crystal':
+        # Crystal's land stands 20 units above the sea its retail maps set
+        # (land 85, sea 65 on all four), close to the default base of 24,
+        # which stays. Its maps are mostly water with column-covered islands
+        # and hills. The section slope class starts at 2 units per 16-px
+        # cell (~.125 per px) and the crack-webbed bank runs down to the
+        # shelf. Authored profile.
+        config['defaults'].update(example='islands', material='single', fractures='40', scree='0')
+        config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
+                                  slopeFloor=-4.0, slopeDry=2.0)
+    elif biome == 'ice':
+        # Ice's snow stands 20 units above its measured shoreline (sea 65,
+        # flats 85; retail maps set 75 and draw the floe shelf below it), so
+        # the default base of 24 stays. Snow slopes stay white to the floes;
+        # slope class from 3 units per 16-px cell (~.19 per px). Authored
+        # profile.
+        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0')
+        config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.1, slopeFull=.3,
+                                  slopeFloor=-4.0, slopeDry=4.0)
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
@@ -173,7 +208,7 @@ def biome_config(biome, assets):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8767)
-    parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert',
+    parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert,crystal,ice',
                         help='comma-separated biomes to prepare; the first is the default')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
                         help='each biome prepares its materials in <root>/assets-<biome>')
