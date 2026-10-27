@@ -1348,6 +1348,25 @@ function demoRamp(points,options) {
   const probe=startStroke('ramp',points[0],options);
   addNode({kind:'ramp',points:points.map(p => ({...p})),params:strokeParams(probe),seed:probe.seed});
 }
+// Capture tools rebuild a map from strokes: [kind, [[x,y],...], options],
+// each starting from the brush card's defaults for this world. options.card
+// overrides card values (diameter, amount, roughness ... in card units); any
+// other key is a startStroke option.
+function scriptedScene(list,{ground=true}={}) {
+  applySeedControl(); refinementSeed=seed;
+  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0);
+  nodes=[]; prefix=[]; selected=-1;
+  if (ground) addGroundNode();
+  list.forEach(([kind,points,options={}],i) => {
+    const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
+    const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
+      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),seed:(seed+i*7919)>>>0};
+    const probe=startStroke(kind,pts[0],{...card,...rest});
+    addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
+  });
+  markChanged(); checkpoint(); updateControls(); schedule(); queueWeather();
+  return nodes.length;
+}
 function mixedScene() {
   applySeedControl(); refinementSeed=seed;
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0);
@@ -1809,5 +1828,5 @@ async function boot() {
 // bakeGpuMs and drawMs's gpuMs are the pass's own GPU time (timestamp queries).
 window.sculptDebug = {state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
-  heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
+  scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 boot();
