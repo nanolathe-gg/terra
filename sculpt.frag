@@ -445,6 +445,8 @@ void main() {
         float hollow = smoothstep(0.25, 0.9, -top) * smoothstep(uFaceSlope.x * 0.4, uFaceSlope.x, faceSlope);
         material *= 1.0 - uCrevice * hollow * (1.0 - route);
     }
+    // Baked boulders take rock material, lit by the same surface.
+    if (uReliefMode == 1) material = mix(material, rock * 1.08, bakedFields(p).b);
     float chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route));
     chip=max(chip,smoothstep(0.035,0.40,materialChipHeight(p)*(1.0-route))*0.65);
     material = mix(material, rock, chip * (1.0 - exposed));

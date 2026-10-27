@@ -273,6 +273,7 @@ export class TerrainRenderer {
   }
 
   setWeather(flow, deposit, talus) {
+    this.fieldsDirty = true;
     const gl = this.gl;
     const bytes = new Uint8Array(this.grid * this.grid * 4);
     if (flow && deposit) for (let i = 0; i < flow.length; i++) {
@@ -375,6 +376,12 @@ export class TerrainRenderer {
     set('uReliefGain', number('reliefGain', 0.55));
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
+    set('uWeather', 7, 'i');
+    set('uBoulderDensity', number('boulders', 0));
+    set('uBoulderSize', number('boulderSize', 9));
+    set('uBoulderFoot', number('boulderFoot', 0.5));
+    set('uBoulderCluster', number('boulderCluster', 0.6));
+    set('uBoulderMoss', number('boulderMoss', 0.35));
     set('uReliefOctaves', number('reliefOctaves', 5), 'i');
     // The routes texture shares unit 12 with the fields; bind it for the bake.
     gl.activeTexture(gl.TEXTURE0 + 12);

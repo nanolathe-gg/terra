@@ -20,6 +20,11 @@ uniform int uReliefOctaves;
 uniform float uReliefGain;      // amplitude ratio between octaves
 uniform float uReliefWarp;      // domain warp, world px
 uniform float uReliefPatchy;    // spatial variation of relief strength
+uniform float uBoulderDensity;   // 0 disables boulders
+uniform float uBoulderSize;      // typical diameter, world px
+uniform float uBoulderFoot;      // share of boulders sourced from cliff feet
+uniform float uBoulderCluster;   // how strongly boulders gather into fields
+uniform float uBoulderMoss;      // share of stones with mossy tops
 out vec4 outFields;
 
 const float TAU = 6.28318530718;
@@ -45,12 +50,53 @@ vec3 gullies(vec2 q, vec2 dir) {
     return sum / weight;
 }
 
+
 float valueNoise(vec2 q) {
     vec2 c = floor(q), f = fract(q);
     vec2 u = f * f * (3.0 - 2.0 * f);
     float a = cellHash(c).x, b = cellHash(c + vec2(1, 0)).x;
     float d = cellHash(c + vec2(0, 1)).x, e = cellHash(c + vec2(1, 1)).x;
     return mix(mix(a, b, u.x), mix(d, e, u.x), u.y) * 2.0 - 1.0;
+}
+
+// Height of the tallest boulder at p (0 if none) and its rock coverage.
+vec2 boulders(vec2 p, float slope, float h) {
+    if (uBoulderDensity <= 0.0) return vec2(0.0);
+    float cellSize = uBoulderSize * 1.6;
+    vec2 cell = floor(p / cellSize);
+    float best = 0.0, cover = 0.0;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec2 c = cell + vec2(i, j);
+        vec2 r1 = cellHash(c + 31.7), r2 = cellHash(c + 77.1);
+        vec2 centre = (c + 0.2 + 0.6 * r1) * cellSize;
+        // Where boulders come from: anywhere on sloped ground, or gathered
+        // at cliff feet where the weathering pass found talus support.
+        float talus = texture(uWeather, centre / (uSize - 1.0)).b;
+        float slopeAt = length(broadGradient(centre));
+        float scattered = smoothstep(0.15, 0.7, slopeAt) * (1.0 - smoothstep(1.6, 2.6, slopeAt));
+        vec2 up = slopeAt > 1e-4 ? -broadGradient(centre) / slopeAt : vec2(0.0);
+        float cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(centre - up * 14.0)));
+        float foot = max(smoothstep(0.02, 0.25, talus), cliffAbove * (1.0 - smoothstep(0.5, 1.0, slopeAt)));
+        float source = mix(scattered, foot, uBoulderFoot);
+        float field = smoothstep(0.35, 0.75, valueNoise(centre / 120.0 + 9.0) * 0.5 + 0.5);
+        float chance = uBoulderDensity * source * mix(1.0, field * 2.0, uBoulderCluster);
+        if (r2.x > chance) continue;
+        if (routeProtection(centre) > 0.05 || baseHeight(centre) < uSea + 1.0) continue;
+        // Many small stones and few large ones.
+        float radius = uBoulderSize * (0.18 + 0.82 * r2.y * r2.y * r2.y);
+        // Angular outline: the largest of three rotated plane distances.
+        vec2 q = p - centre;
+        float a = r1.x * 6.2831;
+        mat2 rot = mat2(cos(a), -sin(a), sin(a), cos(a));
+        q = rot * q;
+        float edge = max(max(abs(q.x) * 0.9, abs(q.y)), abs(q.x * 0.6 + q.y * 0.8)) / radius;
+        float lift = max(0.0, 1.0 - edge * edge);
+        // Partly buried: the ground cuts each stone below its widest point.
+        float buried = mix(0.15, 0.55, fract(r1.x * 7.31));
+        float height = max(0.0, sqrt(lift) - buried) / (1.0 - buried) * radius * (0.55 + 0.35 * r1.y);
+        if (height > best) { best = height; cover = smoothstep(0.0, 0.25, height / max(radius, 1.0)) * (fract(r2.x * 13.7) < uBoulderMoss ? 0.55 : 1.0); }
+    }
+    return vec2(best, cover);
 }
 
 void main() {
@@ -93,5 +139,7 @@ void main() {
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast.
     if (h > uSea) height = max(height, uSea + 0.5 - h);
-    outFields = vec4(height, route, firstOctave * 0.5 + 0.5, gain);
+    vec2 rock = boulders(p, slope, h);
+    height += rock.x;
+    outFields = vec4(height, route, rock.y, gain);
 }
