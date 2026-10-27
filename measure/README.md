@@ -11,6 +11,10 @@ stay outside Git.
 | `water_fit.py` | Water colour by depth and depth by distance from shore, from coast sections |
 | `hill_profiles.py` | Rise, footprint, 20-80% rise width and slope spread of raised forms |
 | `sheet.py` | Labelled 2:1 crop sheets for visual comparison |
+| `crack_lines.py` | Thin dark lines by slope bin (density, contrast, strong and long coherent lines) against the surface's own texture level; retail references per world (`retail <world>`) |
+| `slope_texture.py` | Slope luminance, dark share, band-pass energy, dark-mark sizes and edge crispness, relative to level ground |
+| `crack_sweep.py` | Renders example scenes under knob overrides (URL parameters) and runs both metrics |
+| `crack_sheet.py` | Same-window crop sheets across renders, optionally with detected lines overlaid |
 
 Renders with heights come from `capture/capture.mjs` scenes that set
 `"heights": true`. Pass `ours <label> <stem>...` (stems without `.png`),
