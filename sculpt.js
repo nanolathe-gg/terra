@@ -26,7 +26,7 @@ let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=nul
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
 let history=[], historyIndex=-1, framePending=false, heightDirty=true, needsDraw=true;
 let revision=0, renderedRevision=-1, fitView=true, autosaveTimer, ready=false;
-let paintingIntervals=[],lastPaintingRAF=null;
+let paintingIntervals=[],lastPaintingRAF=null,draft=false;
 let lastWaterStroke=null;
 // Biomes choose starting values for the same brushes. These presets can be
 // borrowed independently of the canvas materials and then edited per tool.
@@ -181,12 +181,22 @@ function framedNoise(node,seed,frame,rect) {
   const world=noiseFor(seed),inv=invert(frame);
   let out=framedBuffers.get(node);
   if (!out) { out={}; for (const field of Object.keys(NOISE_FIELDS)) out[field]=new Float32Array(grid*grid); framedBuffers.set(node,out); }
-  const fields=Object.keys(NOISE_FIELDS);
-  for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
-    const i=y*grid+x,wx=x*spacing,wy=y*spacing,lx=inv[0]*wx+inv[2]*wy+inv[4],ly=inv[1]*wx+inv[3]*wy+inv[5];
-    const gx=Math.round(lx/spacing),gy=Math.round(ly/spacing);
-    if (gx>=0 && gy>=0 && gx<grid && gy<grid) { const j=gy*grid+gx; for (const field of fields) out[field][i]=world[field][j]; }
-    else for (const field of fields) out[field][i]=noiseValue(field,seed,lx,ly);
+  // Source cell per target cell first, then one tight loop per field (a
+  // keyed lookup per cell and field cost ~10 ms a frame while dragging).
+  const w=rect.x1-rect.x0+1,h=rect.y1-rect.y0+1;
+  if (w<=0 || h<=0) return out;
+  const from=new Int32Array(w*h);
+  for (let y=rect.y0,k=0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++,k++) {
+    const wx=x*spacing,wy=y*spacing,gx=Math.round((inv[0]*wx+inv[2]*wy+inv[4])/spacing),gy=Math.round((inv[1]*wx+inv[3]*wy+inv[5])/spacing);
+    from[k]=gx>=0 && gy>=0 && gx<grid && gy<grid?gy*grid+gx:-1;
+  }
+  for (const field of Object.keys(NOISE_FIELDS)) {
+    const dst=out[field],src=world[field];
+    for (let y=rect.y0,k=0;y<=rect.y1;y++) for (let x=rect.x0,i=y*grid+x;x<=rect.x1;x++,k++,i++) {
+      const j=from[k];
+      if (j>=0) dst[i]=src[j];
+      else { const wx=x*spacing,wy=y*spacing; dst[i]=noiseValue(field,seed,inv[0]*wx+inv[2]*wy+inv[4],inv[1]*wx+inv[3]*wy+inv[5]); }
+    }
   }
   return out;
 }
@@ -208,22 +218,31 @@ function blurred(field,radius) {
   }
   return out;
 }
+// Replays borrow working grids from a small stack (a crater's craterlets
+// replay inside it) instead of allocating six grids per shape per frame.
+const workPool=[]; let workDepth=0;
+function borrowWork() {
+  const n=grid*grid,w=workPool[workDepth] ??= {base:new Float32Array(n),protect:new Float32Array(n),route:new Float32Array(n),crack:new Float32Array(n),weights:new Float32Array(n),distances:new Float32Array(n)};
+  workDepth++; return w;
+}
 function startStroke(kind,p,options={}) {
   applySeedControl();
   const radius=options.radius ?? Number($('diameter').value)/2;
-  const base=heights.slice();
+  const work=options.work;
+  const copy=(src,dst) => { if (!dst) return src.slice(); dst.set(src); return dst; };
+  const base=copy(heights,work?.base);
   const strokeSeed=options.seed ?? seed,frame=isIdentity(options.frame)?null:options.frame;
   const strokeNoise=frame?framedNoise(options.node,strokeSeed,frame,options.rect):noiseFor(strokeSeed);
   // Directions drawn from noise live in the authoring frame; turn them with it.
   const turn=frame?Math.atan2(frame[1],frame[0]):0;
   const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8+turn;
-  return {kind,base,protectBase:protection.slice(),routeBase:routes.slice(),crackBase:cracks.slice(),cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
+  return {kind,base,protectBase:copy(protection,work?.protect),routeBase:copy(routes,work?.route),crackBase:copy(cracks,work?.crack),node:options.node,cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),northFace:options.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0),fingers:options.fingers??(experiment.has('fingers')?Number(experiment.get('fingers')):0),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
-    distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),craterEjecta:options.craterEjecta??(experiment.has('craterEjecta')?Number(experiment.get('craterEjecta')):0),northFace:options.northFace??(experiment.has('northFace')?Number(experiment.get('northFace')):0),fingers:options.fingers??(experiment.has('fingers')?Number(experiment.get('fingers')):0),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    distances:kind==='hill' && experiment.get('forms')==='shouldered'?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
 // Finger coasts (Lava): an interlocking fringe of tapered land fingers and
@@ -248,9 +267,28 @@ function fingerRibs(x,y,tx,ty,period,salt) {
   }
   return sum/weight;
 }
+// The fringe belongs to the shape: it is evaluated in the shape's own
+// (authoring) coordinates and cached per shape on that grid, so moving a lake
+// carries its fingers along and re-uses them instead of re-evaluating every
+// kernel each frame.
+const fingerCaches=new WeakMap();
+function fingerCache(s) {
+  if (s.fingerField) return s.fingerField;
+  const key=`${s.seed}|${s.radius}|${s.rough}|${s.bankWidth}`;
+  let c=s.node?fingerCaches.get(s.node):null;
+  if (!c || c.key!==key) { c={key,field:new Float32Array(grid*grid).fill(NaN)}; if (s.node) fingerCaches.set(s.node,c); }
+  return s.fingerField=c.field;
+}
 function fingerShift(s,i,wx,wy,nx,ny,amount) {
-  s.fingerField ??= new Float32Array(heights.length).fill(NaN);
-  let v=s.fingerField[i];
+  const field=fingerCache(s),inv=s.inv;
+  if (inv) {
+    // Into the shape's frame: position, and the coast normal's direction.
+    const lx=inv[0]*wx+inv[2]*wy+inv[4],ly=inv[1]*wx+inv[3]*wy+inv[5],mx=inv[0]*nx+inv[2]*ny,my=inv[1]*nx+inv[3]*ny,ml=Math.hypot(mx,my)||1;
+    wx=lx; wy=ly; nx=mx/ml; ny=my/ml;
+    const gx=Math.round(wx/spacing),gy=Math.round(wy/spacing);
+    i=gx>=0 && gy>=0 && gx<grid && gy<grid?gy*grid+gx:-1;
+  }
+  let v=i>=0?field[i]:NaN;
   if (Number.isNaN(v)) {
     const tx=-ny,ty=nx;
     // Fine lobes come and go along the coast; coarse fingers and inlets are
@@ -259,7 +297,8 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
     const reach=.55+.45*valueNoise(wx/140,wy/140,s.seed^0x6a1);
     const coarse=clamp(fingerRibs(wx,wy,tx,ty,60,s.seed^0x1c29)*1.8,-1,1)*smooth(-.35,.25,valueNoise(wx/220,wy/220,s.seed^0x4e11))*reach;
     const lumps=valueNoise(wx/14,wy/14,s.seed^0x5c1)*7+valueNoise(wx/5,wy/5,s.seed^0x3a7)*2.5;
-    v=s.fingerField[i]=fine*13+Math.max(0,coarse)*90+Math.min(0,coarse)*75+lumps;
+    v=fine*13+Math.max(0,coarse)*90+Math.min(0,coarse)*75+lumps;
+    if (i>=0) field[i]=v;
   }
   return v*amount;
 }
@@ -293,7 +332,16 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
-  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+  // Draft (while a shape is dragged): every other cell is computed and its
+  // change copied to its three neighbours; release evaluates every cell.
+  const step=draft?2:1;
+  const copyCell=(i,j) => {
+    if (shoulderedHill?s.distances[j]<s.distances[i]:s.weights[j]>=s.weights[i]) return;
+    if (shoulderedHill) s.distances[j]=s.distances[i];
+    s.weights[j]=s.weights[i]; heights[j]=clamp(s.base[j]+heights[i]-s.base[i],MIN_HEIGHT,MAX_HEIGHT); protection[j]=protection[i]; routes[j]=routes[i];
+  };
+  const spread=(i,x,y) => { if (x<x1) copyCell(i,i+1); if (y<y1) { copyCell(i,i+grid); if (x<x1) copyCell(i,i+grid+1); } };
+  for (let y=y0;y<=y1;y+=step) for (let x=x0;x<=x1;x+=step) {
     const i=y*grid+x,wx=x*spacing,wy=y*spacing,inv=s.inv;
     // Authoring-frame position for noise evaluated directly from position.
     const lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
@@ -336,6 +384,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       // A crater on dry ground stays dry: floor lumps never dip into the sea.
       heights[i]=clamp(s.base[i]>config.seaLevel+1?Math.max(value,config.seaLevel+1.5):value,MIN_HEIGHT,MAX_HEIGHT);
       protection[i]=s.protectBase[i]*(1-smooth(0,.3,influence)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,influence));
+      if (step>1) spread(i,x,y);
       continue;
     }
     if (shoulderedHill) {
@@ -358,7 +407,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     }
     // A continuous deep core follows the unwarped stroke. Automatic shelves
     // cannot close it; an explicit later shallow-water stroke can cross it.
-    const core=naturalWater?1-smooth(.20,coreEdge,Math.sqrt((wx-p.x)**2+(wy-p.y)**2)/radius):0;
+    const core=naturalWater?1-smooth(.20,coreEdge,Math.sqrt((wx-cx)**2+(wy-cy)**2)/radius):0;
     if (r>=1 && !core && !shoulderedHill) continue;
     let w;
     if (s.kind==='plateau' || s.kind==='offset') {
@@ -440,8 +489,38 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     // new edge faces open to weathering.
     else if (s.kind==='offset') protection[i]=s.protectBase[i]*(1-4*w*(1-w));
     else if (s.kind!=='smooth') protection[i]=s.protectBase[i]*(1-influence);
+    if (step>1) spread(i,x,y);
   }
   heightDirty=true;
+}
+// A stroke is replayed along its path simplified to a small tolerance, one
+// swept segment (a capsule) per piece. Its cost follows the path's length,
+// not how many pointer events drew it: a mountain drawn slowly once replayed
+// a dab per event, over a second a frame while it was being moved.
+function simplifyPath(points,tolerance) {
+  if (points.length<3) return points.slice();
+  const keep=new Uint8Array(points.length); keep[0]=keep[points.length-1]=1;
+  const stack=[[0,points.length-1]];
+  while (stack.length) {
+    const [a,b]=stack.pop(),pa=points[a],pb=points[b],dx=pb.x-pa.x,dy=pb.y-pa.y,l2=dx*dx+dy*dy;
+    let worst=-1,at=-1;
+    for (let k=a+1;k<b;k++) {
+      const q=points[k],t=l2?clamp(((q.x-pa.x)*dx+(q.y-pa.y)*dy)/l2,0,1):0,d=Math.hypot(q.x-pa.x-dx*t,q.y-pa.y-dy*t);
+      if (d>worst) { worst=d; at=k; }
+    }
+    if (worst>tolerance) { keep[at]=1; stack.push([a,at],[at,b]); }
+  }
+  return points.filter((_,k) => keep[k]);
+}
+function sweep(s,points) {
+  const path=simplifyPath(points,Math.max(1,s.radius*.04)),longest=Math.max(16,s.radius*1.5);
+  dab(s,path[0]);
+  for (let k=1;k<path.length;k++) {
+    // Long diagonal pieces are split so each capsule's box stays tight.
+    const a=path[k-1],b=path[k],pieces=Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)/longest);
+    for (let j=0;j<pieces;j++) dab(s,{x:a.x+(b.x-a.x)*j/pieces,y:a.y+(b.y-a.y)*j/pieces},{x:a.x+(b.x-a.x)*(j+1)/pieces,y:a.y+(b.y-a.y)*(j+1)/pieces});
+  }
+  s.path=points.slice(); s.last=s.end=points[points.length-1];
 }
 function extendStroke(s,p) {
   if (s.kind==='hill' && experiment.get('forms')==='shouldered') {
@@ -451,8 +530,9 @@ function extendStroke(s,p) {
     if (!s.hasSpan) { heights.set(s.base); protection.set(s.protectBase); routes.set(s.routeBase); s.weights.fill(0); s.distances.fill(Infinity); s.hasSpan=true; }
     dab(s,s.last,p); s.last=p; s.end=p; s.path.push(p); return;
   }
-  const count=Math.max(1,Math.ceil(Math.hypot(p.x-s.last.x,p.y-s.last.y)/(s.radius/5)));
-  for (let k=1;k<=count;k++) { const t=k/count; dab(s,{x:s.last.x+(p.x-s.last.x)*t,y:s.last.y+(p.y-s.last.y)*t}); }
+  // Live strokes sweep one capsule per pointer event; release replays the
+  // simplified path so the shape matches every later replay.
+  if (Math.hypot(p.x-s.last.x,p.y-s.last.y)>=.2) dab(s,s.last,p);
   s.last=p; s.end=p; s.path.push(p);
 }
 function settleHill(s) {
@@ -478,8 +558,16 @@ function settleHill(s) {
     const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1;
     return [-dy/length*s.faceSide,dx/length*s.faceSide];
   });
+  // Sweep the rounded path in as few sections as keep it within a small
+  // tolerance: every section scans its whole box, and ~80 short sections
+  // cost over 100 ms a frame while a hill was dragged.
+  const kept=simplifyPath(path.map((p,i) => ({...p,i})),Math.max(1,s.radius*.02)),longest=Math.max(16,s.radius*1.5);
   heights.set(s.base); protection.set(s.protectBase); s.weights.fill(0); s.distances.fill(Infinity);
-  for (let i=0;i<path.length-1;i++) dab(s,path[i],path[i+1],frames[i],frames[i+1]);
+  for (let k=0;k<kept.length-1;k++) {
+    const a=kept[k],b=kept[k+1],fa=frames[a.i],fb=frames[b.i],pieces=Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)/longest);
+    const at=t => ({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t}),face=t => [fa[0]+(fb[0]-fa[0])*t,fa[1]+(fb[1]-fa[1])*t];
+    for (let j=0;j<pieces;j++) dab(s,at(j/pieces),at((j+1)/pieces),face(j/pieces),face((j+1)/pieces));
+  }
   // Only the newly added influence is softened across nearest-section seams;
   // the terrain under it, including a plateau or a shore, is not blurred.
   const joined=blurred(blurred(s.weights,2),2);
@@ -509,7 +597,16 @@ function rampSegment(s,a,b) {
   let x0=clamp(Math.floor((Math.min(a.x,b.x)-radius-2*amp)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(a.x,b.x)+radius+2*amp)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(a.y,b.y)-radius-2*amp)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(a.y,b.y)+radius+2*amp)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
-  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+  // Draft (while a shape is dragged): every other cell is computed and its
+  // change copied to its three neighbours; release evaluates every cell.
+  const step=draft?2:1;
+  const copyCell=(i,j) => {
+    if (shoulderedHill?s.distances[j]<s.distances[i]:s.weights[j]>=s.weights[i]) return;
+    if (shoulderedHill) s.distances[j]=s.distances[i];
+    s.weights[j]=s.weights[i]; heights[j]=clamp(s.base[j]+heights[i]-s.base[i],MIN_HEIGHT,MAX_HEIGHT); protection[j]=protection[i]; routes[j]=routes[i];
+  };
+  const spread=(i,x,y) => { if (x<x1) copyCell(i,i+1); if (y<y1) { copyCell(i,i+grid); if (x<x1) copyCell(i,i+grid+1); } };
+  for (let y=y0;y<=y1;y+=step) for (let x=x0;x<=x1;x+=step) {
     const i=y*grid+x,wx=x*spacing,wy=y*spacing,t=clamp(((wx-a.x)*dx+(wy-a.y)*dy)/length2,0,1);
     const cx=a.x+dx*t,cy=a.y+dy*t;
     const plainDistance=Math.hypot(wx-cx,wy-cy);
@@ -609,8 +706,12 @@ function applyNode(n) {
     return;
   }
   if (n.kind==='compact') { for (const i of clipCells()) if (heights[i]>config.baseHeight) heights[i]=config.baseHeight+(heights[i]-config.baseHeight)*n.factor; return; }
+  const work=borrowWork();
+  try { replayShape(n,work); } finally { workDepth--; }
+}
+function replayShape(n,work) {
   const pts=n.points,b=nodeBounds(n),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
-  const s=startStroke(n.kind,pts[0],{...n.params,seed:n.seed,frame:n.frame,node:n,
+  const s=startStroke(n.kind,pts[0],{...n.params,seed:n.seed,frame:n.frame,node:n,work,
     rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
   if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
   if (n.kind==='hill' && experiment.get('forms')==='shouldered' && experiment.get('replay')!=='full') {
@@ -624,7 +725,8 @@ function applyNode(n) {
       settleHill(s); applyCracks(s); return;
     }
   }
-  dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s);
+  if (n.kind==='hill' && experiment.get('forms')==='shouldered') { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
+  else sweep(s,pts);
   if (n.kind==='crater') addCraterlets(n,s);
   applyCracks(s);
 }
@@ -651,8 +753,11 @@ function addCraterlets(n,s) {
       rect={x0:Math.max(box.x0,Math.floor((p.x-reach)/spacing)),y0:Math.max(box.y0,Math.floor((p.y-reach)/spacing)),x1:Math.min(box.x1,Math.ceil((p.x+reach)/spacing)),y1:Math.min(box.y1,Math.ceil((p.y+reach)/spacing))};
       keys[k] ??= {};
     }
-    const t=startStroke('crater',p,{...n.params,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0,frame:n.frame,node:keys[k],rect});
-    dab(t,p);
+    const work=borrowWork();
+    try {
+      const t=startStroke('crater',p,{...n.params,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0,frame:n.frame,node:keys[k],rect,work});
+      dab(t,p);
+    } finally { workDepth--; }
   }
 }
 function snapshot() { return {h:heights.slice(),p:protection.slice(),r:routes.slice(),c:cracks.slice()}; }
@@ -682,11 +787,10 @@ function nodeBounds(n) {
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function copyRect(src,dst,r) { for (let y=r.y0;y<=r.y1;y++) dst.set(src.subarray(y*grid+r.x0,y*grid+r.x1+1),y*grid+r.x0); }
-// TODO(perf): dragging a map-wide lake still costs ~80 ms a frame, two thirds
-// of it in dab(): swept water and plateau strokes are replayed as many
-// overlapping dabs. Settle by evaluating a stroke as one pass over the
-// distance to its path, and by moving node replay to a worker (or a coarse
-// grid while dragging) so the view never waits on it.
+// Dragging a shape costs 13-40 ms a frame for 300-400 px shapes (swept
+// capsules on a simplified path, draft cells, cached finger fringe).
+// TODO(perf): move node replay to a worker so the view never waits on it;
+// framed noise is still gathered per frame (~5 ms) while a shape moves.
 function evaluateRegion(from,rect) {
   // Replays nodes from 'from' inside rect only. Each node is computed over a
   // margin (for neighbourhood steps such as the hill's softening blur) and
@@ -804,7 +908,14 @@ function nodeAction(kind) {
   checkpoint(); renderLayers(); schedule(); queueWeather();
 }
 // Apply a pending node edit now, so history and refinement see it.
-function flushEval() { if (pendingEval>=0) { const from=pendingEval,rect=pendingRect; pendingEval=-1; pendingRect=null; evaluate(from,rect); } }
+function flushEval() {
+  if (pendingEval<0) return;
+  const from=pendingEval,rect=pendingRect; pendingEval=-1; pendingRect=null;
+  // A dragged shape is evaluated in draft; releasing it re-evaluates the
+  // whole area the gesture touched at full detail.
+  draft=Boolean(moving) && experiment.get('draft')!=='off';
+  try { evaluate(from,rect); } finally { draft=false; }
+}
 function checkpoint() {
   flushEval();
   history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed}); if (history.length>48) history.shift(); historyIndex=history.length-1;
@@ -1008,18 +1119,22 @@ overlay.addEventListener('pointermove',event => {
       if (moving.mode==='scale') $('diameter').value=clamp(n.params.radius*2,40,400);
     }
     pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index);
+    moving.rect=unionRect(moving.rect,pendingRect);
   }
   else if (stroke) { const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   schedule(Boolean(stroke));
 });
 function endPointer(event) {
   if (pointerId!==event.pointerId) return;
-  if (moving) { moving=null; pointerId=null; if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId); flushEval(); markViewChanged(); checkpoint(); queueWeather(); updateControls(); schedule(); return; }
+  if (moving) {
+    flushEval();
+    if (moving.rect) { pendingRect=moving.rect; pendingEval=moving.index; }
+    moving=null; pointerId=null; if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId); flushEval(); markViewChanged(); checkpoint(); queueWeather(); updateControls(); schedule(); return; }
   if (stroke && event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   const hadStroke=Boolean(stroke);
   const rawPath=stroke?stroke.path.map(p => ({...p})):null;
   if (stroke) { settleHill(stroke); settleRamp(stroke); if (stroke.kind==='crater') addCraterlets({points:rawPath,params:strokeParams(stroke)},stroke); }
-  if (stroke) { applyCracks(stroke); prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase,c:stroke.crackBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; renderLayers(); }
+  if (stroke) { applyCracks(stroke); prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase,c:stroke.crackBase}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; evaluate(nodes.length-1); renderLayers(); }
   if (stroke) lastWaterStroke=['deep','shallow'].includes(stroke.kind)?stroke:null;
   stroke=null; pan=null; pointerId=null;
   if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId);
