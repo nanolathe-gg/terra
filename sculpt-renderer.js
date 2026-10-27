@@ -252,6 +252,10 @@ export class TerrainRenderer {
       const c = colors[key];
       gl.uniform4fv(this.location('u' + key[0].toUpperCase() + key.slice(1) + 'Base'), c ? [...c, 1] : [0, 0, 0, 0]);
     }
+    // Strata colours: the world's, else a painted-desert set.
+    const strataDefaults = this.config.strataColors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
+    const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
+    gl.uniform3fv(this.location('uStrataColors'), strata.flat());
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
   }
@@ -421,6 +425,10 @@ export class TerrainRenderer {
     this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
     this.f('uBeachWidth', variant.has('beachWidth') ? Number(variant.get('beachWidth')) : 1.0);
     this.f('uRockCrown', variant.has('rockCrown') ? Number(variant.get('rockCrown')) : 0);
+    this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
+    this.f('uStrataSpacing', variant.has('strataSpacing') ? Number(variant.get('strataSpacing')) : 10);
+    this.f('uStrataWarp', variant.has('strataWarp') ? Number(variant.get('strataWarp')) : 12);
+    this.f('uStrataContrast', variant.has('strataContrast') ? Number(variant.get('strataContrast')) : 0.6);
     this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);

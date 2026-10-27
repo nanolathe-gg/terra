@@ -56,6 +56,11 @@ uniform float uSandDust;
 uniform float uSandGrass;
 uniform float uBandWater;
 uniform float uRockCrown;
+// Strata: coloured bands by height on raised ground (painted desert).
+uniform float uStrata, uStrataSpacing, uStrataWarp, uStrataContrast;
+uniform vec3 uStrataColors[5];
+float strataHash(float k) { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
+vec3 strataColor(float k) { int i = int(floor(strataHash(k) * 4.999)); return i == 0 ? uStrataColors[0] : i == 1 ? uStrataColors[1] : i == 2 ? uStrataColors[2] : i == 3 ? uStrataColors[3] : uStrataColors[4]; }
 uniform float uTransitionDetail;
 uniform float uRockStart;
 uniform float uRockFull;
@@ -518,6 +523,28 @@ void main() {
         float crown = smoothstep(uBase + 5.0, uBase + 14.0, h + (n.g - 0.5) * 6.0) * uRockCrown * (1.0 - route);
         material = mix(material, rock, crown);
         exposed = max(exposed, crown);
+    }
+    if (uStrata > 0.0) {
+        // Horizontal beds of colour: each band's colour and thickness come
+        // from its index; the beds wander a little, and their boundaries
+        // are soft over a few height units. The material's own grain is kept
+        // as brightness, so rock stays darker than soil within a bed.
+        float warp = (terrainNoise(p * 0.12 + vec2(5.0, 9.0)).r - 0.5) * uStrataWarp
+                   + (terrainNoise(p * 0.55 + vec2(17.0, 2.0)).g - 0.5) * uStrataWarp * 0.3;
+        float t = (h - uBase + warp) / uStrataSpacing;
+        float k = floor(t), f = fract(t);
+        // Uneven thickness: shift the boundary within each band.
+        float split = 0.25 + 0.5 * strataHash(k + 0.37);
+        vec3 lower = strataColor(k * 2.0), upper = strataColor(k * 2.0 + 1.0);
+        vec3 bed = mix(lower, upper, smoothstep(split - 0.06, split + 0.06, f));
+        bed = mix(strataColor(k * 2.0 - 1.0), bed, smoothstep(0.0, 0.06, f));
+        float lum = dot(material, vec3(0.299, 0.587, 0.114));
+        float meanLum = max(dot(uGroundTexMean, vec3(0.299, 0.587, 0.114)), 0.05);
+        vec3 painted = clamp(bed * clamp(lum / meanLum, 0.7, 1.15), 0.0, 1.0);
+        // Beds show where erosion cuts them, on slopes; level tops keep
+        // their caprock and graded routes their surface.
+        float onRaised = smoothstep(uBase + 1.0, uBase + 6.0, h) * smoothstep(0.06, 0.28, slope) * (1.0 - route);
+        material = mix(material, painted, uStrata * uStrataContrast * onRaised);
     }
     if (uReliefMode == 1) {
         // Procedural sand: a colour with two scales of grain, so it needs no

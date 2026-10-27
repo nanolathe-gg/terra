@@ -15,7 +15,7 @@ SOURCES = {name: HERE / name for name in (
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
-               'moon': 'Moon', 'zhon': 'Zhon'}
+               'moon': 'Moon', 'zhon': 'Zhon', 'desert': 'Painted Desert'}
 
 
 # Every map-wide knob's default (the World panel). A world preset is these
@@ -45,6 +45,11 @@ WORLD_KNOBS = {
     'green': dict(banding=.8, bandLine=.6),
     'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.6),
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5),
+    # Painted Desert: rounded badland hills striped by coloured beds, rilled
+    # by runoff, few cracks.
+    'desert': dict(strata=1, strataSpacing=9, strataWarp=10, strataContrast=.75, banding=.45, crackSeverity=.3,
+                   crackMajor=.4, crackMinor=.3, crackHairline=.2, crackBlocks=.2, reliefAmount=.7, gullyRock=.2,
+                   sand=.6, undulation=6),
     'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=.8, undulation=4, plainRelief=.6, banding=.3),
     'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=50,
@@ -63,7 +68,8 @@ def biome_config(biome, assets):
     elif biome == 'archipelago':
         from sculpt_archipelago_materials import prepare_archipelago_assets
         config = prepare_archipelago_assets(assets)
-    elif biome == 'red':
+    elif biome in ('red', 'desert'):
+        # Painted Desert is an authored world on Red Planet's materials.
         from sculpt_red_materials import prepare_red_assets, prepare_structured_red_assets
         config = prepare_red_assets(assets)
         structured = prepare_structured_red_assets(assets)
@@ -98,7 +104,7 @@ def biome_config(biome, assets):
     if biome == 'green':
         # Water colour by depth measured on the retail Green coast sections.
         config['material'].update(shallowDepth=24, deepDepth=60)
-    if biome == 'red':
+    if biome in ('red', 'desert'):
         config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0')
         config['material'].update(rockyCoasts=True, surfaceRelief=1.25, fractureDepth=1.25,
                                   slopeStart=.06, slopeFull=.30, slopeFloor=-4.0, slopeDry=5.0)
@@ -132,6 +138,16 @@ def biome_config(biome, assets):
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['knobs'] = sorted(knobs)
+    if biome == 'desert':
+        # Default base colours (editable per world in the page): pale ground
+        # and slopes so the beds carry the colour.
+        # The shared TA palette has no warm tans (nearest are olive-creams and
+        # rose-pinks), so this world defaults to full colour; with the TA
+        # palette on it renders rose and ochre beds on olive flats.
+        config['colors'] = {'ground': '#bfa68c', 'slope': '#b0927e', 'rock': '#8e5c4c', 'sand': '#d2bc9e',
+                            'shallow': '#7b8a74', 'deep': '#3f5660'}
+        config['strataColors'] = [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]]
+        config['defaults']['palette'] = 'off'
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
     config['biomes'] = BIOME_NAMES
@@ -141,7 +157,7 @@ def biome_config(biome, assets):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8767)
-    parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon',
+    parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,desert',
                         help='comma-separated biomes to prepare; the first is the default')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
                         help='each biome prepares its materials in <root>/assets-<biome>')
