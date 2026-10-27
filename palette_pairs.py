@@ -62,8 +62,34 @@ def pair_lut(palette, neighbours=10, spread_penalty=0.1):
     return np.concatenate([r.reshape(32, 1024, 3) for r in rows], axis=0).astype(np.uint8)
 
 
-def make_pair_lut(out, palette_path=PALETTE, name='palette-pairs.png'):
+def retail_entries(export, share=.99, raised=8):
+    """Palette indices making up `share` of a retail map's raised ground
+    (16-px cells more than `raised` above the map's median cell height), from
+    a tools/neural-terrain/export directory, most used first."""
+    import json
+    export = Path(export)
+    meta = json.loads((export / 'metadata.json').read_text())
+    w, h = meta['width'], meta['height']
+    cells = np.fromfile(export / 'heights.bin', np.uint8).reshape(meta['cell_height'], meta['cell_width']).astype(int)
+    idx = np.memmap(export / 'map-indexed.bin', np.uint8, 'r', shape=(h, w))
+    level = np.median(cells) + raised
+    cx = np.minimum(np.arange(w) // 16, cells.shape[1] - 1)
+    counts = np.zeros(256, np.int64)
+    for y0 in range(0, h, 1024):
+        rows = np.asarray(idx[y0:y0 + 1024])
+        up = cells[np.minimum(np.arange(y0, y0 + len(rows)) // 16, cells.shape[0] - 1)][:, cx] > level
+        counts += np.bincount(rows[up], minlength=256)
+    order = np.argsort(-counts)
+    keep = np.searchsorted(np.cumsum(counts[order]) / max(counts.sum(), 1), share) + 1
+    return [int(i) for i in order[:keep]]
+
+
+def make_pair_lut(out, palette_path=PALETTE, name='palette-pairs.png', entries=None):
+    """With `entries`, colours and pairs come only from those palette
+    indices (a world whose art mixes within a few ramps)."""
     palette = np.fromfile(palette_path, np.uint8).reshape(256, 4)[:, :3]
+    if entries is not None:
+        palette = palette[sorted(set(entries))]
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     Image.fromarray(pair_lut(palette)).save(out / name)

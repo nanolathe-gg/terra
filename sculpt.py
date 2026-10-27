@@ -255,9 +255,18 @@ def biome_config(biome, assets):
         retail = Path('/private/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3')
         if retail.is_dir():
             from ground_tiles import make_ground_tiles
-            make_ground_tiles(assets, retail, name='ground-tiles', per_map=2000, skip=(), above_sea=0, tolerance=2,
-                              max_height=8, max_vocab=32)
+            tiles = make_ground_tiles(assets, retail, name='ground-tiles', per_map=2000, skip=(), above_sea=0, tolerance=2,
+                                      max_height=8, max_vocab=32)
             config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
+            # Retail mixes each bed from the same ramps when shaded (orange
+            # is mauve 19-22 over yellow 177-181, the cap greys 83-86 with
+            # cream 65-67 and mint 50-51); over the whole palette, shading
+            # walked the orange onto grey 86 + bright orange 198, which the
+            # map never uses. Pairs come only from the entries of the map's
+            # raised ground (99%) and its plain tiles.
+            from palette_pairs import make_pair_lut, retail_entries
+            make_pair_lut(assets, name='palette-pairs-desert.png', entries=retail_entries(retail) + tiles['vocabulary'])
+            config['textures']['palette'] = '/sculpt-assets/palette-pairs-desert.png'
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
     config['biomes'] = BIOME_NAMES
