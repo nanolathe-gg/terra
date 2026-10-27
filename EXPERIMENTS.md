@@ -37,6 +37,7 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 29 | **Blind round 4**: build 563d63976, seeds 9137/9871, each seed cropped from a different half (no repeated layouts) | | A: AUC 0.93 (8/10 caught, 1 false); B: AUC 0.96 (6/10, 0 false) | Regression vs round 3. Tells: features on dead-flat featureless plains (retail plains carry faint lit lumps); an evenly dark smooth band down ramp shoulders; soft rounded waterlines with a pale fringe; beaded rock on low steps; geometric water outlines (authored example layouts) |
 | 30 | Bug: surfaceHeight returned early on near-level ground (slope < 0.1) before adding baked relief, so gentle-slope relief and any flat-ground detail never rendered. Fixed | | Lumps visible after the fix | Fixed |
 | 31 | Level-ground lumps (appearance only), crisp notched waterline, less rock on low banks, ramp shoulders take relief and rock (only the graded surface is protected) | plainRelief 1.2, crispShore, bankRock 0.25 | Round-4 tells, side by side with retail img01/img03; slope stats unchanged except level-ground gray 1.5% to 2.7% (retail 1.1%) | Kept; needs round 5 |
+| 32 | **Blind round 5**: build f2ed349b3, seeds 10457/11939, crops from different halves | | A: AUC 0.20 (0/10 caught, 6/10 retail called generated); B: AUC 0.18 (0/10, 6/10) | Inverted. By eye the sets can't be told apart, but the reviewers read retail's Bryce-rendered contour banding (terrace lines, rings round lakes) and lumpy plains as 'generated'. Ours lacks that banding, a systematic difference. One real tell: a speck of water inside rock on a coast |
 
 Open tells and gaps:
 
@@ -51,3 +52,5 @@ Open tells and gaps:
   shoulder and face width need variation along the outline.
 - Archipelago crater floors drop below the biome's beach height and take the bright beach material.
 - Blind sets sample authored example layouts; geometric water outlines are partly the examples' own brush strokes.
+- Retail slopes show contour banding from their height-banded renders; ours has none (round 5). A banding knob is the user's call.
+- Specks of water inside coastal rock (round 5, coasts scene).
