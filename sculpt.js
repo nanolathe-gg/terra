@@ -58,6 +58,7 @@ const SHAPE_FIELDS=[
   ['faceVariation','face-variation','Face width variation',['plateau','offset','erase'],0,150,5,100,'How much the edge face widens and narrows along the outline.'],
   ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
+  ['bankPx','bank-px','Dry bank (px)',['deep','shallow'],0,160,2,1,'Width of the dry bank from the waterline to the level ground, whatever the shape\'s size (0: a share of the shape, set by Bank width).'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound)',['crystal'],0,1,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world).'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
   ['crystalSize','crystal-size','Crystal width (px)',['crystal'],6,640,2,1,'Crystals: typical base width. Column mound: column top width (retail ~15).'],
@@ -286,7 +287,7 @@ function startStroke(kind,p,options={}) {
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),fingers:options.fingers??shapeValue('fingers'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
     ...Object.fromEntries(['crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation'].map(k => [k,options[k]??shapeValue(k)])),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
@@ -359,6 +360,8 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const shoulderedHill=s.kind==='hill' && experiment.get('forms')==='shouldered';
   const waterTool=s.kind==='deep' || s.kind==='shallow';
   const bankScale=waterTool?2**((s.bankWidth-.5)*1.3):1;
+  // Dry bank of a fixed width on the ground (Lava; 0 keeps the old share).
+  const bankPx=waterTool?(s.bankPx??0):0;
   const faceWidth=.66+(s.softness-.5)*.9,backWidth=s.softness===.5?1.34:2-faceWidth;
   const radius=s.radius,amp=s.rough*radius*(naturalWater ? 1.1 : naturalPlateau ? .95 : shoulderedHill ? .85 : s.kind==='crater' ? .45 : .2);
   const macro=naturalWater || naturalPlateau;
@@ -379,7 +382,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const bumpy=['hill','mountain','lower'].includes(s.kind);
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
   const northWiden=s.northFace??0;
-  const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
+  const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
@@ -455,6 +458,17 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       // Shift the waterline across the coast band (coast near r 0.67).
       const len=Math.sqrt(dx*dx+dy*dy)||1,band=1-smooth(.45,.9,Math.abs(r-.67));
       if (band>0) r+=band*fingerShift(s,i,wx,wy,dx/len,dy/len,s.fingers)/(radius*width*bankScale);
+    }
+    if (bankPx>0 && s.base[i]>config.seaLevel) {
+      // Retail Lava banks keep one width whatever the lake's size: the
+      // profile's 50/80/90% rises sit ~14/31/39 px from the lava on Kill the
+      // Middle, the shape of this brush's dry part stretched to ~60 px
+      // (measure/lava_coasts.py bank). Stretch the dry part (from this
+      // cell's waterline out) to bankPx; the waterline stays put.
+      const bed=(s.kind==='deep'?-55:-7)+(naturalWater?42*smooth(-.15,.55,s.noise.shelf[i])*s.shelves:0);
+      const y=1-(s.base[i]-config.seaLevel)/(s.base[i]-bed);
+      const rw=.1+.9*(.5-Math.sin(Math.asin(clamp(1-2*y,-1,1))/3));
+      if (r>rw) r=rw+(r-rw)*(1-rw)*radius*width*bankScale/bankPx;
     }
     // A continuous deep core follows the unwarped stroke. Automatic shelves
     // cannot close it; an explicit later shallow-water stroke can cross it.
@@ -858,7 +872,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,faceVariation:s.faceVariation,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,cracks:s.cracks}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -962,7 +976,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  const r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110:0);
+  const r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
