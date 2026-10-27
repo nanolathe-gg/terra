@@ -17,8 +17,9 @@ const HELP = {
   shallow:'Set the bed to −7. Paint through deep water to make a shallow passage, or through land to make shallows.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
+  offset:'Paint an area to raise or lower by the chosen height. Its edge is natural and its softness sets cliff or slope; the ground keeps its own relief.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
-  move:'Click a shape to select it; drag to move it. Its brush settings appear below and edit it live.'
+  move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
 let config, renderer, heights, protection, routes, cracks, grid, size, spacing, noise;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
@@ -34,7 +35,7 @@ const TOOL_PRESETS={
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
   archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
-const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,400],amount:['amount',5,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
+const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,400],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
 let toolSettings={};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
@@ -59,8 +60,10 @@ const hillLift=(s,i) => 1+s.rough*(.75*s.noise.coastWidth[i]+.30*s.noise.detail[
 
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
+// Height slider range per shape kind; Raise / lower is signed.
+const amountRange=kind => kind==='offset'?[-80,80]:kind==='smooth'?[5,100]:[5,160];
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {cracks:kind==='hill'?40:kind==='mountain'?50:0,diameter:200,amount:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {cracks:kind==='hill'?40:kind==='mountain'?50:0,diameter:200,amount:kind==='offset'?20:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -69,7 +72,7 @@ function rememberTool(custom=false) {
   toolSettings[tool]=state;
 }
 function showTool(state) {
-  $('amount').max=tool==='smooth'?'100':'160';
+  [$('amount').min,$('amount').max]=amountRange(tool).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
   $('shallow-mode').value=state.shallowMode==='area'?'area':'passage';
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
@@ -82,10 +85,11 @@ function updateControls() {
   try {
   const fixed=['deep','shallow','ramp'].includes(tool);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=tool==='smooth'?'Strength':tool==='lower'?'Lower by':tool==='crater'?'Depth':'Rise';
-  $('amount').max=tool==='smooth'?'100':'160';
-  if (Number($('amount').value)>Number($('amount').max)) $('amount').value=$('amount').max;
-  $('amount-value').textContent=tool==='smooth'?$('amount').value+'%':(tool==='lower'?'−':'+')+$('amount').value;
+  $('amount-label').textContent=tool==='smooth'?'Strength':tool==='lower'?'Lower by':tool==='crater'?'Depth':tool==='offset'?'Height change':'Rise';
+  const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
+  $('amount').value=String(clamp(Number($('amount').value),lo,hi));
+  const amountNow=Number($('amount').value);
+  $('amount-value').textContent=tool==='smooth'?amountNow+'%':tool==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(tool==='lower'?'−':'+')+amountNow;
   $('diameter-value').textContent=$('diameter').value+' units';
   $('roughness-value').textContent=$('roughness').value+'%';
   $('roughness-label').textContent=tool==='ramp'?'Shoulder freedom':tool==='deep' && NATURAL_COAST?'Coast freedom':tool==='plateau' && experiment.get('edges')==='natural'?'Edge freedom':'Roughness';
@@ -94,7 +98,7 @@ function updateControls() {
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
-  $('softness-control').hidden=!['plateau','hill','mountain','crater'].includes(tool);
+  $('softness-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-control').hidden=!['plateau','hill','mountain','crater'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
   $('bank-value').textContent=$('bank-width').value+'%';
@@ -136,21 +140,47 @@ function valueNoise(x,y,s) {
   const a=hash(ix,iy,s),b=hash(ix+1,iy,s),c=hash(ix,iy+1,s),d=hash(ix+1,iy+1,s);
   return (a+(b-a)*tx)*(1-ty)+(c+(d-c)*tx)*ty;
 }
+// Brush noise fields: two octaves each, as (wavelength, weight, salt).
+const NOISE_FIELDS={x:[[95,.7,0x1863],[37,.3,0x32a7]],y:[[95,.7,0x73c1],[37,.3,0x9e15]],detail:[[64,.65,0x5b39],[23,.35,0x2ac9]],
+  coastX:[[210,.65,0x5e17],[75,.35,0x37ab]],coastY:[[210,.65,0x84d1],[75,.35,0x192f]],coastWidth:[[180,.65,0x73b9],[55,.35,0x4f25]],shelf:[[170,.75,0x986d],[48,.25,0x62f3]]};
+const noiseValue=(field,s,x,y) => { const [[w1,a1,k1],[w2,a2,k2]]=NOISE_FIELDS[field]; return a1*valueNoise(x/w1,y/w1,s^k1)+a2*valueNoise(x/w2,y/w2,s^k2); };
 function makeNoise(s) {
   // Noise is a fixed world-space field, never generated anew per draw or dab.
-  const x=new Float32Array(grid*grid),y=new Float32Array(grid*grid),detail=new Float32Array(grid*grid);
-  const coastX=new Float32Array(grid*grid),coastY=new Float32Array(grid*grid),coastWidth=new Float32Array(grid*grid),shelf=new Float32Array(grid*grid);
-  for (let z=0;z<grid;z++) for (let col=0;col<grid;col++) {
-    const i=z*grid+col,wx=col*spacing,wy=z*spacing;
-    x[i]=.7*valueNoise(wx/95,wy/95,s^0x1863)+.3*valueNoise(wx/37,wy/37,s^0x32a7);
-    y[i]=.7*valueNoise(wx/95,wy/95,s^0x73c1)+.3*valueNoise(wx/37,wy/37,s^0x9e15);
-    detail[i]=.65*valueNoise(wx/64,wy/64,s^0x5b39)+.35*valueNoise(wx/23,wy/23,s^0x2ac9);
-    coastX[i]=.65*valueNoise(wx/210,wy/210,s^0x5e17)+.35*valueNoise(wx/75,wy/75,s^0x37ab);
-    coastY[i]=.65*valueNoise(wx/210,wy/210,s^0x84d1)+.35*valueNoise(wx/75,wy/75,s^0x192f);
-    coastWidth[i]=.65*valueNoise(wx/180,wy/180,s^0x73b9)+.35*valueNoise(wx/55,wy/55,s^0x4f25);
-    shelf[i]=.75*valueNoise(wx/170,wy/170,s^0x986d)+.25*valueNoise(wx/48,wy/48,s^0x62f3);
+  const out={};
+  for (const field of Object.keys(NOISE_FIELDS)) {
+    const a=out[field]=new Float32Array(grid*grid);
+    for (let z=0;z<grid;z++) for (let col=0;col<grid;col++) a[z*grid+col]=noiseValue(field,s,col*spacing,z*spacing);
   }
-  return {x,y,detail,coastX,coastY,coastWidth,shelf};
+  return out;
+}
+// A shape's frame maps its authoring coordinates to the world: moving,
+// rotating or scaling a shape changes the frame, and its brush noise is read
+// through the inverse, so the shape keeps its own outline and character.
+// [a,b,c,d,e,f]: world = (a·x + c·y + e, b·x + d·y + f). Absent = identity.
+const IDENTITY=[1,0,0,1,0,0];
+const compose=(m,n) => [m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];
+const invert=m => { const det=m[0]*m[3]-m[1]*m[2],a=m[3]/det,b=-m[1]/det,c=-m[2]/det,d=m[0]/det; return [a,b,c,d,-(a*m[4]+c*m[5]),-(b*m[4]+d*m[5])]; };
+const applyFrame=(m,x,y) => ({x:m[0]*x+m[2]*y+m[4],y:m[1]*x+m[3]*y+m[5]});
+const about=(pivot,m) => compose([1,0,0,1,pivot.x,pivot.y],compose(m,[1,0,0,1,-pivot.x,-pivot.y]));
+const rotation=a => [Math.cos(a),Math.sin(a),-Math.sin(a),Math.cos(a),0,0];
+const scaling=k => [k,0,0,k,0,0];
+const isIdentity=m => !m || m.every((v,i) => Math.abs(v-IDENTITY[i])<1e-9);
+// Noise for a framed shape, gathered from the seed's world grid at each
+// cell's authoring position (nearest cell; the fields are smooth), within
+// rect only. Positions off the map are evaluated directly.
+const framedBuffers=new WeakMap();
+function framedNoise(node,seed,frame,rect) {
+  const world=noiseFor(seed),inv=invert(frame);
+  let out=framedBuffers.get(node);
+  if (!out) { out={}; for (const field of Object.keys(NOISE_FIELDS)) out[field]=new Float32Array(grid*grid); framedBuffers.set(node,out); }
+  const fields=Object.keys(NOISE_FIELDS);
+  for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
+    const i=y*grid+x,wx=x*spacing,wy=y*spacing,lx=inv[0]*wx+inv[2]*wy+inv[4],ly=inv[1]*wx+inv[3]*wy+inv[5];
+    const gx=Math.round(lx/spacing),gy=Math.round(ly/spacing);
+    if (gx>=0 && gy>=0 && gx<grid && gy<grid) { const j=gy*grid+gx; for (const field of fields) out[field][i]=world[field][j]; }
+    else for (const field of fields) out[field][i]=noiseValue(field,seed,lx,ly);
+  }
+  return out;
 }
 function sample(field,x,y) {
   const gx=clamp(x/spacing,0,grid-1),gy=clamp(y/spacing,0,grid-1),ix=Math.floor(gx),iy=Math.floor(gy);
@@ -174,20 +204,23 @@ function startStroke(kind,p,options={}) {
   applySeedControl();
   const radius=options.radius ?? Number($('diameter').value)/2;
   const base=heights.slice();
-  const strokeSeed=options.seed ?? seed, strokeNoise=noiseFor(strokeSeed);
-  const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8;
+  const strokeSeed=options.seed ?? seed,frame=isIdentity(options.frame)?null:options.frame;
+  const strokeNoise=frame?framedNoise(options.node,strokeSeed,frame,options.rect):noiseFor(strokeSeed);
+  // Directions drawn from noise live in the authoring frame; turn them with it.
+  const turn=frame?Math.atan2(frame[1],frame[0]):0;
+  const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8+turn;
   return {kind,base,protectBase:protection.slice(),routeBase:routes.slice(),crackBase:cracks.slice(),cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
-    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100),Math.sin(strokeSeed%628/100)],craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
+    noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??(experiment.has('craterlets')?Number(experiment.get('craterlets')):3),baseline:sample(base,p.x,p.y),weights:new Float32Array(heights.length),
     distances:kind==='hill' && experiment.get('forms')==='shouldered'?new Float32Array(heights.length).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
 }
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
-  const naturalPlateau=s.kind==='plateau' && experiment.get('edges')==='natural';
+  const naturalPlateau=(s.kind==='plateau' || s.kind==='offset') && experiment.get('edges')==='natural';
   const shoulderedHill=s.kind==='hill' && experiment.get('forms')==='shouldered';
   const waterTool=s.kind==='deep' || s.kind==='shallow';
   const bankScale=waterTool?2**((s.bankWidth-.5)*1.3):1;
@@ -214,14 +247,16 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
   for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
-    const i=y*grid+x,wx=x*spacing,wy=y*spacing;
+    const i=y*grid+x,wx=x*spacing,wy=y*spacing,inv=s.inv;
+    // Authoring-frame position for noise evaluated directly from position.
+    const lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
     const t=spanLength2?clamp(((wx-p.x)*spanX+(wy-p.y)*spanY)/spanLength2,0,1):0;
     const cx=p.x+spanX*t,cy=p.y+spanY*t;
     if (crater) {
       // Retail lunar craters: a lobed outline, a rim that rises and falls
       // (with gaps), an off-centre lumpy bowl and an uneven apron. All of the
       // variation is position-based noise from the crater's own seed.
-      const sc=Math.max(radius*.55,8),n0=valueNoise(wx/(radius*.95),wy/(radius*.95),s.seed^0x4a7),n1=valueNoise(wx/sc,wy/sc,s.seed^0x1c3),n2=valueNoise(wx/(sc*.6),wy/(sc*.6),s.seed^0x2d9);
+      const sc=Math.max(radius*.55,8),n0=valueNoise(lx/(radius*.95),ly/(radius*.95),s.seed^0x4a7),n1=valueNoise(lx/sc,ly/sc,s.seed^0x1c3),n2=valueNoise(lx/(sc*.6),ly/(sc*.6),s.seed^0x2d9);
       const lobe=1+s.rough*(.38*n0+.22*n1+.1*n2);
       const off=s.craterOffset;
       const dx=wx-cx-off[0]*radius*.32*s.rough,dy=wy-cy-off[1]*radius*.32*s.rough;
@@ -231,7 +266,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (influence<=s.weights[i]) continue;
       s.weights[i]=influence;
       const floorEdge=.25+.45*(1-s.softness);
-      const rimNoise=valueNoise(wx/(sc*.8),wy/(sc*.8),s.seed^0x3e1);
+      const rimNoise=valueNoise(lx/(sc*.8),ly/(sc*.8),s.seed^0x3e1);
       // Low-frequency rim noise lets whole sectors of rim sink away.
       const rimHeight=s.amount*.34*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
       const rimWidth=(.16+.2*s.softness)*(1+.35*n2);
@@ -253,8 +288,10 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (d2>s.distances[i]) continue;
       s.distances[i]=d2;
     }
-    const dx=wx-cx+amp*(noiseX[i]-(spanLength2?sample(noiseX,cx,cy):nx));
-    const dy=wy-cy+amp*(noiseY[i]-(spanLength2?sample(noiseY,cx,cy):ny));
+    // Outline displacement, turned with the shape's frame.
+    const ex=noiseX[i]-(spanLength2?sample(noiseX,cx,cy):nx),ey=noiseY[i]-(spanLength2?sample(noiseY,cx,cy):ny);
+    const dx=wx-cx+amp*(s.rot[0]*ex-s.rot[1]*ey);
+    const dy=wy-cy+amp*(s.rot[1]*ex+s.rot[0]*ey);
     // The line anchors the channel; broad world-space fields move its banks
     // independently and vary its width. Repeated dabs do not add fresh noise.
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
@@ -264,12 +301,12 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const core=naturalWater?1-smooth(.20,coreEdge,Math.sqrt((wx-p.x)**2+(wy-p.y)**2)/radius):0;
     if (r>=1 && !core && !shoulderedHill) continue;
     let w;
-    if (s.kind==='plateau') {
+    if (s.kind==='plateau' || s.kind==='offset') {
       // Independently vary shoulder width around the level core. An irregular
       // outline with an identical cross-section still makes a uniform rim.
       // Face width varies along the outline at a broad scale too, so a cliff
       // band does not keep one width round a smooth arc (blind round 3).
-      const broadFace=valueNoise(wx/(radius*1.3),wy/(radius*1.3),s.seed^0x5f1);
+      const broadFace=valueNoise(lx/(radius*1.3),ly/(radius*1.3),s.seed^0x5f1);
       const originalShoulder=naturalPlateau?clamp(.56+s.rough*(s.noise.detail[i]+.30*s.noise.coastWidth[i])+faceVariation*.22*broadFace,.18,.88):.62;
       const shoulder=clamp(originalShoulder-(s.softness-.5)*.6,.15,.90);
       w=1-smooth(shoulder,1,r);
@@ -305,6 +342,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     if (!shoulderedHill && influence<=s.weights[i]) continue;
     s.weights[i]=influence; const base=s.base[i]; let value=base;
     if (s.kind==='plateau') value=base+(s.baseline+s.amount+s.rough*3*s.noise.detail[i]-base)*w;
+    else if (s.kind==='offset') value=base+s.amount*w;
     else if (s.kind==='hill' || s.kind==='mountain') value=base+s.amount*w*(shoulderedHill?hillLift(s,i):1);
     else if (s.kind==='lower') value=base-s.amount*w;
     else if (s.kind==='deep' || s.kind==='shallow') {
@@ -335,6 +373,9 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     // are protected, while new hills reopen the affected slopes to weathering.
     if (s.kind==='shallow' && s.shallowMode==='passage' && value===base) protection[i]=s.protectBase[i];
     else if (s.kind==='plateau' || s.kind==='shallow') protection[i]=Math.max(s.protectBase[i]*(1-w),smooth(.65,.95,w));
+    // A raised or lowered area keeps the ground's own protection; only its
+    // new edge faces open to weathering.
+    else if (s.kind==='offset') protection[i]=s.protectBase[i]*(1-4*w*(1-w));
     else if (s.kind!=='smooth') protection[i]=s.protectBase[i]*(1-influence);
   }
   heightDirty=true;
@@ -412,7 +453,8 @@ function rampSegment(s,a,b) {
     // The graded centre follows the curve exactly. Only the outer shoulder
     // borrows the brush's outline variation; it cannot buckle the grade.
     const edgeNoise=smooth(.55,1,plainDistance/radius)*amp;
-    const distance=Math.hypot(wx-cx+edgeNoise*(s.noise.x[i]-sample(s.noise.x,cx,cy)),wy-cy+edgeNoise*(s.noise.y[i]-sample(s.noise.y,cx,cy)));
+    const ex=s.noise.x[i]-sample(s.noise.x,cx,cy),ey=s.noise.y[i]-sample(s.noise.y,cx,cy);
+    const distance=Math.hypot(wx-cx+edgeNoise*(s.rot[0]*ex-s.rot[1]*ey),wy-cy+edgeNoise*(s.rot[1]*ex+s.rot[0]*ey));
     if (distance>=radius || distance>=field.distance[i]) continue;
     if (field.distance[i]===Infinity) field.touched.push(i);
     field.distance[i]=distance; field.along[i]=field.length+t*length;
@@ -479,7 +521,7 @@ function markChanged() { markViewChanged(); heightDirty=true; error(); }
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
-const NODE_NAMES={ground:'Ground undulation',crater:'Crater',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
+const NODE_NAMES={ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
 function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
@@ -504,7 +546,9 @@ function applyNode(n) {
     return;
   }
   if (n.kind==='compact') { for (const i of clipCells()) if (heights[i]>config.baseHeight) heights[i]=config.baseHeight+(heights[i]-config.baseHeight)*n.factor; return; }
-  const pts=n.points, s=startStroke(n.kind,pts[0],{...n.params,seed:n.seed});
+  const pts=n.points,b=nodeBounds(n),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
+  const s=startStroke(n.kind,pts[0],{...n.params,seed:n.seed,frame:n.frame,node:n,
+    rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
   if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
   if (n.kind==='hill' && experiment.get('forms')==='shouldered' && experiment.get('replay')!=='full') {
     // The settled ridge replaces every live dab, so replay goes straight to
@@ -565,15 +609,24 @@ function applyCracks(s) {
   if (!(s.cracks>0) || !['hill','mountain','plateau','crater'].includes(s.kind)) return;
   for (const i of clipCells()) if (s.weights[i]>0) cracks[i]=Math.max(cracks[i],Math.min(1,s.weights[i]*1.6)*s.cracks);
 }
+const craterletKeys=new WeakMap();
 function addCraterlets(n,s) {
   // Small satellite craters around the rim and apron, as on retail Moon
   // sections. Positions, sizes and depths come from the crater's seed.
   const count=Math.round(s.craterlets||0),c=n.points[n.points.length>>1];
+  const framed=!isIdentity(n.frame),turn=framed?Math.atan2(n.frame[1],n.frame[0]):0;
+  let keys=craterletKeys.get(n); if (!keys) craterletKeys.set(n,keys=[]);
   for (let k=0;k<count;k++) {
     const h=(a) => { let x=Math.imul((s.seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
-    const angle=h(1)*Math.PI*2,dist=s.radius*(.9+h(2)*1.1),small=s.radius*(.1+.22*h(3));
+    const angle=h(1)*Math.PI*2+turn,dist=s.radius*(.9+h(2)*1.1),small=s.radius*(.1+.22*h(3));
     const p={x:clamp(c.x+Math.cos(angle)*dist,0,size-1),y:clamp(c.y+Math.sin(angle)*dist,0,size-1)};
-    const t=startStroke('crater',p,{...n.params,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0});
+    let rect=null;
+    if (framed) {
+      const reach=small*3+12*spacing,box=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
+      rect={x0:Math.max(box.x0,Math.floor((p.x-reach)/spacing)),y0:Math.max(box.y0,Math.floor((p.y-reach)/spacing)),x1:Math.min(box.x1,Math.ceil((p.x+reach)/spacing)),y1:Math.min(box.y1,Math.ceil((p.y+reach)/spacing))};
+      keys[k] ??= {};
+    }
+    const t=startStroke('crater',p,{...n.params,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0,frame:n.frame,node:keys[k],rect});
     dab(t,p);
   }
 }
@@ -594,7 +647,7 @@ function nodeBounds(n) {
   const q=n.params||{},radius=q.radius||40,rough=q.rough??.35,soft=q.softness??.5;
   const bank=['deep','shallow'].includes(n.kind)?2**(((q.bankWidth??.5)-.5)*1.3):1;
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
-  const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
+  const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
   const r=radius*reach+12*spacing;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
@@ -651,6 +704,31 @@ function nodeDistance(n,p) {
   }
   return best;
 }
+// Moving, rotating and scaling a shape: the gesture's transform applies to
+// the shape as it was when the gesture began, path and frame together.
+function nodeState(n) { return {points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
+function transformNode(n,start,m) {
+  n.points=start.points.map(q => { const r=applyFrame(m,q.x,q.y); return {x:clamp(r.x,0,size-1),y:clamp(r.y,0,size-1)}; });
+  n.frame=compose(m,start.frame);
+  if (n.params && start.radius) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
+}
+function nodePivot(n) {
+  let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
+  for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
+  return {x:(ax+bx)/2,y:(ay+by)/2,reach:Math.hypot(bx-ax,by-ay)/2+(n.params?.radius||40)};
+}
+// Handle positions on the overlay: round rotates, square scales.
+function nodeHandles(n) {
+  const c=nodePivot(n),lift=(Math.max(config.seaLevel,sample(heights,c.x,c.y))-config.baseHeight)*.5;
+  const r=Math.min(c.reach,size*.45),inside=v => clamp(v,12,size-12);
+  return {pivot:c,centre:{cx:c.x,cy:c.y-lift},rotate:{cx:inside(c.x),cy:inside(c.y-lift-r)},scale:{cx:inside(c.x+r*.707),cy:inside(c.y-lift+r*.707)},radius:r};
+}
+function changeSelected(edit) {
+  const n=nodes[selected]; if (!n?.points || stroke || moving) return;
+  const before=nodeBounds(n); cancelWeather(); edit(n);
+  pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected);
+  flushEval(); markViewChanged(); checkpoint(); queueWeather(); selectNode(selected); schedule();
+}
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
   nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<bestScore) { bestScore=d/reach; best=i; } });
@@ -662,7 +740,8 @@ function selectNode(i) {
   if (n && n.params && HELP[n.kind]) {
     if (tool!=='move') { rememberTool(); tool=n.kind; }
     const p=n.params;
-    $('diameter').value=clamp(p.radius*2,40,400); $('amount').value=clamp(p.amount,5,160); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
+    const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
+    $('diameter').value=clamp(p.radius*2,40,400); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
     $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage'; $('cracks').value=Math.round((p.cracks||0)*100);
   }
@@ -804,7 +883,7 @@ function frame(timestamp) {
 }
 function drawOverlay() {
   ink.clearRect(0,0,size,size);
-  if (cursor && !pan && !space) {
+  if (cursor && !pan && !space && tool!=='move') {
     ink.strokeStyle='#b8eef3'; ink.fillStyle='#a7e6f00c'; ink.lineWidth=1.5;
     ink.beginPath(); ink.arc(cursor.cx,cursor.cy,stroke?.radius ?? Number($('diameter').value)/2,0,Math.PI*2); ink.fill(); ink.stroke();
     ink.beginPath(); ink.moveTo(cursor.cx-4,cursor.cy); ink.lineTo(cursor.cx+4,cursor.cy); ink.moveTo(cursor.cx,cursor.cy-4); ink.lineTo(cursor.cx,cursor.cy+4); ink.stroke();
@@ -817,6 +896,15 @@ function drawOverlay() {
     }
     ink.stroke();
   }
+  if (tool==='move' && selected>=0 && nodes[selected]?.points && !stroke) {
+    const hd=nodeHandles(nodes[selected]);
+    ink.strokeStyle='#f3d36b88'; ink.lineWidth=1; ink.setLineDash([4,5]);
+    ink.beginPath(); ink.arc(hd.centre.cx,hd.centre.cy,hd.radius,0,Math.PI*2); ink.stroke(); ink.setLineDash([]);
+    ink.fillStyle='#f3d36b'; ink.strokeStyle='#1d2416'; ink.lineWidth=1.5;
+    ink.beginPath(); ink.moveTo(hd.centre.cx,hd.centre.cy); ink.lineTo(hd.rotate.cx,hd.rotate.cy); ink.strokeStyle='#f3d36b88'; ink.stroke(); ink.strokeStyle='#1d2416';
+    ink.beginPath(); ink.arc(hd.rotate.cx,hd.rotate.cy,7,0,Math.PI*2); ink.fill(); ink.stroke();
+    ink.fillRect(hd.scale.cx-6,hd.scale.cy-6,12,12); ink.strokeRect(hd.scale.cx-6,hd.scale.cy-6,12,12);
+  }
   if (stroke?.kind==='ramp') {
     ink.strokeStyle='#d4eda8'; ink.lineWidth=2; ink.setLineDash([6,5]); ink.beginPath();
     for (const [i,p] of stroke.path.entries()) {
@@ -825,7 +913,7 @@ function drawOverlay() {
     }
     ink.stroke(); ink.setLineDash([]);
   }
-  overlay.style.cursor=pan?'grabbing':space?'grab':'none';
+  overlay.style.cursor=pan?'grabbing':space?'grab':tool==='move'?(moving?'grabbing':'default'):'none';
 }
 function screenPoint(event) { const r=canvas.getBoundingClientRect(); return {cx:(event.clientX-r.left)*canvas.width/r.width,cy:(event.clientY-r.top)*canvas.height/r.height}; }
 function picked(screen) {
@@ -855,8 +943,18 @@ overlay.addEventListener('pointerdown',event => {
   else {
     const p=picked(cursor); if (!p) return;
     if (tool==='move') {
-      const i=pickNode(p); selectNode(i);
-      if (i>=0 && nodes[i].points) { cancelWeather(); moving={index:i,start:p,points:nodes[i].points.map(q => ({...q}))}; }
+      // A selected shape's handles take precedence over picking.
+      let mode=null,i=-1;
+      if (selected>=0 && nodes[selected]?.points) {
+        const hd=nodeHandles(nodes[selected]),near=q => Math.hypot(cursor.cx-q.cx,cursor.cy-q.cy)<11;
+        if (near(hd.rotate)) mode='rotate'; else if (near(hd.scale)) mode='scale';
+        if (mode) i=selected;
+      }
+      if (!mode) { i=pickNode(p); selectNode(i); mode=event.shiftKey?'height':'move'; }
+      if (i>=0 && nodes[i].points) {
+        if (mode==='height' && (!nodes[i].params || ['deep','shallow','ramp'].includes(nodes[i].kind))) mode='move';
+        cancelWeather(); moving={index:i,mode,start:p,screen:{...cursor},pivot:nodePivot(nodes[i]),state:nodeState(nodes[i])};
+      }
       pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule(); return;
     }
     if (selected>=0) { selected=-1; renderLayers(); }
@@ -870,7 +968,22 @@ overlay.addEventListener('pointerdown',event => {
 overlay.addEventListener('pointermove',event => {
   if (!ready || (pointerId!==null && event.pointerId!==pointerId)) return; cursor=screenPoint(event);
   if (pan) { $('viewport').scrollLeft=pan.left+pan.x-event.clientX; $('viewport').scrollTop=pan.top+pan.y-event.clientY; }
-  else if (moving) { const p=picked(cursor); if (p) { const dx=p.x-moving.start.x,dy=p.y-moving.start.y,n=nodes[moving.index],before=nodeBounds(n); n.points=moving.points.map(q => ({x:clamp(q.x+dx,0,size-1),y:clamp(q.y+dy,0,size-1)})); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index); } }
+  else if (moving) {
+    const p=picked(cursor),n=nodes[moving.index],before=nodeBounds(n),c=moving.pivot,a=moving.start;
+    if (moving.mode==='height') {
+      // Drag up to raise, down to lower: half a height unit per pixel.
+      const [lo,hi]=amountRange(n.kind);
+      n.params={...n.params,amount:clamp(Math.round(moving.state.amount+(moving.screen.cy-cursor.cy)*.5),lo,hi)};
+      $('amount').value=n.params.amount; updateControls();
+    } else if (p) {
+      const m=moving.mode==='rotate'?about(c,rotation(Math.atan2(p.y-c.y,p.x-c.x)-Math.atan2(a.y-c.y,a.x-c.x)))
+        :moving.mode==='scale'?about(c,scaling(clamp(Math.hypot(p.x-c.x,p.y-c.y)/Math.max(4,Math.hypot(a.x-c.x,a.y-c.y)),.2,5)))
+        :[1,0,0,1,p.x-a.x,p.y-a.y];
+      transformNode(n,moving.state,m);
+      if (moving.mode==='scale') $('diameter').value=clamp(n.params.radius*2,40,400);
+    }
+    pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index);
+  }
   else if (stroke) { const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   schedule(Boolean(stroke));
 });
@@ -1032,7 +1145,7 @@ function loadSketch(s) {
   }
   showTool(toolSettings[tool]);
   if (Number.isFinite(s.diameter)) $('diameter').value=clamp(s.diameter,40,400);
-  if (Number.isFinite(s.amount)) $('amount').value=clamp(s.amount,5,160);
+  if (Number.isFinite(s.amount)) $('amount').value=clamp(s.amount,...amountRange(tool));
   if (Number.isFinite(s.roughness)) $('roughness').value=clamp(s.roughness,0,100);
   if (Number.isFinite(s.shelves)) $('shelves').value=clamp(s.shelves,0,100);
   $('shallow-mode').value=s.shallowMode==='passage'?'passage':'area';
@@ -1067,10 +1180,10 @@ function serializeNodes() {
 }
 function deserializeNodes(list) {
   const decode=text => { const raw=atob(text),view=new DataView(Uint8Array.from(raw,c => c.charCodeAt(0)).buffer),out=new Float32Array(raw.length/4); for (let i=0;i<out.length;i++) out[i]=view.getFloat32(i*4,true); return out; };
-  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points});
+  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined});
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
-for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; rememberTool(); tool=b.dataset.tool; showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
+for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
@@ -1126,6 +1239,15 @@ window.addEventListener('keydown',event => {
   if (event.code==='Space' && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); space=true; schedule(false); }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
   if ((event.key==='Delete' || event.key==='Backspace') && selected>=0 && !stroke && !moving) { event.preventDefault(); nodeAction('delete'); status('Deleted the selected shape.'); }
+  // Rotate , . (15°), scale [ ] (10%), height PageUp / PageDown (5).
+  const turn={',':-Math.PI/12,'.':Math.PI/12}[event.key],grow={'[':1/1.1,']':1.1}[event.key],lift={PageUp:5,PageDown:-5}[event.key];
+  if (selected>=0 && nodes[selected]?.points && (turn || grow || lift) && !event.metaKey && !event.ctrlKey) {
+    event.preventDefault();
+    changeSelected(n => {
+      if (lift) { if (n.params && !['deep','shallow','ramp'].includes(n.kind)) n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; return; }
+      transformNode(n,nodeState(n),about(nodePivot(n),turn?rotation(turn):scaling(grow)));
+    });
+  }
 });
 window.addEventListener('keyup',event => { if (event.code==='Space') { space=false; schedule(false); } });
 window.addEventListener('blur',() => { space=false; cursor=null; schedule(false); }); new ResizeObserver(resize).observe($('viewport'));
@@ -1232,5 +1354,5 @@ async function boot() {
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
 // Read-only hook for capture tools: the displayed (refined) heights.
-window.sculptDebug = {heights: () => Array.from(previewHeight()), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
+window.sculptDebug = {heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 boot();
