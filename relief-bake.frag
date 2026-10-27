@@ -330,7 +330,7 @@ float sandCover(vec2 p, float slope, float relief) {
     if (field <= 0.0) return 0.0;
     float lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
     float thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
-    return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.7, 1.3, slope));
+    return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
 }
 
 void main() {

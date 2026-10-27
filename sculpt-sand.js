@@ -80,7 +80,9 @@ export async function transportSand(request, height, pause) {
         dx=nx/norm; dy=ny/norm;
         // Going uphill ends the run: the grains pond against the rise.
         if (at(px+dx,py+dy)>hc+.6) { sand[j]+=load; break; }
-        const settle=load*(.015+(1-Math.exp(-1/length))*(1-smooth(.25,.9,slope)));
+        // Sand also rests on the lower slopes (an apron up the foot), not
+        // only once the ground levels out.
+        const settle=load*(.015+(1-Math.exp(-1/length))*(1-smooth(.45,1.15,slope)));
         sand[j]+=settle; load-=settle; px+=dx; py+=dy;
         if (px<1 || py<1 || px>grid-2 || py>grid-2) break;
       }

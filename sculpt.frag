@@ -45,6 +45,7 @@ uniform bool uTransitionBody;
 uniform float uCrackDark;
 uniform float uCrackLit;
 uniform float uSandDust;
+uniform float uSandGrass;
 uniform float uTransitionDetail;
 uniform float uRockStart;
 uniform float uRockFull;
@@ -511,7 +512,12 @@ void main() {
             material = mix(material, weathered, smoothstep(0.0, 0.6, sand) * uSandDust * 0.6);
             float speck = terrainNoise(p * 6.0 + vec2(17.0, 29.0)).b;
             float cover = smoothstep(0.35, 0.95, sand + (speck - 0.5) * 0.55 * uSandEdge);
-            material = mix(material, sandMaterial, cover);
+            // Grass and moss travel with the sand and regrow over it in
+            // patches, more where it is thin; tufts break the patch edges.
+            float patchy = terrainNoise(p * 0.35 + vec2(51.0, 7.0)).g * 0.65 + terrainNoise(p * 1.3 + vec2(3.0, 91.0)).b * 0.35;
+            float tuft = terrainNoise(p * 5.0 + vec2(13.0, 47.0)).r;
+            float regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + (tuft - 0.5) * 0.3) * uSandGrass;
+            material = mix(material, sandMaterial, cover * (1.0 - regrow));
         }
     }
     // Baked boulders take rock material, lit by the same surface.
