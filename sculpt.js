@@ -798,6 +798,48 @@ window.addEventListener('keydown',event => {
 window.addEventListener('keyup',event => { if (event.code==='Space') { space=false; schedule(false); } });
 window.addEventListener('blur',() => { space=false; cursor=null; schedule(false); }); new ResizeObserver(resize).observe($('viewport'));
 
+
+// Surface knobs: each writes the page address and the renderer's variant,
+// then the renderer re-reads its uniforms and re-bakes its fields.
+const KNOBS = [
+  ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
+    ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefOctaves','Octaves',1,6,1,5]]],
+  ['Faces', [['faceEdge','Edge breakup',0,2,.05,.8],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
+  ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
+    ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35]]],
+  ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
+  ['Sand', [['sand','Amount',0,1,.05,0],['beach','Beach height',0,30,1,10],['basinSand','In hollows',0,1,.05,.6],['drift','Wind drifts',0,1,.05,.45],
+    ['wind','Wind toward (deg)',0,360,5,20],['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4],['sandGrain','Grain',0,.5,.01,.22]]],
+  ['Water', [['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60]]],
+  ['Palette', [['dither','Dither',0,4,.1,2]]],
+];
+function buildKnobs() {
+  const root = $('knobs'), params = new URLSearchParams(location.search);
+  const toggle = (key, label, on, off, isOn) => {
+    const row = document.createElement('label'); row.className = 'small'; row.style.display = 'flex'; row.style.gap = '6px';
+    const box = document.createElement('input'); box.type = 'checkbox'; box.checked = isOn;
+    box.addEventListener('change', () => setKnob(key, box.checked ? on : off));
+    row.append(box, label); root.append(row);
+  };
+  toggle('detail', 'Fall-line surface (off: lab look)', 'fall', 'lab', params.get('detail') !== 'lab');
+  toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
+  for (const [group, knobs] of KNOBS) {
+    const title = document.createElement('h3'); title.textContent = group; root.append(title);
+    for (const [key, label, min, max, step, value] of knobs) {
+      const wrap = document.createElement('div'); wrap.className = 'control';
+      const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value;
+      wrap.innerHTML = `<label for="${id}">${label} <output>${current}</output></label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${current}">`;
+      const input = wrap.querySelector('input'), out = wrap.querySelector('output');
+      input.addEventListener('input', () => { out.textContent = input.value; setKnob(key, input.value); });
+      root.append(wrap);
+    }
+  }
+}
+function setKnob(key, value) {
+  const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
+  experiment.set(key, value);
+  renderer.variant.set(key, value); renderer.applyKnobs(); markViewChanged(); schedule();
+}
 async function boot() {
   try {
     const response=await fetch('/sculpt-config.json'); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
@@ -823,6 +865,7 @@ async function boot() {
     size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); heights.fill(config.baseHeight);
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
+    buildKnobs();
     $('fracture-control').hidden=!config.textures.fractures;
     $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100);
     $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);

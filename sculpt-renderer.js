@@ -158,19 +158,7 @@ export class TerrainRenderer {
     this.i('uSoilCover', variant.get('transition') === 'soil');
     this.i('uMineralMargins', variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope');
     this.i('uRockLayers', rockLayers);
-    this.i('uReliefMode', variant.get('detail') === 'fall' ? 1 : 0);
-    this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
-    gl.uniform2fv(this.location('uFaceSlope'), (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
-    gl.uniform2fv(this.location('uRockShare'), (variant.get('rockShare') || '0.2,0.85').split(',').map(Number));
-    gl.uniform4fv(this.location('uFaceScore'), (variant.get('faceScore') || '0.2,2.0,0.5,0.3').split(',').map(Number));
-    this.f('uFaceEdge', variant.has('faceEdge') ? Number(variant.get('faceEdge')) : 0.8);
-    this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
-    this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
-    this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
-    this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
-    this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
-    gl.uniform3fv(this.location('uSandColor'), (variant.get('sandColor') || '196,168,104').split(',').map(v => Number(v) / 255));
-    this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.22);
+    this.applyKnobs();
     this.i('uDiagnostic', ['diffuse','occlusion','shadow','exposure','shading','material'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -193,8 +181,6 @@ export class TerrainRenderer {
     this.f('uRockStart', threshold - feather * 0.5);
     this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
-    this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : 24);
-    this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : 60);
     this.f('uMineralDetail', variant.get('grain') === 'strong' ? 2.4 : 1.0);
     const rockMean = variant.get('rock') === 'hill' ? material.hillRockMeanRGB : material.rockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
@@ -362,6 +348,28 @@ export class TerrainRenderer {
     gl.bindVertexArray(null);
     if (query) { gl.endQuery(this.timer.TIME_ELAPSED_EXT); this.queries.push(query); }
     return {milliseconds: performance.now() - start, gpuMilliseconds: this.lastGPU};
+  }
+
+  // Surface knobs read from the variant; callable again after a change.
+  applyKnobs() {
+    const gl = this.gl, variant = this.variant;
+    gl.useProgram(this.program);
+    this.i('uReliefMode', variant.get('detail') === 'lab' ? 0 : 1);
+    this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
+    gl.uniform2fv(this.location('uFaceSlope'), (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
+    gl.uniform2fv(this.location('uRockShare'), (variant.get('rockShare') || '0.2,0.85').split(',').map(Number));
+    gl.uniform4fv(this.location('uFaceScore'), (variant.get('faceScore') || '0.2,2.0,0.5,0.3').split(',').map(Number));
+    this.f('uFaceEdge', variant.has('faceEdge') ? Number(variant.get('faceEdge')) : 0.8);
+    this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
+    this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
+    this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
+    this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
+    this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
+    gl.uniform3fv(this.location('uSandColor'), (variant.get('sandColor') || '196,168,104').split(',').map(v => Number(v) / 255));
+    this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.22);
+    this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : 24);
+    this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : 60);
+    this.fieldsDirty = true;
   }
 
   bakeFields() {

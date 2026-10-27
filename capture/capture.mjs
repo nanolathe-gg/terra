@@ -95,6 +95,13 @@ try {
       await sleep(500);
       state = await settle(scene.name);
     }
+    if (scene.eval) {
+      // Drive page controls the way an author would, then wait again.
+      const evalResult = await evaluate(scene.eval);
+      if (evalResult !== undefined) console.log(`${scene.name} eval: ${evalResult}`);
+      await sleep(500);
+      state = await settle(scene.name);
+    }
     await sleep(300);
     const dataURL = await evaluate(`document.getElementById('terrain').toDataURL('image/png')`);
     const png = Buffer.from(dataURL.split(',')[1], 'base64');
