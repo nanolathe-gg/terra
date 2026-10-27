@@ -24,8 +24,11 @@ mkdirSync(outDir, {recursive: true});
 
 const chromePath = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const port = Number(process.env.CAPTURE_PORT || 9431);
-// Metal-backed ANGLE gives the real GPU on macOS; SwiftShader timings
-// would not be comparable with interactive use.
+// --enable-gpu gives headless Chrome the real GPU on macOS: WebGPU runs on
+// Dawn's Metal backend (navigator.gpu needs a secure context, which
+// 127.0.0.1 is), and Metal-backed ANGLE serves the 2D overlay. SwiftShader
+// timings would not be comparable with interactive use. toDataURL reads the
+// last presented WebGPU frame.
 const chrome = spawn(chromePath, ['--headless=new', '--enable-gpu', '--use-angle=metal',
   `--remote-debugging-port=${port}`, `--user-data-dir=${join(outDir, '.profile')}`,
   '--window-size=1500,1250', '--no-first-run', 'about:blank'], {stdio: 'ignore'});

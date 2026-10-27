@@ -119,55 +119,55 @@ struct Uniforms {
     groundTiles: i32,
     sandGrain: f32,
     // Bake (relief-bake.wgsl).
-    reliefScale: f32,
-    reliefAmount: f32,
-    reliefBranch: f32,
-    reliefLumps: f32,
+    reliefScale: f32,     // wavelength of the first octave, world px
+    reliefAmount: f32,    // height per unit slope per wavelength
+    reliefBranch: f32,    // how strongly octaves follow earlier gullies
+    reliefLumps: f32,     // share of isotropic lumps mixed in
     reliefOctaves: i32,
-    reliefGain: f32,
-    reliefWarp: f32,
-    reliefPatchy: f32,
-    reliefJitter: f32,
-    gentleRelief: f32,
-    boulderDensity: f32,
-    boulderSize: f32,
-    boulderFoot: f32,
-    boulderCluster: f32,
-    boulderMoss: f32,
-    debris: f32,
-    debrisReach: f32,
-    debrisSize: f32,
-    debrisSort: f32,
-    repose: f32,
-    sand: f32,
-    crackSeverity: f32,
-    crackWidth: f32,
-    crackJagged: f32,
-    crackNetwork: f32,
-    crackReach: f32,
-    cracksOn: i32,
-    plainRelief: f32,
-    crackSpacing: f32,
-    crackLength: f32,
-    windAngle: f32,
-    ripple: f32,
-    rippleHeight: f32,
-    beachDistance: f32,
-    banding: f32,
-    hasBeach: i32,
-    sandBanding: f32,
+    reliefGain: f32,      // amplitude ratio between octaves
+    reliefWarp: f32,      // domain warp, world px
+    reliefPatchy: f32,    // spatial variation of relief strength
+    reliefJitter: f32,    // per-kernel phase and wavelength variation
+    gentleRelief: f32,    // relief on gentle slopes
+    boulderDensity: f32,  // 0 disables boulders
+    boulderSize: f32,     // typical diameter, world px
+    boulderFoot: f32,     // share of boulders sourced from cliff feet
+    boulderCluster: f32,  // how strongly boulders gather into fields
+    boulderMoss: f32,     // share of stones with mossy tops
+    debris: f32,          // 0 disables debris
+    debrisReach: f32,     // how far debris tumbles, world px
+    debrisSize: f32,      // largest debris stone, world px
+    debrisSort: f32,      // 1: coarse near the source, fine far away
+    repose: f32,          // slope below which debris comes to rest
+    sand: f32,            // 0 disables sand
+    crackSeverity: f32,   // crack depth
+    crackWidth: f32,      // crack core width, world px
+    crackJagged: f32,     // kinks and bends along a crack
+    crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
+    crackReach: f32,      // 0: steep faces only; 1: onto gentle slopes
+    cracksOn: i32,        // the full bake computes cracks; previews skip them
+    plainRelief: f32,     // faint lit lumps on level ground (appearance only)
+    crackSpacing: f32,    // major crack block size, world px
+    crackLength: f32,     // elongation of crack cells along the fall line
+    windAngle: f32,       // direction the wind blows toward, degrees (0 = east)
+    ripple: f32,          // ripple wavelength, world px (0: none)
+    rippleHeight: f32,    // ripple amplitude, height units
+    beachDistance: f32,   // beach reach from the waterline, world px (0: none)
+    banding: f32,         // contour banding strength (0: none)
+    hasBeach: i32,        // the world has beach-sand art: painted sand uses it
+    sandBanding: f32,     // streaks on sand and ramps
     sandBandSpacing: f32,
-    apron: f32,
-    worms: f32,
-    boulderRound: f32,
-    bandSpacing: f32,
-    bandSoftness: f32,
-    bandLine: f32,
-    sun: vec3f,
-    crackMinor: f32,
-    crackHairline: f32,
-    crackBlocks: f32,
-    crackMajor: f32,
+    apron: f32,           // sand apron reach round raised ground, world px (0: none)
+    worms: f32,           // wormy regolith relief on slopes (lunar)
+    boulderRound: f32,    // 0: angular boulders; 1: rounded domes
+    bandSpacing: f32,     // height between bands, height units
+    bandSoftness: f32,    // share of each band that is riser
+    bandLine: f32,        // darkness of the line along each riser
+    sun: vec3f,           // the renderer's light, for lit crack walls
+    crackMinor: f32,      // share of minor cracks inside blocks
+    crackHairline: f32,   // share of hairline crazing
+    crackBlocks: f32,     // how far blocks step and tilt against each other
+    crackMajor: f32,      // share of major cracks
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
