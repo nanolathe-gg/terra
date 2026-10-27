@@ -20,6 +20,8 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 12 | **Blind round 1**: 10 generated crops (build 616ff965d, seeds 911/4829) and 10 retail crops (one per corpus map); one fresh reviewer | | 4/10 generated caught, 4/10 retail called generated: chance | Decisive tell was forensic (grass tiles off the 32-px grid); it misfired on retail too. Visual tell: evenly spaced "comb" ribs |
 | 13 | Random phase and wavelength per relief kernel | reliefJitter | Plateau-face A/B against the retail Wretched Ridges cliff | Kept at 0.8: ribs stay, spacing irregular |
 | 14 | Procedural base ground: a fixed set of unique 32-px tiles placed randomly on the TNT tile grid. Pixels draw from a 64-quantile colour ramp measured on retail flat grass | ground, groundTiles, groundClump | Retail flat grass is nearly uncorrelated per pixel (lag-1 0.05, lag-2 0.135); flat stats 73.8/13.1/1.6/61.4 against retail 73.7/12.9/1.1/60.9 | Kept: 16 tiles by default. This answers the user's TNT tile-budget requirement and removes the off-grid forensic tell |
+| 15 | Shapes as editable nodes (kind, path, parameters, own seed), replayed in order, with a snapshot before each node; Move tool; Shapes list | (editing) | Examples render identically to before; move, height edit and two undos are pixel-exact; the v4 recipe reloads pixel-exact | Kept |
+| 16 | Crater brush: bowl below the ground struck, raised rim, apron fading to nothing at 1.8 radii; dry floor (paint water for a crater lake); drag for elongated | crater: diameter, depth, roughness, softness | Click, drag and on-plateau craters; first version left a ring step and flooded the floor | Kept |
 
 Open tells and gaps:
 

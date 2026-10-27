@@ -16,6 +16,7 @@ const HELP = {
   shallow:'Set the bed to −7. Paint through deep water to make a shallow passage, or through land to make shallows.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
+  crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it. Its brush settings appear below and edit it live.'
 };
 let config, renderer, heights, protection, routes, grid, size, spacing, noise;
@@ -80,7 +81,7 @@ function updateControls() {
   try {
   const fixed=['deep','shallow','ramp'].includes(tool);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=tool==='smooth'?'Strength':tool==='lower'?'Lower by':'Rise';
+  $('amount-label').textContent=tool==='smooth'?'Strength':tool==='lower'?'Lower by':tool==='crater'?'Depth':'Rise';
   $('amount').max=tool==='smooth'?'100':'160';
   if (Number($('amount').value)>Number($('amount').max)) $('amount').value=$('amount').max;
   $('amount-value').textContent=tool==='smooth'?$('amount').value+'%':(tool==='lower'?'−':'+')+$('amount').value;
@@ -92,7 +93,7 @@ function updateControls() {
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
-  $('softness-control').hidden=!['plateau','hill','mountain'].includes(tool);
+  $('softness-control').hidden=!['plateau','hill','mountain','crater'].includes(tool);
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
   $('softness-value').textContent=$('softness').value+'%';
@@ -188,7 +189,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const waterTool=s.kind==='deep' || s.kind==='shallow';
   const bankScale=waterTool?2**((s.bankWidth-.5)*1.3):1;
   const faceWidth=.66+(s.softness-.5)*.9,backWidth=s.softness===.5?1.34:2-faceWidth;
-  const radius=s.radius,amp=s.rough*radius*(naturalWater ? 1.1 : naturalPlateau ? .95 : shoulderedHill ? .85 : .2);
+  const radius=s.radius,amp=s.rough*radius*(naturalWater ? 1.1 : naturalPlateau ? .95 : shoulderedHill ? .85 : s.kind==='crater' ? .45 : .2);
   const macro=naturalWater || naturalPlateau;
   const noiseX=macro?s.noise.coastX:s.noise.x,noiseY=macro?s.noise.coastY:s.noise.y;
   const nx=sample(noiseX,p.x,p.y),ny=sample(noiseY,p.x,p.y);
@@ -199,13 +200,37 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const length=Math.sqrt(spanLength2),sign=s.faceSide;
     face=[-spanY/length*sign,spanX/length*sign];
   }
-  const extent=radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
+  const crater=s.kind==='crater';
+  const extent=crater?radius*1.8+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp;
   const x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   const y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
     const i=y*grid+x,wx=x*spacing,wy=y*spacing;
     const t=spanLength2?clamp(((wx-p.x)*spanX+(wy-p.y)*spanY)/spanLength2,0,1):0;
     const cx=p.x+spanX*t,cy=p.y+spanY*t;
+    if (crater) {
+      // A bowl below the ground it strikes, a raised rim, and a rim apron
+      // fading outward. The nearest dab of a stroke decides each sample.
+      const dx=wx-cx+amp*(s.noise.coastX[i]-sample(s.noise.coastX,cx,cy)),dy=wy-cy+amp*(s.noise.coastY[i]-sample(s.noise.coastY,cx,cy));
+      const r=Math.hypot(dx,dy)/radius;
+      if (r>=1.8) continue;
+      const influence=1-r/1.8;
+      if (influence<=s.weights[i]) continue;
+      s.weights[i]=influence;
+      const floorEdge=.25+.45*(1-s.softness),rimHeight=s.amount*.32,rimWidth=.18+.2*s.softness;
+      const bowl=r<1?1-smooth(floorEdge,1,r):0;
+      // The apron fades to nothing by the footprint edge, so no step remains.
+      const rim=r<1?Math.exp(-(((r-1)/rimWidth)**2)):Math.exp(-(((r-1)/(rimWidth*2.2))**2))*(1-smooth(1.25,1.8,r));
+      const floorNoise=s.rough*3*s.noise.detail[i]*(r<floorEdge?1:0);
+      // A crater floor stays dry; paint water into it for a crater lake.
+      const floor=Math.max(s.baseline-s.amount,Math.min(s.baseline,config.seaLevel+4));
+      const target=s.baseline+rimHeight*rim-(s.baseline-floor)*bowl+floorNoise;
+      // Blend toward the crater only within its footprint; the apron adds.
+      const value=r<1?s.base[i]+(target-s.base[i])*smooth(0,.15,1-r)+(r>=.85?rimHeight*rim*(1-smooth(0,.15,1-r)):0):s.base[i]+rimHeight*rim;
+      heights[i]=clamp(value,MIN_HEIGHT,MAX_HEIGHT);
+      protection[i]=s.protectBase[i]*(1-smooth(0,.3,influence)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,influence));
+      continue;
+    }
     if (shoulderedHill) {
       const d2=(wx-cx)**2+(wy-cy)**2;
       if (d2>s.distances[i]) continue;
@@ -432,7 +457,7 @@ function markChanged() { markViewChanged(); heightDirty=true; error(); }
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1;
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
-const NODE_NAMES={plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
+const NODE_NAMES={crater:'Crater',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
 function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode}; }
 function applyNode(n) {
   if (n.hidden) return;
