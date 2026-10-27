@@ -266,6 +266,11 @@ export class TerrainRenderer {
     const strataDefaults = this.config.strataColors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
     gl.uniform3fv(this.location('uStrataColors'), strata.flat());
+    // Bed zones (start above the plain, slot A, slot B, B's share); by
+    // default two colours alternating evenly from just above the plain.
+    const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
+    gl.uniform4fv(this.location('uStrataZones'), [...zones.flat(), ...new Array((6 - zones.length) * 4).fill(0)]);
+    gl.uniform1i(this.location('uStrataZoneCount'), zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
   }

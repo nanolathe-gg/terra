@@ -46,11 +46,13 @@ WORLD_KNOBS = {
     'green': dict(banding=.8, bandLine=.45),
     'red': dict(crackNetwork=.5, crackSeverity=.7, crackReach=.7, banding=.6),
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5),
-    # Painted Desert: rounded badland hills striped by coloured beds, rilled
-    # by runoff, few cracks.
-    'desert': dict(strata=1, strataSpacing=9, strataWarp=10, strataContrast=.75, banding=.45, crackSeverity=.3,
-                   crackMajor=.4, crackMinor=.3, crackHairline=.2, crackBlocks=.2, reliefAmount=.7, gullyRock=.2,
-                   sand=.6, undulation=6),
+    # Painted Desert, measured on the retail map (measure/desert_*.py): beds
+    # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
+    # slopes, not cracks; the plain carries no lighting (luma vs gradient
+    # R^2 0.000), so no undulation, lumps or occlusion; no drifts.
+    'desert': dict(strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
+                   crackSeverity=.15, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
+                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
     'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=.8, undulation=4, plainRelief=.6, banding=.3),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
@@ -165,15 +167,26 @@ def biome_config(biome, assets):
         # defaults its rock colour to match.
         config['colors'] = {'rock': '#3d5174'}
     if biome == 'desert':
-        # Default base colours (editable per world in the page): pale ground
-        # and slopes so the beds carry the colour.
-        # The shared TA palette has no warm tans (nearest are olive-creams and
-        # rose-pinks), so this world defaults to full colour; with the TA
-        # palette on it renders rose and ochre beds on olive flats.
-        config['colors'] = {'ground': '#bfa68c', 'slope': '#b0927e', 'rock': '#8e5c4c', 'sand': '#d2bc9e',
-                            'shallow': '#7b8a74', 'deep': '#3f5660'}
-        config['strataColors'] = [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]]
+        # Measured on the retail map. Its tans are 50/50 mixes of two palette
+        # entries (orange 20+178, cool 84+65), which nearest-colour cannot
+        # make, so the world stays full colour until the palette stage mixes
+        # index pairs. Bed colour slots: 1 orange (189,143,105), 2 cool
+        # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
+        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
+        # Zones by height above the plain: orange with cool bands (share
+        # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
+        # rock with orange lines above ~69.
+        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 0, .3]]
         config['defaults']['palette'] = 'off'
+        config['defaults']['example'] = 'mesas'
+        # The plain: exact-index tiles from the retail map's level ground,
+        # when the map has been exported (see ground_tiles.py).
+        retail = Path('/private/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3')
+        if retail.is_dir():
+            from ground_tiles import make_ground_tiles
+            make_ground_tiles(assets, retail, name='ground-tiles', per_map=2000, skip=(), above_sea=0, tolerance=2,
+                              max_height=8, max_vocab=32)
+            config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
     config['biomes'] = BIOME_NAMES

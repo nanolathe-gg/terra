@@ -37,12 +37,12 @@ let lastWaterStroke=null;
 const TOOL_PRESETS={
   green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  desert:{crater:{roughness:55,softness:55},plateau:{roughness:50,softness:55},hill:{roughness:45,softness:62},mountain:{roughness:50,softness:50},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   zhon:{crater:{roughness:55,softness:60},plateau:{roughness:45,softness:55},hill:{roughness:30,softness:35},mountain:{roughness:45,softness:55},ramp:{roughness:18},deep:{roughness:60,bankWidth:70,beachFlatness:75,shelves:70},shallow:{roughness:30,bankWidth:70,beachFlatness:75}},
   archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
 };
-const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,400],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
+const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
 // Shape options: per-shape settings, shown for the tools they apply to and
 // kept in each shape, so a selected shape can be changed like a new stroke.
 // Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
@@ -987,7 +987,7 @@ function selectNode(i) {
     if (tool!=='move') { rememberTool(); tool=n.kind; }
     const p=n.params;
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
-    $('diameter').value=clamp(p.radius*2,40,400); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
+    $('diameter').value=clamp(p.radius*2,40,800); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
     $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage'; $('cracks').value=Math.round((p.cracks||0)*100);
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
@@ -1235,7 +1235,7 @@ overlay.addEventListener('pointermove',event => {
         :moving.mode==='scale'?about(c,scaling(clamp(Math.hypot(p.x-c.x,p.y-c.y)/Math.max(4,Math.hypot(a.x-c.x,a.y-c.y)),.2,5)))
         :[1,0,0,1,p.x-a.x,p.y-a.y];
       transformNode(n,moving.state,m);
-      if (moving.mode==='scale') $('diameter').value=clamp(n.params.radius*2,40,400);
+      if (moving.mode==='scale') $('diameter').value=clamp(n.params.radius*2,40,800);
     }
     pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index);
     moving.rect=unionRect(moving.rect,pendingRect);
@@ -1331,6 +1331,16 @@ function mixedScene() {
     demoStroke('shallow',[{x:465,y:320},{x:485,y:750}],{radius:45,rough:.22,shallowMode:'area'});
     markChanged(); return;
   }
+  if (experiment.get('example')==='mesas') {
+    // Painted Desert landforms at about retail proportions: a broad mesa
+    // (cap ~30% of its foot) with a spire, a lower mesa and rounded hills.
+    demoStroke('plateau',[{x:470,y:560},{x:560,y:600}],{radius:300,amount:67,rough:.18,softness:1});
+    demoStroke('mountain',[{x:530,y:570}],{radius:60,amount:60,rough:.5,softness:.3});
+    demoStroke('plateau',[{x:150,y:180},{x:260,y:220}],{radius:150,amount:45,rough:.25,softness:.9});
+    demoStroke('hill',[{x:860,y:180},{x:900,y:260}],{radius:110,amount:35,rough:.45});
+    demoStroke('hill',[{x:170,y:860}],{radius:80,amount:25,rough:.45});
+    markChanged(); return;
+  }
   if (experiment.get('example')==='hills') {
     // Same authored strokes for profile comparisons at native feature scales.
     demoStroke('hill',[{x:210,y:245}],{radius:76,amount:55,rough:.45});
@@ -1403,7 +1413,7 @@ function loadSketch(s) {
     toolSettings[kind]=restored;
   }
   showTool(toolSettings[tool]);
-  if (Number.isFinite(s.diameter)) $('diameter').value=clamp(s.diameter,40,400);
+  if (Number.isFinite(s.diameter)) $('diameter').value=clamp(s.diameter,40,800);
   if (Number.isFinite(s.amount)) $('amount').value=clamp(s.amount,...amountRange(tool));
   if (Number.isFinite(s.roughness)) $('roughness').value=clamp(s.roughness,0,100);
   if (Number.isFinite(s.shelves)) $('shelves').value=clamp(s.shelves,0,100);
@@ -1693,7 +1703,7 @@ async function boot() {
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
     if (worldId!==config.biomeId) document.querySelector('.topbar h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
-    $('example').value=['joins','coasts','hills','intersections','islands'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
+    $('example').value=['joins','coasts','hills','intersections','islands','mesas'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
     buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);

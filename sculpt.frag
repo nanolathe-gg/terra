@@ -79,7 +79,10 @@ uniform float uRockCrown;
 uniform float uStrata, uStrataSpacing, uStrataWarp, uStrataContrast;
 uniform vec3 uStrataColors[5];
 float strataHash(float k) { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
-vec3 strataColor(float k) { int i = int(floor(strataHash(k) * 4.999)); return i == 0 ? uStrataColors[0] : i == 1 ? uStrataColors[1] : i == 2 ? uStrataColors[2] : i == 3 ? uStrataColors[3] : uStrataColors[4]; }
+vec3 strataSlot(float k) { int i = int(k + 0.5); return i <= 0 ? uStrataColors[0] : i == 1 ? uStrataColors[1] : i == 2 ? uStrataColors[2] : i == 3 ? uStrataColors[3] : uStrataColors[4]; }
+// Zone table: x start (height above the plain), y slot A, z slot B, w B's share.
+uniform vec4 uStrataZones[6];
+uniform int uStrataZoneCount;
 uniform float uTransitionDetail;
 uniform float uRockStart;
 uniform float uRockFull;
@@ -553,25 +556,35 @@ void main() {
         exposed = max(exposed, crown);
     }
     if (uStrata > 0.0) {
-        // Horizontal beds of colour: each band's colour and thickness come
-        // from its index; the beds wander a little, and their boundaries
-        // are soft over a few height units. The material's own grain is kept
-        // as brightness, so rock stays darker than soil within a bed.
-        float warp = (terrainNoise(p * 0.12 + vec2(5.0, 9.0)).r - 0.5) * uStrataWarp
-                   + (terrainNoise(p * 0.55 + vec2(17.0, 2.0)).g - 0.5) * uStrataWarp * 0.3;
-        float t = (h - uBase + warp) / uStrataSpacing;
-        float k = floor(t), f = fract(t);
-        // Uneven thickness: shift the boundary within each band.
-        float split = 0.25 + 0.5 * strataHash(k + 0.37);
-        vec3 lower = strataColor(k * 2.0), upper = strataColor(k * 2.0 + 1.0);
-        vec3 bed = mix(lower, upper, smoothstep(split - 0.06, split + 0.06, f));
-        bed = mix(strataColor(k * 2.0 - 1.0), bed, smoothstep(0.0, 0.06, f));
+        // Beds by height, measured on retail Painted Desert: a zone table
+        // (start above the plain; materials A and B as colour slots; B's
+        // share of each period). Within a zone A and B alternate every
+        // uStrataSpacing units, quasi-periodically (B's share varies per
+        // bed), and B's share ramps toward the next zone when both use the
+        // same pair. Beds colour all raised ground, level tops included
+        // (retail mesa caps take their band's colour); edges are hard (~3
+        // px); bed edges wander ~1-1.5 units at 5-25 px and meander broadly.
+        float warp = (terrainNoise(p * 0.08 + vec2(5.0, 9.0)).r - 0.5) * uStrataWarp
+                   + (terrainNoise(p * 0.7 + vec2(17.0, 2.0)).g - 0.5) * 2.6
+                   + (terrainNoise(p * 2.1 + vec2(3.0, 41.0)).b - 0.5) * 1.2;
+        float hr = h - uBase + warp;
+        int zone = 0;
+        for (int i = 1; i < 6; i++) if (i < uStrataZoneCount && hr >= uStrataZones[i].x) zone = i;
+        vec4 z = uStrataZones[zone];
+        float share = z.w;
+        if (zone + 1 < uStrataZoneCount) {
+            vec4 next = uStrataZones[zone + 1];
+            if (next.y == z.y && next.z == z.z) share = mix(z.w, next.w, clamp((hr - z.x) / max(next.x - z.x, 0.1), 0.0, 1.0));
+        }
+        float S = max(uStrataSpacing, 0.5), t = hr / S, k = floor(t), f = fract(t);
+        float split = clamp(1.0 - share * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
+        float edge = clamp(1.5 * max(slope, 0.05) / S, 0.01, 0.2);
+        float isB = smoothstep(split - edge, split + edge, f) * (1.0 - smoothstep(1.0 - edge, 1.0, f));
+        vec3 bed = mix(strataSlot(z.y), strataSlot(z.z), isB);
         float lum = dot(material, vec3(0.299, 0.587, 0.114));
         float meanLum = max(dot(uGroundTexMean, vec3(0.299, 0.587, 0.114)), 0.05);
-        vec3 painted = clamp(bed * clamp(lum / meanLum, 0.7, 1.15), 0.0, 1.0);
-        // Beds show where erosion cuts them, on slopes; level tops keep
-        // their caprock and graded routes their surface.
-        float onRaised = smoothstep(uBase + 1.0, uBase + 6.0, h) * smoothstep(0.06, 0.28, slope) * (1.0 - route);
+        vec3 painted = clamp(bed * clamp(lum / meanLum, 0.82, 1.12), 0.0, 1.0);
+        float onRaised = smoothstep(uStrataZones[0].x, uStrataZones[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, painted, uStrata * uStrataContrast * onRaised);
     }
     if (uReliefMode == 1) {
