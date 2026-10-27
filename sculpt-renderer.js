@@ -169,6 +169,8 @@ export class TerrainRenderer {
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
+    gl.uniform3fv(this.location('uSandColor'), (variant.get('sandColor') || '196,168,104').split(',').map(v => Number(v) / 255));
+    this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.22);
     this.i('uDiagnostic', ['diffuse','occlusion','shadow','exposure','shading','material'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -387,6 +389,13 @@ export class TerrainRenderer {
     set('uDebrisSize', number('debrisSize', 6));
     set('uDebrisSort', number('debrisSort', 0.8));
     set('uRepose', number('repose', 0.6));
+    set('uSand', number('sand', 0));
+    set('uBeach', number('beach', 10));
+    set('uBasinSand', number('basinSand', 0.6));
+    set('uDrift', number('drift', 0.45));
+    set('uWindAngle', number('wind', 20));
+    set('uRipple', number('ripple', 7));
+    set('uRippleHeight', number('rippleHeight', 1.4));
     set('uReliefOctaves', number('reliefOctaves', 5), 'i');
     // The routes texture shares unit 12 with the fields; bind it for the bake.
     gl.activeTexture(gl.TEXTURE0 + 12);

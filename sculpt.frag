@@ -59,6 +59,8 @@ uniform float uLightCap;
 uniform float uFootRim;
 uniform float uCrevice;
 uniform float uDither;
+uniform vec3 uSandColor;
+uniform float uSandGrain;
 /*COMMON*/
 
 float visibility(vec2 p, float h) {
@@ -444,6 +446,21 @@ void main() {
         // where the face material has not taken over.
         float hollow = smoothstep(0.25, 0.9, -top) * smoothstep(uFaceSlope.x * 0.4, uFaceSlope.x, faceSlope);
         material *= 1.0 - uCrevice * hollow * (1.0 - route);
+    }
+    if (uReliefMode == 1) {
+        // Procedural sand: a colour with two scales of grain, so it needs no
+        // sampled art. Coverage comes from the bake.
+        float sand = bakedFields(p).a;
+        if (sand > 0.0) {
+            vec4 g1 = terrainNoise(p * 4.0 + vec2(3.0, 41.0)), g2 = terrainNoise(p * 0.9 + vec2(61.0, 5.0));
+            float grain = (g1.r - 0.5) * 1.0 + (g2.g - 0.5) * 0.6;
+            vec3 sandMaterial = uSandColor * (1.0 + grain * uSandGrain * 2.0);
+            // Thin sand breaks into grains between grass blades rather than
+            // fading as a veil: a per-pixel threshold against fine noise.
+            float speck = terrainNoise(p * 6.0 + vec2(17.0, 29.0)).b;
+            float cover = smoothstep(-0.08, 0.08, sand * 1.3 - 0.25 - (speck - 0.5) * 0.7);
+            material = mix(material, sandMaterial, cover);
+        }
     }
     // Baked boulders take rock material, lit by the same surface.
     if (uReliefMode == 1) material = mix(material, rock * 1.08, bakedFields(p).b);

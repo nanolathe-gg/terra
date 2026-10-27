@@ -30,6 +30,13 @@ uniform float uDebrisReach;      // how far debris tumbles, world px
 uniform float uDebrisSize;       // largest debris stone, world px
 uniform float uDebrisSort;       // 1: coarse near the source, fine far away
 uniform float uRepose;           // slope below which debris comes to rest
+uniform float uSand;             // 0 disables sand
+uniform float uBeach;            // beach height above the water plane
+uniform float uBasinSand;        // water-laid sand in hollows
+uniform float uDrift;            // wind-blown sand behind obstacles
+uniform float uWindAngle;        // direction the wind blows toward, degrees (0 = east)
+uniform float uRipple;           // ripple wavelength, world px (0: none)
+uniform float uRippleHeight;     // ripple amplitude, height units
 out vec4 outFields;
 
 const float TAU = 6.28318530718;
@@ -159,6 +166,31 @@ vec2 debrisStones(vec2 p, vec2 arrival) {
     return vec2(best, cover);
 }
 
+// Sand cover: beaches, water-laid hollows and wind-blown lee drifts.
+float sandCover(vec2 p, float h, float slope) {
+    if (uSand <= 0.0) return 0.0;
+    float gentle = 1.0 - smoothstep(0.25, 0.6, slope);
+    float beach = uBeach > 0.0 ? smoothstep(uSea + uBeach, uSea + uBeach * 0.4, h) * step(uSea - 1.0, h) * gentle : 0.0;
+    const float e = 12.0;
+    float around = 0.25 * (baseHeight(p + vec2(e, 0)) + baseHeight(p - vec2(e, 0)) + baseHeight(p + vec2(0, e)) + baseHeight(p - vec2(0, e)));
+    float basin = smoothstep(0.5, 3.0, around - h) * gentle * uBasinSand;
+    float drift = 0.0;
+    if (uDrift > 0.0) {
+        float a = radians(uWindAngle);
+        vec2 wind = vec2(cos(a), sin(a));
+        // Sheltered when ground upwind rises above the line of the wind.
+        float shelter = 0.0;
+        for (int i = 1; i <= 8; i++) {
+            float d = float(i) * 8.0;
+            shelter = max(shelter, (baseHeight(p - wind * d) - h) / d);
+        }
+        drift = smoothstep(0.15, 0.5, shelter) * gentle * uDrift;
+    }
+    float breakup = valueNoise(p / 40.0 + 13.0) * 0.5 + 0.5;
+    float cover = max(beach, max(basin, drift));
+    return clamp(cover * smoothstep(0.2, 0.6, breakup + cover * 0.4) * uSand, 0.0, 1.0);
+}
+
 void main() {
     vec2 p = gl_FragCoord.xy - 0.5;
     float h = baseHeight(p);
@@ -199,9 +231,19 @@ void main() {
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast.
     if (h > uSea) height = max(height, uSea + 0.5 - h);
+    float sand = sandCover(p, h, slope) * (1.0 - route);
+    if (sand > 0.0 && uRipple > 0.0) {
+        float a = radians(uWindAngle);
+        vec2 wind = vec2(cos(a), sin(a));
+        float wobble = valueNoise(p / 30.0 + 2.0) * 2.0;
+        height += sin(dot(p, wind) * 6.2831 / uRipple + wobble) * uRippleHeight * smoothstep(0.2, 0.7, sand);
+    }
+    // Sand buries relief beneath it.
+    height *= 1.0 - 0.8 * sand;
     vec2 rock = boulders(p, slope, h);
     vec2 scree = debrisStones(p, vec2(0.0));
     if (scree.x > rock.x) rock = scree;
     height += rock.x;
-    outFields = vec4(height, route, rock.y, gain);
+    rock.y *= 1.0 - sand;
+    outFields = vec4(height, route, rock.y, sand);
 }
