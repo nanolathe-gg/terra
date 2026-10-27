@@ -8,6 +8,9 @@ west (measured: brightest faces look 155-180 degrees, 0 = east, 90 = south).
 
     python lava_bands.py spectra ROOT [MAP...]   power across vs along contours
     python lava_bands.py lines ROOT OUT_DIR [MAP...]  dark-line census + profiles
+    python lava_bands.py strong ROOT [MAP...]    bold-line spacing by slope
+    python lava_bands.py faces ROOT OUT_DIR [MAP...]  lines crossed per whole face
+    python lava_bands.py topology ROOT [MAP...]  branch and end points per 100 px
 
 `spectra` samples 64-px luminance profiles on land, straight along the fall
 line and along the contour, at seeds binned by slope. Contour bands put
@@ -454,11 +457,78 @@ def topology(root, names, min_slope=.15):
     return out
 
 
+def strong_lines(P, thr=30, sig=2.0):
+    """The bold lines only: raw luminance smoothed along the contour
+    (Gaussian, sigma 2 px) at or below `thr` (line cores are palette
+    245/31/30/61, luma 0-30), in components of 6 px or more."""
+    lum = P['lum']
+    H, W = lum.shape
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    ty, tx = P['fx'], -P['fy']
+    acc = np.zeros_like(lum)
+    ws = 0.0
+    for k in range(-4, 5):
+        w = np.exp(-.5 * (k / sig) ** 2)
+        acc += w * map_coordinates(lum, [yy + ty * k, xx + tx * k], order=1, mode='nearest')
+        ws += w
+    line = (acc / ws <= thr) & P['ok']
+    lab, n = label(line, np.ones((3, 3)))
+    if n:
+        keep = np.bincount(lab.ravel()) >= 6
+        keep[0] = False
+        line = keep[lab]
+    return line
+
+
+def strong_spacing(root, names):
+    """Distance to the next bold line downhill, in px and height units, by
+    the mean slope of the segment between them. A fixed height step would
+    make the px spacing fall as 1/slope; a fixed ground spacing keeps it."""
+    rng = np.random.default_rng(7)
+    acc = {}
+    for m in iter_maps(root, names):
+        for x0, y0, x1, y1 in tiles(m):
+            P = prepare(m, x0, y0, x1, y1)
+            line = strong_lines(P)
+            ly, lx = np.nonzero(line)
+            if len(ly) == 0:
+                continue
+            tt = np.arange(0, 61, dtype=np.float32)
+            for k in rng.choice(len(ly), min(len(ly), 400), replace=False):
+                y, x = ly[k], lx[k]
+                uy, ux = P['fy'][y, x], P['fx'][y, x]
+                hit = profile(line.astype(np.float32), y, x, uy, ux, tt) > .5
+                after = np.nonzero(~hit)[0]
+                if not len(after):
+                    continue
+                nxt = np.nonzero(hit[after[0]:])[0]
+                if not len(nxt):
+                    continue
+                j = after[0] + nxt[0]
+                hh = profile(P['hs'], y, x, uy, ux, np.array([0, tt[j]], np.float32))
+                b = int(np.digitize(profile(P['g'], y, x, uy, ux, tt[:j + 1]).mean(), SLOPES) - 1)
+                a = acc.setdefault(b, [[], []])
+                a[0].append(float(tt[j]))
+                a[1].append(float(hh[0] - hh[1]))
+        print('done', m.name, file=sys.stderr)
+    out = []
+    for b in sorted(acc):
+        dp, dh = map(np.array, acc[b])
+        if len(dp) >= 30:
+            out.append(dict(slope_bin=f'{SLOPES[b]}-{SLOPES[b + 1]}', n=len(dp),
+                            px_p25_50_75=np.percentile(dp, [25, 50, 75]).round(1).tolist(),
+                            units_p25_50_75=np.percentile(dh, [25, 50, 75]).round(1).tolist()))
+    return out
+
+
 if __name__ == '__main__':
     cmd, root = sys.argv[1], sys.argv[2]
     if cmd == 'spectra':
         freqs, acc = spectra(root, sys.argv[3:])
         for r in report_spectra(freqs, acc):
+            print(json.dumps(r))
+    elif cmd == 'strong':
+        for r in strong_spacing(root, sys.argv[3:]):
             print(json.dumps(r))
     elif cmd == 'topology':
         print(json.dumps(topology(root, sys.argv[3:])))
