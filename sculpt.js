@@ -1429,7 +1429,7 @@ window.addEventListener('blur',() => { space=false; cursor=null; schedule(false)
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
 const KNOBS = [
-  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45]]],
+  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45]]],
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Level-ground lumps',0,3,.05,1.2],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13]]],
@@ -1492,6 +1492,17 @@ function buildWorldPanel() {
     box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
     rows.append(row);
   }
+  // Ground pattern: this world's own, or another world's, recoloured by
+  // the Ground base colour above.
+  const patterns=config.groundPatterns||{},patternRow=document.createElement('div'); patternRow.className='control';
+  patternRow.innerHTML=`<label for="ground-pattern">Ground pattern</label><select id="ground-pattern" style="width:100%"><option value="">This world's own</option>${Object.entries(patterns).filter(([id]) => id!==config.biomeId).map(([id,p]) => `<option value="${id}">${p.name}</option>`).join('')}</select><p class="small">Another world's ground grain, moved to this world's Ground colour. Contrast is under Ground below.</p>`;
+  rows.append(patternRow);
+  $('ground-pattern').value=patterns[experiment.get('groundPattern')]?experiment.get('groundPattern'):'';
+  $('ground-pattern').onchange=() => {
+    // Keep this world's ground colour when only the grain changes.
+    if (!world.colors?.ground && renderer.means.ground) { world.colors={...world.colors,ground:hexColor(renderer.means.ground)}; saveWorlds(); }
+    setKnob('groundPattern',$('ground-pattern').value);
+  };
   $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); renderer.setColors(worldColors()); markViewChanged(); schedule(); };
   $('world-new').onclick=() => {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
@@ -1567,7 +1578,7 @@ function setKnob(key, value) {
   experiment.set(key, value);
   if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); if (key==='strata') buildWorldPanel(); }
   // Textures are chosen when the renderer starts, so this switch reloads.
-  if (key === 'ground') { location.reload(); return; }
+  if (key === 'ground' || key === 'groundPattern') { location.reload(); return; }
   renderer.variant.set(key, value); renderer.applyKnobs(); markViewChanged(); schedule();
   if (key==='detail') $('fracture-control').hidden=!config.textures.fractures || value!=='lab';
   if (key==='undulation' || key==='undulationScale' || key==='undulationCover') {

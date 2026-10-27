@@ -114,7 +114,11 @@ export class TerrainRenderer {
       }
       if (key === 'noise' && variant.get('noise') === 'ridged') url = this.config.assetBase + 'noise-ridged-gaussian.png';
       // Procedural ground tiles replace the sampled grass when the biome has them.
-      if (key === 'grass' && variant.get('ground') !== 'texture' && this.config.textures.groundTiles) url = this.config.textures.groundTiles;
+      // A world may use another world's ground pattern (World panel).
+      if (key === 'grass') {
+        const ground = this.groundSource();
+        url = variant.get('ground') !== 'texture' && ground.groundTiles ? ground.groundTiles : ground.grass;
+      }
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Cannot load ${key} material`);
       const bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
@@ -245,6 +249,10 @@ export class TerrainRenderer {
 
   // Base colours chosen for a world: {ground, slope, rock, sand, beach,
   // shallow, deep} as [r,g,b] 0..1, or absent to keep the world's own.
+  groundSource() {
+    return this.config.groundPatterns?.[this.variant.get('groundPattern')] || this.config.textures;
+  }
+
   setColors(colors = {}) {
     const gl = this.gl;
     gl.useProgram(this.program);
@@ -437,7 +445,9 @@ export class TerrainRenderer {
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.8);
-    this.i('uGroundMode', variant.get('ground') !== 'texture' && this.config.textures.groundTiles ? 1 : 0);
+    this.i('uGroundMode', variant.get('ground') !== 'texture' && this.groundSource().groundTiles ? 1 : 0);
+    this.f('uGroundContrast', variant.has('groundContrast') ? Number(variant.get('groundContrast')) : 1);
+    this.i('uGroundBorrowed', this.groundSource() !== this.config.textures);
     this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
     this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
     this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);

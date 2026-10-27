@@ -51,6 +51,19 @@ uniform vec4 uWaterMid;   // rgb mid-depth colour, a: its depth (0: two stops)
 uniform float uBeachHeight, uBeachWidth;
 // Move a texture to a new base colour, keeping its grain.
 vec3 based(vec3 c, vec3 mean, vec4 base) { return base.a > 0.5 ? clamp(c - mean + base.rgb, 0.0, 1.0) : c; }
+// Ground pattern: its grain scaled about its mean, then moved to the base.
+// A borrowed pattern (another world's) lends only its brightness grain:
+// its hue variation would speckle on a different base colour.
+uniform float uGroundContrast;
+uniform bool uGroundBorrowed;
+vec3 groundBased(vec3 c) {
+    if (uGroundBorrowed && uGroundBase.a > 0.5) {
+        const vec3 luma = vec3(0.299, 0.587, 0.114);
+        float grain = dot(c, luma) / max(dot(uGroundTexMean, luma), 0.02);
+        return clamp(uGroundBase.rgb * (1.0 + (grain - 1.0) * uGroundContrast), 0.0, 1.0);
+    }
+    return based(uGroundTexMean + (c - uGroundTexMean) * uGroundContrast, uGroundTexMean, uGroundBase);
+}
 uniform float uCrackLit;
 uniform float uSandDust;
 uniform float uSandGrass;
@@ -240,7 +253,7 @@ void main() {
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
     vec2 pixel = vec2(gl_FragCoord.x, uSize - gl_FragCoord.y);
-    vec3 grass = based(uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb, uGroundTexMean, uGroundBase);
+    vec3 grass = groundBased(uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb);
     vec3 transitionGround=grass,transitionFace=grass,transitionLow=grass;
     float transitionPower=1.0;
     float transitionCore=0.0;
@@ -503,7 +516,7 @@ void main() {
         // Threshold so that roughly the chosen share of face pixels is rock.
         float threshold = mix(1.4, -0.9, share);
         float rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score);
-        vec3 moss = mix(based(texture(uSlopeGrass, pixel / 512.0).rgb, uSlopeTexMean, uSlopeBase), based(uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb, uGroundTexMean, uGroundBase), uMossFromGround);
+        vec3 moss = mix(based(texture(uSlopeGrass, pixel / 512.0).rgb, uSlopeTexMean, uSlopeBase), groundBased(uGroundMode == 1 ? groundTile(pixel) : texture(uGrass, pixel / 512.0).rgb), uMossFromGround);
         vec3 faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * uMicroRock);
         // A light, crisp grass rim where rough ground meets the level plain.

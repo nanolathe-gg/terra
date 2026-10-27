@@ -22,7 +22,7 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
 # plus its own overrides below, so each world has a value for every setting;
 # a knob missing here is reported in the page's console.
 KNOB_DEFAULTS = dict(
-    groundTiles=16, undulation=10, undulationScale=200, undulationCover=.45,
+    groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13,
@@ -189,8 +189,13 @@ def main():
         except (FileNotFoundError, OSError, ValueError) as err:
             print(f'skipping world {b}: {err}', flush=True)
     biomes = [b for b in biomes if b in configs]
+    # Any world may take another's ground pattern (World panel); the
+    # pattern's mean is replaced by the world's ground colour.
+    patterns = {b: {'name': BIOME_NAMES[b], 'grass': configs[b]['textures']['grass'],
+                    'groundTiles': configs[b]['textures'].get('groundTiles')} for b in biomes}
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
+        config['groundPatterns'] = patterns
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
