@@ -540,12 +540,14 @@ fn bake(p: vec2f) -> vec4f {
     // Ground cover clears weathered and painted sand alike.
     let paint = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
     let paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
-    let paintSand = smoothstep(0.30, 0.70, paint.b * 2.0 - 1.0 + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope)) * (1.0 - route);
+    // Sand bars (sandCrown) keep their sand on steep flanks.
+    let paintSand = smoothstep(0.30, 0.70, paint.b * 2.0 - 1.0 + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
     let paintGround = smoothstep(0.30, 0.70, 1.0 - paint.b * 2.0 + paintEdge);
     if (u.hasBeach == 0) { sand = max(sand, paintSand); }
     sand *= 1.0 - paintGround;
-    // Only sand deep enough to cover the ground buries relief and stones.
-    let buried = smoothstep(0.35, 0.9, sand);
+    // Only sand deep enough to cover the ground buries relief and stones;
+    // painted sand bars (sandCrown) bury theirs too.
+    let buried = max(smoothstep(0.35, 0.9, sand), paintSand * u.sandCrown);
     if (sand > 0.0 && u.ripple > 0.0) {
         let a = radians(u.windAngle);
         let wind = vec2f(cos(a), sin(a));
@@ -575,7 +577,8 @@ fn bake(p: vec2f) -> vec4f {
     // Band lines share the crack darkness code.
     var lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
     if (u.sandBanding > 0.0) {
-        let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand, smoothstep(0.3, 0.8, sand)), route * 0.6));
+        // Sand bars (sandCrown) are smooth rippled sand, not streaked dune slopes.
+        let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand * (1.0 - u.sandCrown), smoothstep(0.3, 0.8, sand)), route * 0.6));
         lineDark = max(lineDark, streak.x * (0.55 + 0.45 * smoothstep(-0.3, 0.4, -streak.y)));
     }
     crackAt.z = max(crackAt.z, bandLit * (1.0 - buried));
@@ -585,6 +588,10 @@ fn bake(p: vec2f) -> vec4f {
     var beach = beachCover(p, h, slope);
     if (u.hasBeach != 0) { beach = max(beach, paintSand); }
     beach *= 1.0 - paintGround;
+    // Alpha holds sand, or (negative) painted sand bars (sandCrown) in a
+    // world whose painted sand is beach art, so the draw can tell them from
+    // the automatic beach.
+    let bar = select(0.0, paintSand * u.sandCrown * (1.0 - paintGround), u.hasBeach != 0 && sand <= 0.0);
     // Green: 2 + crystal on crystal cells.
-    return vec4f(height, select(select(-beach, route, route > 0.01 || beach <= 0.0), 2.0 + crystalRaw, crystalCell > 0.02), crackCode, sand);
+    return vec4f(height, select(select(-beach, route, route > 0.01 || beach <= 0.0), 2.0 + crystalRaw, crystalCell > 0.02), crackCode, select(sand, -bar, bar > 0.0));
 }

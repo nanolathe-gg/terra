@@ -399,7 +399,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // A sandy slope's streaks are the world's look (Zhon dune slopes),
         // not baked shading, so they keep full strength.
         if (u.reliefMode == 1 && u.slopeSand == 0) { slopeCover *= u.slopeTexture; }
-        if (u.slopeSand != 0) { slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + bakedFields(p).a), route); }
+        if (u.slopeSand != 0) { slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + max(bakedFields(p).a, 0.0)), route); }
         slopeShare = slopeCover;
         grass = mix(grass, slopeGrass, slopeCover);
     }
@@ -483,6 +483,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         exposed = mix(exposed, chipped, materialWeather);
     }
     exposed *= 1.0 - route * (1.0 - smoothstep(0.45, 0.9, slope));
+    // Sand bars: painted sand keeps raised ground sand to its crown, steep
+    // or not (Zhon's river sections: domes rising ~100 units from the bed
+    // are sand all over, no rock). The automatic beach does not.
+    let sandBar = u.sandCrown * smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0));
+    exposed *= 1.0 - sandBar;
     let nearWater = 1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h);
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
@@ -531,7 +536,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Lump-scale noise breaks the face's upper and lower edges.
         let edgeNoise = terrainNoise(p * 1.5 + vec2f(53.0, 11.0));
         let faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * u.faceEdge);
-        let face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route);
+        let face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
         let share = mix(u.rockShare.x, u.rockShare.y, smoothstep(u.faceSlope.y, u.faceSlope.y * 1.8, slope));
         let fine = terrainNoise(p * 3.0 + vec2f(19.0, 7.0));
         // Gullies at channel scale expose rock in streaks down the slope.
@@ -560,7 +565,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.rockCrown > 0.0) {
         // Some worlds' raised ground is bare rock to its crown (Zhon's
         // domes), not only where it is steep.
-        let crown = smoothstep(u.base + 5.0, u.base + 14.0, h + (n.g - 0.5) * 6.0) * u.rockCrown * (1.0 - route);
+        let crown = smoothstep(u.base + 5.0, u.base + 14.0, h + (n.g - 0.5) * 6.0) * u.rockCrown * (1.0 - route) * (1.0 - sandBar);
         material = mix(material, rock, crown);
         exposed = max(exposed, crown);
     }

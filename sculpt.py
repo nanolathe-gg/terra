@@ -26,7 +26,7 @@ KNOB_DEFAULTS = dict(
     groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
-    flatShadow=0, flatOcclusion=.4, lightCap=1.13, sunTilt=1, ambient=.42, slopeMarks=0,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13, sunTilt=1, ambient=.42, slopeMarks=0, sandCrown=0,
     faceVariation=.8, northFace=.7, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
@@ -71,8 +71,10 @@ WORLD_KNOBS = {
                  sunTilt=0, faceFill=0, ambient=.12, slopeMarks=.6),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
+    # Painted sand keeps a raised bar sand to its crown (the river sections'
+    # sand bars rise ~100 units from the bed with no rock).
     'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=1,
-                 beachWidth=.6, banding=.3, bandLine=.5, crackDark=.45),
+                 beachWidth=.6, banding=.3, bandLine=.5, crackDark=.45, sandCrown=1),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
     # colour-by-depth ramp, so no depth averaging (authored from the
