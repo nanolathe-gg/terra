@@ -1,0 +1,17 @@
+{"biome": "red", "source": {"map": "red planet", "x": 2560, "y": 896},
+ "ground": true, "query": "",
+ "strokes": [
+  ["offset", [[672, 320], [668, 465]], {"card": {"diameter": 265, "amount": -16, "roughness": 25, "softness": 55}}],
+  ["mountain", [[372, 652]], {"card": {"diameter": 300, "amount": 52, "roughness": 10, "softness": 100}}],
+  ["mountain", [[155, 880], [232, 860], [300, 828]], {"card": {"diameter": 250, "amount": 57, "roughness": 10, "softness": 100}}],
+  ["mountain", [[1012, 8]], {"card": {"diameter": 150, "amount": 24, "roughness": 15, "softness": 100}}],
+  ["shallow", [[288, 155]], {"card": {"diameter": 300, "roughness": 15}, "shallowMode": "area"}],
+  ["shallow", [[102, 290]], {"card": {"diameter": 130, "roughness": 15}, "shallowMode": "area"}],
+  ["shallow", [[1018, 378]], {"card": {"diameter": 130, "roughness": 15}, "shallowMode": "area"}],
+  ["crater", [[875, 850]], {"card": {"diameter": 70, "amount": 16, "roughness": 40, "craterlets": 0}}],
+  ["crater", [[988, 618]], {"card": {"diameter": 80, "amount": 14, "roughness": 40, "craterlets": 0}}],
+  ["crater", [[318, 440]], {"card": {"diameter": 44, "amount": 10, "roughness": 40, "craterlets": 0}}],
+  ["crater", [[392, 436]], {"card": {"diameter": 44, "amount": 10, "roughness": 40, "craterlets": 0}}],
+  ["crater", [[640, 790]], {"card": {"diameter": 40, "amount": 8, "roughness": 40, "craterlets": 0}}],
+  ["offset", [[40, 30], [70, 60]], {"card": {"diameter": 140, "amount": -10, "roughness": 30, "softness": 70}}]
+ ]}
