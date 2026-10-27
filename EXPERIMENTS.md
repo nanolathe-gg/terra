@@ -26,6 +26,8 @@ Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
 | 18 | Sand from weathering: rock faces shed grains; water carries them downhill and drops them where slopes ease, in pits and at shores; wind hops them downwind into lee shelter (continuous Werner 1995 slab model). Colour from the biome's rock texture, lightened | sand, sandReach, windStrength, wind, sandLight, sandGrain | A/B with water only, water plus wind, strong opposite wind | Kept, off by default; replaces row 7's geometric sand rules (user direction) |
 | 19 | Ground tiles from a causal neighbour model of retail flat grass (left, upper-left, upper and upper-right contexts with backoff), 16 tiles, offline | groundTiles | Side by side at 2x with retail and the lab texture: olive, matching grain. A fitted pairwise model (Gibbs) fell into checkerboard phases | Kept; replaces row 14 |
 | 20 | No cast shadows on level ground, less occlusion there; low relief on gentle slopes; fractures 65 to 40 | flatShadow, flatOcclusion, gentleRelief, fractures | Round-2 tells | Kept; needs round 3 |
+| 21 | **Blind round 3**: build a67dbef73, seeds 7307/8419, new retail windows, two reviewers judging by eye | | A: AUC 0.41 (1/10 caught, 4/10 retail called generated); B: AUC 0.72 (0/10 caught, 1/10 false). Pooled: 1/20 generated caught, 5/20 retail called generated | At chance by eye. B's ranking edge: cliff bands of even width along smooth arcs, and the same example layout at two seeds (a test-set flaw; use distinct layouts) |
+| 22 | Ground undulation node: broad, low noise on dry ground in patches, never on protected crests, ramps or passages; first in the shape list | undulation, undulationScale, undulationCover | Dry-land slope shares with heights rounded to whole units: level 70% to 39% (retail 48%), 0.03-0.08 4% to 31% (retail 20%), 0.08-0.2 4% to 8% (retail 12%) | Kept: 10 / 200 px / 0.45 |
 
 Open tells and gaps:
 
@@ -36,3 +38,5 @@ Open tells and gaps:
   Only level ground is procedural so far.
 - Retail flat grass has a little more mid-scale mottling than the tiles.
 - Narrow low steps render as chains of rock lumps (round 2, img08).
+- Cliff bands keep an even width along smooth arcs (round 3, reviewer B):
+  shoulder and face width need variation along the outline.
