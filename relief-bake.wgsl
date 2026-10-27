@@ -1,5 +1,6 @@
-// WGSL port of the former relief-bake.frag. The renderer builds this module
-// with BAKE defined. See sculpt-common.wgsl for naming: uniform uFoo is u.foo.
+// WGSL port of the former relief-bake.frag, as a compute pass (measured a
+// little faster than a full-screen render pass). The renderer builds this
+// module with BAKE defined. See sculpt-common.wgsl for naming: uniform uFoo is u.foo.
 /*COMMON*/
 // Fall-line relief, baked once per height change at one texel per world
 // pixel. Authored appearance detail: it is lit, never exported as height.
@@ -414,17 +415,18 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
 }
 
-// One full-screen triangle over the world-resolution fields texture.
-@vertex
-fn fullScreen(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
-    let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
-    return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+// The world-resolution fields texture: one compute invocation per texel.
+@group(1) @binding(0) var fieldsOut: texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(8, 8)
+fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
+    if (any(id.xy >= textureDimensions(fieldsOut))) { return; }
+    // Texel (x, y) of the fields is world pixel (x, y), as in GLSL.
+    textureStore(fieldsOut, id.xy, bake(vec2f(id.xy)));
 }
 
-@fragment
-fn bakeMain(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
-    // Texel (x, y) of the fields is world pixel (x, y), as in GLSL.
-    let p = fragCoord.xy - 0.5;
+// GLSL main(): the fields at world pixel p.
+fn bake(p: vec2f) -> vec4f {
     let h = baseHeight(p);
     let g = broadGradient(p);
     let slope = length(g);

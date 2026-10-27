@@ -1,7 +1,7 @@
 // One displaced surface, shared by every terrain brush. Prototype renderer
 // on WebGPU (no WebGL fallback). Shaders: sculpt-common.wgsl (shared),
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
-// world-resolution fields bake).
+// world-resolution fields bake, a compute pass).
 
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
@@ -137,8 +137,8 @@ export class TerrainRenderer {
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
     // bake (binding 6 is the fields for the draw, the routes for the bake).
-    // Group 1: the draw's materials.
-    const both = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
+    // Group 1: the draw's materials, or the bake's output.
+    const both = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
     const texture = (binding, visibility, sampleType = 'float', viewDimension = '2d') => ({binding, visibility, texture: {sampleType, viewDimension}});
     const sampler = (binding, visibility) => ({binding, visibility, sampler: {type: 'filtering'}});
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
@@ -158,10 +158,9 @@ export class TerrainRenderer {
         fragment: {module: fragModule, entryPoint: 'fragmentMain', targets: [{format: this.format}]},
         primitive: {topology: 'triangle-list', cullMode: 'none'},
         depthStencil: {format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less'}}),
-      device.createRenderPipelineAsync({label: 'relief bake', layout: device.createPipelineLayout({bindGroupLayouts: [this.commonLayout]}),
-        vertex: {module: bakeModule, entryPoint: 'fullScreen'},
-        fragment: {module: bakeModule, entryPoint: 'bakeMain', targets: [{format: 'rgba16float'}]},
-        primitive: {topology: 'triangle-list'}})]);
+      device.createComputePipelineAsync({label: 'relief bake', layout: device.createPipelineLayout({bindGroupLayouts: [this.commonLayout,
+        device.createBindGroupLayout({label: 'fields out', entries: [{binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}}]})]}),
+        compute: {module: bakeModule, entryPoint: 'bakeMain'}})]);
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -174,8 +173,9 @@ export class TerrainRenderer {
     // The fields are baked once per height change: r relief height, g route
     // protection or (negative) beach, b crack/line code, a sand.
     this.fieldsTexture = device.createTexture({label: 'fields', size: [this.size, this.size], format: 'rgba16float',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
-    this.fieldsView = this.fieldsTexture.createView();
+      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
+    this.fieldsOut = device.createBindGroup({label: 'fields out', layout: this.bakePipeline.getBindGroupLayout(1),
+      entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.meshes = [this.mesh(192), this.mesh(512)];
@@ -681,12 +681,11 @@ export class TerrainRenderer {
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
-    const pass = encoder.beginRenderPass({label: 'relief bake',
-      colorAttachments: [{view: this.fieldsView, loadOp: 'clear', clearValue: {r: 0, g: 0, b: 0, a: 0}, storeOp: 'store'}],
-      timestampWrites: timer?.timestampWrites});
+    const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});
     pass.setPipeline(this.bakePipeline);
     pass.setBindGroup(0, this.commonBindGroup('bake'));
-    pass.draw(3);
+    pass.setBindGroup(1, this.fieldsOut);
+    pass.dispatchWorkgroups(Math.ceil(this.size / 8), Math.ceil(this.size / 8));
     pass.end();
     if (own) {
       timer?.encode(encoder);
