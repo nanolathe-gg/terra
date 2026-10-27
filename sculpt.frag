@@ -76,7 +76,7 @@ uniform float uSandGrass;
 uniform float uBandWater;
 uniform float uRockCrown;
 // Strata: coloured bands by height on raised ground (painted desert).
-uniform float uStrata, uStrataSpacing, uStrataWarp, uStrataContrast;
+uniform float uStrata, uStrataSpacing, uStrataWarp, uStrataContrast, uStrataGrain;
 uniform vec3 uStrataColors[5];
 float strataHash(float k) { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
 vec3 strataSlot(float k) { int i = int(k + 0.5); return i <= 0 ? uStrataColors[0] : i == 1 ? uStrataColors[1] : i == 2 ? uStrataColors[2] : i == 3 ? uStrataColors[3] : uStrataColors[4]; }
@@ -142,6 +142,19 @@ float occlusion(vec2 p, float h) {
     return 1.0 - result * (uFull ? 0.045 : 0.09);
 }
 
+// Two-entry mixes: retail art shows colours the palette lacks as pixel
+// mixes of two entries (Painted Desert's tans are 50/50 pairs). The lookup's
+// rows 32-63 and 64-95 hold the colour's best pair (palette_pairs.py); the
+// mix along A-B is measured per pixel and a per-pixel threshold picks one.
+uniform bool uPaletteMix;
+vec3 palettePair(vec3 rgb, float threshold) {
+    ivec3 c = ivec3(clamp(floor(rgb * 31.0 + 0.5), 0.0, 31.0));
+    ivec2 at = ivec2(c.r + 32 * c.b, c.g);
+    vec3 a = texelFetch(uPalette, at + ivec2(0, 32), 0).rgb, b = texelFetch(uPalette, at + ivec2(0, 64), 0).rgb;
+    vec3 d = b - a;
+    float t = clamp(dot(rgb - a, d) / max(dot(d, d), 1e-5), 0.0, 1.0);
+    return threshold < t ? b : a;
+}
 vec3 paletteColor(vec3 rgb) {
     ivec3 c = ivec3(clamp(floor(rgb * 31.0 + 0.5), 0.0, 31.0));
     return texelFetch(uPalette, ivec2(c.r + 32 * c.b, c.g), 0).rgb;
@@ -583,7 +596,9 @@ void main() {
         vec3 bed = mix(strataSlot(z.y), strataSlot(z.z), isB);
         float lum = dot(material, vec3(0.299, 0.587, 0.114));
         float meanLum = max(dot(uGroundTexMean, vec3(0.299, 0.587, 0.114)), 0.05);
-        vec3 painted = clamp(bed * clamp(lum / meanLum, 0.82, 1.12), 0.0, 1.0);
+        // The ground's grain survives in the beds as brightness, scaled by
+        // Bed grain (retail desert bands are smooth colour).
+        vec3 painted = clamp(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), uStrataGrain), 0.0, 1.0);
         float onRaised = smoothstep(uStrataZones[0].x, uStrataZones[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, painted, uStrata * uStrataContrast * onRaised);
     }
@@ -709,8 +724,16 @@ void main() {
         float ign = fract(52.9829189 * fract(dot(fc, vec2(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
         float ditherStrength = h < uSea + 1.0 ? uDither : uDither * uLandDither;
-        color = clamp(color + (ign - 0.5) * ditherStrength / 31.0, 0.0, 1.0);
-        color = paletteColor(color);
+        // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
+        // local checkerboards, which read as one colour; a noise threshold
+        // clumped them into speckles.
+        ivec2 bq = ivec2(fc) & 3;
+        int bayer[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+        if (uPaletteMix) color = palettePair(color, (float(bayer[bq.y * 4 + bq.x]) + 0.5) / 16.0);
+        else {
+            color = clamp(color + (ign - 0.5) * ditherStrength / 31.0, 0.0, 1.0);
+            color = paletteColor(color);
+        }
     }
     // Read-only pixel probes separate shaded form from material coverage.
     if (uDiagnostic == 1) color = vec3(lighting);

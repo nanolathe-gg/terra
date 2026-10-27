@@ -36,9 +36,9 @@ KNOB_DEFAULTS = dict(
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25, crystalVariation=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0, sandBanding=0, sandBandSpacing=2,
-    strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6,
+    strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
-    dither=2, landDither=.25,
+    dither=2, landDither=.25, paletteMix=0,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
@@ -50,8 +50,8 @@ WORLD_KNOBS = {
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
     # R^2 0.000), so no undulation, lumps or occlusion; no drifts.
-    'desert': dict(strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
-                   crackSeverity=.15, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
+    'desert': dict(paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
+                   bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
     'moon': dict(crackSeverity=.45, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=.8, undulation=4, plainRelief=.6, banding=.3),
@@ -105,6 +105,11 @@ def biome_config(biome, assets):
         config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
     make_fracture_field(assets)
     config['textures']['fractures'] = '/sculpt-assets/fractures.png'
+    # Palette lookup with two-entry mixes (rows 0-31 are the nearest entry,
+    # as before); the shader uses the pair rows when Mix palette pairs is on.
+    from palette_pairs import make_pair_lut
+    make_pair_lut(assets)
+    config['textures']['palette'] = '/sculpt-assets/palette-pairs.png'
     config.update(size=1024, grid=512, baseHeight=24, seaLevel=0, biomeId=biome, biome=BIOME_NAMES[biome])
     # Accepted Green Planet authoring profile. Explicit query values still
     # select older comparisons; plain /sculpt opens the reviewed treatment.
@@ -172,12 +177,11 @@ def biome_config(biome, assets):
         # make, so the world stays full colour until the palette stage mixes
         # index pairs. Bed colour slots: 1 orange (189,143,105), 2 cool
         # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
-        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
+        config['strataColors'] = [[189, 143, 105], [185, 190, 192], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
         # rock with orange lines above ~69.
         config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 0, .3]]
-        config['defaults']['palette'] = 'off'
         config['defaults']['example'] = 'mesas'
         # The plain: exact-index tiles from the retail map's level ground,
         # when the map has been exported (see ground_tiles.py).

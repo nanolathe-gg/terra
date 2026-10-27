@@ -388,6 +388,7 @@ export class TerrainRenderer {
     this.f('uRingVariation', ringVariation);
     this.i('uScree', scree > 0);
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
+    this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
     const front = this.variant.get('lighting') === 'front';
     const sun = [light === 'alternate' ? 0.72 : -0.72, front ? 0.38 : -0.38, 0.82];
     const length = Math.hypot(...sun);
@@ -454,6 +455,7 @@ export class TerrainRenderer {
     this.f('uStrataSpacing', variant.has('strataSpacing') ? Number(variant.get('strataSpacing')) : 10);
     this.f('uStrataWarp', variant.has('strataWarp') ? Number(variant.get('strataWarp')) : 12);
     this.f('uStrataContrast', variant.has('strataContrast') ? Number(variant.get('strataContrast')) : 0.6);
+    this.f('uStrataGrain', variant.has('strataGrain') ? Number(variant.get('strataGrain')) : 1);
     this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
