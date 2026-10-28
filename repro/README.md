@@ -57,3 +57,10 @@ control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
 rendered one at a time with `render.mjs` (`all.sh` only runs `scenes/`), and
 set the new shape options in `options.card` in the units of their sliders
 (`faceCurve` -100..100, shares as percent, widths in px).
+
+The line-feature demos (card C4) are `ridge-moon` (a lopsided ring with rim
+sectors, an open crescent with a rim gap, a crater with radiating spurs and a
+tapering, jagged crescent ridge with spurs), `ridge-red` (branching rugged
+mountain ridges) and `ridge-lava` (low winding hill ridges and a radiating
+lump); their options are Spurs, Crest irregularity, Crest width and height
+variation, Crest taper, Rim sectors and Rim gaps.
