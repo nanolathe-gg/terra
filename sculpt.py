@@ -67,6 +67,15 @@ KNOB_DEFAULTS = dict(
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
 )
+# Shine and roughness (card E2): per material (ground, slope cover, rock, sand,
+# crystal) a gloss (highlight strength), a sharpness (Blinn exponent), a roughness
+# (slope amplitude of the micro-normal grain) and its scale in px. Gloss 0 and
+# roughness 0 everywhere is today's look exactly; sharpness and scale only matter
+# once one of those is set.
+SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
+KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
+for _m in SHINE_MATERIALS:
+    KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
