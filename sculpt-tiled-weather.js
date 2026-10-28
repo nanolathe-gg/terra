@@ -19,7 +19,7 @@ const abortError=() => new DOMException('Weathering request was cancelled.','Abo
 // lattice intervals per core (about 512 world pixels), a 64-interval output
 // overlap, then a further 128-interval solver apron: 641 samples per solve.
 // Neither geometry nor seeds depend on renderer chunks, requests or budgets.
-export function createTiledWeather({read:readAuthored,readUniform,worldSize,worldGrid,params={},budget=256*1048576,onProgress,onChange,
+export function createTiledWeather({read:readAuthored,readUniform,worldSize,worldGrid,params={},budget=256*1048576,onProgress,onChange,onReserve,
   forceTiled=false,workerFactory=() => new Worker(new URL('./sculpt-weathering.js',import.meta.url),{type:'module'})}) {
   if (typeof readAuthored!=='function' || !Number.isInteger(worldGrid) || worldGrid<2 || !(worldSize>1)) throw new Error('Invalid tiled weather lattice.');
   if (!tiledWeatherEnabled(worldGrid,forceTiled)) throw new Error('This map uses the existing global weather solver; forceTiled is a comparison diagnostic.');
@@ -35,7 +35,7 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
     inflightBytes=bytes;
     evict(Math.max(0,budget-bytes));
     if (bytes>budget) throw new Error(`Tiled weather needs about ${Math.ceil(bytes/1048576)} MB of JS working memory; its budget is ${Math.floor(budget/1048576)} MB. Use a smaller requested region or increase the JS budget.`);
-    peakWorkBytes=Math.max(peakWorkBytes,bytes); peakBytes=Math.max(peakBytes,bytes+cacheBytes);
+    peakWorkBytes=Math.max(peakWorkBytes,bytes); peakBytes=Math.max(peakBytes,bytes+cacheBytes);if(bytes)onReserve?.(bytes);
   }
   function evict(limit=Math.max(0,budget-inflightBytes)) {
     while (cacheBytes>limit && cache.size) { const key=cache.keys().next().value; cacheBytes-=cache.get(key).bytes; cache.delete(key); evictions++; }
@@ -86,7 +86,7 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
             if (worker!==instance) return;
             const data=event.data,a=active;
             if (!a || data?.job!==a.job) return;
-            if (data.done) { active=null; a.resolve(data); }
+            if (data.done) { active=null; stopWorker(); a.resolve(data); }
             else try { a.progress?.(data.progress); } catch (error) { active=null; stopWorker(); a.reject(error); }
           };
           instance.onerror=event => { if (worker!==instance) return; const a=active; active=null; stopWorker(); a?.reject(new Error(event.message||'Weather worker failed.')); };
@@ -314,5 +314,5 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
   function stats() { return {revision,cacheBytes,cpuCacheBytes:cacheBytes,residentBytes:cacheBytes+inflightBytes,inflightBytes,peakBytes,peakWorkBytes,budget,cacheEntries:cache.size,
     hits,misses,evictions,solves,uniformSkips,uniformHints,emptyReads,completed,lastMilliseconds,coreCells:core,coreWorldPixels:core*spacing,overlapCells:blend,solverApronCells:apron,solverGrid,solverWorkBytes,worldSize,worldGrid,gridSpacing:spacing}; }
   setBudget(budget);
-  return {read,prepare,sampleCached,requiredRect,invalidate,setBudget,stats,dispose() { disposed=true; cancelActive(); cache.clear(); cacheBytes=0; }};
+  return {buffers:()=>[...new Set([...cache.values()].flatMap(t=>Object.values(t).filter(ArrayBuffer.isView).map(a=>a.buffer)))],evict(){cache.clear();cacheBytes=0;},cancel(){revision++;cancelActive();return revision;},read,prepare,sampleCached,requiredRect,invalidate,setBudget,stats,dispose() { disposed=true; cancelActive(); cache.clear(); cacheBytes=0; }};
 }

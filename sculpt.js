@@ -4,6 +4,7 @@ import {configureMap,resizeMap,drawMapBounds,exportMapField,mountMapCanvas} from
 import {createRegionalFields} from './sculpt-fields.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
+import {mountMapWeather} from './sculpt-map-weather.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -36,7 +37,7 @@ const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
-let mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
+let mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null, mapWeather=null;
 let regionalPrefixSample=null,regionalNoiseMeta=new WeakMap(),regionalConnects=null,regionalCoastCandidate=false,regionalCoastRaw=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
@@ -325,7 +326,7 @@ function updateControls() {
   $('undo').disabled=!ready || Boolean(stroke) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke) || historyIndex>=history.length-1;
   $('export').disabled=!canExport(); mapUpdate();
-  $('fit').setAttribute('aria-pressed',String(fitView)); $('one').setAttribute('aria-pressed',String(!fitView));
+  const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:fitView));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:!fitView));
   } finally { tool=activeTool; }
   if (tool==='move') { $('tool-help').textContent=HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase'].includes(nodes[selected]?.kind); }
   // Say what the brush controls change: the next stroke, or a selected shape.
@@ -2424,6 +2425,7 @@ function regionalHeightCell(x,y) {
   return Math.fround(h+(refined[i]-refinedBase[i])*(1-smooth(0,10,Math.abs(h-refinedBase[i])))*(1-regionalFields.cell(x,y,'r')));
 }
 function sampleRegional(x,y) {
+  if(mapWeather?.usesTiles())return mapWeather.sample(x,y)??mapCanvas?.heightSample(x,y)??regionalFields.sample(x,y);
   if (!refined || !refinedBase || !$('weather').checked) return regionalFields.sample(x,y);
   const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
   return (regionalHeightCell(ix,iy)*(1-fx)+regionalHeightCell(jx,iy)*fx)*(1-fy)+(regionalHeightCell(ix,jy)*(1-fx)+regionalHeightCell(jx,jy)*fx)*fy;
@@ -2482,7 +2484,7 @@ const sculptRegion={
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); cancelWeather(); nodes=deserializeNodes(list); prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
-  subscribe:fn => regionalFields.subscribe(fn),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
@@ -2611,6 +2613,7 @@ function quickMaterials() {
     depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}}));
 }
 function cancelWeather() {
+  mapWeather?.cancel();
   weatherJob++; weatherBase=null;
   quickMaterials();
   weatherWorker?.postMessage({cancel:true,job:weatherJob});
@@ -2627,13 +2630,10 @@ function previewHeight() {
 function queueWeather() {
   flushEval();
   if (!$('weather').checked) {
+    mapWeather?.queue();
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;
   }
-  if (regionalFields && worldGrid>1168) {
-    weatherState='unsupported';
-    $('weather-state').textContent='Exact weathering currently needs the complete bounded field (at most 4×4 units). This larger map keeps its authored terrain. Turn Weathering off to export, or use a smaller canvas for weathering.';
-    updateControls(); return;
-  }
+  if(mapWeather?.queue()) { if(!stroke&&!moving)weatherState='ready';updateControls();return; }
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
@@ -3161,9 +3161,10 @@ function renderExportView(forMap=false) {
   const start=performance.now(),stats=renderer.draw({quality:'full',clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
   drawTiming(stats,performance.now()-start,'full');
 }
-$('export').addEventListener('click',() => {
+$('export').addEventListener('click',async () => {
   if (!canExport()) return;
   try {
+    if(mapCanvas){await mapCanvas.idle();canvas.toBlob(blob=>{if(blob)download(blob,'terrain-view.png');else error('PNG export is unavailable for this view.');},'image/png');return;}
     renderExportView(); const rev=revision,job=weatherJob;
     canvas.toBlob(blob => { if (!blob) error('PNG export is unavailable for this renderer.'); else if (revision!==rev || weatherJob!==job || !canExport()) error('The terrain changed during export. Export the finished view again.'); else download(blob,'terrain-sculpt.png'); },'image/png');
   } catch (err) { error(err.message); }
@@ -3386,8 +3387,13 @@ async function bootMap() {
   heights=new Float32Array(0); protection=new Float32Array(0); routes=new Float32Array(0); cracks=new Float32Array(0); cover=new Float32Array(0); crystal=new Float32Array(0); maskPlanes=MASK_KEYS.map(() => new Int8Array(0));
   seed=Number($('seed').value); refinementSeed=seed; regionalFields=makeRegionalFields();
   addGroundNode();
+  mapWeather=mountMapWeather({api:sculptRegion,config,enabled:()=>$('weather').checked,active:()=>Boolean(stroke||moving),forceTiled:experiment.get('weatherTiles')==='1',
+    params:()=>({seed:refinementSeed,strength:.35,profile:experiment.get('weather')==='broad'?'broad':undefined,baseHeight:config.baseHeight,seaLevel:config.seaLevel,talus:Number($('scree').value)/100,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer?.variant.get('transition')==='mineral'},sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)}),
+    onReady:rect=>{weatherState='ready';$('weather-state').textContent='Overlapping weather tiles · fixed seeds · ready on demand';mapCanvas?.invalidate(rect);},
+    onProgress:p=>{$('weather-state').textContent=`Weathering overlapping tiles · ${Math.round(p.progress*100)}% of this region`;}
+  });
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
-  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());
+  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
   $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
   $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100); $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
