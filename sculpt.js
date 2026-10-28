@@ -1553,6 +1553,45 @@ function loadSketch(s) {
   prefix=[]; selected=-1; evaluate(0); renderLayers();
   markChanged(); updateControls();
 }
+// A sketch remembers the world it was drawn in. Loading one in another world
+// reloads the recorded world first, then plays the sketch there. The file is
+// too large for localStorage (a saved v4 sketch is about 4 MB), so it waits in
+// the Cache API under a one-use token carried in the address (review A2).
+const SKETCH_HANDOFF='nanolathe-sketch-handoff';
+const pendingSketchPath=token => '/pending-sketch-'+encodeURIComponent(token)+'.json';
+async function stashPendingSketch(token,s) {
+  const cache=await caches.open(SKETCH_HANDOFF);
+  await cache.put(pendingSketchPath(token),new Response(JSON.stringify({format:'nanolathe-sketch-handoff',token,sketch:s}),{headers:{'Content-Type':'application/json'}}));
+}
+async function takePendingSketch(token) {
+  if (!token) return null;
+  try {
+    const cache=await caches.open(SKETCH_HANDOFF),response=await cache.match(pendingSketchPath(token));
+    if (!response) return null;
+    await cache.delete(pendingSketchPath(token));
+    const data=await response.json();
+    return data?.format==='nanolathe-sketch-handoff' && data.token===token?data.sketch:null;
+  } catch (_) { return null; }
+}
+async function loadSketchFile(s) {
+  const biome=typeof s?.biome==='string'?s.biome:'';
+  if (biome && biome!==config.biomeId) {
+    let served=false;
+    try {
+      const response=await fetch('/sculpt-config.json?biome='+encodeURIComponent(biome));
+      const servedConfig=response.ok?await response.json():null;
+      served=servedConfig?.biomeId===biome;
+    } catch (_) {}
+    if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return; }
+    const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
+    try { await stashPendingSketch(token,s); }
+    catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return; }
+    status(`Opening ${biome} for the saved terrain…`);
+    goToWorld(biome,null,{pendingSketch:token});
+    return;
+  }
+  loadSketch(s); checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();
+}
 function addGroundNode() {
   const amplitude=experiment.has('undulation')?Number(experiment.get('undulation')):10;
   if (amplitude>0) addNode({kind:'ground',amplitude,wavelength:experiment.has('undulationScale')?Number(experiment.get('undulationScale')):200,coverage:experiment.has('undulationCover')?Number(experiment.get('undulationCover')):.45,seed:seed^0x9e37});
@@ -1603,7 +1642,7 @@ $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
   const file=$('file').files[0]; $('file').value=''; if (!file || stroke) return;
   loading=true; $('editor').disabled=true;
-  try { if (file.size>10000000) throw new Error('This sculpt sketch is too large to load.'); loadSketch(JSON.parse(await file.text())); checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather(); } catch (err) { error(err.message); }
+  try { if (file.size>10000000) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
 $('export').addEventListener('click',() => {
@@ -1681,8 +1720,10 @@ function defaultColor(key) {
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
-function goToWorld(base,id) {
-  const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id); location.href=url.toString();
+function goToWorld(base,id,extra) {
+  const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
+  for (const [key,value] of Object.entries(extra||{})) url.searchParams.set(key,value);
+  location.href=url.toString();
 }
 function buildWorldPanel() {
   const world=activeWorld();
@@ -1847,6 +1888,15 @@ async function boot() {
     if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved terrain.'); } catch (err) { mixedScene(); error('Saved sculpt sketch could not be loaded: '+err.message+' The saved copy is retained until you edit.'); status('Mixed example shown.'); } }
     else { mixedScene(); status('Mixed scene ready · paint any continuous shape.'); }
     ready=true; $('editor').disabled=false; $('world-editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed}]; historyIndex=0; renderLayers();
+    // A sketch loaded in another world was handed to this page before the
+    // reload; play it now that this world's renderer and fields exist.
+    const pending=await takePendingSketch(experiment.get('pendingSketch'));
+    if (pending) {
+      try {
+        if (pending.biome!==config.biomeId) throw new Error(`it belongs to the ${pending.biome} world but ${config.biomeId} opened`);
+        loadSketch(pending); checkpoint(); status('Loaded the saved terrain.');
+      } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); }
+    }
     $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
     updateControls(); resize(); schedule(); queueWeather();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
@@ -1856,5 +1906,5 @@ async function boot() {
 // bakeGpuMs and drawMs's gpuMs are the pass's own GPU time (timestamp queries).
 window.sculptDebug = {state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
-  scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
+  scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), replayAll: () => { flushEval(); const before=heights.slice(); prefix=[]; evaluate(0); let worst=0; for (let i=0;i<before.length;i++) worst=Math.max(worst,Math.abs(before[i]-heights[i])); return worst; }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get biome() { return config.biomeId; }, get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 boot();
