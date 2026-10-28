@@ -302,7 +302,8 @@ export class TerrainRenderer {
     this.f('uRockStart', threshold - feather * 0.5);
     this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
-    this.f('uMineralDetail', variant.get('grain') === 'strong' ? 2.4 : 1.0);
+    // E6: rockDetail scales the rock art's contrast about its mean (1: as drawn).
+    this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1));
     const rockMean = variant.get('rock') === 'hill' ? material.hillRockMeanRGB : material.rockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
     this.i('uShapeCoverage', variant.get('coverage') === 'form');
@@ -732,6 +733,7 @@ export class TerrainRenderer {
     this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
     this.f('uPockmark', variant.has('pockmark') ? Number(variant.get('pockmark')) : 0);
     this.f('uPockSize', variant.has('pockSize') ? Number(variant.get('pockSize')) : 5);
+    this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
     this.fieldsDirty = true;
   }
 

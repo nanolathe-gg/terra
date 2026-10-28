@@ -252,6 +252,8 @@ struct Uniforms {
     // E6 (Moon).
     pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
     pockSize: f32,        // pit spacing across the retail glint axis, px
+    // E6 (Ice mountains).
+    iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

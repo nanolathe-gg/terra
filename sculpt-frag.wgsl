@@ -810,6 +810,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
         var share = mix(u.rockShare.x, u.rockShare.y, smoothstep(u.faceSlope.y, u.faceSlope.y * 1.8, slope));
         var lowGate = lowBank;
+        // Ice monotone mountains (card E6): retail's common ice mountain is one slate-blue material
+        // from the first slope to the crest, not snow and rock interleaved: all face, all rock.
+        if (u.iceSlate > 0.0) {
+            face = max(face, smoothstep(0.12, 0.3, faceSlope) * (1.0 - route) * (1.0 - sandBar) * u.iceSlate);
+            share = mix(share, 1.0, u.iceSlate);
+        }
         // Painted face style (card C5): below 0 less of the face is rock, above 0 more.
         if (u.styleOn != 0) {
             let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));

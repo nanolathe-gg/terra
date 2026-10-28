@@ -101,6 +101,8 @@ for _m in SHINE_MATERIALS:
 KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 # E6, Moon: pits on raised ground and slopes (0: none; the earlier look is wrinkles .8, worms .4, cracks .35 with no pits).
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
+# E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
+KNOB_DEFAULTS.update(iceSlate=0, rockDetail=1)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -308,7 +310,7 @@ WORLD_KNOBS = {
     # sections, see sculpt_section_biome.py 'ice').
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
-    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=.2, crackMajor=.4, crackMinor=.3, crackHairline=.2,
+    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
                 crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
@@ -319,7 +321,16 @@ WORLD_KNOBS = {
                 # height 4 keeps the frost over the water level with the bank behind it
                 # (14 made a dark wall there); frostWet 1 keeps the band white instead of
                 # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
-                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=7, plateHeight=4, frostWet=1),
+                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=7, plateHeight=4, frostWet=1,
+                # Card E6: retail's common ice mountain (Etorrep Glacier, Polar Range) is one monotone,
+                # very rough, shiny slate-blue ice lit strongly: every face is the rock art (contrast
+                # .55) from the first slope to the crest, with a fine grain 2.5 px wide (stretch 2)
+                # that glints, no cracks, little lumpy relief, the shade kept blue and a lower ambient so
+                # the light and shade read strongly. Earlier look (snow and slate interleaved, cracks):
+                # the Ice variant 'snow'; retail's other type (ice-1) is the variant 'crystal'.
+                iceSlate=1, rockDetail=.55, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
+                lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2, shineHeadroom=.3,
+                shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5),
 }
 
 
@@ -362,7 +373,16 @@ WORLD_VARIANTS = {
                       # rough blue-white grain (ground pattern contrast 2 gives it).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0)),
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0,
+                                 # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
+                                 iceSlate=0, rockDetail=1, reliefAmount=.5, reliefScale=28, reliefLumps=.7, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                 shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
+        # Snow and slate (the mountains before card E6): white snow cover and dark slate interleaved,
+        # carved cracks, no sheen.
+        'snow': dict(label='Snow and slate: cracked mountains',
+                     knobs=dict(iceSlate=0, rockDetail=1, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
+                                lightCap=1.13, ambient=.42, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white
         # snow) are not here: the dark faces come from the block's own shading,
         # which the colour knobs only reach through the tops (a darker crystal
