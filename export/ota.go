@@ -108,8 +108,13 @@ func checkArchive(filename string, req exportRequest, world worldInfo, starts []
 	if err != nil {
 		return checked, err
 	}
-	if tnt.Version != uint32(formats.VersionCanonical) || int(tnt.Width) != want.Width || int(tnt.Height) != want.Height || tnt.SeaLevel != uint32(want.SeaLevel) || len(tnt.FeatureTable) != 0 {
+	if tnt.Version != uint32(formats.VersionCanonical) || int(tnt.Width) != want.Width || int(tnt.Height) != want.Height || tnt.SeaLevel != uint32(want.SeaLevel) || len(tnt.FeatureTable) != len(want.FeatureNames) {
 		return checked, fmt.Errorf("decoded TNT header differs")
+	}
+	for i, rec := range tnt.FeatureTable {
+		if rec.Index != uint32(i) || rec.Name != want.FeatureNames[i] {
+			return checked, fmt.Errorf("decoded TNT feature record %d differs", i)
+		}
 	}
 	if !slices.Equal(tnt.TileIndices, want.TileIndices) || !bytes.Equal(tnt.TileGraphics, want.TileGraphics) {
 		return checked, fmt.Errorf("decoded TNT tile map or tile graphics differ")
