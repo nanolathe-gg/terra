@@ -27,7 +27,7 @@ KNOB_DEFAULTS = dict(
     groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
-    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, sandCrown=0,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
     faceVariation=.8, northFace=.7, mesaFlank=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
@@ -101,7 +101,11 @@ WORLD_KNOBS = {
     # (2.0-7.5% by map), ~1.9% of lit ones; long axis ~25-30 deg off vertical.
     'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
-                 sunTilt=0, faceFill=0, ambient=.25, slopeMarks=.4),
+                 sunTilt=0, faceFill=0, ambient=.25,
+                 # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
+                 # on a narrow wall, as a toothed lip; retail's slopes are crazed with
+                 # connected wrinkles and pits, so the joined wrinkles replace them.
+                 slopeMarks=0, wrinkles=.8),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'

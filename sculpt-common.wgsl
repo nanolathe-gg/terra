@@ -201,6 +201,8 @@ struct Uniforms {
     bandRelief: f32,      // share of the relief height that bends the lines, so they fold round ribs and lumps
     bandWander: f32,      // phase wander of the lines, in line steps
     bandGaps: f32,        // share of each line's stretches dropped, so lines break off and spacing widens
+    // Moon joined wrinkles (card B3).
+    wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
