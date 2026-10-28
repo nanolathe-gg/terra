@@ -1197,18 +1197,21 @@ function sweep(s,points) {
 // Seed only coast segments this stroke actually touched. Fractional edge
 // crossings keep the band in pixels, independent of the height range. Cells
 // away from the coast start at `far` (plus two cells) for the caller's passes.
-function coastSeeds(s,raw,sea,far,moved=false) {
+function coastSeeds(s,raw,sea,far,moved=false,box=null) {
   const distance=new Float32Array(raw.length).fill(far+spacing*2),before=moved?s.base:null;
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+  const seed=(i,j) => {
+    if ((s.weights[i]<=0 && s.weights[j]<=0) || (raw[i]>sea)===(raw[j]>sea)) return;
+    // moved: only a waterline this stroke made, where a cell changed side of the sea;
+    // an older lake's coast under this stroke's bank is that stroke's to shape.
+    if (before && (before[i]>sea)===(raw[i]>sea) && (before[j]>sea)===(raw[j]>sea)) return;
+    const d=Math.abs(raw[i]-sea)/Math.max(1e-6,Math.abs(raw[i]-raw[j]))*spacing;
+    distance[i]=Math.min(distance[i],d); distance[j]=Math.min(distance[j],spacing-d);
+  };
+  const x0=box?box.x0:0,x1=box?box.x1:grid-1,y0=box?box.y0:0,y1=box?box.y1:grid-1;
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
     const i=y*grid+x;
-    for (const j of [x+1<grid?i+1:-1,y+1<grid?i+grid:-1]) {
-      if (j<0 || (s.weights[i]<=0 && s.weights[j]<=0) || (raw[i]>sea)===(raw[j]>sea)) continue;
-      // moved: only a waterline this stroke made, where a cell changed side of the sea;
-      // an older lake's coast under this stroke's bank is that stroke's to shape.
-      if (before && (before[i]>sea)===(raw[i]>sea) && (before[j]>sea)===(raw[j]>sea)) continue;
-      const d=Math.abs(raw[i]-sea)/Math.max(1e-6,Math.abs(raw[i]-raw[j]))*spacing;
-      distance[i]=Math.min(distance[i],d); distance[j]=Math.min(distance[j],spacing-d);
-    }
+    if (x+1<grid) seed(i,i+1);
+    if (y+1<grid) seed(i,i+grid);
   }
   return distance;
 }
@@ -1320,12 +1323,12 @@ const hasCoastPass=(kind,p) => (kind==='deep' || kind==='shallow') && ((p?.finge
 // equation (four sweep directions, twice): within about 1% of Euclidean, where
 // the two-pass chamfer of the shore plates is out by up to 8% and would show
 // as straight eight-way facets in a layer's edge.
-function sweepDistance(d) {
-  const h=spacing;
+function sweepDistance(d,box=null) {
+  const h=spacing,bx0=box?box.x0:0,bx1=box?box.x1:grid-1,by0=box?box.y0:0,by1=box?box.y1:grid-1,wide=bx1-bx0+1,tall=by1-by0+1;
   for (let pass=0;pass<2;pass++) for (let dir=0;dir<4;dir++) {
-    const x0=dir&1?grid-1:0,xs=dir&1?-1:1,y0=dir&2?grid-1:0,ys=dir&2?-1:1;
-    for (let k=0,y=y0;k<grid;k++,y+=ys) for (let m=0,x=x0;m<grid;m++,x+=xs) {
-      const i=y*grid+x,a=Math.min(x>0?d[i-1]:Infinity,x<grid-1?d[i+1]:Infinity),b=Math.min(y>0?d[i-grid]:Infinity,y<grid-1?d[i+grid]:Infinity),gap=Math.abs(a-b);
+    const x0=dir&1?bx1:bx0,xs=dir&1?-1:1,y0=dir&2?by1:by0,ys=dir&2?-1:1;
+    for (let k=0,y=y0;k<tall;k++,y+=ys) for (let m=0,x=x0;m<wide;m++,x+=xs) {
+      const i=y*grid+x,a=Math.min(x>bx0?d[i-1]:Infinity,x<bx1?d[i+1]:Infinity),b=Math.min(y>by0?d[i-grid]:Infinity,y<by1?d[i+grid]:Infinity),gap=Math.abs(a-b);
       const v=gap>=h?Math.min(a,b)+h:(a+b+Math.sqrt(2*h*h-gap*gap))/2;
       if (v<d[i]) d[i]=v;
     }
@@ -1333,12 +1336,43 @@ function sweepDistance(d) {
 }
 // Distance (px) to the waterline this stroke made, on the heights now in force;
 // cells it cannot reach keep a large value.
-function coastField(s,raw,sea) { const d=coastSeeds(s,raw,sea,1e5,true); sweepDistance(d); return d; }
+function coastField(s,raw,sea,box=null) { const d=coastSeeds(s,raw,sea,1e5,true,box); sweepDistance(d,box); return d; }
 function stampCoastShore(s) {
-  const sea=config.seaLevel;
-  if (s.fingerCoast>=.5 && s.fingers>0) coastFingers(s,sea);
-  if (Math.round(s.shoreLayers)>=1) coastLayers(s,sea);
+  const sea=config.seaLevel,fingers=s.fingerCoast>=.5 && s.fingers>0,layers=Math.round(s.shoreLayers)>=1;
+  // Every touched coast segment has a cell of the stroke's footprint beside it, so the pass reads and
+  // writes only that footprint grown by the farthest it reaches: the fingers' limit, the layers' zone,
+  // and the cells the blur of the normals looks across. Outside it nothing here can change.
+  let reach=0;
+  if (fingers) reach=Math.max(reach,coastFingerLimit(s));
+  if (layers) reach=Math.max(reach,coastLayerReach(s));
+  const box=coastBox(s,reach);
+  if (!box) return;
+  if (fingers) coastFingers(s,sea,box);
+  if (layers) coastLayers(s,sea,box);
   heightDirty=true;
+}
+function coastBox(s,reach) {
+  const w=s.weights;
+  let x0=grid,y0=grid,x1=-1,y1=-1;
+  for (let y=0;y<grid;y++) for (let x=0,row=y*grid;x<grid;x++) if (w[row+x]>0) { if (x<x0) x0=x; if (x>x1) x1=x; if (y<y0) y0=y; y1=y; }
+  if (x1<0) return null;
+  const m=Math.ceil(reach/spacing)+12;
+  return {x0:Math.max(0,x0-m),y0:Math.max(0,y0-m),x1:Math.min(grid-1,x1+m),y1:Math.min(grid-1,y1+m)};
+}
+// A box blur of a field over the box only (clamped at its edges); where a cell's window lies inside
+// the box it is the blurred() of the whole grid.
+function blurredBox(field,radius,box) {
+  const {x0,y0,x1,y1}=box,tmp=new Float32Array(field.length),out=new Float32Array(field.length),width=2*radius+1;
+  for (let y=y0;y<=y1;y++) {
+    const row=y*grid; let sum=0;
+    for (let k=-radius;k<=radius;k++) sum+=field[row+clamp(x0+k,x0,x1)];
+    for (let x=x0;x<=x1;x++) { tmp[row+x]=sum/width; sum+=field[row+clamp(x+radius+1,x0,x1)]-field[row+clamp(x-radius,x0,x1)]; }
+  }
+  for (let x=x0;x<=x1;x++) {
+    let sum=0; for (let k=-radius;k<=radius;k++) sum+=tmp[clamp(y0+k,y0,y1)*grid+x];
+    for (let y=y0;y<=y1;y++) { out[y*grid+x]=sum/width; sum+=tmp[clamp(y+radius+1,y0,y1)*grid+x]-tmp[clamp(y-radius,y0,y1)*grid+x]; }
+  }
+  return out;
 }
 // Fingers on the joined coast. The lowest layer reaches into the lava as
 // tongues (a lava inlet cuts into the bank the same way): at each cell the
@@ -1384,13 +1418,15 @@ function thumbAt(s,lx,ly,nx,ny,amount) {
   }
   return best+valueNoise(lx/12,ly/12,salt^0x5c1)*1.6;
 }
-function coastFingers(s,sea) {
-  const raw=heights.slice(),dist=coastField(s,raw,sea),n=raw.length,sd=new Float32Array(n);
+// The farthest a finger reaches from the coast (px), and what its cells read beyond that.
+const coastFingerLimit=s => .42*s.radius*2**((s.bankWidth-.5)*1.3)+spacing*3;
+function coastFingers(s,sea,box) {
+  const raw=heights.slice(),dist=coastField(s,raw,sea,box),n=raw.length,sd=new Float32Array(n);
   const bankScale=2**((s.bankWidth-.5)*1.3),reach=.42*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
   const layers=Math.round(s.shoreLayers),low=Math.max(1.2,s.layerRiser>0?s.layerRiser:layers>=1?(config.baseHeight-sea)/(layers+1):3);
-  for (let i=0;i<n;i++) sd[i]=raw[i]>sea?dist[i]:-dist[i];
-  const soft=blurred(sd,10),limit=reach+spacing*3,thumbs=s.fingerBlunt>=.5;
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) sd[i]=raw[i]>sea?dist[i]:-dist[i];
+  const soft=blurredBox(sd,10,box),limit=reach+spacing*3,thumbs=s.fingerBlunt>=.5;
+  for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
     const i=y*grid+x;
     if (dist[i]>limit) continue;
     const gx=soft[y*grid+Math.min(x+1,grid-1)]-soft[y*grid+Math.max(x-1,0)],gy=soft[Math.min(y+1,grid-1)*grid+x]-soft[Math.max(y-1,0)*grid+x],len=Math.hypot(gx,gy);
@@ -1404,14 +1440,18 @@ function coastFingers(s,sea) {
   }
   // A tongue is land joined to land: flood out from the ground that was already dry, and
   // give back any new land the flood does not reach (a tip read across a bend of the coast).
-  const seen=new Uint8Array(n),queue=new Int32Array(n);
+  const seen=new Uint8Array(n),queue=new Int32Array((box.x1-box.x0+1)*(box.y1-box.y0+1));
   let head=0,tail=0;
-  for (let i=0;i<n;i++) if (raw[i]>sea) { seen[i]=1; queue[tail++]=i; }
+  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (raw[i]>sea) { seen[i]=1; queue[tail++]=i; }
+  const grow=j => { if (!seen[j] && heights[j]>sea) { seen[j]=1; queue[tail++]=j; } };
   while (head<tail) {
-    const i=queue[head++],x=i%grid;
-    for (const j of [x>0?i-1:-1,x<grid-1?i+1:-1,i>=grid?i-grid:-1,i+grid<n?i+grid:-1]) if (j>=0 && !seen[j] && heights[j]>sea) { seen[j]=1; queue[tail++]=j; }
+    const i=queue[head++],x=i%grid,y=(i-x)/grid;
+    if (x>box.x0) grow(i-1);
+    if (x<box.x1) grow(i+1);
+    if (y>box.y0) grow(i-grid);
+    if (y<box.y1) grow(i+grid);
   }
-  for (let i=0;i<n;i++) if (!seen[i] && heights[i]>sea) heights[i]=raw[i];
+  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (!seen[i] && heights[i]>sea) heights[i]=raw[i];
 }
 // The lowest layer stands LAYER_FOOT units above the lava (retail's first shelf is
 // 6-10 above it) and is reached over LAYER_WALL px: a ledge nearer the water than
@@ -1425,9 +1465,11 @@ const LAYER_FOOT=6,LAYER_WALL=5;
 // above the foot is shared out evenly so it does. The rise is the world's own, from its sea to its dry base: ground an earlier stroke
 // already lowered or terraced is only ever cut further, never re-measured. Layer edges wander with position-only noise
 // in the shape's own frame, so no two run parallel for long.
-function coastLayers(s,sea) {
+// How far the layers reach from the coast (px), the skip distance included.
+const coastLayerReach=s => { const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx); return (s.layerStyle>=.5?1.6:1)*n*W+2*W; };
+function coastLayers(s,sea,box) {
   const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),circular=s.layerStyle>=.5;
-  const raw=heights.slice(),dist=coastField(s,raw,sea),inv=s.inv,salt=s.seed;
+  const raw=heights.slice(),dist=coastField(s,raw,sea,box),inv=s.inv,salt=s.seed;
   // Circular style: a low flat shelf carrying round stepped mounds (retail lava-2's overlapping
   // pancakes: 3-5 rings 5-8 px apart, 20-35 px across, a unit or two a ring). One mound per
   // jittered lattice cell in the shape's frame; where mounds overlap the higher ring wins.
@@ -1447,7 +1489,7 @@ function coastLayers(s,sea) {
     return best;
   };
   const rise=config.baseHeight-sea,foot=Math.min(LAYER_FOOT,.3*rise),riser=s.layerRiser>0?s.layerRiser:(rise-foot)/n;
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+  for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
     const i=y*grid+x;
     if (!(raw[i]>sea)) continue;
     const d=dist[i],base=s.base[i];
