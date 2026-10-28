@@ -54,6 +54,14 @@ branches and the projection fix below, so re-render before judging.
    | C4 | 8838 | 9638 | `$R/agent-C4/out` | `--worlds none` |
    | C5 | 8839 | 9639 | `$R/agent-C5/out` | `--worlds none` |
    | D | 8840 | 9640 | `$R/agent-D/out` | `--worlds none` |
+   | E1 | 8841 | 9641 | `$R/agent-E1/out` | `--worlds green,archipelago,red` |
+   | E4 | 8842 | 9642 | `$R/agent-E4/out` | `--worlds lava` |
+   | E5 | 8843 | 9643 | `$R/agent-E5/out` | `--worlds ice` |
+   | E2 | 8844 | 9644 | `$R/agent-E2/out` | `--worlds crystal` |
+   | E3 | 8845 | 9645 | `$R/agent-E3/out` | `--worlds green,red,desert` |
+   | E6 | 8846 | 9646 | `$R/agent-E6/out` | `--worlds moon,ice,lava` |
+   | E7 | 8847 | 9647 | `$R/agent-E7/out` | `--worlds crystal` |
+   | E8 | 8848 | 9648 | `$R/agent-E8/out` | `--worlds desert` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -1090,6 +1098,249 @@ A 20x20-unit map has about 100,000 slots.
     - the count for one map per world at 16x16 units.
 - **Stop condition.** If the budget can only be met with visible loss,
   report that. Do not flatten the look to hit the number.
+
+## Cards E: round 7, from the owner's visual feedback
+
+The owner reviewed the round 6 report
+(`https://claude.ai/artifact/1csdAAiBxjNVuCwPBW2d95`, sheets in
+`$R/report-r6/`) and wrote the feedback quoted in each card. **The quotes
+are the spec.** Judge every change against the retail windows they name,
+and against all three windows of the world (rule 5). Wherever the owner
+says "keep the ability, change the default", keep the current look
+reachable as a knob value. Do not delete it.
+
+Cards run in two waves:
+
+- **Wave 1:** E1, E4 and E5, plus E2 and E3 once the owner agrees their
+  approach.
+- **Wave 2:** E6, E7 and E8, after E2 and E3 have merged. Wave 2 needs
+  shine and layered rock to exist.
+
+Cross-world rule: overall, the owner said *"We may want to consider PBR
+materials or something similar - shinier rock faces, very shiny crystals,
+keep the dull matte grass look, etc."* E2 owns that model. No other card
+adds its own specular term.
+
+### E1. Water looks, plus Green and Archipelago ground
+
+> **Green:** Base ground is too lumpy compared to retail. It should mostly
+> be flat, with select painted areas having extra noise/lumps. Shallow
+> water in retail has a hard stop, ours fade gradually. This should be a
+> control for artists and the default in green planet should be almost no
+> fade. Shallow water texture doesn't match: ours is noise, retail is lit
+> terrain with a blue tint.
+>
+> **Archipelago:** Mountains/hills are too dark. Reddish zone around
+> hills/mountains is a bit too wide, too dark, and should fade more
+> gradually into the surrounding terrain. Reddish zone around
+> hills/mountains must use the circular pattern instead of veins by
+> default to match retail. Shallow water needs to be able to have both
+> hard and faded edges, as seen in the retail screenshot.
+>
+> **Red:** Retail shallow water has two modes: 1. cracked lit terrain with
+> a purple tint with a hard stop and 2. shallow lakes with the normal
+> ground base texture tinted light purple. We don't do either.
+
+- **Edge hardness.** Water has two edges: shore to shallow, and shallow
+  to deep.
+  - Measure on the retail windows which edges each world hardens. On
+    green-1 and green-3 the shallow-to-deep step is a hard line.
+  - Make each edge a control: a world default plus a per-stroke option on
+    the water tools, so that one map can have both kinds (Archipelago).
+  - Green's default is almost no fade.
+- **Lit-bed shallow water.** Draw shallow water as the bed under it, in
+  its own material and relief, lit by the same light and then tinted.
+  This replaces the noise texture. Tint and strength are per world. Keep
+  today's noise water as a knob value.
+- **Red's two modes,** as a per-stroke choice:
+  1. cracked lit terrain, tinted purple, with a hard edge;
+  2. a shallow lake: the ground base texture tinted light purple.
+
+  If none of red-1..3 shows a mode, find it in another Red map under
+  `$R/retail-red/` and cut a crop with `repro/retail_crop.py`.
+- **Green ground.**
+  - Set undulation low or off by default.
+  - Lumps become paintable: a mask channel (C5's planes; add one if none
+    fits). The existing undulation knobs keep working.
+  - Keep the ability, change the default.
+- **Archipelago.**
+  - Make hills lighter.
+  - Make the mineral ring narrower and lighter, with a longer fade.
+  - Use the circular pattern by default instead of veins.
+- **Server and guard:** port 8841, CDP 9641, guard
+  `--worlds green,archipelago,red`. Leave Green's rock faces and cracks
+  alone; they belong to E3.
+
+### E2. Shine and roughness (starts when the owner agrees)
+
+- **The model.** Add a specular lobe and micro-normal roughness per
+  material inside the existing baked light. This is not a PBR pipeline:
+  the output is an 8-bit image under one fixed sun, so what the eye
+  reads is the highlight and its grain.
+  - "Shiny rough" (ice, lava rock) means strong specular over
+    high-frequency normal noise.
+  - "Matte" (grass) means no specular.
+- **Controls per material:** gloss (highlight strength), sharpness, and
+  roughness (normal noise amplitude and scale). Every default must
+  reproduce today's output exactly.
+- **Judge after the palette stage.** Highlights quantise to whichever
+  bright entries the world's palette has. A highlight that looks right in
+  RGB can collapse or band after palette pairs and dither, so check by eye
+  on the final output, not the pre-palette buffer.
+- **Defaults.** Set them for Crystal ("Retail is much shinier") and
+  leave every other world off. E6 and E7, and a later shine pass on E4
+  and E5, adopt the model.
+- **Server and guard:** port 8844, CDP 9644, guard `--worlds crystal`.
+  Every other world must match exactly.
+
+### E3. Layered rock: relief, not ink (starts when the owner agrees)
+
+> **Green:** Retail cracks provide relief and have highlights, ours are
+> primarily dark lines and tend to be too dark. Rock faces are a bit too
+> dark. Retails large green-2 rock face reads like coherent sedimentary
+> horizontal layers with lines your eye can follow, then scratched
+> vertically at a slight angle (the deep cracks running north-south down
+> the whole face). Ours reads like scattered gravel.
+>
+> **Red:** Slope cracks are a bit dark and rough, retail is a little
+> lighter and has smaller fine detail and fades into the base texture
+> more naturally (red-3).
+>
+> **Painted Desert:** Retail tall mountains have more shading, but
+> continue the strata pattern, ours just turn ugly gray.
+
+**Relief, not ink.** Strata and joints are micro-relief lit by the sun:
+a highlight on each ledge lip and shadow beneath it. They are not dark
+lines. Do not tune `crackDark` to fix this.
+
+- **Rock structure model:**
+  - **Layers:** spacing, thickness variation, tilt (dip and direction),
+    and ledge step strength.
+  - **Joints:** spacing, angle, depth and continuity. Green-2's
+    north-south scratches run the whole face.
+  - **Scatter:** the end of the dial that gives today's gravel look, so
+    the current look remains reachable.
+- **Crack style.** Give cracks a choice between "relief" (lit groove
+  with a lit lip) and today's "ink".
+- **Defaults:**
+  - Green rock faces get lighter, with layers and joints on green-2.
+  - Red slope cracks get lighter and finer, and fade into the base.
+  - Desert's tall mountains continue the strata, with more shading and
+    no gray.
+- **Server and guard:** port 8845, CDP 9645, guard
+  `--worlds green,red,desert`. E1 also changes Green and Red; your knobs
+  differ from E1's, and the owner reconciles the `WORLD_KNOBS` entries at
+  merge.
+
+### E4. Lava shore layers, fingers and rock
+
+> Retail has many layers in the terrain near lava (lava-1 contour layers,
+> lava-2 circular pattern layers). Retail layers are flat and wide, going
+> inland a good distance and showing each layer clearly and lit naturally.
+> We have slight contour layers but it's not nearly enough and the wrong
+> style (dark bands). We must fix this. Lava fingers in retail are thin and
+> low. The edges of the shore are not deeply shaded/shadowed. Ours are fat
+> little triangles with too much shadow that break up and combine
+> awkwardly. This needs another pass. Retail mountains/hills are shiny
+> rough rock. Ours are dull rock with black contour lines. That's not
+> correct.
+
+- **Shore terraces are height geometry.** Wide flat layers step down to
+  the lava and reach well inland. Each one is lit by the sun: a lit top
+  and a shaded riser.
+  - **Two styles:**
+    - **Contour:** layers follow the shoreline (lava-1).
+    - **Circular:** overlapping round layers (lava-2).
+  - **Controls:** layer count, layer width (inland reach), riser height,
+    irregularity and style.
+  - Rule 6 applies: do not draw lines to fake layers. The B3 band knobs
+    (`bandRelief`, `bandLine`, ...) stay reachable.
+- **Fingers.**
+  - Make them thin and low, with soft shading and no deep shadow.
+  - The owner has approved last round's open decision: fingers now apply
+    to the joined coastline, so overlapping water strokes no longer flood
+    each other into wedges (Kill the Middle, lava-1).
+- **Rock.** Remove the black contour lines from mountains and hills, and
+  shape rough rock relief. Shine comes from E2 later: do not add a
+  specular term.
+- **Server and guard:** port 8842, CDP 9642, guard `--worlds lava`.
+
+### E5. Ice shore and bergs
+
+> Our shoreline is improved but still not close to retail. We have a
+> polygonal ice shelf with distinct shapes and water in between. Retail
+> has ice crystals with visible straight lines naturally distributed
+> throughout that get thinner toward deep water. Ours is an interesting
+> effect artists might want, but it doesn't match retail at all. [...]
+> Our weird crystal for ice-2, ice-3 makes no sense. It's not even close.
+
+- **Shore.**
+  - The new default is ice crystals with visible straight lines,
+    distributed through the shore zone and thinning toward deep water
+    (ice-1).
+  - Keep the plate shelf (`shorePlates`) as an option. Keep the
+    ability, change the default.
+- **Bergs (ice-2).**
+  - A berg is an irregular rough block: an uneven outline, broken facets,
+    and rough, strongly lit faces with no clean bevel.
+  - The scene's pentagon is a placeholder plateau. If the tools cannot
+    make a berg, build the tool, for example a berg option on the plateau
+    with facet count, outline jitter, face roughness and top tilt. Then
+    update the scene in its own commit (rule 6).
+- **Box hollow (ice-3).** A square hollow with dark, rough inner faces
+  and a rough rim. Read `layout.png` for the relief.
+- **Out of scope:** the material of Ice mountains. E6 owns it.
+- **Server and guard:** port 8843, CDP 9643, guard `--worlds ice`.
+
+### E6. Moon, Ice mountains and Lava rock shine (wave 2, after E2 and E3)
+
+> **Moon:** Retail hills are rough, pockmarked, and relatively uniform in
+> texture. Ours have smooth tops and cracks on the side, which doesn't
+> match at all. Craters are generally good, but should have the same
+> uniform rough texture as hills on the sloped sides, and retail has no
+> cracks. Retail lunar surface is a bit shiny.
+>
+> **Ice:** Our hills/mountains look good but don't match retail. Keep the
+> ability, change the default: retail mountains are two types: 1. weird
+> straight-line crystal dark slopes with crystaline tops (ice-1) and the
+> more common one is monotone very rough shiny ice lit strongly.
+
+- Use E2's model for every shine, and E3's structure where it helps.
+- Ice's mountain style becomes a choice. The default is the common
+  monotone, rough, shiny ice; the ice-1 crystal style and today's look
+  remain choices.
+- Lava's hills and mountains become shiny rough rock (E4 removed the
+  contour lines).
+- **Server and guard:** port 8846, CDP 9646, guard
+  `--worlds moon,ice,lava`.
+
+### E7. Crystal (wave 2, after E2)
+
+> Retail is much shinier. Retail crystals all have size variation and some
+> hill smoothness between some crystals. All shallow water should be small
+> crystals. Craters/indents have crystal-like contours as well. Honestly
+> overall this already looks very good.
+
+- **Server and guard:** port 8847, CDP 9647, guard `--worlds crystal`.
+
+### E8. Painted Desert (wave 2, after E3)
+
+> Retail has a gray band near the base (desert-1, desert-3). [...] Retail
+> has more bumpy variation near the base of hills, ours are relatively
+> smooth. We should have both variations in height and major variations in
+> shape at the base.
+
+- The variation at the base is shape: outline and height. Rule 6 applies.
+- **Server and guard:** port 8848, CDP 9648, guard `--worlds desert`.
+
+### Zhon: not a card yet
+
+The owner wants to discuss tools first: random-coloured sand deposits,
+water flow carrying and mixing them downstream with light sand islands, a
+flow direction and strength tool, and rainfall and erosion applied
+selectively. Flow and erosion are not local, so any design must bound the
+simulation to a painted region plus a margin to keep regional replay
+exact. A one-page design comes before any prototype.
 
 ## After the cards
 
