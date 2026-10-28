@@ -66,6 +66,14 @@ branches and the projection fix below, so re-render before judging.
    | E9 | 8850 | 9650 | `$R/agent-E9/out` | `--worlds green` |
    | E10 | 8851 | 9651 | `$R/agent-E10/out` | `--worlds lava` |
    | E11 | 8852 | 9652 | `$R/agent-E11/out` | `--worlds green,archipelago,red` |
+   | G1 | 8853 | 9653 | `$R/agent-G1/out` | `--worlds green,archipelago,red` |
+   | G2 | 8854 | 9654 | `$R/agent-G2/out` | `--worlds green,red,desert` |
+   | G3 | 8855 | 9655 | `$R/agent-G3/out` | `--worlds archipelago` |
+   | G4 | 8856 | 9656 | `$R/agent-G4/out` | `--worlds desert` |
+   | G5 | 8857 | 9657 | `$R/agent-G5/out` | `--worlds lava` |
+   | G6 | 8858 | 9658 | `$R/agent-G6/out` | `--worlds ice` |
+   | G7 | 8859 | 9659 | `$R/agent-G7/out` | `--worlds crystal` |
+   | G8 | 8860 | 9660 | `$R/agent-G8/out` | `--worlds moon` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -1846,6 +1854,282 @@ selectively. Flow and erosion are not local, so any design must bound the
 simulation to a painted region plus a margin to keep regional replay
 exact. A one-page design comes before any prototype: `FLOW_BAKE.md`. It is
 a cached bake step, which the owner accepts being slower to edit.
+
+Round 8 (owner): *"Let's leave the flow bake for now. It's okay but I
+think we need to revisit the tool and how we expect artists to use flow
+baking in general (I think it can be used on land as well, help control
+weathering, sand dunes, etc). Let's leave a TODO and revisit later."* The
+TODO is at the end of `FLOW_BAKE.md`. No card.
+
+## Cards G: round 8, from the owner's review of wave 2
+
+The owner reviewed the wave 2 report
+(`https://claude.ai/artifact/PL5ESAtZmi5PRVbKAXxTwA`) and wrote the
+feedback quoted in each card. **The quotes are the spec.** Renders of
+`terrain-editor` at the start of this round are in
+`$R/repro-out/r8-quick`; renders from before wave 2's E6 (Moon and Ice)
+are in `$R/repro-out/merge-e10`.
+
+Two of the owner's points were settled before the cards (2d7ddf72d). The
+Shallow tool now starts in Area mode, which draws shallows anywhere,
+through land too. ice-1 uses the Ice variant `snow`, the mountain from
+before E6, with E6's finer frost shelf.
+
+**Card D comes first in `sculpt.js`.** Codex is merging card D phase 3
+(region-by-region replay for large maps) with wave 2, inside the replay
+and brush code: the node functions, `startStroke` geometry, the coast
+pass, crystal facets, hill lobes and craters. Until card D lands on
+`terrain-editor`, the G cards change only these:
+
+- shaders (`sculpt-frag.wgsl`, `relief-bake.wgsl`, `sculpt-common.wgsl`);
+- knob values and defaults (`sculpt.py`, `TOOL_PRESETS`, `SHAPE_FIELDS`
+  defaults);
+- the wiring that new knobs need (rule 4).
+
+A shader must take positions only from the inputs today's shading already
+uses (the world pixel position and the baked textures), never from the
+canvas size, because card D renders the map in chunks through the same
+shaders. If an item needs a replay or brush change, write in NOTES.md
+what it would write and how far beyond its stroke it would read, and move
+on. It becomes a follow-up once card D lands. No G card takes a mask
+plane.
+
+Each card owns its piece of shared code. Other cards only set its knobs:
+
+| Card | Owns | New knob names start with |
+| --- | --- | --- |
+| G1 | E11's shallow-water shading and edges | `shoal` |
+| G2 | E9's rock structure (`bedRelief`, `jointField`, the crack functions in `relief-bake.wgsl`) | `cliff` |
+| G3 | E11's Archipelago rings | `ring` |
+| G4 | the Desert strata colour block (`u.strata`) | `desert` |
+| G5 | E10's Lava coast and rock shading | `lava` |
+| G6 | E6's Ice mountains and E5's frost band | `ice` |
+| G7 | E7's crystal shading | `crystal` |
+| G8 | E6's Moon surface and E2's shine model (`shineTerm`) | `moon` |
+
+Prefixes keep two branches from choosing the same name (wave 2 merged two
+`shineGate`s and two `rockDetail`s). Shared lists still grow in one block
+per card, headed by a comment naming it (`// G4`).
+
+### G1. Shallow water, round 3
+
+> **Green:** Shallow water: overall better, however the texture is wrong.
+> It reads as noise while retail reads as lit bumpy terrain under the
+> water with a blue tint, rougher than the grass above it. The hard edge
+> can be more irregular on a small pixel scale like retail.
+>
+> **Archipelago:** Shallow water: better control over edges is good (it
+> should be the artist's choice) but the texture is all wrong. Retail
+> seems to prefer a look of lit bumps over random noise, and so it feels
+> like there is some directionality to it and ours feels flat. Note: the
+> default should still have a small blur on the edge.
+>
+> **Red:** Shallow water: lakes are much improved, but not quite the same
+> texture. Maybe analyze red-2 retail for that specific look. For red-3
+> cracked shallows it is much improved but the transition from shallow to
+> deep water needs a pixel-ragged edge, right now it is too smooth.
+
+- Green, Red and Archipelago already default to the lit bed (`bedLit=1`,
+  `bedRelief=1` in `sculpt.py`), and the owner still reads noise. So the
+  work is the bed itself: lumps big enough to have a lit side and a shaded
+  side under the same sun, rougher than the grass above the waterline,
+  under a blue tint. Measure lump size and the lit/shade split on the
+  retail windows at 2x before changing anything.
+- **Edges.** Green's hard shore edge gets 1-3 px steps like retail's.
+  Archipelago's default shore edge gets a small blur; Hard and Faded stay
+  as choices per stroke.
+- **Red.** Describe red-2's lake bed at 2x first. On red-3 the cracked
+  bed (`waterBed` 3) loses the ragged shallow-to-deep stairs that Red's
+  `deepEdge=1` should give; find out why.
+- **Server and guard:** port 8853, CDP 9653, guard
+  `--worlds green,archipelago,red`.
+
+### G2. Rock faces: finer pieces, strata that follow the slope
+
+> Rock face: good from a distance. I think we are struggling with some of
+> the details up close. My eyes read it as a little too shiny, and the
+> horizontal bands are too far apart. Maybe same with the vertical bands,
+> but retail also has some randomization between the vertical bands that
+> just make it look like textured/lit broken up rock. Ours is too smooth
+> within the horizontal bands, overall retail just has smaller pieces or
+> bumps on those pieces and more irregularity.
+>
+> Small note on rock face: the horizontal and vertical bands should be
+> relative to the slope of the hill or cliff they are on, so if I manually
+> paint rock on a flat surface or right side of a hill, it should not have
+> the sedimentary bands that were going left-to-right when facing me going
+> the same direction, they should follow the hillside. Make sense?
+
+- **Orientation first.** It is structural, and the owner means every world
+  with layered rock, not only Green.
+  - Bedding (the horizontal bands) runs along the contour of the local
+    slope. Joints (the vertical bands) run down the fall line.
+  - Find where today's bands take a fixed screen direction.
+  - On painted rock with no slope under it, take the direction from the
+    slope around it, from heights smoothed at a larger scale. Where there
+    is no slope at all, fade the bedding into plain broken rock.
+- **Then Green up close,** at 2x against green-1..3:
+  - less shine, through the shine knobs (G8 owns the model);
+  - beds closer together, measured on retail in px;
+  - joints at irregular spacing and offset from bed to bed;
+  - smaller lit pieces and bumps within each bed.
+- **Server and guard:** port 8854, CDP 9654. The guard is
+  `--worlds green,red,desert`, the worlds with E3's layered rock.
+  Orientation may move Red and Desert. Show every moved window in the
+  review sheets.
+
+### G3. Archipelago rings
+
+> Red rings: a bit better, maybe too saturated or dark, and they should
+> fade into the underlying sand better instead of just stopping abruptly.
+> One thing retail seems to do is offset faded copies as you transition
+> from the hill to the sand to create a more natural scattered look.
+
+- The rings stop at a line today. Retail's step outward in several
+  copies, each offset from the last (not concentric), each lighter and
+  less saturated, until they are sand.
+- **Server and guard:** port 8855, CDP 9655, guard `--worlds archipelago`.
+
+### G4. Painted Desert colour and grey bands
+
+> Much improved. Are we using the right color? Retail reads a tiny bit
+> more red than our orange. Maybe double check?
+>
+> desert-1: good but the retail gray band seems to repeat
+>
+> desert-3: the top of the plateau has much more color variation than
+> retail
+
+- **Measured,** on flat ground (the 40% of each window with the least
+  local change in luma):
+
+  | Window | Retail hue, R/G | Ours hue, R/G |
+  | --- | --- | --- |
+  | desert-1 | 27.0°, 1.25 | 29.9°, 1.20 |
+  | desert-2 | 30.1°, 1.18 | 28.1°, 1.23 |
+  | desert-3 | 32.4°, 1.16 | 34.5°, 1.12 |
+
+  The owner is right on desert-1 and desert-3: about 2-3° of hue on the
+  base ground, not a palette change. desert-2's flats are already redder
+  than retail's, so find out whether they use the same material before
+  shifting all three.
+- **desert-1:** retail's grey band appears more than once up the strata.
+  Ours has one.
+- **desert-3:** the plateau top needs less colour variation. Look at E8's
+  `baseVary` and the strata colour on the cap.
+- **Server and guard:** port 8856, CDP 9656, guard `--worlds desert`.
+
+### G5. Lava layers and hill rock
+
+> Way better fingers and shore layers. The layers should still allow a
+> bit more variation like retail.
+>
+> Rock shine is okay, but the hill rock style is still not right. It's a
+> different type of rock, bumpy with cutouts, shine, and it almost reminds
+> me of like a stalagtite formation.
+
+- **Layers:** more variation through E10's knobs (`layerVary`,
+  `layerRough`, their ranges and defaults). A change to the coast pass
+  itself waits for card D.
+- **Hill rock** is a new look for Lava hills, separate from the shore
+  layers. Before any code, describe retail's at 2x on lava-1..3 in
+  NOTES.md: the bumps, the cut-outs, the hanging drip-like shapes and
+  where the shine sits. Then build it in the shaders.
+- **Server and guard:** port 8857, CDP 9657, guard `--worlds lava`.
+
+### G6. Ice: shelf lines, ice-2, ice-3 and geometric shapes
+
+> Ice shelf is great, could mayber use some finer lines
+>
+> I prefer the previous mountain from ice-1, the new one does not look
+> good at all. This might be a fluke in the retail ice-1, and we could
+> leave our original as-is and ignore that specific weird retail
+> mountain. What I do think might be worth taking is some geometric
+> shapes, but not just pasting on a cube or two.
+>
+> ice-2 is good but probably too rough
+>
+> ice-3 the shape just sticks out like a sore thumb, I don't know what to
+> do about that one. need help.
+
+- **ice-1** is already back to the earlier mountain (variant `snow`).
+  Geometric shapes are an option, off by default. They are angular facets
+  that belong to the mountain: breaking out of the snow, lit by the same
+  sun, partly buried. Today's crystal strokes are the pasted cubes the
+  owner means. If the shapes need new replay geometry, record the design
+  and wait for card D.
+- **Frost shelf:** finer lines. Keep the rest; the owner likes it.
+- **ice-2:** less rough.
+- **ice-3** (the owner asked for help). The form is right: its heights
+  come from the retail map (3c414bd9a). The material is wrong:
+  - Retail paints the block as a soft, snow-covered mesa. It has a white
+    top with a few pits and faces with soft shading and smooth hatching
+    down the slope. Dark hatched drift lines spill past its foot into the
+    snow, so it sits in the ground.
+  - Ours is a faceted frustum: a grainy, metallic slate texture, hard
+    crease lines between faces, a crisp outline and nothing around its
+    foot. That is why it stands out.
+  - The work: snow on the flat tops of raised ice; rounded crest shading
+    with no straight creases; smooth hatching down the fall line instead
+    of grain; a hatched apron at the foot, fading into the snow. Compare
+    ice-3 under the variant `snow` too, in case the default slate (E6) is
+    what makes it metallic.
+- **Server and guard:** port 8858, CDP 9658, guard `--worlds ice`.
+
+### G7. Crystal craters and small shore crystals
+
+> Amazing
+>
+> crystal-1 needs craters / holes to have smaller less defined crystals
+> and light them as a crater/hole properly
+>
+> crystal-2 and crystal-3 need smaller shore and shallow crystals
+
+- **Craters:** smaller, softer-edged facets, under the shading of a hole:
+  the wall facing the sun lit, the far wall shaded. E7's crater facets are
+  laid in `sculpt.js` (the crystal rect). Try the shading and the cell
+  size in the shader first. If the facet size needs a replay change,
+  record it for after card D.
+- **Shore and shallow crystals** on crystal-2 and -3: smaller cells
+  (`crystalShallowPx` and its relatives).
+- The owner called the rest amazing. The mound tops and every other
+  window stay as they are.
+- **Server and guard:** port 8859, CDP 9659, guard `--worlds crystal`.
+
+### G8. Moon, redone from a visual study
+
+> No. This needs a redo to re-evaluate and understand the moon hill/crater
+> surface better. This is rough, with some 3d pockmarks, no individual
+> scratches. Use visual review because we are way off and made it worse.
+
+Wave 2's loop matched statistics, and the result reads as pepper. This
+card works from pictures: crops at 1:1 and 2x of retail moon-1..3 and of
+other retail Moon maps (`$R/retail-moon`). Write down what differs before
+writing code. Statistics serve only as a guard.
+
+What the owner's session saw at 2x (moon-1's crater wall, moon-3's ridges
+and moon-2's wrinkle ridges):
+
+- **Pockmarks are 3D cups,** about 4-8 px across. Each is a dark hollow
+  with a lit lip on the side facing the sun. They pack densely on shaded
+  slopes, like hammered metal, and are sparse on tops. Ours are black
+  pixel dots with no lit side.
+- **Lit tops are lighter,** crossed by a fine network of thin, slightly
+  dark lines that wander. These are wrinkles, not straight scratches and
+  not streaks down the slope.
+- **Shaded flanks** break into short dark ribs running down the slope,
+  with a stringy texture.
+- **Ridges fold.** Thin wavy lines curve around the forms, and the
+  outlines are lumpy and lobed. The outline is form: if it needs brush
+  changes, record them for after card D.
+- **No individual scratches.** The fine hair-like streaks on our slopes,
+  before and after E6, are what the owner means. Take them out of the
+  default.
+
+E6's `pockmark` and the variant `cracked` stay as choices. The new
+surface becomes the default.
+
+- **Server and guard:** port 8860, CDP 9660, guard `--worlds moon`.
 
 ## After the cards
 

@@ -128,3 +128,12 @@ settled where this page left it open:
 
 Per-scene bake times and memory, the export's reading list and the open
 items are in the card's NOTES.md.
+
+## TODO: revisit the tool (owner, round 8)
+
+The owner wants the tool revisited before stage 2: *"how we expect
+artists to use flow baking in general (I think it can be used on land as
+well, help control weathering, sand dunes, etc)"*. Stage 1 stays as
+built until then. The open question is a general flow and erosion
+control on land: rain and weathering direction, dune fields, washes. It
+is not only a Zhon river tool.
