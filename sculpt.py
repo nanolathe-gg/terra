@@ -200,10 +200,11 @@ WORLD_KNOBS = {
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
                 # white frost with straight needles in parallel runs, ~180 px wide
                 # on land and ~100 px out into the shallows, thinning offshore
-                # (windows ice-1 and Ice Scream). Plate height 14 keeps the frost above
-                # the wet band (13), which greys anything nearer the sea. Plate material
-                # 0 keeps B1's floes.
-                shorePlates=1, plateMaterial=2, plateWaterPx=100, plateLandPx=180, plateSize=44, plateGap=5, plateHeight=14),
+                # (windows ice-1 and Ice Scream). Plate height 4 keeps the frost over the
+                # water level with the bank behind it (14 made a dark wall there; 3 or
+                # less greys the frost through the 13-unit wet band). Plate material 0
+                # keeps B1's floes.
+                shorePlates=1, plateMaterial=2, plateWaterPx=100, plateLandPx=180, plateSize=44, plateGap=5, plateHeight=4),
 }
 
 
