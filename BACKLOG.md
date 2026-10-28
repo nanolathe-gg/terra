@@ -1155,6 +1155,31 @@ Wave 2 shares several pieces of code, so each has one owner:
   in its own function, called from the water path.
 - **E4's coast pass, shore layers and fingers** belong to E10.
 
+Two conventions keep seven branches mergeable:
+
+- **Mask planes.** `MASK_KEYS` in `sculpt.js` has 14 planes today.
+  Plane k is layer k >> 2 and channel k & 3, so planes are numbered by
+  their position in the list. A card that needs planes takes only its
+  own range below. Pad `MASK_KEYS` up to the start of the range with
+  placeholder keys named `free<k>`, and size the mask texture array
+  (`sculpt-renderer.js`) to the highest layer used. At merge the owner
+  replaces each placeholder with its card's key.
+
+  | Card | Planes | Layer |
+  | --- | --- | --- |
+  | E11 | 14-15 | 3 (b, a) |
+  | E10 | 16-19 | 4 |
+  | F1 | 20-27 | 5-6 |
+  | E9 | 28-31 | 7 |
+  | E6 | 32-35 | 8 |
+  | E8 | 36-39 | 9 |
+  | E7 | 40-43 | 10 |
+- **Shared lists.** New entries in `WORLD_KNOBS`, `KNOB_DEFAULTS`,
+  `SHAPE_FIELDS`, the `startStroke` card, `strokeParams` and
+  `struct Uniforms` go in one contiguous block at the end of the list,
+  headed by a comment naming the card (`// E9`). Never interleave them
+  with existing entries.
+
 Cross-world rule: overall, the owner said *"We may want to consider PBR
 materials or something similar - shinier rock faces, very shiny crystals,
 keep the dull matte grass look, etc."* E2 owns that model. No other card
@@ -1478,8 +1503,14 @@ applies to each, and whatever is left stays open.
 
 - The variation at the base is shape: outline and height. Rule 6 applies.
 - **Strata run through the rock.** Every cliff face shows the strata,
-  weathered or not, including desert-2's. Find what hides them there,
-  for example a slope, rock-mask or route cut-off.
+  weathered or not, including desert-2's. Find what hides them there.
+  The first suspect is the strata block in `sculpt-frag.wgsl`:
+  - where `painted.x` (painted rock) is 1, it mixes the bed colour
+    towards one `rockBed`;
+  - `onRaised` is cut by `(1.0 - route)`.
+
+  If desert-2's cliff is painted rock or a routed face, that is where
+  its strata vanish.
 - **The grey band** near the base (desert-1, desert-3). Measure its
   height range, width and colour on the retail windows.
 - E3 left the buttes as smooth cones with no black shadow side, and
