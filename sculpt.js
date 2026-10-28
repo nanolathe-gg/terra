@@ -2,6 +2,7 @@ import {TerrainRenderer} from './sculpt-renderer.js';
 import {quickMaterialField} from './sculpt-material-weathering.js';
 import {configureMap,resizeMap,drawMapBounds,exportMapField} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
+import {mountMapFeatures} from './sculpt-features.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -29,11 +30,14 @@ const HELP = {
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
-let mapUpdate=() => {},exportSurface=null;
+let mapUpdate=() => {},exportSurface=null,mapFeatures=null,mapMetadata=null,mapRevision=0;
+const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
+function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
+function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
-let history=[], historyIndex=-1, framePending=false, heightDirty=true, needsDraw=true;
+let history=[], historyIndex=-1, historySerial=0, framePending=false, heightDirty=true, needsDraw=true;
 let revision=0, renderedRevision=-1, fitView=true, autosaveTimer, ready=false;
 let paintingIntervals=[],lastPaintingRAF=null,draft=false;
 let lastWaterStroke=null;
@@ -295,7 +299,7 @@ function updateControls() {
 }
 
 function canExport() {
-  return ready && !loading && !stroke && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
+  return ready && !loading && !stroke && !mapFeatures?.busy && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
 }
 
 function hash(x,y,s) {
@@ -1867,14 +1871,15 @@ function flushEval() {
   draft=Boolean(moving) && experiment.get('draft')!=='off';
   try { evaluate(from,rect); } finally { draft=false; }
 }
-function checkpoint() {
+function checkpoint(mapOnly=false) {
   flushEval();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
-  const next=historyIndex+delta; if (!ready || stroke || next<0 || next>=history.length) return;
-  lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next;
+  const next=historyIndex+delta; if (!ready || stroke || mapFeatures?.busy || next<0 || next>=history.length) return;
+  if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
+  lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
@@ -1971,6 +1976,8 @@ function frame(timestamp) {
 function drawOverlay() {
   ink.clearRect(0,0,size,size);
   if (config.map) { const display=previewHeight(); drawMapBounds(ink,config.map,config,(x,y) => sample(display,x,y)); }
+  mapFeatures?.draw(ink);
+  if (mapFeatures?.active && !pan && !space) { overlay.style.cursor='crosshair'; return; }
   if (cursor && !pan && !space && tool!=='move') {
     ink.strokeStyle='#b8eef3'; ink.fillStyle='#a7e6f00c'; ink.lineWidth=1.5;
     ink.beginPath(); ink.arc(cursor.cx,cursor.cy,stroke?.radius ?? Number($('diameter').value)/2,0,Math.PI*2); ink.fill(); ink.stroke();
@@ -2229,7 +2236,7 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),map:config.map,biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -2299,7 +2306,7 @@ function loadSketch(s) {
   // A v4 recipe rebuilds from its nodes; a v3 sketch becomes one raster node.
   nodes=s.version===4 && Array.isArray(s.nodes)?deserializeNodes(s.nodes):[{kind:'raster',heights:heights.slice(),protection:protection.slice(),routes:routes.slice()}];
   prefix=[]; selected=-1; evaluate(0); renderLayers();
-  markChanged(); updateControls();
+  restoreMapData(s.mapData); markChanged(); updateControls();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -2354,7 +2361,7 @@ function deserializeNodes(list) {
   return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined});
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
-for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
+for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; mapFeatures?.deactivate(); rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
@@ -2410,6 +2417,7 @@ $('export').addEventListener('click',() => {
 });
 const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName) || target.isContentEditable);
 window.addEventListener('keydown',event => {
+  if (mapFeatures?.active && event.code!=='Space' && !(event.ctrlKey||event.metaKey)) return;
   if (typing(event.target) || loading) return;
   if (event.code==='Space' && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); space=true; schedule(false); }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
@@ -2656,11 +2664,13 @@ async function boot() {
     $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
     $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100);
     $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
+    mapMetadata=mountMapExport({config,canvas,ready:canExport,revision:() => revision+':'+weatherJob+':'+mapRevision,mapData,features:() => mapFeatures,change:mapChanged,samples:() => { const display=renderer.height; return (x,y) => sample(display,x,y); },render:renderExportView,restore:() => { if (exportSurface) { renderer.setHeight(exportSurface,grid); exportSurface=null; } schedule(); },onUpdate:fn => { mapUpdate=fn; },busy:on => { loading=on; $('editor').disabled=on; $('world-editor').disabled=on; for (const id of ['weather','clay','light']) $(id).disabled=on; overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on; }});
+    mapFeatures=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,pick:(cx,cy) => renderer.pick(cx,cy),sample:(x,z) => sample(renderer.height,x,z),change:mapChanged,schedule:() => schedule(false),enabled:() => ready&&!loading});
     let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
     if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved terrain.'); } catch (err) { mixedScene(); error('Saved sculpt sketch could not be loaded: '+err.message+' The saved copy is retained until you edit.'); status('Mixed example shown.'); } }
     else if (config.map) { scriptedScene([]); status('Blank map ready · draw terrain with the existing tools.'); }
     else { mixedScene(); status('Mixed scene ready · paint any continuous shape.'); }
-    ready=true; $('editor').disabled=false; $('world-editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed}]; historyIndex=0; renderLayers();
+    ready=true; $('editor').disabled=false; $('world-editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
     // A sketch loaded in another world was handed to this page before the
     // reload; play it now that this world's renderer and fields exist.
     const pending=await takePendingSketch(experiment.get('pendingSketch'));
@@ -2671,7 +2681,6 @@ async function boot() {
       } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); }
     }
     $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
-    mountMapExport({config,canvas,ready:canExport,revision:() => revision+':'+weatherJob,samples:() => { const display=renderer.height; return (x,y) => sample(display,x,y); },render:renderExportView,restore:() => { if (exportSurface) { renderer.setHeight(exportSurface,grid); exportSurface=null; } schedule(); },onUpdate:fn => { mapUpdate=fn; },busy:on => { loading=on; $('editor').disabled=on; $('world-editor').disabled=on; overlay.style.pointerEvents=on?'none':''; }});
     updateControls(); resize(); schedule(); queueWeather();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
