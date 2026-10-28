@@ -1,8 +1,6 @@
 {"biome": "green", "source": {"map": "great divide", "x": 160, "y": 1504},
  "ground": true, "query": "",
  "strokes": [
-  ["hill", [[-150,670],[250,670],[640,680]], {"card": {"diameter": 900, "amount": 100, "roughness": 10,
-    "profile": 1, "apronPx": 220, "apronHeight": 35, "facePx": 200, "faceCurve": 0, "crown": 0}}],
-  ["plateau", [[-150,1040],[500,1040],[1150,1040]], {"card": {"diameter": 780, "amount": 0, "roughness": 6, "cracks": 0,
-    "profile": 1, "apronPx": 0, "facePx": 230, "faceCurve": 0, "terraces": 2, "ledge": 10, "terraceJitter": 60, "faceVariation": 100}}]
+  ["hill", [[-150,660],[250,665],[640,700]], {"card": {"diameter": 900, "amount": 100, "roughness": 10}}],
+  ["erase", [[-150,1080],[500,1080],[1150,1060]], {"card": {"diameter": 720, "roughness": 30, "softness": 100}}]
  ]}
