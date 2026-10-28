@@ -1,0 +1,5 @@
+{"biome": "green", "ground": false, "query": "",
+ "strokes": [
+  ["offset", [[140, 470], [420, 440], [700, 470], [900, 430]], {"card": {"diameter": 380, "amount": 70, "roughness": 22, "cracks": 0, "softness": 50,
+    "profile": 1, "apronPx": 36, "apronHeight": 12, "facePx": 120, "faceCurve": 0, "terraces": 3, "ledge": 50, "terraceJitter": 80, "lip": 0, "faceVariation": 100}}]
+ ]}

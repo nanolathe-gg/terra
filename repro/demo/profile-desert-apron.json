@@ -1,0 +1,5 @@
+{"biome": "desert", "ground": false, "query": "",
+ "strokes": [
+  ["plateau", [[512, 520]], {"card": {"diameter": 460, "amount": 67, "roughness": 12, "cracks": 0, "softness": 50,
+    "profile": 1, "apronPx": 120, "apronHeight": 25, "facePx": 70, "faceCurve": 30, "terraces": 0, "lip": 0}}]
+ ]}

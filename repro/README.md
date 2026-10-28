@@ -50,3 +50,10 @@ the retail crops stay outside git.
    `pair.png` is retail | ours at full size; `layout.png` compares the height
    reliefs, to check the strokes follow the retail layout before judging
    materials.
+
+`demo/` holds scenes for tools that have no retail crop (the cross-section
+control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
+`-lake` (and `-lake-red`, `-shallow`), `-desert-apron` and `-lip`. They are
+rendered one at a time with `render.mjs` (`all.sh` only runs `scenes/`), and
+set the new shape options in `options.card` in the units of their sliders
+(`faceCurve` -100..100, shares as percent, widths in px).
