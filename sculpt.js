@@ -958,8 +958,7 @@ function rampSegment(s,a,b) {
   // change copied to its three neighbours; release evaluates every cell.
   const step=draft?2:1;
   const copyCell=(i,j) => {
-    if (shoulderedHill?s.distances[j]<s.distances[i]:s.weights[j]>=s.weights[i]) return;
-    if (shoulderedHill) s.distances[j]=s.distances[i];
+    if (s.weights[j]>=s.weights[i]) return;
     s.weights[j]=s.weights[i]; heights[j]=clamp(s.base[j]+heights[i]-s.base[i],MIN_HEIGHT,MAX_HEIGHT); protection[j]=protection[i]; routes[j]=routes[i];
   };
   const spread=(i,x,y) => { if (x<x1) copyCell(i,i+1); if (y<y1) { copyCell(i,i+grid); if (x<x1) copyCell(i,i+grid+1); } };
