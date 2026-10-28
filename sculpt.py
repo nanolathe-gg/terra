@@ -244,6 +244,28 @@ def apply_variant(config, biome, variant):
     return out
 
 
+# Red's shallow water, lifted toward retail's (card B4). The quilted purple is
+# the mean of the coast sections' interiors. Across the three Red windows the
+# retail pixels at depths 0-12 average (106, 65, 117) against the texture as
+# drawn (91, 53, 109): brighter by 15 in red and 12 in green, and the pools of
+# red-2 reach (125, 80, 138). A share of the texture is replaced by a light
+# lilac, which lifts the level and keeps the grain and the hue family.
+RED_SHALLOW_LIFT = 0.18
+RED_SHALLOW_LILAC = (200, 150, 170)
+
+
+def lighten_red_shallows(config, assets):
+    import numpy as np
+    from PIL import Image
+    src = Path(assets) / 'red-water-shallow.png'
+    img = np.asarray(Image.open(src).convert('RGB'), np.float32)
+    lit = (img * (1 - RED_SHALLOW_LIFT) + np.asarray(RED_SHALLOW_LILAC, np.float32) * RED_SHALLOW_LIFT).round().astype(np.uint8)
+    Image.fromarray(lit).save(Path(assets) / 'red-water-shallow-lit.png')
+    config['textures']['waterShallow'] = '/sculpt-assets/red-water-shallow-lit.png'
+    mean = lit.reshape(-1, 3).mean(axis=0).tolist()
+    config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
+
+
 def biome_config(biome, assets):
     """Prepare one biome's materials in its own asset folder and return its
     page configuration, with texture URLs under /sculpt-assets/<biome>/."""
@@ -298,6 +320,8 @@ def biome_config(biome, assets):
         config['material'].update(shallowDepth=24, deepDepth=60)
     if biome in ('red', 'desert'):
         config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0')
+        if biome == 'red':
+            lighten_red_shallows(config, assets)
         config['material'].update(rockyCoasts=True, surfaceRelief=1.25, fractureDepth=1.25,
                                   slopeStart=.06, slopeFull=.30, slopeFloor=-4.0, slopeDry=5.0)
     elif biome == 'archipelago':
