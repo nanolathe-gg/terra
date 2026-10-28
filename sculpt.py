@@ -151,6 +151,8 @@ WORLD_KNOBS = {
                  # a shaded riser) in place of the dark band lines (Banding 0 above; Banding, Band lines and the
                  # B3 knobs stay in the World panel).
                  shoreLayers=6, layerPx=16, layerLedge=.8, layerRough=.7,
+                 # Fingers are low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
+                 fingerCoast=1,
                  # Less ambient light, so the shaded risers read as retail's near-black lines.
                  ambient=.3,
                  # Line cores are near black (luma 15-27 in 55-60 ground) and

@@ -1348,24 +1348,70 @@ function stampCoastShore(s) {
 // banks, so only the outline that survives is fingered. A tongue is as high as
 // the lowest layer and a little lower at its tip: the shading is the first
 // riser's, not a bank's wall.
+// Thumb fingers for the coast pass (retail lava-1: 25-35 px wide, 35-70 px long,
+// 70-90 px apart, near-parallel sides, blunt tips). One finger per jittered
+// lattice point in the shape's own frame; the coast point at tangent offset tau
+// from its axis reaches a stadium's outline (parallel sides, a half-circle tip),
+// not the old ribs' pointed wedges. Position-only, so a moved lake carries its
+// fingers along.
+const THUMB_CELL=52;
+function thumbReach(s,wx,wy,nx,ny,amount) {
+  const inv=s.inv;
+  let lx=wx,ly=wy;
+  if (inv) {
+    lx=inv[0]*wx+inv[2]*wy+inv[4]; ly=inv[1]*wx+inv[3]*wy+inv[5];
+    const mx=inv[0]*nx+inv[2]*ny,my=inv[1]*nx+inv[3]*ny,ml=Math.hypot(mx,my)||1; nx=mx/ml; ny=my/ml;
+  }
+  // The lattice is turned off the axes (26 degrees): a coast running along a lattice row would see two
+  // rows of points where it should see one, and grow a finger every 40 px instead of every 80.
+  const ca=.8988,sa=.4384;
+  return thumbAt(s,ca*lx+sa*ly,-sa*lx+ca*ly,ca*nx+sa*ny,-sa*nx+ca*ny,amount);
+}
+function thumbAt(s,lx,ly,nx,ny,amount) {
+  const tx=-ny,ty=nx,salt=s.seed,ci=Math.floor(lx/THUMB_CELL),cj=Math.floor(ly/THUMB_CELL);
+  let best=0;
+  for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
+    if (hash(i,j,salt^0x31f)<-.3) continue;
+    const ax=(i+.5+.4*hash(i,j,salt^0x5a7))*THUMB_CELL,ay=(j+.5+.4*hash(i,j,salt^0x1d3))*THUMB_CELL;
+    const half=.5*(34*(.85+.3*(hash(i,j,salt^0x6b1)*.5+.5))),tau=Math.abs((lx-ax)*tx+(ly-ay)*ty);
+    // Only lattice points within half a cell of the coast along its normal grow a finger here, so
+    // fingers keep one per ~80 px of coast however far the lattice's other rows lie from it.
+    if (tau>=half || Math.abs((lx-ax)*nx+(ly-ay)*ny)>=THUMB_CELL*.5) continue;
+    const longer=hash(i,j,salt^0x2c9)>.7?1.5:1,L=amount*52*(.6+.9*(hash(i,j,salt^0x4e5)*.5+.5))*longer;
+    // Parallel sides ending in a half circle (a stadium); a finger shorter than it is wide is a half ellipse.
+    const cap=Math.sqrt(1-(tau/half)**2);
+    best=Math.max(best,L>half?L-half+half*cap:L*cap);
+  }
+  return best+valueNoise(lx/12,ly/12,salt^0x5c1)*1.6;
+}
 function coastFingers(s,sea) {
   const raw=heights.slice(),dist=coastField(s,raw,sea),n=raw.length,sd=new Float32Array(n);
   const bankScale=2**((s.bankWidth-.5)*1.3),reach=.42*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
   const layers=Math.round(s.shoreLayers),low=Math.max(1.2,s.layerRiser>0?s.layerRiser:layers>=1?(config.baseHeight-sea)/(layers+1):3);
   for (let i=0;i<n;i++) sd[i]=raw[i]>sea?dist[i]:-dist[i];
-  const soft=blurred(sd,4),limit=reach+spacing*3;
+  const soft=blurred(sd,10),limit=reach+spacing*3,thumbs=s.fingerBlunt>=.5;
   for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
     const i=y*grid+x;
     if (dist[i]>limit) continue;
     const gx=soft[y*grid+Math.min(x+1,grid-1)]-soft[y*grid+Math.max(x-1,0)],gy=soft[Math.min(y+1,grid-1)*grid+x]-soft[Math.max(y-1,0)*grid+x],len=Math.hypot(gx,gy);
     if (len<1e-3) continue;
     // The unit normal points inland; the nearest coast point lies back along it.
-    const nx=gx/len,ny=gy/len,wx=x*spacing,wy=y*spacing,f=clamp(fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
+    const nx=gx/len,ny=gy/len,wx=x*spacing,wy=y*spacing,f=clamp(thumbs?thumbReach(s,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,s.fingers*clamp(s.radius*bankScale/140,.35,1)):fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
     if (sd[i]<0 && -sd[i]<f) {
       const u=-sd[i]/f;
       heights[i]=clamp(sea+low*(.35+.65*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
     } else if (sd[i]>0 && sd[i]<-f) heights[i]=clamp(sea-.5-2.5*(1-sd[i]/-f),MIN_HEIGHT,MAX_HEIGHT);
   }
+  // A tongue is land joined to land: flood out from the ground that was already dry, and
+  // give back any new land the flood does not reach (a tip read across a bend of the coast).
+  const seen=new Uint8Array(n),queue=new Int32Array(n);
+  let head=0,tail=0;
+  for (let i=0;i<n;i++) if (raw[i]>sea) { seen[i]=1; queue[tail++]=i; }
+  while (head<tail) {
+    const i=queue[head++],x=i%grid;
+    for (const j of [x>0?i-1:-1,x<grid-1?i+1:-1,i>=grid?i-grid:-1,i+grid<n?i+grid:-1]) if (j>=0 && !seen[j] && heights[j]>sea) { seen[j]=1; queue[tail++]=j; }
+  }
+  for (let i=0;i<n;i++) if (!seen[i] && heights[i]>sea) heights[i]=raw[i];
 }
 // The lowest layer stands LAYER_FOOT units above the lava (retail's first shelf is
 // 6-10 above it) and is reached over LAYER_WALL px: a ledge nearer the water than
