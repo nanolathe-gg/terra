@@ -260,6 +260,23 @@ crystal material in `sculpt-frag.wgsl`; the crystal and ice knobs in
 
 ### B2. Archipelago and Green
 
+*Done (Sonnet, merged 2026-10-28, f452f2a12):*
+- Archipelago: flat beaches with no lip or dashes, no blue pinholes or
+  sand specks, softer mounds;
+- Green: broken, branching relief instead of combs (`evad` variant),
+  and more broken terraces on Great Divide.
+
+*Still open:*
+- Archipelago mounds are darker than retail (15% dark pixels vs 5-13%);
+- Archipelago's pale shallow band is thinner than retail's;
+- Great Divide's terrace density is .158 vs retail's .235.
+
+*Cross-world bug, to fix after B3 lands:* `debrisStones()` in
+`relief-bake.wgsl` puts a stone wherever a cell's hash is exactly 0, even
+with debris 0. That leaves stray specks in every world. Archipelago opts
+out with `cleanStones`; the real fix is an unconditional early return,
+then re-baseline every world.
+
 *Runs after C1:* Green's ledges and Archipelago's level beaches need
 C1's cross-section. This card covers the rest.
 
