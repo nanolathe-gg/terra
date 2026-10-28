@@ -94,8 +94,14 @@ WORLD_KNOBS = {
                   rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
                   bedLip=1, bedLedge=.55, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
                   crackStyle=1),
-    'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
-                reliefAmount=.2, slopeTexture=0, microRock=0),
+    # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
+    # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
+    # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
+    # Red's faces show none).
+    'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3, bandLine=1,
+                reliefAmount=.2, slopeTexture=0, microRock=0,
+                crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
+                jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160, jointGaps=.4),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
