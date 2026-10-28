@@ -361,10 +361,12 @@ export class TerrainRenderer {
     // the material field (one texture binding for both, see initialize).
     this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 2], format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    // Painted masks (card C5), two layers of signed bytes so an unpainted
+    // Painted masks (card C5), three layers of signed bytes so an unpainted
     // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
-    // layer 1 scatter density (r; the rest is spare). Fresh textures are zero.
-    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, 2], format: 'rgba8snorm',
+    // layer 1 scatter density, relief, cracks, banding; layer 2 face rock share
+    // (the rest is spare). Plane k of the page is layer k >> 2, channel k & 3.
+    // Fresh textures are zero.
+    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, 3], format: 'rgba8snorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     this.worldGrid = grid;
     this.bindGroups = {};
@@ -483,10 +485,11 @@ export class TerrainRenderer {
     if (masks) this.setMasks(masks);
   }
 
-  // Painted masks (card C5): five signed-byte planes, rock, snow or ice, wet
-  // ground and moss (0..127) and scatter density (-127..127), interleaved into
-  // maskTexture's two layers. Nothing is uploaded while nothing has ever been
-  // painted; paintOn tells the shaders whether to read the texture at all.
+  // Painted masks (card C5): nine signed-byte planes (rock, snow or ice, wet
+  // ground, moss, scatter density, relief, cracks, banding, face rock share),
+  // interleaved into maskTexture's layers. Nothing is uploaded while nothing
+  // has ever been painted; paintOn, scatterOn and styleOn tell the shaders
+  // whether to read the texture at all.
   setMasks(planes) {
     const n = this.grid * this.grid;
     // Four cells a read: this runs every frame a shape is dragged, and scanning
@@ -500,14 +503,15 @@ export class TerrainRenderer {
     const any = painted.some(Boolean) ? 1 : 0;
     if (!any && !this.maskUploaded) return;
     this.fieldsDirty = true;
-    if (this.maskBytes?.length !== n * 8) this.maskBytes = new Int8Array(n * 8);
-    const bytes = this.maskBytes, [rock, snow, wet, moss, scatter] = planes;
-    for (let i = 0; i < n; i++) { bytes[i * 4] = rock[i]; bytes[i * 4 + 1] = snow[i]; bytes[i * 4 + 2] = wet[i]; bytes[i * 4 + 3] = moss[i]; bytes[n * 4 + i * 4] = scatter[i]; }
+    if (this.maskBytes?.length !== n * 12) this.maskBytes = new Int8Array(n * 12);
+    const bytes = this.maskBytes;
+    planes.forEach((a, k) => { const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
     this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 2]);
+    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 3]);
     this.maskUploaded = Boolean(any);
     this.i('uPaintOn', any);
     this.i('uScatterOn', painted[4]);
+    this.i('uStyleOn', painted.slice(5).some(Boolean) ? 1 : 0);
   }
 
   setMaterialField(field) {

@@ -52,6 +52,8 @@ KNOB_DEFAULTS = dict(
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
+    # Local style (card C5 stage 2): change about the world's own value, 0 none.
+    styleRelief=0, styleCracks=0, styleBanding=0, styleFace=0,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).

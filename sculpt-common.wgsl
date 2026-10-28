@@ -196,6 +196,7 @@ struct Uniforms {
     // Painted masks (card C5).
     paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
     scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
+    styleOn: i32,         // 1 once any cell carries a painted local style (relief, cracks, banding, face rock share)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -220,8 +221,15 @@ struct Uniforms {
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
 // Layer 0: r rock, g snow or ice, b wet ground, a moss (0..1). Layer 1: r
-// scatter density (-1 none .. +1 densest; 0 leaves the world's own).
+// scatter density (-1 none .. +1 densest; 0 leaves the world's own), then the
+// local style settings g relief, b cracks, a banding (-1 less .. +1 more than
+// the world's own; 0 leaves it). Layer 2: r face rock share (same scale).
 @group(0) @binding(9) var masksTex: texture_2d_array<f32>;
+
+// Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,
+// 4 at +1 (two doublings).
+fn styleScale(f: f32) -> f32 { return select(1.0 + f, exp2(2.0 * f), f > 0.0); }
+fn maskUv(p: vec2f) -> vec2f { return (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid; }
 
 fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 0, 0.0); }
 fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 1, 0.0); }

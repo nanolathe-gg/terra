@@ -1,0 +1,12 @@
+{"biome": "green", "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300, 420], [700, 440]], {"card": {"diameter": 380, "amount": 90, "roughness": 30}}],
+  ["paint", [[210, 330], [330, 300]], {"card": {"diameter": 110, "amount": 100, "paintChannel": 8}}],
+  ["paint", [[430, 320], [560, 310]], {"card": {"diameter": 110, "amount": 100, "paintChannel": 10}}],
+  ["paint", [[620, 330], [760, 340]], {"card": {"diameter": 110, "amount": 100, "paintChannel": 12}}],
+  ["paint", [[260, 520], [380, 540]], {"card": {"diameter": 110, "amount": 100, "paintChannel": 14}}],
+  ["paint", [[480, 540], [600, 540]], {"card": {"diameter": 110, "amount": 100, "paintChannel": 9}}],
+  ["paint", [[680, 530], [800, 520]], {"card": {"diameter": 110, "amount": 100, "paintChannel": 15}}],
+  ["plateau", [[300, 800]], {"card": {"diameter": 260, "amount": 60, "roughness": 20, "styleRelief": 80, "styleCracks": 80}}],
+  ["plateau", [[720, 800]], {"card": {"diameter": 260, "amount": 60, "roughness": 20}}]
+ ]}

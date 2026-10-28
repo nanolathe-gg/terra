@@ -591,6 +591,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
         var share = mix(u.rockShare.x, u.rockShare.y, smoothstep(u.faceSlope.y, u.faceSlope.y * 1.8, slope));
         var lowGate = lowBank;
+        // Painted face style (card C5): below 0 less of the face is rock, above 0 more.
+        if (u.styleOn != 0) {
+            let f = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r;
+            share = select(share * (1.0 + f), mix(share, 1.0, f), f > 0.0);
+        }
         // Painted rock counts as face whatever the slope, and is mostly rock.
         // (A branch of its own: rewriting the expressions above in place moved
         // a few pixels of other worlds through the compiler's float ordering.)
