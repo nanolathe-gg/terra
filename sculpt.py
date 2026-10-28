@@ -196,7 +196,14 @@ WORLD_KNOBS = {
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
     'ice': dict(undulation=4, plainRelief=.6, crackSeverity=.2, crackMajor=.4, crackMinor=.3, crackHairline=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
-                crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2),
+                crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
+                # Shore (card E5): frost crystals are the Ice shore. Retail's band is
+                # white frost with straight needles in parallel runs, ~180 px wide
+                # on land and ~100 px out into the shallows, thinning offshore
+                # (windows ice-1 and Ice Scream). Plate height 14 keeps the frost above
+                # the wet band (13), which greys anything nearer the sea. Plate material
+                # 0 keeps B1's floes.
+                shorePlates=1, plateMaterial=2, plateWaterPx=100, plateLandPx=180, plateSize=44, plateGap=5, plateHeight=14),
 }
 
 

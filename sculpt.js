@@ -135,7 +135,7 @@ const SHAPE_FIELDS=[
   ['plateSize','plate-size','Plate size (px)',['deep','shallow','offset'],8,96,2,1,'Typical width of the interlocking polygonal plates.'],
   ['plateGap','plate-gap','Plate gap (px)',['deep','shallow','offset'],0,160,5,10,'Open gap between adjacent plates.'],
   ['plateHeight','plate-height','Plate height above sea',['deep','shallow','offset'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height. Rock slabs: how far the land slabs stand above their seams.'],
-  ['plateMaterial','plate-material','Plate material (0 ice floes, 1 rock slabs)',['deep','shallow','offset'],0,1,1,1,'0: white and blue floes with open gaps (Ice Scream). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
+  ['plateMaterial','plate-material','Plate material (0 ice floes, 1 rock slabs, 2 frost crystals)',['deep','shallow','offset'],0,2,1,1,'0: white and blue floes with open gaps (Ice Scream). 2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound, 2 berg)',['crystal'],0,2,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world). Berg: a rough ice block with an uneven outline, broken corners and rough faces that take the world\'s own slope relief (Ice); Sides, Width, Height and Variation apply.'],
   ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbours.'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
@@ -1226,6 +1226,7 @@ function stampShorePlates(s) {
     if (y+1<grid) { d=Math.min(d,distance[i+grid]+spacing); if (x) d=Math.min(d,distance[i+grid-1]+diagonal); if (x+1<grid) d=Math.min(d,distance[i+grid+1]+diagonal); }
     distance[i]=d;
   }
+  if (s.plateMaterial>=1.5) { stampShoreFrost(s,raw,distance,sea,water,land); return; }
   if (s.plateMaterial>=.5) { stampShoreSlabs(s,raw,distance,sea,water,land); return; }
   const L=Math.max(8,s.plateSize),gap=Math.max(0,s.plateGap)*.5,inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
   const cells=new Map(),cell=(x,y) => {
@@ -1294,6 +1295,80 @@ function stampShoreSlabs(s,raw,distance,sea,water,land) {
     crystal[i]=seamed?.5:best.shade; protection[i]=1;
     if (wet) heights[i]=clamp(Math.max(raw[i],sea-3.2+best.lift),MIN_HEIGHT,MAX_HEIGHT);
     else if (!seamed) heights[i]=clamp(raw[i]+best.lift*s.plateHeight,MIN_HEIGHT,MAX_HEIGHT);
+  }
+  heightDirty=true;
+}
+
+// Frost crystals (card E5, Ice): retail's ice shore is a band of white frost in
+// which hundreds of thin straight needles lie in parallel runs, each patch of
+// the band in its own direction (three directions 60 degrees apart, as hexagonal
+// ice grows), cut by long straight seams that meet three ways, ragged where it
+// meets the water and thinning out toward deep water (retail Ice windows ice-1
+// and Ice Scream). Patches are Voronoi cells of Plate size; a patch survives
+// with a probability that falls with distance from this stroke's waterline, so
+// the band breaks up into separate flecks offshore. Inside a patch, needles run
+// every Plate gap px (their lengths and gaps are drawn per needle). In the water
+// a needle is a thin strip of ice stood Plate height above the sea; on land it
+// is a low ridge, and the seams between patches are shallow grooves. The needles
+// and seams are real height, lit by the ordinary light, so they read as bright
+// lines with a dark side, not ink.
+function stampShoreFrost(s,raw,distance,sea,water,land) {
+  const L=Math.max(20,s.plateSize),spacing0=Math.max(3,s.plateGap),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1,seed=s.seed,turn=Math.atan2(s.rot[1],s.rot[0]);
+  // Patches (size L) carry the needles; seams run between much larger cells (3 L),
+  // so a seam is long and meets two others, as retail's few long cracks do.
+  const patches=new Map(),seamCells=new Map(),SEAM=3;
+  const patch=(x,y) => {
+    const key=x+','+y; let c=patches.get(key);
+    if (!c) {
+      const k=Math.floor((hash(x,y,seed^0x5d1)*.5+.5)*3)%3;
+      c={x:(x+.5+hash(x,y,seed^0x481)*.4)*L,y:(y+.5+hash(x,y,seed^0x287)*.4)*L,keep:hash(x,y,seed^0x721)*.5+.5,
+         angle:turn+Math.PI/2+k*Math.PI/3+hash(x,y,seed^0x3c9)*.12,gap:spacing0*(.8+.5*(hash(x,y,seed^0x6b7)*.5+.5)),phase:hash(x,y,seed^0x1f3)*.5+.5,id:(x*73856093)^(y*19349663)};
+      patches.set(key,c);
+    }
+    return c;
+  };
+  const seamCell=(x,y) => {
+    const key=x+','+y; let c=seamCells.get(key);
+    if (!c) { c={x:(x+.5+hash(x,y,seed^0x6c1)*.42)*L*SEAM,y:(y+.5+hash(x,y,seed^0x7e9)*.42)*L*SEAM,keep:hash(x,y,seed^0x8d3)*.5+.5}; seamCells.set(key,c); }
+    return c;
+  };
+  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+    const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
+    if (!width || d>=width) continue;
+    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    let best=null,d1=Infinity;
+    for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) { const c=patch(u,v),q=(lx-c.x)**2+(ly-c.y)**2; if (q<d1) { d1=q;best=c; } }
+    const support=1-smooth(.1,1,d/width);
+    // The needle: its distance across, and whether this stretch of it exists.
+    const ca=Math.cos(best.angle),sa=Math.sin(best.angle),across=(lx*ca+ly*sa)/(best.gap*scale)+best.phase,along=(-lx*sa+ly*ca)/scale;
+    const index=Math.round(across),off=Math.abs(across-index)*best.gap;
+    const length=best.gap*(1.5+4*(hash(index,best.id,seed^0x2e7)*.5+.5)),stretch=Math.floor(along/length+hash(index,best.id,seed^0x4a9)*2);
+    const here=hash(index,stretch^best.id,seed^0x91d)*.5+.5,line=hash(index,best.id,seed^0x63d)*.5+.5;
+    let strip=best.keep>support || line<.3?0:smooth(1.5,.5,off)*smooth(.15,.5,here-(1-support)*.35);
+    if (wet) {
+      // Offshore the frost is also a feathered mass of slivers stretched along the patch's needles
+      // (retail's white fingers in the shallows), whose reach falls with the support.
+      const across2=(lx*ca+ly*sa)/scale,field=valueNoise(along/64,across2/20,seed^0x1a7)*.45+valueNoise(along/26,across2/6,seed^0x2b1)*.3+valueNoise(along/10,across2/3,seed^0x3d7)*.18+.5;
+      strip=Math.max(strip,smooth(0,.12,support*.9-field));
+      // Ice strips over the water; the bed keeps its own height between them.
+      if (strip<=.05) continue;
+      const top=sea+s.plateHeight*(.6+.4*(hash(index,best.id,seed^0x7b3)*.5+.5));
+      heights[i]=clamp(raw[i]+(Math.max(raw[i],top)-raw[i])*strip,MIN_HEIGHT,MAX_HEIGHT);
+      protection[i]=Math.max(protection[i],strip); routes[i]=Math.max(routes[i],strip); cover[i]=Math.min(cover[i],-strip);
+    } else {
+      // Land: a low ridge along each needle, a groove along the seam between big cells.
+      const sci=Math.floor(lx/(L*SEAM)),scj=Math.floor(ly/(L*SEAM));
+      let sb=null,sn=null,s1=Infinity,s2=Infinity;
+      for (let v=scj-1;v<=scj+1;v++) for (let u=sci-1;u<=sci+1;u++) {
+        const c=seamCell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
+        if (q<s1) { s2=s1;sn=sb;s1=q;sb=c; } else if (q<s2) { s2=q;sn=c; }
+      }
+      const edge=(s2-s1)/(2*Math.max(1,Math.hypot(sb.x-sn.x,sb.y-sn.y)))*scale+valueNoise(lx/9,ly/9,seed^0x317)*1.2;
+      const seam=Math.max(sb.keep,sn.keep)>1-support*.9?smooth(1.6,.3,edge):0,lift=strip*Math.min(4,s.plateHeight*1.2)-seam*2.5;
+      if (!lift) continue;
+      heights[i]=clamp(raw[i]+lift,MIN_HEIGHT,MAX_HEIGHT);
+      const keep=Math.max(strip,seam); protection[i]=Math.max(protection[i],keep); routes[i]=Math.max(routes[i],keep); cover[i]=Math.min(cover[i],-keep);
+    }
   }
   heightDirty=true;
 }
