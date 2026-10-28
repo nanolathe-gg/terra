@@ -275,7 +275,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32) -> vec4f {
     // contours too, as the relief's wavefronts do.
     var majorFall = fall;
     if (u.faceStreak > 0.0) {
-        let turnBy = u.faceStreak * smoothstep(0.3, 0.7, slope) * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + 71.0), 0.0, 1.0);
+        let turnBy = u.faceStreak * smoothstep(u.faceStreakFrom, u.faceStreakFrom + 0.35, slope) * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + 71.0), 0.0, 1.0);
         majorFall = normalize(mix(fall, vec2f(-fall.y, fall.x), turnBy));
     }
     let c0 = fractureLevel(w, majorFall, major, u.crackLength, m * gentle * u.crackMajor, u.crackNetwork, 3.7);
@@ -374,6 +374,8 @@ fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
 // scale, broken into dashes, and mostly on gentle slopes (blind round 7).
 fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     if (u.banding <= 0.0 || h < u.sea + 0.5) { return vec3f(0.0); }
+    // Low banks drawn level (flatBank, Archipelago) carry no bands either.
+    if (u.flatBank > 0.0 && h < u.base - 0.5) { return vec3f(0.0); }
     // Bands fade out over slopes bandFade * 0.35 / 0.75 to bandFade (default
     // 0.35-0.75; Green fades sooner, as retail's banded slopes are gentle).
     let gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(u.bandFade * (0.35 / 0.75), u.bandFade, slope));
@@ -520,7 +522,7 @@ fn bake(p: vec2f) -> vec4f {
         // turn the wavefronts toward the contours, by a varying amount so
         // ledges, diagonal facets and a few ribs mix.
         if (u.faceStreak > 0.0 && len > 1e-5) {
-            let turnBy = u.faceStreak * smoothstep(0.3, 0.7, slope)
+            let turnBy = u.faceStreak * smoothstep(u.faceStreakFrom, u.faceStreakFrom + 0.35, slope)
                        * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + f32(k) * 5.3 + 71.0), 0.0, 1.0);
             dir = normalize(mix(dir, vec2f(-dir.y, dir.x), turnBy));
         }

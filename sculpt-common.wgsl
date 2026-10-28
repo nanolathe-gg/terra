@@ -113,7 +113,8 @@ struct Uniforms {
     lightCap: f32,
     footRim: f32,
     crevice: f32,
-    faceDark: f32,        // darkening of steep faces, most in hollows (0: none)
+    faceDark: f32,        // darkening of slopes turned from the sun, most in hollows (0: none)
+    flatBank: f32,        // low dry banks lit as level ground, no wet band (0: off)
     dither: f32,
     sandLight: f32,
     sandEdge: f32,
@@ -139,6 +140,7 @@ struct Uniforms {
     reliefPatchy: f32,    // spatial variation of relief strength
     reliefJitter: f32,    // per-kernel phase and wavelength variation
     faceStreak: f32,      // 0: ribs down steep faces; 1: ledges along the contours
+    faceStreakFrom: f32,  // slope where the turn toward the contours starts
     gentleRelief: f32,    // relief on gentle slopes
     boulderDensity: f32,  // 0 disables boulders
     boulderSize: f32,     // typical diameter, world px

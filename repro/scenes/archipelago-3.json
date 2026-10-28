@@ -1,0 +1,11 @@
+{"biome": "archipelago", "source": {"map": "east indeez", "x": 7296, "y": 2048},
+ "ground": true, "query": "",
+ "strokes": [
+  ["deep", [[-100,-150],[-40,180],[-100,320]], {"card": {"diameter": 580, "roughness": 28, "beachFlatness": 35}}],
+  ["hill", [[740,-20],[745,100],[760,180]], {"card": {"diameter": 150, "amount": 75, "roughness": 45}}],
+  ["hill", [[860,10],[990,20]], {"card": {"diameter": 160, "amount": 40, "roughness": 45}}],
+  ["hill", [[880,300],[980,300]], {"card": {"diameter": 120, "amount": 62, "roughness": 45}}],
+  ["hill", [[640,620],[660,760],[700,900]], {"card": {"diameter": 260, "amount": 95, "roughness": 45}}],
+  ["hill", [[100,960],[220,960],[300,1000]], {"card": {"diameter": 380, "amount": 85, "roughness": 45}}],
+  ["hill", [[50,750],[300,760]], {"card": {"diameter": 200, "amount": 30, "roughness": 40}}]
+ ]}

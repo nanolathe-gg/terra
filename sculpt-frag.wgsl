@@ -502,18 +502,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let threshold = mix(1.4, -0.9, share);
         let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowBank;
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
-        var faceMaterial = mix(moss, rock, rockMask);
-        // Retail escarpments are dark (Great Divide face: rock median luma
-        // 43 against ours 59, 10th percentile 10 against 31): darken steep
-        // faces, most in the relief's hollows, so the contrast grows too.
-        // Faces turned from the sun are already dark from the light; they
-        // take a third of it.
-        if (u.faceDark > 0.0) {
-            let steep = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope);
-            let sunlit = smoothstep(0.35, 0.8, dot(normalize(vec3f(-broad, 1.0)), u.light));
-            faceMaterial *= 1.0 - u.faceDark * steep * (0.45 + 0.55 * smoothstep(-0.3, 0.7, -top)) * mix(0.33, 1.0, sunlit);
-        }
+        let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
+        // Steep faces turned from the sun are much darker in retail than
+        // ours (12 Green maps, slope >= 0.55 facing away: median luma 42,
+        // range 26-48; ours 49-61). Lit faces (65) and gentler slopes turned
+        // away (59) already match, so only steep shaded faces darken, most
+        // in the relief's hollows.
+        if (u.faceDark > 0.0) {
+            let turned = 1.0 - smoothstep(0.3, 0.6, dot(normalize(vec3f(-broad, 1.0)), u.light));
+            material *= 1.0 - u.faceDark * turned * smoothstep(0.4, 0.65, slope) * (1.0 - route)
+                            * (0.6 + 0.4 * smoothstep(-0.3, 0.7, -top));
+        }
         // A light, crisp grass rim where rough ground meets the level plain.
         let rim = smoothstep(u.faceSlope.x * 0.35, u.faceSlope.x * 0.6, faceSlope)
                 * (1.0 - smoothstep(u.faceSlope.x * 0.7, u.faceSlope.x * 1.05, faceSlope));
@@ -621,7 +621,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.reliefMode != 1) { cleft = smoothstep(0.15, 1.20, fractureDepth(p, h, slope)); }
     material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
-    material *= 1.0 - nearWater * 0.17;
+    // Retail Archipelago sand runs level to a crisp waterline (hundred
+    // isles): its low bank shows no light, shade or wet band. With flatBank
+    // the dry ground below the plain is lit as level and stays dry-coloured.
+    var flatBank = 0.0;
+    if (u.flatBank > 0.0) {
+        let bh = baseHeight(p);
+        flatBank = u.flatBank * step(u.sea, bh) * (1.0 - smoothstep(u.base - 0.5, u.base + 0.5, bh));
+    }
+    material *= 1.0 - nearWater * 0.17 * (1.0 - flatBank);
     let crystalMask = crystalField(p);
     if (crystalMask > 0.05) {
         // Retail Crystal (measure/crystal_geometry.py): flat tops take the
@@ -649,7 +657,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         material *= 1.0 - 0.3 * near;
     }
-    var color = material * shading;
+    var color = material * mix(shading, 1.0, flatBank);
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
         // Sediment mottling varies apparent water colour without changing the
