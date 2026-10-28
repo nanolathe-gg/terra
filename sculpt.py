@@ -129,6 +129,14 @@ KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots
 # the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
 # the ring texture's own); bedMottleScale sizes the bed's mottle lumps against Green's.
 KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, bedMottleScale=1, stepSoftPx=1)
+# E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
+# the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
+# (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
+KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight=0, layerVary=0, layerCircle=26)
+# E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
+KNOB_DEFAULTS.update(hillLobes=0, hillSteps=8)
+# E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
+KNOB_DEFAULTS.update(layerCrease=0, shineGate=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -303,7 +311,7 @@ WORLD_KNOBS = {
                  # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
                  # a shaded riser) in place of the dark band lines (Banding 0 above; Banding, Band lines and the
                  # B3 knobs stay in the World panel).
-                 shoreLayers=6, layerPx=16, layerLedge=.8, layerRough=.7,
+                 shoreLayers=11, layerPx=9, layerLedge=.8, layerRough=.7,
                  # Fingers are low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
                  fingerCoast=1,
                  # Less ambient light, so the shaded risers read as retail's near-black lines.
@@ -321,7 +329,15 @@ WORLD_KNOBS = {
                  # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
                  # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
                  # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
-                 bandRelief=.4, bandWander=.5, bandGaps=.15),
+                 bandRelief=.4, bandWander=.5, bandGaps=.15,
+                 # E10: lava-1's layers are many and uneven (11 of ~9 px, widths and risers vary along the shore,
+                 # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
+                 # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
+                 # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
+                 layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
+                 shineGate=.7, shineWhite=.3, shineStretch=3,
+                 shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
+                 shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),
     # shadeDepth stays 1 on Lava: directional shading varies by map and
     # window (luma on the east-west height gradient: 6-9 per unit slope on
     # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle

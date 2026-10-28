@@ -464,6 +464,26 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     return vec4f(glint, lit);
 }
 
+// E10 (Lava): retail draws the step between two shore layers as a dark line whichever way it faces, where a
+// lit riser is only dark on the side turned from the sun. This is that line as a cavity: how far the four
+// neighbours 2.5 px round a point stand above it (the foot of a riser has higher ground on one side; a lip
+// and a flat have none), on the banks only: ground between the sea and the plain, so hills keep their own look.
+fn layerCreaseTerm(p: vec2f) -> f32 {
+    let h = baseHeight(p);
+    let bank = smoothstep(u.sea + 0.5, u.sea + 2.0, h) * (1.0 - smoothstep(u.base - 1.5, u.base - 0.3, h));
+    if (bank <= 0.0) { return 0.0; }
+    const r = 2.5;
+    let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
+    return bank * smoothstep(0.1, 0.5, around - h);
+}
+// E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
+// weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
+// shineGate and above, none at a third of it and below.
+fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
+    let gate = smoothstep(u.shineGate * 0.35, u.shineGate, slope);
+    return vec4f(shine.xyz * gate, mix(1.0, shine.w, gate));
+}
+
 // The shallow-to-deep step (card E1). Retail's step is a hard edge with
 // ragged stairs, not the ramp's gradual blend: the step sits at one depth (the
 // ramp's midpoint unless the world names one), is read off the bed's own depth
@@ -1253,8 +1273,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
+        if (u.shineGate > 0.0) { shine = shineSlopeGated(shine, slope); }
         color = color * shine.w + shine.xyz;
     }
+    if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on
         // lit faces of the same slope).
