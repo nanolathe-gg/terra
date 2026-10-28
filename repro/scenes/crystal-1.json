@@ -2,7 +2,7 @@
  "strokes": [
   ["crystal", [[120, 215], [240, 285], [340, 365], [410, 420]], {"card": {"diameter": 230, "amount": 120, "roughness": 70}}],
   ["crystal", [[940, -250], [950, 0], [980, 180]], {"card": {"diameter": 600, "amount": 125, "roughness": 50}}],
-  ["offset", [[725, 765], [870, 760], [900, 900], [730, 905], [1000, 1000]], {"card": {"diameter": 300, "amount": -45, "roughness": 30}}],
+  ["offset", [[725, 765], [870, 760], [900, 900], [730, 905], [1000, 1000]], {"card": {"diameter": 300, "amount": -45, "roughness": 30, "shorePlates": 1, "plateWaterPx": 60, "plateLandPx": 44}}],
   ["deep", [[1010, 1010], [1100, 1100]], {"card": {"diameter": 300, "shelves": 0, "roughness": 30}}],
   ["crystal", [[690, 720], [800, 790], [900, 870], [760, 900]], {"card": {"crystalForm": 0, "diameter": 220, "amount": 42, "crystalSize": 40, "crystalCount": 10, "crystalSides": 5, "crystalTop": 85, "crystalLean": 0, "crystalVariation": 50}}],
   ["crater", [[165, 820]], {"card": {"diameter": 150, "amount": 18, "roughness": 80}}],

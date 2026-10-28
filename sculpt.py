@@ -38,8 +38,8 @@ KNOB_DEFAULTS = dict(
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
-    shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3,
-    crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1,
+    shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3, plateMaterial=0,
+    crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1, crystalSeam=0,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, fingerBlunt=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
@@ -171,7 +171,19 @@ WORLD_KNOBS = {
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
-                    crystalGrain=1, crystalFace=0, crystalInk=1, crystalTone=1.08),
+                    crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.08, crystalSeam=1,
+                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=20),
+    # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
+    # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
+    # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,
+    # 9 of 12 windows). crystalSeam lets the water shader paint the slabs' seams
+    # and a paler fill over the submerged ledge.
+    # crystalFace 1.1 (card C2): riser faces take dark violet (crystal colour x 0.42)
+    # instead of the black B1 left them. In the mound regions of the three
+    # Crystal windows 9-14% of retail pixels are black seams and 33-40% sit at
+    # luma 12-34 (the faces); with faces at black ours had 25-29% black and 6-12%
+    # at 12-34, and the heavy part of the dark (pixels 3 px deep inside a dark
+    # blob) was 10-15% against retail's 4-7%.
     # Ice: level snow (flats at exactly 85 and 170), rounded snow mounds whose
     # shaded faces are smooth slate streaks with no crack network, and a
     # pack-ice shelf instead of a beach; its banks into the water are white

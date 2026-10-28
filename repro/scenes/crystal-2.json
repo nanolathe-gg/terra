@@ -1,9 +1,9 @@
 {"biome": "crystal", "source": {"map": "crystal isles", "x": 1536, "y": 1600}, "ground": true, "query": "",
  "strokes": [
-  ["deep", [[-150, -125], [1180, -125]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45}}],
-  ["deep", [[-150, 1050], [1180, 1050]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45}}],
-  ["deep", [[-110, -125], [-110, 1050]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45}}],
-  ["deep", [[1170, -125], [1170, 1050]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45}}],
+  ["deep", [[-150, -125], [1180, -125]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45, "shorePlates": 1, "plateWaterPx": 80, "plateSize": 24}}],
+  ["deep", [[-150, 1050], [1180, 1050]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45, "shorePlates": 1, "plateWaterPx": 80, "plateSize": 24}}],
+  ["deep", [[-110, -125], [-110, 1050]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45, "shorePlates": 1, "plateWaterPx": 80, "plateSize": 24}}],
+  ["deep", [[1170, -125], [1170, 1050]], {"card": {"diameter": 700, "shelves": 80, "roughness": 45, "shorePlates": 1, "plateWaterPx": 80, "plateSize": 24}}],
   ["deep", [[1000, 1000]], {"card": {"diameter": 300, "shelves": 80, "roughness": 45}}],
   ["deep", [[40, 1000]], {"card": {"diameter": 300, "shelves": 80, "roughness": 45}}],
   ["deep", [[1000, 40]], {"card": {"diameter": 300, "shelves": 80, "roughness": 45}}],
