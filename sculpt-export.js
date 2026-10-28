@@ -73,7 +73,8 @@ export function mountMapExport(api) {
       const response=await fetch('/map-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:abort.signal});
       result=await response.json(); if (!response.ok) throw new Error(result.error||'Map export failed.');
       }
-      $('map-export-state').textContent=warning+`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
+      const completedWarning=api.stream&&result.clampedCells?`Warning: ${result.clampedCells} cell heights clamped to 0–255. `:warning;
+      $('map-export-state').textContent=completedWarning+`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
       for (const [label,key] of [['Download .ufo','archive'],['Indexed terrain image','indexed']]) { if (!result[key]) continue; const a=document.createElement('a'); a.textContent=label; a.href='/map-exports/'+encodeURIComponent(result[key]); a.download=result[key]; a.style.display='block'; $('map-download').append(a); }
       return {...result,clampedCells:result.clampedCells??sampled.clipped};
     } catch (err) { if (exportId) await fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); exportId=null; $('map-export-state').textContent=err.name==='AbortError'?'Export cancelled. No partial archive was published.':warning+err.message; throw err; }
