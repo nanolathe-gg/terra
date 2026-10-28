@@ -374,7 +374,10 @@ WORLD_VARIANTS = {
         'triad': dict(label='Desert Triad: grey buttes',
                       knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
                                  crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3),
-                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .22], [60, 2, 0, .2], [95, 1, 2, .35]])),
+                      # Card E8: retail's grey buttes carry orange lines 15 units apart (median over the
+                      # lit flanks above 60, 14 px) and ~4.4 units wide, not 4 apart.
+                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .3], [60, 2, 0, .3], [95, 1, 2, .35]],
+                                  strataZoneSpacing=[4, 12, 14, 14])),
     },
 }
 for _world, _variants in WORLD_VARIANTS.items():
@@ -570,9 +573,14 @@ def biome_config(biome, assets):
         config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
-        # rock with orange lines above ~69 (card E3: rust-pink lines, share .4, so
-        # the strata stay readable on the tall buttes instead of one grey).
-        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .4]]
+        # rock with orange lines above ~69 (card E3: rust-pink lines, so the strata stay
+        # readable on the tall buttes instead of one grey; card E8: share .4 -> .3 with
+        # the beds 11 thick, which keeps the lines 2-5 units wide as on retail's buttes).
+        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .3]]
+        # Card E8: bed thickness per zone. Orange-line gaps on the lit flanks of retail's
+        # raised ground (measure/desert_strata_gaps.py): median 10.8 units above 70 (14 px),
+        # 8.1 from 20 up; the aprons keep the world's 6.
+        config['strataZoneSpacing'] = [6, 6, 6, 6, 11]
         config['defaults']['example'] = 'mesas'
         # The plain: exact-index tiles from the retail map's level ground,
         # when the map has been exported (see ground_tiles.py).

@@ -52,7 +52,6 @@ fn groundBased(c: vec3f) -> vec3f {
 // Strata: coloured bands by height on raised ground (painted desert).
 fn strataHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
 fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
-
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
@@ -849,7 +848,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let next = u.strataZones[zone + 1];
             if (next.y == z.y && next.z == z.z) { share = mix(z.w, next.w, clamp((hr - z.x) / max(next.x - z.x, 0.1), 0.0, 1.0)); }
         }
-        let S = max(u.strataSpacing, 0.5);
+        var S = max(u.strataSpacing, 0.5);
+        // Card E8: retail's beds thicken up the buttes (lit flanks above 60: line gaps
+        // of 11-15 units, against the apron's 6), so a zone may carry its own thickness.
+        if (u.strataZoneSpace[zone].x > 0.0) { S = u.strataZoneSpace[zone].x; }
         let t = hr / S;
         let k = floor(t);
         let f = fract(t);

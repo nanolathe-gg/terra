@@ -393,6 +393,9 @@ export class TerrainRenderer {
     // default two colours alternating evenly from just above the plain.
     const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
     this.set('uStrataZones', [...zones, ...new Array(6 - zones.length).fill([0, 0, 0, 0])]);
+    // Card E8: a bed thickness per zone (the grey buttes' beds are 2-3 times the apron's); none keeps strataSpacing.
+    const space = (this.config.strataZoneSpacing || []).slice(0, 6);
+    this.set('uStrataZoneSpace', [...space.map(x => [x, 0, 0, 0]), ...new Array(6 - space.length).fill([0, 0, 0, 0])]);
     this.i('uStrataZoneCount', zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
