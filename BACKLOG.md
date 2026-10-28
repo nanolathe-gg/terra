@@ -91,7 +91,10 @@ branches and the projection fix below, so re-render before judging.
    and re-render the failing scenes. If they then match `before` exactly,
    the drift is the compiler's: restore the code and record both
    `compare.py` outputs in NOTES.md. If they still differ, your change
-   leaks into that world; gate it.
+   leaks into that world; gate it. The `false` test does not always bring
+   the baseline back (C5 met this). If it doesn't, move the new shader
+   code into gated branches and bisect until every other scene matches
+   exactly.
 
    The retail picture is registered to the editor's projection by the
    window's plain height (`plain` in `crop.json`, by default the median
@@ -271,11 +274,10 @@ crystal material in `sculpt-frag.wgsl`; the crystal and ice knobs in
 - Archipelago's pale shallow band is thinner than retail's;
 - Great Divide's terrace density is .158 vs retail's .235.
 
-*Cross-world bug, to fix after B3 lands:* `debrisStones()` in
-`relief-bake.wgsl` puts a stone wherever a cell's hash is exactly 0, even
-with debris 0. That leaves stray specks in every world. Archipelago opts
-out with `cleanStones`; the real fix is an unconditional early return,
-then re-baseline every world.
+*Fixed (4325b958c):* `debrisStones()` admitted a stone wherever a cell's
+hash was exactly 0, even with debris 0, leaving stray specks in every
+world. The test is now `>=`, and Archipelago's `cleanStones` workaround
+is gone.
 
 *Runs after C1:* Green's ledges and Archipelago's level beaches need
 C1's cross-section. This card covers the rest.
@@ -353,6 +355,22 @@ relief and `lavaLines` in `relief-bake.wgsl`; the Moon and Lava entries
 in `sculpt.py`.
 
 ### B4. Red, Painted Desert and Zhon
+
+*Done (Sonnet, merged 2026-10-28, 085b8417e):*
+- Red: red-3 gets a shelf and a painted dark rock platform; Red's
+  shallow water is closer to retail (depth 3-6 colour error 71 -> 31 on
+  red-2, 30 -> 17 on red-3); red-2's bank is layered and its landform a
+  dome.
+- Zhon: a `river` variant (brown shallows, olive deeps) and broader,
+  gentler bars.
+- Desert: unchanged. Three apron approaches were rejected.
+
+*Still open:*
+- red-3's drop to deep water is 2-3x too steep, and there is a pale
+  patch in its open sea;
+- Red-1's cracked shoulders;
+- ragged Desert aprons, weathered buttes and rubble halos;
+- Zhon's blotchy water, merging bars and blue rock at bar ends.
 
 *Red:*
 
@@ -574,7 +592,7 @@ strokes, or a separate "shore band" brush if that is simpler.
 
 Start from B1's notes. Guard each preset by its world.
 
-*Crystal preset is done (Sonnet, 2026-10-28, branch card-c2, not merged):*
+*Crystal preset is done (Sonnet, merged 2026-10-28, cdb03a477):*
 - shore plates gain a Plate material option (0 ice floes, B1's look; 1 rock
   slabs) and also work on offset strokes; Crystal's world preset makes
   Shore plates give slabs (20 px, 90 px into the water, 48 px onto land);
@@ -594,6 +612,11 @@ are too regular. The mound flanks' risers (the envelope's staircase between
 32-px columns) are still wider than retail's 2-4 px lines: B1's rank 9.
 
 ### C3. Numbers sheet (no image input needed)
+
+*Done (OpenCode, merged 2026-10-28, 399412fd3):*
+- `repro/stats.py <all.sh out> --out <dir>`, with `--selftest`;
+- 24 family windows per world;
+- about 150 s for all 27 scenes.
 
 Write `repro/stats.py`. For every window it computes metrics for retail
 and for ours, and for every world the range of the retail family over
