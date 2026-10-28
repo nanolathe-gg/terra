@@ -1361,7 +1361,7 @@ function stampShoreSlabs(s,raw,distance,sea,water,land) {
 // and seams are real height, lit by the ordinary light, so they read as bright
 // lines with a dark side, not ink.
 function stampShoreFrost(s,raw,distance,sea,water,land) {
-  const L=Math.max(20,s.plateSize),spacing0=Math.max(3,s.plateGap),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1,seed=s.seed,turn=Math.atan2(s.rot[1],s.rot[0]);
+  const gapSize=Math.max(3,worldDefault('frostGapSize')),gapDepth=worldDefault('frostGapDepth'),L=Math.max(20,s.plateSize),spacing0=Math.max(3,s.plateGap),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1,seed=s.seed,turn=Math.atan2(s.rot[1],s.rot[0]);
   // Patches (size L) carry the needles; seams run between much larger cells (3 L),
   // so a seam is long and meets two others, as retail's few long cracks do.
   const patches=new Map(),seamCells=new Map(),SEAM=3;
@@ -1416,10 +1416,11 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
       }
       const edge=(s2-s1)/(2*Math.max(1,Math.hypot(sb.x-sn.x,sb.y-sn.y)))*scale+valueNoise(lx/9,ly/9,seed^0x317)*1.2;
       const seam=Math.max(sb.keep,sn.keep)>1-support*.9?smooth(1.6,.3,edge):0,lift=strip*Math.min(2.5,s.plateHeight*.7)-seam*2.5;
-      // Melt pockets: small blue gaps in the white, as retail's band has, fewer with distance inland.
-      const holeShare=.17*smooth(.65,0,d/width),hole=holeShare>0?smooth(0,.1,valueNoise(lx/11,ly/11,seed^0x4e1)*.5+valueNoise(lx/4.5,ly/4.5,seed^0x5f3)*.22+.5-(1-holeShare)):0;
+      // Melt pockets: small blue gaps in the white, as retail's band has, fewer with distance inland
+      // (card E6: the world's frostGaps share of cells at the coast, fading out at frostGapReach of the reach).
+      const holeShare=worldDefault('frostGaps')*smooth(worldDefault('frostGapReach'),0,d/width),hole=holeShare>0?smooth(0,.1,valueNoise(lx/gapSize,ly/gapSize,seed^0x4e1)*.5+valueNoise(lx/(gapSize*.41),ly/(gapSize*.41),seed^0x5f3)*.22+.5-(1-holeShare)):0;
       if (hole>.02) {
-        heights[i]=clamp(raw[i]+(Math.min(raw[i],sea-3)-raw[i])*hole,MIN_HEIGHT,MAX_HEIGHT);
+        heights[i]=clamp(raw[i]+(Math.min(raw[i],sea-gapDepth)-raw[i])*hole,MIN_HEIGHT,MAX_HEIGHT);
         protection[i]=Math.max(protection[i],hole); routes[i]=Math.max(routes[i],hole); cover[i]=Math.min(cover[i],-hole);
         continue;
       }
@@ -2888,6 +2889,7 @@ const KNOBS = [
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
   ['Pockmarks (Moon)', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
   ['Ice mountains', [['iceSlate','Monotone slate faces from the first slope',0,1,.05,0],['rockDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Crystal mountains: straight strokes on the faces',0,1,.05,0],['iceCrest','Crystal mountains: share of the raised ground under snow lumps',0,1,.05,0]]],
+  ['Ice frost band', [['frostGaps','Melt pockets: share of cells at the coast',0,.6,.01,.17],['frostGapReach','Melt pockets: reach inland (share of the band)',.2,1.2,.05,.65],['frostGapSize','Melt pockets: size (px)',3,24,1,11],['frostGapDepth','Melt pockets: depth below the sea',.5,6,.1,3]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds

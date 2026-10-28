@@ -103,6 +103,8 @@ KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 # E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
 KNOB_DEFAULTS.update(iceSlate=0, rockDetail=1, iceCrystal=0, iceCrest=0)
+# E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
+KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -321,7 +323,7 @@ WORLD_KNOBS = {
                 # height 4 keeps the frost over the water level with the bank behind it
                 # (14 made a dark wall there); frostWet 1 keeps the band white instead of
                 # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
-                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=7, plateHeight=4, frostWet=1,
+                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=5, plateHeight=4, frostWet=1,
                 # Card E6: retail's common ice mountain (Etorrep Glacier, Polar Range) is one monotone,
                 # very rough, shiny slate-blue ice lit strongly: every face is the rock art (contrast
                 # .55) from the first slope to the crest, with a fine grain 2.5 px wide (stretch 2)
@@ -330,7 +332,11 @@ WORLD_KNOBS = {
                 # the Ice variant 'snow'; retail's other type (ice-1) is the variant 'crystal'.
                 iceSlate=1, rockDetail=.55, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
                 lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2, shineHeadroom=.3,
-                shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5),
+                shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5,
+                # Card E6, frost band against retail ice-1 (x330-430, 32-132 px inland): luma s.d. 52
+                # against 42 and blue gaps in .22 of the pixels against .05, so finer needles in more
+                # patches and small melt pockets, half again as many.
+                frostNeedles=.8, frostGaps=.3, frostGapReach=.7, frostGapSize=7),
 }
 
 
