@@ -574,6 +574,25 @@ strokes, or a separate "shore band" brush if that is simpler.
 
 Start from B1's notes. Guard each preset by its world.
 
+*Crystal preset is done (Sonnet, 2026-10-28, branch card-c2, not merged):*
+- shore plates gain a Plate material option (0 ice floes, B1's look; 1 rock
+  slabs) and also work on offset strokes; Crystal's world preset makes
+  Shore plates give slabs (20 px, 90 px into the water, 48 px onto land);
+- slabs interlock in a Voronoi web with thin seams; on land they stand up
+  to Plate height above their seams, under water they are a shallow ledge
+  that the new `crystalSeam` water term paints paler, with dark seams;
+- crystal-1 (offset pond), crystal-2 (four edge strokes) and crystal-3
+  (left shore) opt in; Crystal's riser faces are dark violet instead of
+  black (`crystalFace` 1.1).
+
+*Still open:* band width and land-side width are set, but plate size spread,
+tilt jitter, edge light and shade and the lava crust and sand materials are
+not; there is no Red preset (Red's slabs are broad dry shelves, not this
+web); crystal-3's water seams are darker and denser than retail's, crystal-2's
+field reaches the window edges where retail's deep water is plain, and slabs
+are too regular. The mound flanks' risers (the envelope's staircase between
+32-px columns) are still wider than retail's 2-4 px lines: B1's rank 9.
+
 ### C3. Numbers sheet (no image input needed)
 
 Write `repro/stats.py`. For every window it computes metrics for retail
