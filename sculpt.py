@@ -39,6 +39,8 @@ KNOB_DEFAULTS = dict(
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
+    # Berg form (card E5; only read when a Crystals stroke sets crystalForm 2): faces in units per px, jitter, broken corners, roughness in units, top tilt in units per px and its direction in degrees.
+    crystalAlign=0, bergFace=.9, bergJitter=.5, bergBreak=3, bergRough=6, bergTilt=.1, bergTiltDir=90, bergFlat=.25,
     shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3, plateMaterial=0,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1, crystalSeam=0,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
