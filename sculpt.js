@@ -2117,7 +2117,7 @@ function facetCrater(s) {
       const gx=Math.round(wx/spacing),gy=Math.round(wy/spacing);
       // The surface's height and slope at the centre, over a few cells so the crater's own lumps do not set it.
       const e=3;
-      k={lx,ly,wx,wy,h:at(gx,gy),dx:(at(gx+e,gy)-at(gx-e,gy))/(2*e*spacing),dy:(at(gx,gy+e)-at(gx,gy-e))/(2*e*spacing),step:(rnd(i,j,3)-.5)*6,shade:.8+.2*rnd(i,j,5)};
+      k={lx,ly,wx,wy,h:at(gx,gy),dx:(at(gx+e,gy)-at(gx-e,gy))/(2*e*spacing),dy:(at(gx,gy+e)-at(gx,gy-e))/(2*e*spacing),step:(rnd(i,j,3)-.5)*6,shade:.7+.17*rnd(i,j,5)};
       seeds.set(key,k);
     }
     return k;
