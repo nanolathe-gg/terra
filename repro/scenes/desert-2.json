@@ -1,9 +1,9 @@
 {"biome": "desert", "source": {"map": "the desert triad", "x": 1216, "y": 960},
  "ground": true, "query": "",
  "strokes": [
-  ["plateau", [[205, 165]], {"card": {"diameter": 240, "amount": 90, "roughness": 20, "softness": 30}}],
+  ["plateau", [[205, 165]], {"card": {"diameter": 280, "amount": 90, "roughness": 26, "softness": 30, "apronPx": 55, "apronHeight": 20, "facePx": 50}}],
   ["mountain", [[540, 570]], {"card": {"diameter": 170, "amount": 45, "roughness": 25, "softness": 50}}],
-  ["plateau", [[565, 700], [610, 690]], {"card": {"diameter": 230, "amount": 115, "roughness": 20, "softness": 40}}],
+  ["plateau", [[565, 700], [610, 690]], {"card": {"diameter": 270, "amount": 115, "roughness": 26, "softness": 40, "apronPx": 55, "apronHeight": 20, "facePx": 40}}],
   ["plateau", [[1110, 560], [1110, 1100]], {"card": {"diameter": 320, "amount": 40, "roughness": 25, "softness": 70}}],
   ["hill", [[200, 990]], {"card": {"diameter": 220, "amount": 30, "roughness": 30}}]
  ]}

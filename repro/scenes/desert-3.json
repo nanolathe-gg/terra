@@ -1,6 +1,6 @@
 {"biome": "desert", "source": {"map": "painted desert", "x": 2240, "y": 960},
  "ground": true, "query": "",
  "strokes": [
-  ["plateau", [[430, 500], [510, 630]], {"card": {"diameter": 820, "amount": 64, "roughness": 15, "softness": 0}}],
-  ["plateau", [[405, 600], [420, 625]], {"card": {"diameter": 150, "amount": 66, "roughness": 25, "softness": 30}}]
+  ["plateau", [[430, 500], [510, 630]], {"card": {"diameter": 820, "amount": 64, "roughness": 22, "softness": 0}}],
+  ["plateau", [[405, 600], [420, 625]], {"card": {"diameter": 150, "amount": 66, "roughness": 28, "softness": 30}}]
  ]}
