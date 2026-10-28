@@ -253,6 +253,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   dispose() {
     if(this.disposed)return;this.disposed=true;for(const resource of [...this.resources.keys()])this.release(resource);
-    this.context?.unconfigure();this.device?.destroy();if(this.outputCanvas){this.outputCanvas.width=1;this.outputCanvas.height=1;}this.outputBytes=0;
+    this.context?.unconfigure();this.device?.destroy();if(this.outputCanvas){this.outputCanvas.width=0;this.outputCanvas.height=0;}
+    this.outputBytes=0;this.fixedBytes=0;this.cpuWorkingBytes=0;this.uniformData=null;this.uniformView=null;this.height=null;this.maskBytes=null;
   }
 }
