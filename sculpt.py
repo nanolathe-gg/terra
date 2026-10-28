@@ -295,12 +295,16 @@ WORLD_KNOBS = {
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=0, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
+                 worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6, bandLine=.63,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
                  # connected wrinkles and pits, so the joined wrinkles replace them.
                  slopeMarks=0, wrinkles=0,
+                 # G8: the band lines (banding .3 before) drew the straight hair-like scratches the owner
+                 # sees on our slopes, before and after E6 (diagnostic: banding 0 alone removes them; shine
+                 # grain, cracks, worms, ejecta and the slope art leave them in). The variants 'pitted' and
+                 # 'cracked' restore them.
                  # G8: pits are lit cups (moonCups) from the visual study, not E6's dots (pockmark, now the
                  # Moon variant 'pitted'): small, on shaded steep faces, few on lit ground, none on tops.
                  moonCups=1,
@@ -510,11 +514,11 @@ WORLD_VARIANTS = {
     'moon': {
         # Pitted (card E6): one pitted surface from crest to foot, dots 4 x 6 px at one density over all raised
         # ground, a trace of sheen, no cracks. The default's lit cups (G8) replace it.
-        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0)),
+        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, banding=.3)),
         # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
         # carved cracks, no pits and no sheen.
         'cracked': dict(label='Cracked slopes: smooth tops',
-                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, shineGate=0, shineWhite=.35, shineStretch=1,
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
                                    shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
                                    shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
                                    shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
