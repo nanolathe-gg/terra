@@ -99,6 +99,10 @@ function buildShapeOptions() {
     wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"></output></label><input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}"><p class="small">${help}</p>`;
     return wrap;
   }));
+  // The cross-section preview sits right under its switch (card C1).
+  const preview=document.createElement('div'); preview.className='control'; preview.id='section-preview-control'; preview.hidden=true;
+  preview.innerHTML='<canvas id="section-preview" width="222" height="84" style="width:100%;background:#172119;border:1px solid #465344;border-radius:4px"></canvas><p class="small">Cross-section, foot to cap (water: bank top to bed), before the outline noise.</p>';
+  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='profile')].after(preview);
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -173,7 +177,10 @@ function updateControls() {
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
   $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
-  for (const [,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool); $(id+'-value').textContent=scale===1?$(id).value:$(id).value+'%'; }
+  const parametric=Number($('sec-profile').value)>=.5;
+  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (key!=='profile' && SECTION_KEYS.includes(key) && !parametric); $(id+'-value').textContent=scale===1?$(id).value:$(id).value+'%'; }
+  $('section-preview-control').hidden=!SECTION_KINDS.includes(tool) || !parametric;
+  if (!$('section-preview-control').hidden) drawSection();
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
   $('softness-value').textContent=$('softness').value+'%';
@@ -474,6 +481,33 @@ function crossSection(s,i,r,reach) {
   const base=s.base[i];
   if (base-c.bed<.5) return 0;
   return clamp((base-waterSection(c,d,reach,base,kw,ka,nj,nA,nB))/(base-c.bed),0,1);
+}
+// The preview: the active tool's profile from the controls, drawn with the
+// same functions as dab() but at neutral noise (widths unscaled, no wobble).
+function drawSection() {
+  const cv=$('section-preview'),g=cv.getContext('2d'),W=cv.width,H=cv.height,kind=tool;
+  const probe={kind,softness:Number($('softness').value)/100,faceVariation:0,bankPx:shapeValue('bankPx'),...Object.fromEntries(SECTION_KEYS.map(k => [k,shapeValue(k)]))};
+  const c=sectionSetup(probe);
+  g.clearRect(0,0,W,H);
+  if (!c) return;
+  const radius=Number($('diameter').value)/2,reach=radius*(c.water?2**((Number($('bank-width').value)/100-.5)*1.3):1);
+  const sea=config.seaLevel,top=config.baseHeight,amount=Number($('amount').value);
+  const n=160,ys=new Float32Array(n+1);
+  let lo=Infinity,hi=-Infinity;
+  for (let k=0;k<=n;k++) {
+    const d=reach*k/n;
+    ys[k]=c.water?waterSection(c,d,reach,top,1,1,0,0,0)+sectionLift:landSection(c,d,reach,1,1,0,0,0)*amount+sectionLift;
+    lo=Math.min(lo,ys[k]); hi=Math.max(hi,ys[k]);
+  }
+  if (c.water) { lo=Math.min(lo,c.bed); hi=Math.max(hi,top); } else { lo=Math.min(lo,0); hi=Math.max(hi,amount); }
+  const pad=8,X=k => pad+(W-2*pad)*k/n,Y=v => H-pad-(H-2*pad)*(v-lo)/Math.max(hi-lo,1);
+  g.strokeStyle='#465344'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(pad,Y(c.water?sea:0)); g.lineTo(W-pad,Y(c.water?sea:0)); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(X(0),H-pad);
+  for (let k=0;k<=n;k++) g.lineTo(X(k),Y(ys[k]));
+  g.lineTo(X(n),H-pad); g.closePath(); g.fillStyle=c.water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
+  g.beginPath(); for (let k=0;k<=n;k++) g[k?'lineTo':'moveTo'](X(k),Y(ys[k]));
+  g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
+  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(c.water?'bank top':'foot',pad,10); g.textAlign='right'; g.fillText(c.water?'bed':'cap',W-pad,10); g.textAlign='left';
 }
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
