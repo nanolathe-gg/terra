@@ -12,10 +12,13 @@ go build -o /private/tmp/nanolathe-map-editor/agent-D/map-export ./tools/map-edi
 triples), and `installedNames` (map file basenames). The map names in
 `catalog.go` come from `repro/scenes`; their installed OTAs establish each
 world's planet. All mounted OTA/TNT pairs with that planet contribute to its
-climate medians. `sources` lists their logical OTA paths. Missing scene maps,
-conflicting planets, and Zhon can produce `disabledReason` instead of an
-exportable climate. The palette is read in memory, including the ordinary
-PCX recovery fallback.
+climate medians and `defaultSeaLevel` (the median TNT header sea level).
+For an even source count, both defaults use the upper middle value. `sources`
+lists their logical OTA paths. Missing scene maps, conflicting planets, and
+Zhon can produce `disabledReason` instead of an exportable climate and sea
+default. Disabled worlds omit `defaultSeaLevel`; a median of zero remains
+present. The palette is read in memory, including the ordinary PCX recovery
+fallback.
 
 Export a local manifest:
 
@@ -51,7 +54,11 @@ Palette conversion uses exact RGB matches, then squared Euclidean RGB
 distance, with the lowest index winning ties. There is no noise or dithering.
 Only exact indexed 32×32 tiles are shared. The 252×252 minimap follows
 `research/formats/tnt.md` "Minimap": fit the play area to its long side and
-fill the unused short axis with palette index `0x64`.
+fill the unused short axis with palette index `0x64`. Each used pixel averages
+all indexed-art RGB values in its source block. Blocks use truncated integer
+boundaries, covering every play-area pixel exactly once; the engine's outer
+strips are excluded. RGB averages round to the nearest integer (half up), then
+use the same nearest-palette rule and lowest-index tie break as the art.
 
 The fixed starts are `(256,256)` and `(unitsX*512-256,unitsY*512-256)`;
 a one-unit axis uses 128px margins so its starts are distinct. Starts and
