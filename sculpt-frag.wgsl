@@ -438,6 +438,35 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32, cracked: bool) -> f32 {
     return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / max(grad, 0.04));
 }
 
+// E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
+// lines 2-4 px apart that follow the hill's outline (a hill's border, not a texture laid on
+// the screen). The mineral field's own falloff is the outline's distance measure: the
+// weathering worker's source falls off about exponentially from the hill, so lines at equal
+// steps of its logarithm are equally spaced in px, whatever the hill's shape. Pixel width
+// comes from the field's gradient. field: the material field's source (.b); returns the
+// line colour and its weight.
+fn fringeField(q: vec2f) -> f32 {
+    return log(max(materialFieldAt((q / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid).b, 1e-4));
+}
+fn fringeContours(p: vec2f, field: f32) -> vec4f {
+    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return vec4f(0.0); }
+    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
+    if (field < outer * 0.5 || field > 0.65) { return vec4f(0.0); }
+    const e = 2.0;
+    let grad = 0.5 / e * length(vec2f(fringeField(p + vec2f(e, 0.0)) - fringeField(p - vec2f(e, 0.0)),
+                                      fringeField(p + vec2f(0.0, e)) - fringeField(p - vec2f(0.0, e))));
+    let scale = max(u.ringCount, 1.0) / max(log(0.3 / outer), 0.5);
+    let wobble = (shelfNoise(p / 7.0 + 13.0) - 0.5) * 1.7 + (shelfNoise(p / 2.6 + 71.0) - 0.5) * 0.8;
+    let k = -log(max(field, 1e-4)) * scale + wobble;
+    let rate = max(grad * scale, 0.02);
+    let f = fract(k);
+    let line = 1.0 - smoothstep(0.3, 0.9, min(f, 1.0 - f) / rate);
+    let dash = smoothstep(0.25, 0.6, shelfNoise(p / 8.0 + 91.0));
+    let zone = smoothstep(outer * 0.5, outer * 3.0, field) * (1.0 - smoothstep(0.25, 0.6, field)) * smoothstep(0.04, 0.12, rate);
+    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
+    return vec4f(tone, line * dash * zone * u.ringContrast);
+}
+
 // E11: the lit bed's mid-scale mottle. Retail's shallows are lit ground whose lumps of 4-17 px
 // read as crisp patches, not clouds (luma s.d. after a 5-px blur 5.6-7.5 against ours 2.8-3.9
 // with the fine grain alone), so the noise is cut at a threshold roughened by a pixel hash.
@@ -632,6 +661,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     let warmGrain = 0.52 - dot(body, vec3f(0.299, 0.587, 0.114));
                     warm = clamp(warm + warmGrain * 0.5 * 4.0 * warm * (1.0 - warm), 0.0, 1.0);
                     transitionGround = mix(transitionGround, body, warm);
+                    let contours = fringeContours(p, sediments.b);
+                    transitionGround = mix(transitionGround, contours.rgb, contours.a);
                     if (u.transitionDetail > 0.0) {
                         let groundLow = textureSampleLevel(grassTex, grassSamp, pixel / 512.0, 3.0).rgb;
                         let ringLow = textureSampleLevel(mineralRingTex, mineralRingSamp, pixel / 512.0, 3.0).rgb;
@@ -660,6 +691,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     var margin = mix(grass, fringe, veil * 0.55);
                     let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
+                    let contours = fringeContours(p, sediments.b);
+                    margin = mix(margin, contours.rgb, contours.a);
                     let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12)
                              * smoothstep(0.02, 0.35, sediments.a);
                     margin = mix(margin, face, core);

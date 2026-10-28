@@ -689,6 +689,9 @@ export class TerrainRenderer {
     this.f('uCrackedContrast', variant.has('crackedContrast') ? Number(variant.get('crackedContrast')) : 0);
     this.f('uBedDots', variant.has('bedDots') ? Number(variant.get('bedDots')) : 0);
     this.f('uBedDotCell', variant.has('bedDotCell') ? Number(variant.get('bedDotCell')) : 14);
+    this.f('uRingContrast', variant.has('ringContrast') ? Number(variant.get('ringContrast')) : 0);
+    this.f('uRingCount', variant.has('ringCount') ? Number(variant.get('ringCount')) : 7);
+    this.f('uRingSize', variant.has('ringSize') ? Number(variant.get('ringSize')) : 1);
     this.f('uBedMottle', variant.has('bedMottle') ? Number(variant.get('bedMottle')) : 0);
     this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
@@ -773,6 +776,7 @@ export class TerrainRenderer {
     set('uPlainRelief', number('plainRelief', 1.2));
     set('uBedRelief', number('bedRelief', 0));
     set('uBedCrackSlope', number('bedCrackSlope', 0.8));
+    set('uBandFoot', number('bandFoot', 0));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackLength', number('crackLength', 2));

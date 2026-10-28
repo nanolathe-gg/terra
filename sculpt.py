@@ -107,6 +107,11 @@ KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0, bedM
 # bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
 # rocky faces are cut from ~1); bedDots / bedDotCell draw dark dots in the lit bed.
 KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots=0, bedDotCell=14)
+# E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
+# dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
+# the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
+# the ring texture's own).
+KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -195,7 +200,15 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1.25, ringFade=1, fringeStyle='rings',
-                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20),
+                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20,
+                        # E11 (round 7 report: "weird black/dark lines around the hills" and "more
+                        # noticeable circle features in the red fringe"): the dark lines were the
+                        # first band risers on the hill's foot (banding 0 removes them, crack knobs do
+                        # not), so band lines start 8 units above the base; retail's fringe is 8-12
+                        # thin wavy crimson lines 2-4 px apart hugging the hill's outline, which the
+                        # contour pass draws from the mineral field's falloff (so they follow the
+                        # outline, not the screen).
+                        bandFoot=8, ringContrast=.55, ringCount=12, ringSize=.3),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
