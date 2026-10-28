@@ -223,6 +223,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         shading = min((0.42 + fill + 0.95 * direct * castShadow) / flatLight, u.lightCap) * occluded;
     }
     var grass = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
+    // The level ground before any slope cover, for crystal tops (crystalGrain).
+    let levelGround = grass;
     var transitionGround = grass;
     var transitionFace = grass;
     var transitionLow = grass;
@@ -622,10 +624,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let jitter = clamp((crystalMask - 0.9) * 10.0, -1.0, 1.0);
         // Tops keep the ground's own grain (Crystal's streaks), moved
         // toward the crystal colour.
-        let grainLum = dot(material, vec3f(0.299, 0.587, 0.114)) / max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
-        var faces = mix(material, crystalColor * clamp(grainLum, 0.6, 1.5), 0.35) * (1.0 + 0.25 * jitter);
-        faces = mix(faces, crystalColor * 0.38, smoothstep(1.2, 2.5, length(g)));
-        faces = mix(faces, vec3f(0.0), (1.0 - smoothstep(0.58, 0.74, crystalMask)) * 0.92);
+        // Crystal Grain 1: the tops carry the level ground's own art (retail
+        // column tops are streaked like the ground), not the slope cover.
+        let topBase = mix(material, levelGround, u.crystalGrain);
+        let grainLum = dot(topBase, vec3f(0.299, 0.587, 0.114)) / max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
+        var faces = mix(topBase, crystalColor * clamp(grainLum, 0.6, 1.5), 0.35) * (1.0 + 0.25 * jitter) * u.crystalTone;
+        faces = mix(faces, crystalColor * 0.38 * u.crystalFace, smoothstep(1.2, 2.5, length(g)));
+        // Crystal Ink 1: crisp pure-black outlines (retail index 0), not a
+        // soft 92% darkening of the column edge.
+        let ink = mix((1.0 - smoothstep(0.58, 0.74, crystalMask)) * 0.92, 1.0 - step(0.66, crystalMask), u.crystalInk);
+        faces = mix(faces, vec3f(0.0), ink);
         material = mix(material, faces, smoothstep(0.05, 0.3, crystalMask));
     } else {
         // A dark apron round a crystal formation, fading over ~16 px.

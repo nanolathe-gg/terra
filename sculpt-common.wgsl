@@ -178,6 +178,10 @@ struct Uniforms {
     crackHairline: f32,   // share of hairline crazing
     crackBlocks: f32,     // how far blocks step and tilt against each other
     crackMajor: f32,      // share of major cracks
+    crystalGrain: f32,    // crystal tops: 0 the slope cover's art, 1 the level ground's
+    crystalFace: f32,     // crystal side-face colour, times crystal colour x 0.38 (1: as before)
+    crystalInk: f32,      // crystal outlines: 0 soft 92% dark, 1 crisp pure black
+    crystalTone: f32,     // crystal top brightness (1: as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

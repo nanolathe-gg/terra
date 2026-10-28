@@ -1,0 +1,5 @@
+{"biome": "ice", "source": {"map": "polar range", "x": 448, "y": 2880}, "ground": true, "query": "",
+ "strokes": [
+  ["crystal", [[300, 400]], {"card": {"diameter": 60, "amount": 135, "crystalSize": 470, "crystalCount": 1, "crystalSides": 4, "crystalTop": 60, "crystalLean": 0, "roughness": 30}}],
+  ["deep", [[1060, 1000], [1000, 1080]], {"card": {"diameter": 260, "shelves": 40, "roughness": 30}}]
+ ]}
