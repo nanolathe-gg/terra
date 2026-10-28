@@ -12,6 +12,19 @@ const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--po
 const [sceneFile, out] = args;
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
+// The page used to fall back to the server's first world for an unknown one,
+// so a Moon scene could be written out as Green. Refuse before rendering:
+// the config request must answer for the scene's world (review A3).
+const sceneConfigResponse = await fetch(`${server}/sculpt-config.json?biome=${encodeURIComponent(scene.biome)}`);
+if (!sceneConfigResponse.ok) {
+  console.error(`render.mjs: ${sceneFile}: world ${scene.biome} is not served (HTTP ${sceneConfigResponse.status})`);
+  process.exit(1);
+}
+const sceneConfig = await sceneConfigResponse.json();
+if (sceneConfig.biomeId !== scene.biome) {
+  console.error(`render.mjs: ${sceneFile}: asked for world ${scene.biome}, the server returned ${sceneConfig.biomeId}`);
+  process.exit(1);
+}
 const url = `${server}/sculpt?biome=${scene.biome}&scratch=1${scene.query ? '&' + scene.query : ''}`;
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
   `--remote-debugging-port=${port}`, `--user-data-dir=${out}/.profile-${port}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
@@ -36,6 +49,8 @@ try {
   await send('Runtime.enable'); await send('Page.enable');
   await send('Page.navigate', {url});
   if (!await ready()) throw new Error('editor never became ready: ' + await ev(`document.getElementById('error').textContent`));
+  const loadedBiome = await ev('sculptDebug.biome');
+  if (loadedBiome !== scene.biome) throw new Error(`page loaded world ${loadedBiome}, scene asks for ${scene.biome}`);
   const t0 = Date.now();
   const count = await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)}, {ground: ${scene.ground !== false}})`);
   if (!await ready()) throw new Error('scene never finished: ' + await ev(`document.getElementById('error').textContent`));
