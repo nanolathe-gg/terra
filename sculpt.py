@@ -96,6 +96,10 @@ SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
+# E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
+# the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
+# (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
+KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight=0, layerVary=0, layerCircle=26)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -228,7 +232,7 @@ WORLD_KNOBS = {
                  # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
                  # a shaded riser) in place of the dark band lines (Banding 0 above; Banding, Band lines and the
                  # B3 knobs stay in the World panel).
-                 shoreLayers=6, layerPx=16, layerLedge=.8, layerRough=.7,
+                 shoreLayers=11, layerPx=9, layerLedge=.8, layerRough=.7,
                  # Fingers are low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
                  fingerCoast=1,
                  # Less ambient light, so the shaded risers read as retail's near-black lines.
@@ -246,7 +250,11 @@ WORLD_KNOBS = {
                  # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
                  # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
                  # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
-                 bandRelief=.4, bandWander=.5, bandGaps=.15),
+                 bandRelief=.4, bandWander=.5, bandGaps=.15,
+                 # E10: lava-1's layers are many and uneven (11 of ~9 px, widths and risers vary along the shore,
+                 # each riser wanders on its own); fingers are small, flat tongues (amount, size and distribution
+                 # are per-stroke options).
+                 layerVary=.8, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4),
     # shadeDepth stays 1 on Lava: directional shading varies by map and
     # window (luma on the east-west height gradient: 6-9 per unit slope on
     # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle

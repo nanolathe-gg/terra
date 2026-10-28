@@ -90,7 +90,9 @@ const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 const STYLE_CHOICES=[[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
 const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace'];
 // Coast options (card E4): joined-coast fingers and shore layers, applied by stampCoastShore once the stroke is swept.
-const COAST_KEYS=['fingerCoast','shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle'];
+const COAST_KEYS=['fingerCoast','shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
+  // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
+  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -108,7 +110,7 @@ const SHAPE_FIELDS=[
   ['layerRiser','layer-riser','Riser height (units; 0 fits the bank)',['deep','shallow'],0,80,1,10,'Height of each step. 0 shares the bank\'s whole rise out between the layers, so the last one meets the plain.'],
   ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
   ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighbouring risers meet and part and no two layers run parallel for long.'],
-  ['layerStyle','layer-style','Layer style',['deep','shallow'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: overlapping round layers, each a small stepped mound against the bank.',[[0,'Contour'],[1,'Circular']]],
+  ['layerStyle','layer-style','Layer style',['deep','shallow'],0,2,1,1,'Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2). Mounds: low round stepped mounds on a shelf (the first circular style).',[[0,'Contour'],[1,'Circular'],[2,'Mounds']]],
   ['profile','sec-profile','Cross-section (0 classic, 1 parametric)',SECTION_KINDS,0,1,1,1,'0 keeps this kind\'s own curve. 1 builds the profile from the options below, in pixels from the outer edge, so it keeps its size whatever the brush diameter. Mesa flanks, Wider north faces and Beach flatness are then ignored; Slope softness and (on water) Dry bank only set the default face width.'],
   ['apronPx','sec-apron-px','Apron width (px)',SECTION_KINDS,0,160,2,1,'A gentle concave skirt at the foot (talus, desert aprons; on water, the beach at the waterline).'],
   ['apronHeight','sec-apron-height','Apron height',SECTION_KINDS,0,60,5,100,'Share of the whole rise (of the bank, on water) reached at the apron\'s top.'],
@@ -185,6 +187,13 @@ const SHAPE_FIELDS=[
   ['styleCracks','style-cracks','Style: cracks',MASK_SHAPES,-100,100,5,100,'Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none).'],
   ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
   ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
+  // E10 (Lava): finger amount, size, distribution and height; layer width variation; circle size of the circular layers.
+  ['fingerAmount','finger-amount','Finger amount (share of sites)',['deep','shallow'],0,200,5,100,'Fingers on the joined coast: how many of the sites along the shore grow a finger. 100 is the usual; 200 grows one at nearly every site.'],
+  ['fingerSize','finger-size','Finger size',['deep','shallow'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
+  ['fingerSpread','finger-spread','Finger distribution (0 even, 100 clustered)',['deep','shallow'],0,100,5,100,'Fingers on the joined coast: 0 spaces them evenly along the shore; higher gathers them in clusters with bare stretches between.'],
+  ['fingerHeight','finger-height','Finger height (units; 0 the old tongue)',['deep','shallow'],0,120,5,10,'Fingers on the joined coast: a flat top this many units above the lava, with soft sides. 0 keeps the earlier tongue, as high as the lowest layer and lower at its tip.'],
+  ['layerVary','layer-vary','Layer width variation',['deep','shallow'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
+  ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
 ];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
@@ -285,14 +294,14 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
   const net=tool==='fissure' && Number($('fissure-network').value)>=.5;
   const modeOff=key => tool==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
   // Berg options show only for the berg form.
-  const frostOff=key => key==='frostNeedles' && Number($('plate-material').value)<2;
+  const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (key==='layerCircle' && Number($('layer-style').value)!==1);
   const bergOff=key => tool==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
   const gated=key => modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
@@ -1469,6 +1478,7 @@ function stampCoastShore(s) {
   if (layers) reach=Math.max(reach,coastLayerReach(s));
   const box=coastBox(s,reach);
   if (!box) return;
+  fingerCells=null;
   if (fingers) coastFingers(s,sea,box);
   if (layers) coastLayers(s,sea,box);
   heightDirty=true;
@@ -1533,19 +1543,27 @@ function thumbReach(s,wx,wy,nx,ny,amount) {
 function thumbAt(s,lx,ly,nx,ny,amount) {
   const tx=-ny,ty=nx,salt=s.seed,ci=Math.floor(lx/THUMB_CELL),cj=Math.floor(ly/THUMB_CELL),unit=(i,j,k) => hash(i,j,salt^k)*.5+.5;
   let best=0;
+  const fingerAmount=s.fingerAmount??1,spread=s.fingerSpread??.5,size=s.fingerSize??1;
   for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
     const ax=(i+.5+.45*hash(i,j,salt^0x5a7))*THUMB_CELL,ay=(j+.5+.45*hash(i,j,salt^0x1d3))*THUMB_CELL;
-    if (unit(i,j,0x31f)>=clamp(.7+.75*valueNoise(ax/130,ay/130,salt^0x1f3),.04,.97)) continue;
+    // E10: the chance is scaled by Finger amount, and Finger distribution sets how strongly the 130 px noise
+    // gathers sites into clusters (.5 and amount 1 are the first thumb fingers' own .7 + .75 * noise).
+    if (unit(i,j,0x31f)>=clamp((.7+1.5*spread*valueNoise(ax/130,ay/130,salt^0x1f3))*fingerAmount,.04*clamp(fingerAmount,0,1),.97)) continue;
     // Only sites within half a cell of the coast along its normal grow a finger here.
     if (Math.abs((lx-ax)*nx+(ly-ay)*ny)>=THUMB_CELL*.5) continue;
-    const L=amount*52*(.3+2*unit(i,j,0x4e5)**2.4),fork=L>40*amount && L<95*amount && unit(i,j,0x2c9)>.8;
-    let h0=clamp(17-.05*(L/Math.max(amount,.2)-30)+(unit(i,j,0x6b1)-.5)*6,11,20)*Math.min(1,.4+amount*.6);
-    if (fork) h0=clamp(h0*1.3,16,24);
+    // Finger size scales the length, and the width a little less (so a small finger is still a blunt thumb).
+    const L=amount*52*(.3+2*unit(i,j,0x4e5)**2.4)*size,fork=L>40*amount*size && L<95*amount*size && unit(i,j,0x2c9)>.8;
+    // Retail lava-1: the long fingers of the south-east coast are the fat ones (35-45 px across, rounded
+    // ends), the small teeth of the north are 12-16 px: half the width grows with the length.
+    let h0=clamp(5+.15*L/Math.max(amount,.2)+(unit(i,j,0x6b1)-.5)*6,7,24)*Math.min(1,.4+amount*.6);
+    if (fork) h0=clamp(h0*1.3,16,26);
     const tau=Math.abs((lx-ax)*tx+(ly-ay)*ty);
     if (tau>=h0) continue;
-    const ht=Math.max(4.5,.55*h0),Ls=Math.max(L-ht,0);
-    // The outline: a straight taper to a tip ht wide, then a half circle ht across.
-    let r=tau>ht?Ls*(h0-tau)/(h0-ht):Ls+Math.sqrt(ht*ht-tau*tau);
+    const ht=Math.max(4.5,.8*h0),Ls=Math.max(L-ht,0);
+    // The outline: the half width tapers from h0 at the root to ht (.8 of it) at the tip, which is a half circle.
+    // (a rounded shoulder where it meets the root, so a blunt finger does not flare into square corners)
+    const sh=(tau-ht)/(h0-ht);
+    let r=tau>ht?Ls*(1-sh*sh):Ls+Math.sqrt(ht*ht-tau*tau);
     if (fork && r>.5*L) { const wn=.42*h0; if (tau<wn) r=Math.min(r,.5*L+(r-.5*L)*tau/wn); }
     best=Math.max(best,r);
   }
@@ -1558,7 +1576,10 @@ function coastFingers(s,sea,box) {
   const bankScale=2**((s.bankWidth-.5)*1.3),reach=.5*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
   // A finger stands as high as the lowest layer (LAYER_FOOT), a little lower at its tip; any lower and the
   // shader's relief reads it as lava and shadow, a thin dark spike.
-  const low=Math.min(LAYER_FOOT,.3*(config.baseHeight-sea));
+  // E10: Finger height > 0 makes them flat-topped at that height (no lower tip), and marks their cells so the
+  // layers pass leaves them at it instead of raising them to the lowest layer's ledge.
+  const flat=s.fingerHeight>0,low=flat?Math.max(2.5,s.fingerHeight):Math.min(LAYER_FOOT,.3*(config.baseHeight-sea));
+  fingerCells=flat?new Float32Array(n):null;
   for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) sd[i]=raw[i]>sea?dist[i]:-dist[i];
   const soft=blurredBox(sd,10,box),limit=reach+spacing*3,thumbs=s.fingerBlunt>=.5;
   for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
@@ -1570,7 +1591,8 @@ function coastFingers(s,sea,box) {
     const nx=gx/len,ny=gy/len,wx=x*spacing,wy=y*spacing,f=clamp(thumbs?thumbReach(s,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,s.fingers*clamp(s.radius*bankScale/140,.35,1)):fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
     if (sd[i]<0 && -sd[i]<f) {
       const u=-sd[i]/f;
-      heights[i]=clamp(sea+low*(.7+.3*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
+      heights[i]=clamp(sea+low*(flat?1:.7+.3*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
+      if (flat) fingerCells[i]=low;
     } else if (sd[i]>0 && sd[i]<-f) heights[i]=clamp(sea-.5-2.5*(1-sd[i]/-f),MIN_HEIGHT,MAX_HEIGHT);
   }
   // A tongue is land joined to land: flood out from the ground that was already dry, and
@@ -1586,8 +1608,10 @@ function coastFingers(s,sea,box) {
     if (y>box.y0) grow(i-grid);
     if (y<box.y1) grow(i+grid);
   }
-  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (!seen[i] && heights[i]>sea) heights[i]=raw[i];
+  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (!seen[i] && heights[i]>sea) { heights[i]=raw[i]; if (flat) fingerCells[i]=0; }
 }
+// Cells the fingers raised, with their flat height (units above sea): the layers pass caps them there.
+let fingerCells=null;
 // The lowest layer stands LAYER_FOOT units above the lava (retail's first shelf is
 // 6-10 above it) and is reached over LAYER_WALL px: a ledge nearer the water than
 // ~3 units dips under the sea in the shader's relief, and a 1-cell wall is a
@@ -1600,16 +1624,45 @@ const LAYER_FOOT=6,LAYER_WALL=5;
 // above the foot is shared out evenly so it does. The rise is the world's own, from its sea to its dry base: ground an earlier stroke
 // already lowered or terraced is only ever cut further, never re-measured. Layer edges wander with position-only noise
 // in the shape's own frame, so no two run parallel for long.
-// How far the layers reach from the coast (px), the skip distance included.
-const coastLayerReach=s => { const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx); return (s.layerStyle>=.5?1.6:1)*n*W+2*W; };
+// How far the layers reach from the coast (px), the skip distance included. Circular layers also
+// reach as far inland as their circles (centred on the coast, up to 1.4 radii across).
+const coastLayerReach=s => {
+  const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),style=Math.round(s.layerStyle);
+  if (style===2) return 1.6*n*W+2*W;
+  if (style===1) return n*W+2.8*Math.max(8,s.layerCircle)+2*W;
+  return n*W*(1+.6*clamp(s.layerVary,0,1))+2*W;
+};
+// Circular layers (retail lava-2): round bites cut out of the bank, layer after layer. A bite is a disc
+// centred within a radius of the waterline, one per jittered lattice cell in the shape's own frame (so a
+// moved lake carries its circles along); a layer is counted from the nearest bite's edge, or the
+// waterline if that is nearer, so each riser is an arc round its bite, concentric with the bite's other
+// risers, meeting a neighbour's arcs at a cusp (the overlap of two discs).
+function circleSites(s,raw,dist,sea,box,Rc) {
+  const inv=s.inv,f=inv?invert(inv):null,salt=s.seed,C=Rc*1.3,out=[];
+  const corner=(x,y) => { const wx=x*spacing,wy=y*spacing; return inv?[inv[0]*wx+inv[2]*wy+inv[4],inv[1]*wx+inv[3]*wy+inv[5]]:[wx,wy]; };
+  const cs=[corner(box.x0,box.y0),corner(box.x1,box.y0),corner(box.x0,box.y1),corner(box.x1,box.y1)];
+  const i0=Math.floor(Math.min(...cs.map(c => c[0]))/C)-1,i1=Math.ceil(Math.max(...cs.map(c => c[0]))/C)+1;
+  const j0=Math.floor(Math.min(...cs.map(c => c[1]))/C)-1,j1=Math.ceil(Math.max(...cs.map(c => c[1]))/C)+1;
+  for (let j=j0;j<=j1;j++) for (let i=i0;i<=i1;i++) {
+    if (hash(i,j,salt^0x91d)<-.55) continue;
+    const lx=(i+.5+.4*hash(i,j,salt^0x13b))*C,ly=(j+.5+.4*hash(i,j,salt^0x5c9))*C;
+    const wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly,gx=Math.round(wx/spacing),gy=Math.round(wy/spacing);
+    if (gx<box.x0 || gx>box.x1 || gy<box.y0 || gy>box.y1) continue;
+    const k=gy*grid+gx,sd=raw[k]>sea?dist[k]:-dist[k],r=Rc*(.4+(hash(i,j,salt^0x77f)*.5+.5)**1.3);
+    // Only bites that straddle the waterline: centred a little way into the lava or up to .8 radius inland.
+    if (sd<-.5*r || sd>.8*r) continue;
+    out.push({x:wx,y:wy,r});
+  }
+  return out;
+}
 function coastLayers(s,sea,box) {
-  const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),circular=s.layerStyle>=.5;
+  const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),style=Math.round(s.layerStyle),mounded=style===2,scalloped=style===1,vary=clamp(s.layerVary,0,1);
   const raw=heights.slice(),dist=coastField(s,raw,sea,box),inv=s.inv,salt=s.seed;
-  // Circular style: a low flat shelf carrying round stepped mounds (retail lava-2's overlapping
+  // Mounds (the first circular style): a low flat shelf carrying round stepped mounds (retail lava-2's overlapping
   // pancakes: 3-5 rings 5-8 px apart, 20-35 px across, a unit or two a ring). One mound per
   // jittered lattice cell in the shape's frame; where mounds overlap the higher ring wins.
   // Shore layers is the rings a mound has, Layer width the ring spacing.
-  const rim=n*W,C=Math.max(24,1.7*rim),reach=circular?1.6*rim:n*W,ring=s.layerRiser>0?s.layerRiser:1.6;
+  const rim=n*W,C=Math.max(24,1.7*rim),reach=mounded?1.6*rim:coastLayerReach(s)-2*W,ring=s.layerRiser>0?s.layerRiser:1.6;
   const mounds=(lx,ly,ledge) => {
     const ci=Math.floor(lx/C),cj=Math.floor(ly/C);
     let best=0;
@@ -1624,6 +1677,21 @@ function coastLayers(s,sea,box) {
     return best;
   };
   const rise=config.baseHeight-sea,foot=Math.min(LAYER_FOOT,.3*rise),riser=s.layerRiser>0?s.layerRiser:(rise-foot)/n;
+  // E10: layer width and riser height vary along the shore and from layer to layer. Each riser k has its
+  // own offset (a noise field of its own, 24-60 px across) and its own height weight, so neighbouring
+  // risers bunch, part and merge; the weights are normalised so the last riser still meets the plain.
+  const weight=new Float32Array(n),cum=new Float32Array(n+1);
+  if (vary>0) {
+    let total=0;
+    for (let k=0;k<n;k++) { weight[k]=1+.6*vary*hash(k,7,salt^0x2e9); total+=weight[k]; }
+    for (let k=0;k<n;k++) { weight[k]*=riser*n/total; cum[k+1]=cum[k]+weight[k]; }
+  }
+  const sites=scalloped?circleSites(s,raw,dist,sea,box,Math.max(8,s.layerCircle)):null;
+  // Sites by bucket, each covering a bite's whole influence (its radius plus the layers beyond it).
+  const bucketCells=scalloped?Math.ceil((1.4*Math.max(8,s.layerCircle)+n*W)/spacing):1,bw=Math.floor((box.x1-box.x0)/bucketCells)+1,bh=Math.floor((box.y1-box.y0)/bucketCells)+1;
+  const buckets=scalloped?Array.from({length:bw*bh},() => []):null;
+  if (scalloped) for (const c of sites) buckets[Math.floor((c.y/spacing-box.y0)/bucketCells)*bw+Math.floor((c.x/spacing-box.x0)/bucketCells)]?.push(c);
+  const fingerFlat=fingerCells;
   for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
     const i=y*grid+x;
     if (!(raw[i]>sea)) continue;
@@ -1632,18 +1700,38 @@ function coastLayers(s,sea,box) {
     const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
     const ledge=clamp(ledge0+irr*.3*valueNoise(lx/33,ly/33,salt^0x2b1),.3,.95);
     let level;
-    if (circular) {
+    if (mounded) {
       const t=d/reach;
       if (t>=1 && raw[i]<base) { heights[i]=base; continue; }
       // The bank is a low flat shelf the mounds stand on, rising to the plain over its outer
       // half, soft enough that its edge is scalloped by the mounds and is not one dark cliff.
       level=foot+(rise-foot)*smooth(.55,1,t)+ring*mounds(lx,ly,ledge);
     } else {
-      const q=Math.max(0,d/W+irr*(.55*valueNoise(lx/42,ly/42,salt^0x7a1)+.25*valueNoise(lx/14,ly/14,salt^0x3c5)+.12*valueNoise(lx/6,ly/6,salt^0x5e3)));
-      if (q>=n) { if (raw[i]<base) heights[i]=base; continue; }
-      const k=Math.floor(q);
-      level=foot+riser*(k+smooth(ledge,1,q-k));
+      // The distance the layers are counted from: the waterline's, or (circular layers) the edge of
+      // the nearest bite if that is nearer.
+      let dd=d;
+      if (scalloped) {
+        const bx=Math.floor((x-box.x0)/bucketCells),by=Math.floor((y-box.y0)/bucketCells);
+        for (let ty=Math.max(0,by-1);ty<=Math.min(bh-1,by+1);ty++) for (let tx=Math.max(0,bx-1);tx<=Math.min(bw-1,bx+1);tx++) for (const c of buckets[ty*bw+tx]) dd=Math.min(dd,Math.hypot(wx-c.x,wy-c.y)-c.r);
+        dd=Math.max(0,dd);
+      }
+      const wob=irr*(scalloped?.4:1)*(.55*valueNoise(lx/42,ly/42,salt^0x7a1)+.25*valueNoise(lx/14,ly/14,salt^0x3c5)+.12*valueNoise(lx/6,ly/6,salt^0x5e3));
+      // Width varies along the shore: layers are W px wide times a factor between about .6 and 1.65.
+      const Wl=vary>0?W*Math.exp(.5*vary*valueNoise(lx/75,ly/75,salt^0x91f)):W;
+      const q=Math.max(0,dd/Wl+wob+(vary>0?vary*(.4*valueNoise(lx/17,ly/17,salt^0x6d3)+.2*valueNoise(lx/8,ly/8,salt^0x4e1)):0));
+      if (q>=n+(vary>0?1:0)) { if (raw[i]<base) heights[i]=base; continue; }
+      if (vary>0) {
+        // Riser k climbs between k + ledge and k + 1 (in layers), moved by its own offset.
+        const k0=Math.max(0,Math.floor(q)-2),k1=Math.min(n-1,Math.floor(q)+1);
+        level=foot+cum[k0];
+        for (let k=k0;k<=k1;k++) { const off=vary*.45*valueNoise(lx/(24+9*(k%4)),ly/(24+9*(k%4)),salt^(0x3a7+k*977)); level+=weight[k]*smooth(k+ledge+off,k+1+off,q); }
+      } else {
+        const k=Math.floor(q);
+        level=foot+riser*(k+smooth(ledge,1,q-k));
+      }
     }
+    // Fingers stay as flat as they were laid (E10 Finger height), under the ledge they would be raised to.
+    if (fingerFlat && fingerFlat[i]>0) level=Math.min(level,fingerFlat[i]);
     heights[i]=clamp(Math.min(Math.min(base,config.baseHeight),sea+level*smooth(0,LAYER_WALL,d))+Math.max(0,base-config.baseHeight),MIN_HEIGHT,MAX_HEIGHT);
   }
 }
