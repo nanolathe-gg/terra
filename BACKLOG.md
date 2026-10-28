@@ -1489,6 +1489,27 @@ applies to each, and whatever is left stays open.
 
 - **Server and guard:** port 8847, CDP 9647, guard `--worlds crystal`.
 
+**Done (merged aa999ad8d; EXPERIMENTS rows 87-91).**
+- Column tops are crumpled facets, with three widths mixed over a mound
+  and some smooth hill between them.
+- Craters are tiled with crystal facets.
+- All shallow water carries small crystal cells.
+- The shine is retuned. The mounds' mean luma is now within 3-7 of
+  retail's; it was 6-12 above.
+- The other 24 windows are exact, and the merged build matches the
+  agent's renders exactly.
+
+**Still open:**
+- **Facet outlines:** retail outlines every facet in a thin black web.
+  Ours keeps thick, dark risers between the larger columns: the 12-34
+  luma band covers 37.7% against retail's 33.1% (the lever is
+  `crystalStep`).
+- **Craters:** they read as rubble. Retail's are shaded faces under that
+  thin web.
+- **Crystal-3:** the mound is brighter than retail's, which is dark and
+  crumpled with few glints.
+- **Shallow cells:** they are shading, not bed relief.
+
 ### E8. Painted Desert (wave 2, after E3)
 
 > Retail has a gray band near the base (desert-1, desert-3). [...] Retail
