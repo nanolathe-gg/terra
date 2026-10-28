@@ -205,6 +205,8 @@ struct Uniforms {
     wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
     // Crystal shore slabs (card C2).
     crystalSeam: f32,     // submerged crystal-field cells: 1 paints the seam marks dark and the slab fill paler (0: water as before)
+    // Ice (card E5).
+    shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

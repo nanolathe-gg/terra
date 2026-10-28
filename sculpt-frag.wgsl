@@ -861,6 +861,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material *= 1.0 - 0.3 * near;
     }
     var color = material * mix(shading, 1.0, flatBank);
+    if (u.shadeBlue > 0.0) {
+        // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
+        // 227-255 as red and green fall), where a plain multiply goes grey-teal in the palette.
+        let fall = clamp(1.0 - shading, 0.0, 1.0) * u.shadeBlue;
+        color = material * (shading + fall * vec3f(0.0, 0.35, 0.85));
+    }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on
         // lit faces of the same slope).
