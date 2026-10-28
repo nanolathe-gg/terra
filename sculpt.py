@@ -85,8 +85,11 @@ WORLD_KNOBS = {
     # windows, no spread), so no undulation: it dipped the plain to 1.6-2.2
     # above the sea, where the surface's relief crossed the water test and
     # drew blue pinholes in dry sand, and its slopes gave the grey blotches.
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68, flatBank=1,
-                        undulation=0),
+    # Mounds (retail: olive-grey, 6-13% of mound pixels darker than luma 45,
+    # ours 28-31%): keep half the directional shading, ambient occlusion and
+    # cast shadow, and a lighter crack floor.
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, bandLine=.68, flatBank=1,
+                        undulation=0, shadeDepth=.5),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
