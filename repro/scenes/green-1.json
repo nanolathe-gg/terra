@@ -4,5 +4,9 @@
   ["deep", [[-90,-120],[-70,200],[-110,460]], {"card": {"diameter": 300, "roughness": 40, "shelves": 80}}],
   ["deep", [[-200,560],[-90,860],[180,1060],[460,1200]], {"card": {"diameter": 620, "roughness": 25, "shelves": 80}}],
   ["hill", [[470,388],[490,392]], {"card": {"diameter": 440, "amount": 80, "roughness": 15}}],
-  ["hill", [[970,676],[980,680]], {"card": {"diameter": 300, "amount": 74, "roughness": 25}}]
+  ["hill", [[970,676],[980,680]], {"card": {"diameter": 300, "amount": 74, "roughness": 25}}],
+  ["paint", [[470,40],[640,60]], {"card": {"diameter": 170, "amount": 60, "paintChannel": 16}}],
+  ["paint", [[780,60],[900,150]], {"card": {"diameter": 160, "amount": 60, "paintChannel": 16}}],
+  ["paint", [[740,250],[860,300]], {"card": {"diameter": 130, "amount": 60, "paintChannel": 16}}],
+  ["paint", [[80,225],[150,230]], {"card": {"diameter": 100, "amount": 60, "paintChannel": 16}}]
  ]}
