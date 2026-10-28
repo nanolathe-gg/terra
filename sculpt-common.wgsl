@@ -322,6 +322,12 @@ struct Uniforms {
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
     iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
+    // G3 (Archipelago rings): the fringe as stacked, offset copies of the hill's outline. Every default is the earlier look.
+    ringShift: f32,       // px each copy sits from the hill's own outline (0: the earlier concentric lines; ringCount copies otherwise)
+    ringShiftDir: f32,    // degrees the copies drift towards on average, clockwise from east in the world (90: south)
+    ringScatter: f32,     // how far each copy's direction wanders from that mean, as a share of a half turn
+    ringWobble: f32,      // px of waver in each copy's outline: lobes with inward cusps, the scalloped look (0: smooth)
+    ringLobe: f32,        // px across one lobe
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
