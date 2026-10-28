@@ -398,7 +398,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -1442,7 +1442,7 @@ function rampSegment(s,a,b) {
 function gradeRamp(s) {
   const field=s.rampField;
   if (!field?.length) return;
-  const ah=sample(s.base,s.start.x,s.start.y),bh=sample(s.base,s.end.x,s.end.y);
+  const ref=s.pre??s.base,ah=sample(ref,s.start.x,s.start.y),bh=sample(ref,s.end.x,s.end.y);
   // A new endpoint changes the grade along the whole path, but only covered
   // samples are visited. Heights always come from the captured starting field.
   for (const i of field.touched) {
@@ -1528,7 +1528,7 @@ function applyNode(n) {
 }
 function replayShape(n,work) {
   const pts=n.points,b=nodeBounds(n),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
-  const s=startStroke(n.kind,pts[0],{...shapeDefaults(),...n.params,seed:n.seed,frame:n.frame,node:n,work,
+  const s=startStroke(n.kind,pts[0],{...shapeDefaults(),...n.params,seed:n.seed,frame:n.frame,node:n,work,pre:regionPre?.h,
     rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
   if (n.kind==='crystal') { s.path=pts.slice(); stampCrystals(s); return; }
   if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
@@ -1557,16 +1557,22 @@ function applyCracks(s) {
   for (const i of clipCells()) if (s.weights[i]>0) cracks[i]=Math.max(cracks[i],Math.min(1,s.weights[i]*1.6)*s.cracks);
 }
 const craterletKeys=new WeakMap();
+const craterletRand=(seed,k,a) => { let x=Math.imul((seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
+// Craterlet k of crater node n: centre and radius, from the crater's seed
+// alone (region replay needs the centres before it replays anything).
+function craterletSpot(n,seed,radius,k) {
+  const c=n.points[n.points.length>>1],turn=isIdentity(n.frame)?0:Math.atan2(n.frame[1],n.frame[0]);
+  const angle=craterletRand(seed,k,1)*Math.PI*2+turn,dist=radius*(.9+craterletRand(seed,k,2)*1.1),small=radius*(.1+.22*craterletRand(seed,k,3));
+  return {p:{x:clamp(c.x+Math.cos(angle)*dist,0,size-1),y:clamp(c.y+Math.sin(angle)*dist,0,size-1)},small};
+}
 function addCraterlets(n,s) {
   // Small satellite craters around the rim and apron, as on retail Moon
   // sections. Positions, sizes and depths come from the crater's seed.
-  const count=Math.round(s.craterlets||0),c=n.points[n.points.length>>1];
-  const framed=!isIdentity(n.frame),turn=framed?Math.atan2(n.frame[1],n.frame[0]):0;
+  const count=Math.round(s.craterlets||0);
+  const framed=!isIdentity(n.frame);
   let keys=craterletKeys.get(n); if (!keys) craterletKeys.set(n,keys=[]);
   for (let k=0;k<count;k++) {
-    const h=(a) => { let x=Math.imul((s.seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
-    const angle=h(1)*Math.PI*2+turn,dist=s.radius*(.9+h(2)*1.1),small=s.radius*(.1+.22*h(3));
-    const p={x:clamp(c.x+Math.cos(angle)*dist,0,size-1),y:clamp(c.y+Math.sin(angle)*dist,0,size-1)};
+    const h=a => craterletRand(s.seed,k,a),{p,small}=craterletSpot(n,s.seed,s.radius,k);
     let rect=null;
     if (framed) {
       const reach=small*3+12*spacing,box=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
@@ -1594,6 +1600,9 @@ let lastEvalMs=0;
 // Region-limited replay. clip is the rectangle (grid cells, inclusive) that
 // node application may compute; with no clip, the whole grid.
 let clip=null;
+// The prefix snapshot (the fields before the node) of the node a region replay
+// is applying; null in a full replay, where the live fields are that state.
+let regionPre=null;
 function* clipCells() {
   const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
   for (let y=c.y0;y<=c.y1;y++) for (let x=c.x0;x<=c.x1;x++) yield y*grid+x;
@@ -1625,11 +1634,46 @@ function copyRect(src,dst,r) { for (let y=r.y0;y<=r.y1;y++) dst.set(src.subarray
 // capsules on a simplified path, draft cells, cached finger fringe).
 // TODO(perf): move node replay to a worker so the view never waits on it;
 // framed noise is still gathered per frame (~5 ms) while a shape moves.
+// A region replay is exact only if no node reads the heights outside the region
+// or lets the edit change them there. Found with sculptDebug.replayDetail, three
+// nodes sample the height at a point of their own: a plateau's or crater's
+// baseline at its first point, a ramp's grade between its end points, and a
+// craterlet's baseline at its centre after the main crater.
+// - A point outside the region is read from the node's own prefix snapshot
+//   (regionPre, the state a full replay reads), except a craterlet's, which only
+//   a replay of the crater can produce: the region grows to contain every
+//   craterlet of a crater it touches (centre and footprint).
+// - A point inside the region changes with the edit, and with it the node's
+//   whole shape: the region grows to the node's bounds.
+// The growth repeats until nothing else is pulled in.
+function regionClosure(from,inner,margin) {
+  const expand=r => ({x0:Math.max(0,r.x0-margin),y0:Math.max(0,r.y0-margin),x1:Math.min(grid-1,r.x1+margin),y1:Math.min(grid-1,r.y1+margin)});
+  const cellOf=q => ({x:Math.floor(q.x/spacing),y:Math.floor(q.y/spacing)});
+  const inside=(r,c) => c.x>=r.x0 && c.x+1<=r.x1 && c.y>=r.y0 && c.y+1<=r.y1;
+  for (let grown=true;grown;) {
+    grown=false;
+    const outer=expand(inner);
+    for (let i=from;i<nodes.length;i++) {
+      const n=nodes[i];
+      if (n.hidden || !n.points || !overlaps(nodeBounds(n),outer)) continue;
+      const pull=r => { const u=unionRect(inner,r); if (u.x0!==inner.x0 || u.y0!==inner.y0 || u.x1!==inner.x1 || u.y1!==inner.y1) { inner=u; grown=true; } };
+      const reads=n.kind==='plateau' || n.kind==='crater'?[n.points[0]]:n.kind==='ramp'?[n.points[0],n.points[n.points.length-1]]:[];
+      if (reads.some(q => inside(inner,cellOf(q)))) pull(nodeBounds(n));
+      if (n.kind!=='crater' || !n.params) continue;
+      const count=Math.round(n.params.craterlets??worldDefault('craterlets'));
+      for (let k=0;k<count;k++) {
+        const {p,small}=craterletSpot(n,n.seed??seed,n.params.radius,k),c=cellOf(p),reach=Math.ceil((small*4+12*spacing)/spacing);
+        pull({x0:Math.max(0,c.x-reach),y0:Math.max(0,c.y-reach),x1:Math.min(grid-1,c.x+reach+1),y1:Math.min(grid-1,c.y+reach+1)});
+      }
+    }
+  }
+  return inner;
+}
 function evaluateRegion(from,rect) {
   // Replays nodes from 'from' inside rect only. Each node is computed over a
   // margin (for neighbourhood steps such as the hill's softening blur) and
   // the margin is put back, so nothing outside rect changes.
-  const inner=rect,margin=6;
+  const margin=6,inner=regionClosure(from,rect,margin);
   const outer={x0:Math.max(0,inner.x0-margin),y0:Math.max(0,inner.y0-margin),x1:Math.min(grid-1,inner.x1+margin),y1:Math.min(grid-1,inner.y1+margin)};
   const now=live(),save=Object.fromEntries(FIELD_KEYS.map(k => [k,new now[k].constructor(heights.length)]));
   copyFields(prefix[from],now,inner);
@@ -1637,7 +1681,7 @@ function evaluateRegion(from,rect) {
     if (!prefix[i]) prefix[i]=snapshot(); else copyFields(now,prefix[i],inner);
     if (!overlaps(nodeBounds(nodes[i]),outer)) continue;
     copyFields(now,save,outer);
-    clip=outer; try { applyNode(nodes[i]); } finally { clip=null; }
+    clip=outer; regionPre=prefix[i]; try { applyNode(nodes[i]); } finally { clip=null; regionPre=null; }
     for (const band of [{x0:outer.x0,y0:outer.y0,x1:outer.x1,y1:inner.y0-1},{x0:outer.x0,y0:inner.y1+1,x1:outer.x1,y1:outer.y1},
                         {x0:outer.x0,y0:inner.y0,x1:inner.x0-1,y1:inner.y1},{x0:inner.x1+1,y0:inner.y0,x1:outer.x1,y1:inner.y1}]) {
       if (band.x0>band.x1 || band.y0>band.y1) continue;
@@ -2116,7 +2160,7 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),biome:config.biomeId||'green',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -2211,18 +2255,19 @@ async function takePendingSketch(token) {
 async function loadSketchFile(s) {
   const biome=typeof s?.biome==='string'?s.biome:'';
   if (biome && biome!==config.biomeId) {
-    let served=false;
+    let served=false,variant='';
     try {
       const response=await fetch('/sculpt-config.json?biome='+encodeURIComponent(biome));
       const servedConfig=response.ok?await response.json():null;
       served=servedConfig?.biomeId===biome;
+      variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
     } catch (_) {}
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return; }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
     try { await stashPendingSketch(token,s); }
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return; }
     status(`Opening ${biome} for the saved terrain…`);
-    goToWorld(biome,null,{pendingSketch:token});
+    goToWorld(biome,null,{pendingSketch:token,variant});
     return;
   }
   loadSketch(s); checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();
@@ -2341,7 +2386,8 @@ const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
-function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.colors||{})},knobs:{}}; }
+// A variant's colours (card C5) stay in config.colors; the world keeps only its base ones, so choosing a variant never writes into the world's own store.
+function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.baseColors||config.colors||{})},knobs:{}}; }
 const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('');
 const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
 // A world's colours: the server's defaults for its base world, then the
@@ -2357,7 +2403,9 @@ function defaultColor(key) {
 }
 function goToWorld(base,id,extra) {
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
-  for (const [key,value] of Object.entries(extra||{})) url.searchParams.set(key,value);
+  // Staying in the same world keeps its variant.
+  if (base===config.biomeId && config.variant && !(extra && 'variant' in extra)) url.searchParams.set('variant',config.variant);
+  for (const [key,value] of Object.entries(extra||{})) if (value) url.searchParams.set(key,value); else url.searchParams.delete(key);
   location.href=url.toString();
 }
 function buildWorldPanel() {
@@ -2368,6 +2416,13 @@ function buildWorldPanel() {
   const custom=Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{})).map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
   select.replaceChildren(...builtIn,...custom);
   select.onchange=() => { const [kind,id]=select.value.split(':'); if (kind==='biome') goToWorld(id); else goToWorld(worlds[id].base,id); };
+  // Variants of this world (card C5 stage 3): named presets over its own. The
+  // world's own preset is the default and a variant reloads the page.
+  const variants=Object.entries(config.variants||{}),variantSelect=$('variant-select');
+  $('variant-control').hidden=!variants.length;
+  variantSelect.replaceChildren(new Option("The world's own",''),...variants.map(([id,label]) => new Option(label,id)));
+  variantSelect.value=config.variant||'';
+  variantSelect.onchange=() => goToWorld(config.biomeId,worldId===config.biomeId?null:worldId,{variant:variantSelect.value});
   const rows=$('world-colors'); rows.replaceChildren();
   for (const [key,label] of COLOR_KEYS) {
     if (key==='beach' && !config.textures.beach) continue;
@@ -2480,9 +2535,10 @@ function setKnob(key, value) {
 }
 async function boot() {
   try {
-    const response=await fetch('/sculpt-config.json'+(experiment.has('biome')?'?biome='+encodeURIComponent(experiment.get('biome')):'')); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
+    const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
     if (config.size!==1024 || !Number.isInteger(config.grid) || config.grid<2 || config.grid>1024 || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
+    if (config.variant) LOCAL_KEY+='-v-'+config.variant;
     document.querySelector('.topbar h2').textContent=(config.biome||'Green Planet')+' terrain';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.

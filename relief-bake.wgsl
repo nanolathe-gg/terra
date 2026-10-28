@@ -531,13 +531,18 @@ fn bake(p: vec2f) -> vec4f {
     if (u.paintOn != 0) {
         paintFall = normalize(vec2f(valueNoise(p / 60.0 + 3.0), valueNoise(p / 60.0 + 9.0)) + vec2f(1e-3));
         let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
-        paintRock = smoothstep(0.2, 0.8, raw.r);
-        faceSlope = max(slope, 0.8 * max(paintRock, 0.5 * smoothstep(0.2, 0.8, raw.a)));
+        let cover = paintEdge(p, raw, wideSlope(p), 0.0);
+        paintRock = cover.x;
+        faceSlope = max(slope, 0.8 * max(paintRock, 0.5 * cover.w));
     }
     // Painted local style (card C5): relief strength, cracks and banding, each
     // -1 less .. +1 more than the world's own, 0 unchanged.
     var style = vec3f(0.0);
-    if (u.styleOn != 0) { style = textureSampleLevel(masksTex, linearClamp, maskUv(p), 1, 0.0).gba; }
+    if (u.styleOn != 0) {
+        let raw = textureSampleLevel(masksTex, linearClamp, maskUv(p), 1, 0.0).gba;
+        let wide = wideSlope(p);
+        style = vec3f(styleEdge(p, raw.x, wide), styleEdge(p, raw.y, wide), styleEdge(p, raw.z, wide));
+    }
     // Only a route's graded surface stays smooth; its steep shoulders are
     // ordinary faces and take relief like any other (no smooth dark band).
     // Crystal cells (Crystals brush) keep clean flat faces: no relief,

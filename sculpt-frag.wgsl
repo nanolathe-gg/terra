@@ -221,11 +221,9 @@ fn slopeMark(pixel: vec2f, density: f32) -> f32 {
 // stays exactly 0. Every colour is one the world already draws: its rock, its
 // slope cover (moss), its lightest ground or beach (snow), its ground darkened
 // as the shoreline band darkens it (wet).
-fn paintCoverage(p: vec2f) -> vec4f {
+fn paintCoverage(p: vec2f, slope: f32, hollow: f32) -> vec4f {
     let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
-    let edge = ((terrainNoise(p * 0.5 + vec2f(21.0, 55.0)).r - 0.5) * 0.46 + (terrainNoise(p * 2.2 + vec2f(7.0, 99.0)).g - 0.5) * 0.20)
-             * smoothstep(vec4f(0.0), vec4f(0.2), raw);
-    return smoothstep(vec4f(0.30), vec4f(0.70), raw + edge);
+    return paintEdge(p, raw, slope, hollow);
 }
 // The lightest of the world's ground and beach materials, grain damped (snow
 // lies smoother than the ground it covers) and frosted: lifted 55% toward white,
@@ -287,7 +285,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Painted masks (card C5): coverage of rock, snow, wet ground and moss.
     // Rock takes the face treatment below; the others mix after the beds.
     var painted = vec4f(0.0);
-    if (u.paintOn != 0) { painted = paintCoverage(p); }
+    if (u.paintOn != 0) {
+        // Hollow: how far below its surroundings the relief lies here (the face blend's top, negated).
+        let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0)) + surfaceHeight(p - vec2f(0.0, 3.0)) + surfaceHeight(p + vec2f(0.0, 3.0)));
+        painted = paintCoverage(p, wideSlope(p), clamp((around - h) / 1.5, -1.0, 1.0));
+    }
     let flatLight = u.ambient + 0.95 * u.light.z;
     var lighting = (u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
     lighting = min(lighting, u.lightCap);
@@ -593,7 +595,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var lowGate = lowBank;
         // Painted face style (card C5): below 0 less of the face is rock, above 0 more.
         if (u.styleOn != 0) {
-            let f = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r;
+            let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));
             share = select(share * (1.0 + f), mix(share, 1.0, f), f > 0.0);
         }
         // Painted rock counts as face whatever the slope, and is mostly rock.

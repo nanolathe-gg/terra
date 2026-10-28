@@ -231,6 +231,40 @@ struct Uniforms {
 fn styleScale(f: f32) -> f32 { return select(1.0 + f, exp2(2.0 * f), f > 0.0); }
 fn maskUv(p: vec2f) -> vec2f { return (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid; }
 
+// Slope averaged over about 14 px: the relief a painted edge follows changes
+// over tens of pixels, not at the 5 px the shading's slope does.
+fn wideSlope(p: vec2f) -> f32 {
+    return 0.2 * (length(broadGradient(p)) + length(broadGradient(p + vec2f(14.0, 0.0))) + length(broadGradient(p - vec2f(14.0, 0.0)))
+                + length(broadGradient(p + vec2f(0.0, 14.0))) + length(broadGradient(p - vec2f(0.0, 14.0))));
+}
+// Painted mask coverage with a soft, broken edge that follows the relief (card
+// C5). raw: rock, snow or ice, wet ground, moss as painted (0..1); slope: wideSlope;
+// hollow: -1 on convex tops .. +1 in hollows (0 where unknown). The painted value
+// moves with the relief (rock holds on steep ground and in hollows, snow and
+// wet ground on level ground and in hollows, moss on gentler tops) and with
+// broad noise, and a narrow ramp then cuts it against pixel-scale noise: over
+// the tens of pixels where the value crosses the ramp, grass and rock
+// interleave, instead of one hard outline. A cell with nothing painted (raw 0)
+// is exactly 0.
+fn paintEdge(p: vec2f, raw: vec4f, slope: f32, hollow: f32) -> vec4f {
+    let held = smoothstep(vec4f(0.0), vec4f(0.25), raw);
+    let steep = smoothstep(0.08, 0.6, slope) - 0.35;
+    let follow = vec4f(1.0, -0.6, -0.4, -0.2) * steep * 0.6 + vec4f(0.8, 0.3, 0.8, -0.3) * hollow * 0.2;
+    let lobes = terrainNoise(p * 0.11 + vec2f(63.0, 17.0)).b - 0.5 + (terrainNoise(p * 0.5 + vec2f(21.0, 55.0)).r - 0.5) * 0.6;
+    let grain = terrainNoise(p * 1.6 + vec2f(7.0, 99.0)).g + terrainNoise(p * 4.5 + vec2f(33.0, 5.0)).a * 0.6 - 0.8;
+    return smoothstep(vec4f(0.35), vec4f(0.65), raw + (follow + lobes * 1.0 + grain * 1.8) * held);
+}
+// The same for a painted style amount f (-1..1): it holds where painted strongly
+// and breaks up along the relief and the noise, never growing past the brush.
+// 0 stays exactly 0.
+fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
+    let steep = smoothstep(0.08, 0.6, slope) - 0.35;
+    let lobes = terrainNoise(p * 0.11 + vec2f(5.0, 88.0)).b - 0.5 + (terrainNoise(p * 0.5 + vec2f(41.0, 13.0)).r - 0.5) * 0.6;
+    let grain = terrainNoise(p * 1.6 + vec2f(77.0, 29.0)).g + terrainNoise(p * 4.5 + vec2f(9.0, 61.0)).a * 0.6 - 0.8;
+    let held = smoothstep(0.0, 0.25, abs(f));
+    return f * smoothstep(0.30, 0.60, abs(f) + (steep * 0.25 + lobes * 0.4 + grain * 0.6) * held);
+}
+
 fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 0, 0.0); }
 fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 1, 0.0); }
 
