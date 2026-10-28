@@ -1,0 +1,9 @@
+{"biome": "moon", "ground": true, "query": "boulders=0.25&boulderSize=24&boulderFoot=0&boulderCluster=0&debris=0.12&debrisSize=9&debrisReach=90",
+ "strokes": [
+  ["mountain", [[220, 300]], {"card": {"diameter": 300, "amount": 110, "roughness": 50}}],
+  ["mountain", [[250, 700]], {"card": {"diameter": 300, "amount": 110, "roughness": 50}}],
+  ["mountain", [[790, 300]], {"card": {"diameter": 300, "amount": 110, "roughness": 50}}],
+  ["mountain", [[760, 700]], {"card": {"diameter": 300, "amount": 110, "roughness": 50}}],
+  ["crater", [[510, 500]], {"card": {"diameter": 240, "amount": 30, "roughness": 30, "craterlets": 2}}],
+  ["paint", [[150, 220], [240, 420], [230, 560], [260, 820]], {"card": {"diameter": 460, "amount": 100, "softness": 60, "paintChannel": 5}}]
+ ]}

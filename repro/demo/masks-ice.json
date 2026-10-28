@@ -1,0 +1,7 @@
+{"biome": "ice", "ground": true, "query": "",
+ "strokes": [
+  ["mountain", [[300, 400], [330, 520]], {"card": {"diameter": 420, "amount": 120, "roughness": 60, "softness": 40}}],
+  ["mountain", [[720, 400], [750, 520]], {"card": {"diameter": 420, "amount": 120, "roughness": 60, "softness": 40, "maskChannel": 2, "maskAmount": 100}}],
+  ["paint", [[120, 830], [400, 870], [620, 810]], {"card": {"diameter": 110, "amount": 100, "paintChannel": 2}}],
+  ["paint", [[640, 880], [900, 840]], {"card": {"diameter": 90, "amount": 100, "paintChannel": 1}}]
+ ]}

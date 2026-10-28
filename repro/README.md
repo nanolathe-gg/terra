@@ -57,3 +57,14 @@ control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
 rendered one at a time with `render.mjs` (`all.sh` only runs `scenes/`), and
 set the new shape options in `options.card` in the units of their sliders
 (`faceCurve` -100..100, shares as percent, widths in px).
+
+`demo/masks-*.json` (card C5, painted masks): `masks-green` (rock patches on a hill,
+moss, a wet band by a lake), `masks-desert` (a rocky mesa through the plateau's
+Paint inside option, next to a plain one), `masks-ice` (snow and rock paint, and a
+mountain painted snow through its own footprint) and `masks-moon` (boulder scatter
+painted denser on the left; the world's Boulders and Debris sliders are set in the
+scene's `query`, since every world ships them at 0 and the paint only multiplies
+them). A paint stroke is `["paint", points, {"card": {"paintChannel": n, ...}}]`
+with `paintChannel` 1 rock, 2 snow or ice, 3 wet ground, 4 moss, 5 denser scatter,
+6 sparser scatter, 7 erase all masks; a landform paints its own footprint with
+`maskChannel` (0 off, 1..6 as above) and `maskAmount` (percent).

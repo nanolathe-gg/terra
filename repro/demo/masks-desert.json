@@ -1,0 +1,6 @@
+{"biome": "desert", "ground": false, "query": "",
+ "strokes": [
+  ["plateau", [[300, 520]], {"card": {"diameter": 400, "amount": 67, "roughness": 12, "cracks": 0, "softness": 80}}],
+  ["plateau", [[740, 520]], {"card": {"diameter": 400, "amount": 67, "roughness": 12, "cracks": 0, "softness": 80, "maskChannel": 1, "maskAmount": 100}}],
+  ["hill", [[520, 840]], {"card": {"diameter": 260, "amount": 40, "roughness": 30, "maskChannel": 1, "maskAmount": 70}}]
+ ]}

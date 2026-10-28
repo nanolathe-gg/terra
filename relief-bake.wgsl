@@ -57,6 +57,17 @@ fn valueNoise(q: vec2f) -> f32 {
     return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
 }
 
+// Painted scatter density (card C5): the multiplier on the world's boulder and
+// debris density at p. Exactly 1.0 where nothing is painted (and skipped
+// unless paintOn); painted sparser it falls linearly to 0 (none), denser it
+// doubles three times (8x). Stones read it at their centre, so a stone is
+// wholly in or out.
+fn scatterScale(p: vec2f) -> f32 {
+    if (u.paintOn == 0) { return 1.0; }
+    let f = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 1, 0.0).r;
+    return select(1.0 + f, exp2(3.0 * f), f > 0.0);
+}
+
 // Height of the tallest boulder at p (0 if none) and its rock coverage.
 fn boulders(p: vec2f, slope: f32, h: f32) -> vec2f {
     if (u.boulderDensity <= 0.0) { return vec2f(0.0); }
@@ -81,7 +92,7 @@ fn boulders(p: vec2f, slope: f32, h: f32) -> vec2f {
             let foot = max(smoothstep(0.02, 0.25, talus), cliffAbove * (1.0 - smoothstep(0.5, 1.0, slopeAt)));
             let source = mix(scattered, foot, u.boulderFoot);
             let field = smoothstep(0.35, 0.75, valueNoise(centre / 120.0 + 9.0) * 0.5 + 0.5);
-            let chance = u.boulderDensity * source * mix(1.0, field * 2.0, u.boulderCluster);
+            let chance = u.boulderDensity * source * mix(1.0, field * 2.0, u.boulderCluster) * scatterScale(centre);
             if (r2.x > chance) { continue; }
             if (routeProtection(centre) > 0.05 || baseHeight(centre) < u.sea + 1.0) { continue; }
             // Many small stones and few large ones.
@@ -151,7 +162,7 @@ fn debrisStones(p: vec2f, arrival: vec2f) -> vec2f {
             let r2 = cellHash(c + 61.9);
             let centre = (c + 0.15 + 0.7 * r1) * cellSize;
             let here = debrisArrival(centre, length(broadGradient(centre)));
-            if (r2.x > clamp(here.x * u.debris, 0.0, 0.95)) { continue; }
+            if (r2.x > clamp(here.x * u.debris * scatterScale(centre), 0.0, 0.95)) { continue; }
             if (baseHeight(centre) < u.sea + 1.0) { continue; }
             let sizeAt = mix(1.0, 1.0 - 0.75 * here.y, u.debrisSort);
             let radius = u.debrisSize * 0.5 * sizeAt * (0.5 + 0.5 * r2.y);
