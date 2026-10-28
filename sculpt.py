@@ -38,7 +38,7 @@ KNOB_DEFAULTS = dict(
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5, bedLip=1,
-    jointSpacing=36, jointAngle=0, jointDepth=2, jointRun=120, jointGaps=.3, crackStyle=0,
+    jointSpacing=36, jointAngle=0, jointDepth=2, jointRun=120, jointGaps=.3, crackStyle=0, bedHeight=0,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,

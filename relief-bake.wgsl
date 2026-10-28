@@ -392,45 +392,18 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 // shades, so the rock reads as coherent layers scratched by joints rather
 // than as scattered gravel. Nothing here is ink.
 //
-// Beds: horizontal planes (tilted by bedDip toward bedDipDir) cut the face in
-// lines that wander broadly and wobble finely but stay continuous, so the eye
-// can follow one. Bed thickness varies bed to bed. Each bed's surface is
-// pulled toward a flat tread with a short riser (bedLedge), and the riser's
-// top edge carries a lip with a notch at its foot (bedLip). Returns the
-// height offset in height units and the lip's rock cover (0..1): a lip is a
-// convex ridge, which the face material would take for moss on a lump top.
-fn bedRelief(p: vec2f, h: f32, slope: f32) -> vec2f {
-    let S = max(u.bedSpacing, 2.0);
-    let a = radians(u.bedDipDir);
-    let tilt = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
-    let wander = valueNoise(p / 110.0 + 3.1) * S * 0.4 + valueNoise(p / 34.0 + 8.2) * S * 0.18 + valueNoise(p / 9.0 + 2.7) * S * 0.05;
-    let L = (h + tilt + wander) / S;
-    // Bed boundaries sit within 0.4 of each whole step, so they never cross.
-    var k = floor(L);
-    var lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5);
-    if (L < lo) { k -= 1.0; lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5); }
-    let hi = k + 1.0 + u.bedVary * 0.8 * (cellHash(vec2f(k + 1.0, 3.7)).x - 0.5);
-    let thick = hi - lo;
-    let f = clamp((L - lo) / thick, 0.0, 1.0);
-    // Bed thickness along the ground (px), the riser a few px wide whatever the bed.
-    let bedPx = thick * S / max(slope, 0.15);
-    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
-    let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
-    var off = step_ * thick * S * u.bedLedge;
-    // The lip on the riser's top edge and the notch at its foot.
-    let dTop = (1.0 - f) * bedPx;
-    let dFoot = (f - (1.0 - riser)) * bedPx;
-    let lip = exp(-dTop * dTop / 5.0);
-    let notch = exp(-(dFoot + 1.0) * (dFoot + 1.0) / 6.0);
-    off += u.bedLip * (lip - 0.8 * notch);
-    return vec2f(off, max(lip, notch));
-}
-
 // Joints: grooves close to the screen's north-south with a slight lean,
 // spaced irregularly, each running in unbroken stretches (jointRun px) with
-// gaps (jointGaps) and deepest mid-stretch; they wander a little. Returns the
-// height offset (<= 0).
-fn jointRelief(p: vec2f) -> f32 {
+// gaps (jointGaps) and deepest mid-stretch; they wander a little. A joint
+// also breaks the beds: the block to its right is shifted along the beds by
+// up to 0.25 of a bed wherever the joint is present, so rows end and step at
+// the joints instead of running on as contour lines. Returns (groove height
+// offset <= 0, block shift in bed thicknesses).
+fn jointPresent(cell: f32, y: f32) -> f32 {
+    let run = max(u.jointRun, 20.0);
+    return smoothstep(mix(-1.1, 0.15, u.jointGaps), mix(-0.7, 0.55, u.jointGaps), valueNoise(vec2f(y / run, cell * 3.7) + 11.0));
+}
+fn jointField(p: vec2f) -> vec2f {
     let a = radians(u.jointAngle);
     let along = vec2f(sin(a), cos(a));
     let across = vec2f(cos(a), -sin(a));
@@ -440,18 +413,68 @@ fn jointRelief(p: vec2f) -> f32 {
     let c = floor(x / J);
     var best = 1e9;
     var cell = c;
+    var left = -1e9;
+    var leftCell = c - 1.0;
     for (var i = -1; i <= 1; i++) {
         let ci = c + f32(i);
-        let d = abs(x - (ci + 0.15 + 0.7 * cellHash(vec2f(ci, 19.0)).x) * J);
+        let pos = (ci + 0.15 + 0.7 * cellHash(vec2f(ci, 19.0)).x) * J;
+        let d = abs(x - pos);
         if (d < best) { best = d; cell = ci; }
+        if (pos <= x && pos > left) { left = pos; leftCell = ci; }
     }
     let run = max(u.jointRun, 20.0);
-    let present = smoothstep(mix(-1.1, 0.15, u.jointGaps), mix(-0.7, 0.55, u.jointGaps), valueNoise(vec2f(y / run, cell * 3.7) + 11.0));
     let deep = 0.55 + 0.9 * cellHash(vec2f(cell, 41.0)).y;
     let along_ = 0.7 + 0.3 * valueNoise(vec2f(y / (run * 0.5), cell * 5.1) + 23.0);
     let hw = 1.3 + 0.9 * deep;
     let t = max(0.0, 1.0 - best / hw);
-    return -u.jointDepth * deep * along_ * present * t * t * (3.0 - 2.0 * t);
+    let groove = -u.jointDepth * deep * along_ * jointPresent(cell, y) * t * t * (3.0 - 2.0 * t);
+    let shift = (cellHash(vec2f(leftCell, 57.0)).x - 0.5) * 0.5 * jointPresent(leftCell, y);
+    return vec2f(groove, shift);
+}
+
+// Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
+// wander broadly and wobble finely but stay continuous between joints, so the
+// eye can follow one. The picture draws a point at screen row y - height / 2,
+// so a plane tilted 2 height units per px toward the north (bedDip 2, bedDipDir
+// 270) shows as rows that are level on the screen whatever the terrain below
+// does: retail Green's rows are level, and their spacing barely changes with
+// the face's steepness (8-12 px across slope bins), as these planes give.
+// bedHeight 0 instead spaces the beds in px along the ground; 1 spaces them by
+// height units, as the strata colours are. Bed thickness
+// varies bed to bed. Each bed's surface is pulled toward a flat tread with a
+// short riser (bedLedge), and the riser's top edge carries a lip with a notch
+// at its foot (bedLip). Returns the height offset and the lip's rock cover
+// (0..1): a lip is a convex ridge, which the face material would take for
+// moss on a lump top.
+fn bedRelief(p: vec2f, h: f32, shift: f32) -> vec2f {
+    let a = radians(u.bedDipDir);
+    let dip = vec2f(cos(a), sin(a));
+    let tilt = u.bedDip * dot(p, dip);
+    // How fast the bed coordinate changes along the ground: beds are that many
+    // px apart per unit of spacing in px mode.
+    let G = max(length(broadGradient(p) + u.bedDip * dip), 0.15);
+    let S = max(u.bedSpacing, 2.0) * pow(G, 1.0 - u.bedHeight);
+    let wander = valueNoise(p / 110.0 + 3.1) * S * 0.4 + valueNoise(p / 34.0 + 8.2) * S * 0.18 + valueNoise(p / 9.0 + 2.7) * S * 0.05;
+    let L = (h + tilt + wander) / S + shift;
+    // Bed boundaries sit within 0.4 of each whole step, so they never cross.
+    var k = floor(L);
+    var lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5);
+    if (L < lo) { k -= 1.0; lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5); }
+    let hi = k + 1.0 + u.bedVary * 0.8 * (cellHash(vec2f(k + 1.0, 3.7)).x - 0.5);
+    let thick = hi - lo;
+    let f = clamp((L - lo) / thick, 0.0, 1.0);
+    // Bed thickness along the ground (px), the riser a few px wide whatever the bed.
+    let bedPx = thick * S / G;
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
+    var off = step_ * thick * S * u.bedLedge;
+    // The lip on the riser's top edge and the notch at its foot.
+    let dTop = (1.0 - f) * bedPx;
+    let dFoot = (f - (1.0 - riser)) * bedPx;
+    let lip = exp(-dTop * dTop / 5.0);
+    let notch = exp(-(dFoot + 1.0) * (dFoot + 1.0) / 6.0);
+    off += u.bedLip * (lip - 0.8 * notch);
+    return vec2f(off, lip);
 }
 
 // Beach: dry ground within reach of the water, as the world's coast
@@ -773,17 +796,24 @@ fn bake(p: vec2f) -> vec4f {
     // fall-line ribs, so faces read as fractured rock rather than combed.
     var broken = 0.0;
     if (u.cracksOn == 1) { broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route); }
-    height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
     // Rock structure (card E3): the structured face steps in as the scatter
-    // (ribs, block steps, minor cracks) steps back.
+    // (ribs, block steps, minor cracks) steps back; its relief is added below.
     var structureRock = 0.0;
+    var order = 0.0;
+    var steep = 0.0;
     if (u.rockOrder > 0.0 && u.cracksOn != 0 && h > u.sea + 1.0) {
-        let order = u.rockOrder * smoothstep(0.0, 0.5, clamp(crackMask, 0.0, 1.0)) * (1.0 - route) * (1.0 - buried);
-        let steep = smoothstep(0.35, 0.8, faceSlope);
-        height *= 1.0 - 0.55 * order * steep;
+        order = u.rockOrder * smoothstep(0.0, 0.5, clamp(crackMask, 0.0, 1.0)) * (1.0 - route) * (1.0 - buried);
+        steep = smoothstep(0.35, 0.8, faceSlope);
+        height *= 1.0 - 0.85 * order * steep;
+        crackAt.w *= 1.0 - 0.85 * order * steep;
+        crackAt.x *= 1.0 - 0.5 * order * steep;
         crackAt.y *= 1.0 - 0.5 * order * steep;
-        let bed = bedRelief(p, h, faceSlope);
-        height += order * (steep * bed.x + smoothstep(0.5, 1.0, faceSlope) * jointRelief(p));
+    }
+    height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
+    if (order > 0.0) {
+        let joint = jointField(p);
+        let bed = bedRelief(p, h, joint.y);
+        height += order * (steep * bed.x + smoothstep(0.5, 1.0, faceSlope) * joint.x);
         structureRock = order * steep * bed.y;
     }
     // Relief never carries dry ground below the water plane: it would cut
