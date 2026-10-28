@@ -518,7 +518,9 @@ lets reviews use numbers where images are not needed.
   picture metrics.
 - The plain height for the shore band is `plain` in `crop.json` for
   retail, and the world's `baseHeight` for ours: 24, or 8 for Archipelago
-  and Zhon. Our sea is 0, and both height files are heights above sea.
+  and Zhon. `heights.npy` holds heights above sea; `ours-heights.json`
+  holds raw heights plus its `sea`, which must be subtracted (as
+  `pair.py` does).
 
 **Output.** `stats.json`, and `stats.md` with one table per world:
 - the family range;
