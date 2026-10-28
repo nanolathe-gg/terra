@@ -962,13 +962,13 @@ function fissureCell(s,i,wx,wy,lx,ly,cx,cy,t) {
 }
 // Card E8: retail's aprons and mesa feet are ragged and lumpy, not smooth lobes.
 // The outline shift (px, outward positive) mixes 55 px and 21 px lobes; the bumps
-// (height units) ride on the apron and the foot of the face (w: the stroke's rise share
+// (height units, 30, 13 and 6.5 px) ride on the apron and the foot of the face (w: the stroke's rise share
 // here) and leave a plateau's face, cap and the plain alone. Both depend only on the
 // cell's own position in the shape's frame, so replay stays exact.
 // A plateau's shift fades in over its outer half (r from .5 to .95), so its rings stay smooth and
 // only the foot strays; the amount is capped at 15% of the radius so a small butte keeps its shape.
 const baseOutline=(s,lx,ly,r,radius) => Math.min(s.baseVary,.15*radius)*(s.kind==='plateau'?smooth(.5,.95,r):1)*(.6*valueNoise(lx/55,ly/55,s.seed^0x2e83)+.4*valueNoise(lx/21,ly/21,s.seed^0x71d5));
-const baseBumps=(s,lx,ly,w) => s.baseBump*smooth(.03,s.kind==='plateau'?.12:.2,w)*(s.kind==='plateau'?1-smooth(.12,.3,w):1)*(.65*valueNoise(lx/30,ly/30,s.seed^0x4c91)+.35*valueNoise(lx/13,ly/13,s.seed^0x1a77));
+const baseBumps=(s,lx,ly,w) => s.baseBump*smooth(.03,s.kind==='plateau'?.12:.2,w)*(s.kind==='plateau'?1-smooth(.12,.3,w):1)*(.55*valueNoise(lx/30,ly/30,s.seed^0x4c91)+.3*valueNoise(lx/13,ly/13,s.seed^0x1a77)+.25*valueNoise(lx/6.5,ly/6.5,s.seed^0x63d9));
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
   const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind)) && experiment.get('edges')==='natural';

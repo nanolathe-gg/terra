@@ -195,7 +195,7 @@ WORLD_KNOBS = {
                    jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8).
-                   baseVary=36, baseBump=3, baseBand=1),
+                   baseVary=36, baseBump=3.5, baseBand=1),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
