@@ -1382,13 +1382,20 @@ function blurredBox(field,radius,box) {
 // banks, so only the outline that survives is fingered. A tongue is as high as
 // the lowest layer and a little lower at its tip: the shading is the first
 // riser's, not a bank's wall.
-// Thumb fingers for the coast pass (retail lava-1: 25-35 px wide, 35-70 px long,
-// 70-90 px apart, near-parallel sides, blunt tips). One finger per jittered
-// lattice point in the shape's own frame; the coast point at tangent offset tau
-// from its axis reaches a stadium's outline (parallel sides, a half-circle tip),
-// not the old ribs' pointed wedges. Position-only, so a moved lake carries its
-// fingers along.
-const THUMB_CELL=52;
+// Thumb fingers for the coast pass (retail lava-1: tendrils and stubs, 22-40 px across at
+// the root, 15-110 px long, in clusters with gaps between, tapering to a small round tip,
+// now and then forked). One finger per jittered lattice site in the shape's own frame; the
+// coast point at tangent offset tau from a site's axis reaches the finger's outline.
+// Everything about a finger comes from its site's hashes and a broad density noise, so no
+// two are alike and a moved lake carries its fingers along (position-only):
+// - spacing: the chance a site grows a finger follows a noise 130 px across, so stretches
+//   of coast are crowded and others bare, and sites jitter by almost half a cell;
+// - length: a power law, many stubs and a few long tendrils, and the longer the thinner (a little);
+// - taper: the half width falls linearly from the root to a tip just over half as wide, capped by
+//   a half circle;
+// - fork: a fifth of the middling fingers, made broader, split in two prongs by a V-notch
+//   that starts half way out.
+const THUMB_CELL=44;
 function thumbReach(s,wx,wy,nx,ny,amount) {
   const inv=s.inv;
   let lx=wx,ly=wy;
@@ -1397,33 +1404,39 @@ function thumbReach(s,wx,wy,nx,ny,amount) {
     const mx=inv[0]*nx+inv[2]*ny,my=inv[1]*nx+inv[3]*ny,ml=Math.hypot(mx,my)||1; nx=mx/ml; ny=my/ml;
   }
   // The lattice is turned off the axes (26 degrees): a coast running along a lattice row would see two
-  // rows of points where it should see one, and grow a finger every 40 px instead of every 80.
+  // rows of points where it should see one, and grow twice the fingers.
   const ca=.8988,sa=.4384;
   return thumbAt(s,ca*lx+sa*ly,-sa*lx+ca*ly,ca*nx+sa*ny,-sa*nx+ca*ny,amount);
 }
 function thumbAt(s,lx,ly,nx,ny,amount) {
-  const tx=-ny,ty=nx,salt=s.seed,ci=Math.floor(lx/THUMB_CELL),cj=Math.floor(ly/THUMB_CELL);
+  const tx=-ny,ty=nx,salt=s.seed,ci=Math.floor(lx/THUMB_CELL),cj=Math.floor(ly/THUMB_CELL),unit=(i,j,k) => hash(i,j,salt^k)*.5+.5;
   let best=0;
   for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
-    if (hash(i,j,salt^0x31f)<-.3) continue;
-    const ax=(i+.5+.4*hash(i,j,salt^0x5a7))*THUMB_CELL,ay=(j+.5+.4*hash(i,j,salt^0x1d3))*THUMB_CELL;
-    const half=.5*(34*(.85+.3*(hash(i,j,salt^0x6b1)*.5+.5))),tau=Math.abs((lx-ax)*tx+(ly-ay)*ty);
-    // Only lattice points within half a cell of the coast along its normal grow a finger here, so
-    // fingers keep one per ~80 px of coast however far the lattice's other rows lie from it.
-    if (tau>=half || Math.abs((lx-ax)*nx+(ly-ay)*ny)>=THUMB_CELL*.5) continue;
-    const longer=hash(i,j,salt^0x2c9)>.7?1.5:1,L=amount*52*(.6+.9*(hash(i,j,salt^0x4e5)*.5+.5))*longer;
-    // Parallel sides ending in a half circle (a stadium); a finger shorter than it is wide is a half ellipse.
-    const cap=Math.sqrt(1-(tau/half)**2);
-    best=Math.max(best,L>half?L-half+half*cap:L*cap);
+    const ax=(i+.5+.45*hash(i,j,salt^0x5a7))*THUMB_CELL,ay=(j+.5+.45*hash(i,j,salt^0x1d3))*THUMB_CELL;
+    if (unit(i,j,0x31f)>=clamp(.7+.75*valueNoise(ax/130,ay/130,salt^0x1f3),.04,.97)) continue;
+    // Only sites within half a cell of the coast along its normal grow a finger here.
+    if (Math.abs((lx-ax)*nx+(ly-ay)*ny)>=THUMB_CELL*.5) continue;
+    const L=amount*52*(.3+2*unit(i,j,0x4e5)**2.4),fork=L>40*amount && L<95*amount && unit(i,j,0x2c9)>.8;
+    let h0=clamp(17-.05*(L/Math.max(amount,.2)-30)+(unit(i,j,0x6b1)-.5)*6,11,20)*Math.min(1,.4+amount*.6);
+    if (fork) h0=clamp(h0*1.3,16,24);
+    const tau=Math.abs((lx-ax)*tx+(ly-ay)*ty);
+    if (tau>=h0) continue;
+    const ht=Math.max(4.5,.55*h0),Ls=Math.max(L-ht,0);
+    // The outline: a straight taper to a tip ht wide, then a half circle ht across.
+    let r=tau>ht?Ls*(h0-tau)/(h0-ht):Ls+Math.sqrt(ht*ht-tau*tau);
+    if (fork && r>.5*L) { const wn=.42*h0; if (tau<wn) r=Math.min(r,.5*L+(r-.5*L)*tau/wn); }
+    best=Math.max(best,r);
   }
   return best+valueNoise(lx/12,ly/12,salt^0x5c1)*1.6;
 }
 // The farthest a finger reaches from the coast (px), and what its cells read beyond that.
-const coastFingerLimit=s => .42*s.radius*2**((s.bankWidth-.5)*1.3)+spacing*3;
+const coastFingerLimit=s => .5*s.radius*2**((s.bankWidth-.5)*1.3)+spacing*3;
 function coastFingers(s,sea,box) {
   const raw=heights.slice(),dist=coastField(s,raw,sea,box),n=raw.length,sd=new Float32Array(n);
-  const bankScale=2**((s.bankWidth-.5)*1.3),reach=.42*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
-  const layers=Math.round(s.shoreLayers),low=Math.max(1.2,s.layerRiser>0?s.layerRiser:layers>=1?(config.baseHeight-sea)/(layers+1):3);
+  const bankScale=2**((s.bankWidth-.5)*1.3),reach=.5*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
+  // A finger stands as high as the lowest layer (LAYER_FOOT), a little lower at its tip; any lower and the
+  // shader's relief reads it as lava and shadow, a thin dark spike.
+  const low=Math.min(LAYER_FOOT,.3*(config.baseHeight-sea));
   for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) sd[i]=raw[i]>sea?dist[i]:-dist[i];
   const soft=blurredBox(sd,10,box),limit=reach+spacing*3,thumbs=s.fingerBlunt>=.5;
   for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
@@ -1435,7 +1448,7 @@ function coastFingers(s,sea,box) {
     const nx=gx/len,ny=gy/len,wx=x*spacing,wy=y*spacing,f=clamp(thumbs?thumbReach(s,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,s.fingers*clamp(s.radius*bankScale/140,.35,1)):fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
     if (sd[i]<0 && -sd[i]<f) {
       const u=-sd[i]/f;
-      heights[i]=clamp(sea+low*(.35+.65*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
+      heights[i]=clamp(sea+low*(.7+.3*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
     } else if (sd[i]>0 && sd[i]<-f) heights[i]=clamp(sea-.5-2.5*(1-sd[i]/-f),MIN_HEIGHT,MAX_HEIGHT);
   }
   // A tongue is land joined to land: flood out from the ground that was already dry, and
