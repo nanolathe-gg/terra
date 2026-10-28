@@ -1,0 +1,7 @@
+{"biome": "green", "ground": false, "query": "",
+ "strokes": [
+  ["plateau", [[290, 560]], {"card": {"diameter": 400, "amount": 50, "roughness": 12, "cracks": 0,
+    "profile": 1, "apronPx": 30, "apronHeight": 15, "facePx": 60, "faceCurve": 0, "terraces": 0, "lip": 12}}],
+  ["plateau", [[740, 560]], {"card": {"diameter": 400, "amount": 50, "roughness": 12, "cracks": 0,
+    "profile": 1, "apronPx": 30, "apronHeight": 15, "facePx": 60, "faceCurve": 0, "terraces": 0, "lip": -12}}]
+ ]}

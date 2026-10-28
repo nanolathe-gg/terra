@@ -1,0 +1,7 @@
+{"biome": "green", "ground": false, "query": "",
+ "strokes": [
+  ["hill", [[290, 560]], {"card": {"diameter": 400, "amount": 90, "roughness": 15, "cracks": 0,
+    "profile": 1, "apronPx": 50, "apronHeight": 15, "facePx": 0, "faceCurve": 0, "terraces": 3, "ledge": 55, "terraceJitter": 40, "lip": 4, "crown": 60}}],
+  ["mountain", [[740, 560]], {"card": {"diameter": 400, "amount": 150, "roughness": 15, "cracks": 0,
+    "profile": 1, "apronPx": 50, "apronHeight": 15, "facePx": 0, "faceCurve": -40, "terraces": 3, "ledge": 55, "terraceJitter": 40, "lip": 4, "crown": 25}}]
+ ]}

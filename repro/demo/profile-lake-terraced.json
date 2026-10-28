@@ -1,0 +1,5 @@
+{"biome": "green", "ground": false, "query": "",
+ "strokes": [
+  ["deep", [[380, 520], [640, 500]], {"card": {"diameter": 560, "roughness": 22, "shelves": 0,
+    "profile": 1, "apronPx": 24, "apronHeight": 20, "facePx": 110, "faceCurve": -20, "terraces": 2, "ledge": 50, "terraceJitter": 40, "lip": 4, "shelfPx": 90, "shelfDepth": 8, "shelfSteps": 0}}]
+ ]}

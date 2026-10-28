@@ -44,6 +44,10 @@ KNOB_DEFAULTS = dict(
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
+    # Cross-section (card C1): profile 0 keeps each brush's own curve; the rest
+    # only matter once a stroke sets profile 1 (px, units or shares as labelled).
+    profile=0, apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
+    lip=0, crown=.5, shelfPx=0, shelfDepth=6, shelfSteps=0,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
