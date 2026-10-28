@@ -2019,7 +2019,7 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),biome:config.biomeId||'green',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -2114,18 +2114,19 @@ async function takePendingSketch(token) {
 async function loadSketchFile(s) {
   const biome=typeof s?.biome==='string'?s.biome:'';
   if (biome && biome!==config.biomeId) {
-    let served=false;
+    let served=false,variant='';
     try {
       const response=await fetch('/sculpt-config.json?biome='+encodeURIComponent(biome));
       const servedConfig=response.ok?await response.json():null;
       served=servedConfig?.biomeId===biome;
+      variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
     } catch (_) {}
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return; }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
     try { await stashPendingSketch(token,s); }
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return; }
     status(`Opening ${biome} for the saved terrain…`);
-    goToWorld(biome,null,{pendingSketch:token});
+    goToWorld(biome,null,{pendingSketch:token,variant});
     return;
   }
   loadSketch(s); checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();
@@ -2244,7 +2245,8 @@ const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
-function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.colors||{})},knobs:{}}; }
+// A variant's colours (card C5) stay in config.colors; the world keeps only its base ones, so choosing a variant never writes into the world's own store.
+function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.baseColors||config.colors||{})},knobs:{}}; }
 const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('');
 const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
 // A world's colours: the server's defaults for its base world, then the
@@ -2260,7 +2262,9 @@ function defaultColor(key) {
 }
 function goToWorld(base,id,extra) {
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
-  for (const [key,value] of Object.entries(extra||{})) url.searchParams.set(key,value);
+  // Staying in the same world keeps its variant.
+  if (base===config.biomeId && config.variant && !(extra && 'variant' in extra)) url.searchParams.set('variant',config.variant);
+  for (const [key,value] of Object.entries(extra||{})) if (value) url.searchParams.set(key,value); else url.searchParams.delete(key);
   location.href=url.toString();
 }
 function buildWorldPanel() {
@@ -2271,6 +2275,13 @@ function buildWorldPanel() {
   const custom=Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{})).map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
   select.replaceChildren(...builtIn,...custom);
   select.onchange=() => { const [kind,id]=select.value.split(':'); if (kind==='biome') goToWorld(id); else goToWorld(worlds[id].base,id); };
+  // Variants of this world (card C5 stage 3): named presets over its own. The
+  // world's own preset is the default and a variant reloads the page.
+  const variants=Object.entries(config.variants||{}),variantSelect=$('variant-select');
+  $('variant-control').hidden=!variants.length;
+  variantSelect.replaceChildren(new Option("The world's own",''),...variants.map(([id,label]) => new Option(label,id)));
+  variantSelect.value=config.variant||'';
+  variantSelect.onchange=() => goToWorld(config.biomeId,worldId===config.biomeId?null:worldId,{variant:variantSelect.value});
   const rows=$('world-colors'); rows.replaceChildren();
   for (const [key,label] of COLOR_KEYS) {
     if (key==='beach' && !config.textures.beach) continue;
@@ -2383,9 +2394,10 @@ function setKnob(key, value) {
 }
 async function boot() {
   try {
-    const response=await fetch('/sculpt-config.json'+(experiment.has('biome')?'?biome='+encodeURIComponent(experiment.get('biome')):'')); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
+    const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
     if (config.size!==1024 || !Number.isInteger(config.grid) || config.grid<2 || config.grid>1024 || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
+    if (config.variant) LOCAL_KEY+='-v-'+config.variant;
     document.querySelector('.topbar h2').textContent=(config.biome||'Green Planet')+' terrain';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.
