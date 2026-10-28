@@ -1,11 +1,17 @@
-import {quickMaterialField} from './sculpt-material-weathering.js';
-
 // Large-map authoring policy. Keep the original whole-field worker for every
 // worldGrid <= 1168; forceTiled exists only for the global/tiled comparison.
 export const GLOBAL_WEATHER_GRID_LIMIT=1168;
 export const tiledWeatherEnabled=(worldGrid,forceTiled=false) => worldGrid>GLOBAL_WEATHER_GRID_LIMIT || forceTiled;
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const smooth=v => { const t=clamp(v,0,1); return t*t*(3-2*t); };
+const rangeSmooth=(a,b,v) => smooth((v-a)/(b-a));
+function materialHash(x,y,seed) {
+  let h=Math.imul(x,374761393)^Math.imul(y,668265263)^seed; h=Math.imul(h^(h>>>13),1274126177); return ((h^(h>>>16))>>>0)/4294967295;
+}
+function materialNoise(x,y,seed) {
+  const ix=Math.floor(x),iy=Math.floor(y),fx=smooth(x-ix),fy=smooth(y-iy),a=materialHash(ix,iy,seed),b=materialHash(ix+1,iy,seed),c=materialHash(ix,iy+1,seed),d=materialHash(ix+1,iy+1,seed);
+  return (a+(b-a)*fx)*(1-fy)+(c+(d-c)*fx)*fy;
+}
 const overlap=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 const abortError=() => new DOMException('Weathering request was cancelled.','AbortError');
 
@@ -113,18 +119,28 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
     const before=Object.values(source.fields).reduce((n,a) => n+a.byteLength,0),after=Object.values(fields).reduce((n,a) => n+a.byteLength,0);
     return {...source,fields,maskPlanes:source.maskPlanes?.map(a => byPlane.get(a)),gridWidth:width,gridHeight:height,gridOrigin:[rect.x0*spacing,rect.y0*spacing],rect:worldRect(rect),bytes:(source.bytes??before)-before+after};
   }
-  function uniformResult(request) {
+  function uniformResult(request,input,rect) {
     const h=request.height[0];
     for (let i=0;i<request.height.length;i++) if (request.height[i]!==h) return null;
     const sea=request.seaLevel??0,relative=Math.fround(h-sea);
     if (!Number.isFinite(relative) || relative< -90 || relative>300) return null;
     let materialField=null;
     if (request.materialWeathering>0) {
-      const height=request.height.map(v => v-sea);
-      materialField=quickMaterialField({...request,height,baseHeight:request.baseHeight-sea,seaLevel:0});
-      // Only a source-free constant plane has no material arrivals/runoff.
-      // Its fine-ground channel still contains the existing seeded clusters.
-      for (let i=3;i<materialField.length;i+=4) if (materialField[i]!==0) return null;
+      const profile=request.materialProfile||{},minerals=profile.mineral===true,elevated=profile.elevatedCover||[0,30,0];
+      const base=sea?request.baseHeight-sea:request.baseHeight??24,floor=profile.rockyCoasts?0:base;
+      let cover=rangeSmooth(profile.transportSlopeStart??(minerals ? .07 : .60),profile.transportSlopeFull??(minerals ? .55 : 1.35),0);
+      if (minerals) { const raised=rangeSmooth(base+elevated[0],base+elevated[1],relative); cover=cover*(1-elevated[2])+Math.max(Math.min(cover,.28),raised)*elevated[2]; }
+      cover*=rangeSmooth(floor+.3,floor+(profile.rockyCoasts?3:6),relative);
+      // On a source-free constant plane, gradients, basins, material arrivals,
+      // sand and talus are zero. Retain the unchanged material solver's fine
+      // cover, including its local seeded cluster phase. Evaluate only the
+      // retained overlap; no full-grid quick-preview cache is needed here.
+      if (Math.fround(cover)!==0) return null;
+      const width=rect.x1-rect.x0+1; materialField=new Float32Array(width*(rect.y1-rect.y0+1)*4);
+      if (relative>.2) for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
+        const wx=(x-input.x0)*spacing,wy=(y-input.y0)*spacing,clusters=.65*materialNoise(wx/31,wy/31,request.seed^0x941a)+.35*materialNoise(wx/11,wy/11,request.seed^0x4b79);
+        materialField[((y-rect.y0)*width+x-rect.x0)*4+1]=clamp(.22*(.35+clusters*1.1),0,1);
+      }
     }
     // The whole solver works at sea zero and restores sea into Float32 output.
     return {uniformBase:h,uniformDelta:Math.fround(Math.fround(relative+sea)-h),materialField};
@@ -144,11 +160,11 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
       if (!Number.isFinite(height[j]) || !Number.isFinite(protect[j])) throw new Error('Weathering requires finite authored height and protection.');
     }
     const request={...settings,height,protect,grid:solverGrid,size:(solverGrid-1)*spacing+1,seed:tileSeed(t.x,t.y)};
-    const started=performance.now(),uniform=uniformResult(request);
+    const started=performance.now(),uniform=uniformResult(request,input,rect);
     let result;
     if (uniform) {
       uniformSkips++;
-      result={...uniform,materialField:crop(uniform.materialField,4,input,rect)};
+      result=uniform;
     } else {
       const base=crop(height,1,input,rect),data=await solve(request,rev,signal,progress); current(rev,signal);
       for (const k of ['height','flow','deposit','talus']) if (!(data[k] instanceof Float32Array) || data[k].length!==solverGrid*solverGrid) throw new Error('Weather worker returned an invalid tile.');
