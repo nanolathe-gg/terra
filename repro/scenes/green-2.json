@@ -1,0 +1,6 @@
+{"biome": "green", "source": {"map": "great divide", "x": 160, "y": 1504},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[-150,660],[250,665],[640,700]], {"card": {"diameter": 900, "amount": 100, "roughness": 10}}],
+  ["erase", [[-150,1080],[500,1080],[1150,1060]], {"card": {"diameter": 720, "roughness": 30, "softness": 100}}]
+ ]}

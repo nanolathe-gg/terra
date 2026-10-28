@@ -41,6 +41,8 @@ KNOB_DEFAULTS = dict(
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
+    # Form (repro round): ledges on steep faces, darker faces, jagged bands.
+    faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
@@ -48,12 +50,11 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(banding=.8, bandLine=.84, crackDark=.4),
-    # Red slopes keep the plain's albedo and are shaded by facing alone
-    # (retail red planet / king of the hill: lit slopes 0.89-0.96 of level
-    # luma at slope 0.4-0.8, ours 0.86 from material alone), with fine
-    # contour rings rather than ribs: band-pass contrast on slopes 0.4-0.8
-    # was 1.6x retail's, dark-line share 3x (repro/scenes/red.json).
+    'green': dict(banding=.8, bandLine=.84, crackDark=.4,
+                  # Repro round (3 windows, 12-map census, measure by slope
+                  # and facing): faces keep fall-line ribs much more than
+                  # any retail map; slopes turned from the sun are too light.
+                  faceStreak=1, faceDark=.35),
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
                 reliefAmount=.2, slopeTexture=0, microRock=0),
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68),

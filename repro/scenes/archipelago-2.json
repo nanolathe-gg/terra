@@ -1,0 +1,12 @@
+{"biome": "archipelago", "source": {"map": "canal crossing", "x": 5888, "y": 2816},
+ "ground": true, "query": "",
+ "strokes": [
+  ["deep", [[-100,1100],[500,1110],[1150,1100]], {"card": {"diameter": 420, "roughness": 28, "beachFlatness": 35}}],
+  ["shallow", [[-50,960],[500,965],[1100,960]], {"card": {"diameter": 120, "roughness": 30, "beachFlatness": 35}, "shallowMode": "area"}],
+  ["hill", [[600,470],[640,480]], {"card": {"diameter": 540, "amount": 100, "roughness": 30}}],
+  ["mountain", [[560,440],[610,520]], {"card": {"diameter": 170, "amount": 25, "roughness": 50}}],
+  ["hill", [[40,600],[60,615]], {"card": {"diameter": 240, "amount": 80, "roughness": 45}}],
+  ["hill", [[880,80],[920,100]], {"card": {"diameter": 180, "amount": 80, "roughness": 45}}],
+  ["hill", [[215,40],[225,150]], {"card": {"diameter": 170, "amount": 55, "roughness": 45}}],
+  ["hill", [[470,30],[520,20]], {"card": {"diameter": 90, "amount": 22, "roughness": 40}}]
+ ]}

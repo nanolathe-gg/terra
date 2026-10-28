@@ -556,6 +556,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
+        // Steep faces turned from the sun are much darker in retail than
+        // ours (12 Green maps, slope >= 0.55 facing away: median luma 42,
+        // range 26-48; ours 49-61). Lit faces (65) and gentler slopes turned
+        // away (59) already match, so only steep shaded faces darken, most
+        // in the relief's hollows.
+        if (u.faceDark > 0.0) {
+            let turned = 1.0 - smoothstep(0.3, 0.6, dot(normalize(vec3f(-broad, 1.0)), u.light));
+            material *= 1.0 - u.faceDark * turned * smoothstep(0.4, 0.65, slope) * (1.0 - route)
+                            * (0.6 + 0.4 * smoothstep(-0.3, 0.7, -top));
+        }
         // A light, crisp grass rim where rough ground meets the level plain.
         let rim = smoothstep(u.faceSlope.x * 0.35, u.faceSlope.x * 0.6, faceSlope)
                 * (1.0 - smoothstep(u.faceSlope.x * 0.7, u.faceSlope.x * 1.05, faceSlope));
@@ -652,7 +662,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are
         // lit by the carved geometry.
-        material *= 1.0 - u.crackDark * clamp(-coverOrCrack, 0.0, 1.0);
+        // Codes below -1 come only from band lines with Line darkness above
+        // 1 (Green's dark terrace steps); up to -1 this is unchanged.
+        material *= 1.0 - min(u.crackDark * max(-coverOrCrack, 0.0), 1.0);
     }
     var chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route));
     chip = max(chip, smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65);
@@ -661,7 +673,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.reliefMode != 1) { cleft = smoothstep(0.15, 1.20, fractureDepth(p, h, slope)); }
     material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
-    material *= 1.0 - nearWater * 0.17;
+    // Retail Archipelago sand runs level to a crisp waterline (hundred
+    // isles): its low bank shows no light, shade or wet band. With flatBank
+    // the dry ground below the plain is lit as level and stays dry-coloured.
+    var flatBank = 0.0;
+    if (u.flatBank > 0.0) {
+        let bh = baseHeight(p);
+        flatBank = u.flatBank * step(u.sea, bh) * (1.0 - smoothstep(u.base - 0.5, u.base + 0.5, bh));
+    }
+    material *= 1.0 - nearWater * 0.17 * (1.0 - flatBank);
     let crystalMask = crystalField(p);
     if (crystalMask > 0.05) {
         // Retail Crystal (measure/crystal_geometry.py): flat tops take the
@@ -689,7 +709,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         material *= 1.0 - 0.3 * near;
     }
-    var color = material * shading;
+    var color = material * mix(shading, 1.0, flatBank);
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on
         // lit faces of the same slope).

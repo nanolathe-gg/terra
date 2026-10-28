@@ -1,0 +1,8 @@
+{"biome": "green", "source": {"map": "pc games' evad river delta", "x": 4608, "y": 2176},
+ "ground": true, "query": "",
+ "strokes": [
+  ["deep", [[-90,-120],[-70,200],[-110,460]], {"card": {"diameter": 300, "roughness": 40, "shelves": 80}}],
+  ["deep", [[-200,560],[-90,860],[180,1060],[460,1200]], {"card": {"diameter": 620, "roughness": 25, "shelves": 80}}],
+  ["hill", [[470,388],[490,392]], {"card": {"diameter": 440, "amount": 80, "roughness": 15}}],
+  ["hill", [[970,676],[980,680]], {"card": {"diameter": 300, "amount": 74, "roughness": 25}}]
+ ]}

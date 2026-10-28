@@ -1,0 +1,10 @@
+{"biome": "green", "source": {"map": "the barrier reef", "x": 128, "y": 1152},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[60,250],[180,210],[220,280]], {"card": {"diameter": 340, "amount": 62, "roughness": 15}}],
+  ["hill", [[480,10],[540,20]], {"card": {"diameter": 120, "amount": 28, "roughness": 30}}],
+  ["mountain", [[840,345],[845,350]], {"card": {"diameter": 70, "amount": 22, "roughness": 40}}],
+  ["hill", [[230,790],[290,800]], {"card": {"diameter": 220, "amount": 34, "roughness": 25}}],
+  ["deep", [[600,690],[760,750],[900,870],[1100,960]], {"card": {"diameter": 280, "roughness": 35, "shelves": 60}}],
+  ["deep", [[760,1000],[1100,1080]], {"card": {"diameter": 320, "roughness": 35, "shelves": 60}}]
+ ]}

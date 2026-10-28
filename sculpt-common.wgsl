@@ -117,6 +117,8 @@ struct Uniforms {
     sandCrown: f32,     // painted sand stays sand to the crown, no rock (Zhon sand bars)
     footRim: f32,
     crevice: f32,
+    faceDark: f32,        // darkening of slopes turned from the sun, most in hollows (0: none)
+    flatBank: f32,        // low dry banks lit as level ground, no wet band (0: off)
     dither: f32,
     sandLight: f32,
     sandEdge: f32,
@@ -141,6 +143,8 @@ struct Uniforms {
     reliefWarp: f32,      // domain warp, world px
     reliefPatchy: f32,    // spatial variation of relief strength
     reliefJitter: f32,    // per-kernel phase and wavelength variation
+    faceStreak: f32,      // 0: ribs down steep faces; 1: ledges along the contours
+    faceStreakFrom: f32,  // slope where the turn toward the contours starts
     gentleRelief: f32,    // relief on gentle slopes
     boulderDensity: f32,  // 0 disables boulders
     boulderSize: f32,     // typical diameter, world px
@@ -178,6 +182,8 @@ struct Uniforms {
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser
     bandWidth: f32,       // bank lines (style 1): width at half depth, px (0: 1.6)
+    bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
+    bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
     sun: vec3f,           // the renderer's light, for lit crack walls
     crackMinor: f32,      // share of minor cracks inside blocks
     crackHairline: f32,   // share of hairline crazing
