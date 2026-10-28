@@ -730,6 +730,8 @@ export class TerrainRenderer {
     // E6: shine roughness gate and headroom (0: the earlier shine exactly).
     this.f('uShineGate', variant.has('shineGate') ? Number(variant.get('shineGate')) : 0);
     this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
+    this.f('uPockmark', variant.has('pockmark') ? Number(variant.get('pockmark')) : 0);
+    this.f('uPockSize', variant.has('pockSize') ? Number(variant.get('pockSize')) : 5);
     this.fieldsDirty = true;
   }
 

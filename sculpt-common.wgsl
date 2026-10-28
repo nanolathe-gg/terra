@@ -249,6 +249,9 @@ struct Uniforms {
     // E6 (shine fix: Moon, Ice).
     shineGate: f32,       // shine roughness only on raised ground and slopes, not the level plain (0: everywhere, as before; 1: only there)
     shineHeadroom: f32,   // dim the lit body where the lobe is low, so glints stand against it on near-white ice (0: additive only, as before)
+    // E6 (Moon).
+    pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
+    pockSize: f32,        // pit spacing across the retail glint axis, px
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

@@ -269,6 +269,37 @@ fn wrinkleLines(pixel: vec2f, along: vec2f, across: vec2f, keep: f32, sun: vec2f
     return vec2f(dark, lit * (1.0 - dark));
 }
 
+// Moon pockmarks (card E6). Retail's hills and crater walls are one rough
+// pitted surface from crest to foot, with no cracks: small dark pits about
+// 2-3 px wide and 3-4 px tall, leaning with the retail glint axis, packed
+// close on shaded faces (near black on dark ground) and thin on lit ones. One
+// pit per cell of a lattice stretched along that axis, jittered and sized per
+// cell; density is the share of cells that hold one. Returns 0..1.
+fn pockPits(pixel: vec2f, size: f32, density: f32) -> f32 {
+    // Retail's pits cluster and thin in patches ~40 px across, so the lattice's evenness never shows.
+    let clump = 0.55 + 0.9 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
+    var pit = 0.0;
+    for (var layer = 0; layer < 2; layer++) {
+        // Layer 1: a finer, sparser set between the large pits.
+        let cell = select(size, size * 0.55, layer == 1);
+        let weight = select(1.0, 0.7, layer == 1);
+        let keep = select(density, density * 0.7, layer == 1) * clump;
+        let q = vec2f(dot(pixel, SHINE_ACROSS) / cell, dot(pixel, SHINE_ALONG) / (cell * 1.4));
+        let c = vec2i(floor(q));
+        for (var j = -1; j <= 1; j++) {
+            for (var i = -1; i <= 1; i++) {
+                let k = c + vec2i(i, j);
+                let r = markHash(k + vec2i(311 + 700 * layer, 977));
+                if (r.x >= keep) { continue; }
+                let centre = vec2f(k) + 0.15 + 0.7 * r.yz;
+                let d = (q - centre) / vec2f(mix(0.18, 0.4, r.w), mix(0.18, 0.4, fract(r.w * 7.3)));
+                pit = max(pit, weight * (1.0 - smoothstep(0.55, 1.0, dot(d, d))));
+            }
+        }
+    }
+    return pit;
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -1000,14 +1031,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let fall = clamp(1.0 - shading, 0.0, 1.0) * u.shadeBlue;
         color = material * (shading + fall * vec3f(0.0, 0.35, 0.85));
     }
+    // Raised or sloped ground (card E6): the footprint of the shine gate and of Moon's pockmarks; level plain is 0.
+    // Raised ground counts whole, tops included, where a crater's floor counts only where it slopes.
+    var landform = 1.0;
+    if (u.shineGate > 0.0 || u.pockmark > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        // Raised ground or sloped ground: the shine's roughness gate (card E6; unread while shineGate is 0).
-        var landform = 1.0;
-        if (u.shineGate > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
         let shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform);
         color = color * shine.w + shine.xyz;
+    }
+    if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
+        let shaded = 1.0 - clamp(shading, 0.0, 1.0);
+        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.35, 1.0, shaded));
+        color *= 1.0 - pits * landform * mix(0.3, 0.92, shaded);
     }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on

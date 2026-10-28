@@ -99,6 +99,8 @@ for _m in SHINE_MATERIALS:
 # E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
 # a glint read on near-white ice (0: the lobe only adds light).
 KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
+# E6, Moon: pits on raised ground and slopes (0: none; the earlier look is wrinkles .8, worms .4, cracks .35 with no pits).
+KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -201,13 +203,22 @@ WORLD_KNOBS = {
     # Crisp dark marks on slopes, measured by measure/slope_marks.py on eight
     # Lunar maps: median ~5.4% of shaded 0.4-0.8 slopes in 1-40 px marks
     # (2.0-7.5% by map), ~1.9% of lit ones; long axis ~25-30 deg off vertical.
-    'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
+    # Card E6: retail's hills and crater walls are one rough, pitted surface from crest to
+    # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
+    # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
+    'moon': dict(crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+                 worms=0, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
                  # connected wrinkles and pits, so the joined wrinkles replace them.
-                 slopeMarks=0, wrinkles=.8),
+                 slopeMarks=0, wrinkles=0,
+                 # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
+                 # faint sheen with a fine round grain there (the plain keeps its own grain).
+                 pockmark=1, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
+                 shineGround=.1, shineGroundSharp=12, shineGroundRough=.35, shineGroundScale=3,
+                 shineSlope=.12, shineSlopeSharp=30, shineSlopeRough=.35, shineSlopeScale=3,
+                 shineRock=.12, shineRockSharp=30, shineRockRough=.35, shineRockScale=3),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'
@@ -356,6 +367,15 @@ WORLD_VARIANTS = {
         # snow) are not here: the dark faces come from the block's own shading,
         # which the colour knobs only reach through the tops (a darker crystal
         # colour darkened the top, not the sides). See NOTES, stage 3.
+    },
+    'moon': {
+        # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
+        # carved cracks, no pits and no sheen.
+        'cracked': dict(label='Cracked slopes: smooth tops',
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, shineGate=0, shineWhite=.35, shineStretch=1,
+                                   shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
+                                   shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
+                                   shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
     },
     'zhon': {
         # The river family (card B4): the reproduction windows' sections are

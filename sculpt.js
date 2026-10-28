@@ -2886,6 +2886,7 @@ const KNOBS = [
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
   // E6
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
+  ['Pockmarks (Moon)', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds
