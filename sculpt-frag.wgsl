@@ -346,7 +346,7 @@ fn shineNoise(q: vec2f) -> vec2f {
 // material code already settled (rock: exposed; slope cover: the face blend
 // and the sampled slope cover; sand and crystal from their baked fields).
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32, faceCover: f32,
-             slopeCover: f32, crystalMask: f32, sunSeen: f32) -> vec4f {
+             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32) -> vec4f {
     var sand = 0.0;
     if (u.reliefMode == 1) { sand = smoothstep(0.35, 0.95, bakedFields(p).a); }
     if (u.beach != 0) { sand = max(sand, smoothstep(0.25, 0.75, beachField(p))); }
@@ -372,6 +372,11 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     // Sharpness follows the gloss that uses it, grain scale the roughness.
     focus = max(focus / max(gloss, 1e-4), 1.0);
     scale = max(scale / max(rough, 1e-4), 1.0);
+    // Card E6: the sheen and its grain only sit on raised ground and slopes (Moon's plain keeps its own
+    // grain); shineGate 0 is every world's earlier shine.
+    let reach = mix(1.0, landform, u.shineGate);
+    rough *= reach;
+    gloss *= reach;
     var micro = g;
     if (rough > 0.0) {
         let q = vec2f(dot(pixel, SHINE_ACROSS) / scale, dot(pixel, SHINE_ALONG) / (scale * max(u.shineStretch, 1.0)));
@@ -383,6 +388,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     let litAfter = max(0.0, dot(grained, u.light));
     let lit = clamp((u.ambient + 0.95 * litAfter) / (u.ambient + 0.95 * litBefore), 0.5, 1.6);
     var glint = vec3f(0.0);
+    var dim = 1.0;
     if (gloss > 0.0) {
         let halfway = normalize(u.light + SHINE_VIEW);
         let lobe = pow(max(dot(grained, halfway), 0.0), focus) * smoothstep(0.0, 0.15, dot(grained, u.light));
@@ -391,8 +397,13 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
         let body = smoothstep(0.04, 0.22, top);
         let tint = mix(material / max(top, 0.05), vec3f(1.0), u.shineWhite);
         glint = tint * (gloss * lobe * sunSeen * body);
+        // Card E6, shine on near-white ice: adding light to a body already near white only clips, so
+        // the glint has nothing to stand against and the surface reads rough, not shiny. The headroom
+        // takes light off the body wherever the lobe is low and leaves it at the lobe's peak, so a
+        // glint is a bright fleck over a body a little duller than the plain's.
+        if (u.shineHeadroom > 0.0) { dim = 1.0 - u.shineHeadroom * clamp(gloss, 0.0, 1.0) * (1.0 - clamp(lobe, 0.0, 1.0)) * body; }
     }
-    return vec4f(glint, lit);
+    return vec4f(glint, lit * dim);
 }
 
 // The shallow-to-deep step (card E1). Retail's step is a hard edge with
@@ -992,7 +1003,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        let shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        // Raised ground or sloped ground: the shine's roughness gate (card E6; unread while shineGate is 0).
+        var landform = 1.0;
+        if (u.shineGate > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
+        let shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform);
         color = color * shine.w + shine.xyz;
     }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {

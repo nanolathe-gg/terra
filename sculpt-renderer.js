@@ -727,6 +727,9 @@ export class TerrainRenderer {
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
     this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
+    // E6: shine roughness gate and headroom (0: the earlier shine exactly).
+    this.f('uShineGate', variant.has('shineGate') ? Number(variant.get('shineGate')) : 0);
+    this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
     this.fieldsDirty = true;
   }
 
