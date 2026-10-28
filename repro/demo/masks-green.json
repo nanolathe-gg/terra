@@ -1,0 +1,9 @@
+{"biome": "green", "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[512, 370]], {"card": {"diameter": 480, "amount": 110, "roughness": 40}}],
+  ["paint", [[420, 300], [470, 285], [540, 305]], {"card": {"diameter": 90, "amount": 100, "softness": 40, "paintChannel": 1}}],
+  ["paint", [[575, 400], [625, 430]], {"card": {"diameter": 80, "amount": 100, "softness": 40, "paintChannel": 1}}],
+  ["paint", [[380, 450], [440, 500]], {"card": {"diameter": 120, "amount": 90, "paintChannel": 4}}],
+  ["deep", [[200, 840], [500, 870], [820, 820]], {"card": {"diameter": 260}}],
+  ["paint", [[210, 752], [500, 778], [800, 732]], {"card": {"diameter": 80, "amount": 90, "paintChannel": 3}}]
+ ]}
