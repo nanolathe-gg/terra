@@ -2976,7 +2976,6 @@ function loadSketch(s) {
     if (saved && typeof saved==='object') {
       for (const [key,[,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(saved[key])) restored[key]=clamp(saved[key],lo,hi);
       restored.preset=Object.hasOwn(TOOL_PRESETS,saved.preset)?saved.preset:'custom';
-      restored.shallowMode=saved.shallowMode==='passage'?'passage':'area';
     }
     toolSettings[kind]=restored;
   }
@@ -2985,7 +2984,7 @@ function loadSketch(s) {
   if (Number.isFinite(s.amount)) $('amount').value=clamp(s.amount,...amountRange(tool));
   if (Number.isFinite(s.roughness)) $('roughness').value=clamp(s.roughness,0,100);
   if (Number.isFinite(s.shelves)) $('shelves').value=clamp(s.shelves,0,100);
-  $('shallow-mode').value=s.shallowMode==='passage'?'passage':'area';
+  $('shallow-mode').value='area'; // Area every session: older autosaves remember the old Passage default.
   $('fractures').value=Number.isFinite(s.fractures)?clamp(s.fractures,0,100):0;
   $('scree').value=Number.isFinite(s.scree)?clamp(s.scree,0,100):0;
   $('bank-width').value=Number.isFinite(s.bankWidth)?clamp(s.bankWidth,0,100):50;
