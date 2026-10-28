@@ -1538,6 +1538,23 @@ applies to each, and whatever is left stays open.
   strata 3-4 px apart against retail's 10-18.
 - **Server and guard:** port 8848, CDP 9648, guard `--worlds desert`.
 
+**Done (merged a0b77aea7; EXPERIMENTS rows 92-95).**
+- desert-2's strata were there, just too thin: under 1 px on a steep
+  face. Each zone now has its own bed thickness.
+- Feet are ragged and aprons bumpy, cut as height.
+- A grey band runs near the base.
+- desert-2's buttes are cones with a dark side.
+
+**Still open:**
+- The grey band reads as blotches, not retail's streaks along the beds.
+- Strata lines are 8 px apart against retail's 14.
+- Foot roughness is 55-70% of retail's, and about 30% on desert-2.
+- There are no shadows darker than luma 25.
+- Retail's rubble halos and pebbles around desert-2's buttes are not
+  done.
+- E3's bake ledges (spacing 4-6) don't match the new colour beds
+  (11-14).
+
 ### E9. Green rock faces (wave 2, after E2 and E3)
 
 > **Owner, round 7, asked whether "too dark" meant tone or contrast:**
@@ -1579,6 +1596,27 @@ What to deliver:
 - Judge on all three Green windows (rule 5). Red and Desert also use the
   rock structure, so they must match exactly.
 - **Server and guard:** port 8850, CDP 9650, guard `--worlds green`.
+
+**Done (merged 07c8b9fb8; EXPERIMENTS rows 96-99).**
+- Green-2's face has leaning gullies and ribs, bending ledges with lit
+  lips, scratches, two levels of facets, and glints. Grass stays at the
+  edges.
+- Its contrast and bright share now match retail's (luma s.d. 26.3
+  against 27.2).
+- Green-1 and green-3 are neutral.
+
+**Still open:**
+- By eye the face reads as neat masonry. Its facets are regular and
+  brick-like, with too few black crevices (share under luma 30 is .12
+  against .25), and its glints are pin-pricks where retail's cover whole
+  facets. The levers are listed in `$R/agent-E9/NOTES.md`: a finer
+  third facet level, roughness that varies by region, more varied bed
+  spacing, and a darker rock base.
+- The face's outline is ragged where retail's grass fringe is soft.
+- Retail's hills carry long, thin diagonal black cracks in the moss.
+- `shineOutside` is a gate after `shineTerm`. The model needs a painted
+  coverage weight (E6).
+- Rule 8 was exceeded: about 14 rounds.
 
 ### E10. Lava shore layers, fingers and rock shine (wave 2)
 
@@ -1668,6 +1706,23 @@ applies.
   faces and E3's code.
 - **Server and guard:** port 8852, CDP 9652, guard
   `--worlds green,archipelago,red`.
+
+**Done (merged 34065f41f; EXPERIMENTS rows 100-102).**
+- **Green shallows:** the step wanders along the shore. The bed is lit
+  by its own relief, which removed green-3's blur, and carries
+  mid-scale mottle.
+- **Red:** a hard step, a stronger cracked bed and lake dots. Red-3's
+  scene follows retail's wider shelf.
+- **Archipelago:** the fringe is contour lines that follow each hill,
+  the black lines at the hill foot are gone, and reef bars are dappled.
+
+**Still open:**
+- Archipelago's lines read as dashes; retail's are finer and smoother.
+- Green's per-pixel dark share is twice retail's (`bedMottle` is the
+  lever). Red's lake dots are heavier than retail's.
+- Red's cracked mode uses the world's crack knobs at a rocky slope. It
+  does not yet sample the neighbouring land.
+- Green's shallow outline is smoother than retail's notches.
 
 ### F1. Flow bake, stage 1: current and colour (after E1 merges)
 
