@@ -244,7 +244,7 @@ def biome_config(biome, assets):
         # and hills. The section slope class starts at 2 units per 16-px
         # cell (~.125 per px) and the crack-webbed bank runs down to the
         # shelf. Authored profile.
-        config['defaults'].update(example='islands', material='single', fractures='40', scree='0')
+        config['defaults'].update(example='columns', material='single', fractures='40', scree='0')
         # Its level ground is streaked on one diagonal (retail crystal
         # cracked: along-streak correlation of high-passed luma .12/.08 at
         # 6/12 px, 60 degrees). The 32-px tile model loses the streaks

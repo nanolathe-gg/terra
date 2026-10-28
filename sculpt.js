@@ -1476,6 +1476,15 @@ function mixedScene() {
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0);
   nodes=[]; prefix=[]; selected=-1;
   addGroundNode();
+  if (experiment.get('example')==='columns') {
+    // Crystal's starting example shows the tool that defines its islands.
+    demoStroke('deep',[{x:70,y:0},{x:45,y:480},{x:95,y:1023}],{radius:180,rough:.4,shelves:.8});
+    demoStroke('deep',[{x:0,y:1040},{x:530,y:990},{x:1050,y:1040}],{radius:160,rough:.4,shelves:.8});
+    demoStroke('crystal',[{x:520,y:300},{x:660,y:370},{x:730,y:500}],{radius:150,amount:115,rough:.6,crystalForm:1});
+    demoStroke('crystal',[{x:330,y:600},{x:300,y:780}],{radius:100,amount:65,rough:.5,crystalForm:1});
+    demoStroke('crystal',[{x:215,y:180},{x:235,y:510},{x:225,y:810}],{radius:85,amount:10,rough:.45,crystalForm:0,crystalSize:30,crystalCount:5,crystalTop:.88,crystalLean:0});
+    return;
+  }
   if (experiment.get('example')==='islands') {
     demoStroke('deep',[{x:50,y:0},{x:100,y:300},{x:35,y:650},{x:150,y:1023}],{radius:150,rough:.6,shelves:.9});
     demoStroke('deep',[{x:0,y:900},{x:450,y:910},{x:1023,y:850}],{radius:165,rough:.55,shelves:.8});
@@ -1892,7 +1901,7 @@ async function boot() {
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
     if (worldId!==config.biomeId) document.querySelector('.topbar h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
-    $('example').value=['joins','coasts','hills','intersections','islands','mesas'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
+    $('example').value=['joins','coasts','hills','intersections','islands','mesas','columns'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
     buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);
