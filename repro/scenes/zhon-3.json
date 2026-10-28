@@ -1,5 +1,5 @@
 {"biome": "zhon", "source": {"section": "low savannah rivers/5119d591", "sea": 59},
- "ground": true, "query": "beachWidth=0",
+ "ground": true, "query": "beachWidth=0&variant=river",
  "strokes": [
   ["deep", [[1100, 520], [-80, 520]], {"card": {"diameter": 620, "roughness": 35, "shelves": 40}}],
   ["deep", [[60, -80], [60, 1100]], {"card": {"diameter": 460, "roughness": 35, "shelves": 40}}],
