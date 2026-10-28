@@ -36,6 +36,9 @@ KNOB_DEFAULTS = dict(
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
+    # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
+    rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5, bedLip=1,
+    jointSpacing=36, jointAngle=0, jointDepth=2, jointRun=120, jointGaps=.3, crackStyle=0, bedHeight=0, rockFrom=.6,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
@@ -93,9 +96,24 @@ WORLD_KNOBS = {
                   # Great Divide's terraces are short dashes stacked like
                   # scales, not long smooth lines (thin dark lines per
                   # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
-                  bandJag=1),
-    'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
-                reliefAmount=.2, slopeTexture=0, microRock=0),
+                  bandJag=1,
+                  # Card E3 (retail green-2's big rock face): coherent level beds scratched
+                  # by long joints leaning ~20 degrees (row period 8-12 px whatever the
+                  # slope; thin-line direction shares vertical/horizontal .29/.27 against
+                  # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
+                  # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
+                  # sparse patches and keep their own relief.
+                  rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
+                  bedLip=1, bedLedge=.55, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
+                  crackStyle=1),
+    # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
+    # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
+    # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
+    # Red's faces show none).
+    'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3, bandLine=1,
+                reliefAmount=.2, slopeTexture=0, microRock=0,
+                crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
+                jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160, jointGaps=.4),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
@@ -118,7 +136,15 @@ WORLD_KNOBS = {
     # 1.07-1.14), so no highlight above level.
     'desert': dict(mesaFlank=1, lightCap=1, paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
                    bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
-                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
+                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
+                   # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
+                   # 6 height units thick, level on the height so they ring each butte), long
+                   # joints, and black shadow sides: retail's buttes are dark on the side turned
+                   # from the sun, where ours shaded to a soft grey. No fill light and little
+                   # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
+                   # the strata colours replace the face material.
+                   rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
+                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
@@ -271,7 +297,7 @@ WORLD_VARIANTS = {
         # shaded flanks and long dark cracks, beside Painted Desert's broad
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: grey buttes',
-                      knobs=dict(strataSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
+                      knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
                                  crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3),
                       config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .22], [60, 2, 0, .2], [95, 1, 2, .35]])),
     },
@@ -467,8 +493,9 @@ def biome_config(biome, assets):
         config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
-        # rock with orange lines above ~69.
-        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 0, .3]]
+        # rock with orange lines above ~69 (card E3: rust-pink lines, share .4, so
+        # the strata stay readable on the tall buttes instead of one grey).
+        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .4]]
         config['defaults']['example'] = 'mesas'
         # The plain: exact-index tiles from the retail map's level ground,
         # when the map has been exported (see ground_tiles.py).

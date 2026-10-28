@@ -284,6 +284,21 @@ fn crackShade(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
     return vec2f(max(core, shadow), lit) * c.open;
 }
 
+// The relief style of crackShade (card E3, crackStyle 1): the groove is carved
+// and lit rather than inked. Its floor keeps only a light core, the wall
+// facing the sun is a wider lit lip, and the wall turned from the sun shades
+// by the carved geometry plus a faint tone. Returns (dark, lit).
+fn crackShadeRelief(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
+    if (c.open <= 0.0) { return vec2f(0.0); }
+    let half_ = width * 0.5;
+    let core = 1.0 - smoothstep(half_ - 0.45, half_ + 0.45, c.dist);
+    let side = (smoothstep(half_ - 0.3, half_ + 0.3, c.dist) - smoothstep(half_ + 1.1, half_ + 3.0, c.dist)) * wall;
+    let facing = dot(c.normal, sun);
+    let lit = side * smoothstep(0.0, 0.5, facing);
+    let shadow = side * smoothstep(0.0, 0.5, -facing) * 0.35;
+    return vec2f(max(core * 0.3, shadow), lit) * c.open;
+}
+
 // Returns (carved depth, dark, lit, block relief).
 // boost (0..1, card C5 painted cracks "more") raises the world's severity and
 // level shares to at least its defaults times boost, so cracks also appear in a
@@ -336,11 +351,25 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let s0 = crackShade(c0, width * 1.25 * mix(0.6, 1.0, rocky), sun, 1.0);
     let s1 = crackShade(c1, width * 0.9 * mix(0.8, 1.0, rocky), sun, 0.8);
     let s2 = crackShade(c2, width * 0.55, sun, 0.0) * vec2f(0.6, 0.0);
-    let dark = max(s0.x, max(s1.x, s2.x));
-    let lit = max(s0.y, s1.y) * (1.0 - dark);
+    var dark = max(s0.x, max(s1.x, s2.x));
+    var lit = max(s0.y, s1.y) * (1.0 - dark);
     // A modest V for majors and minors, so the cracks also shade at scale.
-    let carve = c0.open * max(0.0, 1.0 - c0.dist / (width * 0.6 + 1.2)) * mix(0.8, 3.0, severity) * mix(0.5, 1.0, rocky)
+    var carve = c0.open * max(0.0, 1.0 - c0.dist / (width * 0.6 + 1.2)) * mix(0.8, 3.0, severity) * mix(0.5, 1.0, rocky)
               + c1.open * max(0.0, 1.0 - c1.dist / (width * 0.45 + 0.9)) * mix(0.4, 1.5, severity);
+    // Relief style (card E3): a wider, deeper groove that the light shows, a
+    // light floor and a lit lip, in place of the ink. The hairlines keep their
+    // faint dark pixel: they are too fine to carve.
+    if (u.crackStyle > 0.0) {
+        let r0 = crackShadeRelief(c0, width * 1.25 * mix(0.6, 1.0, rocky), sun, 1.0);
+        let r1 = crackShadeRelief(c1, width * 0.9 * mix(0.8, 1.0, rocky), sun, 0.8);
+        let rdark = max(r0.x, max(r1.x, s2.x * 0.5));
+        let rlit = max(r0.y, r1.y) * (1.0 - rdark);
+        let rcarve = c0.open * max(0.0, 1.0 - c0.dist / (width * 0.9 + 2.0)) * mix(1.2, 4.0, severity) * mix(0.5, 1.0, rocky)
+                   + c1.open * max(0.0, 1.0 - c1.dist / (width * 0.7 + 1.5)) * mix(0.6, 2.2, severity);
+        dark = mix(dark, rdark, u.crackStyle);
+        lit = mix(lit, rlit, u.crackStyle);
+        carve = mix(carve, rcarve, u.crackStyle);
+    }
     // Blocks step and tilt against each other on rocky ground.
     let b0 = cellHash(c0.id + 5.5) - 0.5;
     let t0 = cellHash(c0.id + 8.8) - 0.5;
@@ -356,6 +385,96 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     // Like the relief, block steps grow with the slope.
     blocks *= blockShare * rocky * m;
     return vec4f(carve, dark, lit, blocks);
+}
+
+// Rock structure (card E3). Sedimentary beds and joints as micro-relief the
+// sun lights: a ledge's lip catches the light and the notch under it
+// shades, so the rock reads as coherent layers scratched by joints rather
+// than as scattered gravel. Nothing here is ink.
+//
+// Joints: grooves close to the screen's north-south with a slight lean,
+// spaced irregularly, each running in unbroken stretches (jointRun px) with
+// gaps (jointGaps) and deepest mid-stretch; they wander a little. A joint
+// also breaks the beds: the block to its right is shifted along the beds by
+// up to 0.25 of a bed wherever the joint is present, so rows end and step at
+// the joints instead of running on as contour lines. Returns (groove height
+// offset <= 0, block shift in bed thicknesses).
+fn jointPresent(cell: f32, y: f32) -> f32 {
+    let run = max(u.jointRun, 20.0);
+    return smoothstep(mix(-1.1, 0.15, u.jointGaps), mix(-0.7, 0.55, u.jointGaps), valueNoise(vec2f(y / run, cell * 3.7) + 11.0));
+}
+fn jointField(p: vec2f) -> vec2f {
+    let a = radians(u.jointAngle);
+    let along = vec2f(sin(a), cos(a));
+    let across = vec2f(cos(a), -sin(a));
+    let J = max(u.jointSpacing, 6.0);
+    let y = dot(p, along);
+    let x = dot(p, across) + J * 0.35 * valueNoise(p / (J * 4.0) + 4.4) + J * 0.05 * valueNoise(p / (J * 0.7) + 9.1);
+    let c = floor(x / J);
+    var best = 1e9;
+    var cell = c;
+    var left = -1e9;
+    var leftCell = c - 1.0;
+    for (var i = -1; i <= 1; i++) {
+        let ci = c + f32(i);
+        let pos = (ci + 0.15 + 0.7 * cellHash(vec2f(ci, 19.0)).x) * J;
+        let d = abs(x - pos);
+        if (d < best) { best = d; cell = ci; }
+        if (pos <= x && pos > left) { left = pos; leftCell = ci; }
+    }
+    let run = max(u.jointRun, 20.0);
+    let deep = 0.55 + 0.9 * cellHash(vec2f(cell, 41.0)).y;
+    let along_ = 0.7 + 0.3 * valueNoise(vec2f(y / (run * 0.5), cell * 5.1) + 23.0);
+    let hw = 1.3 + 0.9 * deep;
+    let t = max(0.0, 1.0 - best / hw);
+    let groove = -u.jointDepth * deep * along_ * jointPresent(cell, y) * t * t * (3.0 - 2.0 * t);
+    let shift = (cellHash(vec2f(leftCell, 57.0)).x - 0.5) * 0.5 * jointPresent(leftCell, y);
+    return vec2f(groove, shift);
+}
+
+// Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
+// wander broadly and wobble finely but stay continuous between joints, so the
+// eye can follow one. The picture draws a point at screen row y - height / 2,
+// so a plane tilted 2 height units per px toward the north (bedDip 2, bedDipDir
+// 270) shows as rows that are level on the screen whatever the terrain below
+// does: retail Green's rows are level, and their spacing barely changes with
+// the face's steepness (8-12 px across slope bins), as these planes give.
+// bedHeight 0 instead spaces the beds in px along the ground; 1 spaces them by
+// height units, as the strata colours are. Bed thickness
+// varies bed to bed. Each bed's surface is pulled toward a flat tread with a
+// short riser (bedLedge), and the riser's top edge carries a lip with a notch
+// at its foot (bedLip). Returns the height offset and the lip's rock cover
+// (0..1): a lip is a convex ridge, which the face material would take for
+// moss on a lump top.
+fn bedRelief(p: vec2f, h: f32, shift: f32) -> vec2f {
+    let a = radians(u.bedDipDir);
+    let dip = vec2f(cos(a), sin(a));
+    let tilt = u.bedDip * dot(p, dip);
+    // How fast the bed coordinate changes along the ground: beds are that many
+    // px apart per unit of spacing in px mode.
+    let G = max(length(broadGradient(p) + u.bedDip * dip), 0.15);
+    let S = max(u.bedSpacing, 2.0) * pow(G, 1.0 - u.bedHeight);
+    let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
+    let L = (h + tilt + wander) / S + shift;
+    // Bed boundaries sit within 0.4 of each whole step, so they never cross.
+    var k = floor(L);
+    var lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5);
+    if (L < lo) { k -= 1.0; lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5); }
+    let hi = k + 1.0 + u.bedVary * 0.8 * (cellHash(vec2f(k + 1.0, 3.7)).x - 0.5);
+    let thick = hi - lo;
+    let f = clamp((L - lo) / thick, 0.0, 1.0);
+    // Bed thickness along the ground (px), the riser a few px wide whatever the bed.
+    let bedPx = thick * S / G;
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
+    var off = step_ * thick * S * u.bedLedge;
+    // The lip on the riser's top edge and the notch at its foot.
+    let dTop = (1.0 - f) * bedPx;
+    let dFoot = (f - (1.0 - riser)) * bedPx;
+    let lip = exp(-dTop * dTop / 5.0);
+    let notch = exp(-(dFoot + 1.0) * (dFoot + 1.0) / 6.0);
+    off += u.bedLip * (lip - 0.8 * notch);
+    return vec2f(off, lip);
 }
 
 // Beach: dry ground within reach of the water, as the world's coast
@@ -677,7 +796,28 @@ fn bake(p: vec2f) -> vec4f {
     // fall-line ribs, so faces read as fractured rock rather than combed.
     var broken = 0.0;
     if (u.cracksOn == 1) { broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route); }
+    // Rock structure (card E3): the structured face steps in as the scatter
+    // (ribs, block steps, minor cracks) steps back; its relief is added below.
+    var structureRock = 0.0;
+    var order = 0.0;
+    var steep = 0.0;
+    if (u.rockOrder > 0.0 && u.cracksOn != 0 && h > u.sea + 1.0) {
+        order = u.rockOrder * smoothstep(0.0, 0.5, clamp(crackMask, 0.0, 1.0)) * (1.0 - route) * (1.0 - buried);
+        // Beds and joints are for faces: steep ground (full from slope
+        // rockFrom + 0.5) and painted rock, which counts as a face whatever the slope.
+        steep = max(smoothstep(u.rockFrom, u.rockFrom + 0.5, slope), paintRock);
+        height *= 1.0 - 0.85 * order * steep;
+        crackAt.w *= 1.0 - 0.85 * order * steep;
+        crackAt.x *= 1.0 - 0.5 * order * steep;
+        crackAt.y *= 1.0 - 0.5 * order * steep;
+    }
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
+    if (order > 0.0) {
+        let joint = jointField(p);
+        let bed = bedRelief(p, h, joint.y);
+        height += order * steep * (bed.x + joint.x);
+        structureRock = order * steep * bed.y * step(0.01, u.bedLip);
+    }
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast. Nor lifts the bed above it.
     if (h > u.sea) { height = max(height, u.sea + 0.5 - h); }
@@ -687,6 +827,7 @@ fn bake(p: vec2f) -> vec4f {
     if (scree.x > rock.x) { rock = scree; }
     height += rock.x;
     rock.y *= 1.0 - buried;
+    rock.y = max(rock.y, structureRock);
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
