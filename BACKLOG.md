@@ -1253,6 +1253,28 @@ lines. Do not tune `crackDark` to fix this.
   differ from E1's, and the owner reconciles the `WORLD_KNOBS` entries at
   merge.
 
+**Done (merged 9f173e6c1).**
+- Beds and joints are lit micro-relief in the bake. `rockOrder` runs
+  from 0 (scatter) to 1 (structure). The other knobs are `bed*`,
+  `joint*`, `crackStyle` and `rockFrom`.
+- Beds are level on the screen. Retail green-2 rows are 8-12 px apart
+  whatever the slope.
+- Green-2's thin-line direction shares (vertical | horizontal) went from
+  .47 | .13 to .37 | .24 (retail .29 | .27). Red cracks are finer and
+  lighter. Desert strata continue on the buttes.
+
+**Still open:**
+- **Owner's question:** the rock faces were "too dark", but their mean
+  luma already matched or exceeded retail's. Retail has more contrast
+  (luma sd 27 against our 19-20, with more deep darks and twice our share
+  above 90). E3 lightened the ink, and the owner is asked whether tone or
+  contrast was meant.
+- **Rule 8** was exceeded on Green, with about 19 cycles.
+- **Desert (E8):** the buttes are smooth cones with no black shadow side,
+  and the strata lines are 3-4 px apart against retail's 10-18.
+- **Red-3:** its dark chunks come from the authored terrain.
+- The adopter how-to is in `$R/agent-E3/NOTES.md`.
+
 ### E4. Lava shore layers, fingers and rock
 
 > Retail has many layers in the terrain near lava (lava-1 contour layers,
