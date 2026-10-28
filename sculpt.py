@@ -734,7 +734,9 @@ def biome_config(biome, assets):
         # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
         # Slot 5 (card E8): the grey band at the foot of the raised ground, retail's neutral grey
         # (mean (118,115,112) over its pixels; palette entries 88-89 in pairs).
-        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [118, 115, 112]]
+        # Card G4: slot 0 (the orange beds) from (189,143,105) to (189,140,108). Picture orange (R-B > 40, 5x5 mean) on the
+        # three windows, retail / before: hue 21.9 / 26.0, 21.4 / 23.8, 21.8 / 25.4; G/B 1.25 / 1.33, 1.21 / 1.27, 1.25 / 1.31.
+        config['strataColors'] = [[189, 140, 108], [190, 198, 185], [150, 144, 128], [175, 111, 90], [118, 115, 112]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
         # rock with orange lines above ~69 (card E3: rust-pink lines, so the strata stay
