@@ -616,6 +616,18 @@ examples are from Codex's review; C0 will confirm or extend them):
 Each is a new kind or a shape option, depends only on its own cells,
 replays exactly by region, and is off by default.
 
+*Stage 1 is done (merged 2026-10-28, 1c23b37c5):*
+- spurs on hill, mountain and crater strokes;
+- crest irregularity, width and height variation, and end tapers;
+- crater rim sectors and gaps;
+- moon-2 and moon-3 use them.
+
+*Still open:*
+- spurs are even rays, where retail's are bulbous lobes with forks;
+- broken rims are softer than retail's;
+- Red ridges look twiggy;
+- live drawing shows no spurs until release.
+
 **Census evidence** (C0 rank 4: Red, Moon, Lava; rank 6: Green, Red,
 Desert, Ice):
 - *Ridges:* connected branches, crests of varying width and height,
