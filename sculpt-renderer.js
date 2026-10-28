@@ -361,12 +361,13 @@ export class TerrainRenderer {
     // the material field (one texture binding for both, see initialize).
     this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 2], format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    // Painted masks (card C5), three layers of signed bytes so an unpainted
+    // Painted masks (card C5), four layers of signed bytes so an unpainted
     // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
-    // layer 1 scatter density, relief, cracks, banding; layer 2 face rock share
-    // (the rest is spare). Plane k of the page is layer k >> 2, channel k & 3.
-    // Fresh textures are zero.
-    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, 3], format: 'rgba8snorm',
+    // layer 1 scatter density, relief, cracks, banding; layer 2 face rock share,
+    // then the water choices (shore edge, shallow-to-deep edge, bed; card E1);
+    // layer 3 ground lumps (the rest is spare). Plane k of the page is layer
+    // k >> 2, channel k & 3. Fresh textures are zero.
+    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, 4], format: 'rgba8snorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     this.worldGrid = grid;
     this.bindGroups = {};
@@ -485,11 +486,14 @@ export class TerrainRenderer {
     if (masks) this.setMasks(masks);
   }
 
-  // Painted masks (card C5): nine signed-byte planes (rock, snow or ice, wet
-  // ground, moss, scatter density, relief, cracks, banding, face rock share),
+  // Painted masks (card C5): thirteen signed-byte planes (rock, snow or ice, wet
+  // ground, moss, scatter density, relief, cracks, banding, face rock share;
+  // then, card E1, shore edge, shallow-to-deep edge, water bed and ground lumps),
   // interleaved into maskTexture's layers. Nothing is uploaded while nothing
-  // has ever been painted; paintOn, scatterOn and styleOn tell the shaders
-  // whether to read the texture at all.
+  // has ever been painted; paintOn, scatterOn, styleOn, waterOn and lumpOn tell
+  // the shaders whether to read the texture at all. The water and lump planes
+  // have their own flags, so a stroke that sets only those leaves every other
+  // read of the texture, and the render it feeds, as it was.
   setMasks(planes) {
     const n = this.grid * this.grid;
     // Four cells a read: this runs every frame a shape is dragged, and scanning
@@ -503,15 +507,17 @@ export class TerrainRenderer {
     const any = painted.some(Boolean) ? 1 : 0;
     if (!any && !this.maskUploaded) return;
     this.fieldsDirty = true;
-    if (this.maskBytes?.length !== n * 12) this.maskBytes = new Int8Array(n * 12);
+    if (this.maskBytes?.length !== n * 16) this.maskBytes = new Int8Array(n * 16);
     const bytes = this.maskBytes;
     planes.forEach((a, k) => { const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
     this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 3]);
+    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 4]);
     this.maskUploaded = Boolean(any);
-    this.i('uPaintOn', any);
+    this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
     this.i('uScatterOn', painted[4]);
-    this.i('uStyleOn', painted.slice(5).some(Boolean) ? 1 : 0);
+    this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
+    this.i('uWaterOn', painted.slice(9, 12).some(Boolean) ? 1 : 0);
+    this.i('uLumpOn', painted[12] || 0);
   }
 
   setMaterialField(field) {
@@ -693,6 +699,13 @@ export class TerrainRenderer {
     this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
+    // Water looks (card E1): every default is the earlier water.
+    this.f('uBedLit', variant.has('bedLit') ? Number(variant.get('bedLit')) : 0);
+    this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
+    this.v('uShallowMean', (this.config.water?.shallowMeanRGB || this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
+    this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
+    this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
+    this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
     this.fieldsDirty = true;
   }
 
@@ -727,6 +740,8 @@ export class TerrainRenderer {
     set('uSand', number('sand', 0));
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
+    set('uBedRelief', number('bedRelief', 0));
+    set('uLumpRelief', number('lumpRelief', 1.2));
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackLength', number('crackLength', 2));
     set('uCrackWidth', number('crackWidth', 1));

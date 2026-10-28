@@ -573,9 +573,24 @@ fn bake(p: vec2f) -> vec4f {
     let crackMask = select(crackShape * (1.0 + style.y), max(crackShape, style.y), style.y > 0.0);
     // Retail level ground is not dead flat in the art: faint embossed lumps
     // at 10-30 px. Appearance only; exported heights stay level.
+    // Painted ground lumps (card E1) add to the world's own lumps, or (below 0)
+    // take them away; unpainted ground (0) keeps exactly the world's.
+    var lumpGain = 1.0;
+    var lumpAdd = 0.0;
+    if (u.lumpOn != 0) {
+        let painted = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).r;
+        lumpGain = 1.0 + min(painted, 0.0);
+        lumpAdd = max(painted, 0.0) * u.lumpRelief;
+    }
     var plain = 0.0;
-    if (u.plainRelief > 0.0 && h > u.sea + 1.0) {
-        plain = (valueNoise(p / 13.0 + 41.0) * 0.6 + valueNoise(p / 29.0 + 7.0) * 0.4) * u.plainRelief * 1.6
+    if ((u.plainRelief > 0.0 || lumpAdd > 0.0) && h > u.sea + 1.0) {
+        plain = (valueNoise(p / 13.0 + 41.0) * 0.6 + valueNoise(p / 29.0 + 7.0) * 0.4) * (u.plainRelief * lumpGain + lumpAdd) * 1.6
+              * (1.0 - smoothstep(0.1, 0.4, slope));
+    }
+    // The bed under shallow water carries its own faint lumps, lit with the
+    // rest (card E1); the relief clamp below keeps it under the water plane.
+    if (u.bedRelief > 0.0 && h <= u.sea + 1.0) {
+        plain = (valueNoise(p / 11.0 + 71.0) * 0.55 + valueNoise(p / 23.0 + 5.0) * 0.45) * u.bedRelief * 1.6
               * (1.0 - smoothstep(0.1, 0.4, slope));
     }
     // Level crests and graded routes stay smooth; relief grows with slope.

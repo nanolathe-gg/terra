@@ -56,6 +56,11 @@ KNOB_DEFAULTS = dict(
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
+    # Water looks (card E1). The three stroke options are 0 (the world's own),
+    # 1 or 2; the world knobs default to the earlier noise water, a ramp from
+    # shallow to deep colour, and level ground with no painted lumps beyond
+    # plainRelief's.
+    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=1.2,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,

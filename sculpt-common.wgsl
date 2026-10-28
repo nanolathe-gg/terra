@@ -205,6 +205,17 @@ struct Uniforms {
     wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
     // Crystal shore slabs (card C2).
     crystalSeam: f32,     // submerged crystal-field cells: 1 paints the seam marks dark and the slab fill paler (0: water as before)
+    // Water looks (card E1). Defaults reproduce the earlier water exactly.
+    bedLit: f32,          // shallow water drawn as the lit bed under it, tinted (0: the noise water; 1: all bed)
+    bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)
+    bedRelief: f32,       // bed lumps (bake): faint embossed relief under shallow water, 0: none
+    deepEdge: f32,        // shallow-to-deep step: 0 the depth ramp, 1 a hard step with ragged stairs
+    deepEdgeDepth: f32,   // depth of the hard step (0: the ramp's midpoint)
+    waterOn: i32,         // 1 once any cell carries a painted water edge or bed choice (planes 9-11)
+    lumpOn: i32,          // 1 once any cell carries painted ground lumps (plane 12)
+    lumpRelief: f32,      // height of a fully painted lump field, in the units of plainRelief
+    shallowMean: vec3f,   // mean colour of the shallow water art: the lit bed's tint
+    bedBright: f32,       // brightness of the tinted bed (1: the tint as it is)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -231,7 +242,11 @@ struct Uniforms {
 // Layer 0: r rock, g snow or ice, b wet ground, a moss (0..1). Layer 1: r
 // scatter density (-1 none .. +1 densest; 0 leaves the world's own), then the
 // local style settings g relief, b cracks, a banding (-1 less .. +1 more than
-// the world's own; 0 leaves it). Layer 2: r face rock share (same scale).
+// the world's own; 0 leaves it). Layer 2: r face rock share (same scale), then
+// the water choices of a deep or shallow stroke (card E1): g shore edge, b
+// shallow-to-deep edge (+1 hard, -1 faded), a bed (+1 lit bed, -1 noise
+// water); 0 leaves the world's own. Layer 3: r painted ground lumps (+1 more,
+// -1 fewer than the world's own).
 @group(0) @binding(9) var masksTex: texture_2d_array<f32>;
 
 // Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,

@@ -320,6 +320,32 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
     return mix(color, slab, submerged);
 }
 
+// The shallow-to-deep step (card E1). Retail's step is a hard edge with
+// ragged stairs, not the ramp's gradual blend: the step sits at one depth (the
+// ramp's midpoint unless the world names one), is read off the bed's own depth
+// rather than the soft disc average, and wanders by a block-sized jitter and a
+// broad wobble. hard 0 is the ramp, 1 the step; between, both narrow together.
+fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) -> f32 {
+    let at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
+    let block = floor(pixel / 2.0);
+    let jitter = fract(sin(dot(block, vec2f(39.3467, 11.135))) * 43758.5453) - 0.5;
+    let reach = mix(0.5 * (u.deepDepth - u.shallowDepth), 0.8, hard);
+    let d = mix(colorDepth, depth, hard) + (jitter * 2.6 + (n.r - 0.5) * 5.0) * hard;
+    return smoothstep(at - reach, at + reach, d);
+}
+
+// Shallow water as the bed under it (card E1): the ground colour already lit at
+// this pixel, moved toward the water's own hue. The tint keeps the bed's light
+// (its brightness against flat ground), so lumps, shade and grain carry through;
+// bedTint is how much of the bed's own colour the tint replaces.
+fn litBed(bed: vec3f) -> vec3f {
+    const luma = vec3f(0.299, 0.587, 0.114);
+    let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
+    let light = clamp(dot(bed, luma) / level, 0.25, 2.0);
+    let tint = u.shallowMean * light * u.bedBright;
+    return saturate(mix(bed, tint, u.bedTint));
+}
+
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -908,13 +934,31 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.coastalDetail != 0) { colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth); }
         // Optional contour rings in the water colour, every 6 depth units.
         if (u.bandWater > 0.0) { colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, u.bandWater * 0.7); }
-        let deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
+        // A deep or shallow stroke's water choices (card E1), painted into the
+        // masks: +1 hard / lit bed, -1 faded / noise water, 0 the world's own.
+        // The plane is bilinear, so a half threshold keeps a stroke's footprint
+        // to within a pixel of where it was painted.
+        var shoreHard = u.crispShore;
+        var edgeHard = u.deepEdge;
+        var bedLit = u.bedLit;
+        if (u.waterOn != 0) {
+            let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).gba;
+            if (pick.x > 0.5) { shoreHard = 1.0; } else if (pick.x < -0.5) { shoreHard = 0.0; }
+            if (pick.y > 0.5) { edgeHard = 1.0; } else if (pick.y < -0.5) { edgeHard = 0.0; }
+            if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
+        }
+        var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
+        if (edgeHard > 0.0) { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
         let waterSize = vec2f(textureDimensions(waterTex, 0));
         let grain = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
         if (u.nativeShallows != 0 && u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
-            let shallow = pixelSample(waterShallowTex, waterShallowSamp, pixel, vec2f(textureDimensions(waterShallowTex, 0))).rgb;
+            var shallow = pixelSample(waterShallowTex, waterShallowSamp, pixel, vec2f(textureDimensions(waterShallowTex, 0))).rgb;
             let deepWater = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb;
+            // The lit bed: the ground under the water, lit by the same sun and
+            // tinted, replaces the shallow art's noise (retail draws its shallows
+            // as the lit terrain through a blue tint).
+            if (bedLit > 0.0) { shallow = mix(shallow, litBed(color), bedLit); }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
@@ -928,13 +972,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
         var submerged = smoothstep(-0.2, 2.8, depth);
-        if (u.crispShore > 0.0) {
+        if (shoreHard > 0.0) {
             // Retail waterlines are hard edges with small stair-step notches,
             // not soft fades: threshold depth against pixel-block jitter.
             let block = floor(pixel / 2.0);
             let jitter = fract(sin(dot(block, vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
             let crisp = step(0.6 + jitter * 1.4, depth);
-            submerged = mix(submerged, crisp, u.crispShore);
+            submerged = mix(submerged, crisp, shoreHard);
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
         if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
