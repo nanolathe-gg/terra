@@ -1763,6 +1763,28 @@ stage changes no heights.
   the planes ordinary mask layers so that phase 3 can treat them like the
   others.
 
+**Done (merged 0ac568579; EXPERIMENTS row 103).**
+- River and Source tools: a colour picker suggests the world's colours
+  and remembers those used before.
+- A worker bake with progress, Cancel, a cache, a stale badge and an
+  optional idle bake.
+- Planes 20-24 store the flow and three sediment concentrations; mask
+  layers went from 4 to 7. Save and load keep them, and replay is exact.
+- Without a bake, every scene is unchanged.
+- The bake takes 0.9 s per Zhon scene. `FLOW_BAKE.md` has an "As built"
+  section, and `$R/agent-F1/NOTES.md` lists what the export must read.
+
+**Still open:**
+- The sediment reads as a diffuse brown haze. Retail's plumes are
+  strong maroon lanes with clear teal between them and a continuous
+  bank band 50-70 px wide. Our streaks are faint.
+- A fourth colour silently merges into the nearest of three.
+- There is no random-hue source.
+- The bake is not chunked (card D phase 3).
+- The localStorage autosave may refuse a sketch with a bake.
+- The bake reads heights from before its node; move the node to change
+  that.
+
 ### Zhon: not a card yet
 
 The owner wants to discuss tools first: random-coloured sand deposits,
