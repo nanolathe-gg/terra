@@ -80,3 +80,9 @@ cracks more/fewer, 12/13 banding more/less, 14/15 face rock more/less (Strength
 is how far); a landform sets the same about its own footprint with `styleRelief`,
 `styleCracks`, `styleBanding` and `styleFace` (percent, -100..100, 0 none).
 `demo/masks-style.json` shows each on a Green hill and a plateau pair.
+
+Variants (card C5 stage 3): a world may offer named presets over its own, listed in
+`WORLD_VARIANTS` (`sculpt.py`) and chosen in the World panel's Variant drop-down. A
+scene names one in its `query`: `"query": "variant=evad"` (green: Evad River and
+Barrier Reef smooth slopes; ice: `bergs`; desert: `triad`). With no variant a scene
+renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt in.
