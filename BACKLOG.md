@@ -1875,24 +1875,25 @@ Shallow tool now starts in Area mode, which draws shallows anywhere,
 through land too. ice-1 uses the Ice variant `snow`, the mountain from
 before E6, with E6's finer frost shelf.
 
-**Card D comes first in `sculpt.js`.** Codex is merging card D phase 3
-(region-by-region replay for large maps) with wave 2, inside the replay
-and brush code: the node functions, `startStroke` geometry, the coast
-pass, crystal facets, hill lobes and craters. Until card D lands on
-`terrain-editor`, the G cards change only these:
+**Card D lands first.** The G cards branch from `terrain-editor` after
+card D phase 3 (region-by-region replay for large maps) has merged.
+Shader and knob changes work as before. A change to replay or brush code
+must keep regional replay exact. That covers the node functions,
+`startStroke` geometry, the coast pass, crystal facets, hill lobes and
+craters:
 
-- shaders (`sculpt-frag.wgsl`, `relief-bake.wgsl`, `sculpt-common.wgsl`);
-- knob values and defaults (`sculpt.py`, `TOOL_PRESETS`, `SHAPE_FIELDS`
-  defaults);
-- the wiring that new knobs need (rule 4).
+- If the change reads ground beyond its stroke's own rectangle, add that
+  reach to `regionalReadApron` in `sculpt.js`.
+- Run `repro/regional.mjs` on your world's three scenes. It replays the
+  whole map and again as 2x2 regions and compares every field plane. It
+  must report no mismatch. Record the output in NOTES.md.
+- A shader takes positions only from the inputs today's shading already
+  uses (the world pixel position and the baked textures), never from the
+  canvas size, because card D renders large maps in chunks through the
+  same shaders.
 
-A shader must take positions only from the inputs today's shading already
-uses (the world pixel position and the baked textures), never from the
-canvas size, because card D renders the map in chunks through the same
-shaders. If an item needs a replay or brush change, write in NOTES.md
-what it would write and how far beyond its stroke it would read, and move
-on. It becomes a follow-up once card D lands. No G card takes a mask
-plane.
+No G card takes a mask plane without asking first, because under card D
+every plane costs memory in every chunk.
 
 Each card owns its piece of shared code. Other cards only set its knobs:
 
@@ -2029,8 +2030,8 @@ per card, headed by a comment naming it (`// G4`).
 > me of like a stalagtite formation.
 
 - **Layers:** more variation through E10's knobs (`layerVary`,
-  `layerRough`, their ranges and defaults). A change to the coast pass
-  itself waits for card D.
+  `layerRough`, their ranges and defaults) first, then the coast pass
+  itself if the knobs cannot reach retail's variation.
 - **Hill rock** is a new look for Lava hills, separate from the shore
   layers. Before any code, describe retail's at 2x on lava-1..3 in
   NOTES.md: the bumps, the cut-outs, the hanging drip-like shapes and
@@ -2056,8 +2057,7 @@ per card, headed by a comment naming it (`// G4`).
   Geometric shapes are an option, off by default. They are angular facets
   that belong to the mountain: breaking out of the snow, lit by the same
   sun, partly buried. Today's crystal strokes are the pasted cubes the
-  owner means. If the shapes need new replay geometry, record the design
-  and wait for card D.
+  owner means.
 - **Frost shelf:** finer lines. Keep the rest; the owner likes it.
 - **ice-2:** less rough.
 - **ice-3** (the owner asked for help). The form is right: its heights
@@ -2087,9 +2087,7 @@ per card, headed by a comment naming it (`// G4`).
 
 - **Craters:** smaller, softer-edged facets, under the shading of a hole:
   the wall facing the sun lit, the far wall shaded. E7's crater facets are
-  laid in `sculpt.js` (the crystal rect). Try the shading and the cell
-  size in the shader first. If the facet size needs a replay change,
-  record it for after card D.
+  laid in `sculpt.js` (the crystal rect).
 - **Shore and shallow crystals** on crystal-2 and -3: smaller cells
   (`crystalShallowPx` and its relatives).
 - The owner called the rest amazing. The mound tops and every other
@@ -2120,8 +2118,8 @@ and moon-2's wrinkle ridges):
 - **Shaded flanks** break into short dark ribs running down the slope,
   with a stringy texture.
 - **Ridges fold.** Thin wavy lines curve around the forms, and the
-  outlines are lumpy and lobed. The outline is form: if it needs brush
-  changes, record them for after card D.
+  outlines are lumpy and lobed. That outline is form, so shape it in the
+  brush (rule 6).
 - **No individual scratches.** The fine hair-like streaks on our slopes,
   before and after E6, are what the owner means. Take them out of the
   default.
