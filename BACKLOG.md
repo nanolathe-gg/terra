@@ -451,8 +451,9 @@ strokes.
 - **Variation along the outline.** Every width is multiplied by the
   existing broad outline noise times `faceVariation`, so faces are not
   even.
-- **Terraces.** Step the unstepped profile `p`:
-  `(floor(q) + smooth(1 - ledge, 1, fract(q))) / n`, where
+- **Terraces.** `ledge` is the flat share of each step. Step the
+  unstepped profile `p`:
+  `(floor(q) + smooth(ledge, 1, fract(q))) / n`, where
   `q = p * n + terraceJitter * noise(lx, ly)`. It is the contour-band
   idea from `relief-bake.wgsl`, but in the heights.
 - **Code layout.** Put the parametric path in one new function (for
@@ -464,6 +465,12 @@ strokes.
   replay must stay exact: `sculptDebug.replayAll()` reports mismatch 0
   after editing a shape.
 - **UI.** Draw a small preview of the cross-section beside the options.
+
+*Stage 1 is done (merged 2026-10-27, 79725791f).* The demo scenes are
+in `repro/demo/`. Under `profile` 1, `bankPx`, Beach flatness, Mesa
+flanks and Wider north faces are ignored, and a hill is the plain swept
+hill. Not converged yet: shelf steps do not show in the water colour,
+and Lava fingers no longer sit at the waterline under `profile` 1.
 
 **Stage 1: the engine and UI.**
 - The default keeps the old path, so the guard is `--worlds none`.
@@ -588,6 +595,21 @@ Each is a new kind or a shape option, depends only on its own cells,
 replays exactly by region, and is off by default.
 
 ### C5. Painted masks and world variants
+
+**Stages** (stop for review after each):
+1. **Masks.** New per-cell channels in the shape graph (`FIELD_KEYS`),
+   painted by cover-like brushes, plus a shape option that writes them
+   inside a landform's own footprint:
+   - material channels: rock, snow or ice, wet or dark ground, moss;
+   - a scatter density that multiplies the world's boulder and debris
+     density (unpainted keeps today's density).
+
+   Upload them as one texture beside the cover field and mix them in
+   the material. Each world's "rock" and "moss" come from its own
+   materials, never from new colours.
+2. **Local style.** Painted or per-shape multipliers for banding,
+   cracks, relief strength and face treatment.
+3. **World variants.** Named world variants.
 
 - **Material channels:** paint rock showing through, snow or ice, dark or
   wet ground, and moss. Today only sand and grass can be painted.
