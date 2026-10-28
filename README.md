@@ -1,5 +1,12 @@
 # Terrain editor prototype
 
+Card D phase 3 adds maps up to 40×40 units with a scrolling viewport,
+bounded regional replay, live gestures, overlapping weather tiles and streamed
+export. The 1024px study keeps its existing rendering path. Phase 3 review
+measurements and the remaining GPU rounding difference are recorded in
+`/private/tmp/nanolathe-map-editor/agent-D/NOTES.md`. Phase 3b integrates
+wave 2 through `04f1b786e`, including stored flow bakes. Phase 4 has not started.
+
 Card D phases 1 and 2 add playable terrain, features, starts and OTA settings.
 Limits and later phases are in [BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
 
@@ -22,11 +29,24 @@ world's derived catalogue is refreshed once per server run from its configured
 content roots, even when private files already exist.
 
 Open <http://127.0.0.1:8840/sculpt>. **Playable map** creates a blank map
-canvas, with 1–4 units on each axis and a chosen sea level, initially the
+canvas. Choose 1–40 units on each axis and a sea level, initially the
 upper median TNT sea level of its retail world. Each unit is 512 playable
 pixels. A 4×4 map contains 130×136 cells, including the outer strips, and
 2080×2176 art pixels. Yellow outlines the playable rectangle; orange marks
-the height-dependent edge strips. Fit and 1× use the existing viewport.
+the height-dependent edge strips. Fit, 1×, 0.5× and the minimap navigator use a viewport-sized canvas. Export view PNG captures only the current view.
+
+The authored-field regression check uses an isolated headless Chrome:
+
+```sh
+cd tools/map-editor
+node repro/regional.mjs repro/scenes/lava-1.json --server http://127.0.0.1:8840 --port 9640
+```
+
+It waits for the scene and any flow bake, then compares every authored field
+from whole replay with four 2×2 regional reads. Its JSON report includes every
+plane's mismatch count, maximum difference and first mismatch; any mismatch
+or editor error exits nonzero. The selected CDP port must be free. Weather
+and projected GPU art retain the separate image/replay guards in `repro/all.sh`.
 
 The original 1024px study remains available. Draw a map with the existing
 terrain brushes, then use the feature tools. Water brush depths and material
@@ -68,7 +88,49 @@ The helper decodes and checks the TNT cells, feature anchors/fringe, tiles,
 minimap, OTA settings/starts and archive before publishing it.
 See [the export format contract](export/README.md).
 
-The bounded square working field retains full-resolution fields and export
-images in memory. Sparse fields, visible-chunk caching, maps above 4×4,
-streaming, budgets, cancellation and incremental server documents remain
-phase 3. Tile reuse policy remains phase 4. Neither phase is implemented.
+Full-size maps keep the stroke graph as their source. Field prefix tiles replay
+with each brush's read apron; long connected coasts query earlier tiles without
+expanding one connected bounding box. Lava shore layers reduce their whole
+stroke bounds tile by tile, retaining the global bite lattice while processing
+only each requested region. Brush aprons include base variation, hill lobes,
+facet-crater seed reads and the finger/shore/frost reach. Visible chunks and one surrounding margin
+are baked on demand. Scrolling uses an LRU image cache, while overview and the
+navigator use a coarse 128×128 height preview. A stroke, move, rotation, scale or
+height drag previews while held and commits one undo step; Escape cancels it.
+
+River and Source strokes keep one cached flow-bake node. Its input heights
+are read in bounded prefix tiles before that node, while its stale hash still
+covers the entire bake region. Regional replay copies only the stored planes
+overlapping its window; eviction and export never simulate the flow again.
+One whole bake job and its five output planes must fit the page budget; an
+overlarge job is refused before its inputs or worker are allocated.
+
+The GPU and page heap budgets default to 512 MiB and 1 GiB, with controls in
+**Map view and memory** (`gpuMB` / `heapMB` in the URL). The device requests
+default WebGPU limits. Mask storage counts its actual layer count: currently 25 planes in 7 RGBA
+layers. Flow occupies planes 20–24; 14–19 and 25+ remain unused. Every selected
+GPU budget uses the same canonical bake size chosen at the 128 MiB floor; lower
+budgets evict and re-bake more images. Changing chunk geometry can move isolated
+palette decisions because the GPU rounds interpolation differently. The remaining
+Ice frost decision is documented with raw field and float probes in NOTES.md.
+
+Maps with at most 1168 samples on their working side keep the existing global
+weather solver. Larger maps use fixed 256-cell weather cores, 64-cell blend
+overlap and another 128-cell solver apron. Tile seeds depend only on the map seed
+and tile coordinates, so cache size and renderer chunk boundaries do not change
+the result. Weather is lazy in the view; exports await it for both art and TNT
+corner heights. Field, weather and upload reservations share the page budget.
+
+**Save to server** writes graph/settings/objects and changed sparse mask chunks
+under `<assets-root>/documents/documents/<id>/`; **Reload document** restores that
+world/size/sea canvas. Field chunks use stable coordinate keys. Stored flow planes use immutable
+content keys and bounded encoded chunks; the recipe is published last so an
+interrupted save leaves its previous flow bake readable. Reload and sketch
+import check decoded bake memory before allocating it. Sketch files remain an
+alternative to server documents.
+
+Export streams one tile-aligned PNG at a time to the helper. The helper keeps
+hashes, tile indices and attributes in memory, spills tile bytes under its own
+budget, and writes the indexed PNG and archive without a full-map image buffer.
+Cancel removes the exact temporary job and publishes no partial archive. More
+than 65536 distinct tiles is refused; the tile reuse policy is still phase 4.

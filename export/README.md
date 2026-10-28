@@ -1,4 +1,4 @@
-# Terrain editor export (Card D, phases 1 and 2)
+# Terrain editor export (Card D, phases 1–3)
 
 Build and inspect installed content:
 
@@ -47,16 +47,20 @@ Export a local manifest:
 
 The illustrative heights above must be replaced with exactly
 `(unitsX*32+2)*(unitsY*32+8)` integer bytes, in cell row order. Both unit counts
-are 1–4. Images cover every cell, including the engine's outer strips: their
+are 1–40. Images cover every cell, including the engine's outer strips: their
 combined extent is `(unitsX*32+2)*16` by `(unitsY*32+8)*16` pixels. Chunk
 positions and dimensions are multiples of 32, and the chunks must cover that
-extent exactly once. Paths are local files, relative to the manifest or
+extent exactly once. Each chunk is at most 4096 px on either side. Paths are local files, relative to the manifest or
 absolute; images must be opaque PNGs. Supply final engine-projected art in
 screen coordinates (`worldY-height/2`); the exporter adds no projection shift.
 
 Palette conversion uses exact RGB matches, then squared Euclidean RGB
 distance, with the lowest index winning ties. There is no noise or dithering.
-Only exact indexed 32×32 tiles are shared. The 252×252 minimap follows
+Only exact indexed 32×32 tiles are shared. Unique tiles are numbered by their
+first appearance in the complete row-major tile grid, so changing chunk
+dimensions, the browser's GPU budget or the exporter's spill budget does not
+change TNT bytes. More than 65536 unique tiles is refused cleanly; phase 3
+does not merge or approximate tiles. The 252×252 minimap follows
 `research/formats/tnt.md` "Minimap": fit the play area to its long side and
 fill the unused short axis with palette index `0x64`. Each used pixel averages
 all indexed-art RGB values in its source block. Blocks use truncated integer
@@ -109,11 +113,98 @@ The command writes `<name>.ufo` with stored HPI entries
 comparison. Before publishing, it reopens the staged archive through
 `vfs.NewArchive` (via `MountArchiveReader`), lists and reads both files,
 compares every TNT cell, feature record, tile and minimap byte, and parses
-the OTA settings and numbered starts. Publication
+the OTA settings and numbered starts. The TNT and stored HPI writers use
+fixed buffers because the public encoders accept complete byte slices.
+The TNT packing matches `formats.EncodeTNT`; the HPI writer reuses
+`vfs.WriteArchive`'s empty-file directory and patches the stored lengths and
+offsets. Self-checks use bounded VFS range reads rather than whole-file reads.
+The indexed PNG streams through a one-tile-row cache. Publication
 is atomic per file and refuses an existing destination. Installed names are
 also refused case-insensitively. Content roots cannot be output directories.
 
 Stdout is one JSON result with `name`, `archive`, `indexed`, `widthCells`,
 `heightCells`, `uniqueTiles`, `tileSlots`, `exactPixels`, `nearestPixels`,
-`featureCount`, `starts`, and `selfCheck` (`tnt`, `ota`, `archive` booleans). Output filenames
+`featureCount`, `starts`, `metrics` (`peakRSSBytes`, `peakTemporaryBytes`,
+`exportMilliseconds`) and `selfCheck` (`tnt`, `ota`, `archive` booleans). RSS
+is the helper process's high-water mark, including its content-catalogue
+startup; elapsed time begins when export state is prepared and includes the
+time between arriving chunks. Temporary bytes include the private job files
+and staged outputs, excluding the final files' hard links. Output filenames
 are basenames. Errors go to stderr with a nonzero exit status.
+
+## Streamed HTTP export
+
+The editor bridge keeps one Go helper per active export. It accepts one
+finished PNG at a time and removes it after quantisation; it never accumulates
+the map's PNGs or a complete map image.
+
+1. `POST /map-export/start`, JSON containing the manifest metadata above,
+   without `chunks`. Returns `{id,width,height,maxChunkSide}` in pixels.
+2. `POST /map-export/chunk?id=ID&x=X&y=Y&width=W&height=H`, with an opaque
+   PNG body. All four coordinates are integers; dimensions and positions
+   align to 32 px. Send chunks in row order, increasing y then x, covering
+   every tile exactly once. Each reply contains
+   `{id,receivedTiles,totalTiles,uniqueTiles}`.
+3. `POST /map-export/finish?id=ID`, with an empty body, returns the normal
+   export result after checks and publication.
+4. `DELETE /map-export?id=ID` cancels the helper and removes its exact
+   temporary filenames. The id expires on finish, error or cancellation.
+
+`POST /map-export` still accepts the original JSON/base64 `chunks` array
+(1–25 chunks) and runs the same writer. Large maps use the streamed API.
+Export ids are random 32-character lowercase hex strings. Metadata requests
+are capped at 16 MiB; a PNG upload is capped at 64 MiB, and its declared
+dimensions are checked before decoding.
+
+The default unique-tile memory budget is 16 MiB. Set
+`NANOLATHE_EXPORT_TILE_BUDGET_MB=0..64` for the HTTP bridge, or pass
+`--tile-budget-mb N` to the command; zero spills immediately. Only tile hashes,
+the tile index and attribute maps, minimap accumulators and the bounded tile
+cache remain in memory between chunks. Hash collisions are checked against
+the actual tile bytes. Chunks are immediately quantised and deduplicated.
+
+Private jobs use `nanolathe-map-export-jobs/export-ID/` under the OS temporary
+directory. `TMPDIR=/private/tmp/nanolathe-map-editor/agent-D/tmp` selects the
+card's diagnostic storage. The bridge records its process id and output
+directory in each job's owner file. On startup it cleans jobs belonging to
+the same output directory whose owner process has exited, preserving live
+jobs and unknown filenames. Cleanup unlinks exact names and removes only
+empty directories. Output stages have exact `.map-export-ID-*.tmp` names;
+complete output files appear by exclusive hard links after checks. The
+archive is published before the preview, so a crash cannot leave a preview
+without a complete archive. The server calls `MapExport.close()` at shutdown.
+
+The command-line streaming equivalent is:
+
+```sh
+map-export --stream --input metadata.json --out exports --work PRIVATE_DIR
+```
+
+After its `{ready:true,width,height,maxChunkSide}` reply, send newline-delimited
+JSON commands on stdin: `{op:"chunk",x,y,width,height,path:"local.png"}`,
+`{op:"finish"}` or `{op:"cancel"}`. Each chunk gets one progress reply;
+finish gets one result. EOF cancels an unfinished export. `--work` is optional
+and otherwise temporary files use the OS temporary directory.
+
+## Incremental server documents
+
+`MapDocument` stores authored documents below `<assets-root>/documents/`.
+
+- `PUT /map-document?id=ID` takes the raw JSON metadata object: the stroke
+  graph, feature placements, starts, OTA settings and sparse chunk references.
+  `GET` returns `{id,document,revision,chunks:[{key,bytes,sha256}]}`.
+- `PUT /map-document/chunk?id=ID&key=KEY` saves opaque field-plane bytes
+  independently (32 MiB maximum). The reply is
+  `{id,key,bytes,sha256,changed,revision}`. Saving identical bytes leaves the
+  chunk file and revision untouched. `GET` streams those bytes and supplies
+  their SHA-256 as an ETag.
+- `DELETE /map-document/chunk?id=ID&key=KEY` removes one chunk;
+  `DELETE /map-document?id=ID` removes the metadata and its referenced chunks.
+
+Ids and keys are 1–128 ASCII letters, digits, underscores, hyphens or single
+dots, beginning with a letter, digit, underscore or hyphen. Path separators
+and `..` are refused. Metadata and changed chunks are fsynced and replaced
+atomically. Content-addressed chunk filenames let a metadata replacement
+switch versions without exposing a partially written chunk. Upload field
+chunks before metadata that references them. Reload reads the stored graph
+and chunk bytes; it does not require a full-map field blob.

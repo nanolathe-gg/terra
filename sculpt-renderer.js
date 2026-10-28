@@ -4,7 +4,7 @@
 // world-resolution fields bake, a compute pass).
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
-const MASK_LAYERS = 7;
+const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
 // Average colour of an image (0..1 RGB), from a 64x64 reduction.
@@ -24,11 +24,24 @@ function preprocess(source, common, defines) {
   const out = [], keep = [];
   for (const line of source.replace('/*COMMON*/', common).split('\n')) {
     const m = line.match(/^\s*#(ifdef|ifndef|else|endif)\b\s*(\w*)/);
-    if (!m) { out.push(keep.every(Boolean) ? line : ''); continue; }
-    if (m[1] === 'ifdef' || m[1] === 'ifndef') keep.push((m[1] === 'ifdef') === defines.has(m[2]));
-    else if (m[1] === 'else') keep.push(!keep.pop());
-    else keep.pop();
-    out.push('');
+    if (!m) {
+      if (keep.every(k => k.enabled)) out.push(line);
+      // CHUNK alternatives disappear completely from the whole-map source.
+      // Its shader text stays identical, including the old BAKE blank lines:
+      // even an unused branch can otherwise change float compilation.
+      else if (!keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
+      continue;
+    }
+    let chunk = false;
+    if (m[1] === 'ifdef' || m[1] === 'ifndef') {
+      chunk = m[2] === 'CHUNK';
+      keep.push({name: m[2], enabled: (m[1] === 'ifdef') === defines.has(m[2])});
+    } else {
+      chunk = keep.at(-1)?.name === 'CHUNK';
+      if (m[1] === 'else') keep.at(-1).enabled = !keep.at(-1).enabled;
+      else keep.pop();
+    }
+    if (!chunk && !keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
   }
   return out.join('\n');
 }
@@ -79,6 +92,11 @@ export class TerrainRenderer {
     return self;
   }
 
+  static async createChunked(canvas, config) {
+    const {ChunkTerrainRenderer} = await import('./sculpt-chunk-renderer.js');
+    return ChunkTerrainRenderer.create(canvas, config);
+  }
+
   constructor(canvas, config) {
     if (!navigator.gpu) throw new Error(NO_WEBGPU + ' This browser does not offer it' + (window.isSecureContext ? '.' : ' on an insecure page; open it from localhost or https.'));
     this.canvas = canvas;
@@ -87,6 +105,8 @@ export class TerrainRenderer {
     if (!this.context) throw new Error(NO_WEBGPU + ' The page could not get a WebGPU canvas.');
     this.grid = config.grid;
     this.size = config.size;
+    this.maskPlaneCount = config.maskKeys?.length ?? MASK_PLANE_COUNT;
+    this.maskLayers = Math.max(1, Math.ceil(this.maskPlaneCount / 4));
     this.height = new Float32Array(this.grid * this.grid).fill(config.baseHeight);
     this.timers = [];
     this.lastGPU = null;
@@ -123,7 +143,8 @@ export class TerrainRenderer {
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    this.layout = uniformLayout(common);
+    const defines = this.chunked ? new Set(['CHUNK']) : new Set();
+    this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
     this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
@@ -139,9 +160,9 @@ export class TerrainRenderer {
       return module;
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
-      compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
-      compile('sculpt-frag.wgsl', preprocess(frag, common, new Set())),
-      compile('relief-bake.wgsl', preprocess(bake, common, new Set(['BAKE'])))]);
+      compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
+      compile('sculpt-frag.wgsl', preprocess(frag, common, defines)),
+      compile('relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
     // bake (binding 6 is the fields for the draw, the routes for the bake).
@@ -364,16 +385,15 @@ export class TerrainRenderer {
     // the material field (one texture binding for both, see initialize).
     this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 2], format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    // Painted masks (card C5), signed bytes so an unpainted cell is exactly
-    // 0.0: layer 0 rock, snow or ice, wet ground, moss;
+    // Painted masks (card C5), signed bytes so an unpainted
+    // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
     // layer 1 scatter density, relief, cracks, banding; layer 2 face rock share,
     // then the water choices (shore edge, shallow-to-deep edge, bed; card E1);
-    // layer 3 ground lumps (the rest is spare); layers 5-6 the flow bake (card
-    // F1: current x and y, then three sediment concentrations). Plane k of the
-    // page is layer k >> 2, channel k & 3. Sized to the highest layer used (7,
-    // MASK_LAYERS); one texture binding for all. Fresh textures are zero.
-    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, MASK_LAYERS], format: 'rgba8snorm',
+    // layer 3 ground lumps (the rest is spare). Plane k of the page is layer
+    // k >> 2, channel k & 3. Fresh textures are zero.
+    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, this.maskLayers], format: 'rgba8snorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
+    this.maskAllocatedLayers = this.maskLayers;
     this.worldGrid = grid;
     this.bindGroups = {};
     this.maskUploaded = false;
@@ -511,9 +531,24 @@ export class TerrainRenderer {
   // read of the texture, and the render it feeds, as it was.
   setMasks(planes) {
     const n = this.grid * this.grid;
+    this.maskPlaneCount = planes.length;
+    this.maskLayers = Math.max(1, Math.ceil(planes.length / 4));
+    if (this.maskLayers > this.device.limits.maxTextureArrayLayers) throw new Error('nanolathe: mask planes exceed the device texture array limit');
+    this.worldTextures(this.grid);
+    if (this.maskAllocatedLayers !== this.maskLayers) {
+      this.maskTexture.destroy();
+      this.maskTexture = this.device.createTexture({label: 'masks', size: [this.grid, this.grid, this.maskLayers], format: 'rgba8snorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
+      this.maskAllocatedLayers = this.maskLayers;
+      this.maskUploaded = true;
+      this.bindGroups = {};
+    }
     // Four cells a read: this runs every frame a shape is dragged, and scanning
     // five unpainted planes byte by byte cost 2 ms.
     const painted = planes.map(a => {
+      if (!a) return 0;
+      if (a.length !== n) throw new Error('nanolathe: invalid mask plane dimensions');
+      if (!a.buffer || a.byteOffset % 4) return a.some(Boolean) ? 1 : 0;
       const words = new Int32Array(a.buffer, a.byteOffset, n >> 2);
       for (let i = 0; i < words.length; i++) if (words[i]) return 1;
       for (let i = n & ~3; i < n; i++) if (a[i]) return 1;
@@ -522,16 +557,14 @@ export class TerrainRenderer {
     const any = painted.some(Boolean) ? 1 : 0;
     if (!any && !this.maskUploaded) return;
     this.fieldsDirty = true;
-    if (this.maskBytes?.length !== n * 4 * MASK_LAYERS) { this.maskBytes = new Int8Array(n * 4 * MASK_LAYERS); this.maskWritten = []; }
+    if (this.maskBytes?.length !== n * this.maskLayers * 4) this.maskBytes = new Int8Array(n * this.maskLayers * 4);
     const bytes = this.maskBytes;
-    // A plane that is empty now and was when last copied is already zero in the
-    // buffer: with the placeholder planes of other cards that skips half the copies.
-    planes.forEach((a, k) => { if (!painted[k] && !this.maskWritten[k]) return; this.maskWritten[k] = painted[k]; const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, MASK_LAYERS]);
+    bytes.fill(0);
+    planes.forEach((a, k) => { if (!a) return; const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
+    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, this.maskLayers]);
     this.maskUploaded = Boolean(any);
     this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
-    this.i('uScatterOn', painted[4]);
+    this.i('uScatterOn', painted[4] || 0);
     this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
@@ -654,6 +687,7 @@ export class TerrainRenderer {
       depthStencilAttachment: {view: this.depthView, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard'},
       timestampWrites: timer?.timestampWrites});
     pass.setPipeline(this.drawPipeline);
+    if (this.chunkViewport) pass.setViewport(...this.chunkViewport, 0, 1);
     pass.setBindGroup(0, this.commonBindGroup('draw'));
     pass.setBindGroup(1, this.materialBindGroup(fringeTexture));
     const mesh = this.meshes[full ? 1 : 0];
@@ -905,7 +939,7 @@ export class TerrainRenderer {
     pass.setPipeline(this.bakePipeline);
     pass.setBindGroup(0, this.commonBindGroup('bake'));
     pass.setBindGroup(1, this.fieldsOut);
-    pass.dispatchWorkgroups(Math.ceil(this.size / 8), Math.ceil(this.size / 8));
+    pass.dispatchWorkgroups(Math.ceil((this.bakeWidth ?? this.size) / 8), Math.ceil((this.bakeHeight ?? this.size) / 8));
     pass.end();
     if (own) {
       timer?.encode(encoder);

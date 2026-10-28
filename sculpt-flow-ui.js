@@ -27,14 +27,15 @@ export const resultWidth = result => result.rect.x1 - result.rect.x0 + 1;
 
 // Replay's only job: copy the stored planes into the live ones, inside the
 // clip a region replay allows (cells outside the bake's rect are untouched).
-export function applyResult(result, planes, clip, grid) {
+// The clip and destination stride are local; origin is its world-cell offset.
+export function applyResult(result, planes, clip, grid, origin = [0, 0]) {
   if (!result) return;
-  const r = result.rect, w = resultWidth(result);
-  const x0 = Math.max(r.x0, clip.x0), x1 = Math.min(r.x1, clip.x1), y0 = Math.max(r.y0, clip.y0), y1 = Math.min(r.y1, clip.y1);
+  const r = result.rect, w = resultWidth(result), [ox, oy] = origin;
+  const x0 = Math.max(r.x0, clip.x0 + ox), x1 = Math.min(r.x1, clip.x1 + ox), y0 = Math.max(r.y0, clip.y0 + oy), y1 = Math.min(r.y1, clip.y1 + oy);
   if (x0 > x1 || y0 > y1) return;
   for (let k = 0; k < FLOW_PLANES; k++) {
     const src = result.planes[k], dst = planes[FLOW_FIRST + k];
-    for (let y = y0; y <= y1; y++) dst.set(src.subarray((y - r.y0) * w + (x0 - r.x0), (y - r.y0) * w + (x1 - r.x0) + 1), y * grid + x0);
+    for (let y = y0; y <= y1; y++) dst.set(src.subarray((y - r.y0) * w + (x0 - r.x0), (y - r.y0) * w + (x1 - r.x0) + 1), (y - oy) * grid + x0 - ox);
   }
 }
 
@@ -64,9 +65,22 @@ export function encodeResult(result) {
   if (!result) return undefined;
   return {rect: {...result.rect}, colors: result.colors, hash: result.hash, settings: result.settings, stats: result.stats, planes: result.planes.map(p => toBase64(runs(p)))};
 }
+function savedLayout(saved, grid, allowChunks = false) {
+  const r = saved?.rect, planes = saved?.planes, refs = saved?.planeChunks;
+  const inline = Array.isArray(planes) && planes.length === FLOW_PLANES && Array.from(planes).every(p => typeof p === 'string');
+  const chunked = allowChunks && Array.isArray(refs) && refs.length === FLOW_PLANES && Array.from(refs).every(keys => Array.isArray(keys) && Array.from(keys).every(key => typeof key === 'string'));
+  if (!r || ![r.x0, r.y0, r.x1, r.y1].every(Number.isInteger) || r.x0 < 0 || r.y0 < 0 || r.x1 >= grid || r.y1 >= grid || r.x1 < r.x0 || r.y1 < r.y0 || (!inline && !chunked)) throw new Error('The saved flow bake is not valid.');
+  return {rect: r, inline};
+}
+// Preflight before decoding or hydrating a server document: all five output
+// planes remain live, plus one inline decoder's strings/bytes or an 8MiB
+// chunk-transfer allowance. This does not allocate decoded plane buffers.
+export function savedResultBytes(saved, grid) {
+  const {rect: r, inline} = savedLayout(saved, grid, true);
+  return FLOW_PLANES * (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1) + (inline ? 3 * Math.max(...saved.planes.map(p => p.length)) : 8 * 1048576);
+}
 export function decodeResult(saved, grid) {
-  const r = saved?.rect;
-  if (!r || ![r.x0, r.y0, r.x1, r.y1].every(Number.isInteger) || r.x0 < 0 || r.y0 < 0 || r.x1 >= grid || r.y1 >= grid || r.x1 < r.x0 || r.y1 < r.y0 || !Array.isArray(saved.planes) || saved.planes.length !== FLOW_PLANES) throw new Error('The saved flow bake is not valid.');
+  const {rect: r} = savedLayout(saved, grid);
   const length = (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1);
   const colors = Array.isArray(saved.colors) ? saved.colors.slice(0, 3).map(c => [0, 1, 2].map(i => Math.max(0, Math.min(1, Number(c?.[i]) || 0)))) : [];
   while (colors.length < 3) colors.push([0, 0, 0]);
@@ -85,6 +99,24 @@ const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).
 const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
 const validHex = h => typeof h === 'string' && /^#[0-9a-f]{6}$/i.test(h);
 
+// Bound the actual allocations in sculpt-flow.js, including temporaries its
+// stats omit. 219 bytes/coarse cell covers all typed allocations even if none
+// have been collected: water/depth/wish 17, bed blur 24, face flux 8,
+// pressure 28, speeds 4, advection 36, neighbours 16, source fields 12,
+// transport 24 and five bank extensions 50. The extra face rows/columns are
+// separate; the full rect needs four bytes of input and five output planes.
+// Each extension's fresh-cell list gets two eight-byte slots/cell;
+// path copies/segments and per-node objects have a conservative JS allowance.
+function workerReservation(rect, settings, rivers, sources) {
+  const w = rect.x1 - rect.x0 + 1, h = rect.y1 - rect.y0 + 1, cells = settings.cells ?? 45000;
+  if (![w, h].every(n => Number.isSafeInteger(n) && n > 0) || !Number.isFinite(cells) || cells <= 0) throw new Error('The flow region or solver grid is not valid.');
+  const area = w * h, f = Math.max(1, Math.ceil(Math.sqrt(area / cells))), cw = Math.ceil(w / f), ch = Math.ceil(h / f), n = cw * ch;
+  const paths = [...rivers, ...sources], points = paths.reduce((sum, p) => sum + p.pts.length, 0);
+  const bytes = area * 9 + n * (219 + 16) + 4 * (cw + ch) + points * 256 + (paths.length + 1) * 1024;
+  if (!Number.isSafeInteger(bytes)) throw new Error('The flow region is too large to bake.');
+  return bytes;
+}
+
 // Up to three sediments: each distinct source colour takes the next slot; a fourth
 // colour joins the nearest of the three (documented in NOTES: more than three is not carried).
 export function assignSlots(sources) {
@@ -102,10 +134,15 @@ export function assignSlots(sources) {
   return {slots, colors: [0, 1, 2].map(i => colors[i] ? rgb(colors[i]) : [0, 0, 0])};
 }
 
+// Map hooks: readBefore(rect, nodeIndex) returns an owned compact Float32Array
+// before that node (-1 means the full graph); revision invalidates its cache.
+// reserve checks additional bytes before allocation. The retained height cache
+// is exposed by buffers(), and active worker memory by stats().inflightBytes.
 export function mountFlow(host) {
   const $ = host.$;
   let settings = {...BAKE_DEFAULTS}, auto = false, show = false, colour = '#7a3038';
   let worker = null, job = 0, running = null, stale = false, idleTimer = 0, checkTimer = 0, lastText = '';
+  let inputCache = null, inputError = '';
 
   const nodeList = () => host.nodes();
   const bakeIndex = () => { const i = nodeList().findIndex(n => n.kind === 'flowbake'); return i; };
@@ -122,32 +159,54 @@ export function mountFlow(host) {
       const b = host.nodeBounds(n); box = box ? {x0: Math.min(box.x0, b.x0), y0: Math.min(box.y0, b.y0), x1: Math.max(box.x1, b.x1), y1: Math.max(box.y1, b.y1)} : b;
       (n.kind === 'river' ? rivers : src).push(n);
     }
-    if (!box) return null;
+    if (!box) { inputCache = null; return null; }
     const m = Math.ceil(MARGIN_PX / spacing);
     const rect = {x0: Math.max(0, box.x0 - m), y0: Math.max(0, box.y0 - m), x1: Math.min(grid - 1, box.x1 + m), y1: Math.min(grid - 1, box.y1 + m)};
     const {slots, colors} = assignSlots(src.map(n => ({color: n.params?.color})));
     const pts = n => n.points.map(p => [p.x, p.y]);
-    const i = bakeIndex(), before = i >= 0 && host.prefix()[i] ? host.prefix()[i].h : host.heights();
-    return {rect, colors, before,
+    const i = bakeIndex(), inp = {rect, colors,
       rivers: rivers.map(n => ({pts: pts(n), radius: n.params.radius, amount: n.params.amount / 100})),
       sources: src.map((n, k) => ({pts: pts(n), radius: n.params.radius, amount: n.params.amount / 100, slot: slots[k], color: n.params.color}))};
+    if (!host.readBefore) return {...inp, before: i >= 0 && host.prefix()[i] ? host.prefix()[i].h : host.heights()};
+    // Map hosts return only this exact rect from the earlier graph prefix.
+    // A progress refresh keeps it; a changed revision, prefix or rect does not.
+    const key = host.revision ? JSON.stringify([host.revision(), i, grid, rect]) : null;
+    if (!inputCache || key === null || key !== inputCache.key) {
+      inputCache = null;
+      const length = (rect.x1 - rect.x0 + 1) * (rect.y1 - rect.y0 + 1);
+      // Admission happens before the compact read, not after a world-sized
+      // allocation. An already-running worker is counted by stats instead.
+      host.reserve?.(length * 4 + (running ? 0 : workerReservation(rect, settings, inp.rivers, inp.sources)));
+      const before = host.readBefore(rect, i);
+      if (!(before instanceof Float32Array) || before.length !== length || before.byteLength !== before.buffer.byteLength) throw new Error('The regional flow input must be a compact height array over the complete bake region.');
+      inputCache = {key, before};
+    }
+    return {...inp, before: inputCache.before, compact: true};
   }
   function hashOf(inp) {
     let x = 2166136261;
     const text = JSON.stringify([inp.rect, inp.rivers, inp.sources, settings, host.sea()], (k, v) => typeof v === 'number' ? Math.round(v * 100) / 100 : v);
+    if (inp.compact && inputCache?.before === inp.before && inputCache.hashText === text) return inputCache.hash;
     for (let i = 0; i < text.length; i++) x = Math.imul(x ^ text.charCodeAt(i), 16777619);
     const grid = host.grid(), r = inp.rect;
-    for (let y = r.y0; y <= r.y1; y++) for (let k = y * grid + r.x0, end = y * grid + r.x1; k <= end; k++) x = Math.imul(x ^ (Math.round(inp.before[k] * 8) | 0), 16777619);
-    return (x >>> 0).toString(16) + ':' + (r.x1 - r.x0 + 1) + 'x' + (r.y1 - r.y0 + 1);
+    const width = r.x1 - r.x0 + 1;
+    for (let y = r.y0; y <= r.y1; y++) for (let k = inp.compact ? (y - r.y0) * width : y * grid + r.x0, end = k + width - 1; k <= end; k++) x = Math.imul(x ^ (Math.round(inp.before[k] * 8) | 0), 16777619);
+    const hash = (x >>> 0).toString(16) + ':' + width + 'x' + (r.y1 - r.y0 + 1);
+    if (inp.compact && inputCache?.before === inp.before) { inputCache.hashText = text; inputCache.hash = hash; }
+    return hash;
   }
 
   const text = (id, value) => { const el = $(id); if (el && el.textContent !== value) el.textContent = value; };
   function refresh() {
-    const inp = inputs(), node = bakeNode(), result = node?.result;
+    let inp;
+    try { inp = inputs(); inputError = ''; }
+    catch (err) { const message = String(err?.message || err); if (message !== inputError) host.error('The flow bake is unavailable: ' + message); inputError = message; }
+    const node = bakeNode(), result = node?.result;
     const was = stale;
     stale = Boolean(result && (!inp || hashOf(inp) !== result.hash));
     let state;
     if (running) state = `Baking… ${Math.round(running.progress * 100)}% (${running.phase})`;
+    else if (inputError) state = 'Flow bake unavailable: ' + inputError;
     else if (!inp && !result) state = 'No river or source yet. Draw a river along the current, a source where sediment enters, then Bake.';
     else if (!result) state = 'Not baked yet.';
     else if (stale) state = 'Stale: the inputs changed since the bake. The old result stays on screen until you bake.';
@@ -173,26 +232,38 @@ export function mountFlow(host) {
       if (d.cancelled) { running = null; refresh(); host.updateControls(); return; }
       if (!d.done) { running.progress = d.progress; running.phase = d.phase; refresh(); return; }
       const done = running; running = null;
-      host.place({rect: done.rect, planes: d.planes.map(p => new Int8Array(p.buffer ?? p)), colors: done.colors, hash: done.hash, settings: {...done.settings}, stats: d.stats});
+      try { host.place({rect: done.rect, planes: d.planes.map(p => new Int8Array(p.buffer ?? p)), colors: done.colors, hash: done.hash, settings: {...done.settings}, stats: d.stats}); }
+      catch (err) { fail(String(err?.message || err)); return; }
       host.status(`Flow baked in ${(d.stats.ms / 1000).toFixed(2)} s.`);
       refresh(); host.updateControls();
     };
-    w.onerror = event => fail(event.message || 'worker unavailable');
+    w.onerror = event => { if (w === worker) fail(event.message || 'worker unavailable'); };
   }
   function fail(message) { running = null; worker?.terminate(); worker = null; host.error('The flow bake failed: ' + message); refresh(); host.updateControls(); }
+  // Replacing a graph invalidates even a completion already queued by the
+  // old worker. The caller refreshes only after its new graph is ready.
+  function reset() {
+    worker?.terminate(); worker = running = inputCache = null; job++;
+    clearTimeout(idleTimer); clearTimeout(checkTimer); idleTimer = checkTimer = 0;
+    stale = false; inputError = '';
+  }
 
   // Start a bake of the current inputs; resolves when it is placed (or fails).
   function bake(overrides) {
     if (running) { cancel(); return; }
     if (overrides) { settings = {...settings, ...overrides}; syncSliders(); }
-    const inp = inputs(); if (!inp) return;
-    if (!worker) startWorker();
-    const id = ++job, r = inp.rect, w = r.x1 - r.x0 + 1, grid = host.grid();
-    const region = new Float32Array(w * (r.y1 - r.y0 + 1));
-    for (let y = r.y0; y <= r.y1; y++) region.set(inp.before.subarray(y * grid + r.x0, y * grid + r.x1 + 1), (y - r.y0) * w);
-    running = {job: id, rect: r, colors: inp.colors, hash: hashOf(inp), settings: {...settings}, progress: 0, phase: 'setup'};
-    worker.postMessage({job: id, grid, size: host.size(), seaLevel: host.sea(), rect: r, heights: region, rivers: inp.rivers, sources: inp.sources, settings: {...settings}}, [region.buffer]);
-    refresh(); host.updateControls();
+    try {
+      const inp = inputs(); if (!inp) return;
+      const id = ++job, r = inp.rect, w = r.x1 - r.x0 + 1, grid = host.grid();
+      const inflightBytes = workerReservation(r, settings, inp.rivers, inp.sources);
+      host.reserve?.(inflightBytes);
+      const region = inp.compact ? inp.before.slice() : new Float32Array(w * (r.y1 - r.y0 + 1));
+      if (!inp.compact) for (let y = r.y0; y <= r.y1; y++) region.set(inp.before.subarray(y * grid + r.x0, y * grid + r.x1 + 1), (y - r.y0) * w);
+      running = {job: id, rect: r, colors: inp.colors, hash: hashOf(inp), settings: {...settings}, progress: 0, phase: 'setup', inflightBytes};
+      if (!worker) startWorker();
+      worker.postMessage({job: id, grid, size: host.size(), seaLevel: host.sea(), rect: r, heights: region, rivers: inp.rivers, sources: inp.sources, settings: {...settings}}, [region.buffer]);
+      refresh(); host.updateControls();
+    } catch (err) { fail(String(err?.message || err)); }
   }
   function cancel() { if (!running) return; worker?.postMessage({cancel: true, job: running.job}); running.phase = 'cancelling'; refresh(); }
 
@@ -276,12 +347,18 @@ export function mountFlow(host) {
       }
       ink.globalAlpha = 1;
     });
-    const planes = host.planes();
-    if (show && planes) {
+    const planes = host.flowAt ? null : host.planes?.();
+    if (show && (planes || host.flowAt)) {
       const grid = host.grid(), spacing = host.spacing();
+      // Keep the absolute 28px lattice while looking only beyond this view's
+      // projected-height apron. Map hosts sample the stored result directly.
+      const view = host.view?.(), start = v => Math.max(12, 12 + Math.ceil((v - 160 - 12) / 28) * 28);
+      const x0 = view ? start(view.x) : 12, y0 = view ? start(view.y) : 12;
+      const x1 = view ? Math.min(host.size(), view.x + view.width + 160) : host.size(), y1 = view ? Math.min(host.size(), view.y + view.height + 160) : host.size();
       ink.strokeStyle = '#ffffffcc'; ink.fillStyle = '#ffe36b'; ink.lineWidth = 1.5;
-      for (let wy = 12; wy < host.size(); wy += 28) for (let wx = 12; wx < host.size(); wx += 28) {
-        const k = Math.round(wy / spacing) * grid + Math.round(wx / spacing), fx = planes[FLOW_FIRST][k] / 127, fy = planes[FLOW_FIRST + 1][k] / 127, m = Math.hypot(fx, fy);
+      for (let wy = y0; wy < y1; wy += 28) for (let wx = x0; wx < x1; wx += 28) {
+        const k = Math.round(wy / spacing) * grid + Math.round(wx / spacing), flow = host.flowAt?.(wx, wy);
+        const fx = (host.flowAt ? (flow?.[0] ?? 0) : planes[FLOW_FIRST][k]) / 127, fy = (host.flowAt ? (flow?.[1] ?? 0) : planes[FLOW_FIRST + 1][k]) / 127, m = Math.hypot(fx, fy);
         if (m < .06) continue;
         const speed = m * m, len = 8 + 22 * speed, y0 = wy - lift(wx, wy), tx = fx / m, ty = fy / m;
         ink.beginPath(); ink.moveTo(wx, y0); ink.lineTo(wx + tx * len, y0 + ty * len); ink.stroke(); ink.beginPath(); ink.arc(wx, y0, 1.8, 0, Math.PI * 2); ink.fill();
@@ -290,16 +367,19 @@ export function mountFlow(host) {
   }
 
   return {
-    changed, busy: () => Boolean(running), stale: () => stale, bake, cancel, draw, remember, refresh,
+    changed, busy: () => Boolean(running), stale: () => stale, bake, cancel, reset, draw, remember, refresh,
     colour: () => colour,
     setColour: c => { if (validHex(c)) { colour = c.toLowerCase(); $('flow-colour').value = colour; $('flow-hex').value = colour; } },
     serialize: () => ({settings: {...settings}, auto}),
     load: saved => {
+      reset();
       settings = {...BAKE_DEFAULTS};
       for (const k of Object.keys(BAKE_DEFAULTS)) if (Number.isFinite(saved?.settings?.[k])) settings[k] = saved.settings[k];
       auto = Boolean(saved?.auto); $('flow-auto').checked = auto; syncSliders(); refresh();
     },
     rebuildColours: buildColours,
+    buffers: () => inputCache ? [inputCache.before.buffer] : [],
+    stats: () => ({inflightBytes: running?.inflightBytes || 0, cacheBytes: inputCache?.before.byteLength || 0}),
     debug: () => ({stale, running: Boolean(running), settings: {...settings}, auto, state: lastText})
   };
 }

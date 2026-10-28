@@ -1,14 +1,17 @@
-// Card D phase 1: rectangular map bounds over the prototype's square working
+export {mountMapCanvas} from './sculpt-canvas.js';
+
+// Card D: rectangular map bounds over the prototype's square working
 // field. The extra south rows supply projected art, including the void strips.
 export function configureMap(config, query) {
   if (!query.has('mapX') && !query.has('mapY')) return null;
   const unitsX=Number(query.get('mapX')),unitsY=Number(query.get('mapY')),sea=Number(query.get('sea')??config.defaultSeaLevel??64);
-  if (![unitsX,unitsY].every(n => Number.isInteger(n) && n>=1 && n<=4) || !Number.isInteger(sea) || sea<0 || sea>255) throw new Error('Map size must be 1–4 units on each side; sea level must be 0–255.');
+  if (![unitsX,unitsY].every(n => Number.isInteger(n) && n>=1 && n<=40) || !Number.isInteger(sea) || sea<0 || sea>255) throw new Error('Map size must be 1–40 units on each side; sea level must be 0–255.');
   const widthCells=unitsX*32+2,heightCells=unitsY*32+8,width=widthCells*16,height=heightCells*16;
   // DESIGN_MAP_GENERATOR geometry; 160 extra pixels cover base/2 even at
-  // sea 255. Phase 3 replaces this bounded square backing with chunk fields.
+  // sea 255. Fields and GPU bakes are regional; this is the canonical lattice.
   config.map={unitsX,unitsY,widthCells,heightCells,width,height,playRight:unitsX*512,playBottom:unitsY*512};
   config.size=Math.max(width,height)+160; config.grid=config.size/2;
+  config.worldSize=config.size; config.worldGrid=config.grid;
   config.baseHeight+=sea-config.seaLevel; config.seaLevel=sea;
   return config.map;
 }
