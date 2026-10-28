@@ -45,6 +45,8 @@ KNOB_DEFAULTS = dict(
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1, crystalSeam=0,
     # Ice (card E5): shade keeps its blue (0 grey, as every world was).
     shadeBlue=0,
+    # Ice frost band (card E5): its cells skip the wet-band darkening (0: every world as before).
+    frostWet=0, frostNeedles=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, fingerBlunt=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
@@ -198,13 +200,14 @@ WORLD_KNOBS = {
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
                 crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
-                # white frost with straight needles in parallel runs, ~180 px wide
-                # on land and ~100 px out into the shallows, thinning offshore
-                # (windows ice-1 and Ice Scream). Plate height 4 keeps the frost over the
-                # water level with the bank behind it (14 made a dark wall there; 3 or
-                # less greys the frost through the 13-unit wet band). Plate material 0
-                # keeps B1's floes.
-                shorePlates=1, plateMaterial=2, plateWaterPx=100, plateLandPx=180, plateSize=44, plateGap=5, plateHeight=4),
+                # mostly plain white ice with sparse fine straight lines (windows ice-1
+                # and Ice Scream), broken by blue gaps that grow more frequent toward
+                # deep water: reach 140 px into the water and 220 px inland, needles
+                # every 7 px in about half the patches, thinning offshore. Plate
+                # height 4 keeps the frost over the water level with the bank behind it
+                # (14 made a dark wall there); frostWet 1 keeps the band white instead of
+                # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
+                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=7, plateHeight=4, frostWet=1),
 }
 
 

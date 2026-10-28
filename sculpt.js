@@ -136,6 +136,7 @@ const SHAPE_FIELDS=[
   ['plateGap','plate-gap','Plate gap (px)',['deep','shallow','offset'],0,160,5,10,'Open gap between adjacent plates.'],
   ['plateHeight','plate-height','Plate height above sea',['deep','shallow','offset'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height. Rock slabs: how far the land slabs stand above their seams.'],
   ['plateMaterial','plate-material','Plate material (0 ice floes, 1 rock slabs, 2 frost crystals)',['deep','shallow','offset'],0,2,1,1,'0: white and blue floes with open gaps (Ice Scream). 2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
+  ['frostNeedles','frost-needles','Frost needle share (plate material 2)',['deep','shallow','offset'],0,100,5,100,'Frost crystals: the share of patches that carry needles at all; the rest of the band is plain ice. Needles in a patch are also dropped at random, so lines are sparse, fine and of varied length.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound, 2 berg)',['crystal'],0,2,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world). Berg: a rough ice block with an uneven outline, broken corners and rough faces that take the world\'s own slope relief (Ice); Sides, Width, Height and Variation apply.'],
   ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbours.'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
@@ -268,8 +269,9 @@ function updateControls() {
   const net=tool==='fissure' && Number($('fissure-network').value)>=.5;
   const modeOff=key => tool==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
   // Berg options show only for the berg form.
+  const frostOff=key => key==='frostNeedles' && Number($('plate-material').value)<2;
   const bergOff=key => tool==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
-  const gated=key => modeOff(key) || bergOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
+  const gated=key => modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   $('section-preview-control').hidden=!SECTION_KINDS.includes(tool) || !parametric;
   if (!$('section-preview-control').hidden) drawSection();
@@ -413,7 +415,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','fingerBlunt','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -1322,6 +1324,7 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
     if (!c) {
       const k=Math.floor((hash(x,y,seed^0x5d1)*.5+.5)*3)%3;
       c={x:(x+.5+hash(x,y,seed^0x481)*.4)*L,y:(y+.5+hash(x,y,seed^0x287)*.4)*L,keep:hash(x,y,seed^0x721)*.5+.5,
+         needles:hash(x,y,seed^0x9c5)*.5+.5<s.frostNeedles,
          angle:turn+Math.PI/2+k*Math.PI/3+hash(x,y,seed^0x3c9)*.12,gap:spacing0*(.8+.5*(hash(x,y,seed^0x6b7)*.5+.5)),phase:hash(x,y,seed^0x1f3)*.5+.5,id:(x*73856093)^(y*19349663)};
       patches.set(key,c);
     }
@@ -1335,6 +1338,8 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
   for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
     const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
     if (!width || d>=width) continue;
+    // Every cell of the band carries a trace of protection: the shader's frostWet reads it to keep the band white.
+    protection[i]=Math.max(protection[i],.04);
     const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,d1=Infinity;
     for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) { const c=patch(u,v),q=(lx-c.x)**2+(ly-c.y)**2; if (q<d1) { d1=q;best=c; } }
@@ -1344,12 +1349,12 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
     const index=Math.round(across),off=Math.abs(across-index)*best.gap;
     const length=best.gap*(1.5+4*(hash(index,best.id,seed^0x2e7)*.5+.5)),stretch=Math.floor(along/length+hash(index,best.id,seed^0x4a9)*2);
     const here=hash(index,stretch^best.id,seed^0x91d)*.5+.5,line=hash(index,best.id,seed^0x63d)*.5+.5;
-    let strip=best.keep>support || line<.3?0:smooth(1.5,.5,off)*smooth(.15,.5,here-(1-support)*.35);
+    let strip=!best.needles || best.keep>support || line<.45?0:smooth(1.5,.5,off)*smooth(.15,.5,here-(1-support)*.35);
     if (wet) {
       // Offshore the frost is also a feathered mass of slivers stretched along the patch's needles
       // (retail's white fingers in the shallows), whose reach falls with the support.
       const across2=(lx*ca+ly*sa)/scale,field=valueNoise(along/64,across2/20,seed^0x1a7)*.45+valueNoise(along/26,across2/6,seed^0x2b1)*.3+valueNoise(along/10,across2/3,seed^0x3d7)*.18+.5;
-      strip=Math.max(strip,smooth(0,.12,support*.9-field));
+      strip=Math.max(strip,smooth(0,.12,Math.pow(support,1.25)*.9-field));
       // Ice strips over the water; the bed keeps its own height between them.
       if (strip<=.05) continue;
       const top=sea+s.plateHeight*(.6+.4*(hash(index,best.id,seed^0x7b3)*.5+.5));
@@ -1364,7 +1369,14 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
         if (q<s1) { s2=s1;sn=sb;s1=q;sb=c; } else if (q<s2) { s2=q;sn=c; }
       }
       const edge=(s2-s1)/(2*Math.max(1,Math.hypot(sb.x-sn.x,sb.y-sn.y)))*scale+valueNoise(lx/9,ly/9,seed^0x317)*1.2;
-      const seam=Math.max(sb.keep,sn.keep)>1-support*.9?smooth(1.6,.3,edge):0,lift=strip*Math.min(4,s.plateHeight*1.2)-seam*2.5;
+      const seam=Math.max(sb.keep,sn.keep)>1-support*.9?smooth(1.6,.3,edge):0,lift=strip*Math.min(2.5,s.plateHeight*.7)-seam*2.5;
+      // Melt pockets: small blue gaps in the white, as retail's band has, fewer with distance inland.
+      const holeShare=.17*smooth(.65,0,d/width),hole=holeShare>0?smooth(0,.1,valueNoise(lx/11,ly/11,seed^0x4e1)*.5+valueNoise(lx/4.5,ly/4.5,seed^0x5f3)*.22+.5-(1-holeShare)):0;
+      if (hole>.02) {
+        heights[i]=clamp(raw[i]+(Math.min(raw[i],sea-3)-raw[i])*hole,MIN_HEIGHT,MAX_HEIGHT);
+        protection[i]=Math.max(protection[i],hole); routes[i]=Math.max(routes[i],hole); cover[i]=Math.min(cover[i],-hole);
+        continue;
+      }
       if (!lift) continue;
       heights[i]=clamp(raw[i]+lift,MIN_HEIGHT,MAX_HEIGHT);
       const keep=Math.max(strip,seam); protection[i]=Math.max(protection[i],keep); routes[i]=Math.max(routes[i],keep); cover[i]=Math.min(cover[i],-keep);
@@ -1711,7 +1723,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','fingerBlunt'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }

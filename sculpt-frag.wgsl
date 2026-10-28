@@ -320,6 +320,11 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
     return mix(color, slab, submerged);
 }
 
+// Ice frost band (card E5): the frost stroke marks every cell of its band with a
+// little protection, and where frostWet is 1 those cells keep the white of the
+// level snow instead of the grey the wet band gives the bank near the sea.
+fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * smoothstep(0.02, 0.04, route)); }
+
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -608,7 +613,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // are sand all over, no rock). The automatic beach does not.
     let sandBar = u.sandCrown * smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0));
     exposed *= 1.0 - sandBar;
-    let nearWater = 1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h);
+    let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
         // Beach sand: within reach of the water (baked), or failing that a
