@@ -42,7 +42,7 @@ KNOB_DEFAULTS = dict(
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
-    fingers=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    fingers=0, fingerBlunt=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
@@ -118,7 +118,7 @@ WORLD_KNOBS = {
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=5, bandLine=1,
-                 northFace=.7, fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
+                 northFace=.7, fingers=1, fingerBlunt=1, worms=0, shoreEdge=1, slopeTexture=0,
                  # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
                  bankPx=60,
                  # Line cores are near black (luma 15-27 in 55-60 ground) and
