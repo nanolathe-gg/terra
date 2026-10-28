@@ -92,11 +92,11 @@ show whether the look is right before heights get involved. The same
 bake later gives Lava flow streaks, Green and Archipelago silt, and
 Desert dry washes.
 
-## Questions for the owner
+## Decisions (owner, 2026-10-28)
 
-1. **Sediment colours:** a free colour picker, or a range of hues per
-   world? The export quantises to the palette either way.
-2. **Heights:** should stage 1 stay colour-only (recommended), with bars
-   and erosion as stages 2 and 3?
-3. **When to bake:** an explicit Bake button with a stale badge
-   (recommended), with idle auto-bake as an option?
+1. **Sediment colours** use a free colour picker. It suggests colours (for
+   example from the world's palette) and remembers colours used before.
+2. **Stages:** stage 1 changes colour only. Bars and erosion come in
+   stages 2 and 3.
+3. **Baking:** an explicit Bake button with a stale badge. Baking when
+   the editor is idle is an option.

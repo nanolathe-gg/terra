@@ -62,6 +62,7 @@ branches and the projection fix below, so re-render before judging.
    | E6 | 8846 | 9646 | `$R/agent-E6/out` | `--worlds moon,ice,lava` |
    | E7 | 8847 | 9647 | `$R/agent-E7/out` | `--worlds crystal` |
    | E8 | 8848 | 9648 | `$R/agent-E8/out` | `--worlds desert` |
+   | F1 | 8849 | 9649 | `$R/agent-F1/out` | `--worlds zhon` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -1332,6 +1333,42 @@ lines. Do not tune `crackDark` to fix this.
 
 - The variation at the base is shape: outline and height. Rule 6 applies.
 - **Server and guard:** port 8848, CDP 9648, guard `--worlds desert`.
+
+### F1. Flow bake, stage 1: current and colour (after E1 merges)
+
+The spec is `FLOW_BAKE.md`: stage 1 and the owner's decisions. This
+stage changes no heights.
+
+- **River tool.** Strokes set the current's direction, strength and
+  width.
+- **Source tool.** Dabs set a sediment colour and amount.
+  - The colour comes from a free picker that suggests colours (for
+    example from the world's palette).
+  - It remembers colours used before, with the world settings.
+- **Bake.**
+  - A Bake button runs the bake in a worker over the region of its
+    inputs plus a margin, with progress.
+  - The result is cached under a hash of what it reads. A stale badge
+    appears when an edit changes that hash, and the old result stays on
+    screen until the next bake.
+  - An option bakes automatically when the editor is idle.
+- **Outputs and replay.**
+  - Flow direction and speed, and the concentration of up to three
+    sediments, are stored as extra layers of the existing mask texture
+    array. Add no new binding: the editor is at 16 sampled textures.
+  - Save and load keep them.
+  - Replay reads the planes: `sculptDebug.replayAll()` mismatch 0 with
+    a bake present.
+- **Shading.**
+  - Water is tinted by sediment concentration.
+  - Streaks follow the flow, scaled by speed.
+  - Banks are tinted where sediment reaches the shore.
+- **Judge on zhon-1..3:** maroon sediment from upstream mixing into teal
+  channels, streaks along the current, and red-tinted banks. Add river
+  strokes and sources to the three Zhon scenes in their own commit (rule
+  6: the scenes follow the retail flow).
+- **Server and guard:** port 8849, CDP 9649, guard `--worlds zhon`.
+  Scenes without a bake must match exactly.
 
 ### Zhon: not a card yet
 
