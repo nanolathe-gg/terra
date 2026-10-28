@@ -2889,6 +2889,8 @@ const KNOBS = [
     ['bedFlow','Beds broken and shifted by joints (0 continuous)',0,1,.05,1],['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullySpacing','Gully spacing (px)',12,120,2,40],['gullyWidth','Gully width (px)',4,40,1,14],['gullyAngle','Gully lean from north-south (deg)',-60,60,1,-20],
     ['gullyRun','Gully length (px)',30,400,10,160],['gullyGaps','Gully gaps',0,1,.05,.3],['gullyShade','Gully floor shade (occlusion)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
+  ['Rock face: scratches', [['scratchDepth','Scratch depth (height; 0 none)',0,4,.1,0],['scratchSpacing','Scratch spacing (px)',3,40,1,9],['scratchAngle','Scratch lean from north-south (deg)',-60,60,1,-20],['scratchRun','Scratch length (px)',20,300,5,90],['scratchGaps','Scratch gaps',0,1,.05,.4]]],
+  ['Rock face: facets', [['facetTilt','Facet tilt (height per px; 0 none)',0,2,.05,0],['facetSize','Facet height (px)',2,24,.5,6],['facetStretch','Facet width (x height)',.25,4,.05,1.5],['facetStep','Step between facets (height)',0,6,.1,1],['facetSeam','Facet crease darkness',0,2,.05,0],['facetSkew','Facet tilt in y (share of its tilt in x)',0,1,.05,1],['facetCoarse','Coarser second level of facets (share)',0,1.5,.05,0]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds

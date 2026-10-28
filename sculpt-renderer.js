@@ -828,6 +828,18 @@ export class TerrainRenderer {
     set('uBedFlow', number('bedFlow', 1));
     set('uBedBend', number('bedBend', 0));
     set('uBedPunch', number('bedPunch', 0));
+    set('uScratchDepth', number('scratchDepth', 0));
+    set('uScratchSpacing', number('scratchSpacing', 9));
+    set('uScratchAngle', number('scratchAngle', -20));
+    set('uScratchRun', number('scratchRun', 90));
+    set('uScratchGaps', number('scratchGaps', 0.4));
+    set('uFacetTilt', number('facetTilt', 0));
+    set('uFacetSize', number('facetSize', 6));
+    set('uFacetStretch', number('facetStretch', 1.5));
+    set('uFacetStep', number('facetStep', 1));
+    set('uFacetSeam', number('facetSeam', 0));
+    set('uFacetSkew', number('facetSkew', 1));
+    set('uFacetCoarse', number('facetCoarse', 0));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});

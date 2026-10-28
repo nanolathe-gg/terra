@@ -99,7 +99,9 @@ for _m in SHINE_MATERIALS:
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(faceRock=0, rockMoss=1,
                      gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
-                     bedFlow=1, bedBend=0, bedPunch=0)
+                     bedFlow=1, bedBend=0, bedPunch=0,
+                     scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
+                     facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -137,10 +139,12 @@ WORLD_KNOBS = {
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
                   undulation=0, plainRelief=0,
-                  # E9 (Green rock faces): gullies and ribs, with beds that run on across them.
+                  # E9 (Green rock faces): gullies and ribs, beds that run on across them, scratches and angular facets.
                   faceRock=1, rockMoss=.15,
                   gullyDepth=14, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=2, ribTilt=.35,
-                  bedFlow=0, bedBend=2.5, bedPunch=1,),
+                  bedFlow=0, bedBend=2.5, bedPunch=1,
+                  scratchDepth=3.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
+                  facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail

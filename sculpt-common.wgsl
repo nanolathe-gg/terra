@@ -260,6 +260,18 @@ struct Uniforms {
     bedFlow: f32,         // how far joints break and shift the beds (1: as before; 0: continuous beds)
     bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
+    scratchDepth: f32,    // weathering scratches: depth, height units (0: none)
+    scratchSpacing: f32,  // distance between scratches, world px
+    scratchAngle: f32,    // scratch lean from the screen's north-south, degrees
+    scratchRun: f32,      // typical length of an unbroken scratch, world px
+    scratchGaps: f32,     // share of each scratch's length that is missing
+    facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
+    facetSize: f32,       // facet height, world px
+    facetStretch: f32,    // facet width as a multiple of its height
+    facetStep: f32,       // step between neighbouring facets, height units
+    facetSeam: f32,       // how dark the creases between facets are (0: lit like the facets)
+    facetSkew: f32,       // facets' tilt in y as a share of their tilt in x (the picture squeezes steep y tilts: 1 as before, lower keeps them readable)
+    facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
