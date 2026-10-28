@@ -645,6 +645,19 @@ The census did not establish channels with bars or braids; leave them out.
 ### C5. Painted masks and world variants
 
 **Stages** (stop for review after each):
+*Stages 1-2 are done (merged 2026-10-28, 4b7abd719 and 915f9ad6d):*
+- mask planes for rock, snow, wet, moss and scatter;
+- style planes for relief, cracks, banding and face rock;
+- a Paint masks brush and per-shape options;
+- the draw is back at 16 textures;
+- green-2's face is now a wide dark rock band.
+
+*Still open:*
+- masked edges are hard cut-outs (being fixed);
+- a region-replay bug with craterlets (being fixed);
+- face-rock style does nothing on Red;
+- moss in Red, Desert and Lava looks like rubble.
+
 Green-2 needs a grey rock face (C1 stage 2 finding). Use it as a stage 1
 or stage 2 demo.
 
