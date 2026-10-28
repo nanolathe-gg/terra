@@ -1,5 +1,12 @@
 # Terrain editor prototype
 
+**Card D phase 3 is stopped at its exactness gate.** The branch contains a
+partial chunked editor for review; it is not accepted for landing. The second
+render candidate differs from the whole bake at one Ice frost pixel (maximum
+channel difference 24). The backlog requires stopping after two failed rounds.
+The existing 1024px study path remains separate. Do not treat the large-map
+client as verified: its full performance and budget-equivalence checks are unrun.
+
 Card D phases 1 and 2 add playable terrain, features, starts and OTA settings.
 Limits and later phases are in [BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
 
@@ -22,7 +29,7 @@ world's derived catalogue is refreshed once per server run from its configured
 content roots, even when private files already exist.
 
 Open <http://127.0.0.1:8840/sculpt>. **Playable map** creates a blank map
-canvas, with 1–4 units on each axis and a chosen sea level, initially the
+canvas. The accepted phase-1/2 scope is 1–4 units on each axis and a chosen sea level, initially the
 upper median TNT sea level of its retail world. Each unit is 512 playable
 pixels. A 4×4 map contains 130×136 cells, including the outer strips, and
 2080×2176 art pixels. Yellow outlines the playable rectangle; orange marks
@@ -68,7 +75,11 @@ The helper decodes and checks the TNT cells, feature anchors/fringe, tiles,
 minimap, OTA settings/starts and archive before publishing it.
 See [the export format contract](export/README.md).
 
-The bounded square working field retains full-resolution fields and export
-images in memory. Sparse fields, visible-chunk caching, maps above 4×4,
-streaming, budgets, cancellation and incremental server documents remain
-phase 3. Tile reuse policy remains phase 4. Neither phase is implemented.
+Full-size maps and chunked baking remain phase 3's unfinished acceptance
+work. The partial implementation on this branch adds regional fields and GPU resources, an LRU viewport compositor,
+streamed export, cancellation and incremental server documents. The default
+GPU/heap budgets are 512 MiB/1 GiB; the intended low GPU budget is 128 MiB.
+The field closure is still conservative and can exceed the heap budget for
+long connected strokes. Exact global weathering remains available only on the
+bounded maps; larger maps explicitly require turning Weathering off to export.
+Tile reuse policy remains phase 4 and has not started.
