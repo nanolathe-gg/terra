@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -11,6 +13,51 @@ import (
 	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
 	"github.com/nanolathe-gg/nanolathe/vfs"
 )
+
+// Track omission separately from JSON null without changing the reusable
+// climate catalogue. A supplied settings object replaces all climate fields.
+type requestedSettings struct {
+	Value   climate
+	Present bool
+}
+
+func (s *requestedSettings) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return fmt.Errorf("settings must be a full climate object: %w", err)
+	}
+	for _, name := range []string{"minWind", "maxWind", "tidal", "solar", "gravity", "surfaceMetal", "mohoMetal", "lava"} {
+		value, present := fields[name]
+		if !present || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return fmt.Errorf("settings.%s is required and must not be null", name)
+		}
+	}
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&s.Value); err != nil {
+		return fmt.Errorf("settings: %w", err)
+	}
+	s.Present = true
+	return nil
+}
+
+type requestedStarts struct {
+	Values  []start
+	Present bool
+}
+
+func (s *requestedStarts) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return fmt.Errorf("starts must be an array, not null; omit it for the fixed pair")
+	}
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&s.Values); err != nil {
+		return fmt.Errorf("starts: %w", err)
+	}
+	s.Present = true
+	return nil
+}
 
 type featurePlacement struct {
 	Name string `json:"name"`
@@ -97,12 +144,12 @@ func validateSettings(c *climate) error {
 
 func mapStarts(req exportRequest) ([]start, error) {
 	pw, ph := req.UnitsX*512, req.UnitsY*512
-	if req.Starts == nil {
+	if !req.Starts.Present {
 		// Phase-1 callers keep the old fixed pair and its one-unit margins.
 		mx, mz := min(256, pw/4), min(256, ph/4)
 		return []start{{mx, mz}, {pw - mx, ph - mz}}, nil
 	}
-	starts := *req.Starts
+	starts := req.Starts.Values
 	if len(starts) < 1 || len(starts) > 10 {
 		return nil, fmt.Errorf("starts must contain 1..10 pixel positions")
 	}

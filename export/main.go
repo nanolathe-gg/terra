@@ -36,8 +36,8 @@ type exportRequest struct {
 	Heights     []int              `json:"heights"`
 	Chunks      []chunk            `json:"chunks"`
 	Features    []featurePlacement `json:"features"`
-	Starts      *[]start           `json:"starts"`
-	Settings    *climate           `json:"settings"`
+	Starts      requestedStarts    `json:"starts"`
+	Settings    requestedSettings  `json:"settings"`
 }
 
 type chunk struct {
@@ -180,11 +180,11 @@ func validateRequest(req exportRequest, catalog catalog) (worldInfo, error) {
 			return worldInfo{}, fmt.Errorf("corner height at cell (%d,%d) is %d, expected 0..255; clamp in the editor before export", i%w, i/w, height)
 		}
 	}
-	if err := validateSettings(req.Settings); err != nil {
-		return worldInfo{}, err
-	}
-	if req.Settings != nil {
-		world.Climate = req.Settings
+	if req.Settings.Present {
+		if err := validateSettings(&req.Settings.Value); err != nil {
+			return worldInfo{}, err
+		}
+		world.Climate = &req.Settings.Value
 	}
 	return world, nil
 }
