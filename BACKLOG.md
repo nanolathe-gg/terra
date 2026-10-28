@@ -1037,6 +1037,21 @@ compiler-drift test applies. The one planned exception is tile-reuse step
 - If this phase fails its exactness tests after two rounds, stop and
   report. The owner will reassign it.
 
+**Phases 1-2 done (merged 14777aa23 and ebb4cdb56).**
+- Export is full-detail: the classic shot matches the exported image
+  pixel for pixel. The in-game darkening was the engine's gamma 8, which
+  is a display setting, not the art.
+- Heights reach the shaders shifted by the sea level, so every shader
+  works at a sea level of 0.
+- Default sea levels per world: Green 75, Red 48, Archipelago 84, Lunar
+  1, Lava 23, Desert 0, Crystal 65, Ice 55.
+- Features, tree fills, deposits, starts and OTA settings are exported.
+- Map mode needs `$R/map-export` and `$R/bin/map-features`, built from
+  `tools/map-editor/export` and `/features`. Without them the page says
+  only "Could not read map defaults from the installed content".
+- With E1-E5 merged, map mode renders lava-1, ice-1 and green-3 like
+  their windows, with replay mismatch 0.
+
 ### Phase 4: tile budget
 
 Each unique tile costs 1 KB, and retail maps reuse tiles heavily: base
@@ -1171,6 +1186,27 @@ adds its own specular term.
 - **Server and guard:** port 8841, CDP 9641, guard
   `--worlds green,archipelago,red`. Leave Green's rock faces and cracks
   alone; they belong to E3.
+
+**Done (merged a066f2d76).**
+- Shallow water is the lit bed under a tint, with a hard shallow-to-deep
+  step as a world default, and per-stroke shore, step and look options
+  stored in a fourth mask layer.
+- Green's step is at depth 40 with no fade; the p99 edge gradient went
+  from 6.2 to 7.3 (retail 7.1-7.2).
+- Red has two per-stroke modes: a lilac ground lake, or a cracked bed.
+- Green's plain is flat by default, with paintable ground lumps.
+- Archipelago's hills went from luma 77 to 90 (retail 90-91). The ring
+  is narrower and lighter and defaults to nested rings.
+
+**Still open:**
+- The Archipelago ring renders as hairy arcs, not retail's smooth
+  concentric contours. It needs an outline-following pattern (new tool
+  work).
+- Archipelago-1's reef bars are pale and boxy: the hard step exposes the
+  scene's rectangular strokes.
+- The hard-step depth is one value per world.
+- Red's cracked mode uses the world's crack network, not retail's
+  cobble-sized polygons.
 
 ### E2. Shine and roughness (starts when the owner agrees)
 
@@ -1334,6 +1370,41 @@ lines. Do not tune `crackDark` to fix this.
   and a rough rim. Read `layout.png` for the relief.
 - **Out of scope:** the material of Ice mountains. E6 owns it.
 - **Server and guard:** port 8843, CDP 9643, guard `--worlds ice`.
+
+**E4 done (merged f3a0fb261).**
+- Shore layers are cut as height: contour style on lava-1, circular on
+  lava-2. Lava-1's median shore band went from 64 to 113 px (retail 107).
+- Fingers lie on the joined coast as irregular tapered tongues and
+  tendrils, with no flooded wedges.
+- Lava rock has no black ink.
+- The coast pass costs 17-33 ms per water stroke, and the old 3.8e-6
+  replay mismatch is gone.
+
+**Still open (for E6):**
+- Lava-1's fingers are too sparse. The levers are `thumbAt`'s site
+  probability, the length law and the root width `h0`.
+- The circular layers are faint.
+- Lava-1's sun-facing north bank shows no layer lines; retail's are dark
+  at every facing.
+- Lava-3's tall hill is still a cone.
+
+**E5 done (merged a5ac69aa7).**
+- Bergs are a Crystals-brush form: ice-2's dry overlap went from .455 to
+  .815.
+- Ice-3 is the raised block the retail heights show: overlap went from
+  .213 to .787.
+- `shadeBlue` keeps shaded ice blue.
+- Frost crystals are Ice's default shore: mostly plain ice, sparse
+  needles, blue gaps toward deep water, and no grey wet band
+  (`frostWet`).
+
+**Still open (for E6):**
+- Retail's frost band has more fine lines and about 4x the inland blue
+  gaps.
+- Retail has a darker submerged shelf offshore.
+- The berg's lit faces are about 50 per channel darker than retail's and
+  lack its vertical crease.
+- Ice-3's faces are speckled where retail's are smooth dark slate.
 
 ### E6. Moon, Ice mountains and Lava rock shine (wave 2, after E2 and E3)
 
