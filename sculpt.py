@@ -127,10 +127,12 @@ WORLD_KNOBS = {
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
                    # 6 height units thick, level on the height so they ring each butte), long
-                   # joints, and darker faces turned from the sun; retail's buttes carry black
-                   # shadow sides where ours shaded to a soft grey.
+                   # joints, and black shadow sides: retail's buttes are dark on the side turned
+                   # from the sun, where ours shaded to a soft grey. No fill light and little
+                   # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
+                   # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
-                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceDark=.5),
+                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
@@ -470,8 +472,9 @@ def biome_config(biome, assets):
         config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
-        # rock with orange lines above ~69.
-        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 0, .3]]
+        # rock with orange lines above ~69 (card E3: rust-pink lines, share .4, so
+        # the strata stay readable on the tall buttes instead of one grey).
+        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .4]]
         config['defaults']['example'] = 'mesas'
         # The plain: exact-index tiles from the retail map's level ground,
         # when the map has been exported (see ground_tiles.py).
