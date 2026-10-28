@@ -646,6 +646,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let weathered = pixelSample(rockWeatheredTex, rockWeatheredSamp, pixel + vec2f(73.0, 17.0), vec2f(256.0)).rgb;
         rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
         rock = mix(rock, weathered, smoothstep(0.40, 0.62, moss));
+        // E9: the weathered and fractured tiles carry green blotches (14% and 5.5% of their pixels)
+        // that read as moss scattered over the face; retail's face holds grass at its edges. Clamp
+        // the green to the larger of red and blue so the tile keeps its structure and loses its moss.
+        if (u.rockMoss < 1.0) { rock.g = mix(min(rock.g, max(rock.r, rock.b)), rock.g, u.rockMoss); }
     }
     rock = based(rock, u.rockTexMean, u.rockBase);
     // Deposition softens the exposed face into a connected apron. Flow and
@@ -795,7 +799,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                   + (fine.g - 0.5) * u.faceScore.z + (n.r - 0.5) * u.faceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.
         let threshold = mix(1.4, -0.9, share);
-        let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
+        var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
+        // E9: inside painted rock the face is rock; moss stays at its edges and on the ledges below.
+        if (u.faceRock > 0.0 && u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * u.faceRock); }
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);

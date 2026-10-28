@@ -96,6 +96,8 @@ SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
+# E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
+KNOB_DEFAULTS.update(faceRock=0, rockMoss=1)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -132,7 +134,9 @@ WORLD_KNOBS = {
                   # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
-                  undulation=0, plainRelief=0),
+                  undulation=0, plainRelief=0,
+                  # E9 (Green rock faces).
+                  faceRock=1, rockMoss=.15),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail

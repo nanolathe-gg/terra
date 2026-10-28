@@ -727,6 +727,9 @@ export class TerrainRenderer {
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
     this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
+    // E9 (Green rock faces).
+    this.f('uFaceRock', variant.has('faceRock') ? Number(variant.get('faceRock')) : 0);
+    this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
     this.fieldsDirty = true;
   }
 
