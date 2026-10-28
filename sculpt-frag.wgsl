@@ -52,6 +52,35 @@ fn groundBased(c: vec3f) -> vec3f {
 // Strata: coloured bands by height on raised ground (painted desert).
 fn strataHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
 fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
+// Card E8 (Painted Desert): the grey band at the foot of retail's raised ground. Retail's
+// neutral grey (mean (118,115,112)) sits in a thin height window on the first rise of the
+// raised ground (world height 9-12 on a plain of 2-3; ribbons median 9 px wide on gently
+// rising ground, measure/desert_greyband.py). Here the window is 4-6.5 above the plain,
+// the middle of a lobe's rim, where its slope makes the ribbon that wide; the bumpy apron
+// wanders it and the gaps break it into stretches.
+// hf: the height above the plain; slope: units per px, which sets the edge softness.
+// Card E8: the beds of one zone at height hr as a colour, for painted rock, whose height is
+// not the zone's (the same split and share as the strata block; no edge softening, as a
+// painted mesa's rock is mostly gentle).
+fn rockStrata(hr: f32, zone: i32, paint: f32) -> vec3f {
+    if (paint <= 0.0) { return strataSlot(u.strataZones[zone].y); }
+    let z = u.strataZones[zone];
+    let S = max(u.strataZoneSpace[zone].x, 0.5);
+    let t = hr / S;
+    let k = floor(t);
+    let split = clamp(1.0 - z.w * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
+    let isB = smoothstep(split - 0.04, split + 0.04, fract(t));
+    return mix(strataSlot(z.y), strataSlot(z.z), isB);
+}
+fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
+    let wander = (terrainNoise(p * 0.03 + vec2f(41.0, 7.0)).r - 0.5) * 2.0 * u.baseBandWander
+               + (terrainNoise(p * 0.35 + vec2f(5.0, 63.0)).g - 0.5) * 1.5;
+    let e = clamp(1.2 * max(slope, 0.05), 0.15, 1.0);
+    let hh = hf + wander;
+    let inside = smoothstep(u.baseBandLow - e, u.baseBandLow + e, hh) * (1.0 - smoothstep(u.baseBandHigh - e, u.baseBandHigh + e, hh));
+    let gap = terrainNoise(p * 0.07 + vec2f(77.0, 3.0)).b;
+    return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
+}
 
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
@@ -889,7 +918,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let next = u.strataZones[zone + 1];
             if (next.y == z.y && next.z == z.z) { share = mix(z.w, next.w, clamp((hr - z.x) / max(next.x - z.x, 0.1), 0.0, 1.0)); }
         }
-        let S = max(u.strataSpacing, 0.5);
+        var S = max(u.strataSpacing, 0.5);
+        // Card E8: retail's beds thicken up the buttes (lit flanks above 60: line gaps
+        // of 11-15 units, against the apron's 6), so a zone may carry its own thickness.
+        if (u.strataZoneSpace[zone].x > 0.0) { S = u.strataZoneSpace[zone].x; }
         let t = hr / S;
         let k = floor(t);
         let f = fract(t);
@@ -899,7 +931,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Painted rock (card C5) in a world with beds takes the colour its
         // highest ground is painted with (its top zone's main bed: Painted
         // Desert's grey buttes), not the alternating beds or the brown rock art.
-        let rockBed = strataSlot(u.strataZones[max(u.strataZoneCount - 1, 0)].y);
+        let topZone = max(u.strataZoneCount - 1, 0);
+        var rockBed = strataSlot(u.strataZones[topZone].y);
+        // Card E8: the strata run through the rock itself, so painted rock carries the top
+        // zone's own beds (its grey with the lines), not one flat colour, wherever it is painted.
+        if (u.strataZoneSpace[topZone].x > 0.0) { rockBed = rockStrata(hr, topZone, painted.x); }
         let bed = mix(mix(strataSlot(z.y), strataSlot(z.z), isB), rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
@@ -908,6 +944,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
         let onRaised = smoothstep(u.strataZones[0].x, u.strataZones[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, bedColour, max(u.strata * u.strataContrast * onRaised, u.strata * painted.x));
+        if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
     // Painted masks (card C5), after the world's own beds and before sand,
     // which covers them. Rock went through the face treatment above; where a

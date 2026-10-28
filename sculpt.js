@@ -64,6 +64,8 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:[
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
 // card startStroke builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
 const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
+// Card E8: the kinds whose feet may be ragged and bumpy (baseVary, baseBump).
+const BASE_KINDS=['plateau','offset','hill','mountain'];
 // Line features (card C4): spurs, crest variation and crater rim sectors. All
 // default off; spurs and crest options turn a hill or mountain into a ridge
 // built from tapering pieces (ridgePieces), rim options reshape a crater's rim.
@@ -190,6 +192,9 @@ const SHAPE_FIELDS=[
   ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal'],0,100,5,100,'Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width.'],
   ['crystalSmooth','crystal-smooth','Smooth hill between crystals (column mound)',['crystal'],0,100,5,100,'Column mound: the share of the widest columns (and some of the middle ones) left as smooth hill with no flat top, taking the world\'s hill relief. 0 tiles the whole mound.'],
   ['craterFacets','crater-facets','Crystal facets',['crater'],0,100,5,100,'Crater: tiles the bowl, rim and apron with polygonal facets (planes fitted to the crater\'s own surface, stepped a few units from each other), so its contours are straight-edged like crystal. 0 keeps the smooth crater.'],
+  // E8 (Painted Desert): ragged feet and bumpy aprons.
+  ['baseVary','base-vary','Foot outline raggedness (px)',BASE_KINDS,0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
+  ['baseBump','base-bump','Foot bumps (height units)',BASE_KINDS,0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
@@ -444,7 +449,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS,/* E8 */'baseVary','baseBump'].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null,
     // E7
@@ -965,6 +970,15 @@ function fissureCell(s,i,wx,wy,lx,ly,cx,cy,t) {
   protection[i]=s.protectBase[i]*(1-smooth(0,.3,g)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,g));
   if (s.masks) paintCell(s.masks,i,smooth(0,.3,g)*f.dark);
 }
+// Card E8: retail's aprons and mesa feet are ragged and lumpy, not smooth lobes.
+// The outline shift (px, outward positive) mixes 55 px and 21 px lobes; the bumps
+// (height units, 30, 13 and 6.5 px) ride on the apron and the foot of the face (w: the stroke's rise share
+// here) and leave a plateau's face, cap and the plain alone. Both depend only on the
+// cell's own position in the shape's frame, so replay stays exact.
+// A plateau, hill or mountain takes the shift only over its outer half (r from .5 to .95), so its rings
+// stay smooth and only the foot strays; the amount is capped at 15% of the radius so a small butte keeps its shape.
+const baseOutline=(s,lx,ly,r,radius) => Math.min(s.baseVary,.15*radius)*(s.kind==='offset'?1:smooth(.5,.95,r))*(.6*valueNoise(lx/55,ly/55,s.seed^0x2e83)+.4*valueNoise(lx/21,ly/21,s.seed^0x71d5));
+const baseBumps=(s,lx,ly,w) => s.baseBump*smooth(.03,s.kind==='offset'?.2:.12,w)*(s.kind==='offset'?1:1-smooth(.12,.3,w))*(.55*valueNoise(lx/30,ly/30,s.seed^0x4c91)+.3*valueNoise(lx/13,ly/13,s.seed^0x1a77)+.25*valueNoise(lx/6.5,ly/6.5,s.seed^0x63d9));
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
   const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind)) && experiment.get('edges')==='natural';
@@ -994,7 +1008,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const bumpy=['hill','mountain','lower'].includes(s.kind);
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
   const northWiden=s.northFace??0;
-  const extent=s.fis?s.fis.reach:crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
+  const extent=s.fis?s.fis.reach:crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx+(s.baseVary>0?s.baseVary:0);
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
@@ -1074,6 +1088,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
     let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
     if (pc) r/=pc.r0+(pc.r1-pc.r0)*t;
+    if (s.baseVary>0 && BASE_KINDS.includes(s.kind)) r-=baseOutline(s,lx,ly,r,radius)/(radius*width*bankScale);
     if (waterTool && s.fingers>0 && !(s.fingerCoast>=.5) && r>(s.fingerBlunt>=.5?.1:.25) && r<1.6) {
       // Shift the waterline across the coast band (coast near r 0.67). Thumbs
       // reach tens of px, so their band is set in px, not as a share of a small lake.
@@ -1194,6 +1209,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (s.kind==='shallow' && s.shallowMode==='passage') value=Math.max(base,value);
     }
     else if (s.kind==='smooth') value=base+(s.smoothTarget[i]-base)*w*clamp(s.amount/100,0,1);
+    if (s.baseBump>0 && BASE_KINDS.includes(s.kind)) value+=baseBumps(s,lx,ly,w);
     if (s.prof) value+=sectionLift;
     heights[i]=clamp(value,MIN_HEIGHT,MAX_HEIGHT);
     if (s.kind!=='smooth' && value!==base) routes[i]=s.routeBase[i]*(1-influence);
@@ -2037,7 +2053,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,/* E8 */'baseVary','baseBump'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7
   ...Object.fromEntries(E7_KEYS.map(k => [k,s[k]]))}; }
 function applyNode(n) {
@@ -2979,6 +2995,8 @@ const KNOBS = [
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
   ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
+  // E8 (Painted Desert): the grey band at the foot of the raised ground (strata colour 5); its heights are above the plain.
+  ['Desert foot band', [['baseBand','Grey band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds

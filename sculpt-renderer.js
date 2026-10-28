@@ -393,6 +393,9 @@ export class TerrainRenderer {
     // default two colours alternating evenly from just above the plain.
     const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
     this.set('uStrataZones', [...zones, ...new Array(6 - zones.length).fill([0, 0, 0, 0])]);
+    // Card E8: a bed thickness per zone (the grey buttes' beds are 2-3 times the apron's); none keeps strataSpacing.
+    const space = (this.config.strataZoneSpacing || []).slice(0, 6);
+    this.set('uStrataZoneSpace', [...space.map(x => [x, 0, 0, 0]), ...new Array(6 - space.length).fill([0, 0, 0, 0])]);
     this.i('uStrataZoneCount', zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
@@ -730,6 +733,12 @@ export class TerrainRenderer {
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
     this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
+    // Card E8 (Painted Desert); 0 is every world as it was.
+    this.f('uBaseBand', variant.has('baseBand') ? Number(variant.get('baseBand')) : 0);
+    this.f('uBaseBandLow', variant.has('baseBandLow') ? Number(variant.get('baseBandLow')) : 4);
+    this.f('uBaseBandHigh', variant.has('baseBandHigh') ? Number(variant.get('baseBandHigh')) : 6.5);
+    this.f('uBaseBandWander', variant.has('baseBandWander') ? Number(variant.get('baseBandWander')) : 1);
+    this.f('uBaseBandGaps', variant.has('baseBandGaps') ? Number(variant.get('baseBandGaps')) : 0.45);
     this.fieldsDirty = true;
   }
 

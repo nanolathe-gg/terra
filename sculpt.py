@@ -98,6 +98,11 @@ for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
 # E7 (Crystal): every knob's default is the earlier output.
 KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFacets=0, crystalShallow=0, crystalShallowPx=10)
+# E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
+KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
+# E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
+# drifts, and the share of its length that is missing).
+KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -189,7 +194,10 @@ WORLD_KNOBS = {
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
-                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3),
+                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3,
+                   # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
+                   # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8).
+                   baseVary=36, baseBump=3.5, baseBand=1),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
@@ -389,8 +397,16 @@ WORLD_VARIANTS = {
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: grey buttes',
                       knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
-                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3),
-                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .22], [60, 2, 0, .2], [95, 1, 2, .35]])),
+                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
+                                 # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
+                                 # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
+                                 # 0.4%). Ambient .12 gives 0% and 1.0%.
+                                 ambient=.12),
+                      # Card E8: retail's grey buttes carry rust-pink lines (slot 4, (175,111,90), the nearest
+                      # slot to the measured (149,88,86)) 15 units apart (median over the lit flanks above 60,
+                      # 14 px) and ~4.4 units wide, not 4 apart.
+                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 3, .3], [60, 2, 3, .3], [95, 1, 2, .35]],
+                                  strataZoneSpacing=[4, 12, 14, 14])),
     },
 }
 for _world, _variants in WORLD_VARIANTS.items():
@@ -583,12 +599,19 @@ def biome_config(biome, assets):
         # make, so the world stays full colour until the palette stage mixes
         # index pairs. Bed colour slots: 1 orange (189,143,105), 2 cool
         # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
-        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
+        # Slot 5 (card E8): the grey band at the foot of the raised ground, retail's neutral grey
+        # (mean (118,115,112) over its pixels; palette entries 88-89 in pairs).
+        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [118, 115, 112]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
-        # rock with orange lines above ~69 (card E3: rust-pink lines, share .4, so
-        # the strata stay readable on the tall buttes instead of one grey).
-        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .4]]
+        # rock with orange lines above ~69 (card E3: rust-pink lines, so the strata stay
+        # readable on the tall buttes instead of one grey; card E8: share .4 -> .3 with
+        # the beds 11 thick, which keeps the lines 2-5 units wide as on retail's buttes).
+        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .3]]
+        # Card E8: bed thickness per zone. Orange-line gaps on the lit flanks of retail's
+        # raised ground (measure/desert_strata_gaps.py): median 10.8 units above 70 (14 px),
+        # 8.1 from 20 up; the aprons keep the world's 6.
+        config['strataZoneSpacing'] = [6, 6, 6, 6, 11]
         config['defaults']['example'] = 'mesas'
         # The plain: exact-index tiles from the retail map's level ground,
         # when the map has been exported (see ground_tiles.py).
