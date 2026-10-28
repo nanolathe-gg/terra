@@ -53,6 +53,7 @@ branches and the projection fix below, so re-render before judging.
    | C3 | none | none | `$R/agent-C3` | none (`repro/stats.py` only) |
    | C4 | 8838 | 9638 | `$R/agent-C4/out` | `--worlds none` |
    | C5 | 8839 | 9639 | `$R/agent-C5/out` | `--worlds none` |
+   | D | 8840 | 9640 | `$R/agent-D/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -785,6 +786,256 @@ or stage 2 demo.
 
 Every default reproduces today's renders exactly: the guard is
 `--worlds none` until a world adopts a feature.
+
+## Card D: a real map editor (full-size maps, features, export to .ufo)
+
+Turn the editor into one that makes a playable map: a full-size canvas you
+can scroll, the existing terrain tools, features of the world (metal
+deposits, trees, a tree fill), start positions and the OTA settings, and an
+export to `<name>.ufo` (an HPI archive holding `maps/<name>.ota` and
+`maps/<name>.tnt`) that the player drops into the Total Annihilation folder.
+The exported map must load in Nanolathe and, within the limits below, in
+retail `TotalA.exe`; nobody can automate retail here, so the owner tests
+that by hand.
+
+Work in four phases, in order. After each phase commit, update
+`$R/agent-D/NOTES.md` and **stop for the owner's review**; continue only
+when told to. At the start of each phase, merge `terrain-editor` into your
+branch (merge, never rebase): the owner keeps tuning the worlds on
+`terrain-editor` while you work.
+
+**Files.** `tools/map-editor/**` only. Put new code in new files
+(`sculpt-map.js` for the large canvas and features, `sculpt-export.js`
+for the export UI, and Go programs under `tools/map-editor/export/` and
+`tools/map-editor/features/`). Add only small hooks to `sculpt.js`,
+`sculpt-renderer.js` and `sculpt.py`. Do not edit `internal/`, `formats/`,
+`vfs/` or `cmd/`; import what you need from them.
+- `mapgen`'s minimap builder is unexported and `mapgenFeatures` lives in
+  package main: reimplement them in your tool, with a comment naming the
+  rule you followed. Do not export anything from `internal/mapgen`.
+- Build and vet only your packages
+  (`go build ./tools/map-editor/... && go vet ./tools/map-editor/...`).
+  Add no `_test.go` files. The Go gates still do not apply.
+
+**Guard.** `repro/compare.py ... --worlds none` after every change: export,
+features and chunking must not move a pixel in any window. Rule 3's
+compiler-drift test applies. The one planned exception is tile-reuse step
+(b) in phase 4.
+
+**What already exists (reuse it).**
+- `formats.EncodeTNT` (`formats/tnt_write.go`) writes a canonical `0x2000`
+  terrain file that `formats.LoadTNT` reads back.
+- `formats.EncodeTDF` writes TDF text. `internal/mapgen/ota.go` shows a
+  complete skirmish OTA: climate, one `Network 1` schema, `StartPosN`
+  specials.
+- `vfs.WriteArchive` (`vfs/hpi_write.go`) writes an HPI with the copyright
+  trailer that retail's mount validator requires.
+- `cmd/nanolathe/mapgen_world.go` shows how to read a world from the
+  player's content:
+  - its maps' climate medians;
+  - which features its maps use, and how often;
+  - `mapgenFeatures` sorting them into deposit, trees, foliage and rocks.
+- `internal/mapgen/resources.go` places deposits and vegetation (see
+  `gentleLand`, `placeVegetation`).
+- `nanolathe --map "<name>" --shot out.png --renderer=classic` composes
+  a battle frame headlessly. Add a second game root (`--roots`) that holds
+  only your exported `.ufo`, and **never write into `~/TotalAnnihilation`**.
+- Formats: [fmt tnt] (`research/formats/tnt.md`: attribute map, anchor
+  cells and `0xFFFE` fringe, minimap sizing and its `0x64` fill),
+  [fmt ota], [fmt hpi], [fmt pal].
+
+### Phase 1: export the canvas you have
+
+- **Geometry.** A map of `U x V` OTA units (512 px each) is
+  `U*32+2` by `V*32+8` cells of 16 px. The play area is
+  `Width*16-32` by `Height*16-128` px. This follows the generator
+  (`docs/DESIGN_MAP_GENERATOR.md`).
+  - The canvas must cover every cell, including the strips the engine
+    voids (`[03 R-TERR-01 §2]`). Outline the play area in the view.
+  - Generalise the canvas to non-square sizes up to the 8192-px texture
+    limit, which is about 4x4 units. Today's 1024-px canvas is only 2x2.
+- **Heights.** Sample at the 16-px cell corners, clamp to 0..255 with a
+  warning, and write the editor's sea level as the header byte.
+- **Projection: verify it, don't assume it.**
+  - The engine draws world row `y` of a point at height `h` on screen row
+    `y - h/2`, measured from height 0 (search doc 03 for
+    `zPixels - height/2`). The editor's view uses
+    `y - (visible - base)/2`. The exported art must follow the engine.
+  - **Pass:** a classic-renderer `--shot` of the exported map with units
+    staged on a hilltop and at the shore shows them standing on the art,
+    not floating or sunk. `docs/ARCHITECTURE.md` lists the `--shot-*`
+    flags.
+- **Tiles and palette.**
+  - Cut the final image into 32x32 tiles and map each colour to a
+    palette index. Use an exact lookup if the palette stage already emits
+    palette RGB, otherwise the nearest colour.
+  - Export must add no position-keyed noise. Deduplicate exact tiles.
+  - Report the unique tile count and the slot count.
+- **Minimap.** 252 px on the long side, with the used sub-rectangle and
+  fill exactly as [fmt tnt] "Minimap" states.
+- **OTA.** Follow `internal/mapgen/ota.go`. Climate defaults to the
+  world's retail medians.
+  - The name and description must be free of TDF-reserved characters.
+  - Refuse a name that an installed map already uses: the picker would
+    hide one of them.
+- **Archive.** Write `<name>.ufo` to `$R/agent-D/exports/` and offer it
+  as a download.
+  - Read [fmt hpi] on compression methods before you choose
+    `Compress`; stored (method 0) is always safe.
+- **Self-check, built into the command.** Decode what you wrote:
+  - `LoadTNT` must match cell for cell, tile for tile;
+  - `vfs.NewArchive` must list both files;
+  - the OTA must parse.
+- **Worlds.** Map each editor world to the OTA `planet` its retail maps
+  use: read the OTAs of the maps in `repro/scenes`, and don't guess
+  spellings. Zhon has no retail planet or feature set: its export stays
+  disabled until the owner picks one.
+- **Pass:**
+  - a 4x4-unit map with a hill, a lake and two starts (phase 2 adds the
+    start tool; for now a fixed pair is fine) loads in a classic `--shot`;
+  - the shot's terrain matches the exported indexed image (write a diff
+    image, not just a claim);
+  - the guard holds.
+
+### Phase 2: features, starts and map settings
+
+- **Feature catalogue.** A Go helper writes each world's catalogue to
+  `$R/agent-D/features/<world>/`. These files are retail-derived, so never
+  commit them. It holds:
+  - name, footprint, metal, energy, blocking, reclaimable;
+  - how often the world's retail maps use the feature;
+  - a first-frame PNG and its offsets from the feature's GAF (`seqname`,
+    and `seqnameshad` for the shadow).
+- **Drawing features.** The editor draws feature sprites over the
+  terrain at their cell's projected position. Tile art never contains
+  sprites: the engine draws them.
+- **Tools.**
+  - Place and erase single features, snapped to cells, and refuse
+    overlapping footprints.
+  - A tree fill over a brush, lasso or flood region, with these
+    controls:
+    - density;
+    - clustering, from noise;
+    - spacing by footprint;
+    - corner difference of 10 or less, and dry land only, as `gentleLand`
+      requires;
+    - a mix weighted by retail usage;
+    - a seed;
+    - a margin around starts and deposits.
+  - Foliage and rocks use the same fill.
+- **Metal deposits.** Follow `mapgenFeatures`: use the world's most-used
+  *drawn*, indestructible metal feature. The Metal world has none; its
+  ground is the metal.
+- **Encoding.** Write each feature's record index in the anchor cell
+  (top-left) and `0xFFFE` in the rest of its footprint ([fmt tnt]). Every
+  name must exist in the world's feature TDFs: retail exits on a missing
+  record.
+- **Starts.** 1 to 10 start positions, written as `StartPosN` specials
+  with `XPos`/`ZPos` in pixels ([fmt ota]); `numplayers` follows the
+  count.
+- **Settings.** An OTA panel: name, description, wind, tidal, solar,
+  gravity, surface metal, Moho metal, lava world. Defaults come from the
+  world's retail medians.
+- **Pass:**
+  - a 4x4-unit Green map with a forest, four deposits and four starts
+    loads in `--shot`;
+  - trees and deposits appear where the editor put them;
+  - a unit can be staged on a start;
+  - the guard holds.
+
+### Phase 3: full-size maps and scrolling
+
+- **Target.** Up to 40x40 units, non-square allowed. That is 1282x1288
+  cells, about 20,500 px a side; retail's largest map, Seven Islands, is
+  1280x1280 cells. Provide scrolling, a minimap navigator and at least
+  1x, 0.5x and overview zoom.
+- **The hard part.**
+  - The renderer bakes the whole canvas into textures sized `this.size`
+    square. At this size that cannot work, so bake in chunks, with an
+    apron wide enough for every neighbourhood pass (normals, blurs,
+    shadows, relief).
+  - Keep chunks resident only while needed.
+  - Shapes already replay per region; keep regional replay exact
+    (`sculptDebug.replayAll()` mismatch 0).
+  - The editor already uses all 16 sampled textures, so chunking must
+    not add one.
+- **Document.** Save on the server: the stroke graph, sparse painted
+  mask chunks, features, starts and OTA settings. Saving and reloading
+  gives the same map.
+- **Exactness tests.**
+  - The existing 1024-px canvas baked as 2x2 chunks must be
+    pixel-identical to the whole bake.
+  - The guard must hold.
+- **Measure:**
+  - memory and time at 16x16 and 40x40 units;
+  - stroke latency on screen;
+  - full export time, with a progress bar.
+- **Out of scope.** Do not start worker-based multi-core replay (see
+  "After the cards"), but leave the shape engine callable per chunk so
+  that it can come later.
+- If this phase fails its exactness tests after two rounds, stop and
+  report. The owner will reassign it.
+
+### Phase 4: tile budget
+
+Each unique tile costs 1 KB, and retail maps reuse tiles heavily: base
+ground repeats, while hills, shores and cliffs are unique. A census of the
+275 canonical maps in the reference install found:
+
+- **All maps:** median 3,218 unique tiles. The most seen is 11,561
+  (`Lava & Two Hills`), and a `u16` tile index is the format's hard limit.
+- **Large maps** (at least 500x500 cells; 53 of them): median 5,078
+  unique tiles, with about 5% of tile slots unique.
+
+Unique tiles per world, p50 / p90:
+
+| World | p50 | p90 |
+| --- | ---: | ---: |
+| Green | 2,870 | 4,883 |
+| Red | 2,959 | 4,869 |
+| Lava | 2,967 | 7,816 |
+| Archipelago | 2,667 | 7,389 |
+| Ice | 5,230 | 7,051 |
+| Crystal | 4,434 | 9,698 |
+| Lunar | 3,110 | 4,388 |
+| Desert | 2,822 | 3,252 |
+
+Our art is noise everywhere, so without work nearly every slot is unique.
+A 20x20-unit map has about 100,000 slots.
+
+- **Budget.** A knob defaulting to 6,000 tiles. Retail mode has a hard
+  ceiling of 11,500, the largest count known to work; a Nanolathe-only
+  export may go higher. Show the count live in the export panel.
+- **Steps, in order:**
+  - **(a) Measure.** On a 16x16-unit map, find and list every reason two
+    level-ground tiles differ:
+    - dither keyed to absolute position;
+    - the ground pattern's phase against the 32-px tile grid after
+      projection;
+    - undulation shading;
+    - weathering;
+    - anything else you find.
+  - **(b) Make base ground repeat exactly.** Align the `groundTiles`
+    pattern to the TNT tile grid in screen space, key dither to the
+    tile-local position, and choose variants by a tile hash.
+    - This changes pixels in every world, so it will fail the guard by
+      design.
+    - Put it behind an export-only switch first, and measure how far
+      the export differs from the view.
+    - The owner decides, after looking at the sheets, whether it
+      becomes the default. Do not decide this yourself.
+  - **(c) Merge near-duplicates under the budget.**
+    - Use an error that weights edge pixels, so merges do not open
+      seams.
+    - Never merge tiles that hold a cliff edge, a shore or a feature
+      footprint's ground.
+    - Prefer merging into base-ground tiles.
+  - **(d) Report:**
+    - a curve of unique count against merge threshold;
+    - a before and after contact sheet at 1x;
+    - the count for one map per world at 16x16 units.
+- **Stop condition.** If the budget can only be met with visible loss,
+  report that. Do not flatten the look to hit the number.
 
 ## After the cards
 
