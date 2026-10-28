@@ -159,7 +159,12 @@ WORLD_KNOBS = {
                  # ~2.5 px wide at half depth (measure/lava_bands.py lines
                  # profiles); the thin 1.6 px V at 0.75 darkness read as faint
                  # grain on the ground's palette noise.
-                 bandWidth=2.3, crackDark=.95,
+                 bandWidth=2.3,
+                 # Card E4: hills and mountains are rough rock, not smooth cones crossed by black
+                 # hairlines. Cracks stay but lose their ink (.95 -> .35); the relief is finer and
+                 # lumpier (scale 28 -> 20, amount .5 -> .9, lumps .7 -> .9) and Moon's joined wrinkles
+                 # and pits (card B3) roughen the slopes. Shine is card E2's, not set here.
+                 crackDark=.35, reliefAmount=.9, reliefScale=20, reliefLumps=.9, wrinkles=.6,
                  # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
                  # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
                  # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
