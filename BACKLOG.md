@@ -213,6 +213,21 @@ them at a no-op default.
 
 ### B1. Ice and Crystal
 
+*Done (Codex, merged 2026-10-28, 25e64434d):*
+- opt-in per-stroke shore plates (`shorePlates` and five size options;
+  Ice Scream uses them);
+- Crystal column tops flattened (`crystalTiers`) and widened to 32 px;
+- Crystal's material controls switched on;
+- rigid crystal transforms;
+- a column-mound example.
+
+*Still open:*
+- Ice block shapes (every attempt rejected);
+- Crystal interlocking shore slabs (rejected; C2);
+- Crystal's black gaps between columns are heavier than retail's thin
+  outlines;
+- Ice's plate band is narrower and more regular than retail's floe field.
+
 *Ice:* blocks render as clean polygonal solids with straight rims, flat
 bright tops and grey faces.
 
@@ -466,6 +481,13 @@ strokes.
   after editing a shape.
 - **UI.** Draw a small preview of the cross-section beside the options.
 
+*Stage 2 is done (merged 2026-10-28, d9f24351c):*
+- Painted Desert's plateau preset uses the profile; the desert scenes and
+  red-2's layered bank use it too.
+- Green-2 and Archipelago were tried and reverted. Green-2's grey rock
+  face is a material gap: retail's dark/rock share on the face rows is
+  0.80, ours 0.48. Archipelago's lip and dashes are material (B2).
+
 *Stage 1 is done (merged 2026-10-27, 79725791f).* The demo scenes are
 in `repro/demo/`. Under `profile` 1, `bankPx`, Beach flatness, Mesa
 flanks and Wider north faces are ignored, and a hill is the plain swept
@@ -594,9 +616,26 @@ examples are from Codex's review; C0 will confirm or extend them):
 Each is a new kind or a shape option, depends only on its own cells,
 replays exactly by region, and is off by default.
 
+**Census evidence** (C0 rank 4: Red, Moon, Lava; rank 6: Green, Red,
+Desert, Ice):
+- *Ridges:* connected branches, crests of varying width and height,
+  tapering spurs, convincing junctions.
+- *Craters:* broad unequal rim sectors and deliberate gaps.
+- *Fissures:* author-placed long cuts with a start, a path and branches,
+  coarser than the procedural crack field, which stays.
+
+The census did not establish channels with bars or braids; leave them out.
+
+**Stages** (stop for review after each):
+1. Branching ridges and spurs, and broken crater rims.
+2. Placed fissures.
+
 ### C5. Painted masks and world variants
 
 **Stages** (stop for review after each):
+Green-2 needs a grey rock face (C1 stage 2 finding). Use it as a stage 1
+or stage 2 demo.
+
 1. **Masks.** New per-cell channels in the shape graph (`FIELD_KEYS`),
    painted by cover-like brushes, plus a shape option that writes them
    inside a landform's own footprint:
