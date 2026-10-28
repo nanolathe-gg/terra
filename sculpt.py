@@ -3,6 +3,7 @@
 import argparse
 import copy
 import json
+import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -12,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.wgsl', 'sculpt-sand.js')}
+    'relief-bake.wgsl', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js')}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -480,7 +481,11 @@ def main():
                         help='comma-separated biomes to prepare; the first is the default')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
                         help='each biome prepares its materials in <root>/assets-<biome>')
+    parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export)')
+    parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
     args = parser.parse_args()
+    from sculpt_export import MapExport
+    map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'])
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
     assets = {b: args.assets_root / f'assets-{b}' for b in biomes}
     configs = {}
@@ -504,6 +509,12 @@ def main():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlsplit(self.path).path
+            try:
+                if map_export.get(self, path):
+                    return
+            except (OSError, ValueError, subprocess.SubprocessError) as err:
+                map_export.reply(self, {'error': str(err)}, 400)
+                return
             content_type = 'text/plain; charset=utf-8'
             if path == '/sculpt-config.json':
                 # An unknown or unavailable world is an error, not a silent
@@ -553,6 +564,12 @@ def main():
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 pass
+
+        def do_POST(self):
+            try:
+                map_export.post(self, urlsplit(self.path).path)
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
+                map_export.reply(self, {'error': str(err)}, 400)
 
         def log_message(self, fmt, *args):
             if args and str(args[1]) not in ('200', '304'):
