@@ -1867,7 +1867,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shoreLayers>=1?q.shoreLayers*(q.layerPx||0)+(q.layerStyle>=.5?5*(q.layerPx||0):0):0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
+  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shoreLayers>=1?q.shoreLayers*(q.layerPx||0)*(q.layerStyle>=.5?1.6:1)+2*(q.layerPx||0):0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
