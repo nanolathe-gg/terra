@@ -336,7 +336,7 @@ function updateControls() {
 }
 
 function canExport() {
-  if (regionalFields) return ready && !loading && !stroke && !mapFeatures?.busy && (!$('weather').checked || weatherState==='ready');
+  if (regionalFields) return ready && !loading && !stroke && !moving && !mapFeatures?.busy && (!$('weather').checked || weatherState==='ready');
   return ready && !loading && !stroke && !mapFeatures?.busy && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
 }
 
@@ -2352,13 +2352,68 @@ function currentStrokeOptions() {
   applySeedControl();
   return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)]))};
 }
+function regionalPoints(points) {
+  if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
+  return points.map(p => ({x:clamp(p.x,0,(config.map?.width??size)-1),y:clamp(p.y,0,(config.map?.height??size)-1)}));
+}
+function beginRegionalStroke(kind,point,options={}) {
+  if (stroke || moving || !HELP[kind] || kind==='move') throw new Error('A terrain gesture is already active or the brush is invalid.');
+  const points=regionalPoints([point]),params={...currentStrokeOptions(),...options},node={kind,points,params,seed:params.seed??seed};
+  delete params.seed; cancelWeather();
+  const index=nodes.length,selectionBefore=selected;
+  nodes.push(node); selected=-1; stroke={regional:true,kind,node,index,selectionBefore,path:points};
+  evaluate(index,nodeBounds(node)); renderLayers(); updateControls(); schedule();
+  return index;
+}
+function previewRegionalStroke(points) {
+  if (!stroke?.regional) return false;
+  const node=stroke.node,before=nodeBounds(node),next=regionalPoints(Array.isArray(points)?points:[points]);
+  node.points=Array.isArray(points)?next:[...node.points,...next]; stroke.path=node.points;
+  evaluate(stroke.index,unionRect(before,nodeBounds(node))); schedule();
+  return stroke.index;
+}
+function endRegionalStroke(commit=true) {
+  if (!stroke?.regional) return false;
+  const gesture=stroke,node=gesture.node,rect=nodeBounds(node); stroke=null;
+  if (!commit) { nodes.splice(gesture.index,1); selected=gesture.selectionBefore; evaluate(gesture.index,rect); }
+  else { selected=-1; checkpoint(); }
+  renderLayers(); updateControls(); schedule(); queueWeather();
+  return commit?gesture.index:false;
+}
 function applyRegionalStroke(kind,points,options={}) {
-  if (!HELP[kind] || kind==='move' || !Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
-  cancelWeather();
-  const params={...currentStrokeOptions(),...options},node={kind,points:points.map(p => ({x:clamp(p.x,0,(config.map?.width??size)-1),y:clamp(p.y,0,(config.map?.height??size)-1)})),params,seed:params.seed??seed};
-  delete params.seed;
-  nodes.push(node); selected=-1; evaluate(nodes.length-1,nodeBounds(node)); checkpoint(); queueWeather(); schedule();
-  return nodes.length-1;
+  const path=regionalPoints(points),index=beginRegionalStroke(kind,path[0],options);
+  if (path.length>1) previewRegionalStroke(path);
+  endRegionalStroke(true); return index;
+}
+function beginRegionalMove(index=selected) {
+  if (stroke || moving || !nodes[index]?.points) return false;
+  cancelWeather(); selectNode(index);
+  const original=cloneNodes([nodes[index]])[0];
+  moving={regional:true,index,original,state:nodeState(original),selectionBefore:selected,changed:false};
+  updateControls(); return index;
+}
+// Transforms and parameter edits are relative to the gesture's first node,
+// regardless of pointer cadence. A release is one undoable history entry.
+function previewRegionalMove(edit) {
+  if (!moving?.regional) return false;
+  const gesture=moving,before=nodeBounds(nodes[gesture.index]),node=cloneNodes([gesture.original])[0];
+  if (typeof edit==='function') edit(node,gesture.state);
+  else {
+    const q=Array.isArray(edit)?{matrix:edit}:edit||{},matrix=q.matrix??[1,0,0,1,q.dx??0,q.dy??0];
+    if (!Array.isArray(matrix) || matrix.length!==6 || matrix.some(v => !Number.isFinite(v)) || Math.abs(matrix[0]*matrix[3]-matrix[1]*matrix[2])<1e-8) throw new Error('Invalid terrain transform.');
+    transformNode(node,gesture.state,matrix);
+    if (q.params) node.params={...node.params,...q.params};
+    if (Number.isFinite(q.amount)) node.params={...node.params,amount:q.amount};
+  }
+  nodes[gesture.index]=node; gesture.changed=true;
+  evaluate(gesture.index,unionRect(before,nodeBounds(node))); schedule(); return gesture.index;
+}
+function endRegionalMove(commit=true) {
+  if (!moving?.regional) return false;
+  const gesture=moving,rect=nodeBounds(nodes[gesture.index]); moving=null;
+  if (!commit) { nodes[gesture.index]=gesture.original; evaluate(gesture.index,unionRect(rect,nodeBounds(gesture.original))); }
+  else if (gesture.changed) checkpoint();
+  selectNode(gesture.index); updateControls(); schedule(); queueWeather(); return commit?gesture.index:false;
 }
 function currentDrawOptions() {
   return {clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
@@ -2415,13 +2470,14 @@ const sculptRegion={
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   subscribe:fn => regionalFields.subscribe(fn),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
 };
 window.sculptRegion=sculptRegion;
-function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),params:n.params?{...n.params}:undefined})); }
+function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),frame:n.frame?.slice(),params:n.params?{...n.params}:undefined})); }
 function nodeDistance(n,p) {
   if (!n.points) return Infinity;
   let best=Infinity;
@@ -2523,7 +2579,7 @@ function checkpoint(mapOnly=false) {
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
-  const next=historyIndex+delta; if (!ready || stroke || mapFeatures?.busy || next<0 || next>=history.length) return;
+  const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
   lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
@@ -2912,7 +2968,7 @@ function sketch() {
 function persistLater() {
   if (experiment.has('scratch')) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(() => {
-    if (stroke || loading) { persistLater(); return; }
+    if (stroke || moving || loading) { persistLater(); return; }
     try { localStorage.setItem(LOCAL_KEY,JSON.stringify(sketch())); $('save-state').textContent='Terrain recipe autosaved locally.'; }
     catch (_) { $('save-state').textContent='Local autosave unavailable. Use Save sketch to keep this heightfield.'; }
   },450);
