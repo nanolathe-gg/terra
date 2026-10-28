@@ -1,8 +1,8 @@
 {"biome": "red", "source": {"map": "gods of war", "x": 256, "y": 576},
  "ground": true, "query": "",
  "strokes": [
-  ["deep", [[700, -150], [1200, 380]], {"card": {"diameter": 820, "roughness": 30}}],
-  ["deep", [[420, -60], [700, 230], [900, 480], [1100, 700]], {"card": {"diameter": 560, "roughness": 30}}],
-  ["deep", [[60, 90], [200, 60], [330, 120], [450, 220], [510, 320], [535, 420], [600, 520], [730, 590], [860, 690], [980, 820], [1080, 980]], {"card": {"diameter": 360, "roughness": 40}}],
+  ["deep", [[740, -190], [1240, 340]], {"card": {"diameter": 820, "roughness": 30}}],
+  ["deep", [[460, -100], [740, 190], [940, 440], [1140, 660]], {"card": {"diameter": 620, "roughness": 30}}],
+  ["deep", [[60, 90], [200, 60], [330, 120], [450, 220], [510, 320], [535, 420], [600, 520], [730, 590], [860, 690], [980, 820], [1080, 980]], {"card": {"diameter": 560, "roughness": 30, "profile": 1, "apronPx": 30, "apronHeight": 15, "facePx": 90, "faceCurve": 0, "shelfPx": 70, "shelfDepth": 12, "shelfSteps": 0}}],
   ["deep", [[-60, 1060], [60, 880]], {"card": {"diameter": 360, "roughness": 40}}]
  ]}
