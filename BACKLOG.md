@@ -329,6 +329,24 @@ C1's cross-section. This card covers the rest.
   line about 60-100 px out that follows the lake's outline (lava-1, right
   half). Remove it.
 
+*Done (Sonnet, merged 2026-10-28, 899f8064a; lava-1 fingers restored
+in 98686e5ca):*
+- Lava bank lines are wider apart, wander and break off
+  (`bandRelief`/`bandWander`/`bandGaps`);
+- Lava finger tips are blunt and attached (`fingerBlunt`);
+- lava-1's crease came from a 9-unit hill stroke, not `bankPx`, and is
+  gone;
+- Moon has joined wrinkles and pits (`wrinkles`) in place of slope
+  marks.
+
+*Still open:*
+- overlapping fingered water strokes flood each other into wedges
+  (lava-1); fingers should apply to the union coast;
+- Lava lines are still more concentric than retail's slabs;
+- Moon walls are lighter than retail's near-black pits;
+- `slopeMarks` is dormant in every world; remove it or keep it as an
+  opt-in.
+
 *Read:* `crater` and `shoulderedHill` and `fingerShift` and the `bankPx`
 remapping in `sculpt.js`; `slopeMark` in `sculpt-frag.wgsl`; the worm
 relief and `lavaLines` in `relief-bake.wgsl`; the Moon and Lava entries
