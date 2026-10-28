@@ -188,8 +188,9 @@ const SHAPE_FIELDS=[
   // E7
   ['crystalFacet','crystal-facet','Facet tilt (column mound)',['crystal'],0,100,5,100,'Column mound: tilts each column\'s top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops.'],
   ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal'],0,100,5,100,'Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width.'],
+  ['crystalSmooth','crystal-smooth','Smooth hill between crystals (column mound)',['crystal'],0,100,5,100,'Column mound: the share of the widest columns (and some of the middle ones) left as smooth hill with no flat top, taking the world\'s hill relief. 0 tiles the whole mound.'],
 ];
-const E7_KEYS=['crystalFacet','crystalSizeVar'];
+const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
@@ -1698,6 +1699,8 @@ const FACET_SLOPE=1; // units per px at Facet tilt 1 (E7)
 // Size variation (E7): a mound's columns come in three widths (shares of Column width) and
 // the width changes over the mound from a smooth noise field and the mound's own height.
 const SIZE_LEVELS=[1,.55,.3],SIZE_STEP=[1,.65,.4];
+// Smooth hill between crystals (E7): the share of columns of each width left as bare hill.
+const BARE_SHARE=[1,.4,0];
 function stampColumns(s) {
   const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},path=simplifyPath(s.path,Math.max(1,s.radius*.05));
   const R=s.radius,H=s.amount,L=Math.max(4,s.crystalSize),inv=s.inv;
@@ -1715,7 +1718,7 @@ function stampColumns(s) {
   const pad=R*1.4;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity; for (const p of path) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   const rect={x0:Math.max(c.x0,Math.floor((ax-pad)/spacing)),y0:Math.max(c.y0,Math.floor((ay-pad)/spacing)),x1:Math.min(c.x1,Math.ceil((bx+pad)/spacing)),y1:Math.min(c.y1,Math.ceil((by+pad)/spacing))};
-  const facet=clamp(s.crystalFacet,0,1)*FACET_SLOPE,sizeVar=clamp(s.crystalSizeVar,0,1),levels=sizeVar>0?SIZE_LEVELS.length:1;
+  const facet=clamp(s.crystalFacet,0,1)*FACET_SLOPE,sizeVar=clamp(s.crystalSizeVar,0,1),levels=sizeVar>0?SIZE_LEVELS.length:1,smoothShare=clamp(s.crystalSmooth,0,1);
   const columns=SIZE_LEVELS.map(() => new Map());
   // Which width a column's centre asks for: finer where the noise and the mound's height are high.
   const levelAt=(x,y,m) => {
@@ -1732,7 +1735,7 @@ function stampColumns(s) {
       const f=s.inv?invert(s.inv):null,wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly;
       const m=mound(wx,wy),e=2,gx=(mound(wx+e,wy)-mound(wx-e,wy))/(2*e),gy=(mound(wx,wy+e)-mound(wx,wy-e))/(2*e);
       const flush=rnd(i,j,3+o)<.4,step=flush?0:(rnd(i,j,4+o)-.35)*2*s.crystalStep*(.5+s.crystalVariation)*SIZE_STEP[lv];
-      k={lx,ly,wx,wy,m,gx,gy,step,shade:.8+.2*rnd(i,j,5+o),on:levelAt(wx,wy,m)===lv}; columns[lv].set(key,k);
+      k={lx,ly,wx,wy,m,gx,gy,step,shade:.8+.2*rnd(i,j,5+o),on:levelAt(wx,wy,m)===lv,bare:smoothShare>0 && rnd(i,j,12+o)<smoothShare*BARE_SHARE[lv]}; columns[lv].set(key,k);
       // Facets (E7): the top is one plane tilted at a random heading, or two that meet at a
       // crease through the column's centre (a ridge or a valley). Headings turn with the frame.
       if (facet>0) {
@@ -1764,6 +1767,12 @@ function stampColumns(s) {
       }
     }
     if (best.m<=1) continue;
+    // A bare column is the mound's own smooth hill: no flat top, no crystal mark, no protection, so the bake gives it relief.
+    if (best.bare) {
+      const hill=mound(wx,wy);
+      if (hill>.5) heights[y*grid+x]=clamp(s.base[y*grid+x]+hill,MIN_HEIGHT,MAX_HEIGHT);
+      continue;
+    }
     // Crystal repro 1–3: inheriting the mound incline made continuous dark
     // walls. Preserve the envelope but expose separate column tops.
     const incline=best.gx*(wx-best.wx)+best.gy*(wy-best.wy);
