@@ -30,7 +30,7 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
   const solverWorkBytes=solverGrid*solverGrid*256;
   let settings=structuredClone(params),revision=0,worker=null,active=null,job=0,disposed=false,tail=Promise.resolve();
   let cacheBytes=0,inflightBytes=0,peakBytes=0,peakWorkBytes=0,hits=0,misses=0,evictions=0,solves=0,uniformSkips=0,uniformHints=0;
-  let completed=0,lastMilliseconds=0;
+  let completed=0,lastMilliseconds=0,emptyReads=0;
   function reserve(bytes) {
     inflightBytes=bytes;
     evict(Math.max(0,budget-bytes));
@@ -215,7 +215,7 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
     });
   }
   const signalOf=value => value?.signal??value;
-  function progress(t,index,total,value=1) { onProgress?.({revision,progress:(index+value)/total,tile:{x:t.x,y:t.y},completed:index,total}); }
+  function progress(t,index,total,value=1) { onProgress?.({revision,progress:(index+value)/total,tile:{x:t.x,y:t.y},completed:index+(value===1?1:0),total}); }
   function prepare(request,signal) {
     signal=signalOf(signal); const list=tiles(cells(request));
     return enqueue(async (rev,s) => {
@@ -236,11 +236,11 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
         const authored=authoredRegion(await readAuthored(worldRect(region),s),region); current(rev,s);
         const width=region.x1-region.x0+1,height=region.y1-region.y0+1;
         if (authored.gridWidth!==width || authored.gridHeight!==height || Math.round(authored.gridOrigin[0]/spacing)!==region.x0 || Math.round(authored.gridOrigin[1]/spacing)!==region.y0) throw new Error('Authored weather region is not on the canonical world lattice.');
-        const delta=new Float32Array(n),weights=new Float32Array(n),weather={flow:new Float32Array(n),deposit:new Float32Array(n),talus:new Float32Array(n),sand:withSand?new Float32Array(n):null};
+        const weather={flow:new Float32Array(n),deposit:new Float32Array(n),talus:new Float32Array(n),sand:withSand?new Float32Array(n):null};
         const materialField=withMaterial?new Float32Array(n*4):null;
-        let deadline=performance.now()+8;
-        for (let index=0;index<list.length;index++) {
-          const t=await tile(list[index],rev,s,p => progress(list[index],index,list.length,p),outputBytes); current(rev,s);
+        let deadline=performance.now()+8,delta=null,weights=null;
+        const deferred=[];
+        async function accumulate(t) {
           const x0=Math.max(region.x0,t.rect.x0),x1=Math.min(region.x1,t.rect.x1),y0=Math.max(region.y0,t.rect.y0),y1=Math.min(region.y1,t.rect.y1);
           for (let y=y0;y<=y1;y++) {
             for (let x=x0;x<=x1;x++) {
@@ -252,11 +252,25 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
             }
             if ((y&7)===7 && performance.now()>=deadline) { await new Promise(resolve => setTimeout(resolve,0)); current(rev,s); deadline=performance.now()+8; }
           }
+        }
+        for (let index=0;index<list.length;index++) {
+          const t=await tile(list[index],rev,s,p => progress(list[index],index,list.length,p),outputBytes); current(rev,s);
+          // Prove the complete input of every contributor before skipping any
+          // pixel work. If a later tile has output, replay these zero weights
+          // first, preserving the original accumulation order exactly. Zero
+          // height stays on that path too, including authored negative zero.
+          if (!delta && t.uniformDelta===0 && t.uniformBase!==0 && !t.flow && !t.deposit && !t.talus && !t.sand && !t.materialField) {
+            deferred.push({x:t.x,y:t.y,rect:t.rect,gridWidth:t.gridWidth,uniformDelta:0});
+          } else {
+            if (!delta) { delta=new Float32Array(n); weights=new Float32Array(n); for (const previous of deferred) await accumulate(previous); deferred.length=0; }
+            await accumulate(t);
+          }
           progress(list[index],index,list.length);
         }
         current(rev,s);
         const fields={...authored.fields,h:authored.fields.h.slice()};
-        for (let i=0;i<n;i++) {
+        if (!delta) emptyReads++;
+        else for (let i=0;i<n;i++) {
           fields.h[i]+=delta[i]/weights[i]*(1-(authored.fields.r?.[i]??0));
           for (const a of Object.values(weather)) if (a) a[i]/=weights[i];
           if (materialField) for (let c=0;c<4;c++) materialField[i*4+c]/=weights[i];
@@ -298,7 +312,7 @@ export function createTiledWeather({read:readAuthored,readUniform,worldSize,worl
   }
   function setBudget(bytes) { if (!Number.isFinite(bytes) || bytes<1048576) throw new Error('Weather JS budget must be at least 1 MB.'); budget=bytes; evict(); }
   function stats() { return {revision,cacheBytes,cpuCacheBytes:cacheBytes,residentBytes:cacheBytes+inflightBytes,inflightBytes,peakBytes,peakWorkBytes,budget,cacheEntries:cache.size,
-    hits,misses,evictions,solves,uniformSkips,uniformHints,completed,lastMilliseconds,coreCells:core,coreWorldPixels:core*spacing,overlapCells:blend,solverApronCells:apron,solverGrid,solverWorkBytes,worldSize,worldGrid,gridSpacing:spacing}; }
+    hits,misses,evictions,solves,uniformSkips,uniformHints,emptyReads,completed,lastMilliseconds,coreCells:core,coreWorldPixels:core*spacing,overlapCells:blend,solverApronCells:apron,solverGrid,solverWorkBytes,worldSize,worldGrid,gridSpacing:spacing}; }
   setBudget(budget);
   return {read,prepare,sampleCached,requiredRect,invalidate,setBudget,stats,dispose() { disposed=true; cancelActive(); cache.clear(); cacheBytes=0; }};
 }
