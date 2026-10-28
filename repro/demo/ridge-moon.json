@@ -81,10 +81,12 @@
      "spurLength": 140,
      "spurSpread": 60,
      "spurWidth": 90,
-     "spurTaper": 80,
+     "spurTaper": 70,
      "spurHeight": 100,
      "crestJag": 60,
-     "crestVary": 50
+     "crestVary": 50,
+     "spurForks": 80,
+     "spurBulb": 60
     }
    }
   ],
@@ -125,8 +127,10 @@
      "spurLength": 110,
      "spurSpread": 40,
      "spurWidth": 80,
-     "spurTaper": 80,
-     "spurHeight": 75
+     "spurTaper": 70,
+     "spurHeight": 75,
+     "spurForks": 80,
+     "spurBulb": 60
     }
    }
   ]
