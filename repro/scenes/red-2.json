@@ -1,7 +1,7 @@
 {"biome": "red", "source": {"map": "red river", "x": 2560, "y": 2880},
  "ground": true, "query": "",
  "strokes": [
-  ["offset", [[150, 400], [320, 390], [480, 300], [540, 140], [500, -40]], {"card": {"diameter": 470, "amount": -40, "roughness": 30, "softness": 60}}],
+  ["offset", [[150, 400], [320, 390], [480, 300], [540, 140], [500, -40]], {"card": {"diameter": 510, "amount": -40, "roughness": 30, "softness": 60, "profile": 1, "apronPx": 40, "apronHeight": 15, "facePx": 150, "faceCurve": 0, "terraces": 3, "ledge": 25, "terraceJitter": 50}}],
   ["plateau", [[470, 40], [480, 90]], {"card": {"diameter": 120, "amount": 40, "roughness": 20, "softness": 50}}],
   ["plateau", [[680, 885]], {"card": {"diameter": 210, "amount": 82, "roughness": 25, "softness": 40}}]
  ]}

@@ -4,6 +4,6 @@
   ["offset", [[130, 540], [210, 700], [380, 790]], {"card": {"diameter": 240, "amount": 9, "roughness": 80, "softness": 50}}],
   ["offset", [[610, 90], [690, 230]], {"card": {"diameter": 190, "amount": 7, "roughness": 80, "softness": 50}}],
   ["offset", [[900, 900], [960, 960]], {"card": {"diameter": 180, "amount": 8, "roughness": 80, "softness": 50}}],
-  ["plateau", [[470, 580]], {"card": {"diameter": 260, "amount": 64, "roughness": 12, "softness": 100}}],
-  ["plateau", [[355, 245], [450, 370], [540, 475], [665, 600], [770, 745]], {"card": {"diameter": 500, "amount": 64, "roughness": 12, "softness": 100}}]
+  ["plateau", [[470, 580]], {"card": {"diameter": 260, "amount": 64, "roughness": 22, "softness": 100}}],
+  ["plateau", [[355, 245], [450, 370], [540, 475], [665, 600], [770, 745]], {"card": {"diameter": 500, "amount": 64, "roughness": 22, "softness": 100}}]
  ]}
