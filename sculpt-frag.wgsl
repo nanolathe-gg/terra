@@ -678,9 +678,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                          + surfaceHeight(p - vec2f(0.0, 7.0)) + surfaceHeight(p + vec2f(0.0, 7.0)));
         let gully = smoothstep(0.3, 2.0, wide - h);
         // Structured rock (card E3): a ledge's lip is a convex ridge, not a lump
-        // of moss, so on structured faces the lump-top term steps back.
+        // of moss, so on painted rock the lump-top term steps back (a hill's
+        // own faces keep their moss; the bake covers their lips with rock).
         var topTerm = u.faceScore.y * top;
-        if (u.rockOrder > 0.0) { topTerm *= 1.0 - u.rockOrder * smoothstep(0.35, 0.8, max(slope, 0.8 * painted.x)); }
+        if (u.rockOrder > 0.0) { topTerm *= 1.0 - u.rockOrder * painted.x; }
         let score = u.faceScore.x * micro / max(slope, 0.25) - topTerm + u.gullyRock * gully
                   + (fine.g - 0.5) * u.faceScore.z + (n.r - 0.5) * u.faceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.

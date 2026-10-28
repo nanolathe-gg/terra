@@ -38,7 +38,7 @@ KNOB_DEFAULTS = dict(
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5, bedLip=1,
-    jointSpacing=36, jointAngle=0, jointDepth=2, jointRun=120, jointGaps=.3, crackStyle=0, bedHeight=0,
+    jointSpacing=36, jointAngle=0, jointDepth=2, jointRun=120, jointGaps=.3, crackStyle=0, bedHeight=0, rockFrom=.6,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
@@ -84,7 +84,16 @@ WORLD_KNOBS = {
                   # Great Divide's terraces are short dashes stacked like
                   # scales, not long smooth lines (thin dark lines per
                   # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
-                  bandJag=1),
+                  bandJag=1,
+                  # Card E3 (retail green-2's big rock face): coherent level beds scratched
+                  # by long joints leaning ~20 degrees (row period 8-12 px whatever the
+                  # slope; thin-line direction shares vertical/horizontal .29/.27 against
+                  # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
+                  # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
+                  # sparse patches and keep their own relief.
+                  rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
+                  bedLip=1, bedLedge=.55, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
+                  crackStyle=1),
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
                 reliefAmount=.2, slopeTexture=0, microRock=0),
     # Retail sand runs level to a crisp waterline (hundred isles, canal

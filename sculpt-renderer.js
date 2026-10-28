@@ -752,6 +752,7 @@ export class TerrainRenderer {
     set('uJointGaps', number('jointGaps', 0.3));
     set('uCrackStyle', number('crackStyle', 0));
     set('uBedHeight', number('bedHeight', 0));
+    set('uRockFrom', number('rockFrom', 0.6));
     if (this.sun) this.v('uSun', this.sun);
     set('uCracksOn', preview && v.get('previewCracks') !== '1' ? 0 : 1);
     set('uWindAngle', number('wind', 20));

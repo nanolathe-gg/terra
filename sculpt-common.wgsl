@@ -219,7 +219,8 @@ struct Uniforms {
     jointRun: f32,        // typical length of an unbroken joint, world px
     jointGaps: f32,       // share of each joint's length that is missing (0: the whole face)
     crackStyle: f32,      // cracks: 0 ink (dark floor), 1 relief (carved groove with a lit lip)
-    bedHeight: f32,       // 0 beds spaced along the face (px, as retail Green measures), 1 by height (as the strata colours)
+    bedHeight: f32,       // 0 beds spaced along the ground (px), 1 by height units (as the strata colours)
+    rockFrom: f32,        // slope where beds and joints start on steep ground (painted rock always counts)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

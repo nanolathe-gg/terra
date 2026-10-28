@@ -454,7 +454,7 @@ fn bedRelief(p: vec2f, h: f32, shift: f32) -> vec2f {
     // px apart per unit of spacing in px mode.
     let G = max(length(broadGradient(p) + u.bedDip * dip), 0.15);
     let S = max(u.bedSpacing, 2.0) * pow(G, 1.0 - u.bedHeight);
-    let wander = valueNoise(p / 110.0 + 3.1) * S * 0.4 + valueNoise(p / 34.0 + 8.2) * S * 0.18 + valueNoise(p / 9.0 + 2.7) * S * 0.05;
+    let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
     let L = (h + tilt + wander) / S + shift;
     // Bed boundaries sit within 0.4 of each whole step, so they never cross.
     var k = floor(L);
@@ -803,7 +803,9 @@ fn bake(p: vec2f) -> vec4f {
     var steep = 0.0;
     if (u.rockOrder > 0.0 && u.cracksOn != 0 && h > u.sea + 1.0) {
         order = u.rockOrder * smoothstep(0.0, 0.5, clamp(crackMask, 0.0, 1.0)) * (1.0 - route) * (1.0 - buried);
-        steep = smoothstep(0.35, 0.8, faceSlope);
+        // Beds and joints are for faces: steep ground (full from slope
+        // rockFrom + 0.5) and painted rock, which counts as a face whatever the slope.
+        steep = max(smoothstep(u.rockFrom, u.rockFrom + 0.5, slope), paintRock);
         height *= 1.0 - 0.85 * order * steep;
         crackAt.w *= 1.0 - 0.85 * order * steep;
         crackAt.x *= 1.0 - 0.5 * order * steep;
@@ -813,8 +815,8 @@ fn bake(p: vec2f) -> vec4f {
     if (order > 0.0) {
         let joint = jointField(p);
         let bed = bedRelief(p, h, joint.y);
-        height += order * (steep * bed.x + smoothstep(0.5, 1.0, faceSlope) * joint.x);
-        structureRock = order * steep * bed.y;
+        height += order * steep * (bed.x + joint.x);
+        structureRock = order * steep * bed.y * step(0.01, u.bedLip);
     }
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast. Nor lifts the bed above it.
