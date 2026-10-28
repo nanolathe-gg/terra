@@ -85,6 +85,8 @@ const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Mo
 const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 const STYLE_CHOICES=[[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
 const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace'];
+// Coast options (card E4): joined-coast fingers and shore layers, applied by stampCoastShore once the stroke is swept.
+const COAST_KEYS=['fingerCoast','shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -95,6 +97,14 @@ const SHAPE_FIELDS=[
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
   ['fingerBlunt','finger-blunt','Blunt fingers (0 pointed, 1 thumbs)',['deep','shallow'],0,1,1,1,'Fingers as retail Lava draws them: 25-35 px thumbs with rounded tips and inlets, not pointed teeth.'],
   ['bankPx','bank-px','Dry bank (px)',['deep','shallow'],0,160,2,1,'Width of the dry bank from the waterline to the level ground, whatever the shape\'s size (0: a share of the shape, set by Bank width).'],
+  // Card E4 (Lava): fingers and terraces cut into the joined coast once the stroke is swept (stampCoastShore).
+  ['fingerCoast','finger-coast','Fingers on the joined coast',['deep','shallow'],0,1,1,1,'1: the fingers are low tongues of the lowest shore layer, laid on the coast this stroke leaves after every earlier stroke has had its say, so overlapping lakes no longer flood one another\'s fingers into wedges. 0: the older shift of this stroke\'s own waterline.'],
+  ['shoreLayers','shore-layers','Shore layers',['deep','shallow'],0,12,1,1,'Cut the bank into this many flat terraces stepping down to the water, as real heights the sun lights (a lit top, a shaded riser), counted from the waterline this stroke leaves. 0: the plain bank.'],
+  ['layerPx','layer-px','Layer width (px)',['deep','shallow'],4,60,1,1,'Width of one layer, ledge and riser together: Shore layers times this is how far the terraces reach inland.'],
+  ['layerRiser','layer-riser','Riser height (units; 0 fits the bank)',['deep','shallow'],0,80,1,10,'Height of each step. 0 shares the bank\'s whole rise out between the layers, so the last one meets the plain.'],
+  ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
+  ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighbouring risers meet and part and no two layers run parallel for long.'],
+  ['layerStyle','layer-style','Layer style',['deep','shallow'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: overlapping round layers, each a small stepped mound against the bank.',[[0,'Contour'],[1,'Circular']]],
   ['profile','sec-profile','Cross-section (0 classic, 1 parametric)',SECTION_KINDS,0,1,1,1,'0 keeps this kind\'s own curve. 1 builds the profile from the options below, in pixels from the outer edge, so it keeps its size whatever the brush diameter. Mesa flanks, Wider north faces and Beach flatness are then ignored; Slope softness and (on water) Dry bank only set the default face width.'],
   ['apronPx','sec-apron-px','Apron width (px)',SECTION_KINDS,0,160,2,1,'A gentle concave skirt at the foot (talus, desert aprons; on water, the beach at the waterline).'],
   ['apronHeight','sec-apron-height','Apron height',SECTION_KINDS,0,60,5,100,'Share of the whole rise (of the bank, on water) reached at the apron\'s top.'],
@@ -271,7 +281,7 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -424,7 +434,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -1052,7 +1062,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
     let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
     if (pc) r/=pc.r0+(pc.r1-pc.r0)*t;
-    if (waterTool && s.fingers>0 && r>(s.fingerBlunt>=.5?.1:.25) && r<1.6) {
+    if (waterTool && s.fingers>0 && !(s.fingerCoast>=.5) && r>(s.fingerBlunt>=.5?.1:.25) && r<1.6) {
       // Shift the waterline across the coast band (coast near r 0.67). Thumbs
       // reach tens of px, so their band is set in px, not as a share of a small lake.
       const len=Math.sqrt(dx*dx+dy*dy)||1,band=1-smooth(.45,.9,Math.abs(r-.67)*(s.fingerBlunt>=.5?Math.min(1,radius*width*bankScale/180):1));
@@ -1217,23 +1227,34 @@ function sweep(s,points) {
   }
   s.path=points.slice(); s.last=s.end=points[points.length-1];
 }
+// Seed only coast segments this stroke actually touched. Fractional edge
+// crossings keep the band in pixels, independent of the height range. Cells
+// away from the coast start at `far` (plus two cells) for the caller's passes.
+function coastSeeds(s,raw,sea,far,moved=false,box=null) {
+  const distance=new Float32Array(raw.length).fill(far+spacing*2),before=moved?s.base:null;
+  const seed=(i,j) => {
+    if ((s.weights[i]<=0 && s.weights[j]<=0) || (raw[i]>sea)===(raw[j]>sea)) return;
+    // moved: only a waterline this stroke made, where a cell changed side of the sea;
+    // an older lake's coast under this stroke's bank is that stroke's to shape.
+    if (before && (before[i]>sea)===(raw[i]>sea) && (before[j]>sea)===(raw[j]>sea)) return;
+    const d=Math.abs(raw[i]-sea)/Math.max(1e-6,Math.abs(raw[i]-raw[j]))*spacing;
+    distance[i]=Math.min(distance[i],d); distance[j]=Math.min(distance[j],spacing-d);
+  };
+  const x0=box?box.x0:0,x1=box?box.x1:grid-1,y0=box?box.y0:0,y1=box?box.y1:grid-1;
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+    const i=y*grid+x;
+    if (x+1<grid) seed(i,i+1);
+    if (y+1<grid) seed(i,i+grid);
+  }
+  return distance;
+}
 // Shared shore plates: geometry belongs to the water stroke, so Crystal and
 // Red can reuse it with their own ground materials. Heights above sea are
 // explicit; no world-wide coast inference or material-tag channel is needed.
 function stampShorePlates(s) {
   const water=Math.max(0,s.plateWaterPx),land=Math.max(0,s.plateLandPx),reach=Math.max(water,land);
   if (!reach) return;
-  const raw=heights.slice(),distance=new Float32Array(raw.length).fill(reach+spacing*2),sea=config.seaLevel;
-  // Seed only coast segments this stroke actually touched. Fractional edge
-  // crossings keep the band in pixels, independent of the height range.
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
-    const i=y*grid+x;
-    for (const j of [x+1<grid?i+1:-1,y+1<grid?i+grid:-1]) {
-      if (j<0 || (s.weights[i]<=0 && s.weights[j]<=0) || (raw[i]>sea)===(raw[j]>sea)) continue;
-      const d=Math.abs(raw[i]-sea)/Math.max(1e-6,Math.abs(raw[i]-raw[j]))*spacing;
-      distance[i]=Math.min(distance[i],d); distance[j]=Math.min(distance[j],spacing-d);
-    }
-  }
+  const raw=heights.slice(),sea=config.seaLevel,distance=coastSeeds(s,raw,sea,reach);
   // Distance is approximate on the height grid, especially near diagonal
   // coasts; two linear passes avoid a per-pixel coast search.
   const diagonal=spacing*Math.SQRT2;
@@ -1404,6 +1425,223 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
     }
   }
   heightDirty=true;
+}
+
+// Coast pass (card E4, Lava). Retail's lava banks are wide flat layers stepping
+// down to the lava, each lit by the sun (a lit top, a shaded riser), and its
+// fingers are thin low tongues, not full-height wedges (the owner's review of
+// round 6; retail lava-1 and lava-2). Both are height geometry cut into the
+// waterline the stroke leaves once it is swept, so they follow the joined coast
+// of every earlier stroke and never fake a layer with a drawn line. They read
+// neighbouring heights, so evaluate() replays the full suffix when a node has
+// one (as it does for shore plates). 'far' below is the distance of cells no
+// touched coast reaches; the sweeps never lower it by more than the grid is wide.
+const hasCoastPass=(kind,p) => (kind==='deep' || kind==='shallow') && ((p?.fingerCoast??worldDefault('fingerCoast'))>=.5 && (p?.fingers??worldDefault('fingers'))>0 || Math.round(p?.shoreLayers??worldDefault('shoreLayers'))>=1);
+// Distance to the nearest touched coast, in px, by fast sweeping the eikonal
+// equation (four sweep directions, twice): within about 1% of Euclidean, where
+// the two-pass chamfer of the shore plates is out by up to 8% and would show
+// as straight eight-way facets in a layer's edge.
+function sweepDistance(d,box=null) {
+  const h=spacing,bx0=box?box.x0:0,bx1=box?box.x1:grid-1,by0=box?box.y0:0,by1=box?box.y1:grid-1,wide=bx1-bx0+1,tall=by1-by0+1;
+  for (let pass=0;pass<2;pass++) for (let dir=0;dir<4;dir++) {
+    const x0=dir&1?bx1:bx0,xs=dir&1?-1:1,y0=dir&2?by1:by0,ys=dir&2?-1:1;
+    for (let k=0,y=y0;k<tall;k++,y+=ys) for (let m=0,x=x0;m<wide;m++,x+=xs) {
+      const i=y*grid+x,a=Math.min(x>bx0?d[i-1]:Infinity,x<bx1?d[i+1]:Infinity),b=Math.min(y>by0?d[i-grid]:Infinity,y<by1?d[i+grid]:Infinity),gap=Math.abs(a-b);
+      const v=gap>=h?Math.min(a,b)+h:(a+b+Math.sqrt(2*h*h-gap*gap))/2;
+      if (v<d[i]) d[i]=v;
+    }
+  }
+}
+// Distance (px) to the waterline this stroke made, on the heights now in force;
+// cells it cannot reach keep a large value.
+function coastField(s,raw,sea,box=null) { const d=coastSeeds(s,raw,sea,1e5,true,box); sweepDistance(d,box); return d; }
+function stampCoastShore(s) {
+  const sea=config.seaLevel,fingers=s.fingerCoast>=.5 && s.fingers>0,layers=Math.round(s.shoreLayers)>=1;
+  // Every touched coast segment has a cell of the stroke's footprint beside it, so the pass reads and
+  // writes only that footprint grown by the farthest it reaches: the fingers' limit, the layers' zone,
+  // and the cells the blur of the normals looks across. Outside it nothing here can change.
+  let reach=0;
+  if (fingers) reach=Math.max(reach,coastFingerLimit(s));
+  if (layers) reach=Math.max(reach,coastLayerReach(s));
+  const box=coastBox(s,reach);
+  if (!box) return;
+  if (fingers) coastFingers(s,sea,box);
+  if (layers) coastLayers(s,sea,box);
+  heightDirty=true;
+}
+function coastBox(s,reach) {
+  const w=s.weights;
+  let x0=grid,y0=grid,x1=-1,y1=-1;
+  for (let y=0;y<grid;y++) for (let x=0,row=y*grid;x<grid;x++) if (w[row+x]>0) { if (x<x0) x0=x; if (x>x1) x1=x; if (y<y0) y0=y; y1=y; }
+  if (x1<0) return null;
+  const m=Math.ceil(reach/spacing)+12;
+  return {x0:Math.max(0,x0-m),y0:Math.max(0,y0-m),x1:Math.min(grid-1,x1+m),y1:Math.min(grid-1,y1+m)};
+}
+// A box blur of a field over the box only (clamped at its edges); where a cell's window lies inside
+// the box it is the blurred() of the whole grid.
+function blurredBox(field,radius,box) {
+  const {x0,y0,x1,y1}=box,tmp=new Float32Array(field.length),out=new Float32Array(field.length),width=2*radius+1;
+  for (let y=y0;y<=y1;y++) {
+    const row=y*grid; let sum=0;
+    for (let k=-radius;k<=radius;k++) sum+=field[row+clamp(x0+k,x0,x1)];
+    for (let x=x0;x<=x1;x++) { tmp[row+x]=sum/width; sum+=field[row+clamp(x+radius+1,x0,x1)]-field[row+clamp(x-radius,x0,x1)]; }
+  }
+  for (let x=x0;x<=x1;x++) {
+    let sum=0; for (let k=-radius;k<=radius;k++) sum+=tmp[clamp(y0+k,y0,y1)*grid+x];
+    for (let y=y0;y<=y1;y++) { out[y*grid+x]=sum/width; sum+=tmp[clamp(y+radius+1,y0,y1)*grid+x]-tmp[clamp(y-radius,y0,y1)*grid+x]; }
+  }
+  return out;
+}
+// Fingers on the joined coast. The lowest layer reaches into the lava as
+// tongues (a lava inlet cuts into the bank the same way): at each cell the
+// finger field of fingerShift is read at the nearest point of the coast and
+// moved along the coast's smoothed normal, so a finger is one prism from the
+// coast to its tip. Strokes that overlap have already flooded one another's
+// banks, so only the outline that survives is fingered. A tongue is as high as
+// the lowest layer and a little lower at its tip: the shading is the first
+// riser's, not a bank's wall.
+// Thumb fingers for the coast pass (retail lava-1: tendrils and stubs, 22-40 px across at
+// the root, 15-110 px long, in clusters with gaps between, tapering to a small round tip,
+// now and then forked). One finger per jittered lattice site in the shape's own frame; the
+// coast point at tangent offset tau from a site's axis reaches the finger's outline.
+// Everything about a finger comes from its site's hashes and a broad density noise, so no
+// two are alike and a moved lake carries its fingers along (position-only):
+// - spacing: the chance a site grows a finger follows a noise 130 px across, so stretches
+//   of coast are crowded and others bare, and sites jitter by almost half a cell;
+// - length: a power law, many stubs and a few long tendrils, and the longer the thinner (a little);
+// - taper: the half width falls linearly from the root to a tip just over half as wide, capped by
+//   a half circle;
+// - fork: a fifth of the middling fingers, made broader, split in two prongs by a V-notch
+//   that starts half way out.
+const THUMB_CELL=44;
+function thumbReach(s,wx,wy,nx,ny,amount) {
+  const inv=s.inv;
+  let lx=wx,ly=wy;
+  if (inv) {
+    lx=inv[0]*wx+inv[2]*wy+inv[4]; ly=inv[1]*wx+inv[3]*wy+inv[5];
+    const mx=inv[0]*nx+inv[2]*ny,my=inv[1]*nx+inv[3]*ny,ml=Math.hypot(mx,my)||1; nx=mx/ml; ny=my/ml;
+  }
+  // The lattice is turned off the axes (26 degrees): a coast running along a lattice row would see two
+  // rows of points where it should see one, and grow twice the fingers.
+  const ca=.8988,sa=.4384;
+  return thumbAt(s,ca*lx+sa*ly,-sa*lx+ca*ly,ca*nx+sa*ny,-sa*nx+ca*ny,amount);
+}
+function thumbAt(s,lx,ly,nx,ny,amount) {
+  const tx=-ny,ty=nx,salt=s.seed,ci=Math.floor(lx/THUMB_CELL),cj=Math.floor(ly/THUMB_CELL),unit=(i,j,k) => hash(i,j,salt^k)*.5+.5;
+  let best=0;
+  for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
+    const ax=(i+.5+.45*hash(i,j,salt^0x5a7))*THUMB_CELL,ay=(j+.5+.45*hash(i,j,salt^0x1d3))*THUMB_CELL;
+    if (unit(i,j,0x31f)>=clamp(.7+.75*valueNoise(ax/130,ay/130,salt^0x1f3),.04,.97)) continue;
+    // Only sites within half a cell of the coast along its normal grow a finger here.
+    if (Math.abs((lx-ax)*nx+(ly-ay)*ny)>=THUMB_CELL*.5) continue;
+    const L=amount*52*(.3+2*unit(i,j,0x4e5)**2.4),fork=L>40*amount && L<95*amount && unit(i,j,0x2c9)>.8;
+    let h0=clamp(17-.05*(L/Math.max(amount,.2)-30)+(unit(i,j,0x6b1)-.5)*6,11,20)*Math.min(1,.4+amount*.6);
+    if (fork) h0=clamp(h0*1.3,16,24);
+    const tau=Math.abs((lx-ax)*tx+(ly-ay)*ty);
+    if (tau>=h0) continue;
+    const ht=Math.max(4.5,.55*h0),Ls=Math.max(L-ht,0);
+    // The outline: a straight taper to a tip ht wide, then a half circle ht across.
+    let r=tau>ht?Ls*(h0-tau)/(h0-ht):Ls+Math.sqrt(ht*ht-tau*tau);
+    if (fork && r>.5*L) { const wn=.42*h0; if (tau<wn) r=Math.min(r,.5*L+(r-.5*L)*tau/wn); }
+    best=Math.max(best,r);
+  }
+  return best+valueNoise(lx/12,ly/12,salt^0x5c1)*1.6;
+}
+// The farthest a finger reaches from the coast (px), and what its cells read beyond that.
+const coastFingerLimit=s => .5*s.radius*2**((s.bankWidth-.5)*1.3)+spacing*3;
+function coastFingers(s,sea,box) {
+  const raw=heights.slice(),dist=coastField(s,raw,sea,box),n=raw.length,sd=new Float32Array(n);
+  const bankScale=2**((s.bankWidth-.5)*1.3),reach=.5*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
+  // A finger stands as high as the lowest layer (LAYER_FOOT), a little lower at its tip; any lower and the
+  // shader's relief reads it as lava and shadow, a thin dark spike.
+  const low=Math.min(LAYER_FOOT,.3*(config.baseHeight-sea));
+  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) sd[i]=raw[i]>sea?dist[i]:-dist[i];
+  const soft=blurredBox(sd,10,box),limit=reach+spacing*3,thumbs=s.fingerBlunt>=.5;
+  for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
+    const i=y*grid+x;
+    if (dist[i]>limit) continue;
+    const gx=soft[y*grid+Math.min(x+1,grid-1)]-soft[y*grid+Math.max(x-1,0)],gy=soft[Math.min(y+1,grid-1)*grid+x]-soft[Math.max(y-1,0)*grid+x],len=Math.hypot(gx,gy);
+    if (len<1e-3) continue;
+    // The unit normal points inland; the nearest coast point lies back along it.
+    const nx=gx/len,ny=gy/len,wx=x*spacing,wy=y*spacing,f=clamp(thumbs?thumbReach(s,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,s.fingers*clamp(s.radius*bankScale/140,.35,1)):fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
+    if (sd[i]<0 && -sd[i]<f) {
+      const u=-sd[i]/f;
+      heights[i]=clamp(sea+low*(.7+.3*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
+    } else if (sd[i]>0 && sd[i]<-f) heights[i]=clamp(sea-.5-2.5*(1-sd[i]/-f),MIN_HEIGHT,MAX_HEIGHT);
+  }
+  // A tongue is land joined to land: flood out from the ground that was already dry, and
+  // give back any new land the flood does not reach (a tip read across a bend of the coast).
+  const seen=new Uint8Array(n),queue=new Int32Array((box.x1-box.x0+1)*(box.y1-box.y0+1));
+  let head=0,tail=0;
+  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (raw[i]>sea) { seen[i]=1; queue[tail++]=i; }
+  const grow=j => { if (!seen[j] && heights[j]>sea) { seen[j]=1; queue[tail++]=j; } };
+  while (head<tail) {
+    const i=queue[head++],x=i%grid,y=(i-x)/grid;
+    if (x>box.x0) grow(i-1);
+    if (x<box.x1) grow(i+1);
+    if (y>box.y0) grow(i-grid);
+    if (y<box.y1) grow(i+grid);
+  }
+  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (!seen[i] && heights[i]>sea) heights[i]=raw[i];
+}
+// The lowest layer stands LAYER_FOOT units above the lava (retail's first shelf is
+// 6-10 above it) and is reached over LAYER_WALL px: a ledge nearer the water than
+// ~3 units dips under the sea in the shader's relief, and a 1-cell wall is a
+// black line. Both are the engine's own constants, not controls.
+const LAYER_FOOT=6,LAYER_WALL=5;
+// Shore layers: the land's height as a staircase in the distance from the
+// coast (contour layers), or in that distance plus a field of stepped round
+// mounds (circular layers, retail lava-2). Layer k tops out at sea + foot +
+// riser * k; the last riser meets the plain, and with riser 0 the bank's rise
+// above the foot is shared out evenly so it does. The rise is the world's own, from its sea to its dry base: ground an earlier stroke
+// already lowered or terraced is only ever cut further, never re-measured. Layer edges wander with position-only noise
+// in the shape's own frame, so no two run parallel for long.
+// How far the layers reach from the coast (px), the skip distance included.
+const coastLayerReach=s => { const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx); return (s.layerStyle>=.5?1.6:1)*n*W+2*W; };
+function coastLayers(s,sea,box) {
+  const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),circular=s.layerStyle>=.5;
+  const raw=heights.slice(),dist=coastField(s,raw,sea,box),inv=s.inv,salt=s.seed;
+  // Circular style: a low flat shelf carrying round stepped mounds (retail lava-2's overlapping
+  // pancakes: 3-5 rings 5-8 px apart, 20-35 px across, a unit or two a ring). One mound per
+  // jittered lattice cell in the shape's frame; where mounds overlap the higher ring wins.
+  // Shore layers is the rings a mound has, Layer width the ring spacing.
+  const rim=n*W,C=Math.max(24,1.7*rim),reach=circular?1.6*rim:n*W,ring=s.layerRiser>0?s.layerRiser:1.6;
+  const mounds=(lx,ly,ledge) => {
+    const ci=Math.floor(lx/C),cj=Math.floor(ly/C);
+    let best=0;
+    for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
+      if (hash(i,j,salt^0x91d)<-.7) continue;
+      const cx=(i+.5+.4*hash(i,j,salt^0x13b))*C,cy=(j+.5+.4*hash(i,j,salt^0x5c9))*C,R=rim*(.9+.4*(hash(i,j,salt^0x77f)*.5+.5));
+      const q=(R-Math.hypot(lx-cx,ly-cy))/W+irr*.8*valueNoise(lx/9,ly/9,salt^0x4a1);
+      if (q<=0) continue;
+      const qc=Math.min(q,n),k=Math.min(Math.floor(qc),n-1);
+      best=Math.max(best,qc>=n?n:k+smooth(ledge,1,qc-k));
+    }
+    return best;
+  };
+  const rise=config.baseHeight-sea,foot=Math.min(LAYER_FOOT,.3*rise),riser=s.layerRiser>0?s.layerRiser:(rise-foot)/n;
+  for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
+    const i=y*grid+x;
+    if (!(raw[i]>sea)) continue;
+    const d=dist[i],base=s.base[i];
+    if (d>=reach+2*W) { if (s.weights[i]>0 && raw[i]<base) heights[i]=base; continue; }
+    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
+    const ledge=clamp(ledge0+irr*.3*valueNoise(lx/33,ly/33,salt^0x2b1),.3,.95);
+    let level;
+    if (circular) {
+      const t=d/reach;
+      if (t>=1 && raw[i]<base) { heights[i]=base; continue; }
+      // The bank is a low flat shelf the mounds stand on, rising to the plain over its outer
+      // half, soft enough that its edge is scalloped by the mounds and is not one dark cliff.
+      level=foot+(rise-foot)*smooth(.55,1,t)+ring*mounds(lx,ly,ledge);
+    } else {
+      const q=Math.max(0,d/W+irr*(.55*valueNoise(lx/42,ly/42,salt^0x7a1)+.25*valueNoise(lx/14,ly/14,salt^0x3c5)+.12*valueNoise(lx/6,ly/6,salt^0x5e3)));
+      if (q>=n) { if (raw[i]<base) heights[i]=base; continue; }
+      const k=Math.floor(q);
+      level=foot+riser*(k+smooth(ledge,1,q-k));
+    }
+    heights[i]=clamp(Math.min(Math.min(base,config.baseHeight),sea+level*smooth(0,LAYER_WALL,d))+Math.max(0,base-config.baseHeight),MIN_HEIGHT,MAX_HEIGHT);
+  }
 }
 
 // Crystals: clusters of faceted crystals. Each is a pyramid over a polygon
@@ -1744,7 +1982,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1790,6 +2028,7 @@ function replayShape(n,work) {
   }
   if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
   else sweep(s,pts);
+  if (hasCoastPass(n.kind,s)) stampCoastShore(s);
   if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
   if (n.kind==='crater') addCraterlets(n,s);
   applyCracks(s);
@@ -1861,7 +2100,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5 && q.crystalForm<1.5?1.35:1)+(q.crystalForm>=.5 && q.crystalForm<1.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
+  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5 && q.crystalForm<1.5?1.35:1)+(q.crystalForm>=.5 && q.crystalForm<1.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shoreLayers>=1?q.shoreLayers*(q.layerPx||0)*(q.layerStyle>=.5?1.6:1)+2*(q.layerPx||0):0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
@@ -1938,8 +2177,9 @@ function evaluateRegion(from,rect) {
 function evaluate(from=0,rect=null) {
   const evalStart=performance.now();
   // Shore distance depends on neighbouring heights; replay the full suffix
-  // when it contains a plate band so changes outside a small edit stay exact.
-  if (rect && nodes.slice(from).some(n => ['deep','shallow','offset'].includes(n.kind) && n.params?.shorePlates>0)) rect=null;
+  // when it contains a plate band or a coast pass (joined-coast fingers, shore
+  // layers) so changes outside a small edit stay exact.
+  if (rect && nodes.slice(from).some(n => (['deep','shallow','offset'].includes(n.kind) && n.params?.shorePlates>0) || hasCoastPass(n.kind,n.params))) rect=null;
   if (rect && from>0 && prefix[from] && prefix.length>=nodes.length) { evaluateRegion(from,rect); lastEvalMs=performance.now()-evalStart; return; }
   from=Math.max(0,Math.min(from,nodes.length));
   if (from>0 && prefix[from]) { const now=live(); for (const k of FIELD_KEYS) now[k].set(prefix[from][k]); }

@@ -52,7 +52,10 @@ KNOB_DEFAULTS = dict(
     frostWet=0, frostNeedles=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
-    fingers=0, fingerBlunt=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    fingers=0, fingerBlunt=0, bankPx=0,
+    # Coast pass (card E4): fingers on the joined coast and flat shore layers cut as heights
+    # (layerPx px a layer, riser 0 shares the bank's rise out, ledge and irregularity in shares).
+    fingerCoast=0, shoreLayers=0, layerPx=12, layerRiser=0, layerLedge=.75, layerRough=.5, layerStyle=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
@@ -217,15 +220,29 @@ WORLD_KNOBS = {
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=7, bandLine=1,
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=0, bandStyle=1, bandSpacing=7, bandLine=1,
                  northFace=.7, fingers=1, fingerBlunt=1, worms=0, shoreEdge=1, slopeTexture=0,
                  # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
                  bankPx=60,
+                 # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
+                 # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
+                 # a shaded riser) in place of the dark band lines (Banding 0 above; Banding, Band lines and the
+                 # B3 knobs stay in the World panel).
+                 shoreLayers=6, layerPx=16, layerLedge=.8, layerRough=.7,
+                 # Fingers are low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
+                 fingerCoast=1,
+                 # Less ambient light, so the shaded risers read as retail's near-black lines.
+                 ambient=.3,
                  # Line cores are near black (luma 15-27 in 55-60 ground) and
                  # ~2.5 px wide at half depth (measure/lava_bands.py lines
                  # profiles); the thin 1.6 px V at 0.75 darkness read as faint
                  # grain on the ground's palette noise.
-                 bandWidth=2.3, crackDark=.95,
+                 bandWidth=2.3,
+                 # Card E4: hills and mountains are rough rock, not smooth cones crossed by black
+                 # hairlines. Cracks stay but lose their ink (.95 -> .35); the relief is finer and
+                 # lumpier (scale 28 -> 20, amount .5 -> .9, lumps .7 -> .9) and Moon's joined wrinkles
+                 # and pits (card B3) roughen the slopes. Shine is card E2's, not set here.
+                 crackDark=.35, reliefAmount=.9, reliefScale=20, reliefLumps=.9, wrinkles=.6,
                  # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
                  # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
                  # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
