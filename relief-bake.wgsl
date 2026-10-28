@@ -652,7 +652,9 @@ fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
     if (any(id.xy >= textureDimensions(fieldsOut))) { return; }
     // Texel (x, y) of the fields is world pixel (x, y), as in GLSL.
 #ifdef CHUNK
-    textureStore(fieldsOut, id.xy, bake(vec2f(id.xy) + u.chunkFieldsOrigin));
+    // Convert the global integer texel once, just as the whole-map bake does;
+    // every hash/noise call receives that same world position.
+    textureStore(fieldsOut, id.xy, bake(vec2f(id.xy + vec2u(u.chunkFieldsOrigin))));
 #else
     textureStore(fieldsOut, id.xy, bake(vec2f(id.xy)));
 #endif
