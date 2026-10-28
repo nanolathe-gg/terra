@@ -100,7 +100,7 @@ for _m in SHINE_MATERIALS:
 KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
 # drifts, and the share of its length that is missing).
-KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.25)
+KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
