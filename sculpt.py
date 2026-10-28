@@ -102,7 +102,8 @@ for _m in SHINE_MATERIALS:
 # E7 (Crystal): every knob's default is the earlier output.
 KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFacets=0, crystalShallow=0, crystalShallowPx=10)
 # G7 (Crystal): craters with smaller, softer facets (0: the earlier output).
-KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3)
+KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
+                     crystalCraterGap=0, crystalCraterTone=0)
 # E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
 KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
@@ -400,9 +401,12 @@ WORLD_KNOBS = {
                     # E7: shallow water carries a mosaic of small crystal cells; the shore slabs
                     # shrink from 20 to 14 px (retail's band is a fine mesh, plates 12-80 px).
                     crystalShallow=1, crystalShallowPx=10,
-                    # G7: crater facets as small as retail's wall cells (12-20 px) and nearly flush with the
-                    # crater's own surface, so the sun's light runs smoothly across the wall.
-                    crystalCraterPx=16, crystalCraterStep=1),
+                    # G7: craters read as holes under a thin wandering web (retail crystal-1: smooth lit and
+                    # shaded walls, cells 12-20 px, hairline to 2 px lines, many left out): small facets with a
+                    # 1-unit step, one skin mark and the web drawn by the shader.
+                    crystalCraterPx=16, crystalCraterStep=1, crystalCraterSkin=1,
+                    crystalCraterWeb=1, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
+                    crystalCraterTone=.12),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,

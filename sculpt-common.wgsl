@@ -249,6 +249,12 @@ struct Uniforms {
     // E7 (Crystal).
     crystalShallow: f32,   // shallow water: how strongly it carries a mosaic of small crystal cells (0: as before)
     crystalShallowPx: f32, // width of those cells, px
+    // G7 (Crystal craters).
+    crystalCraterWeb: f32,     // crater skin (crystal mark .74): how dark the web of thin lines between them is drawn (0: no web)
+    crystalCraterWebPx: f32,   // width of the web's cells, px
+    crystalCraterWobble: f32,  // how far the web's lines wander off straight, px
+    crystalCraterGap: f32,     // share of the web's lines left out
+    crystalCraterTone: f32,    // cell-to-cell brightness variation (0: one tone)
     // E8 (Painted Desert)
     strataZoneSpace: array<vec4f, 6>,   // x: bed thickness of each zone of strataZones, height units (0: the world's strataSpacing)
     baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off

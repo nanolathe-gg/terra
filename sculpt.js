@@ -223,9 +223,10 @@ const SHAPE_FIELDS=[
   // G7 (Crystal): craters with smaller, softer facets.
   ['crystalCraterPx','crystal-crater-px','Facet width (px, crystal craters)',['crater'],0,48,2,1,'Crater facets: the width of each polygonal facet. 0 sizes them by the crater\'s radius (about a third of it, 14-36 px); retail\'s crater walls break into cells of 12-20 px.'],
   ['crystalCraterStep','crystal-crater-step','Facet step (units, crystal craters)',['crater'],0,60,5,10,'Crater facets: how far each facet may stand above or below the crater\'s own surface, in height units either way (shown in tenths: 3 is the earlier ragged crater). Retail\'s crater walls are smooth planes broken by a thin web, so a small step keeps the sun\'s light running smoothly across the wall.'],
+  ['crystalCraterSkin','crystal-crater-skin','Web in the shader (crystal craters)',['crater'],0,100,100,100,'Crater facets: 100 marks the whole crater as one crystal skin (no seams in the crystal field) and leaves the thin web between the facets to the shader (World knobs crystalCraterWeb and its relatives), drawn at pixel size so its lines run thin and wander; 0 inks each facet\'s seam in the field as before.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
-const G7_KEYS=['crystalCraterPx','crystalCraterStep'];
+const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
@@ -2326,6 +2327,8 @@ function applyCracks(s) {
 }
 // A crater facet's width: G7's own px, else about a third of the radius (E7). The regional read apron uses the same figure.
 const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);
+// The crystal mark of a crater's skin (G7): the shader reads exactly this value, which no column's mark (.8 and over) or seam (.5) has.
+const CRATER_SKIN=.74;
 // Crater facets (E7): retail's Crystal hollows and knobs have straight-edged
 // polygonal contours, not the soft round bowl. After the crater is cut, its
 // cells (the bowl, rim and apron, wherever it moved the ground) are tiled with
@@ -2336,7 +2339,7 @@ const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius
 // the facets (1).
 function facetCrater(s) {
   const strength=clamp(s.craterFacets,0,1); if (!(strength>0)) return;
-  const L=craterFacetWidth(s),inv=s.inv,f=inv?invert(inv):null,snap=heights.slice();
+  const skin=s.crystalCraterSkin>=.5,L=craterFacetWidth(s),inv=s.inv,f=inv?invert(inv):null,snap=heights.slice();
   const rnd=(i,j,a) => { let x=Math.imul(i*73856093^j*19349663^((s.seed>>>0)+a*83492791),2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
   // Seed planes read the crater's own cells and the stroke's starting ground elsewhere, never the live field: in a region
   // replay the cells outside the clip hold the state after later shapes, which must not tilt these facets.
@@ -2364,7 +2367,8 @@ function facetCrater(s) {
     const value=snap[i]+(facet-snap[i])*strength;
     heights[i]=clamp(s.base[i]>config.seaLevel+1?Math.max(value,config.seaLevel+1.5):value,MIN_HEIGHT,MAX_HEIGHT);
     // Facets are crystal cells, as a column mound's are: the bake keeps them clean and the shader draws their tops and inks their edges.
-    if (Math.abs(relief)>=2) { protection[i]=1; crystal[i]=d2-d1<Math.max(1.2,spacing*.6)?.5:best.shade; }
+    // G7 skin: one mark (the shader reads exactly .74 as a crater's skin) for the whole crater; the shader draws the web.
+    if (Math.abs(relief)>=2) { protection[i]=1; crystal[i]=skin?CRATER_SKIN:d2-d1<Math.max(1.2,spacing*.6)?.5:best.shade; }
   }
   heightDirty=true;
 }

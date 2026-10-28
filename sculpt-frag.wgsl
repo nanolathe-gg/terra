@@ -456,6 +456,49 @@ fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: 
     return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * 0.55 * seam);
 }
 
+// A crater's skin is the crystal field's exact value .74 (sculpt.js CRATER_SKIN). A column mound's seam ramps cross that value
+// too, so a pixel counts as skin only when it and its four neighbours three px off all read it.
+fn skinBand(m: f32) -> f32 { return 1.0 - smoothstep(0.012, 0.03, abs(m - 0.74)); }
+fn craterSkin(p: vec2f, m: f32) -> f32 {
+    var band = skinBand(m);
+    for (var k = 0; k < 4; k++) {
+        if (band <= 0.0) { break; }
+        band = min(band, skinBand(crystalField(p + vec2f(cos(f32(k) * 1.570796), sin(f32(k) * 1.570796)) * 3.0)));
+    }
+    return band;
+}
+
+// Crater web (card G7, Crystal): retail's crater and hollow walls are smooth lit and shaded planes crossed by a thin dark web
+// that wanders, fades in and out and varies in weight, not a tiling of crisp facets. The web is drawn here from position at
+// pixel size (a field mark is two px wide, which can only draw blocky dashes): Voronoi seams of crystalCraterWebPx cells, the
+// lookup bent by the world noise so the lines wander, each seam given one weight (its width, and whether it is drawn at all)
+// that both of its cells agree on, and each cell a slight brightness of its own. Returns (line 0-1, cell tone).
+fn craterWeb(p: vec2f) -> vec2f {
+    let size = max(u.crystalCraterWebPx, 6.0);
+    let warp = (terrainNoise(p * 0.25).rg - 0.5) * 2.0 * u.crystalCraterWobble;
+    let q = (p + warp) / size;
+    let cell = vec2i(floor(q));
+    let at = fract(q);
+    var d1 = 8.0;
+    var d2 = 8.0;
+    var id1 = vec4f(0.0);
+    var id2 = vec4f(0.0);
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let h = markHash(cell + vec2i(i, j));
+            let d = length(vec2f(f32(i), f32(j)) + 0.5 + (h.xy - 0.5) * 0.9 - at);
+            if (d < d1) { d2 = d1; id2 = id1; d1 = d; id1 = h; }
+            else if (d < d2) { d2 = d; id2 = h; }
+        }
+    }
+    let edge = (d2 - d1) * 0.5 * size;
+    let w = fract((id1.z + id2.z) * 7.31);
+    let drawn = smoothstep(u.crystalCraterGap, u.crystalCraterGap + 0.08, w);
+    let width = 0.6 + 1.0 * fract(w * 3.7 + 0.2);
+    let line = (1.0 - smoothstep(width * 0.5, width * 0.5 + 0.6, edge)) * drawn;
+    return vec2f(line, 1.0 + u.crystalCraterTone * (id1.x - 0.5));
+}
+
 // Shine and roughness (card E2). Nanolathe look, not a retail claim: a
 // Blinn lobe over a micro-roughened surface normal, per material, added to
 // the lit colour (so it passes the highlight cap) before the palette stage.
@@ -1326,10 +1369,33 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let grainLum = dot(topBase, vec3f(0.299, 0.587, 0.114)) / max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
         var faces = mix(topBase, crystalColor * clamp(grainLum, 0.6, 1.5), 0.35) * (1.0 + 0.25 * jitter) * u.crystalTone;
         faces = mix(faces, crystalColor * 0.38 * u.crystalFace, smoothstep(1.2, 2.5, length(g)));
+        // G7: a crater's skin has no seams, so the ramp from its mark to bare ground (the only place below .66) draws no outline.
+        var skinEdge = 0.0;
+        if (u.crystalCraterWeb > 0.0 && crystalMask < 0.66) {
+            // Skin beside this pixel: a step toward it, then three more (flat skin there, not a seam's ramp that crosses .74).
+            for (var k = 0; k < 4; k++) {
+                let d = vec2f(cos(f32(k) * 1.570796), sin(f32(k) * 1.570796));
+                let q = p + d * 3.0;
+                let side = skinBand(crystalField(q)) * skinBand(crystalField(q + d * 3.0));
+                if (side > 0.0) { skinEdge = max(skinEdge, side * skinBand(crystalField(q + vec2f(-d.y, d.x) * 3.0)) * skinBand(crystalField(q - vec2f(-d.y, d.x) * 3.0))); }
+            }
+        }
         // Crystal Ink 1: crisp pure-black outlines (retail index 0), not a
         // soft 92% darkening of the column edge.
-        let ink = mix((1.0 - smoothstep(0.58, 0.74, crystalMask)) * 0.92, 1.0 - step(0.66, crystalMask), u.crystalInk);
+        let ink = mix((1.0 - smoothstep(0.58, 0.74, crystalMask)) * 0.92, 1.0 - step(0.66, crystalMask), u.crystalInk) * (1.0 - skinEdge);
         faces = mix(faces, vec3f(0.0), ink);
+        // G7: a crater's skin is the field's value .74 (a column's marks are .8 and over, its seams .5); the thin web crosses it.
+        var craterBand = 0.0;
+        if (u.crystalCraterWeb > 0.0) { craterBand = craterSkin(p, crystalMask); }
+        if (craterBand > 0.0) {
+            let s = max(shading, 0.05);
+            if (u.crystalCraterWeb > 0.0) {
+                let web = craterWeb(p);
+                faces *= mix(1.0, web.y, craterBand);
+                // Lines run fainter on the lit wall, darker in shade.
+                faces = mix(faces, vec3f(0.0), u.crystalCraterWeb * web.x * craterBand * mix(0.6, 1.0, smoothstep(0.1, 0.45, slope)) * mix(1.0, 0.6, smoothstep(0.95, 1.1, s)));
+            }
+        }
         material = mix(material, faces, smoothstep(0.05, 0.3, crystalMask));
     } else {
         // A dark apron round a crystal formation, fading over ~16 px.
