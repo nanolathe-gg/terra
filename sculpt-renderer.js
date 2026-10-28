@@ -552,6 +552,10 @@ export class TerrainRenderer {
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
     this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
     this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
+    this.f('uCrystalGrain', Number(this.variant.get('crystalGrain')) || 0);
+    this.f('uCrystalFace', this.variant.has('crystalFace') ? Number(this.variant.get('crystalFace')) : 1);
+    this.f('uCrystalInk', Number(this.variant.get('crystalInk')) || 0);
+    this.f('uCrystalTone', this.variant.has('crystalTone') ? Number(this.variant.get('crystalTone')) : 1);
     const front = this.variant.get('lighting') === 'front';
     // sunTilt scales the light's north-south component (1: as before; Moon 0,
     // lit from due west as every retail Lunar map measures).

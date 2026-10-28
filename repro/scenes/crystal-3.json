@@ -1,0 +1,7 @@
+{"biome": "crystal", "source": {"map": "brilliant cut lake", "x": 6688, "y": 1856}, "ground": true, "query": "",
+ "strokes": [
+  ["deep", [[20, -150], [40, 500], [20, 1180]], {"card": {"diameter": 600, "shelves": 85, "roughness": 20}}],
+  ["crystal", [[640, 400], [800, 480], [960, 560], [1060, 600]], {"card": {"diameter": 260, "amount": 130, "roughness": 70}}],
+  ["crystal", [[300, 80], [380, 500], [320, 950]], {"card": {"crystalForm": 0, "diameter": 260, "amount": 12, "crystalSize": 34, "crystalCount": 5, "crystalSides": 4, "crystalTop": 80, "crystalVariation": 60}}],
+  ["crystal", [[600, 750], [800, 900]], {"card": {"crystalForm": 0, "diameter": 200, "amount": 10, "crystalSize": 28, "crystalCount": 3, "crystalSides": 4, "crystalTop": 80, "crystalVariation": 60}}]
+ ]}
