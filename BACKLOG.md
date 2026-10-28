@@ -47,6 +47,12 @@ branches and the projection fix below, so re-render before judging.
    | B2 | 8833 | 9633 | `$R/agent-B2/out` | `--worlds archipelago,green` |
    | B3 | 8834 | 9634 | `$R/agent-B3/out` | `--worlds moon,lava` |
    | B4 | 8835 | 9635 | `$R/agent-B4/out` | `--worlds red,desert,zhon` |
+   | C0 | none | none | `$R/agent-C0` | none (no editor edits) |
+   | C1 | 8836 | 9636 | `$R/agent-C1/out` | stage 1 `--worlds none` |
+   | C2 | 8837 | 9637 | `$R/agent-C2/out` | each preset's world |
+   | C3 | none | none | `$R/agent-C3` | none (`repro/stats.py` only) |
+   | C4 | 8838 | 9638 | `$R/agent-C4/out` | `--worlds none` |
+   | C5 | 8839 | 9639 | `$R/agent-C5/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -235,6 +241,9 @@ crystal material in `sculpt-frag.wgsl`; the crystal and ice knobs in
 
 ### B2. Archipelago and Green
 
+*Runs after C1:* Green's ledges and Archipelago's level beaches need
+C1's cross-section. This card covers the rest.
+
 *Archipelago:*
 
 - Give flat sandy shores their own profile, with no raised, shaded,
@@ -322,6 +331,232 @@ scratchpad under `/private/tmp/claude-501/`. Do not move or delete it.
 `relief-bake.wgsl`; `sandBar` and the upper-zone shading in
 `sculpt-frag.wgsl`; the water sources in `sculpt_red_materials.py`; the
 Zhon water recipe in `sculpt_section_biome.py`.
+
+## Cards C: new tools
+
+Knob tuning cannot draw what the brushes cannot shape. These cards add
+tools. They do not rename or fold old knobs: leave `mesaFlank`, `bankPx`,
+`beachFlatness`, `northFace`, `shelves` and the rest as they are.
+
+Order:
+- **Now:** C0 and C3. Neither edits the editor.
+- **Next:** C1. B2-B4 wait for it, because Green's ledges, Archipelago's
+  beaches, Red's shelves and Desert's aprons need it.
+- **After B1 lands:** C2, which builds on B1's floe shelf.
+- **After C1:** C4 and C5.
+
+### C0. Retail feature census (image input; no editor changes)
+
+Build a catalogue of the landforms and surface features that recur in
+retail, per world, with example crops. For each feature, say whether our
+tools can make it and what tool or option it would take. It decides which
+of C2, C4 and C5 matter most, and what they still miss.
+
+- **Samples.** Take at least 12 windows of 512 px per world, from at least
+  4 maps where a world has them (Desert has 2, Moon and Crystal 4). Use
+  the exports in `$R/retail-<world>/*/`; for Zhon, the sections. Crop with
+  `repro/retail_crop.py` or a small script. Retail pixels stay under
+  `/private/tmp`.
+- **Features to look for:**
+  - *landforms:* ridges, escarpments and terraces, mesas, buttes, spires,
+    craters, channels, fans, dunes;
+  - *shores:* beach, bank, cliff, shelf, floes, rubble, bars, reefs;
+  - *surface:* cracks and fissures, scree, snow, crust, scorch, strata;
+  - *scattered small features.*
+- **Per feature, record:**
+  - its name and the worlds it appears in;
+  - how often it appears (windows seen out of windows sampled);
+  - 2-3 crops and its size in px;
+  - the closest current tool, after trying it in the editor;
+  - a verdict: yes, roughly or no;
+  - what is missing.
+- **Deliverable:** `$R/agent-C0/census/index.html` (like the 2026-10-27
+  review page) and `census.json`. No editor commits; a sampling script
+  under `repro/` is fine.
+- **Done when** every world has its features listed with crops and
+  verdicts, and the ten most important missing features across all worlds
+  are ranked by worlds x frequency x how much they show.
+
+### C1. Cross-section control (new forms)
+
+**Why.** Each shape kind has one fixed cross-section in `dab()`
+(`sculpt.js`):
+- plateau: `1 - smooth(shoulder, 1, r)`;
+- hill: `(1 - r^2)^2`;
+- mountain: `(1 - r^2)^k`;
+- water: `1 - smooth(.1, 1, r)`.
+
+So stepped escarpments, talus aprons, raised lips and submerged shelves
+cannot be drawn at all.
+
+**What.** Add an optional parametric cross-section to plateau, offset,
+hill and mountain, and to the dry bank and bed of deep and shallow
+strokes.
+
+**Design:**
+
+- **The switch.** A new shape option, `profile`: 0 keeps the kind's
+  current curve, by the exact old code path, and is the default; 1 is
+  parametric.
+- **Storage.** Every parameter is a `SHAPE_FIELDS` option kept in the
+  shape, so it can be edited on a selected shape and is saved in
+  sketches. Old sketches lack the options and replay unchanged.
+- **Parameters.** Measured inward from the outer edge (the foot), in
+  pixels, so a form keeps its size whatever the stroke's radius:
+  - `apronPx` and `apronHeight` (the share of the amount reached at the
+    apron's top): a gentle concave foot, for talus, skirts and desert
+    aprons.
+  - `facePx` (0: a share of the radius set by softness) and `faceCurve`
+    (-1 concave to +1 convex).
+  - `terraces` (0-8), `ledge` (the flat share of each step) and
+    `terraceJitter` (how much step heights and widths vary along the
+    outline).
+  - `lip` (units): a raised rim at the top of the face; negative values
+    round the edge off.
+  - **The cap** is the rest of the inside: flat for plateau and offset,
+    rounded for hill and mountain (`crown`).
+- **Deep and shallow strokes.** The same parameters shape the dry bank,
+  from the waterline up to the plain. Three more describe a submerged
+  shelf before the drop to the bed: `shelfPx`, `shelfDepth` (units below
+  sea) and `shelfSteps` (layered shelves, as on Red).
+- **Variation along the outline.** Every width is multiplied by the
+  existing broad outline noise times `faceVariation`, so faces are not
+  even.
+- **Terraces.** Step the unstepped profile `p`:
+  `(floor(q) + smooth(1 - ledge, 1, fract(q))) / n`, where
+  `q = p * n + terraceJitter * noise(lx, ly)`. It is the contour-band
+  idea from `relief-bake.wgsl`, but in the heights.
+- **Locality.** Every cell's value depends only on its own position. Region
+  replay must stay exact: `sculptDebug.replayAll()` reports mismatch 0
+  after editing a shape.
+- **UI.** Draw a small preview of the cross-section beside the options.
+
+**Stage 1: the engine and UI.**
+- The default keeps the old path, so the guard is `--worlds none`.
+- Show the forms in scenes that use them: render your own demo scenes
+  with `repro/render.mjs` directly (`all.sh` skips scenes that have no
+  retail crop).
+- Show apron, terraces, lip and shelf on each kind.
+- **Stop for review.**
+
+**Stage 2: use it where retail needs it.**
+- Use it in green-2 (Great Divide's wide terraced face), desert-1..3
+  (aprons and buttes), red-1..3 (layered shelves) and archipelago-1..3
+  (level beaches with no lip).
+- Set those worlds' `TOOL_PRESETS` and switch those scenes' strokes to
+  the profile. Here scene edits are the point: commit them separately.
+- Guard: `--worlds green,desert,red,archipelago`.
+- **Done when** each touched window's form is closer on its review
+  sheet, judged across all of the world's windows, and `replayAll`
+  mismatch is 0.
+
+### C2. Shore band (floe shelves and their relatives)
+
+B1 adds Ice's floe shelf. Turn it into a band of broken plates along a
+waterline that every world can use. Make it an option on deep and shallow
+strokes, or a separate "shore band" brush if that is simpler.
+
+**Parameters:**
+- band width in px, separately on the water and land sides;
+- plate size and size spread;
+- gap width;
+- plate height above sea and tilt jitter;
+- edge light and shade;
+- material: snow or ice, rock slab, lava crust, sand.
+
+**Presets:**
+- Ice: floes (B1's).
+- Crystal: low interlocking rubble slabs. Codex: "low rocky shore rubble
+  is replaced by small scattered prisms".
+- Red: rocky shelf slabs at banks. Codex: "broad layered or rocky
+  bank/shelf structure".
+- Lava: crust plates near banks, if C0 finds them.
+
+Start from B1's notes. Guard each preset by its world.
+
+### C3. Numbers sheet (no image input needed)
+
+Write `repro/stats.py`. For every window it computes metrics for retail
+and for ours, and for every world the range of the retail family over
+many windows. It gives text-only models targets they can check, and it
+lets reviews use numbers where images are not needed.
+
+**Height metrics** (from `heights.npy` and `ours-heights.json`):
+- a slope histogram;
+- steep share (slope above 0.5 and above 1.0);
+- water share;
+- shore band width: the median distance from the waterline to plain
+  height;
+- relief roughness at two scales.
+
+**Picture metrics** (from `retail.png` and `ours.png`):
+- luma mean and s.d.;
+- colour histogram distance in Lab;
+- edge density;
+- edge orientation shares: horizontal, vertical and diagonal (this tells
+  ledges from ribs);
+- thin dark line density (black top-hat, 1-3 px);
+- band-pass energy at 2, 8 and 32 px.
+
+**Family range.**
+- Sample at least 20 seeded windows of 1024 px per world from the retail
+  exports (for Zhon, the sections).
+- Compute the same metrics and report the 10th-90th percentiles.
+
+**Output.** `stats.json`, and `stats.md` with one table per world:
+- the family range;
+- each retail window;
+- ours, flagged wherever it falls outside the family range.
+
+**Checks:**
+- `--selftest` must pass:
+  - horizontal stripes read as horizontal;
+  - a 1 px dark grid reads as thin lines;
+  - a flat image has no edges.
+- Runs on `$R/repro-out/merged-r7` in a few minutes and gives the same
+  output twice.
+- The family ranges contain at least 80% of the retail windows' own
+  metrics.
+
+**Files:** `repro/stats.py` only. Server and ports are not needed.
+
+### C4. Line features
+
+New brushes for the long narrow features retail draws as lines (the
+examples are from Codex's review; C0 will confirm or extend them):
+
+- **Sharp ridge:** a narrow, nearly straight crest with a jagged top and
+  a low, steady height. Examples: Ice pressure ridges, Moon wrinkle
+  ridges, dikes.
+- **Channel:** a winding cut with banks, optional bars and braids, wet or
+  dry. Its meander and its width vary along the path. Examples: Zhon
+  rivers and bars, Moon rilles, Desert washes, Red dry beds.
+- **Fissure:** paint a crack network along a stroke, instead of relying
+  on the world-wide crack field. Examples: ice crevasses, cracks in lava
+  crust, rock fissures.
+- **Spurs and broken rims:** spurs branching from ridges and crater rims,
+  and crater rims with sectors and gaps. Examples: Full Moon's radiating
+  formation, AC20's broken crescent.
+
+Each is a new kind or a shape option, depends only on its own cells,
+replays exactly by region, and is off by default.
+
+### C5. Painted masks and world variants
+
+- **Material channels:** paint rock showing through, snow or ice, dark or
+  wet ground, and moss. Today only sand and grass can be painted.
+- **Scatter density:** paint the density of boulders, debris, pits, small
+  craters and slabs. The world sliders become the density wherever
+  nothing is painted.
+- **Local style:** set banding, cracks, relief and face treatment per
+  shape or per painted area, so Great Divide's dense terraces can sit
+  beside smooth hills.
+- **Variants:** two or three named presets per world, for example
+  Painted Desert mesas and Desert Triad buttes, Icy Bergs and Polar
+  Range, Great Divide and Evad River.
+
+Every default reproduces today's renders exactly: the guard is
+`--worlds none` until a world adopts a feature.
 
 ## After the cards
 
