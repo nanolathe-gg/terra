@@ -82,6 +82,11 @@ function buildShapeOptions() {
     return wrap;
   }));
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+  // Releasing a shape option finalizes the edit like the ordinary sliders
+  // below: snapshot it for Undo and restart the refinement the input handler
+  // cancelled. Without this the page stays "paused while editing" and Export
+  // never re-enables (review A1, 2026-10-27).
+  for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 }
 let toolSettings={};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
