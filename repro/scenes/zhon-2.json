@@ -1,0 +1,23 @@
+{"biome": "zhon", "source": {"section": "low savannah rivers/78c00eee", "sea": 59}, "ground": true, "query": "beachWidth=0",
+ "strokes": [
+  ["deep", [[510, -80], [510, 1100]], {"card": {"diameter": 600, "roughness": 35, "shelves": 40}}],
+  ["deep", [[-80, 980], [1100, 980]], {"card": {"diameter": 360, "roughness": 35, "shelves": 40}}],
+  ["deep", [[250, 550], [250, 850]], {"card": {"diameter": 300, "roughness": 35, "shelves": 40}}],
+  ["deep", [[780, 550], [800, 850]], {"card": {"diameter": 300, "roughness": 35, "shelves": 40}}],
+  ["hill", [[490, 165], [490, 235]], {"card": {"diameter": 169, "amount": 71, "softness": 88}}],
+  ["hill", [[580, 330], [580, 450]], {"card": {"diameter": 182, "amount": 80, "softness": 88}}],
+  ["hill", [[416, 370], [416, 470]], {"card": {"diameter": 143, "amount": 70, "softness": 88}}],
+  ["hill", [[320, 520], [320, 600]], {"card": {"diameter": 117, "amount": 55, "softness": 88}}],
+  ["hill", [[730, 490], [730, 560]], {"card": {"diameter": 130, "amount": 58, "softness": 88}}],
+  ["hill", [[820, 590], [820, 670]], {"card": {"diameter": 117, "amount": 52, "softness": 88}}],
+  ["hill", [[630, 680], [630, 740]], {"card": {"diameter": 143, "amount": 58, "softness": 88}}],
+  ["sand", [[490, 165], [490, 235]], {"card": {"diameter": 169}}],
+  ["sand", [[580, 330], [580, 450]], {"card": {"diameter": 182}}],
+  ["sand", [[416, 370], [416, 470]], {"card": {"diameter": 143}}],
+  ["sand", [[320, 520], [320, 600]], {"card": {"diameter": 117}}],
+  ["sand", [[730, 490], [730, 560]], {"card": {"diameter": 130}}],
+  ["sand", [[820, 590], [820, 670]], {"card": {"diameter": 117}}],
+  ["sand", [[630, 680], [630, 740]], {"card": {"diameter": 143}}],
+  ["sand", [[10, 580], [30, 770]], {"card": {"diameter": 110}}],
+  ["sand", [[1015, 600], [1015, 700]], {"card": {"diameter": 70}}]
+ ]}

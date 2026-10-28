@@ -62,13 +62,15 @@ WORLD_KNOBS = {
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
     # the light at 174-190 deg on the Lunar sections and all four retail
-    # Lunar maps (ours was 152). No sky: shaded faces of the cc21 crater sit
-    # at 0.27-0.46 of level ground (ours 0.43-0.60 at ambient .42 with fill);
-    # ambient .12 gives 0.29-0.50. Crisp dark marks on slopes, measured by
-    # measure/slope_marks.py (shaded faces: ~7.5% of px in 1-40 px marks).
+    # Lunar maps (ours was 152). Little sky: across the 12 retail Lunar maps
+    # (median) faces turned from the light sit at 0.82 / 0.57 / 0.36 of level
+    # ground by steepness (ours 0.79 / 0.62 / 0.43 at ambient .42 with fill).
+    # Crisp dark marks on slopes, measured by measure/slope_marks.py on eight
+    # Lunar maps: median ~5.4% of shaded 0.4-0.8 slopes in 1-40 px marks
+    # (2.0-7.5% by map), ~1.9% of lit ones; long axis ~25-30 deg off vertical.
     'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
-                 sunTilt=0, faceFill=0, ambient=.12, slopeMarks=.6),
+                 sunTilt=0, faceFill=0, ambient=.25, slopeMarks=.4),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'

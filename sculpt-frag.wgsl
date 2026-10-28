@@ -175,8 +175,8 @@ fn groundTile(pixel: vec2f) -> vec3f {
 
 // Moon slope marks, measured on the retail Lunar sections and the cc21
 // crater (measure/slope_marks.py): crisp dark specks and short dashes on
-// slopes from ~0.15, about 2 px wide and 3-7 px long, their long axis within
-// ~20-30 degrees of the screen vertical, ~0.4 of the surrounding luma, and
+// slopes from ~0.15, about 2 px wide and 3-7 px long, their long axis a
+// median ~25-30 degrees off the screen vertical, ~0.4 of the surrounding luma, and
 // flanked left and right by brighter ground (~1.15-1.25 of the local median
 // 2-3 px to either side, against ~1.05 above and below). They are drawn in
 // screen pixels, after shading and before the palette stage, so nothing
@@ -202,7 +202,7 @@ fn slopeMark(pixel: vec2f, density: f32) -> f32 {
             let centre = (vec2f(k) + 0.1 + 0.8 * r.yz) * cell;
             let halfLength = mix(1.3, 3.6, r.w);
             let halfWidth = mix(0.8, 1.3, r2.x);
-            let angle = (r2.y - 0.5) * 0.9;
+            let angle = (r2.y - 0.5) * 1.4;
             let axis = vec2f(sin(angle), cos(angle));
             let d = pixel - centre;
             let along = dot(d, axis) / halfLength;
@@ -689,8 +689,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // More on faces turned from the light (sections: ~0.6 as many on
         // lit faces of the same slope).
         let away = smoothstep(-0.05, 0.10, dot(broad, normalize(u.light.xy)));
-        // Few on lit faces in the cc21 crater (0.5% of px against 7.5% on
-        // shaded faces of the same slope; the sections give ~0.6).
+        // Fewer on lit faces (eight Lunar maps: ~1.9% of px against ~5.4% on
+        // shaded faces of the same slope; our surface already has some).
         let density = u.slopeMarks * smoothstep(0.12, 0.45, slope) * mix(0.15, 1.0, away);
         if (density > 0.0) {
             let mark = slopeMark(pixel, density);

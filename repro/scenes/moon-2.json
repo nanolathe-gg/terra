@@ -1,0 +1,20 @@
+{"biome": "moon", "source": {"map": "full moon", "x": 1280, "y": 1152}, "ground": true, "query": "",
+ "strokes": [
+  ["crater", [[372, 110]], {"card": {"diameter": 210, "amount": 18, "roughness": 40, "craterlets": 1}}],
+  ["hill", [[222, 15], [226, 75]], {"card": {"diameter": 90, "amount": 15, "softness": 88}}],
+  ["hill", [[700, 35], [800, 35]], {"card": {"diameter": 110, "amount": 18, "softness": 88}}],
+  ["hill", [[505, 545]], {"card": {"diameter": 280, "amount": 30, "roughness": 60, "softness": 88}}],
+  ["crater", [[520, 500]], {"card": {"diameter": 90, "amount": 10, "craterlets": 0}}],
+  ["hill", [[20, 600], [90, 610]], {"card": {"diameter": 220, "amount": 40, "roughness": 40, "softness": 88}}],
+  ["crater", [[780, 495]], {"card": {"diameter": 120, "amount": 13}}],
+  ["crater", [[915, 270]], {"card": {"diameter": 110, "amount": 11}}],
+  ["crater", [[700, 915]], {"card": {"diameter": 120, "amount": 15}}],
+  ["crater", [[968, 775]], {"card": {"diameter": 80, "amount": 12}}],
+  ["hill", [[200, 880], [250, 960]], {"card": {"diameter": 200, "amount": 8, "roughness": 20, "softness": 88}}],
+  ["hill", [[270, 400]], {"card": {"diameter": 70, "amount": 12, "softness": 88}}],
+  ["crater", [[40, 470]], {"card": {"diameter": 50, "amount": 6, "craterlets": 0}}],
+  ["crater", [[100, 240]], {"card": {"diameter": 60, "amount": 5, "craterlets": 0}}],
+  ["crater", [[470, 750]], {"card": {"diameter": 50, "amount": 5, "craterlets": 0}}],
+  ["crater", [[850, 700]], {"card": {"diameter": 50, "amount": 5, "craterlets": 0}}],
+  ["crater", [[330, 730]], {"card": {"diameter": 40, "amount": 4, "craterlets": 0}}]
+ ]}
