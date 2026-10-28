@@ -3,6 +3,8 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
+// Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
+const MASK_LAYERS = 7;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
 // Average colour of an image (0..1 RGB), from a 64x64 reduction.
@@ -361,13 +363,15 @@ export class TerrainRenderer {
     // the material field (one texture binding for both, see initialize).
     this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 2], format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    // Painted masks (card C5), four layers of signed bytes so an unpainted
-    // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
+    // Painted masks (card C5), signed bytes so an unpainted cell is exactly
+    // 0.0: layer 0 rock, snow or ice, wet ground, moss;
     // layer 1 scatter density, relief, cracks, banding; layer 2 face rock share,
     // then the water choices (shore edge, shallow-to-deep edge, bed; card E1);
-    // layer 3 ground lumps (the rest is spare). Plane k of the page is layer
-    // k >> 2, channel k & 3. Fresh textures are zero.
-    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, 4], format: 'rgba8snorm',
+    // layer 3 ground lumps (the rest is spare); layers 5-6 the flow bake (card
+    // F1: current x and y, then three sediment concentrations). Plane k of the
+    // page is layer k >> 2, channel k & 3. Sized to the highest layer used (7,
+    // MASK_LAYERS); one texture binding for all. Fresh textures are zero.
+    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, MASK_LAYERS], format: 'rgba8snorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     this.worldGrid = grid;
     this.bindGroups = {};
@@ -514,11 +518,13 @@ export class TerrainRenderer {
     const any = painted.some(Boolean) ? 1 : 0;
     if (!any && !this.maskUploaded) return;
     this.fieldsDirty = true;
-    if (this.maskBytes?.length !== n * 16) this.maskBytes = new Int8Array(n * 16);
+    if (this.maskBytes?.length !== n * 4 * MASK_LAYERS) { this.maskBytes = new Int8Array(n * 4 * MASK_LAYERS); this.maskWritten = []; }
     const bytes = this.maskBytes;
-    planes.forEach((a, k) => { const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
+    // A plane that is empty now and was when last copied is already zero in the
+    // buffer: with the placeholder planes of other cards that skips half the copies.
+    planes.forEach((a, k) => { if (!painted[k] && !this.maskWritten[k]) return; this.maskWritten[k] = painted[k]; const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
     this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 4]);
+    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, MASK_LAYERS]);
     this.maskUploaded = Boolean(any);
     this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
     this.i('uScatterOn', painted[4]);
