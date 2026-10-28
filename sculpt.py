@@ -228,9 +228,18 @@ WORLD_VARIANTS = {
         # The Ice blocks are Crystals-brush stamps, so their colour is the
         # world's crystal colour; side faces are that colour times 0.38 times
         # crystalFace.
+        # Berg faces and tops (card E5): retail's bergs are blue-tinted all over,
+        # tops (125,150,236) darker than the lit faces (177,201,251), so the
+        # variant's ground, slope cover and rock take those colours (the berg
+        # form carries no crystal mark; it is lit and covered like any slope).
         'bergs': dict(label='Icy Bergs: blue blocks',
-                      colors=dict(crystal='#8ea6ee'),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4)),
+                      colors=dict(crystal='#8ea6ee', ground='#9db5fa', slope='#a5bef9', rock='#9ab2f4'),
+                      # No slope cover, face rock or exposed rock: their dark slate and granite
+                      # read as teal specks on a bright berg, where retail's faces are one
+                      # rough blue-white grain (ground pattern contrast 2 gives it).
+                      # A short wet band keeps the waterline from a dark fringe.
+                      material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0)),
         # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white
         # snow) are not here: the dark faces come from the block's own shading,
         # which the colour knobs only reach through the tops (a darker crystal
@@ -279,6 +288,8 @@ def apply_variant(config, biome, variant):
             out[key] = {**out.get(key, {}), **value}
     out['baseColors'] = dict(config.get('colors', {}))
     out['colors'] = {**config.get('colors', {}), **v.get('colors', {})}
+    if v.get('material'):
+        out['material'] = {**out.get('material', {}), **v['material']}
     out.update(copy.deepcopy(v.get('config', {})))
     out['variant'] = variant
     return out
