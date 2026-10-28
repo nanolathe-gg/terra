@@ -49,6 +49,9 @@ KNOB_DEFAULTS = dict(
     # only matter once a stroke sets profile 1 (px, units or shares as labelled).
     profile=0, apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
     lip=0, crown=.5, shelfPx=0, shelfDepth=6, shelfSteps=0,
+    # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
+    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.6, spurTaper=.6, spurHeight=.7, crestJag=0, crestVary=0, crestTaper=0,
+    rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
