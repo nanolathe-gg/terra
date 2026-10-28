@@ -81,7 +81,12 @@ WORLD_KNOBS = {
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68, flatBank=1),
+    # Retail's plain is dead flat (dry heights 6, 2 and 1 in the three
+    # windows, no spread), so no undulation: it dipped the plain to 1.6-2.2
+    # above the sea, where the surface's relief crossed the water test and
+    # drew blue pinholes in dry sand, and its slopes gave the grey blotches.
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68, flatBank=1,
+                        undulation=0),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
