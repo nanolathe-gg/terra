@@ -254,6 +254,8 @@ struct Uniforms {
     pockSize: f32,        // pit spacing across the retail glint axis, px
     // E6 (Ice mountains).
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
+    iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
+    iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

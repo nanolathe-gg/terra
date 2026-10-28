@@ -102,7 +102,7 @@ KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 # E6, Moon: pits on raised ground and slopes (0: none; the earlier look is wrinkles .8, worms .4, cracks .35 with no pits).
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 # E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
-KNOB_DEFAULTS.update(iceSlate=0, rockDetail=1)
+KNOB_DEFAULTS.update(iceSlate=0, rockDetail=1, iceCrystal=0, iceCrest=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -377,6 +377,10 @@ WORLD_VARIANTS = {
                                  # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
                                  iceSlate=0, rockDetail=1, reliefAmount=.5, reliefScale=28, reliefLumps=.7, shineWhite=.35, shineStretch=1, shineHeadroom=0,
                                  shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
+        # Crystal mountains (card E6, retail ice-1): slate ruled with straight dark strokes in
+        # domains, snow-white lumps standing on the raised ground, soft relief, no glint.
+        'crystal': dict(label='Crystal mountains: straight strokes',
+                        knobs=dict(iceCrystal=1, iceCrest=.3, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
         # Snow and slate (the mountains before card E6): white snow cover and dark slate interleaved,
         # carved cracks, no sheen.
         'snow': dict(label='Snow and slate: cracked mountains',

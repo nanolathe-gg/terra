@@ -734,6 +734,8 @@ export class TerrainRenderer {
     this.f('uPockmark', variant.has('pockmark') ? Number(variant.get('pockmark')) : 0);
     this.f('uPockSize', variant.has('pockSize') ? Number(variant.get('pockSize')) : 5);
     this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
+    this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
+    this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
     this.fieldsDirty = true;
   }
 

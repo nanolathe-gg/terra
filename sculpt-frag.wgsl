@@ -300,6 +300,38 @@ fn pockPits(pixel: vec2f, size: f32, density: f32) -> f32 {
     return pit;
 }
 
+// Ice crystal mountains (card E6). Retail's second ice mountain (ice-1) is slate
+// ruled with straight dark strokes, 1-2 px wide and 8-40 px long, spaced 3-6 px, in
+// domains ~36 px across that each keep one of three directions (two steep, one
+// shallow, as the window's strokes run); the strokes break into segments. Domains
+// are the nearest of a jittered lattice's points. Returns 0..1, 1 on a stroke.
+fn iceHatch(pixel: vec2f) -> f32 {
+    let cell = 36.0;
+    let c = vec2i(floor(pixel / cell));
+    var best = 1e9;
+    var id = vec4f(0.0);
+    var home = c;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let k = c + vec2i(i, j);
+            let r = markHash(k + vec2i(17, 53));
+            let d = length(pixel - (vec2f(k) + 0.15 + 0.7 * r.xy) * cell);
+            if (d < best) { best = d; id = r; home = k; }
+        }
+    }
+    // Steep leaning right (72 degrees) in 45% of domains, steep leaning left (110) in 40%, shallow (29) in 15%.
+    let angle = select(select(0.5, 1.92, id.z < 0.85), 1.26, id.z < 0.45) + (id.w - 0.5) * 0.25;
+    let along = vec2f(cos(angle), sin(angle));
+    let across = vec2f(-along.y, along.x);
+    let s = dot(pixel, across) / mix(3.6, 6.0, fract(id.w * 13.7));
+    let band = abs(fract(s) - 0.5);
+    let stroke = 1.0 - smoothstep(0.18, 0.32, band);
+    let rs = markHash(vec2i(i32(floor(s)), home.x * 7 + home.y * 13) + vec2i(101, 7));
+    // Some domains are bare, some strokes of a domain are missing, and the rest break into runs of 16-42 px.
+    let run = dot(pixel, along) / mix(16.0, 42.0, rs.x) + rs.y * 10.0;
+    return stroke * step(0.3, id.x) * step(0.35, rs.z) * step(0.45, fract(run));
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -1030,6 +1062,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let dark = 1.0 - smoothstep(0.45, 0.70, dot(material, vec3f(0.299, 0.587, 0.114)));
         material *= mix(1.0, u.hillLight, smoothstep(u.base + 1.0, u.base + 10.0, baseHeight(p)) * dark);
     }
+    // Ice crystal mountains (card E6): snow-white lumps ~30-50 px across stand on the raised ground (retail ice-1:
+    // six or seven rounded white caps on one mountain), a ragged edge, taken before the light so they shade as snow.
+    if (u.iceCrest > 0.0) {
+        let lumps = terrainNoise(p * 0.05 + vec2f(31.0, 7.0)).r + (n.b - 0.5) * 0.12;
+        let raised = smoothstep(u.base + 12.0, u.base + 40.0, h);
+        let crest = smoothstep(0.0, 0.05, lumps - mix(0.75, 0.45, u.iceCrest)) * raised;
+        material = mix(material, snowMaterial(pixel), crest);
+        exposed *= 1.0 - crest;
+    }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
         // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
@@ -1041,6 +1082,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Raised ground counts whole, tops included, where a crater's floor counts only where it slopes.
     var landform = 1.0;
     if (u.shineGate > 0.0 || u.pockmark > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
+    if (u.iceCrystal > 0.0) {
+        // Straight strokes over the rock faces, darker the more rock shows (card E6; after shadeBlue, which rebuilds the colour).
+        color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
+    }
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);

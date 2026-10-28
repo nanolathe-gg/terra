@@ -2887,7 +2887,7 @@ const KNOBS = [
   // E6
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
   ['Pockmarks (Moon)', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
-  ['Ice mountains', [['iceSlate','Monotone slate faces from the first slope',0,1,.05,0],['rockDetail','Rock art contrast',0,2,.05,1]]],
+  ['Ice mountains', [['iceSlate','Monotone slate faces from the first slope',0,1,.05,0],['rockDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Crystal mountains: straight strokes on the faces',0,1,.05,0],['iceCrest','Crystal mountains: share of the raised ground under snow lumps',0,1,.05,0]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds
