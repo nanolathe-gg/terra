@@ -72,6 +72,9 @@ KNOB_DEFAULTS = dict(
 # (slope amplitude of the micro-normal grain) and its scale in px. Gloss 0 and
 # roughness 0 everywhere is today's look exactly; sharpness and scale only matter
 # once one of those is set.
+# Ranges and palette notes for adopting worlds: NOTES.md of card E2 (gloss 0-2, sharpness
+# 20-200, roughness 0-2, scale 3-12 px; highlights quantise to the world's lightest palette
+# entries, so judge them on the final output).
 SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
@@ -180,7 +183,16 @@ WORLD_KNOBS = {
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.08, crystalSeam=1,
-                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=20),
+                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=20,
+                    # Shine (card E2): retail Crystal is much shinier. Silver-lilac streaks run along
+                    # the ground's grain on facets that face the sun's side; tops and the rock and
+                    # slope plates round them take a sharp lobe over strong grain, and the level
+                    # plain stays matte. Highlights are neutral (retail's brightest entries on the
+                    # mounds are grey 155/171/187 and pinkish 187,147,195, not the blue lilac).
+                    shineCrystal=.38, shineCrystalSharp=100, shineCrystalRough=1, shineCrystalScale=8,
+                    shineRock=.3, shineRockSharp=100, shineRockRough=1, shineRockScale=8,
+                    shineSlope=.25, shineSlopeSharp=100, shineSlopeRough=1, shineSlopeScale=8,
+                    shineStretch=3, shineWhite=1),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,
