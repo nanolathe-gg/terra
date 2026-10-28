@@ -40,13 +40,23 @@ branches and the projection fix below, so re-render before judging.
    use them and never stop a process you did not start. The system
    `python3` has no numpy; use the venv above.
 
-   | Card | Server | Browser (CDP) | Out dir |
-   | --- | --- | --- | --- |
-   | A | 8831 | 9631 | `$R/agent-A/out` |
-   | B1 | 8832 | 9632 | `$R/agent-B1/out` |
-   | B2 | 8833 | 9633 | `$R/agent-B2/out` |
-   | B3 | 8834 | 9634 | `$R/agent-B3/out` |
-   | B4 | 8835 | 9635 | `$R/agent-B4/out` |
+   | Card | Server | Browser (CDP) | Out dir | Guard |
+   | --- | --- | --- | --- | --- |
+   | A | 8831 | 9631 | `$R/agent-A/out` | `--worlds none` |
+   | B1 | 8832 | 9632 | `$R/agent-B1/out` | `--worlds ice,crystal` |
+   | B2 | 8833 | 9633 | `$R/agent-B2/out` | `--worlds archipelago,green` |
+   | B3 | 8834 | 9634 | `$R/agent-B3/out` | `--worlds moon,lava` |
+   | B4 | 8835 | 9635 | `$R/agent-B4/out` | `--worlds red,desert,zhon` |
+
+   Before the baseline, check that every world is really served (until
+   card A lands, an unavailable world answers as Green):
+
+   ```
+   for w in green red archipelago moon zhon lava desert crystal ice; do
+     curl -s "http://127.0.0.1:<server>/sculpt-config.json?biome=$w" | grep -o '"biomeId": *"[a-z]*"'; done
+   ```
+
+   Each line must name the world asked for.
 
 3. **Baseline before any edit, guard after every change.** Retail crops are
    in `$R/repro-r7/<scene>`; renders are deterministic, so an untouched
@@ -58,13 +68,32 @@ branches and the projection fix below, so re-render before judging.
    REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/before http://127.0.0.1:<server> <cdp>
    # ...change something...
    REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/after-<n> http://127.0.0.1:<server> <cdp>
-   $PY repro/compare.py $R/agent-<card>/out/before $R/agent-<card>/out/after-<n> --worlds <your worlds, or none>
+   $PY repro/compare.py $R/agent-<card>/out/before $R/agent-<card>/out/after-<n> <guard from the table>
    $PY repro/triptych.py $R/agent-<card>/out/before $R/agent-<card>/out/after-<n> $R/agent-<card>/out/review-<n>
    ```
 
    `compare.py` must exit 0. Look at `review-<n>/<world>.png` (retail |
    before | after for each window) and each window's `layout.png` before
    you claim anything.
+
+   One known false alarm: a new branch in shared shader code, even one
+   that is never taken, can change how the GPU compiler orders float
+   arithmetic, and the crack lattice is sensitive enough to move a few
+   percent of pixels in other worlds (mean |diff| under 1; seen when the
+   `faceStreak` branch was added to `cracks()` in `relief-bake.wgsl`). If
+   the guard fails, temporarily replace each new condition with `false`
+   and re-render the failing scenes. If they then match `before` exactly,
+   the drift is the compiler's: restore the code and record both
+   `compare.py` outputs in NOTES.md. If they still differ, your change
+   leaks into that world; gate it.
+
+   The retail picture is registered to the editor's projection by the
+   window's plain height (`plain` in `crop.json`, by default the median
+   dry height). Where raised ground dominates a window, the median is too
+   high: desert-3 got 23 against desert-1's 8 on the same map, about 8 px
+   of vertical error. If `layout.png` agrees but `pair.png` shows a steady
+   vertical offset, re-cut the crop into a new directory with
+   `repro/retail_crop.py ... --plain <height>` rather than moving strokes.
 
 4. **Gate new behaviour per world.** Add a knob to `KNOB_DEFAULTS` in
    `sculpt.py` whose default reproduces the old output exactly, and set it
