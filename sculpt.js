@@ -1426,32 +1426,48 @@ const LAYER_FOOT=6,LAYER_WALL=5;
 // already lowered or terraced is only ever cut further, never re-measured. Layer edges wander with position-only noise
 // in the shape's own frame, so no two run parallel for long.
 function coastLayers(s,sea) {
-  const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),zone=n*W,ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),circular=s.layerStyle>=.5;
+  const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),circular=s.layerStyle>=.5;
   const raw=heights.slice(),dist=coastField(s,raw,sea),inv=s.inv,salt=s.seed;
-  // Round mounds: one per jittered lattice cell, a cone of radius R about its centre.
-  const C=Math.max(24,5*W),mound=(lx,ly) => {
+  // Circular style: a low flat shelf carrying round stepped mounds (retail lava-2's overlapping
+  // pancakes: 3-5 rings 5-8 px apart, 20-35 px across, a unit or two a ring). One mound per
+  // jittered lattice cell in the shape's frame; where mounds overlap the higher ring wins.
+  // Shore layers is the rings a mound has, Layer width the ring spacing.
+  const rim=n*W,C=Math.max(24,1.7*rim),reach=circular?1.6*rim:n*W,ring=s.layerRiser>0?s.layerRiser:1.6;
+  const mounds=(lx,ly,ledge) => {
     const ci=Math.floor(lx/C),cj=Math.floor(ly/C);
     let best=0;
     for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
-      if (hash(i,j,salt^0x91d)<-.45) continue;
-      const cx=(i+.5+.3*hash(i,j,salt^0x13b))*C,cy=(j+.5+.3*hash(i,j,salt^0x5c9))*C,R=C*(.42+.2*(hash(i,j,salt^0x77f)*.5+.5));
-      best=Math.max(best,R-Math.hypot(lx-cx,ly-cy));
+      if (hash(i,j,salt^0x91d)<-.7) continue;
+      const cx=(i+.5+.4*hash(i,j,salt^0x13b))*C,cy=(j+.5+.4*hash(i,j,salt^0x5c9))*C,R=rim*(.9+.4*(hash(i,j,salt^0x77f)*.5+.5));
+      const q=(R-Math.hypot(lx-cx,ly-cy))/W+irr*.8*valueNoise(lx/9,ly/9,salt^0x4a1);
+      if (q<=0) continue;
+      const qc=Math.min(q,n),k=Math.min(Math.floor(qc),n-1);
+      best=Math.max(best,qc>=n?n:k+smooth(ledge,1,qc-k));
     }
     return best;
   };
+  const rise=config.baseHeight-sea,foot=Math.min(LAYER_FOOT,.3*rise),riser=s.layerRiser>0?s.layerRiser:(rise-foot)/n;
   for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
     const i=y*grid+x;
     if (!(raw[i]>sea)) continue;
     const d=dist[i],base=s.base[i];
-    if (d>=zone+2*W) { if (s.weights[i]>0 && raw[i]<base) heights[i]=base; continue; }
+    if (d>=reach+2*W) { if (s.weights[i]>0 && raw[i]<base) heights[i]=base; continue; }
     const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
-    let q=d/W;
-    if (circular) q+=mound(lx,ly)/W;
-    q=Math.max(0,q+irr*(.55*valueNoise(lx/42,ly/42,salt^0x7a1)+.25*valueNoise(lx/14,ly/14,salt^0x3c5)+.12*valueNoise(lx/6,ly/6,salt^0x5e3)));
-    if (q>=n) { if (raw[i]<base) heights[i]=base; continue; }
-    const ledge=clamp(ledge0+irr*.3*valueNoise(lx/33,ly/33,salt^0x2b1),.3,.95),k=Math.floor(q),g=k+smooth(ledge,1,q-k);
-    const rise=config.baseHeight-sea,foot=Math.min(LAYER_FOOT,.3*rise),riser=s.layerRiser>0?s.layerRiser:(rise-foot)/n;
-    heights[i]=clamp(Math.min(Math.min(base,config.baseHeight),sea+(foot+riser*g)*smooth(0,LAYER_WALL,d))+Math.max(0,base-config.baseHeight),MIN_HEIGHT,MAX_HEIGHT);
+    const ledge=clamp(ledge0+irr*.3*valueNoise(lx/33,ly/33,salt^0x2b1),.3,.95);
+    let level;
+    if (circular) {
+      const t=d/reach;
+      if (t>=1 && raw[i]<base) { heights[i]=base; continue; }
+      // The bank is a low flat shelf the mounds stand on, rising to the plain over its outer
+      // half, soft enough that its edge is scalloped by the mounds and is not one dark cliff.
+      level=foot+(rise-foot)*smooth(.55,1,t)+ring*mounds(lx,ly,ledge);
+    } else {
+      const q=Math.max(0,d/W+irr*(.55*valueNoise(lx/42,ly/42,salt^0x7a1)+.25*valueNoise(lx/14,ly/14,salt^0x3c5)+.12*valueNoise(lx/6,ly/6,salt^0x5e3)));
+      if (q>=n) { if (raw[i]<base) heights[i]=base; continue; }
+      const k=Math.floor(q);
+      level=foot+riser*(k+smooth(ledge,1,q-k));
+    }
+    heights[i]=clamp(Math.min(Math.min(base,config.baseHeight),sea+level*smooth(0,LAYER_WALL,d))+Math.max(0,base-config.baseHeight),MIN_HEIGHT,MAX_HEIGHT);
   }
 }
 // Crystals: clusters of faceted crystals. Each is a pyramid over a polygon
