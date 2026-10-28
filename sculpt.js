@@ -2109,7 +2109,9 @@ function facetCrater(s) {
   const strength=clamp(s.craterFacets,0,1); if (!(strength>0)) return;
   const L=clamp(s.radius*.36,14,36),inv=s.inv,f=inv?invert(inv):null,snap=heights.slice();
   const rnd=(i,j,a) => { let x=Math.imul(i*73856093^j*19349663^((s.seed>>>0)+a*83492791),2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
-  const at=(gx,gy) => snap[clamp(gy,0,grid-1)*grid+clamp(gx,0,grid-1)];
+  // Seed planes read the crater's own cells and the stroke's starting ground elsewhere, never the live field: in a region
+  // replay the cells outside the clip hold the state after later shapes, which must not tilt these facets.
+  const at=(gx,gy) => { const k=clamp(gy,0,grid-1)*grid+clamp(gx,0,grid-1); return s.weights[k]>0?snap[k]:s.base[k]; };
   const seeds=new Map(),seed=(i,j) => {
     const key=i*65536+j; let k=seeds.get(key);
     if (!k) {
