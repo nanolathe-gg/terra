@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.wgsl', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js')}
+    'relief-bake.wgsl', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -83,6 +83,9 @@ KNOB_DEFAULTS = dict(
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
+    # F1 (flow bake): how the baked current and sediment are drawn. Nothing reads them in a scene with no bake, so no world's
+    # render changes; they are tuned on Zhon's rivers.
+    flowTint=1, flowShallow=.85, flowStreak=.5, flowStreakLen=140, flowBank=.9,
 )
 # Shine and roughness (card E2): per material (ground, slope cover, rock, sand,
 # crystal) a gloss (highlight strength), a sharpness (Blinn exponent), a roughness
@@ -96,6 +99,52 @@ SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
+# E7 (Crystal): every knob's default is the earlier output.
+KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFacets=0, crystalShallow=0, crystalShallowPx=10)
+# E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
+KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
+# E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
+# drifts, and the share of its length that is missing).
+KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
+# E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
+KNOB_DEFAULTS.update(faceRock=0, rockMoss=1, rockDetail=1, shineOutside=1,
+                     gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
+                     bedFlow=1, bedBend=0, bedPunch=0,
+                     scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
+                     facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
+# E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
+# shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
+# its depth with broad noise so the band's width and outline vary along the shore; bedFlat
+# lights the lit bed by its own relief only (no slope shading across the shelf); bedMottle is
+# the bed's mid-scale mottle as a share of brightness.
+KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0, bedMottle=0)
+# E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
+# crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
+# bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
+# rocky faces are cut from ~1); bedDots / bedDotCell draw dark dots in the lit bed.
+KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots=0, bedDotCell=14)
+# E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
+# dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
+# the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
+# the ring texture's own); bedMottleScale sizes the bed's mottle lumps against Green's.
+KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, bedMottleScale=1, stepSoftPx=1)
+# E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
+# the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
+# (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
+KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight=0, layerVary=0, layerCircle=26)
+# E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
+KNOB_DEFAULTS.update(hillLobes=0, hillSteps=8)
+# E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
+KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
+# E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
+# a glint read on near-white ice (0: the lobe only adds light).
+KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
+# E6, Moon: pits on raised ground and slopes (0: none; the earlier look is wrinkles .8, worms .4, cracks .35 with no pits).
+KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
+# E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
+KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
+# E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
+KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -118,7 +167,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
-                  bedLip=1, bedLedge=.55, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
+                  bedLip=1.8, bedLedge=.6, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -132,7 +181,26 @@ WORLD_KNOBS = {
                   # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
-                  undulation=0, plainRelief=0),
+                  undulation=0, plainRelief=0,
+                  # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
+                  # light or shade as a whole), layered in long ledges that bend with it, scored by thin scratches
+                  # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
+                  # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
+                  # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
+                  # earlier look: faceRock 0, rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0, bedFlow 1,
+                  # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  faceRock=1, rockMoss=.15, rockDetail=.5,
+                  gullyDepth=14, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=2, ribTilt=.35,
+                  bedFlow=0, bedBend=2.5, bedPunch=1,
+                  scratchDepth=3.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
+                  facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,
+                  shineRock=.5, shineRockSharp=14, shineRockRough=.12, shineRockScale=5, shineWhite=1, shineOutside=.3,
+                  # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
+                  # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
+                  # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
+                  # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
+                  # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
+                  stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1, bedMottle=.08),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
@@ -144,7 +212,17 @@ WORLD_KNOBS = {
                 # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
                 # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
                 # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
-                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1),
+                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1,
+                # E11 (round 7 report: "darker dots", "cracks too soft", "edge against the deep
+                # water seems shaded"). Retail's lilac lake has dark dots of 3-4 px every 12-20 px
+                # (dark components >= 3 px average 6.5-11 px, ours 4.3-6.7); the step is a true
+                # threshold. Under a cracked-bed stroke (red-3's shelf) it sits at depth 14, where
+                # retail's lilac share falls from .91 (0-6) / .66 (6-12) to .27 (12-18) / .17;
+                # the lake (red-2) is lilac to its full depth 24 and keeps the world's 22. The
+                # cracked bed is cut as rocky ground and keeps its crevices through the tint
+                # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
+                stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6, bedMottle=.07,
+                crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
@@ -168,7 +246,17 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1.25, ringFade=1, fringeStyle='rings',
-                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20),
+                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20,
+                        # E11 (round 7 report: "weird black/dark lines around the hills" and "more
+                        # noticeable circle features in the red fringe"): the dark lines were the
+                        # first band risers on the hill's foot (banding 0 removes them, crack knobs do
+                        # not), so band lines start 8 units above the base; retail's fringe is 8-12
+                        # thin wavy crimson lines 2-4 px apart hugging the hill's outline, which the
+                        # contour pass draws from the mineral field's falloff (so they follow the
+                        # outline, not the screen). Reef bars carry retail's dappled texture
+                        # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
+                        bandFoot=8, ringContrast=.55, ringCount=12, ringSize=.3,
+                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottle=.09, bedMottleScale=1.2),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
@@ -187,7 +275,10 @@ WORLD_KNOBS = {
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
-                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3),
+                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3,
+                   # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
+                   # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8).
+                   baseVary=36, baseBump=3.5, baseBand=1),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
@@ -198,13 +289,22 @@ WORLD_KNOBS = {
     # Crisp dark marks on slopes, measured by measure/slope_marks.py on eight
     # Lunar maps: median ~5.4% of shaded 0.4-0.8 slopes in 1-40 px marks
     # (2.0-7.5% by map), ~1.9% of lit ones; long axis ~25-30 deg off vertical.
-    'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
+    # Card E6: retail's hills and crater walls are one rough, pitted surface from crest to
+    # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
+    # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
+    'moon': dict(crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+                 worms=0, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
                  # connected wrinkles and pits, so the joined wrinkles replace them.
-                 slopeMarks=0, wrinkles=.8),
+                 slopeMarks=0, wrinkles=0,
+                 # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
+                 # faint sheen with a fine round grain there (the plain keeps its own grain).
+                 pockmark=1, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
+                 shineGround=0, shineGroundSharp=12, shineGroundRough=.12, shineGroundScale=3,
+                 shineSlope=.06, shineSlopeSharp=30, shineSlopeRough=.12, shineSlopeScale=3,
+                 shineRock=.06, shineRockSharp=30, shineRockRough=.12, shineRockScale=3),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'
@@ -228,7 +328,7 @@ WORLD_KNOBS = {
                  # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
                  # a shaded riser) in place of the dark band lines (Banding 0 above; Banding, Band lines and the
                  # B3 knobs stay in the World panel).
-                 shoreLayers=6, layerPx=16, layerLedge=.8, layerRough=.7,
+                 shoreLayers=11, layerPx=9, layerLedge=.8, layerRough=.7,
                  # Fingers are low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
                  fingerCoast=1,
                  # Less ambient light, so the shaded risers read as retail's near-black lines.
@@ -246,7 +346,15 @@ WORLD_KNOBS = {
                  # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
                  # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
                  # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
-                 bandRelief=.4, bandWander=.5, bandGaps=.15),
+                 bandRelief=.4, bandWander=.5, bandGaps=.15,
+                 # E10: lava-1's layers are many and uneven (11 of ~9 px, widths and risers vary along the shore,
+                 # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
+                 # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
+                 # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
+                 layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
+                 shineSlopeGate=.7, shineWhite=.3, shineStretch=3,
+                 shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
+                 shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),
     # shadeDepth stays 1 on Lava: directional shading varies by map and
     # window (luma on the east-west height gradient: 6-9 per unit slope on
     # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle
@@ -265,17 +373,31 @@ WORLD_KNOBS = {
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
-                    crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.08, crystalSeam=1,
-                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=20,
+                    crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
+                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=14,
                     # Shine (card E2): retail Crystal is much shinier. Silver-lilac streaks run along
                     # the ground's grain on facets that face the sun's side; tops and the rock and
                     # slope plates round them take a sharp lobe over strong grain, and the level
                     # plain stays matte. Highlights are neutral (retail's brightest entries on the
                     # mounds are grey 155/171/187 and pinkish 187,147,195, not the blue lilac).
-                    shineCrystal=.4, shineCrystalSharp=100, shineCrystalRough=1, shineCrystalScale=8,
-                    shineRock=.3, shineRockSharp=100, shineRockRough=1, shineRockScale=8,
-                    shineSlope=.25, shineSlopeSharp=100, shineSlopeRough=1, shineSlopeScale=8,
-                    shineStretch=3, shineWhite=1),
+                    # E7 retune after the facets: a broader lobe (sharp 100 -> 70) with less gloss
+                    # (.4/.3/.25 -> .3/.22/.18) and a lighter top (crystalTone 1.08 -> 1.16) puts more
+                    # of the mound at luma 80-130, where retail's tops sit, without lifting the tail.
+                    shineCrystal=.3, shineCrystalSharp=70, shineCrystalRough=1, shineCrystalScale=8,
+                    shineRock=.22, shineRockSharp=70, shineRockRough=1, shineRockScale=8,
+                    shineSlope=.18, shineSlopeSharp=70, shineSlopeRough=1, shineSlopeScale=8,
+                    shineStretch=3, shineWhite=1,
+                    # E7: crumpled multi-facet column tops.
+                    crystalFacet=.7,
+                    # E7: three column widths mixed over a mound, the small ones at the crest.
+                    crystalSizeVar=.7,
+                    # E7: some columns stay smooth hill between the crystals.
+                    crystalSmooth=.35,
+                    # E7: craters tiled with crystal facets.
+                    craterFacets=1,
+                    # E7: shallow water carries a mosaic of small crystal cells; the shore slabs
+                    # shrink from 20 to 14 px (retail's band is a fine mesh, plates 12-80 px).
+                    crystalShallow=1, crystalShallowPx=10),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,
@@ -294,7 +416,7 @@ WORLD_KNOBS = {
     # sections, see sculpt_section_biome.py 'ice').
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
-    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=.2, crackMajor=.4, crackMinor=.3, crackHairline=.2,
+    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
                 crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
@@ -305,7 +427,20 @@ WORLD_KNOBS = {
                 # height 4 keeps the frost over the water level with the bank behind it
                 # (14 made a dark wall there); frostWet 1 keeps the band white instead of
                 # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
-                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=7, plateHeight=4, frostWet=1),
+                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=5, plateHeight=4, frostWet=1,
+                # Card E6: retail's common ice mountain (Etorrep Glacier, Polar Range) is one monotone,
+                # very rough, shiny slate-blue ice lit strongly: every face is the rock art (contrast
+                # .55) from the first slope to the crest, with a fine grain 2.5 px wide (stretch 2)
+                # that glints, no cracks, little lumpy relief, the shade kept blue and a lower ambient so
+                # the light and shade read strongly. Earlier look (snow and slate interleaved, cracks):
+                # the Ice variant 'snow'; retail's other type (ice-1) is the variant 'crystal'.
+                iceSlate=1, mineralDetail=.55, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
+                lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2,
+                shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5,
+                # Card E6, frost band against retail ice-1 (x330-430, 32-132 px inland): luma s.d. 52
+                # against 42 and blue gaps in .22 of the pixels against .05, so finer needles in more
+                # patches and small melt pockets, half again as many.
+                frostNeedles=.8, frostGaps=.3, frostGapReach=.7, frostGapSize=7),
 }
 
 
@@ -348,11 +483,33 @@ WORLD_VARIANTS = {
                       # rough blue-white grain (ground pattern contrast 2 gives it).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0)),
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0,
+                                 # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
+                                 iceSlate=0, mineralDetail=1, reliefAmount=.5, reliefScale=28, reliefLumps=.7, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                 shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
+        # Crystal mountains (card E6, retail ice-1): slate ruled with straight dark strokes in
+        # domains, snow-white lumps standing on the raised ground, soft relief, no glint.
+        'crystal': dict(label='Crystal mountains: straight strokes',
+                        knobs=dict(iceCrystal=1, iceCrest=.3, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
+        # Snow and slate (the mountains before card E6): white snow cover and dark slate interleaved,
+        # carved cracks, no sheen.
+        'snow': dict(label='Snow and slate: cracked mountains',
+                     knobs=dict(iceSlate=0, mineralDetail=1, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
+                                lightCap=1.13, ambient=.42, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white
         # snow) are not here: the dark faces come from the block's own shading,
         # which the colour knobs only reach through the tops (a darker crystal
         # colour darkened the top, not the sides). See NOTES, stage 3.
+    },
+    'moon': {
+        # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
+        # carved cracks, no pits and no sheen.
+        'cracked': dict(label='Cracked slopes: smooth tops',
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, shineGate=0, shineWhite=.35, shineStretch=1,
+                                   shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
+                                   shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
+                                   shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
     },
     'zhon': {
         # The river family (card B4): the reproduction windows' sections are
@@ -373,8 +530,16 @@ WORLD_VARIANTS = {
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: grey buttes',
                       knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
-                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3),
-                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .22], [60, 2, 0, .2], [95, 1, 2, .35]])),
+                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
+                                 # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
+                                 # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
+                                 # 0.4%). Ambient .12 gives 0% and 1.0%.
+                                 ambient=.12),
+                      # Card E8: retail's grey buttes carry rust-pink lines (slot 4, (175,111,90), the nearest
+                      # slot to the measured (149,88,86)) 15 units apart (median over the lit flanks above 60,
+                      # 14 px) and ~4.4 units wide, not 4 apart.
+                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 3, .3], [60, 2, 3, .3], [95, 1, 2, .35]],
+                                  strataZoneSpacing=[4, 12, 14, 14])),
     },
 }
 for _world, _variants in WORLD_VARIANTS.items():
@@ -567,12 +732,19 @@ def biome_config(biome, assets):
         # make, so the world stays full colour until the palette stage mixes
         # index pairs. Bed colour slots: 1 orange (189,143,105), 2 cool
         # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
-        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [120, 112, 100]]
+        # Slot 5 (card E8): the grey band at the foot of the raised ground, retail's neutral grey
+        # (mean (118,115,112) over its pixels; palette entries 88-89 in pairs).
+        config['strataColors'] = [[189, 143, 105], [190, 198, 185], [150, 144, 128], [175, 111, 90], [118, 115, 112]]
         # Zones by height above the plain: orange with cool bands (share
         # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
-        # rock with orange lines above ~69 (card E3: rust-pink lines, share .4, so
-        # the strata stay readable on the tall buttes instead of one grey).
-        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .4]]
+        # rock with orange lines above ~69 (card E3: rust-pink lines, so the strata stay
+        # readable on the tall buttes instead of one grey; card E8: share .4 -> .3 with
+        # the beds 11 thick, which keeps the lines 2-5 units wide as on retail's buttes).
+        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .3]]
+        # Card E8: bed thickness per zone. Orange-line gaps on the lit flanks of retail's
+        # raised ground (measure/desert_strata_gaps.py): median 10.8 units above 70 (14 px),
+        # 8.1 from 20 up; the aprons keep the world's 6.
+        config['strataZoneSpacing'] = [6, 6, 6, 6, 11]
         config['defaults']['example'] = 'mesas'
         # The plain: exact-index tiles from the retail map's level ground,
         # when the map has been exported (see ground_tiles.py).

@@ -1,6 +1,6 @@
 // Regional authoring fields. The stroke graph is authoritative; cached prefix
 // tiles are disposable. Every tile uses the same integer world lattice.
-export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKeys,nodes,bounds,stages=nodes,readApron=() => 0,pointReads=() => [],replay,baseCell,budget=1024*1024*1024,chunkCells=256,workspaceBytesPerCell}) {
+export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKeys,nodes,bounds,stages=nodes,readApron=() => 0,pointReads=() => [],reduceBounds=() => false,replay,baseCell,budget=1024*1024*1024,chunkCells=256,workspaceBytesPerCell}) {
   const spacing=(worldSize-1)/(worldGrid-1),cache=new Map(),listeners=new Set(),masks=new Set(maskKeys);
   const bytesPerCell=keys.reduce((n,k) => n+(masks.has(k)?1:4),0);
   // Live fields, two nested brush work sets (including mask bases), source
@@ -18,7 +18,7 @@ export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKe
       compiled=stages().filter(n => !n.hidden); stageMeta=new WeakMap();
       // Capture metadata on the outer world grid before any nested brush view
       // temporarily changes the globals used by the original shape routines.
-      for (const n of compiled) stageMeta.set(n,{bounds:bounds(n),pad:Math.max(0,Math.ceil(readApron(n))),points:pointReads(n)});
+      for (const n of compiled) stageMeta.set(n,{bounds:bounds(n),pad:Math.max(0,Math.ceil(readApron(n))),points:pointReads(n),reduce:reduceBounds(n),reduced:false});
     }
     return compiled;
   }
@@ -69,6 +69,39 @@ export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKe
     const v=(cell(ix,iy)*(1-fx)+cell(jx,iy)*fx)*(1-fy)+(cell(ix,jy)*(1-fx)+cell(jx,jy)*fx)*fy;
     run.points.set(key,v); return v;
   }
+  // Some positional passes retain the whole brush's support as their origin.
+  // Reduce that support over bounded body replays, never over one shape-sized
+  // array. The body sees only its earlier prefix and must not ask for its own
+  // bounds again through a same-stage coast replay.
+  function globalBoundsOf(count,run) {
+    const n=list()[count-1],meta=stageMeta.get(n);
+    if (!meta.reduce) return null;
+    if (meta.reduced) return meta.globalBounds;
+    if (meta.reducing) throw new Error('Terrain bounds replay requested its own global bounds.');
+    meta.reducing=true;
+    try {
+      for (const p of meta.points) prefixPoint(count-1,p.x,p.y,run);
+      const limits=clip({x0:Math.floor(meta.bounds.x0),y0:Math.floor(meta.bounds.y0),x1:Math.ceil(meta.bounds.x1),y1:Math.ceil(meta.bounds.y1)});
+      let result=null;
+      for (let y=Math.floor(limits.y0/chunkCells)*chunkCells;y<=limits.y1;y+=chunkCells) for (let x=Math.floor(limits.x0/chunkCells)*chunkCells;x<=limits.x1;x+=chunkCells) {
+        const core={x0:Math.max(x,limits.x0),y0:Math.max(y,limits.y0),x1:Math.min(x+chunkCells-1,limits.x1),y1:Math.min(y+chunkCells-1,limits.y1)};
+        const working=apron(core,n),prior=prefixRegion(count-1,working,run),workingBytes=area(working)*workCellBytes,width=working.x1-working.x0+1;
+        lastWorkingBytes=workingBytes+prior.bytes; maxWorkingCells=Math.max(maxWorkingCells,area(working));
+        try {
+          reserve(workingBytes);
+          try {
+            const {weights}=replay(working,{node:n,fields:prior.fields,sample:(px,py) => prefixPoint(count-1,px,py,run),connects:(cx,cy,local) => connected(count,cx,cy,local,run),mode:'bounds'});
+            if (!weights || weights.length!==area(working)) throw new Error('Terrain bounds replay did not return its working weights.');
+            for (let cy=core.y0;cy<=core.y1;cy++) for (let cx=core.x0;cx<=core.x1;cx++) if (weights[(cy-working.y0)*width+cx-working.x0]>0) {
+              if (!result) result={x0:cx,y0:cy,x1:cx,y1:cy};
+              else { result.x0=Math.min(result.x0,cx); result.y0=Math.min(result.y0,cy); result.x1=Math.max(result.x1,cx); result.y1=Math.max(result.y1,cy); }
+            }
+          } finally { activeBytes-=workingBytes; }
+        } finally { activeBytes-=prior.bytes; }
+      }
+      meta.globalBounds=result; meta.reduced=true; return result;
+    } finally { meta.reducing=false; }
+  }
   function prefixTile(count,x,y,run) {
     const rect={x0:x,y0:y,x1:Math.min(worldGrid-1,x+chunkCells-1),y1:Math.min(worldGrid-1,y+chunkCells-1)};
     while (count>0 && !overlaps(boundsOf(list()[count-1]),rect)) count--;
@@ -84,12 +117,13 @@ export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKe
       // Resolve remote points before keeping this node's scratch arrays live.
       // Recursive samples always ask for an earlier prefix, never this tile.
       for (const p of stageMeta.get(n).points) prefixPoint(count-1,p.x,p.y,run);
+      const globalBounds=globalBoundsOf(count,run);
       const working=apron(rect,n),prior=prefixRegion(count-1,working,run),workingBytes=area(working)*workCellBytes+bytes;
       lastWorkingBytes=workingBytes+prior.bytes; maxWorkingCells=Math.max(maxWorkingCells,area(working));
       try {
         reserve(workingBytes);
         try {
-          const source=replay(working,{node:n,fields:prior.fields,sample:(px,py) => prefixPoint(count-1,px,py,run),connects:(cx,cy,local) => connected(count,cx,cy,local,run)});
+          const source=replay(working,{node:n,fields:prior.fields,sample:(px,py) => prefixPoint(count-1,px,py,run),connects:(cx,cy,local) => connected(count,cx,cy,local,run),globalBounds});
           fields=allocate(rect); copy(source,working,fields,rect);
         } finally { activeBytes-=workingBytes; }
       } finally { activeBytes-=prior.bytes; }
@@ -109,13 +143,14 @@ export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKe
     const key=count+':coast:'+x+','+y;
     if (cache.has(key)) { const r=cache.get(key); cache.delete(key); cache.set(key,r); hits++; return r; }
     connectionTiles++;
+    const globalBounds=globalBoundsOf(count,run);
     const working=apron(rect,n),prior=prefixRegion(count-1,working,run),bytes=area(rect)*8,workBytes=area(working)*workCellBytes+bytes;
     maxWorkingCells=Math.max(maxWorkingCells,area(working));
     let fields;
     try {
       reserve(workBytes);
       try {
-        const source=replay(working,{node:n,fields:prior.fields,sample:(px,py) => prefixPoint(count-1,px,py,run),mode:'coast'});
+        const source=replay(working,{node:n,fields:prior.fields,sample:(px,py) => prefixPoint(count-1,px,py,run),globalBounds,mode:'coast'});
         fields={h:new Float32Array(area(rect)),raw:new Float32Array(area(rect))}; copy(source,working,fields,rect,['h','raw']);
       } finally { activeBytes-=workBytes; }
     } finally { activeBytes-=prior.bytes; }
@@ -147,23 +182,28 @@ export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKe
       return false;
     } finally { activeBytes-=reserved; }
   }
-  function readCells(request,{cacheResult=true,forceReplay=false}={}) {
+  function readCells(request,{cacheResult=true,forceReplay=false,prefixCount}={}) {
     if (![request.x0,request.y0,request.x1,request.y1].every(Number.isFinite) || request.x1<request.x0 || request.y1<request.y0) throw new Error('Invalid terrain cells.');
+    const count=prefixCount===undefined?list().length:prefixCount;
+    if (!Number.isInteger(count) || count<0 || count>list().length) throw new Error('Invalid terrain prefix count.');
     const rect=clip({x0:Math.floor(request.x0),y0:Math.floor(request.y0),x1:Math.ceil(request.x1),y1:Math.ceil(request.y1)});
     if (forceReplay) clear();
-    const run={points:new Map()},source=prefixRegion(list().length,rect,run);
+    const run={points:new Map()},source=prefixRegion(count,rect,run);
     activeBytes-=source.bytes;
     const r={fields:source.fields,maskPlanes:maskKeys.map(k => source.fields[k]),gridWidth:rect.x1-rect.x0+1,gridHeight:rect.y1-rect.y0+1,gridSpacing:spacing,gridOrigin:[rect.x0*spacing,rect.y0*spacing],worldSize,worldGrid,revision,bytes:source.bytes,rect:worldRect(rect)};
     if (!cacheResult) evict(0);
     return r;
   }
-  function read({x=0,y=0,width=0,height=width,apron=0}) {
+  function read({x=0,y=0,width=0,height=width,apron=0},options) {
     if (![x,y,width,height,apron].every(Number.isFinite) || width<0 || height<0 || apron<0) throw new Error('Invalid terrain region.');
-    return readCells({x0:Math.floor((x-apron)/spacing),y0:Math.floor((y-apron)/spacing),x1:Math.ceil((x+width+apron)/spacing),y1:Math.ceil((y+height+apron)/spacing)});
+    return readCells({x0:Math.floor((x-apron)/spacing),y0:Math.floor((y-apron)/spacing),x1:Math.ceil((x+width+apron)/spacing),y1:Math.ceil((y+height+apron)/spacing)},options);
   }
   function cell(ix,iy,key='h') {
     ix=clamp(Math.round(ix),0,worldGrid-1); iy=clamp(Math.round(iy),0,worldGrid-1);
-    if (baseCell && !nodes().some(n => !n.hidden && n.points?.length && overlaps(bounds(n),{x0:ix,y0:iy,x1:ix,y1:iy}))) return key==='h'?baseCell(ix,iy):0;
+    if (baseCell && !nodes().some(n => {
+      const rect=n.kind==='flowbake'?n.result?.rect:n.points?.length?bounds(n):null;
+      return !n.hidden && rect && overlaps(rect,{x0:ix,y0:iy,x1:ix,y1:iy});
+    })) return key==='h'?baseCell(ix,iy):0;
     const tx=Math.floor(ix/chunkCells)*chunkCells,ty=Math.floor(iy/chunkCells)*chunkCells,r=prefixTile(list().length,tx,ty,{points:new Map()});
     return r.fields[key][(iy-ty)*r.gridWidth+ix-tx];
   }
@@ -171,7 +211,10 @@ export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKe
     const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
     return (cell(ix,iy,key)*(1-fx)+cell(jx,iy,key)*fx)*(1-fy)+(cell(ix,jy,key)*(1-fx)+cell(jx,jy,key)*fx)*fy;
   }
-  function clear() { cache.clear(); cacheBytes=0; }
+  function clear() {
+    cache.clear(); cacheBytes=0;
+    for (const n of compiled||[]) { const meta=stageMeta.get(n); meta.reduced=false; delete meta.globalBounds; }
+  }
   function changed(rect=null,keepPrefix=0) {
     revision++; compiled=null;
     // Appending or previewing the last shape keeps earlier prefix tiles valid;

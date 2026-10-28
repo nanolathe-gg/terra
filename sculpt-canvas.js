@@ -1,3 +1,4 @@
+import {storeDocumentBakes,loadDocumentBakes} from './sculpt-document.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
@@ -40,7 +41,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function ownedBytes(extra=[]){const buffers=new Set(api.residentBuffers?.()||[]);for(const e of cache.values())if(e.heightPatch)buffers.add(e.heightPatch.fields.h.buffer);for(const a of extra)if(ArrayBuffer.isView(a))buffers.add(a.buffer);const r=renderer.stats();return [...buffers].reduce((n,b)=>n+b.byteLength,0)+r.cpuRetainedBytes+(r.cpuWorkingBytes??0)+(api.workingBytes?.()??0);}
   function fieldArrays(r){return [...Object.values(r.fields),...Object.values(r.weather??{}),r.materialField??r.material].filter(ArrayBuffer.isView);}
   function checkHeap(r,upload=0){const arrays=fieldArrays(r),used=()=> (performance.memory?.usedJSHeapSize??0)+ownedBytes(arrays)+upload;if(used()>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;if(used()>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
-  api.checkMemory=()=>{let m=metrics();if(m.accountedHeapBytes>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;m=metrics();if(m.accountedHeapBytes>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
+  api.checkMemory=(extra=0)=>{let m=metrics();if(m.accountedHeapBytes+extra>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;m=metrics();if(m.accountedHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
   function metrics() {
     const fields=api.stats?.()??{},render=renderer.stats(),heap=performance.memory?.usedJSHeapSize??0,gpu=gpuResident();
     const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes(),accounted=heap+owned;
@@ -158,7 +159,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function pickWorld(p) { const v=state(); return pick((p.x-v.x)*scale,(p.z-v.y)*scale); }
   navigatorCanvas.onpointerdown=event=>{const r=navigatorCanvas.getBoundingClientRect(); if (overview) zoom(1); viewport.scrollLeft=(event.clientX-r.left)/r.width*map.width*scale-canvas.width/2; viewport.scrollTop=(event.clientY-r.top)/r.height*map.height*scale-canvas.height/2;position();schedule();};
   function localPoint(event){const p=screen(event),q=pickWorld(p);return {x:q[0],y:q[1]};}
-  function moveHandles(index){const n=api.graph()[index];if(!n?.points?.length)return null;let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;for(const p of n.points){ax=Math.min(ax,p.x);ay=Math.min(ay,p.y);bx=Math.max(bx,p.x);by=Math.max(by,p.y);}const x=(ax+bx)/2,y=(ay+by)/2,lift=(Math.max(config.seaLevel,visibleSample(x,y))-config.baseHeight)/2,radius=Math.min(Math.hypot(bx-ax,by-ay)/2+(n.params?.radius||40),config.size*.45);return {pivot:{x,y},centre:{x,y:y-lift},rotate:{x,y:y-lift-radius},scale:{x:x+radius*.707,y:y-lift+radius*.707}};}
+  function nodeMetadata(index){return api.nodeMetadata?api.nodeMetadata(index):api.graph()[index];}
+  function moveHandles(index){const n=nodeMetadata(index);if(!n?.points?.length)return null;let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;for(const p of n.points){ax=Math.min(ax,p.x);ay=Math.min(ay,p.y);bx=Math.max(bx,p.x);by=Math.max(by,p.y);}const x=(ax+bx)/2,y=(ay+by)/2,lift=(Math.max(config.seaLevel,visibleSample(x,y))-config.baseHeight)/2,radius=Math.min(Math.hypot(bx-ax,by-ay)/2+(n.params?.radius||40),config.size*.45);return {pivot:{x,y},centre:{x,y:y-lift},rotate:{x,y:y-lift-radius},scale:{x:x+radius*.707,y:y-lift+radius*.707}};}
   overlay.addEventListener('pointerdown',event=>{
     if(![0,1].includes(event.button)||busy||gesture||pan||api.gestureActive?.()||!api.ready())return;event.preventDefault();overlay.focus({preventScroll:true});overlay.setPointerCapture(event.pointerId);
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
@@ -166,7 +168,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const p=localPoint(event),start=performance.now();
     if(api.currentTool()==='move'){
       const screenPoint=screen(event),selected=api.selection(),handles=moveHandles(selected),hit=handles&&['rotate','scale'].find(k=>Math.hypot(screenPoint.x-handles[k].x,screenPoint.z-handles[k].y)<12/scale);
-      const index=hit?selected:api.selectAt(p);if(index<0)return;const h=moveHandles(index);if(api.beginMove(index)===false)return;gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:api.graph()[index]?.params?.amount??0,action:event.shiftKey?'amount':hit||'move'};
+      const index=hit?selected:api.selectAt(p);if(index<0)return;const h=moveHandles(index);if(api.beginMove(index)===false)return;gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:nodeMetadata(index)?.params?.amount??0,action:event.shiftKey?'amount':hit||'move'};
     }else{api.beginStroke(api.currentTool(),p,api.strokeOptions());gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'stroke',points:[p],start};}
     pendingStrokeTime=start;metadata?.update?.();schedule();
   });
@@ -210,25 +212,29 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height);tile.getContext('2d').drawImage(entry.bitmap,0,0);entry.bitmap.close?.();const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
   async function saveDocument() {
-    if(saving){saveAgain=true;return;}saving=true;
+    if(saving){saveAgain=true;return;}saving=true;find('[data-load]').disabled=true;
     try {
-      const id=find('[data-document]').value.trim();if(!/^[A-Za-z0-9_-]{1,100}$/.test(id))throw new Error('Use letters, numbers, hyphens and underscores for the document name.');docId=id;
-      const sketch=api.sketch(),body={format:'nanolathe-map-document',version:1,sketch,mapData:api.mapData(),map,biome:config.biomeId,seaLevel:config.seaLevel};
-      const chunks=api.maskChunks?.()||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('/map-document/chunk?'+new URLSearchParams({id:docId,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
-      const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('/map-document?'+new URLSearchParams({id:docId}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
-      find('[data-save-state]').textContent='Saved to server · '+docId;
-    }catch(err){find('[data-save-state]').textContent=err.message;throw err;}finally{saving=false;if(saveAgain){saveAgain=false;queueSave();}}
+      const id=find('[data-document]').value.trim();if(!/^[A-Za-z0-9_-]{1,100}$/.test(id))throw new Error('Use letters, numbers, hyphens and underscores for the document name.');if(id!==docId){docId=id;maskVersions.clear();lastMetadata='';}
+      const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('/map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
+      const sketch=await storeDocumentBakes(api.sketch(),writeChunk),body={format:'nanolathe-map-document',version:1,sketch,mapData:api.mapData(),map,biome:config.biomeId,seaLevel:config.seaLevel};
+      const chunks=api.maskChunks?.()||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('/map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
+      const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('/map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
+      find('[data-save-state]').textContent='Saved to server · '+id;
+    }catch(err){find('[data-save-state]').textContent=err.message;throw err;}finally{saving=false;find('[data-load]').disabled=busy;if(saveAgain){saveAgain=false;queueSave();}}
   }
   async function loadDocument() {
+    clearTimeout(saveTimer);while(saving)await tick();clearTimeout(saveTimer);
     const id=find('[data-document]').value.trim(),data=await json('/map-document?'+new URLSearchParams({id}));
     const documentData=data.document??data.metadata??data;
     if(documentData.biome!==config.biomeId||documentData.map?.unitsX!==map.unitsX||documentData.map?.unitsY!==map.unitsY||documentData.seaLevel!==config.seaLevel)throw new Error('Open a canvas with the document’s world, dimensions and sea level before loading it.');
-    await api.loadSketch(documentData.sketch);api.restoreMapData(documentData.mapData);docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
+    const storedBytes=api.checkGraphMemory?.(documentData.sketch.nodes??[])??0;let encodedBytes=0;
+    const sketch=await loadDocumentBakes(documentData.sketch,async key=>{const r=await fetch('/map-document/chunk?'+new URLSearchParams({id,key}));if(!r.ok)throw new Error('Could not read saved flow plane '+key);const rawLength=r.headers.get('Content-Length'),length=Number(rawLength);if(!/^\d+$/.test(rawLength??'')||!Number.isSafeInteger(length))throw new Error('The saved flow chunk has no valid byte length.');encodedBytes+=length;api.checkMemory?.(storedBytes+6*encodedBytes);return r.text();});
+    await api.loadSketch(sketch);api.restoreMapData(documentData.mapData);docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
   }
   function queueSave(){clearTimeout(saveTimer);if(gesture||busy)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
   find('[data-save]').onclick=()=>saveDocument().catch(()=>{});find('[data-load]').onclick=()=>loadDocument().catch(err=>{find('[data-save-state]').textContent=err.message;});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);queueSave();});
-  function setBusy(on){busy=on;api.setBusy(on);find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
+  function setBusy(on){busy=on;api.setBusy(on);find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on||saving;if(!on){if(resizePending)resize();else schedule();}}
   features=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();queueSave();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   const result={renderer,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];}};

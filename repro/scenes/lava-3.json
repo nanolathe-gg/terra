@@ -2,7 +2,7 @@
  "ground": true, "query": "",
  "strokes": [
   ["hill", [[640,400]], {"card": {"diameter": 230, "amount": 138, "roughness": 25, "spurCount": 6, "spurLength": 65, "spurSpread": 100, "spurWidth": 90,
-    "spurTaper": 30, "spurHeight": 85, "spurBulb": 80, "crestVary": 40, "crestJag": 20}}],
+    "spurTaper": 30, "spurHeight": 85, "spurBulb": 80, "crestVary": 40, "crestJag": 20, "hillLobes": 7, "hillSteps": 6}}],
   ["hill", [[960,20],[1060,40]], {"card": {"diameter": 240, "amount": 120, "roughness": 20}}],
   ["plateau", [[950,950],[1100,900]], {"card": {"diameter": 620, "amount": 101, "roughness": 25, "softness": 70}}],
   ["plateau", [[100,1010],[250,1020]], {"card": {"diameter": 420, "amount": 135, "roughness": 25, "softness": 70}}],

@@ -3,6 +3,8 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
+// Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
+const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
 // Average colour of an image (0..1 RGB), from a 64x64 reduction.
@@ -103,7 +105,7 @@ export class TerrainRenderer {
     if (!this.context) throw new Error(NO_WEBGPU + ' The page could not get a WebGPU canvas.');
     this.grid = config.grid;
     this.size = config.size;
-    this.maskPlaneCount = config.maskKeys?.length ?? 14;
+    this.maskPlaneCount = config.maskKeys?.length ?? MASK_PLANE_COUNT;
     this.maskLayers = Math.max(1, Math.ceil(this.maskPlaneCount / 4));
     this.height = new Float32Array(this.grid * this.grid).fill(config.baseHeight);
     this.timers = [];
@@ -323,7 +325,8 @@ export class TerrainRenderer {
     this.f('uRockStart', threshold - feather * 0.5);
     this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
-    this.f('uMineralDetail', variant.get('grain') === 'strong' ? 2.4 : 1.0);
+    // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
+    this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1));
     const rockMean = variant.get('rock') === 'hill' ? material.hillRockMeanRGB : material.rockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
     this.i('uShapeCoverage', variant.get('coverage') === 'form');
@@ -415,6 +418,9 @@ export class TerrainRenderer {
     // default two colours alternating evenly from just above the plain.
     const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
     this.set('uStrataZones', [...zones, ...new Array(6 - zones.length).fill([0, 0, 0, 0])]);
+    // Card E8: a bed thickness per zone (the grey buttes' beds are 2-3 times the apron's); none keeps strataSpacing.
+    const space = (this.config.strataZoneSpacing || []).slice(0, 6);
+    this.set('uStrataZoneSpace', [...space.map(x => [x, 0, 0, 0]), ...new Array(6 - space.length).fill([0, 0, 0, 0])]);
     this.i('uStrataZoneCount', zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
@@ -562,7 +568,11 @@ export class TerrainRenderer {
     this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
+    this.i('uFlowOn', painted.slice(20, 25).some(Boolean) ? 1 : 0);
   }
+
+  // The sediment colours of the flow bake (card F1): up to three [r,g,b] in 0..1.
+  setSediment(colors) { this.set('uSedimentColors', [0, 1, 2].map(i => [...(colors?.[i] || [0, 0, 0]), 1])); }
 
   setMaterialField(field) {
     const bytes=new Uint8Array(this.grid*this.grid*4);
@@ -717,8 +727,29 @@ export class TerrainRenderer {
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
     this.set('uShine', shine);
+    // E10 (Lava): crease at the foot of each bank step; shine only from this slope up (0: off).
+    this.f('uLayerCrease', variant.has('layerCrease') ? Number(variant.get('layerCrease')) : 0);
+    this.f('uShineSlopeGate', variant.has('shineSlopeGate') ? Number(variant.get('shineSlopeGate')) : 0);
     this.f('uShadeBlue', variant.has('shadeBlue') ? Number(variant.get('shadeBlue')) : 0);
     this.f('uFrostWet', variant.has('frostWet') ? Number(variant.get('frostWet')) : 0);
+    // E7 (Crystal): shallow water's crystal mosaic.
+    this.f('uCrystalShallow', variant.has('crystalShallow') ? Number(variant.get('crystalShallow')) : 0);
+    this.f('uCrystalShallowPx', variant.has('crystalShallowPx') ? Number(variant.get('crystalShallowPx')) : 10);
+    // E11: shallow water round 2; every default is the earlier look.
+    this.f('uStepSharp', variant.has('stepSharp') ? Number(variant.get('stepSharp')) : 0);
+    this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
+    this.f('uShelfScale', variant.has('shelfScale') ? Number(variant.get('shelfScale')) : 100);
+    this.f('uCrackedStep', variant.has('crackedStep') ? Number(variant.get('crackedStep')) : 0);
+    this.f('uCrackedContrast', variant.has('crackedContrast') ? Number(variant.get('crackedContrast')) : 0);
+    this.f('uBedDots', variant.has('bedDots') ? Number(variant.get('bedDots')) : 0);
+    this.f('uBedDotCell', variant.has('bedDotCell') ? Number(variant.get('bedDotCell')) : 14);
+    this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
+    this.f('uBedMottleScale', variant.has('bedMottleScale') ? Number(variant.get('bedMottleScale')) : 1);
+    this.f('uRingContrast', variant.has('ringContrast') ? Number(variant.get('ringContrast')) : 0);
+    this.f('uRingCount', variant.has('ringCount') ? Number(variant.get('ringCount')) : 7);
+    this.f('uRingSize', variant.has('ringSize') ? Number(variant.get('ringSize')) : 1);
+    this.f('uBedMottle', variant.has('bedMottle') ? Number(variant.get('bedMottle')) : 0);
+    this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
@@ -765,6 +796,31 @@ export class TerrainRenderer {
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
     this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
+    // Card E8 (Painted Desert); 0 is every world as it was.
+    this.f('uBaseBand', variant.has('baseBand') ? Number(variant.get('baseBand')) : 0);
+    this.f('uBaseBandLow', variant.has('baseBandLow') ? Number(variant.get('baseBandLow')) : 4);
+    this.f('uBaseBandHigh', variant.has('baseBandHigh') ? Number(variant.get('baseBandHigh')) : 6.5);
+    this.f('uBaseBandWander', variant.has('baseBandWander') ? Number(variant.get('baseBandWander')) : 1);
+    this.f('uBaseBandGaps', variant.has('baseBandGaps') ? Number(variant.get('baseBandGaps')) : 0.45);
+    // E9 (Green rock faces).
+    this.f('uFaceRock', variant.has('faceRock') ? Number(variant.get('faceRock')) : 0);
+    this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
+    this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
+    this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);
+    // Flow bake (card F1): only read where a bake wrote planes 20-24 (uFlowOn).
+    this.f('uFlowTint', variant.has('flowTint') ? Number(variant.get('flowTint')) : 1);
+    this.f('uFlowShallow', variant.has('flowShallow') ? Number(variant.get('flowShallow')) : 0.85);
+    this.f('uFlowStreak', variant.has('flowStreak') ? Number(variant.get('flowStreak')) : 0.5);
+    this.f('uFlowStreakLen', variant.has('flowStreakLen') ? Number(variant.get('flowStreakLen')) : 140);
+    this.f('uFlowBank', variant.has('flowBank') ? Number(variant.get('flowBank')) : 0.9);
+    // E6: shine roughness gate and headroom (0: the earlier shine exactly).
+    this.f('uShineGate', variant.has('shineGate') ? Number(variant.get('shineGate')) : 0);
+    this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
+    this.f('uPockmark', variant.has('pockmark') ? Number(variant.get('pockmark')) : 0);
+    this.f('uPockSize', variant.has('pockSize') ? Number(variant.get('pockSize')) : 5);
+    this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
+    this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
+    this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
     this.fieldsDirty = true;
   }
 
@@ -800,6 +856,8 @@ export class TerrainRenderer {
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
     set('uBedRelief', number('bedRelief', 0));
+    set('uBedCrackSlope', number('bedCrackSlope', 0.8));
+    set('uBandFoot', number('bandFoot', 0));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackLength', number('crackLength', 2));
@@ -851,6 +909,30 @@ export class TerrainRenderer {
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
+    // E9 (Green rock faces).
+    set('uGullyDepth', number('gullyDepth', 0));
+    set('uGullySpacing', number('gullySpacing', 40));
+    set('uGullyWidth', number('gullyWidth', 14));
+    set('uGullyAngle', number('gullyAngle', -20));
+    set('uGullyRun', number('gullyRun', 160));
+    set('uGullyGaps', number('gullyGaps', 0.3));
+    set('uGullyShade', number('gullyShade', 0));
+    set('uRibTilt', number('ribTilt', 0));
+    set('uBedFlow', number('bedFlow', 1));
+    set('uBedBend', number('bedBend', 0));
+    set('uBedPunch', number('bedPunch', 0));
+    set('uScratchDepth', number('scratchDepth', 0));
+    set('uScratchSpacing', number('scratchSpacing', 9));
+    set('uScratchAngle', number('scratchAngle', -20));
+    set('uScratchRun', number('scratchRun', 90));
+    set('uScratchGaps', number('scratchGaps', 0.4));
+    set('uFacetTilt', number('facetTilt', 0));
+    set('uFacetSize', number('facetSize', 6));
+    set('uFacetStretch', number('facetStretch', 1.5));
+    set('uFacetStep', number('facetStep', 1));
+    set('uFacetSeam', number('facetSeam', 0));
+    set('uFacetSkew', number('facetSkew', 1));
+    set('uFacetCoarse', number('facetCoarse', 0));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});

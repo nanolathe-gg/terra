@@ -52,6 +52,35 @@ fn groundBased(c: vec3f) -> vec3f {
 // Strata: coloured bands by height on raised ground (painted desert).
 fn strataHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
 fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
+// Card E8 (Painted Desert): the grey band at the foot of retail's raised ground. Retail's
+// neutral grey (mean (118,115,112)) sits in a thin height window on the first rise of the
+// raised ground (world height 9-12 on a plain of 2-3; ribbons median 9 px wide on gently
+// rising ground, measure/desert_greyband.py). Here the window is 4-6.5 above the plain,
+// the middle of a lobe's rim, where its slope makes the ribbon that wide; the bumpy apron
+// wanders it and the gaps break it into stretches.
+// hf: the height above the plain; slope: units per px, which sets the edge softness.
+// Card E8: the beds of one zone at height hr as a colour, for painted rock, whose height is
+// not the zone's (the same split and share as the strata block; no edge softening, as a
+// painted mesa's rock is mostly gentle).
+fn rockStrata(hr: f32, zone: i32, paint: f32) -> vec3f {
+    if (paint <= 0.0) { return strataSlot(u.strataZones[zone].y); }
+    let z = u.strataZones[zone];
+    let S = max(u.strataZoneSpace[zone].x, 0.5);
+    let t = hr / S;
+    let k = floor(t);
+    let split = clamp(1.0 - z.w * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
+    let isB = smoothstep(split - 0.04, split + 0.04, fract(t));
+    return mix(strataSlot(z.y), strataSlot(z.z), isB);
+}
+fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
+    let wander = (terrainNoise(p * 0.03 + vec2f(41.0, 7.0)).r - 0.5) * 2.0 * u.baseBandWander
+               + (terrainNoise(p * 0.35 + vec2f(5.0, 63.0)).g - 0.5) * 1.5;
+    let e = clamp(1.2 * max(slope, 0.05), 0.15, 1.0);
+    let hh = hf + wander;
+    let inside = smoothstep(u.baseBandLow - e, u.baseBandLow + e, hh) * (1.0 - smoothstep(u.baseBandHigh - e, u.baseBandHigh + e, hh));
+    let gap = terrainNoise(p * 0.07 + vec2f(77.0, 3.0)).b;
+    return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
+}
 
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
@@ -269,6 +298,69 @@ fn wrinkleLines(pixel: vec2f, along: vec2f, across: vec2f, keep: f32, sun: vec2f
     return vec2f(dark, lit * (1.0 - dark));
 }
 
+// Moon pockmarks (card E6). Retail's hills and crater walls are one rough
+// pitted surface from crest to foot, with no cracks: small dark pits about
+// 2-3 px wide and 3-4 px tall, leaning with the retail glint axis, packed
+// close on shaded faces (near black on dark ground) and thin on lit ones. One
+// pit per cell of a lattice stretched along that axis, jittered and sized per
+// cell; density is the share of cells that hold one. Returns 0..1.
+fn pockPits(pixel: vec2f, size: f32, density: f32) -> f32 {
+    // Retail's pits cluster and thin in patches ~40 px across, so the lattice's evenness never shows.
+    let clump = 0.55 + 0.9 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
+    var pit = 0.0;
+    for (var layer = 0; layer < 2; layer++) {
+        // Layer 1: a finer, sparser set between the large pits.
+        let cell = select(size, size * 0.55, layer == 1);
+        let weight = select(1.0, 0.7, layer == 1);
+        let keep = select(density, density * 0.7, layer == 1) * clump;
+        let q = vec2f(dot(pixel, SHINE_ACROSS) / cell, dot(pixel, SHINE_ALONG) / (cell * 1.4));
+        let c = vec2i(floor(q));
+        for (var j = -1; j <= 1; j++) {
+            for (var i = -1; i <= 1; i++) {
+                let k = c + vec2i(i, j);
+                let r = markHash(k + vec2i(311 + 700 * layer, 977));
+                if (r.x >= keep) { continue; }
+                let centre = vec2f(k) + 0.15 + 0.7 * r.yz;
+                let d = (q - centre) / vec2f(mix(0.18, 0.4, r.w), mix(0.18, 0.4, fract(r.w * 7.3)));
+                pit = max(pit, weight * (1.0 - smoothstep(0.55, 1.0, dot(d, d))));
+            }
+        }
+    }
+    return pit;
+}
+
+// Ice crystal mountains (card E6). Retail's second ice mountain (ice-1) is slate
+// ruled with straight dark strokes, 1-2 px wide and 8-40 px long, spaced 3-6 px, in
+// domains ~36 px across that each keep one of three directions (two steep, one
+// shallow, as the window's strokes run); the strokes break into segments. Domains
+// are the nearest of a jittered lattice's points. Returns 0..1, 1 on a stroke.
+fn iceHatch(pixel: vec2f) -> f32 {
+    let cell = 36.0;
+    let c = vec2i(floor(pixel / cell));
+    var best = 1e9;
+    var id = vec4f(0.0);
+    var home = c;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let k = c + vec2i(i, j);
+            let r = markHash(k + vec2i(17, 53));
+            let d = length(pixel - (vec2f(k) + 0.15 + 0.7 * r.xy) * cell);
+            if (d < best) { best = d; id = r; home = k; }
+        }
+    }
+    // Steep leaning right (72 degrees) in 45% of domains, steep leaning left (110) in 40%, shallow (29) in 15%.
+    let angle = select(select(0.5, 1.92, id.z < 0.85), 1.26, id.z < 0.45) + (id.w - 0.5) * 0.25;
+    let along = vec2f(cos(angle), sin(angle));
+    let across = vec2f(-along.y, along.x);
+    let s = dot(pixel, across) / mix(3.6, 6.0, fract(id.w * 13.7));
+    let band = abs(fract(s) - 0.5);
+    let stroke = 1.0 - smoothstep(0.18, 0.32, band);
+    let rs = markHash(vec2i(i32(floor(s)), home.x * 7 + home.y * 13) + vec2i(101, 7));
+    // Some domains are bare, some strokes of a domain are missing, and the rest break into runs of 16-42 px.
+    let run = dot(pixel, along) / mix(16.0, 42.0, rs.x) + rs.y * 10.0;
+    return stroke * step(0.3, id.x) * step(0.35, rs.z) * step(0.45, fract(run));
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -324,6 +416,46 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
     return mix(color, slab, submerged);
 }
 
+// Crystal shallows (card E7): retail's shallow Crystal water, everywhere it is
+// shallow, is a mosaic of small crystals: cells about 6-14 px across, each with its
+// own brightness and a slight lean (lighter toward one side), outlined by a thin
+// dark seam. The bed is art in retail (the TNT height grid is 16 px), so this
+// is drawn from position, not from heights. The cells fade out as the water
+// deepens, and stand aside where the larger shore slabs (the crystal field's
+// marks) already cover the water.
+// One layer of the mosaic: the nearest cell's hash, its lean and the distance to its seam, in cells of `size` px.
+struct ShallowCell { id: vec4f, lean: f32, edge: f32 }
+fn shallowCell(p: vec2f, size: f32, salt: i32) -> ShallowCell {
+    let q = p / size;
+    let cell = vec2i(floor(q));
+    let at = fract(q);
+    var d1 = 8.0;
+    var d2 = 8.0;
+    var id = vec4f(0.0);
+    var off = vec2f(0.0);
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let h = markHash(cell + vec2i(i + salt, j));
+            let pt = vec2f(f32(i), f32(j)) + 0.5 + (h.xy - 0.5) * 0.9 - at;
+            let d = length(pt);
+            if (d < d1) { d2 = d1; d1 = d; id = h; off = -pt; }
+            else if (d < d2) { d2 = d; }
+        }
+    }
+    return ShallowCell(id, dot(off, normalize(id.zw - 0.5 + vec2f(0.001))) * 0.5, (d2 - d1) * 0.5 * size);
+}
+fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: f32) -> vec3f {
+    let size = max(u.crystalShallowPx, 4.0);
+    // Two scales, as retail's mosaic has: a share of the water keeps cells 2.2 times as wide, the rest the fine ones.
+    let big = shallowCell(p, size * 2.2, 7919);
+    var c = shallowCell(p, size, 0);
+    if (big.id.y < 0.4) { c = big; }
+    let seam = 1.0 - smoothstep(0.3, 1.2, c.edge);
+    let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * c.lean;
+    let w = u.crystalShallow * submerged * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
+    return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * 0.55 * seam);
+}
+
 // Shine and roughness (card E2). Nanolathe look, not a retail claim: a
 // Blinn lobe over a micro-roughened surface normal, per material, added to
 // the lit colour (so it passes the highlight cap) before the palette stage.
@@ -350,7 +482,7 @@ fn shineNoise(q: vec2f) -> vec2f {
 // material code already settled (rock: exposed; slope cover: the face blend
 // and the sampled slope cover; sand and crystal from their baked fields).
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32, faceCover: f32,
-             slopeCover: f32, crystalMask: f32, sunSeen: f32) -> vec4f {
+             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32) -> vec4f {
     var sand = 0.0;
     if (u.reliefMode == 1) { sand = smoothstep(0.35, 0.95, bakedFields(p).a); }
     if (u.beach != 0) { sand = max(sand, smoothstep(0.25, 0.75, beachField(p))); }
@@ -376,6 +508,11 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     // Sharpness follows the gloss that uses it, grain scale the roughness.
     focus = max(focus / max(gloss, 1e-4), 1.0);
     scale = max(scale / max(rough, 1e-4), 1.0);
+    // Card E6: the sheen and its grain only sit on raised ground and slopes (Moon's plain keeps its own
+    // grain); shineGate 0 is every world's earlier shine.
+    let reach = mix(1.0, landform, u.shineGate);
+    rough *= reach;
+    gloss *= reach;
     var micro = g;
     if (rough > 0.0) {
         let q = vec2f(dot(pixel, SHINE_ACROSS) / scale, dot(pixel, SHINE_ALONG) / (scale * max(u.shineStretch, 1.0)));
@@ -387,6 +524,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     let litAfter = max(0.0, dot(grained, u.light));
     let lit = clamp((u.ambient + 0.95 * litAfter) / (u.ambient + 0.95 * litBefore), 0.5, 1.6);
     var glint = vec3f(0.0);
+    var dim = 1.0;
     if (gloss > 0.0) {
         let halfway = normalize(u.light + SHINE_VIEW);
         let lobe = pow(max(dot(grained, halfway), 0.0), focus) * smoothstep(0.0, 0.15, dot(grained, u.light));
@@ -395,8 +533,33 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
         let body = smoothstep(0.04, 0.22, top);
         let tint = mix(material / max(top, 0.05), vec3f(1.0), u.shineWhite);
         glint = tint * (gloss * lobe * sunSeen * body);
+        // Card E6, shine on near-white ice: adding light to a body already near white only clips, so
+        // the glint has nothing to stand against and the surface reads rough, not shiny. The headroom
+        // takes light off the body wherever the lobe is low and leaves it at the lobe's peak, so a
+        // glint is a bright fleck over a body a little duller than the plain's.
+        if (u.shineHeadroom > 0.0) { dim = 1.0 - u.shineHeadroom * clamp(gloss, 0.0, 1.0) * (1.0 - clamp(lobe, 0.0, 1.0)) * body; }
     }
-    return vec4f(glint, lit);
+    return vec4f(glint, lit * dim);
+}
+
+// E10 (Lava): retail draws the step between two shore layers as a dark line whichever way it faces, where a
+// lit riser is only dark on the side turned from the sun. This is that line as a cavity: how far the four
+// neighbours 2.5 px round a point stand above it (the foot of a riser has higher ground on one side; a lip
+// and a flat have none), on the banks only: ground between the sea and the plain, so hills keep their own look.
+fn layerCreaseTerm(p: vec2f) -> f32 {
+    let h = baseHeight(p);
+    let bank = smoothstep(u.sea + 0.5, u.sea + 2.0, h) * (1.0 - smoothstep(u.base - 1.5, u.base - 0.3, h));
+    if (bank <= 0.0) { return 0.0; }
+    const r = 2.5;
+    let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
+    return bank * smoothstep(0.1, 0.5, around - h);
+}
+// E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
+// weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
+// shineSlopeGate and above, none at a third of it and below.
+fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
+    let gate = smoothstep(u.shineSlopeGate * 0.35, u.shineSlopeGate, slope);
+    return vec4f(shine.xyz * gate, mix(1.0, shine.w, gate));
 }
 
 // The shallow-to-deep step (card E1). Retail's step is a hard edge with
@@ -413,17 +576,104 @@ fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) 
     return smoothstep(at - reach, at + reach, d);
 }
 
+// E11: value noise for the shelf's wander (smooth, 0..1, four lattice hashes).
+fn shelfHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
+fn shelfNoise(q: vec2f) -> f32 {
+    let i = floor(q);
+    let f = fract(q);
+    let s = f * f * (3.0 - 2.0 * f);
+    return mix(mix(shelfHash(i), shelfHash(i + vec2f(1.0, 0.0)), s.x), mix(shelfHash(i + vec2f(0.0, 1.0)), shelfHash(i + vec2f(1.0, 1.0)), s.x), s.y);
+}
+
+// The shallow-to-deep step with a true threshold (E11, Green and Red). The ragged
+// stairs are pixel blocks in the picture, not in depth: depth units would turn a
+// flat shelf into a wide fuzzy band (green-3's blurry middle), so the 2-px block
+// jitter is scaled by the bed's own gradient. The step's depth wanders with broad
+// noise (shelfWander units over shelfScale px), so the band's outline and width
+// vary along the shore instead of following it at a fixed offset.
+fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32, cracked: bool) -> f32 {
+    var at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
+    if (cracked && u.crackedStep > 0.0) { at = u.crackedStep; }
+    let grad = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
+                                  baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
+    let block = floor(pixel / 2.0);
+    let jitter = fract(sin(dot(block, vec2f(39.3467, 11.135))) * 43758.5453) - 0.5;
+    let q = p / max(u.shelfScale, 8.0);
+    let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
+    // The wander fades in with depth, so the shore side of the band keeps its own width.
+    let d = depth - jitter * 4.0 * max(grad, 0.05);
+    return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
+}
+
+// E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
+// lines 2-4 px apart that follow the hill's outline (a hill's border, not a texture laid on
+// the screen). The mineral field's own falloff is the outline's distance measure: the
+// weathering worker's source falls off about exponentially from the hill, so lines at equal
+// steps of its logarithm are equally spaced in px, whatever the hill's shape. Pixel width
+// comes from the field's gradient. field: the material field's source (.b); returns the
+// line colour and its weight.
+fn fringeField(q: vec2f) -> f32 {
+    return log(max(materialFieldAt((q / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid).b, 1e-4));
+}
+fn fringeContours(p: vec2f, field: f32) -> vec4f {
+    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return vec4f(0.0); }
+    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
+    if (field < outer * 0.5 || field > 0.65) { return vec4f(0.0); }
+    const e = 2.0;
+    let grad = 0.5 / e * length(vec2f(fringeField(p + vec2f(e, 0.0)) - fringeField(p - vec2f(e, 0.0)),
+                                      fringeField(p + vec2f(0.0, e)) - fringeField(p - vec2f(0.0, e))));
+    let scale = max(u.ringCount, 1.0) / max(log(0.3 / outer), 0.5);
+    let wobble = (shelfNoise(p / 7.0 + 13.0) - 0.5) * 1.7 + (shelfNoise(p / 2.6 + 71.0) - 0.5) * 0.8;
+    let k = -log(max(field, 1e-4)) * scale + wobble;
+    let rate = max(grad * scale, 0.02);
+    let f = fract(k);
+    let line = 1.0 - smoothstep(0.3, 0.9, min(f, 1.0 - f) / rate);
+    let dash = smoothstep(0.25, 0.6, shelfNoise(p / 8.0 + 91.0));
+    let zone = smoothstep(outer * 0.5, outer * 3.0, field) * (1.0 - smoothstep(0.25, 0.6, field)) * smoothstep(0.04, 0.12, rate);
+    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
+    return vec4f(tone, line * dash * zone * u.ringContrast);
+}
+
+// E11: the lit bed's mid-scale mottle. Retail's shallows are lit ground whose lumps of 4-17 px
+// read as crisp patches, not clouds (luma s.d. after a 5-px blur 5.6-7.5 against ours 2.8-3.9
+// with the fine grain alone), so the noise is cut at a threshold roughened by a pixel hash.
+// pixel: the screen pixel (the grain). Returns -1..1.
+fn bedMottleField(p: vec2f, pixel: vec2f) -> f32 {
+    let z = u.bedMottleScale;
+    let m = shelfNoise(p / (3.2 * z) + 31.0) * 0.5 + shelfNoise(p / (6.5 * z) + 7.0) * 0.3 + shelfNoise(p / (15.0 * z) + 53.0) * 0.2;
+    let grain = fract(sin(dot(floor(pixel), vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
+    return smoothstep(0.3, 0.7, 0.5 + (m - 0.5) * 2.2 + grain * 0.45) * 2.0 - 1.0;
+}
+
+// E11: dark dots in the lit bed. Retail's lilac lake shows small dark dots (3-4 px, one every
+// 12-20 px, blue-purple) that the ground tiles' fine grain does not give (dark components
+// of >= 3 px average 6.5-11 px in retail against 4.3-6.7 in ours). One jittered dot per
+// cell of bedDotCell screen px, a share of cells empty; 0..1 coverage.
+fn bedDotField(pixel: vec2f) -> f32 {
+    let cell = max(u.bedDotCell, 6.0);
+    let c = floor(pixel / cell);
+    let r = vec2f(shelfHash(c + 3.1), shelfHash(c + 91.7));
+    let centre = (c + 0.2 + 0.6 * r) * cell;
+    let radius = 1.5 + 1.0 * shelfHash(c + 47.3);
+    let present = step(0.3, shelfHash(c + 11.9));
+    return present * (1.0 - smoothstep(radius - 0.6, radius + 0.4, length(pixel - centre)));
+}
+
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
 // bedTint is how much of the bed's own colour the tint replaces.
-fn litBed(bed: vec3f) -> vec3f {
+fn litBed(bed: vec3f, cracked: bool) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
     // as soft darker blue, never as black rims), so the dark side carries less.
-    let ratio = clamp(dot(bed, luma) / level, 0.25, 2.0);
-    let light = pow(ratio, select(u.bedContrast * 0.6, u.bedContrast, ratio >= 1.0));
+    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides.
+    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked && u.crackedContrast > 0.0), 2.0);
+    var contrast = u.bedContrast;
+    var darkSide = 0.6;
+    if (cracked && u.crackedContrast > 0.0) { contrast = u.crackedContrast; darkSide = 1.0; }
+    let light = pow(ratio, select(contrast * darkSide, contrast, ratio >= 1.0));
     let tint = u.shallowMean * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
@@ -431,6 +681,84 @@ fn litBed(bed: vec3f) -> vec3f {
 // little protection, and where frostWet is 1 those cells keep the white of the
 // level snow instead of the grey the wet band gives the bank near the sea.
 fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * smoothstep(0.02, 0.04, route)); }
+
+// ---- F1: the current and the sediment it carries (mask planes 20-24; sculpt-flow.js) ----
+// What the bake wrote at p: dir and speed of the current (the planes hold the direction times the
+// square root of the speed, so slow water keeps its direction in a signed byte), and the
+// concentration of each of the three sediments. On land the concentration planes carry the same
+// sediment fading with the distance from the shore, which tints the banks.
+struct FlowSample { dir: vec2f, speed: f32, conc: vec3f }
+fn flowSample(p: vec2f) -> FlowSample {
+    let a = textureSampleLevel(masksTex, linearClamp, maskUv(p), 5, 0.0);
+    let b = textureSampleLevel(masksTex, linearClamp, maskUv(p), 6, 0.0);
+    let m = length(a.xy);
+    var s: FlowSample;
+    s.speed = min(1.0, m * m);
+    s.dir = select(vec2f(1.0, 0.0), a.xy / m, m > 0.01);
+    s.conc = max(vec3f(a.z, a.w, b.x), vec3f(0.0));
+    return s;
+}
+// The colour the carried sediments make together (their colours weighted by concentration), and their total.
+fn sedimentMix(conc: vec3f) -> vec4f {
+    let total = conc.x + conc.y + conc.z;
+    let sum = u.sedimentColors[0].rgb * conc.x + u.sedimentColors[1].rgb * conc.y + u.sedimentColors[2].rgb * conc.z;
+    return vec4f(sum / max(total, 1e-4), total);
+}
+fn flowHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
+fn flowValue(q: vec2f) -> f32 {
+    let i = floor(q);
+    let f = fract(q);
+    let w = f * f * (3.0 - 2.0 * f);
+    return mix(mix(flowHash(i), flowHash(i + vec2f(1.0, 0.0)), w.x), mix(flowHash(i + vec2f(0.0, 1.0)), flowHash(i + vec2f(1.0, 1.0)), w.x), w.y);
+}
+// Streaks along the current: smooth noise averaged along the local flow direction (a short line
+// convolution), so the streaks follow a bending current wherever it goes. -1..1.
+fn flowStreaks(p: vec2f, dir: vec2f) -> f32 {
+    var sum = 0.0;
+    let step = u.flowStreakLen / 6.0;
+    for (var k = -6; k <= 6; k++) {
+        let q = p + dir * (f32(k) * step);
+        sum += 0.65 * flowValue(q / 26.0) + 0.35 * flowValue((q + vec2f(41.0, 17.0)) / 11.0);
+    }
+    return clamp((sum / 13.0 - 0.5) * 4.0, -1.0, 1.0);
+}
+// Water carrying sediment: its colour is moved toward the sediments' own as they thicken (less in
+// the shallows), keeping part of the water's light so grain and lit bed carry through; streaks run
+// along the current, stronger where it is fast.
+fn flowWater(water: vec3f, p: vec2f, deep: f32) -> vec3f {
+    let s = flowSample(p);
+    let sediment = sedimentMix(s.conc);
+    let carry = saturate(sediment.w * 1.1);
+    var out = water;
+    if (sediment.w > 0.003) {
+        let level = dot(water, vec3f(0.299, 0.587, 0.114));
+        let tinted = saturate(sediment.rgb * (0.8 + (level - 0.2) * 0.6));
+        out = mix(water, tinted, carry * u.flowTint * mix(u.flowShallow, 1.0, deep));
+    }
+    if (u.flowStreak > 0.0 && s.speed > 0.02) {
+        let streak = flowStreaks(p, s.dir) * u.flowStreak * smoothstep(0.04, 0.5, s.speed);
+        out *= 1.0 + 0.45 * streak * (0.6 + 0.4 * carry);
+    }
+    return out;
+}
+// Banks where the sediment reaches the shore: the stain the bake left on land, broken up by the
+// same kind of noise as a painted mask's edge, thinner on sand (bars and beaches), keeping the
+// ground's own light.
+fn flowBank(color: vec3f, p: vec2f) -> vec3f {
+    let s = flowSample(p);
+    let sediment = sedimentMix(s.conc);
+    if (sediment.w < 0.01) { return color; }
+    let lobes = terrainNoise(p * 0.07 + vec2f(11.0, 47.0)).b - 0.5 + (terrainNoise(p * 0.45 + vec2f(5.0, 91.0)).r - 0.5) * 0.6;
+    let grain = terrainNoise(p * 1.7 + vec2f(37.0, 13.0)).g + terrainNoise(p * 5.0 + vec2f(8.0, 71.0)).a * 0.6 - 0.8;
+    let held = smoothstep(0.02, 0.2, sediment.w);
+    let stain = smoothstep(0.12, 0.45, sediment.w * 1.5 + (lobes * 0.9 + grain * 0.7) * held) * u.flowBank;
+    let sand = max(smoothstep(0.35, 0.95, bakedFields(p).a), smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0)));
+    let level = dot(color, vec3f(0.299, 0.587, 0.114));
+    let tinted = saturate(sediment.rgb * (0.55 + level * 2.2));
+    // Only low ground: the raised sand bars and hills in the water are not stained.
+    let low = 1.0 - smoothstep(22.0, 38.0, baseHeight(p) - u.sea);
+    return mix(color, tinted, saturate(stain * (1.0 - 0.85 * sand) * low));
+}
 
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
@@ -583,6 +911,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     let warmGrain = 0.52 - dot(body, vec3f(0.299, 0.587, 0.114));
                     warm = clamp(warm + warmGrain * 0.5 * 4.0 * warm * (1.0 - warm), 0.0, 1.0);
                     transitionGround = mix(transitionGround, body, warm);
+                    let contours = fringeContours(p, sediments.b);
+                    transitionGround = mix(transitionGround, contours.rgb, contours.a);
                     if (u.transitionDetail > 0.0) {
                         let groundLow = textureSampleLevel(grassTex, grassSamp, pixel / 512.0, 3.0).rgb;
                         let ringLow = textureSampleLevel(mineralRingTex, mineralRingSamp, pixel / 512.0, 3.0).rgb;
@@ -611,6 +941,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     var margin = mix(grass, fringe, veil * 0.55);
                     let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
+                    let contours = fringeContours(p, sediments.b);
+                    margin = mix(margin, contours.rgb, contours.a);
                     let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12)
                              * smoothstep(0.02, 0.35, sediments.a);
                     margin = mix(margin, face, core);
@@ -654,8 +986,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let weathered = pixelSample(rockWeatheredTex, rockWeatheredSamp, pixel + vec2f(73.0, 17.0), vec2f(256.0)).rgb;
         rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
         rock = mix(rock, weathered, smoothstep(0.40, 0.62, moss));
+        // E9: the weathered and fractured tiles carry green blotches (14% and 5.5% of their pixels)
+        // that read as moss scattered over the face; retail's face holds grass at its edges. Clamp
+        // the green to the larger of red and blue so the tile keeps its structure and loses its moss.
+        if (u.rockMoss < 1.0) { rock.g = mix(min(rock.g, max(rock.r, rock.b)), rock.g, u.rockMoss); }
     }
     rock = based(rock, u.rockTexMean, u.rockBase);
+    // E9: the rock tile's own blotches and cell outlines read as soft cobble over the lit form;
+    // below 1 the tile's contrast around the rock's mean colour is scaled down so the carved relief carries the face.
+    if (u.rockDetail < 1.0) {
+        let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+        rock = rockFlat + (rock - rockFlat) * u.rockDetail;
+    }
     // Deposition softens the exposed face into a connected apron. Flow and
     // deposited soil come from the same weathering that changed the surface.
     var rockScore = slope + (n.g - 0.5) * 0.55 + (n.b - 0.5) * 0.30 - weather.g * 0.55;
@@ -776,6 +1118,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
         var share = mix(u.rockShare.x, u.rockShare.y, smoothstep(u.faceSlope.y, u.faceSlope.y * 1.8, slope));
         var lowGate = lowBank;
+        // Ice monotone mountains (card E6): retail's common ice mountain is one slate-blue material
+        // from the first slope to the crest, not snow and rock interleaved: all face, all rock.
+        if (u.iceSlate > 0.0) {
+            face = max(face, smoothstep(0.12, 0.3, faceSlope) * (1.0 - route) * (1.0 - sandBar) * u.iceSlate);
+            share = mix(share, 1.0, u.iceSlate);
+        }
         // Painted face style (card C5): below 0 less of the face is rock, above 0 more.
         if (u.styleOn != 0) {
             let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));
@@ -803,7 +1151,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                   + (fine.g - 0.5) * u.faceScore.z + (n.r - 0.5) * u.faceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.
         let threshold = mix(1.4, -0.9, share);
-        let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
+        var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
+        // E9: inside painted rock the face is rock; moss stays at its edges and on the ledges below.
+        if (u.faceRock > 0.0 && u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * u.faceRock); }
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
@@ -857,7 +1207,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let next = u.strataZones[zone + 1];
             if (next.y == z.y && next.z == z.z) { share = mix(z.w, next.w, clamp((hr - z.x) / max(next.x - z.x, 0.1), 0.0, 1.0)); }
         }
-        let S = max(u.strataSpacing, 0.5);
+        var S = max(u.strataSpacing, 0.5);
+        // Card E8: retail's beds thicken up the buttes (lit flanks above 60: line gaps
+        // of 11-15 units, against the apron's 6), so a zone may carry its own thickness.
+        if (u.strataZoneSpace[zone].x > 0.0) { S = u.strataZoneSpace[zone].x; }
         let t = hr / S;
         let k = floor(t);
         let f = fract(t);
@@ -867,7 +1220,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Painted rock (card C5) in a world with beds takes the colour its
         // highest ground is painted with (its top zone's main bed: Painted
         // Desert's grey buttes), not the alternating beds or the brown rock art.
-        let rockBed = strataSlot(u.strataZones[max(u.strataZoneCount - 1, 0)].y);
+        let topZone = max(u.strataZoneCount - 1, 0);
+        var rockBed = strataSlot(u.strataZones[topZone].y);
+        // Card E8: the strata run through the rock itself, so painted rock carries the top
+        // zone's own beds (its grey with the lines), not one flat colour, wherever it is painted.
+        if (u.strataZoneSpace[topZone].x > 0.0) { rockBed = rockStrata(hr, topZone, painted.x); }
         let bed = mix(mix(strataSlot(z.y), strataSlot(z.z), isB), rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
@@ -876,6 +1233,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
         let onRaised = smoothstep(u.strataZones[0].x, u.strataZones[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, bedColour, max(u.strata * u.strataContrast * onRaised, u.strata * painted.x));
+        if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
     // Painted masks (card C5), after the world's own beds and before sand,
     // which covers them. Rock went through the face treatment above; where a
@@ -990,6 +1348,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let dark = 1.0 - smoothstep(0.45, 0.70, dot(material, vec3f(0.299, 0.587, 0.114)));
         material *= mix(1.0, u.hillLight, smoothstep(u.base + 1.0, u.base + 10.0, baseHeight(p)) * dark);
     }
+    // Ice crystal mountains (card E6): snow-white lumps ~30-50 px across stand on the raised ground (retail ice-1:
+    // six or seven rounded white caps on one mountain), a ragged edge, taken before the light so they shade as snow.
+    if (u.iceCrest > 0.0) {
+        let lumps = terrainNoise(p * 0.05 + vec2f(31.0, 7.0)).r + (n.b - 0.5) * 0.12;
+        let raised = smoothstep(u.base + 12.0, u.base + 40.0, h);
+        let crest = smoothstep(0.0, 0.05, lumps - mix(0.75, 0.45, u.iceCrest)) * raised;
+        material = mix(material, snowMaterial(pixel), crest);
+        exposed *= 1.0 - crest;
+    }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
         // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
@@ -997,11 +1364,28 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let fall = clamp(1.0 - shading, 0.0, 1.0) * u.shadeBlue;
         color = material * (shading + fall * vec3f(0.0, 0.35, 0.85));
     }
+    // Raised or sloped ground (card E6): the footprint of the shine gate and of Moon's pockmarks; level plain is 0.
+    // Raised ground counts whole, tops included, where a crater's floor counts only where it slopes.
+    var landform = 1.0;
+    if (u.shineGate > 0.0 || u.pockmark > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
+    if (u.iceCrystal > 0.0) {
+        // Straight strokes over the rock faces, darker the more rock shows (card E6; after shadeBlue, which rebuilds the colour).
+        color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
+    }
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        let shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform);
+        // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
+        if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
+        if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }
         color = color * shine.w + shine.xyz;
+    }
+    if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
+    if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
+        let shaded = 1.0 - clamp(shading, 0.0, 1.0);
+        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, shaded));
+        color *= 1.0 - pits * landform * mix(0.5, 0.92, shaded);
     }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on
@@ -1031,6 +1415,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             color = min(color * (1.0 + 0.2 * away * gate * lines.y), max(color, material * 0.9));
         }
     }
+    if (u.flowOn != 0 && h > u.sea - 1.0) { color = flowBank(color, p); }
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
         // Sediment mottling varies apparent water colour without changing the
@@ -1066,7 +1451,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
-        if (edgeHard > 0.0) { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
+        if (edgeHard > 0.0) {
+            if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
+            else { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
+        }
         let waterSize = vec2f(textureDimensions(waterTex, 0));
         let grain = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
@@ -1079,7 +1467,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // The bed is the level ground under the sun and shade at this pixel: the slope
             // and rock materials of its banks are not drawn through the water.
             // A cracked bed keeps its drawn material, cracks and all.
-            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * shading, color, crackedBed)), bedLit); }
+            // E11 bedFlat: light the bed by its own relief only. A shelf's slope toward the deep
+            // would otherwise shade the pale bed darker over a hundred px and read as blur.
+            var bedShade = shading;
+            if (u.bedFlat > 0.0) {
+                let own = normalize(vec3f(-(g - broad), 1.0));
+                bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
+            }
+            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
+            if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
+            if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed && edgeHard > 0.0) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
@@ -1092,6 +1489,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
+        if (u.flowOn != 0) { water = flowWater(water, p, deep); }
         var submerged = smoothstep(-0.2, 2.8, depth);
         if (shoreHard > 0.0) {
             // Retail waterlines are hard edges with small stair-step notches,
@@ -1103,6 +1501,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
         if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
+        if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
     }
     if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {
         // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just

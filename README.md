@@ -4,7 +4,8 @@ Card D phase 3 adds maps up to 40×40 units with a scrolling viewport,
 bounded regional replay, live gestures, overlapping weather tiles and streamed
 export. The 1024px study keeps its existing rendering path. Phase 3 review
 measurements and the remaining GPU rounding difference are recorded in
-`/private/tmp/nanolathe-map-editor/agent-D/NOTES.md`. Phase 4 has not started.
+`/private/tmp/nanolathe-map-editor/agent-D/NOTES.md`. Phase 3b integrates
+wave 2 through `04f1b786e`, including stored flow bakes. Phase 4 has not started.
 
 Card D phases 1 and 2 add playable terrain, features, starts and OTA settings.
 Limits and later phases are in [BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
@@ -33,6 +34,19 @@ upper median TNT sea level of its retail world. Each unit is 512 playable
 pixels. A 4×4 map contains 130×136 cells, including the outer strips, and
 2080×2176 art pixels. Yellow outlines the playable rectangle; orange marks
 the height-dependent edge strips. Fit, 1×, 0.5× and the minimap navigator use a viewport-sized canvas. Export view PNG captures only the current view.
+
+The authored-field regression check uses an isolated headless Chrome:
+
+```sh
+cd tools/map-editor
+node repro/regional.mjs repro/scenes/lava-1.json --server http://127.0.0.1:8840 --port 9640
+```
+
+It waits for the scene and any flow bake, then compares every authored field
+from whole replay with four 2×2 regional reads. Its JSON report includes every
+plane's mismatch count, maximum difference and first mismatch; any mismatch
+or editor error exits nonzero. The selected CDP port must be free. Weather
+and projected GPU art retain the separate image/replay guards in `repro/all.sh`.
 
 The original 1024px study remains available. Draw a map with the existing
 terrain brushes, then use the feature tools. Water brush depths and material
@@ -76,14 +90,25 @@ See [the export format contract](export/README.md).
 
 Full-size maps keep the stroke graph as their source. Field prefix tiles replay
 with each brush's read apron; long connected coasts query earlier tiles without
-expanding one connected bounding box. Visible chunks and one surrounding margin
+expanding one connected bounding box. Lava shore layers reduce their whole
+stroke bounds tile by tile, retaining the global bite lattice while processing
+only each requested region. Brush aprons include base variation, hill lobes,
+facet-crater seed reads and the finger/shore/frost reach. Visible chunks and one surrounding margin
 are baked on demand. Scrolling uses an LRU image cache, while overview and the
 navigator use a coarse 128×128 height preview. A stroke, move, rotation, scale or
 height drag previews while held and commits one undo step; Escape cancels it.
 
+River and Source strokes keep one cached flow-bake node. Its input heights
+are read in bounded prefix tiles before that node, while its stale hash still
+covers the entire bake region. Regional replay copies only the stored planes
+overlapping its window; eviction and export never simulate the flow again.
+One whole bake job and its five output planes must fit the page budget; an
+overlarge job is refused before its inputs or worker are allocated.
+
 The GPU and page heap budgets default to 512 MiB and 1 GiB, with controls in
 **Map view and memory** (`gpuMB` / `heapMB` in the URL). The device requests
-default WebGPU limits. Mask storage counts its actual layer count. Every selected
+default WebGPU limits. Mask storage counts its actual layer count: currently 25 planes in 7 RGBA
+layers. Flow occupies planes 20–24; 14–19 and 25+ remain unused. Every selected
 GPU budget uses the same canonical bake size chosen at the 128 MiB floor; lower
 budgets evict and re-bake more images. Changing chunk geometry can move isolated
 palette decisions because the GPU rounds interpolation differently. The remaining
@@ -98,7 +123,10 @@ corner heights. Field, weather and upload reservations share the page budget.
 
 **Save to server** writes graph/settings/objects and changed sparse mask chunks
 under `<assets-root>/documents/documents/<id>/`; **Reload document** restores that
-world/size/sea canvas. Chunks use stable coordinate keys. Sketch files remain an
+world/size/sea canvas. Field chunks use stable coordinate keys. Stored flow planes use immutable
+content keys and bounded encoded chunks; the recipe is published last so an
+interrupted save leaves its previous flow bake readable. Reload and sketch
+import check decoded bake memory before allocating it. Sketch files remain an
 alternative to server documents.
 
 Export streams one tile-aligned PNG at a time to the helper. The helper keeps

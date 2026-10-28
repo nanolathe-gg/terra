@@ -477,8 +477,133 @@ fn bedRelief(p: vec2f, h: f32, shift: f32) -> vec2f {
     let dFoot = (f - (1.0 - riser)) * bedPx;
     let lip = exp(-dTop * dTop / 5.0);
     let notch = exp(-(dFoot + 1.0) * (dFoot + 1.0) / 6.0);
-    off += u.bedLip * (lip - 0.8 * notch);
+    // E9 bedPunch: beds differ in how hard they weather, so a few ledges stand out
+    // and the eye can follow them (0: every bed alike, as before).
+    let punch = mix(1.0, 0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y, u.bedPunch);
+    off *= punch;
+    off += punch * u.bedLip * (lip - 0.8 * notch);
     return vec2f(off, lip);
+}
+
+// Rock face form (card E9). Retail's big green faces are carved: broad gullies
+// and ribs run down the face at a slight lean, tens of px apart, so whole
+// stripes read lit or shaded; the beds run on across them; long thin scratches
+// score the stripes; and the fine detail is angular facets, not rounded cells.
+// Everything is height the sun lights; nothing here is ink.
+
+// Whether the stretch of a groove at distance y along its line is present:
+// runs of about `run` px with gaps (a share of the length), per cell and salt.
+fn grooveRun(cell: f32, y: f32, run: f32, gaps: f32, salt: f32) -> f32 {
+    let r = max(run, 12.0);
+    return smoothstep(mix(-1.1, 0.15, gaps), mix(-0.7, 0.55, gaps), valueNoise(vec2f(y / r, cell * 3.7) + salt));
+}
+
+// Gullies and ribs. Gully lines lean gullyAngle from the screen's north-south
+// and sit gullySpacing apart (0.6-1.4 of it), bending with broad noise. A rib is
+// the stretch of face between two gully lines: a plane tilted by its own random
+// slope (ribTilt, height per px at most), so a stripe faces the sun or turns from
+// it as a whole. A gully is carved into the line as a smooth channel gullyWidth
+// across and up to gullyDepth deep, in runs of gullyRun px with gaps (gullyGaps),
+// deepest mid-run. Returns (height offset, how deep the gully floor is here, 0..1).
+fn gullyPos(c: f32, S: f32) -> f32 { return (c + 0.2 + 0.6 * cellHash(vec2f(c, 13.0)).x) * S; }
+fn gullyField(p: vec2f) -> vec2f {
+    let a = radians(u.gullyAngle);
+    let along = vec2f(sin(a), cos(a));
+    let across = vec2f(cos(a), -sin(a));
+    let S = max(u.gullySpacing, 8.0);
+    let y = dot(p, along);
+    let x = dot(p, across) + S * 0.55 * valueNoise(p / (S * 3.0) + 6.3) + S * 0.10 * valueNoise(p / (S * 0.8) + 2.9);
+    let c0 = floor(x / S);
+    var cl = c0 - 1.0;
+    if (x >= gullyPos(c0, S)) { cl = c0; }
+    let cr = cl + 1.0;
+    let pl = gullyPos(cl, S);
+    let pr = gullyPos(cr, S);
+    let t = clamp((x - pl) / (pr - pl), 0.0, 1.0);
+    let hl = u.ribTilt * S * (cellHash(vec2f(cl, 77.0)).x - 0.5) * 2.0;
+    let hr = u.ribTilt * S * (cellHash(vec2f(cr, 77.0)).x - 0.5) * 2.0;
+    var off = mix(hl, hr, mix(t, smoothstep(0.0, 1.0, t), 0.4));
+    var floor_ = 0.0;
+    if (u.gullyDepth > 0.0) {
+        var cut = 0.0;
+        for (var i = 0; i < 2; i++) {
+            let c = select(cl, cr, i == 1);
+            let d = abs(x - select(pl, pr, i == 1));
+            let hw = max(u.gullyWidth, 2.0) * 0.5 * (0.7 + 0.6 * cellHash(vec2f(c, 5.0)).x);
+            let u_ = clamp(d / hw, 0.0, 1.0);
+            let prof = 1.0 - smoothstep(0.0, 1.0, u_);
+            let deep = 0.5 + 0.9 * cellHash(vec2f(c, 41.0)).y;
+            let mid = 0.55 + 0.45 * valueNoise(vec2f(y / (max(u.gullyRun, 12.0) * 0.6), c * 5.1) + 23.0);
+            cut = max(cut, u.gullyDepth * deep * mid * grooveRun(c, y, u.gullyRun, u.gullyGaps, 61.0) * prof);
+        }
+        off -= cut;
+        floor_ = cut / u.gullyDepth;
+    }
+    return vec2f(off, floor_);
+}
+
+// Weathering scratches: thin grooves leaning scratchAngle, scratchSpacing apart,
+// 1-2 px wide and up to scratchDepth deep, in runs of scratchRun px with gaps.
+fn scratchField(p: vec2f) -> f32 {
+    let a = radians(u.scratchAngle);
+    let along = vec2f(sin(a), cos(a));
+    let across = vec2f(cos(a), -sin(a));
+    let S = max(u.scratchSpacing, 3.0);
+    let y = dot(p, along);
+    let x = dot(p, across) + S * 0.5 * valueNoise(p / (S * 6.0) + 12.4) + S * 0.12 * valueNoise(p / (S * 1.3) + 7.7);
+    let c = floor(x / S);
+    var best = 1e9;
+    var cell = c;
+    for (var i = -1; i <= 1; i++) {
+        let ci = c + f32(i);
+        let d = abs(x - (ci + 0.1 + 0.8 * cellHash(vec2f(ci, 29.0)).x) * S);
+        if (d < best) { best = d; cell = ci; }
+    }
+    let run = max(u.scratchRun, 12.0);
+    let depth = u.scratchDepth * (0.5 + 0.8 * cellHash(vec2f(cell, 43.0)).x) * (0.6 + 0.4 * valueNoise(vec2f(y / (run * 0.4), cell * 7.1) + 3.0));
+    let hw = 0.8 + 0.5 * cellHash(vec2f(cell, 47.0)).y;
+    let t = max(0.0, 1.0 - best / hw);
+    return -depth * grooveRun(cell, y, run, u.scratchGaps, 53.0) * t * t * (3.0 - 2.0 * t);
+}
+
+// Angular facets: a jittered grid of cells F px tall and `stretch` times as wide
+// (the beds' direction), each a plane with its own random tilt (up to `tilt`,
+// height per px) and a step against its neighbours (up to `step_`), so each
+// lights as a flat facet and the seams between them are crisp creases, not
+// grooves. facetField adds a coarser level (facetCoarse times the fine one's
+// size 2.4 times larger, and that share of its tilt and step) so the facets
+// crumple at two scales, as retail's rock does.
+// Returns (height, seam): the seam is 1 on the crease between two facets and 0 over 1.2 px away from it.
+fn facetLevel(p: vec2f, F: f32, stretch: f32, tilt_: f32, step_: f32, salt: f32) -> vec2f {
+    let size = vec2f(F * max(stretch, 0.25), F);
+    let q = p / size;
+    let g = floor(q);
+    var best = 1e9;
+    var second = 1e9;
+    var id = g;
+    var pt = vec2f(0.0);
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let c = g + vec2f(f32(i), f32(j));
+            let point = c + 0.15 + 0.7 * cellHash(c + 71.0 + salt);
+            let d = point - q;
+            let dd = dot(d, d);
+            if (dd < best) { second = best; best = dd; id = c; pt = point; }
+            else if (dd < second) { second = dd; }
+        }
+    }
+    // The picture draws a point at row y - height / 2, so a facet tilted steeply in y is stretched or squeezed on the screen
+    // (flat at 2 units per px): the tilt across the beds (x) carries the contrast, the tilt in y is held to facetSkew of it.
+    let tilt = (cellHash(id + 37.0 + salt) - 0.5) * 2.0 * tilt_ * vec2f(1.0, u.facetSkew);
+    let step = (cellHash(id + 19.0 + salt).x - 0.5) * step_;
+    let seam = (1.0 - smoothstep(0.0, 1.2 / F, sqrt(second) - sqrt(best))) * (0.3 + 0.7 * cellHash(id + 5.0 + salt).y);
+    return vec2f(dot(tilt, (q - pt) * size) + step, seam);
+}
+fn facetField(p: vec2f) -> vec2f {
+    let F = max(u.facetSize, 2.0);
+    var f = facetLevel(p, F, u.facetStretch, u.facetTilt, u.facetStep, 0.0);
+    if (u.facetCoarse > 0.0) { f.x += facetLevel(p + vec2f(31.0, 17.0), F * 2.4, u.facetStretch, u.facetTilt * u.facetCoarse, u.facetStep * u.facetCoarse, 133.0).x; }
+    return f;
 }
 
 // Beach: dry ground within reach of the water, as the world's coast
@@ -806,7 +931,10 @@ fn bake(p: vec2f) -> vec4f {
     // doubles it up to twice and never drops below 0.8 times the painted amount.
     let banding = select(u.banding * (1.0 + style.z), max(u.banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
     if (u.bandStyle != 1) { bandsAt = contourBands(p, h, slope, fall, banding); }
-    let bands = bandsAt.xy * (1.0 - route);
+    var bands = bandsAt.xy * (1.0 - route);
+    // E11: the dark lines round Archipelago's hills were the first contour risers on the
+    // hill's foot; retail has red fringe lines there instead (fringeContours draws those).
+    if (u.bandFoot > 0.0) { bands.y *= smoothstep(u.base + 0.5 * u.bandFoot, u.base + u.bandFoot, h); }
     height += bands.x;
     var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
@@ -844,7 +972,7 @@ fn bake(p: vec2f) -> vec4f {
     var crackedBed = false;
     if (u.waterOn != 0 && h <= u.sea + 1.0) { crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5; }
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
-    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, 0.8), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
+    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, u.bedCrackSlope), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
     var broken = 0.0;
@@ -852,6 +980,8 @@ fn bake(p: vec2f) -> vec4f {
     // Rock structure (card E3): the structured face steps in as the scatter
     // (ribs, block steps, minor cracks) steps back; its relief is added below.
     var structureRock = 0.0;
+    var gullyFloor = 0.0;
+    var facetSeam = 0.0;
     var order = 0.0;
     var steep = 0.0;
     if (u.rockOrder > 0.0 && u.cracksOn != 0 && h > u.sea + 1.0) {
@@ -866,9 +996,25 @@ fn bake(p: vec2f) -> vec4f {
     }
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
     if (order > 0.0) {
-        let joint = jointField(p);
-        let bed = bedRelief(p, h, joint.y);
+        var joint = jointField(p);
+        // E9: the face's own form. Gullies and ribs carve the face; the beds follow
+        // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
+        // The form fades out over the face's foot, so no gully reaches the water plane.
+        var carved = vec2f(0.0);
+        if (u.gullyDepth > 0.0 || u.ribTilt > 0.0) { carved = gullyField(p) * smoothstep(u.base + 2.0, u.base + 16.0, h); }
+        joint.y *= u.bedFlow;
+        let bed = bedRelief(p, h + carved.x * u.bedBend, joint.y);
         height += order * steep * (bed.x + joint.x);
+        // The form eases in over the painted edge (a smoothstep of the cover, not the cover itself), so the rim stays smooth.
+        let gate = smoothstep(0.15, 0.85, order * steep);
+        height += gate * carved.x;
+        gullyFloor = gate * carved.y;
+        if (u.scratchDepth > 0.0) { height += gate * scratchField(p); }
+        if (u.facetTilt > 0.0) {
+            let facet = facetField(p);
+            height += gate * facet.x;
+            facetSeam = gate * facet.y;
+        }
         structureRock = order * steep * bed.y * step(0.01, u.bedLip);
     }
     // Relief never carries dry ground below the water plane: it would cut
@@ -885,6 +1031,10 @@ fn bake(p: vec2f) -> vec4f {
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
     var lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
+    // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
+    lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
+    // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
+    lineDark = max(lineDark, facetSeam * u.facetSeam * (1.0 - buried));
     if (u.sandBanding > 0.0) {
         // Sand bars (sandCrown) are smooth rippled sand, not streaked dune slopes.
         let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand * (1.0 - u.sandCrown), smoothstep(0.3, 0.8, sand)), route * 0.6));

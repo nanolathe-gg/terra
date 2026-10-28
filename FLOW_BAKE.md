@@ -100,3 +100,57 @@ Desert dry washes.
    stages 2 and 3.
 3. **Baking:** an explicit Bake button with a stale badge. Baking when
    the editor is idle is an option.
+
+## As built, stage 1 (card F1)
+
+Stage 1 is in: the River and Source tools, the Bake button with its stale
+badge and the idle option, and shading in the water path. What the code
+settled where this page left it open:
+
+- **Nodes.** `river` and `source` write nothing; one `flowbake` node stores
+  the bake's output (five Int8 planes over its rect, the sediment colours,
+  the hash) and replay copies the planes in. The bake reads the heights
+  *before its own node*, so strokes after it do not feed it.
+- **Planes.** Mask planes 20-24 (layers 5-6): the current's x and y (the
+  direction times the square root of the speed), then the concentration of
+  up to three sediments; on land within the bank reach the sediment planes
+  carry the stain fading from the shore, which tints banks. Planes 25-27 are
+  free for stage 2's height change.
+- **Hash.** Region, every river and source (points, widths, amounts,
+  colours), the bake settings, the sea level and the region's heights.
+- **Solver.** `sculpt-flow.js`: a wish field from the strokes and the bed, a
+  staggered-grid pressure projection (land a wall, the region's edge open),
+  then advection, mixing and settling per colour to a steady state, on a
+  coarse grid for large regions (6 px cells for a full 1024 px map, about
+  0.9 s).
+- **Not yet:** more than three colours (the fourth joins the nearest), the
+  rain mask, stages 2 and 3, and tiled flow simulation for a bake whose stored
+  output exceeds the selected page budget.
+
+Per-scene bake times and memory, the export's reading list and the open
+items are in the card's NOTES.md.
+
+## Regional map integration (card D phase 3b)
+
+Map canvases keep 25 mask planes in 7 RGBA layers. Planes 14–19 and 25+
+are free placeholders, not active allocations in a larger mask array. Every
+upload clears and packs the actual layers, including zero planes, so a reused
+GPU texture cannot retain a previous chunk's current or sediment.
+
+The flow worker and its arithmetic are unchanged. The host gathers compact
+input heights in bounded prefix reads before the bake node, then hashes the
+entire bake rectangle with the same inputs/settings as the study path. Changes
+outside the visible viewport can therefore mark the stored result stale.
+Replay copies only the intersection of its window and the stored world-cell
+rectangle, preserving the source stride and the regional destination origin.
+
+Worker admission includes input, outputs and solver temporaries. Stored bake
+loads validate dimensions and reserve decoded planes before allocation; no
+compressed zero-run payload can bypass the page budget. Reset/load terminates
+an obsolete worker and ignores its queued completion/error events.
+
+Version 5 sketch recipes retain the five encoded planes. Server documents
+store those encoded bytes as at most 4 MiB immutable SHA-256 content chunks,
+then publish metadata referencing them. A failed save leaves the previous
+recipe and its bake intact. Reload hydrates the chunks before normal recipe
+decoding; it preserves the bake without running the worker.

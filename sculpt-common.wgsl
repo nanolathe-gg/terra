@@ -246,6 +246,82 @@ struct Uniforms {
     // Ice (card E5).
     shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
+    // E7 (Crystal).
+    crystalShallow: f32,   // shallow water: how strongly it carries a mosaic of small crystal cells (0: as before)
+    crystalShallowPx: f32, // width of those cells, px
+    // E8 (Painted Desert)
+    strataZoneSpace: array<vec4f, 6>,   // x: bed thickness of each zone of strataZones, height units (0: the world's strataSpacing)
+    baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off
+    baseBandLow: f32,      // lower edge of its height window, above the plain
+    baseBandHigh: f32,     // upper edge
+    baseBandWander: f32,   // how far the window drifts with position, height units
+    baseBandGaps: f32,     // share of the band's length that is missing
+    // E9 (Green rock faces). Every default reproduces the earlier output exactly.
+    faceRock: f32,        // painted rock's interior is rock, with moss kept to its edges (0: moss blobs inside as before; 1: none inside)
+    rockMoss: f32,        // how much of the rock art's own green (fractured and weathered tiles) is kept (1: all, as before; 0: none)
+    shineOutside: f32,    // share of the rock's glints kept outside painted rock (1: everywhere, as the shine model gives them)
+    rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
+    gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
+    gullySpacing: f32,    // distance between gully lines, world px
+    gullyWidth: f32,      // gully width across, world px
+    gullyAngle: f32,      // gully lean from the screen's north-south, degrees
+    gullyRun: f32,        // typical length of an unbroken gully, world px
+    gullyGaps: f32,       // share of each gully's length that is missing
+    gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
+    ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
+    bedFlow: f32,         // how far joints break and shift the beds (1: as before; 0: continuous beds)
+    bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
+    bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
+    scratchDepth: f32,    // weathering scratches: depth, height units (0: none)
+    scratchSpacing: f32,  // distance between scratches, world px
+    scratchAngle: f32,    // scratch lean from the screen's north-south, degrees
+    scratchRun: f32,      // typical length of an unbroken scratch, world px
+    scratchGaps: f32,     // share of each scratch's length that is missing
+    facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
+    facetSize: f32,       // facet height, world px
+    facetStretch: f32,    // facet width as a multiple of its height
+    facetStep: f32,       // step between neighbouring facets, height units
+    facetSeam: f32,       // how dark the creases between facets are (0: lit like the facets)
+    facetSkew: f32,       // facets' tilt in y as a share of their tilt in x (the picture squeezes steep y tilts: 1 as before, lower keeps them readable)
+    facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
+    // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
+    stepSharp: f32,       // Green, Red: the shallow-to-deep step is a true threshold, ragged by pixels (0: the earlier smoothed step)
+    shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
+    shelfScale: f32,      // size of that wander, world px
+    crackedStep: f32,     // Red: depth of the shallow-to-deep step under a cracked-bed stroke (0: the world's own step)
+    crackedContrast: f32, // Red: how much of the cracked bed's light and cracks carry through its tint (0: bedContrast's own, compressed, path)
+    bedCrackSlope: f32,   // Red (bake): the slope the cracked bed's cracks are cut for; the land's cracked faces are steeper (.8: as before)
+    bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
+    bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
+    stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
+    bedMottleScale: f32,  // size of the bed's mottle lumps against Green's (1: 3-15 px; Archipelago's reef bars use larger blotches)
+    bandFoot: f32,        // Archipelago (bake): no band lines on the hill's foot below this height above the dry base (0: lines everywhere)
+    ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
+    ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
+    ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
+    bedMottle: f32,       // the lit bed's mid-scale mottle: lit lumps of 4-17 px, as a share of brightness (0: none; Green)
+    bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
+    // F1 (flow bake): the current and the sediment it carries (mask planes 20-24).
+    flowOn: i32,          // 1 once any cell carries a baked current or sediment; 0 skips every read of it
+    flowTint: f32,        // how far a full concentration of sediment replaces the water's colour
+    flowShallow: f32,     // the share of that tint kept in the shallowest water (1: tinted alike at every depth)
+    flowStreak: f32,      // contrast of the streaks the current draws (0: none)
+    flowStreakLen: f32,   // length of a streak, world px
+    flowBank: f32,        // how strongly sediment tints the banks it reaches
+    sedimentColors: array<vec4f, 3>,   // rgb of the three sediments the bake carries (set by the bake's node)
+    // E10 (Lava).
+    layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
+    shineSlopeGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)
+    // E6 (shine fix: Moon, Ice).
+    shineGate: f32,       // shine roughness only on raised ground and slopes, not the level plain (0: everywhere, as before; 1: only there)
+    shineHeadroom: f32,   // dim the lit body where the lobe is low, so glints stand against it on near-white ice (0: additive only, as before)
+    // E6 (Moon).
+    pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
+    pockSize: f32,        // pit spacing across the retail glint axis, px
+    // E6 (Ice mountains).
+    iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
+    iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
+    iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
