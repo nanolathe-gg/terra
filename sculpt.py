@@ -40,7 +40,7 @@ KNOB_DEFAULTS = dict(
     crystalVariation=.5, crystalTiers=0,
     shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1,
-    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
+    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, fingerBlunt=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
@@ -117,7 +117,7 @@ WORLD_KNOBS = {
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=5, bandLine=1,
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=7, bandLine=1,
                  northFace=.7, fingers=1, fingerBlunt=1, worms=0, shoreEdge=1, slopeTexture=0,
                  # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
                  bankPx=60,
@@ -125,7 +125,11 @@ WORLD_KNOBS = {
                  # ~2.5 px wide at half depth (measure/lava_bands.py lines
                  # profiles); the thin 1.6 px V at 0.75 darkness read as faint
                  # grain on the ground's palette noise.
-                 bandWidth=2.6, crackDark=.95),
+                 bandWidth=2.3, crackDark=.95,
+                 # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
+                 # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
+                 # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
+                 bandRelief=.4, bandWander=.5, bandGaps=.15),
     # shadeDepth stays 1 on Lava: directional shading varies by map and
     # window (luma on the east-west height gradient: 6-9 per unit slope on
     # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle

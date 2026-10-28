@@ -751,6 +751,9 @@ export class TerrainRenderer {
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));
     set('uBandStyle', number('bandStyle', 0), 'i');
+    set('uBandRelief', number('bandRelief', 0));
+    set('uBandWander', number('bandWander', 0));
+    set('uBandGaps', number('bandGaps', 0));
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', Boolean(this.config.textures.beach));
     set('uSandBanding', number('sandBanding', 0));

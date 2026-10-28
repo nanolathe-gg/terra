@@ -469,7 +469,7 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
 // shaded faces), dark on every facing, no light lines. The broad slope sets
 // the step, so neighbouring lines converge and merge where it changes.
 // Returns (line strength, facing).
-fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec2f {
+fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f32) -> vec2f {
     if (banding <= 0.0 || h < u.sea + 0.5 || slope < 0.12) { return vec2f(0.0); }
     // Broad slope of the dry land only: the lava bed would steepen a bank.
     let broad = vec2f(max(baseHeight(p + vec2f(16.0, 0.0)), u.sea) - max(baseHeight(p - vec2f(16.0, 0.0)), u.sea),
@@ -477,7 +477,14 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec2f {
     // On a narrow steep bank the broad slope is gentler than the face, so
     // the steeper of the two sets the step (lines no closer than ~7 px).
     let S = u.bandSpacing * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
-    let uu = (h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18) / S;   // GLSL: u
+    var field = h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18;
+    // Card B3: retail's bank lines fork, end and meet, because they trace a
+    // rough surface rather than a smooth slope. The relief's ribs and lumps
+    // bend the contours (they fold round every rib), a slow phase wander makes
+    // neighbouring lines meet and part, all as extra height in line steps.
+    if (u.bandRelief > 0.0) { field += u.bandRelief * relief; }
+    if (u.bandWander > 0.0) { field += u.bandWander * S * (valueNoise(p / 41.0 + 61.0) * 1.2 + valueNoise(p / 17.0 + 77.0) * 0.5); }
+    let uu = field / S;   // GLSL: u
     let v = fract(uu);
     let px = min(v, 1.0 - v) * S / max(slope, 0.05);
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
@@ -488,7 +495,14 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec2f {
     let core = select(1.6, u.bandWidth, u.bandWidth > 0.0);
     let halfWidth = core * mix(1.0, 1.375, smoothstep(0.8, 1.4, slope) * smoothstep(0.1, -0.4, facing));
     let line = clamp(1.0 - px / halfWidth, 0.0, 1.0);
-    let strength = smoothstep(0.12, 0.25, slope) * (0.75 + 0.25 * smoothstep(0.3, 1.5, slope));
+    var strength = smoothstep(0.12, 0.25, slope) * (0.75 + 0.25 * smoothstep(0.3, 1.5, slope));
+    // Each line (its own level) is present only along stretches ~40 px long:
+    // wider and more irregular spacing, lines that break off (card B3).
+    if (u.bandGaps > 0.0) {
+        let level = floor(uu + 0.5);
+        let present = valueNoise(p / 38.0 + vec2f(level * 7.31, level * 3.17) + 13.0);
+        strength *= smoothstep(mix(-1.2, 0.15, u.bandGaps), mix(-0.9, 0.45, u.bandGaps), present);
+    }
     return vec2f(line * strength * banding, facing);
 }
 
@@ -632,7 +646,7 @@ fn bake(p: vec2f) -> vec4f {
     height += bands.x;
     var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
-    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall, banding).x * u.bandLine * (1.0 - route); }
+    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall, banding, height).x * u.bandLine * (1.0 - route); }
     var sand = sandCover(p, slope, height) * (1.0 - route);
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
