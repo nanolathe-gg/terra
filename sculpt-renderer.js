@@ -656,6 +656,7 @@ export class TerrainRenderer {
     this.f('uAmbient', variant.has('ambient') ? Number(variant.get('ambient')) : 0.42);
     this.f('uSlopeMarks', variant.has('slopeMarks') ? Number(variant.get('slopeMarks')) : 0);
     this.f('uWrinkles', variant.has('wrinkles') ? Number(variant.get('wrinkles')) : 0);
+    this.f('uCrystalSeam', variant.has('crystalSeam') ? Number(variant.get('crystalSeam')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);

@@ -204,6 +204,8 @@ struct Uniforms {
     bandGaps: f32,        // share of each line's stretches dropped, so lines break off and spacing widens
     // Moon joined wrinkles (card B3).
     wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
+    // Crystal shore slabs (card C2).
+    crystalSeam: f32,     // submerged crystal-field cells: 1 paints the seam marks dark and the slab fill paler (0: water as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

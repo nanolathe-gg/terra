@@ -308,6 +308,18 @@ fn mossMaterial(pixel: vec2f) -> vec3f {
     return saturate(face * (1.0 + (grain - 1.0) * 0.8) * 0.85);
 }
 
+// Crystal shore slabs (card C2): water repaints whatever colour a crystal mark
+// gives, so the marks of cells under water are read here. A slab's bed is lit
+// paler than the water round it, slab by slab (the field's 0.8-1.0 brightness
+// mark), and the 0.5 edge marks are thin dark seams.
+fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
+    let seam = 1.0 - smoothstep(0.58, 0.74, mask);
+    let fill = smoothstep(0.66, 0.8, mask);
+    let jitter = clamp((mask - 0.9) * 10.0, -1.0, 1.0);
+    let slab = color * (1.0 + u.crystalSeam * fill * (0.32 + 0.14 * jitter)) * (1.0 - u.crystalSeam * 0.7 * seam);
+    return mix(color, slab, submerged);
+}
+
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -925,6 +937,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             submerged = mix(submerged, crisp, u.crispShore);
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
+        if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
     }
     if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {
         // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just

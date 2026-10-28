@@ -126,12 +126,13 @@ const SHAPE_FIELDS=[
   ['fissureCell','fissure-cell','Network block size (px)',['fissure'],30,160,5,1,'Typical width of a block between the cuts.'],
   ['fissureCrack','fissure-crack','Fractured rock beside the cut',['fissure'],0,100,5,100,'Raises the world\'s own crack field along the cut, so the rock beside it breaks up (0 leaves only the cut).'],
   ['fissureDark','fissure-dark','Darkness',['fissure'],0,100,5,100,'Paints the world\'s own wet (dark) ground along the cut, so it reads dark whatever the ground (it layers on rock, snow or moss).'],
-  ['shorePlates','shore-plates','Shore plates',['deep','shallow'],0,1,1,1,'Add a band of broken plates on this stroke only. Off preserves the original water shape.'],
-  ['plateWaterPx','plate-water-px','Plates: water width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline into the water.'],
-  ['plateLandPx','plate-land-px','Plates: land width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
-  ['plateSize','plate-size','Plate size (px)',['deep','shallow'],8,96,2,1,'Typical width of the interlocking polygonal plates.'],
-  ['plateGap','plate-gap','Plate gap (px)',['deep','shallow'],0,160,5,10,'Open gap between adjacent plates.'],
-  ['plateHeight','plate-height','Plate height above sea',['deep','shallow'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height.'],
+  ['shorePlates','shore-plates','Shore plates',['deep','shallow','offset'],0,1,1,1,'Add a band of broken plates on this stroke only. Off preserves the original water shape.'],
+  ['plateWaterPx','plate-water-px','Plates: water width (px)',['deep','shallow','offset'],0,240,4,1,'Reach from this stroke\'s waterline into the water.'],
+  ['plateLandPx','plate-land-px','Plates: land width (px)',['deep','shallow','offset'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
+  ['plateSize','plate-size','Plate size (px)',['deep','shallow','offset'],8,96,2,1,'Typical width of the interlocking polygonal plates.'],
+  ['plateGap','plate-gap','Plate gap (px)',['deep','shallow','offset'],0,160,5,10,'Open gap between adjacent plates.'],
+  ['plateHeight','plate-height','Plate height above sea',['deep','shallow','offset'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height. Rock slabs: how far the land slabs stand above their seams.'],
+  ['plateMaterial','plate-material','Plate material (0 ice floes, 1 rock slabs)',['deep','shallow','offset'],0,1,1,1,'0: white and blue floes with open gaps (Ice Scream). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound)',['crystal'],0,1,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world).'],
   ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbours.'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
@@ -399,7 +400,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','fingerBlunt','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','fingerBlunt','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -1212,6 +1213,7 @@ function stampShorePlates(s) {
     if (y+1<grid) { d=Math.min(d,distance[i+grid]+spacing); if (x) d=Math.min(d,distance[i+grid-1]+diagonal); if (x+1<grid) d=Math.min(d,distance[i+grid+1]+diagonal); }
     distance[i]=d;
   }
+  if (s.plateMaterial>=.5) { stampShoreSlabs(s,raw,distance,sea,water,land); return; }
   const L=Math.max(8,s.plateSize),gap=Math.max(0,s.plateGap)*.5,inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
   const cells=new Map(),cell=(x,y) => {
     const key=x+','+y; let c=cells.get(key);
@@ -1242,6 +1244,43 @@ function stampShorePlates(s) {
       heights[i]=clamp(raw[i]+ridge*Math.min(3,s.plateHeight),MIN_HEIGHT,MAX_HEIGHT);
       protection[i]=Math.max(protection[i],ridge); routes[i]=Math.max(routes[i],ridge); cover[i]=Math.min(cover[i],-ridge);
     }
+  }
+  heightDirty=true;
+}
+
+// Rock slabs (card C2, Crystal): the same band, but a web of low flat slabs
+// that interlock along the waterline, as retail Crystal's shores do (census
+// crystal-low-shore-slabs: plates 12-80 px, bands 40-140 px, dark seams a few
+// px wide on the land rim and across the shallow shelf). Seams are the crystal
+// field's edge mark, which the shader inks black; slab interiors carry its
+// brightness mark. On land the slabs stand up to plateHeight above their
+// seams. Under water they are a shallow ledge (the bed lifted to 2.2-3.2 units
+// down, never above the waterline), and the water shader reads the same marks
+// (crystalSeam) to paint the seams and a paler slab fill over the ledge. Slabs
+// thin out with the distance from this stroke's own waterline and stop at the
+// band's width, so two shores join only where their bands meet; nothing here is
+// ever raised above the sea.
+function stampShoreSlabs(s,raw,distance,sea,water,land) {
+  const L=Math.max(8,s.plateSize),seam=Math.max(spacing*.5,Math.max(0,s.plateGap)*.5),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
+  const cells=new Map(),cell=(x,y) => {
+    const key=x+','+y; let c=cells.get(key);
+    if (!c) { c={x:(x+.5+hash(x,y,s.seed^0x481)*.4)*L,y:(y+.5+hash(x,y,s.seed^0x287)*.4)*L,keep:hash(x,y,s.seed^0x721)*.5+.5,shade:.8+.2*(hash(x,y,s.seed^0x3b9)*.5+.5),lift:hash(x,y,s.seed^0x6d3)*.5+.5}; cells.set(key,c); }
+    return c;
+  };
+  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+    const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
+    if (!width || d>=width) continue;
+    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    let best=null,next=null,d1=Infinity,d2=Infinity;
+    for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) {
+      const c=cell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
+      if (q<d1) { d2=d1;next=best;d1=q;best=c; } else if (q<d2) { d2=q;next=c; }
+    }
+    if (best.keep>1-smooth(.2,1,d/width)) continue;
+    const edge=(d2-d1)/(2*Math.max(1,Math.hypot(best.x-next.x,best.y-next.y)))*scale+valueNoise(lx/6,ly/6,s.seed^0x317)*.5,seamed=edge<seam;
+    crystal[i]=seamed?.5:best.shade; protection[i]=1;
+    if (wet) heights[i]=clamp(Math.max(raw[i],sea-3.2+best.lift),MIN_HEIGHT,MAX_HEIGHT);
+    else if (!seamed) heights[i]=clamp(raw[i]+best.lift*s.plateHeight,MIN_HEIGHT,MAX_HEIGHT);
   }
   heightDirty=true;
 }
@@ -1525,7 +1564,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','fingerBlunt'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','fingerBlunt'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1571,7 +1610,7 @@ function replayShape(n,work) {
   }
   if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
   else sweep(s,pts);
-  if (['deep','shallow'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
+  if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
   if (n.kind==='crater') addCraterlets(n,s);
   applyCracks(s);
 }
@@ -1642,7 +1681,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0):0);
+  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
@@ -1720,7 +1759,7 @@ function evaluate(from=0,rect=null) {
   const evalStart=performance.now();
   // Shore distance depends on neighbouring heights; replay the full suffix
   // when it contains a plate band so changes outside a small edit stay exact.
-  if (rect && nodes.slice(from).some(n => ['deep','shallow'].includes(n.kind) && n.params?.shorePlates>0)) rect=null;
+  if (rect && nodes.slice(from).some(n => ['deep','shallow','offset'].includes(n.kind) && n.params?.shorePlates>0)) rect=null;
   if (rect && from>0 && prefix[from] && prefix.length>=nodes.length) { evaluateRegion(from,rect); lastEvalMs=performance.now()-evalStart; return; }
   from=Math.max(0,Math.min(from,nodes.length));
   if (from>0 && prefix[from]) { const now=live(); for (const k of FIELD_KEYS) now[k].set(prefix[from][k]); }
