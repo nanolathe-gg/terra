@@ -100,3 +100,31 @@ Desert dry washes.
    stages 2 and 3.
 3. **Baking:** an explicit Bake button with a stale badge. Baking when
    the editor is idle is an option.
+
+## As built, stage 1 (card F1)
+
+Stage 1 is in: the River and Source tools, the Bake button with its stale
+badge and the idle option, and shading in the water path. What the code
+settled where this page left it open:
+
+- **Nodes.** `river` and `source` write nothing; one `flowbake` node stores
+  the bake's output (five Int8 planes over its rect, the sediment colours,
+  the hash) and replay copies the planes in. The bake reads the heights
+  *before its own node*, so strokes after it do not feed it.
+- **Planes.** Mask planes 20-24 (layers 5-6): the current's x and y (the
+  direction times the square root of the speed), then the concentration of
+  up to three sediments; on land within the bank reach the sediment planes
+  carry the stain fading from the shore, which tints banks. Planes 25-27 are
+  free for stage 2's height change.
+- **Hash.** Region, every river and source (points, widths, amounts,
+  colours), the bake settings, the sea level and the region's heights.
+- **Solver.** `sculpt-flow.js`: a wish field from the strokes and the bed, a
+  staggered-grid pressure projection (land a wall, the region's edge open),
+  then advection, mixing and settling per colour to a steady state, on a
+  coarse grid for large regions (6 px cells for a full 1024 px map, about
+  0.9 s).
+- **Not yet:** more than three colours (the fourth joins the nearest), the
+  rain mask, stages 2 and 3, chunked baking for maps larger than the grid.
+
+Per-scene bake times and memory, the export's reading list and the open
+items are in the card's NOTES.md.

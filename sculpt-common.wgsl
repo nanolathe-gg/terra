@@ -301,6 +301,14 @@ struct Uniforms {
     ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
     bedMottle: f32,       // the lit bed's mid-scale mottle: lit lumps of 4-17 px, as a share of brightness (0: none; Green)
     bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
+    // F1 (flow bake): the current and the sediment it carries (mask planes 20-24).
+    flowOn: i32,          // 1 once any cell carries a baked current or sediment; 0 skips every read of it
+    flowTint: f32,        // how far a full concentration of sediment replaces the water's colour
+    flowShallow: f32,     // the share of that tint kept in the shallowest water (1: tinted alike at every depth)
+    flowStreak: f32,      // contrast of the streaks the current draws (0: none)
+    flowStreakLen: f32,   // length of a streak, world px
+    flowBank: f32,        // how strongly sediment tints the banks it reaches
+    sedimentColors: array<vec4f, 3>,   // rgb of the three sediments the bake carries (set by the bake's node)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
