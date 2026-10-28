@@ -205,6 +205,14 @@ struct Uniforms {
     wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
     // Crystal shore slabs (card C2).
     crystalSeam: f32,     // submerged crystal-field cells: 1 paints the seam marks dark and the slab fill paler (0: water as before)
+    // Shine and roughness (card E2): a specular lobe and micro-normal grain per
+    // material, added to the lit colour before the palette stage (0: none).
+    shineOn: i32,         // 1 once any material has gloss or roughness; 0 skips every shine read
+    shineStretch: f32,    // micro-normal grain length along its axis, times its width (1: round)
+    shineWhite: f32,      // highlight colour: 0 the material's own hue at full brightness, 1 white
+    // Per material (ground, slope cover, rock, sand, crystal): x gloss, y sharpness
+    // (Blinn exponent), z roughness (normal slope amplitude), w roughness scale, px.
+    shine: array<vec4f, 5>,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

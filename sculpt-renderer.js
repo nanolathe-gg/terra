@@ -657,6 +657,15 @@ export class TerrainRenderer {
     this.f('uSlopeMarks', variant.has('slopeMarks') ? Number(variant.get('slopeMarks')) : 0);
     this.f('uWrinkles', variant.has('wrinkles') ? Number(variant.get('wrinkles')) : 0);
     this.f('uCrystalSeam', variant.has('crystalSeam') ? Number(variant.get('crystalSeam')) : 0);
+    // Shine and roughness (card E2): per material gloss, sharpness, roughness amplitude and scale. All gloss and roughness 0 skips the shading.
+    const shine = ['Ground', 'Slope', 'Rock', 'Sand', 'Crystal'].map(m => {
+      const knob = (suffix, fallback) => variant.has(`shine${m}${suffix}`) ? Number(variant.get(`shine${m}${suffix}`)) : fallback;
+      return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
+    });
+    this.i('uShineOn', shine.some(m => m[0] > 0 || m[2] > 0));
+    this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
+    this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
+    this.set('uShine', shine);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
