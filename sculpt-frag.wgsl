@@ -52,6 +52,23 @@ fn groundBased(c: vec3f) -> vec3f {
 // Strata: coloured bands by height on raised ground (painted desert).
 fn strataHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
 fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
+// Card E8 (Painted Desert): the grey band at the foot of retail's raised ground. Retail's
+// neutral grey (mean (118,115,112)) sits in a thin height window on the first rise of the
+// raised ground (world height 9-12 on a plain of 2-3; ribbons median 9 px wide on gently
+// rising ground, measure/desert_greyband.py). Here the window is 4-6.5 above the plain,
+// the middle of a lobe's rim, where its slope makes the ribbon that wide; the bumpy apron
+// wanders it and the gaps break it into stretches.
+// hf: the height above the plain; slope: units per px, which sets the edge softness.
+fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
+    let wander = (terrainNoise(p * 0.03 + vec2f(41.0, 7.0)).r - 0.5) * 2.0 * u.baseBandWander
+               + (terrainNoise(p * 0.35 + vec2f(5.0, 63.0)).g - 0.5) * 1.5;
+    let e = clamp(1.2 * max(slope, 0.05), 0.15, 1.0);
+    let hh = hf + wander;
+    let inside = smoothstep(u.baseBandLow - e, u.baseBandLow + e, hh) * (1.0 - smoothstep(u.baseBandHigh - e, u.baseBandHigh + e, hh));
+    let gap = terrainNoise(p * 0.07 + vec2f(77.0, 3.0)).b;
+    return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
+}
+
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
@@ -870,6 +887,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
         let onRaised = smoothstep(u.strataZones[0].x, u.strataZones[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, bedColour, max(u.strata * u.strataContrast * onRaised, u.strata * painted.x));
+        if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
     // Painted masks (card C5), after the world's own beds and before sand,
     // which covers them. Rock went through the face treatment above; where a

@@ -248,6 +248,11 @@ struct Uniforms {
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
     // E8 (Painted Desert)
     strataZoneSpace: array<vec4f, 6>,   // x: bed thickness of each zone of strataZones, height units (0: the world's strataSpacing)
+    baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off
+    baseBandLow: f32,      // lower edge of its height window, above the plain
+    baseBandHigh: f32,     // upper edge
+    baseBandWander: f32,   // how far the window drifts with position, height units
+    baseBandGaps: f32,     // share of the band's length that is missing
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
