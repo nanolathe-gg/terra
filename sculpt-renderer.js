@@ -531,7 +531,11 @@ export class TerrainRenderer {
     this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
+    this.i('uFlowOn', painted.slice(20, 25).some(Boolean) ? 1 : 0);
   }
+
+  // The sediment colours of the flow bake (card F1): up to three [r,g,b] in 0..1.
+  setSediment(colors) { this.set('uSedimentColors', [0, 1, 2].map(i => [...(colors?.[i] || [0, 0, 0]), 1])); }
 
   setMaterialField(field) {
     const bytes=new Uint8Array(this.grid*this.grid*4);
@@ -733,6 +737,12 @@ export class TerrainRenderer {
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
     this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
+    // Flow bake (card F1): only read where a bake wrote planes 20-24 (uFlowOn).
+    this.f('uFlowTint', variant.has('flowTint') ? Number(variant.get('flowTint')) : 1);
+    this.f('uFlowShallow', variant.has('flowShallow') ? Number(variant.get('flowShallow')) : 0.85);
+    this.f('uFlowStreak', variant.has('flowStreak') ? Number(variant.get('flowStreak')) : 0.5);
+    this.f('uFlowStreakLen', variant.has('flowStreakLen') ? Number(variant.get('flowStreakLen')) : 140);
+    this.f('uFlowBank', variant.has('flowBank') ? Number(variant.get('flowBank')) : 0.9);
     this.fieldsDirty = true;
   }
 

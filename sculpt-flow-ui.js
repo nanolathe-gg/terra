@@ -125,7 +125,7 @@ export function mountFlow(host) {
     if (!box) return null;
     const m = Math.ceil(MARGIN_PX / spacing);
     const rect = {x0: Math.max(0, box.x0 - m), y0: Math.max(0, box.y0 - m), x1: Math.min(grid - 1, box.x1 + m), y1: Math.min(grid - 1, box.y1 + m)};
-    const {slots, colors} = assignSlots(src);
+    const {slots, colors} = assignSlots(src.map(n => ({color: n.params?.color})));
     const pts = n => n.points.map(p => [p.x, p.y]);
     const i = bakeIndex(), before = i >= 0 && host.prefix()[i] ? host.prefix()[i].h : host.heights();
     return {rect, colors, before,

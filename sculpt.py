@@ -84,6 +84,9 @@ KNOB_DEFAULTS = dict(
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
+    # F1 (flow bake): how the baked current and sediment are drawn. Nothing reads them in a scene with no bake, so no world's
+    # render changes; they are tuned on Zhon's rivers.
+    flowTint=1, flowShallow=.85, flowStreak=.5, flowStreakLen=140, flowBank=.9,
 )
 # Shine and roughness (card E2): per material (ground, slope cover, rock, sand,
 # crystal) a gloss (highlight strength), a sharpness (Blinn exponent), a roughness

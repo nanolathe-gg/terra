@@ -246,6 +246,14 @@ struct Uniforms {
     // Ice (card E5).
     shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
+    // F1 (flow bake): the current and the sediment it carries (mask planes 20-24).
+    flowOn: i32,          // 1 once any cell carries a baked current or sediment; 0 skips every read of it
+    flowTint: f32,        // how far a full concentration of sediment replaces the water's colour
+    flowShallow: f32,     // the share of that tint kept in the shallowest water (1: tinted alike at every depth)
+    flowStreak: f32,      // contrast of the streaks the current draws (0: none)
+    flowStreakLen: f32,   // length of a streak, world px
+    flowBank: f32,        // how strongly sediment tints the banks it reaches
+    sedimentColors: array<vec4f, 3>,   // rgb of the three sediments the bake carries (set by the bake's node)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

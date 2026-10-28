@@ -264,21 +264,25 @@ async function bake(request, report) {
     for (let c = 0; c < n; c++) a[c] = S[c];
     let step = 0;
     for (; step < maxSteps; step++) {
+      // Split step: advect along the current into b, then mix b with its water neighbours (each half is
+      // stable alone; adding the two in one pass is not, with fast water and strong mixing), settle, hold the sources.
+      for (let c = 0; c < n; c++) {
+        if (!water[c]) continue;
+        let v = 0; const o = 4 * c;
+        for (let k = 0; k < 4; k++) { const q = src[o + k]; if (q >= 0) v += wgt[o + k] * a[q]; }
+        b[c] = v;
+      }
       let change = 0;
       for (let c = 0; c < n; c++) {
         if (!water[c]) continue;
-        // advect, then mix with the water neighbours, then settle, then hold the sources
-        let v = 0; const o = 4 * c;
-        for (let k = 0; k < 4; k++) { const q = src[o + k]; if (q >= 0) v += wgt[o + k] * a[q]; }
-        let d = 0; for (let k = 0; k < 4; k++) { const q = nb[o + k]; if (q >= 0) d += a[q] - a[c]; }
-        // diffusion acts on the advected value's neighbourhood through the previous field: a split step
-        v = (v + diffusion * d) * still[c];
+        let d = 0; const o = 4 * c;
+        for (let k = 0; k < 4; k++) { const q = nb[o + k]; if (q >= 0) d += b[q] - b[c]; }
+        let v = (b[c] + diffusion * d) * still[c];
         if (S[c] > v) v = S[c];
         if (v < 0) v = 0;
         const dv = Math.abs(v - a[c]); if (dv > change) change = dv;
-        b[c] = v;
+        a[c] = v;
       }
-      [a, b] = [b, a];
       if (step >= 24 && change < 8e-4) { step++; break; }
       if ((step & 15) === 15 && await tick('carry', .17 + .73 * ((slot + Math.min(1, step / maxSteps)) / Math.max(1, used.filter(Boolean).length)))) return null;
     }
