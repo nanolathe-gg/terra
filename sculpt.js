@@ -187,8 +187,9 @@ const SHAPE_FIELDS=[
   ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
   // E7
   ['crystalFacet','crystal-facet','Facet tilt (column mound)',['crystal'],0,100,5,100,'Column mound: tilts each column\'s top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops.'],
+  ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal'],0,100,5,100,'Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width.'],
 ];
-const E7_KEYS=['crystalFacet'];
+const E7_KEYS=['crystalFacet','crystalSizeVar'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
@@ -1694,6 +1695,9 @@ function crystalList(s) {
 // carry the column's brightness jitter (0.8-1.0) and mark the edges between
 // columns (0.5), where the shader inks the outline.
 const FACET_SLOPE=1; // units per px at Facet tilt 1 (E7)
+// Size variation (E7): a mound's columns come in three widths (shares of Column width) and
+// the width changes over the mound from a smooth noise field and the mound's own height.
+const SIZE_LEVELS=[1,.55,.3],SIZE_STEP=[1,.65,.4];
 function stampColumns(s) {
   const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},path=simplifyPath(s.path,Math.max(1,s.radius*.05));
   const R=s.radius,H=s.amount,L=Math.max(4,s.crystalSize),inv=s.inv;
@@ -1711,34 +1715,55 @@ function stampColumns(s) {
   const pad=R*1.4;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity; for (const p of path) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   const rect={x0:Math.max(c.x0,Math.floor((ax-pad)/spacing)),y0:Math.max(c.y0,Math.floor((ay-pad)/spacing)),x1:Math.min(c.x1,Math.ceil((bx+pad)/spacing)),y1:Math.min(c.y1,Math.ceil((by+pad)/spacing))};
-  const columns=new Map(),facet=clamp(s.crystalFacet,0,1)*FACET_SLOPE;
-  const column=(i,j) => {
-    const key=i*65536+j; let k=columns.get(key);
+  const facet=clamp(s.crystalFacet,0,1)*FACET_SLOPE,sizeVar=clamp(s.crystalSizeVar,0,1),levels=sizeVar>0?SIZE_LEVELS.length:1;
+  const columns=SIZE_LEVELS.map(() => new Map());
+  // Which width a column's centre asks for: finer where the noise and the mound's height are high.
+  const levelAt=(x,y,m) => {
+    if (!(sizeVar>0)) return 0;
+    const f=.5+.32*valueNoise(x/64,y/64,s.seed^0x51a)+.18*valueNoise(x/27,y/27,s.seed^0x2e7)+.3*(m/H-.5);
+    return f>1.17-.4*sizeVar?2:f>.84-.3*sizeVar?1:0;
+  };
+  const column=(lv,i,j) => {
+    const key=i*65536+j; let k=columns[lv].get(key);
     if (!k) {
       // Column centre in the shape's own frame, then to the world.
-      const lx=(i+.5+(rnd(i,j,1)-.5)*.9)*L,ly=(j+.5+(rnd(i,j,2)-.5)*.9)*L;
+      const Ll=L*SIZE_LEVELS[lv],o=lv*16;
+      const lx=(i+.5+(rnd(i,j,1+o)-.5)*.9)*Ll,ly=(j+.5+(rnd(i,j,2+o)-.5)*.9)*Ll;
       const f=s.inv?invert(s.inv):null,wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly;
       const m=mound(wx,wy),e=2,gx=(mound(wx+e,wy)-mound(wx-e,wy))/(2*e),gy=(mound(wx,wy+e)-mound(wx,wy-e))/(2*e);
-      const flush=rnd(i,j,3)<.4,step=flush?0:(rnd(i,j,4)-.35)*2*s.crystalStep*(.5+s.crystalVariation);
-      k={lx,ly,wx,wy,m,gx,gy,step,shade:.8+.2*rnd(i,j,5)}; columns.set(key,k);
+      const flush=rnd(i,j,3+o)<.4,step=flush?0:(rnd(i,j,4+o)-.35)*2*s.crystalStep*(.5+s.crystalVariation)*SIZE_STEP[lv];
+      k={lx,ly,wx,wy,m,gx,gy,step,shade:.8+.2*rnd(i,j,5+o),on:levelAt(wx,wy,m)===lv}; columns[lv].set(key,k);
       // Facets (E7): the top is one plane tilted at a random heading, or two that meet at a
       // crease through the column's centre (a ridge or a valley). Headings turn with the frame.
       if (facet>0) {
-        const mag=a => facet*(.2+.8*rnd(i,j,a)),h0=rnd(i,j,6)*Math.PI*2,h1=h0+Math.PI*(.5+rnd(i,j,7)),m0=mag(8),m1=rnd(i,j,9)<.3?0:mag(10);
-        k.ax=Math.cos(h0)*m0; k.ay=Math.sin(h0)*m0; k.bx=Math.cos(h1)*m1; k.by=Math.sin(h1)*m1; k.ridge=rnd(i,j,11)<.5;
+        const mag=a => facet*(.2+.8*rnd(i,j,a+o)),h0=rnd(i,j,6+o)*Math.PI*2,h1=h0+Math.PI*(.5+rnd(i,j,7+o)),m0=mag(8),m1=rnd(i,j,9+o)<.3?0:mag(10);
+        k.ax=Math.cos(h0)*m0; k.ay=Math.sin(h0)*m0; k.bx=Math.cos(h1)*m1; k.by=Math.sin(h1)*m1; k.ridge=rnd(i,j,11+o)<.5;
       }
     }
     return k;
   };
   for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
     const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
-    const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,d1=Infinity,d2=Infinity;
-    for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
-      const k=column(i,j),d=Math.hypot(lx-k.lx,ly-k.ly);
-      if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d;
+    // The nearest column centre of any width that is in use here (the widest width's, as before, when there is one).
+    for (let lv=0;lv<levels;lv++) {
+      const Ll=L*SIZE_LEVELS[lv],ci=Math.floor(lx/Ll),cj=Math.floor(ly/Ll);
+      for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
+        const k=column(lv,i,j);
+        if (!k.on && levels>1) continue;
+        const d=Math.hypot(lx-k.lx,ly-k.ly);
+        if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d;
+      }
     }
-    if (!best || best.m<=1) continue;
+    if (!best) {
+      // No width in use is near: fall back to the widest columns whatever they asked for.
+      const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+      for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
+        const k=column(0,i,j),d=Math.hypot(lx-k.lx,ly-k.ly);
+        if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d;
+      }
+    }
+    if (best.m<=1) continue;
     // Crystal repro 1–3: inheriting the mound incline made continuous dark
     // walls. Preserve the envelope but expose separate column tops.
     const incline=best.gx*(wx-best.wx)+best.gy*(wy-best.wy);
