@@ -92,7 +92,7 @@ const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace'];
 // Coast options (card E4): joined-coast fingers and shore layers, applied by stampCoastShore once the stroke is swept.
 const COAST_KEYS=['fingerCoast','shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
   // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
-  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle'];
+  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle','hillLobes','hillSteps'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -194,6 +194,8 @@ const SHAPE_FIELDS=[
   ['fingerHeight','finger-height','Finger height (units; 0 the old tongue)',['deep','shallow'],0,120,5,10,'Fingers on the joined coast: a flat top this many units above the lava, with soft sides. 0 keeps the earlier tongue, as high as the lowest layer and lower at its tip.'],
   ['layerVary','layer-vary','Layer width variation',['deep','shallow'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
+  ['hillLobes','hill-lobes','Lobes (stacked round terraces)',['hill','mountain'],0,16,1,1,'Build the hill from this many round lobes, one stacked on another, each a flat tread and a short riser, as retail Lava\'s tall hills are, in place of a smooth cone. 0: the plain hill.'],
+  ['hillSteps','hill-steps','Lobe steps (terraces up the hill)',['hill','mountain'],2,24,1,1,'How many equal steps the hill\'s height is cut into where the lobes stack.'],
 ];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
@@ -294,7 +296,7 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',hillSteps:'hillLobes',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -1736,6 +1738,36 @@ function coastLayers(s,sea,box) {
   }
 }
 
+// E10 (Lava): a hill of stacked round lobes (retail lava-3's tall hill: pancake mounds one on another,
+// each a flat tread and a short riser), where the plain hill is a smooth cone. After the hill is built
+// its elevation e above the ground it stands on is cut into terraces of equal height, but counted from
+// e plus a lobe field: a few round bumps (centres along the stroke and out to half its radius), each
+// adding up to about two steps inside its edge. A riser follows a level of that sum, so it runs round a
+// lobe as an arc, and neighbouring lobes' arcs meet at cusps. Steps are the hill's height over Lobe steps.
+function stampHillLobes(s) {
+  const lobes=Math.round(s.hillLobes);
+  if (lobes<1 || s.amount<4 || !s.path?.length) return;
+  const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},salt=s.seed,R=s.radius;
+  // The step is the stroke's own height over the number of steps (never the clip's peak, so a region replay cuts the same terraces).
+  const step=s.amount/Math.max(2,Math.round(s.hillSteps)),path=s.path,sites=[];
+  const h=(k,a) => hash(k,a,salt^0x7e3)*.5+.5;
+  for (let k=0;k<lobes;k++) {
+    const along=h(k,1)*(path.length-1),j=Math.min(path.length-2,Math.floor(along)),f=along-j;
+    const a=path[Math.max(0,j)],b=path[Math.min(path.length-1,j+1)]||a,angle=h(k,2)*Math.PI*2,reach=R*.55*Math.sqrt(h(k,3));
+    sites.push({x:a.x+(b.x-a.x)*f+Math.cos(angle)*reach,y:a.y+(b.y-a.y)*f+Math.sin(angle)*reach,r:R*(.28+.27*h(k,4)),up:.8+.9*h(k,5)});
+  }
+  for (let y=c.y0;y<=c.y1;y++) for (let x=c.x0;x<=c.x1;x++) {
+    const i=y*grid+x,e=heights[i]-s.base[i];
+    if (e<=.3) continue;
+    const wx=x*spacing,wy=y*spacing;
+    let L=0;
+    for (const o of sites) { const d=Math.hypot(wx-o.x,wy-o.y); if (d<o.r) L=Math.max(L,o.up*smooth(o.r,.45*o.r,d)); }
+    const phase=e/step+L,k=Math.floor(phase),cut=step*(k+smooth(.55,1,phase-k));
+    // The lower flank keeps the hill's own slope; the stack of lobes forms only on the upper part.
+    heights[i]=clamp(s.base[i]+e+(cut-e)*smooth(.2*s.amount,.45*s.amount,e),MIN_HEIGHT,MAX_HEIGHT);
+  }
+}
+
 // Crystals: clusters of faceted crystals. Each is a pyramid over a polygon
 // of n sides whose apex may lean off centre; its surface is the lowest of its
 // face planes, so faces are flat and meet at sharp edges. Flat tops cut it
@@ -2115,12 +2147,13 @@ function replayShape(n,work) {
     if (path.length>=3) {
       const sx=path[1].x-path[0].x,sy=path[1].y-path[0].y;
       s.faceSide=(-sy*s.face[0]+sx*s.face[1])<0?-1:1; s.path=path; s.last=s.end=path[path.length-1];
-      settleHill(s); applyCracks(s); return;
+      settleHill(s); if (s.hillLobes>=.5) stampHillLobes(s); applyCracks(s); return;
     }
   }
   if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
   else sweep(s,pts);
   if (hasCoastPass(n.kind,s)) stampCoastShore(s);
+  if ((n.kind==='hill' || n.kind==='mountain') && s.hillLobes>=.5) stampHillLobes(s);
   if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
   if (n.kind==='crater') addCraterlets(n,s);
   applyCracks(s);
