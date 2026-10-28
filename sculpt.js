@@ -60,7 +60,7 @@ const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
 // Line features (card C4): spurs, crest variation and crater rim sectors. All
 // default off; spurs and crest options turn a hill or mountain into a ridge
 // built from tapering pieces (ridgePieces), rim options reshape a crater's rim.
-const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','crestJag','crestVary','crestTaper','rimHeight','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
+const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestJag','crestVary','crestTaper','rimHeight','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
 const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.spurCount)>=1 || o.crestJag>0 || o.crestVary>0 || o.crestTaper>0);
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
@@ -101,6 +101,8 @@ const SHAPE_FIELDS=[
   ['spurWidth','spur-width','Spur width',['hill','mountain','crater'],20,200,5,100,'A spur\'s width at its root, as a share of the ridge\'s own (a crater\'s radius, on a crater); it flares a little where it joins.'],
   ['spurTaper','spur-taper','Spur taper',['hill','mountain','crater'],0,100,5,100,'How much a spur narrows and lowers toward its tip.'],
   ['spurHeight','spur-height','Spur height',['hill','mountain','crater'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the crater\'s rim height).'],
+  ['spurForks','spur-forks','Spur forks',['hill','mountain','crater'],0,100,5,100,'The share of spurs that fork once, two thirds of the way out, into a shorter spur.'],
+  ['spurBulb','spur-bulb','Bulbous spur tips',['hill','mountain','crater'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
   ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
   ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
   ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain'],0,100,5,100,'The ridge narrows and lowers toward both ends of its path.'],
@@ -235,7 +237,7 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
+  const gate={spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -627,18 +629,32 @@ function lineMultipliers(s,a,len,salt,taper,ends) {
 }
 // Spurs from roots [{x,y,heading,k}]: each a wandering four-point line that
 // narrows and lowers toward its tip, laid out as three pieces. A root height
-// fade lets a spur rise out of a crater rim instead of stacking on it.
+// fade lets a spur rise out of a crater rim instead of stacking on it. Forks
+// (Spur forks: the share of spurs that fork once, two thirds along) grow a
+// shorter spur off the spur's own width and height, and Bulbous tips swell
+// the last half of every spur into a rounded lobe, so a spur can end in a
+// knuckle instead of a point; both off, the pieces are exactly the plain
+// tapering spurs.
 function spurPieces(s,roots,fade,jag) {
-  const kf=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,spread=s.spurSpread,out=[];
-  for (const root of roots) {
-    const k=root.k,len=s.spurLength*kf*(.55+.9*rand01(s.seed,k,14)),step=len/3,curl=(.1+.3*spread)*Math.PI,rootR=s.spurWidth*(.85+.3*rand01(s.seed,k,15)),salt=0x300+k*97;
-    let x=root.x,y=root.y,h=root.heading;
+  const kf=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,spread=s.spurSpread,bulb=s.spurBulb,out=[];
+  const grow=(x,y,heading,len,rootR,rootH,k,level,rootFade) => {
+    const step=len/3,curl=(.1+.3*spread)*Math.PI,salt=0x300+k*97;
+    let h=heading;
     for (let j=0;j<3;j++) {
       h+=(rand01(s.seed,k,20+j)-.5)*curl;
       const nx=x+Math.cos(h)*step,ny=y+Math.sin(h)*step,m0=lineMultipliers(s,step*j,len,salt,s.spurTaper,false),m1=lineMultipliers(s,step*(j+1),len,salt,s.spurTaper,false);
-      out.push(mkPiece({x,y},{x:nx,y:ny},rootR*m0[0],rootR*m1[0],s.spurHeight*m0[1]*(j?1:fade),s.spurHeight*m1[1],jag));
+      let r0=m0[0],r1=m1[0],e0=m0[1],e1=m1[1];
+      // A lobe keeps its height as well as its width, so it stands as a knuckle rather than a soft swelling.
+      if (bulb>0) { const b0=bulb*smooth(.5,1,j/3),b1=bulb*smooth(.5,1,(j+1)/3); r0+=b0*.7; r1+=b1*.7; e0+=(1-e0)*b0; e1+=(1-e1)*b1; }
+      out.push(mkPiece({x,y},{x:nx,y:ny},rootR*r0,rootR*r1,rootH*e0*(j?1:rootFade),rootH*e1,jag));
+      if (j===1 && level===0 && s.spurForks>0 && rand01(s.seed,k,50)<s.spurForks)
+        grow(nx,ny,h+(rand01(s.seed,k,51)<.5?-1:1)*(.5+.6*rand01(s.seed,k,52)),len*.5,rootR*r1*.85,rootH*e1*.85,k+100,1,1);
       x=nx; y=ny;
     }
+  };
+  for (const root of roots) {
+    const k=root.k;
+    grow(root.x,root.y,root.heading,s.spurLength*kf*(.55+.9*rand01(s.seed,k,14)),s.spurWidth*(.85+.3*rand01(s.seed,k,15)),s.spurHeight,k,0,fade);
   }
   return out;
 }
@@ -1582,7 +1598,7 @@ function nodeBounds(n) {
   // Spurs (card C4) reach up to one and a half spur lengths past the ridge or rim, plus their own width.
   // A ridge's crest also swells to 1.4 of its radius and a spur's root flares to about 1.7 times Spur width.
   if (ridgeOn(n.kind,q)) r+=radius;
-  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*1.6*k+radius*Math.max(1,(q.spurWidth||.8)*1.7); }
+  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
