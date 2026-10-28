@@ -243,6 +243,9 @@ struct Uniforms {
     bedContrast: f32,     // how much of the bed's light carries through the tint (1: all, 0: flat tint)
     hillLight: f32,       // brightness of the hill cover's material (Archipelago; 1: as drawn)
     ringFade: f32,        // how gradually the mineral ring fades out from the hill (0: as drawn; Archipelago)
+    // Ice (card E5).
+    shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
+    frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

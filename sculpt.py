@@ -42,8 +42,14 @@ KNOB_DEFAULTS = dict(
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
+    # Berg form (card E5; only read when a Crystals stroke sets crystalForm 2): faces in units per px, jitter, broken corners, roughness in units, top tilt in units per px and its direction in degrees.
+    crystalAlign=0, bergFace=.9, bergJitter=.5, bergBreak=3, bergRough=6, bergTilt=.1, bergTiltDir=90, bergFlat=.25,
     shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3, plateMaterial=0,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1, crystalSeam=0,
+    # Ice (card E5): shade keeps its blue (0 grey, as every world was).
+    shadeBlue=0,
+    # Ice frost band (card E5): its cells skip the wet-band darkening (0: every world as before).
+    frostWet=0, frostNeedles=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
     fingers=0, fingerBlunt=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
@@ -273,7 +279,16 @@ WORLD_KNOBS = {
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
     'ice': dict(undulation=4, plainRelief=.6, crackSeverity=.2, crackMajor=.4, crackMinor=.3, crackHairline=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
-                crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2),
+                crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
+                # Shore (card E5): frost crystals are the Ice shore. Retail's band is
+                # mostly plain white ice with sparse fine straight lines (windows ice-1
+                # and Ice Scream), broken by blue gaps that grow more frequent toward
+                # deep water: reach 140 px into the water and 220 px inland, needles
+                # every 7 px in about half the patches, thinning offshore. Plate
+                # height 4 keeps the frost over the water level with the bank behind it
+                # (14 made a dark wall there); frostWet 1 keeps the band white instead of
+                # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
+                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=7, plateHeight=4, frostWet=1),
 }
 
 
@@ -305,9 +320,18 @@ WORLD_VARIANTS = {
         # The Ice blocks are Crystals-brush stamps, so their colour is the
         # world's crystal colour; side faces are that colour times 0.38 times
         # crystalFace.
+        # Berg faces and tops (card E5): retail's bergs are blue-tinted all over,
+        # tops (125,150,236) darker than the lit faces (177,201,251), so the
+        # variant's ground, slope cover and rock take those colours (the berg
+        # form carries no crystal mark; it is lit and covered like any slope).
         'bergs': dict(label='Icy Bergs: blue blocks',
-                      colors=dict(crystal='#8ea6ee'),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4)),
+                      colors=dict(crystal='#8ea6ee', ground='#9db5fa', slope='#a5bef9', rock='#9ab2f4'),
+                      # No slope cover, face rock or exposed rock: their dark slate and granite
+                      # read as teal specks on a bright berg, where retail's faces are one
+                      # rough blue-white grain (ground pattern contrast 2 gives it).
+                      # A short wet band keeps the waterline from a dark fringe.
+                      material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0)),
         # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white
         # snow) are not here: the dark faces come from the block's own shading,
         # which the colour knobs only reach through the tops (a darker crystal
@@ -356,6 +380,8 @@ def apply_variant(config, biome, variant):
             out[key] = {**out.get(key, {}), **value}
     out['baseColors'] = dict(config.get('colors', {}))
     out['colors'] = {**config.get('colors', {}), **v.get('colors', {})}
+    if v.get('material'):
+        out['material'] = {**out.get('material', {}), **v['material']}
     out.update(copy.deepcopy(v.get('config', {})))
     out['variant'] = variant
     return out

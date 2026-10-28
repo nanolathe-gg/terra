@@ -423,6 +423,10 @@ fn litBed(bed: vec3f) -> vec3f {
     let tint = u.shallowMean * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
+// Ice frost band (card E5): the frost stroke marks every cell of its band with a
+// little protection, and where frostWet is 1 those cells keep the white of the
+// level snow instead of the grey the wet band gives the bank near the sea.
+fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * smoothstep(0.02, 0.04, route)); }
 
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
@@ -713,7 +717,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // are sand all over, no rock). The automatic beach does not.
     let sandBar = u.sandCrown * smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0));
     exposed *= 1.0 - sandBar;
-    let nearWater = 1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h);
+    let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
         // Beach sand: within reach of the water (baked), or failing that a
@@ -979,6 +983,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material *= mix(1.0, u.hillLight, smoothstep(u.base + 1.0, u.base + 10.0, baseHeight(p)) * dark);
     }
     var color = material * mix(shading, 1.0, flatBank);
+    if (u.shadeBlue > 0.0) {
+        // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
+        // 227-255 as red and green fall), where a plain multiply goes grey-teal in the palette.
+        let fall = clamp(1.0 - shading, 0.0, 1.0) * u.shadeBlue;
+        color = material * (shading + fall * vec3f(0.0, 0.35, 0.85));
+    }
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);

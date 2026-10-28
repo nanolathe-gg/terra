@@ -1,7 +1,7 @@
 {"biome": "ice", "source": {"map": "icy bergs", "x": 3840, "y": 1536}, "ground": true, "query": "variant=bergs",
  "strokes": [
   ["offset", [[512, 512]], {"card": {"diameter": 2600, "amount": -80, "roughness": 20}}],
-  ["crystal", [[640, 580]], {"card": {"diameter": 80, "amount": 170, "crystalSize": 600, "crystalCount": 1, "crystalSides": 5, "crystalTop": 50, "crystalLean": 30, "roughness": 40}}],
-  ["crystal", [[800, 200]], {"card": {"diameter": 30, "amount": 85, "crystalSize": 70, "crystalCount": 1, "crystalSides": 5, "crystalTop": 40}}],
-  ["crystal", [[260, 890]], {"card": {"diameter": 20, "amount": 70, "crystalSize": 24, "crystalCount": 1, "crystalSides": 4, "crystalTop": 40}}]
+  ["crystal", [[620, 575]], {"seed": 3, "card": {"diameter": 80, "amount": 170, "crystalForm": 2, "crystalSize": 900, "crystalCount": 1, "crystalSides": 6, "crystalVariation": 0, "bergFace": 90, "bergJitter": 60, "bergBreak": 3, "bergRough": 14, "bergTilt": 34, "bergTiltDir": 104, "bergFlat": 25, "roughness": 40}}],
+  ["crystal", [[808, 235]], {"card": {"diameter": 20, "amount": 84, "crystalForm": 2, "crystalSize": 150, "crystalCount": 1, "crystalSides": 7, "crystalVariation": 0, "bergFace": 200, "bergJitter": 30, "bergBreak": 0, "bergRough": 6, "bergTilt": 0, "roughness": 40}}],
+  ["crystal", [[325, 970]], {"card": {"diameter": 10, "amount": 64, "crystalForm": 2, "crystalSize": 90, "crystalCount": 1, "crystalSides": 5, "crystalVariation": 0, "bergFace": 200, "bergJitter": 30, "bergBreak": 0, "bergRough": 3, "bergTilt": 0, "roughness": 40}}]
  ]}

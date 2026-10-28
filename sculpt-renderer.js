@@ -672,6 +672,8 @@ export class TerrainRenderer {
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
     this.set('uShine', shine);
+    this.f('uShadeBlue', variant.has('shadeBlue') ? Number(variant.get('shadeBlue')) : 0);
+    this.f('uFrostWet', variant.has('frostWet') ? Number(variant.get('frostWet')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
