@@ -92,7 +92,7 @@ WORLD_KNOBS = {
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
                   # grid upsampled), so the step sits at 40 and nothing fades.
-                  bedLit=1, bedTint=1, bedContrast=.6, bedBright=1.12, bedRelief=1.4, deepEdge=1, deepEdgeDepth=40,
+                  bedLit=1, bedTint=1, bedContrast=.45, bedBright=1, bedRelief=1, deepEdge=1, deepEdgeDepth=40,
                   # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
                   # lumps only in patches, which the Paint brush's Ground lumps makes. On
                   # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
@@ -105,7 +105,7 @@ WORLD_KNOBS = {
     # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
-                bedLit=1, bedTint=1, bedContrast=.8, bedBright=1.1, bedRelief=1, deepEdge=1),
+                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
