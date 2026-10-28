@@ -53,10 +53,15 @@ KNOB_DEFAULTS = dict(
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
-    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, crestJag=0, crestVary=0, crestTaper=0,
+    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
     # Local style (card C5 stage 2): change about the world's own value, 0 none.
     styleRelief=0, styleCracks=0, styleBanding=0, styleFace=0,
+    # Crater rim height as a share of its depth (card C4); .34 is the rim every crater had.
+    rimHeight=.34,
+    # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
+    fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
+    fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).

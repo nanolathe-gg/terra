@@ -1,0 +1,48 @@
+{
+ "biome": "red",
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "plateau",
+   [
+    [
+     512,
+     512
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 720,
+     "amount": 14,
+     "roughness": 20,
+     "softness": 60
+    }
+   }
+  ],
+  [
+   "fissure",
+   [
+    [
+     480,
+     480
+    ],
+    [
+     560,
+     540
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 460,
+     "amount": 22,
+     "fissureNetwork": 1,
+     "fissureWidth": 8,
+     "fissureCell": 70,
+     "fissureJag": 40,
+     "fissureCrack": 30
+    }
+   }
+  ]
+ ]
+}

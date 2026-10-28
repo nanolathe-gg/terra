@@ -80,3 +80,8 @@ cracks more/fewer, 12/13 banding more/less, 14/15 face rock more/less (Strength
 is how far); a landform sets the same about its own footprint with `styleRelief`,
 `styleCracks`, `styleBanding` and `styleFace` (percent, -100..100, 0 none).
 `demo/masks-style.json` shows each on a Green hill and a plateau pair.
+
+The fissure demos (card C4 stage 2) are `fissure-desert` (jagged cuts with
+branches across a mesa's cap and face), `fissure-ice` (one branching crevasse
+through a snow shore), `fissure-green` (cuts across a hill with its own painted
+rock) and `fissure-red` (a polygonal fracture network on a low platform; Mode 1).

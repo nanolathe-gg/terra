@@ -1,0 +1,100 @@
+{
+ "biome": "desert",
+ "ground": false,
+ "query": "",
+ "strokes": [
+  [
+   "plateau",
+   [
+    [
+     512,
+     520
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 560,
+     "amount": 67,
+     "roughness": 12,
+     "cracks": 0,
+     "softness": 50,
+     "profile": 1,
+     "apronPx": 120,
+     "apronHeight": 25,
+     "facePx": 90,
+     "faceCurve": 30,
+     "terraces": 0,
+     "lip": 0
+    }
+   }
+  ],
+  [
+   "fissure",
+   [
+    [
+     330,
+     420
+    ],
+    [
+     430,
+     480
+    ],
+    [
+     520,
+     540
+    ],
+    [
+     610,
+     640
+    ],
+    [
+     700,
+     690
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 100,
+     "amount": 28,
+     "fissureWidth": 6,
+     "fissureJag": 60,
+     "fissureBranches": 3,
+     "fissureBranchLen": 70,
+     "fissureBranchSpread": 45,
+     "fissureTaper": 60,
+     "fissureCrack": 40,
+     "fissureDark": 80
+    }
+   }
+  ],
+  [
+   "fissure",
+   [
+    [
+     560,
+     330
+    ],
+    [
+     600,
+     380
+    ],
+    [
+     650,
+     420
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 100,
+     "amount": 28,
+     "fissureWidth": 6,
+     "fissureJag": 50,
+     "fissureBranches": 1,
+     "fissureBranchLen": 50,
+     "fissureCrack": 30,
+     "fissureDark": 80
+    }
+   }
+  ]
+ ]
+}

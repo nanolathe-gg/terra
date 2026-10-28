@@ -1,0 +1,86 @@
+{
+ "biome": "ice",
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "deep",
+   [
+    [
+     40,
+     -100
+    ],
+    [
+     50,
+     500
+    ],
+    [
+     30,
+     1100
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 520,
+     "shelves": 70,
+     "roughness": 22
+    }
+   }
+  ],
+  [
+   "hill",
+   [
+    [
+     470,
+     400
+    ],
+    [
+     520,
+     560
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 380,
+     "amount": 40,
+     "roughness": 50
+    }
+   }
+  ],
+  [
+   "fissure",
+   [
+    [
+     400,
+     280
+    ],
+    [
+     385,
+     380
+    ],
+    [
+     430,
+     480
+    ],
+    [
+     410,
+     580
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 100,
+     "amount": 22,
+     "fissureWidth": 9,
+     "fissureJag": 55,
+     "fissureBranches": 4,
+     "fissureBranchLen": 95,
+     "fissureBranchSpread": 55,
+     "fissureTaper": 50,
+     "fissureCrack": 30,
+     "fissureDark": 80
+    }
+   }
+  ]
+ ]
+}

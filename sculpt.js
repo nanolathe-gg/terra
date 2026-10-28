@@ -22,6 +22,7 @@ const HELP = {
   sand:'Paint sand cover: the ground under the brush becomes sand (on slopes too, so a hill set in sand has sandy feet). Heights do not change.',
   grass:'Paint ground cover: clears sand (painted or weathered) back to the world\'s own ground, such as grass. Heights do not change.',
   paint:'Paint a material over the ground, or a scatter density: rock showing through, snow or ice, wet (dark) ground and moss take the world\'s own materials; denser or sparser scatter multiplies the World panel\'s Boulders and Debris (at 0 nothing shows). Strength is how fully it paints, Softness the edge. Heights do not change.',
+  fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
@@ -59,8 +60,11 @@ const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
 // Line features (card C4): spurs, crest variation and crater rim sectors. All
 // default off; spurs and crest options turn a hill or mountain into a ridge
 // built from tapering pieces (ridgePieces), rim options reshape a crater's rim.
-const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','crestJag','crestVary','crestTaper','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
+const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestJag','crestVary','crestTaper','rimHeight','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
 const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.spurCount)>=1 || o.crestJag>0 || o.crestVary>0 || o.crestTaper>0);
+// Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
+// the stroke's own amount; the rest are shape options kept in the shape.
+const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
 const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
@@ -101,13 +105,26 @@ const SHAPE_FIELDS=[
   ['spurWidth','spur-width','Spur width',['hill','mountain','crater'],20,200,5,100,'A spur\'s width at its root, as a share of the ridge\'s own (a crater\'s radius, on a crater); it flares a little where it joins.'],
   ['spurTaper','spur-taper','Spur taper',['hill','mountain','crater'],0,100,5,100,'How much a spur narrows and lowers toward its tip.'],
   ['spurHeight','spur-height','Spur height',['hill','mountain','crater'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the crater\'s rim height).'],
+  ['spurForks','spur-forks','Spur forks',['hill','mountain','crater'],0,100,5,100,'The share of spurs that fork once, two thirds of the way out, into a shorter spur.'],
+  ['spurBulb','spur-bulb','Bulbous spur tips',['hill','mountain','crater'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
   ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
   ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
   ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain'],0,100,5,100,'The ridge narrows and lowers toward both ends of its path.'],
+  ['rimHeight','rim-height','Rim height (share of depth)',['crater'],0,150,1,100,'How high the rim stands, as a share of the crater\'s Depth (34% is the usual rim); the bowl floor does not change, so a tall rim needs no deeper bowl.'],
   ['rimSectors','rim-sectors','Rim sectors',['crater'],0,8,1,1,'Split the rim into this many sectors of different height and width (a lopsided ring, not an even one).'],
   ['rimUnequal','rim-unequal','Sector inequality',['crater'],0,100,5,100,'How different the sectors are: 0 equal; 100 from a faint low ridge to a tall, broad massif.'],
   ['rimGaps','rim-gaps','Rim gaps',['crater'],0,4,1,1,'Deliberate breaks in the rim, where it sinks to a low saddle.'],
   ['rimGapWidth','rim-gap-width','Gap width (degrees)',['crater'],10,180,5,1,'Angular width of each gap; a wide one leaves an open crescent.'],
+  ['fissureWidth','fissure-width','Width (px)',['fissure'],2,24,1,1,'Width of the cut at its widest. The grid is 2 px, so a cut never reads narrower than about 4 px, however thin it is set.'],
+  ['fissureJag','fissure-jag','Jaggedness',['fissure'],0,100,5,100,'How far the cut zigzags off its path, and how its depth varies along it.'],
+  ['fissureBranches','fissure-branches','Branches',['fissure'],0,12,1,1,'Side cuts that leave the main cut, and fork once, grown from the shape\'s own seed. Network mode ignores them.'],
+  ['fissureBranchLen','fissure-branch-len','Branch length (px)',['fissure'],20,300,5,1,'Average reach of a branch; each runs from about half to one and a half times this.'],
+  ['fissureBranchSpread','fissure-branch-spread','Branch angle spread',['fissure'],0,100,5,100,'0: branches leave at about 25 degrees to the cut; 100: up to square.'],
+  ['fissureTaper','fissure-taper','Taper',['fissure'],0,100,5,100,'How much the cut narrows and shallows toward its ends and its branch tips.'],
+  ['fissureNetwork','fissure-network','Mode (0 line, 1 network)',['fissure'],0,1,1,1,'0: cut along the stroke. 1: a connected polygonal fracture network over the stroke\'s whole footprint (Diameter sets how far it reaches), as on Red\'s rock platforms.'],
+  ['fissureCell','fissure-cell','Network block size (px)',['fissure'],30,160,5,1,'Typical width of a block between the cuts.'],
+  ['fissureCrack','fissure-crack','Fractured rock beside the cut',['fissure'],0,100,5,100,'Raises the world\'s own crack field along the cut, so the rock beside it breaks up (0 leaves only the cut).'],
+  ['fissureDark','fissure-dark','Darkness',['fissure'],0,100,5,100,'Paints the world\'s own wet (dark) ground along the cut, so it reads dark whatever the ground (it layers on rock, snow or moss).'],
   ['shorePlates','shore-plates','Shore plates',['deep','shallow'],0,1,1,1,'Add a band of broken plates on this stroke only. Off preserves the original water shape.'],
   ['plateWaterPx','plate-water-px','Plates: water width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline into the water.'],
   ['plateLandPx','plate-land-px','Plates: land width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
@@ -181,12 +198,12 @@ const hillLift=(s,i) => 1+s.rough*(.75*s.noise.coastWidth[i]+.30*s.noise.detail[
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
-const amountRange=kind => kind==='crystal'?[5,200]:kind==='offset'?[-80,80]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
+const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind==='offset'?[-80,80]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -208,7 +225,7 @@ function updateControls() {
   try {
   const fixed=['deep','shallow','ramp','erase'].includes(tool);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater'?'Depth':tool==='offset'?'Height change':'Rise';
+  $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
   const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
@@ -220,6 +237,8 @@ function updateControls() {
   $('shallow-mode-control').hidden=tool!=='shallow';
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
+  // A fissure's outline is its own jaggedness; Roughness would do nothing.
+  $('roughness').closest('.control').hidden=tool==='fissure';
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(tool);
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
@@ -229,10 +248,13 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps'};
+  const gate={spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
-  const gated=key => gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0);
+  // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
+  const net=tool==='fissure' && Number($('fissure-network').value)>=.5;
+  const modeOff=key => tool==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
+  const gated=key => modeOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   $('section-preview-control').hidden=!SECTION_KINDS.includes(tool) || !parametric;
   if (!$('section-preview-control').hidden) drawSection();
@@ -376,12 +398,13 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
   made.masks=maskSetup(made,work);
   made.rim=rimSetup(made);
+  made.fis=fissureSetup(made);
   return made;
 }
 // Painted masks (card C5). What each choice writes, as [plane, target]; the
@@ -397,7 +420,7 @@ const MASK_WRITES=[null,[[0,127],[1,0],[3,0]],[[1,127],[0,0],[3,0]],[[2,127]],[[
   [[5,127]],[[5,-127]],[[6,127]],[[6,-127]],[[7,127]],[[7,-127]],[[8,127]],[[8,-127]]];
 function maskSetup(s,work) {
   const shape=MASK_SHAPES.includes(s.kind);
-  const choice=Math.round(s.kind==='paint'?s.paintChannel:s.kind==='erase'?7:shape?s.maskChannel:0);
+  const choice=Math.round(s.kind==='paint'?s.paintChannel:s.kind==='erase'?7:s.kind==='fissure'?(s.fissureDark>0?3:0):shape?s.maskChannel:0);
   // [plane, target, gain] per write: gain scales the influence (the shape's paint strength; a style write's target already carries its amount).
   const writes=(MASK_WRITES[choice]||[]).map(([j,t]) => [j,t,shape?clamp(s.maskAmount,0,1):1]);
   if (shape) STYLE_KEYS.forEach((k,j) => { const v=clamp(s[k]||0,-1,1); if (Math.abs(v)>=.005) writes.push([5+j,Math.round(127*v),1]); });
@@ -623,18 +646,32 @@ function lineMultipliers(s,a,len,salt,taper,ends) {
 }
 // Spurs from roots [{x,y,heading,k}]: each a wandering four-point line that
 // narrows and lowers toward its tip, laid out as three pieces. A root height
-// fade lets a spur rise out of a crater rim instead of stacking on it.
+// fade lets a spur rise out of a crater rim instead of stacking on it. Forks
+// (Spur forks: the share of spurs that fork once, two thirds along) grow a
+// shorter spur off the spur's own width and height, and Bulbous tips swell
+// the last half of every spur into a rounded lobe, so a spur can end in a
+// knuckle instead of a point; both off, the pieces are exactly the plain
+// tapering spurs.
 function spurPieces(s,roots,fade,jag) {
-  const kf=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,spread=s.spurSpread,out=[];
-  for (const root of roots) {
-    const k=root.k,len=s.spurLength*kf*(.55+.9*rand01(s.seed,k,14)),step=len/3,curl=(.1+.3*spread)*Math.PI,rootR=s.spurWidth*(.85+.3*rand01(s.seed,k,15)),salt=0x300+k*97;
-    let x=root.x,y=root.y,h=root.heading;
+  const kf=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,spread=s.spurSpread,bulb=s.spurBulb,out=[];
+  const grow=(x,y,heading,len,rootR,rootH,k,level,rootFade) => {
+    const step=len/3,curl=(.1+.3*spread)*Math.PI,salt=0x300+k*97;
+    let h=heading;
     for (let j=0;j<3;j++) {
       h+=(rand01(s.seed,k,20+j)-.5)*curl;
       const nx=x+Math.cos(h)*step,ny=y+Math.sin(h)*step,m0=lineMultipliers(s,step*j,len,salt,s.spurTaper,false),m1=lineMultipliers(s,step*(j+1),len,salt,s.spurTaper,false);
-      out.push(mkPiece({x,y},{x:nx,y:ny},rootR*m0[0],rootR*m1[0],s.spurHeight*m0[1]*(j?1:fade),s.spurHeight*m1[1],jag));
+      let r0=m0[0],r1=m1[0],e0=m0[1],e1=m1[1];
+      // A lobe keeps its height as well as its width, so it stands as a knuckle rather than a soft swelling.
+      if (bulb>0) { const b0=bulb*smooth(.5,1,j/3),b1=bulb*smooth(.5,1,(j+1)/3); r0+=b0*.7; r1+=b1*.7; e0+=(1-e0)*b0; e1+=(1-e1)*b1; }
+      out.push(mkPiece({x,y},{x:nx,y:ny},rootR*r0,rootR*r1,rootH*e0*(j?1:rootFade),rootH*e1,jag));
+      if (j===1 && level===0 && s.spurForks>0 && rand01(s.seed,k,50)<s.spurForks)
+        grow(nx,ny,h+(rand01(s.seed,k,51)<.5?-1:1)*(.5+.6*rand01(s.seed,k,52)),len*.5,rootR*r1*.85,rootH*e1*.85,k+100,1,1);
       x=nx; y=ny;
     }
+  };
+  for (const root of roots) {
+    const k=root.k;
+    grow(root.x,root.y,root.heading,s.spurLength*kf*(.55+.9*rand01(s.seed,k,14)),s.spurWidth*(.85+.3*rand01(s.seed,k,15)),s.spurHeight,k,0,fade);
   }
   return out;
 }
@@ -684,8 +721,8 @@ function ridgeRise(s,pc,t,lx,ly,wx,wy) {
   return h;
 }
 function sweepRidge(s,points) {
-  const path=simplifyPath(points,Math.max(1,s.radius*.04));
-  for (const pc of ridgePieces(s,path)) { s.piece=pc; dab(s,pc.a,pc.b); }
+  const path=simplifyPath(points,s.fis?Math.max(1.5,s.fis.hw):Math.max(1,s.radius*.04));
+  for (const pc of s.fis?fissurePieces(s,path):ridgePieces(s,path)) { s.piece=pc; dab(s,pc.a,pc.b); }
   s.piece=null; s.path=points.slice(); s.last=s.end=points[points.length-1];
 }
 // Crater rim sectors and gaps. The rim is split into sectors, each with its
@@ -747,9 +784,110 @@ function addRimSpurs(n,s) {
   }
   const work=borrowWork();
   try {
-    const t=startStroke('mountain',roots[0],{...n.params,radius:R,amount:s.amount*.34,rough:s.rough*.8,softness:.8,cracks:0,craterlets:0,craterEjecta:0,spurCount:0,rimSectors:0,rimGaps:0,crestJag:0,crestVary:0,crestTaper:0,profile:0,seed:s.seed,frame:n.frame,node:keys,rect,work});
+    const t=startStroke('mountain',roots[0],{...n.params,radius:R,amount:s.amount*s.rimHeight,rough:s.rough*.8,softness:.8,cracks:0,craterlets:0,craterEjecta:0,spurCount:0,rimSectors:0,rimGaps:0,crestJag:0,crestVary:0,crestTaper:0,profile:0,seed:s.seed,frame:n.frame,node:keys,rect,work});
     for (const pc of pieces) { t.piece=pc; dab(t,pc.a,pc.b); }
   } finally { workDepth--; }
+}
+// Placed fissures (card C4 stage 2). The Fissure tool cuts the heights (a narrow
+// V trench of Depth units, widest Width px) along its stroke and raises the
+// world's own crack field beside the cut, so the rock round it breaks up. Line
+// mode is swept like a ridge: the main cut and its branches (each forking once)
+// are short pieces whose width and depth multipliers taper them toward their
+// ends; each cell reads the nearest piece, so cuts join at their roots. A
+// zigzag displaces the cell's position by high-frequency noise before the
+// distance is taken, and its depth wobbles along the cut. Network mode instead
+// cuts the borders of a jittered cell pattern (the distance to the nearest
+// bisector of two sites) inside the stroke's footprint, which fades at its edge.
+// Everything is a function of the cell's own position, the stroke seed and the
+// path, so region replay stays exact.
+function fissureSetup(s) {
+  if (s.kind!=='fissure') return null;
+  const kf=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,hw=Math.max(s.fissureWidth,1)*.5*kf,net=s.fissureNetwork>=.5,jag=s.fissureJag;
+  // amp: zigzag amplitude in px; reach: how far from a piece a cell can feel it (cut, crack fringe, zigzag).
+  const amp=hw*(.5+2.2*jag)+1;
+  return {net,kf,hw,jag,amp,cell:s.fissureCell,crack:s.fissureCrack,dark:s.fissureDark,reach:net?s.radius*1.05+hw+8:hw*3.5+amp+6};
+}
+// Branches (and a fork off each) grown from roots along the main cut. A line is
+// four points; width and depth fall from the root to the tip.
+function fissurePieces(s,path) {
+  const f=s.fis,out=[],seed=s.seed,taper=s.fissureTaper,cum=[0];
+  for (let k=1;k<path.length;k++) cum.push(cum[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
+  const L=cum[cum.length-1],longest=Math.max(16,Math.min(s.radius*1.5,60)),ends=(a,len) => { const e=len>0?Math.min(a/len,1-a/len):1; return 1-smooth(0,.3,e); };
+  const taperW=u => 1-.7*taper*u,taperD=u => 1-.55*taper*u;
+  if (path.length<2) out.push(mkPiece(path[0],null,1,1,1,1,0));
+  for (let k=1;k<path.length;k++) {
+    const a=path[k-1],b=path[k],len=cum[k]-cum[k-1],n=Math.max(1,Math.ceil(len/longest));
+    for (let j=0;j<n;j++) {
+      const f0=j/n,f1=(j+1)/n,e0=ends(cum[k-1]+len*f0,L),e1=ends(cum[k-1]+len*f1,L);
+      out.push(mkPiece({x:a.x+(b.x-a.x)*f0,y:a.y+(b.y-a.y)*f0},{x:a.x+(b.x-a.x)*f1,y:a.y+(b.y-a.y)*f1},taperW(e0),taperW(e1),taperD(e0),taperD(e1),0));
+    }
+  }
+  const N=Math.round(clamp(s.fissureBranches,0,12));
+  if (N<1 || L<=0 || f.net) return out;
+  const spread=s.fissureBranchSpread,rnd=(a,b) => rand01(seed,a,b+0x5f3);
+  // grow(x,y,heading,len,w0,d0,id,level): a four-point line that narrows and shallows to its tip, with one fork at its middle on level 0.
+  const grow=(x,y,heading,len,w0,d0,id,level) => {
+    const step=len/3;
+    let h=heading,px=x,py=y;
+    for (let j=0;j<3;j++) {
+      h+=(rnd(id,30+j)-.5)*.7;
+      const nx=px+Math.cos(h)*step,ny=py+Math.sin(h)*step,u0=j/3,u1=(j+1)/3;
+      out.push(mkPiece({x:px,y:py},{x:nx,y:ny},w0*(1-.75*taper*u0),w0*(1-.75*taper*u1),d0*(1-.7*taper*u0),d0*(1-.7*taper*u1),0));
+      if (level===0 && j===1 && rnd(id,40)<.7) grow(nx,ny,h+(rnd(id,41)<.5?-1:1)*(.5+.6*rnd(id,42)),len*.5,w0*.7,d0*.85,id+100,1);
+      px=nx; py=ny;
+    }
+  };
+  for (let k=0;k<N;k++) {
+    const at=L*(.08+.84*(k+.2+.6*rnd(k,11))/N),side=((k+(rnd(k,12)<.25?1:0))&1)?1:-1;
+    let i=1; while (i<cum.length-1 && cum[i]<at) i++;
+    const a=path[i-1],b=path[i],fr=(at-cum[i-1])/Math.max(cum[i]-cum[i-1],1e-6);
+    grow(a.x+(b.x-a.x)*fr,a.y+(b.y-a.y)*fr,Math.atan2(b.y-a.y,b.x-a.x)+side*(.45+.95*spread)*(.7+.6*rnd(k,13)),s.fissureBranchLen*f.kf*(.5+.9*rnd(k,14)),.75,.85,k,0);
+  }
+  return out;
+}
+// A trench's cut fraction at distance d from the cut, half-width hw: full depth
+// within three quarters of a cell of the cut (so a narrow or tapered cut still
+// reaches every cell it crosses: a pointwise V narrower than the 2 px grid broke
+// into dashes), then steep up to hw, and gone beyond.
+function fissureProfile(d,hw,cellPx) {
+  const lo=.75*cellPx,u=(d-lo)/Math.max(hw-lo,.35*cellPx);
+  return u<=0?1:u>=1?0:Math.pow(1-u,1.5);
+}
+function fissureCell(s,i,wx,wy,lx,ly,cx,cy,t) {
+  const f=s.fis,pc=s.piece;
+  let g,near;
+  if (f.net) {
+    // Block borders: the distance (authoring px) from this point to the bisector of the two nearest sites of a jittered grid, with the grid itself warped a little.
+    const C=f.cell,wxp=lx+C*.14*valueNoise(lx/(C*.9),ly/(C*.9),s.seed^0x2e1),wyp=ly+C*.14*valueNoise(lx/(C*.9),ly/(C*.9),s.seed^0x4d7);
+    const ix=Math.floor(wxp/C),iy=Math.floor(wyp/C);
+    let d1=1e30,d2=1e30,x1=0,y1=0,x2=0,y2=0;
+    for (let j=-1;j<=1;j++) for (let k=-1;k<=1;k++) {
+      const cxs=ix+k,cys=iy+j,sx=(cxs+.5+.42*hash(cxs,cys,s.seed^0x61)) * C,sy=(cys+.5+.42*hash(cxs,cys,s.seed^0x93)) * C,dd=(wxp-sx)*(wxp-sx)+(wyp-sy)*(wyp-sy);
+      if (dd<d1) { d2=d1; x2=x1; y2=y1; d1=dd; x1=sx; y1=sy; } else if (dd<d2) { d2=dd; x2=sx; y2=sy; }
+    }
+    const e=(d2-d1)/(2*Math.max(Math.hypot(x2-x1,y2-y1),1e-3)),hw=f.hw/f.kf,reg=1-smooth(.55,1,Math.hypot(wx-cx,wy-cy)/s.radius);
+    // Each border cut has its own depth and its own width, wobbling along it.
+    const vary=.65+.35*valueNoise(lx/(C*.5),ly/(C*.5),s.seed^0x7a9),wob=1+f.jag*.5*valueNoise(lx/9,ly/9,s.seed^0x1f3);
+    g=fissureProfile(e,hw*wob,spacing)*vary*reg; near=(1-smooth(0,1,e/(hw*3+3)))*reg;
+  } else {
+    const rm=pc?pc.r0+(pc.r1-pc.r0)*t:1,hm=pc?pc.h0+(pc.h1-pc.h0)*t:1,hw=f.hw*rm;
+    let dx=wx-cx,dy=wy-cy;
+    if (f.jag>0) {
+      dx+=f.amp*(.7*valueNoise(lx/23,ly/23,s.seed^0x5a1)+.5*valueNoise(lx/9,ly/9,s.seed^0x3c7));
+      dy+=f.amp*(.7*valueNoise(lx/23,ly/23,s.seed^0x6b5)+.5*valueNoise(lx/9,ly/9,s.seed^0x2d3));
+    }
+    const d=Math.hypot(dx,dy);
+    g=fissureProfile(d,hw,spacing)*hm*(1-.5*f.jag*(.5-.5*valueNoise(lx/17,ly/17,s.seed^0x7e1))); near=1-smooth(0,1,d/(hw*3+3));
+  }
+  // The crack field rises beside the cut whatever the depth there; the cut itself is a union by depth.
+  if (near>0 && f.crack>0) cracks[i]=Math.max(cracks[i],f.crack*near);
+  if (g<=s.weights[i]) return;
+  s.weights[i]=g;
+  // A cut in dry ground stays dry (as a crater's floor does): it never opens a pond.
+  const cut=s.base[i]-s.amount*g;
+  heights[i]=clamp(s.base[i]>config.seaLevel+1?Math.max(cut,config.seaLevel+1.5):cut,MIN_HEIGHT,MAX_HEIGHT);
+  protection[i]=s.protectBase[i]*(1-smooth(0,.3,g)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,g));
+  if (s.masks) paintCell(s.masks,i,smooth(0,.3,g)*f.dark);
 }
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
@@ -780,7 +918,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const bumpy=['hill','mountain','lower'].includes(s.kind);
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
   const northWiden=s.northFace??0;
-  const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
+  const extent=s.fis?s.fis.reach:crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
@@ -800,6 +938,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
     const t=spanLength2?clamp(((wx-p.x)*spanX+(wy-p.y)*spanY)/spanLength2,0,1):0;
     const cx=p.x+spanX*t,cy=p.y+spanY*t;
+    if (s.fis) { fissureCell(s,i,wx,wy,lx,ly,cx,cy,t); if (step>1) spread(i,x,y); continue; }
     if (crater) {
       // Retail lunar craters: a lobed outline, a rim that rises and falls
       // (with gaps), an off-centre lumpy bowl and an uneven apron. All of the
@@ -816,7 +955,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       const floorEdge=.25+.45*(1-s.softness);
       const rimNoise=valueNoise(lx/(sc*.8),ly/(sc*.8),s.seed^0x3e1);
       // Low-frequency rim noise lets whole sectors of rim sink away.
-      let rimHeight=s.amount*.34*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
+      let rimHeight=s.amount*s.rimHeight*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
       const rimWidth0=(.16+.2*s.softness)*(1+.35*n2);
       let rimWidth=rimWidth0;
       // Sectors and gaps (card C4), by angle in the shape's own frame.
@@ -1005,7 +1144,7 @@ function simplifyPath(points,tolerance) {
   return points.filter((_,k) => keep[k]);
 }
 function sweep(s,points) {
-  if (s.ridge) { sweepRidge(s,points); return; }
+  if (s.ridge || s.fis) { sweepRidge(s,points); return; }
   const path=simplifyPath(points,Math.max(1,s.radius*.04)),longest=Math.max(16,s.radius*1.5);
   dab(s,path[0]);
   for (let k=1;k<path.length;k++) {
@@ -1359,8 +1498,8 @@ function markChanged() { markViewChanged(); heightDirty=true; error(); }
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
-const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1436,7 +1575,7 @@ function addCraterlets(n,s) {
     }
     const work=borrowWork();
     try {
-      const t=startStroke('crater',p,{...n.params,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0,frame:n.frame,node:keys[k],rect,work});
+      const t=startStroke('crater',p,{...n.params,rimHeight:s.rimHeight,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0,frame:n.frame,node:keys[k],rect,work});
       dab(t,p);
     } finally { workDepth--; }
   }
@@ -1471,10 +1610,12 @@ function nodeBounds(n) {
   let r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
+  // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
+  if (n.kind==='fissure') { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r=(q.fissureNetwork>=.5?radius*1.1:0)+(Math.round(q.fissureBranches)>=1?(q.fissureBranchLen||0)*2.4*k:0)+(q.fissureWidth||5)*3*k+24+12*spacing; }
   // Spurs (card C4) reach up to one and a half spur lengths past the ridge or rim, plus their own width.
   // A ridge's crest also swells to 1.4 of its radius and a spur's root flares to about 1.7 times Spur width.
   if (ridgeOn(n.kind,q)) r+=radius;
-  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*1.6*k+radius*Math.max(1,(q.spurWidth||.8)*1.7); }
+  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
