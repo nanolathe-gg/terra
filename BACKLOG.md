@@ -794,9 +794,10 @@ can scroll, the existing terrain tools, features of the world (metal
 deposits, trees, a tree fill), start positions and the OTA settings, and an
 export to `<name>.ufo` (an HPI archive holding `maps/<name>.ota` and
 `maps/<name>.tnt`) that the player drops into the Total Annihilation folder.
-The exported map must load in Nanolathe and, within the limits below, in
-retail `TotalA.exe`; nobody can automate retail here, so the owner tests
-that by hand.
+The exported map must load in Nanolathe; that is the target. The owner
+will try retail `TotalA.exe` by hand later, so keep the files canonical
+and warn where a map exceeds what retail is known to load (phase 4), but
+do not limit the editor to retail.
 
 Work in four phases, in order. After each phase commit, update
 `$R/agent-D/NOTES.md` and **stop for the owner's review**; continue only
@@ -853,8 +854,9 @@ compiler-drift test applies. The one planned exception is tile-reuse step
   (`docs/DESIGN_MAP_GENERATOR.md`).
   - The canvas must cover every cell, including the strips the engine
     voids (`[03 R-TERR-01 §2]`). Outline the play area in the view.
-  - Generalise the canvas to non-square sizes up to the 8192-px texture
-    limit, which is about 4x4 units. Today's 1024-px canvas is only 2x2.
+  - Generalise the canvas to non-square sizes up to 4x4 units (about
+    2,100 px a side). Today's 1024-px canvas is only 2x2. Larger maps are
+    phase 3.
 - **Heights.** Sample at the 16-px cell corners, clamp to 0..255 with a
   warning, and write the editor's sea level as the header byte.
 - **Projection: verify it, don't assume it.**
@@ -872,6 +874,8 @@ compiler-drift test applies. The one planned exception is tile-reuse step
     palette RGB, otherwise the nearest colour.
   - Export must add no position-keyed noise. Deduplicate exact tiles.
   - Report the unique tile count and the slot count.
+- **Shape of the export.** Build it as a loop over chunks from the
+  start, even though a 4x4 map fits in one; phase 3 streams that loop.
 - **Minimap.** 252 px on the long side, with the used sub-rectangle and
   fill exactly as [fmt tnt] "Minimap" states.
 - **OTA.** Follow `internal/mapgen/ota.go`. Climate defaults to the
@@ -950,27 +954,74 @@ compiler-drift test applies. The one planned exception is tile-reuse step
   cells, about 20,500 px a side; retail's largest map, Seven Islands, is
   1280x1280 cells. Provide scrolling, a minimap navigator and at least
   1x, 0.5x and overview zoom.
+- **Ordinary hardware.** The editor must run on ordinary machines, not
+  only this one. Treat an integrated GPU and 8 GB of RAM as the floor.
+  - Request the WebGPU device with default limits; never raise them.
+    Read the limits the adapter really has and size chunks from them.
+  - Add memory budgets as knobs: GPU memory for terrain (default 512 MB)
+    and the page's JS heap (default 1 GB). Count every texture and
+    buffer the editor holds against them.
+  - Show that it still works under a low budget (128 MB of GPU memory),
+    re-baking more often.
+- **While editing, render only the visible slice.**
+  - Bake only the chunks that meet the viewport, plus a margin of one
+    chunk. Keep them in a least-recently-used cache within the GPU
+    budget, and drop the rest.
+  - A stroke marks the chunks it touches as dirty. Visible dirty chunks
+    re-bake at once; the others re-bake when they scroll into view.
+  - The overview and the minimap never bake full-resolution chunks.
+    Draw them from a coarse preview, either heights with a per-world
+    colour ramp or a low-resolution bake.
+  - Keep field planes (heights, masks and the rest) per chunk, allocated
+    only where something has been drawn; an untouched chunk is the
+    world's base. A chunk's fields can be dropped and recomputed from the
+    stroke graph by regional replay.
+- **Export: a chunked bake, streamed.**
+  - Bake chunk by chunk, row by row. Quantise each chunk to palette
+    indices, cut it into tiles, and add them to the unique-tile set at
+    once.
+  - Never hold the whole map image: at 40x40 units it is about 1.7 GB of
+    RGBA.
+  - In memory, hold only tile hashes, the tile index map and the
+    attribute map. Spill unique tile bytes to a temporary file when they
+    pass a budget. Use `$R/agent-D/tmp/` while testing; the tool itself
+    uses the OS temporary directory.
+  - Chunks go from the browser to the server as they finish, and the Go
+    tool assembles the TNT, OTA and HPI from the temporary files.
+  - Export can be cancelled and shows progress. A cancelled or crashed
+    export leaves nothing partial in the exports folder. Delete
+    temporary files by exact name, never with `rm -rf`.
 - **The hard part.**
   - The renderer bakes the whole canvas into textures sized `this.size`
-    square. At this size that cannot work, so bake in chunks, with an
-    apron wide enough for every neighbourhood pass (normals, blurs,
-    shadows, relief).
-  - Keep chunks resident only while needed.
+    square, so it must bake in chunks instead. Each chunk needs an apron
+    wide enough for every neighbourhood pass: normals, blurs, shadows and
+    relief.
+  - The apron must also cover the projection. Ground 255 high draws up
+    to 128 px north of its cell, so a chunk needs the rows south of it.
   - Shapes already replay per region; keep regional replay exact
     (`sculptDebug.replayAll()` mismatch 0).
   - The editor already uses all 16 sampled textures, so chunking must
     not add one.
 - **Document.** Save on the server: the stroke graph, sparse painted
-  mask chunks, features, starts and OTA settings. Saving and reloading
-  gives the same map.
+  mask chunks, features, starts and OTA settings.
+  - Save incrementally, writing only the chunks that changed, not the
+    whole map as one blob.
+  - Saving and reloading gives the same map.
 - **Exactness tests.**
   - The existing 1024-px canvas baked as 2x2 chunks must be
     pixel-identical to the whole bake.
+  - A map exported under the 128 MB budget, which forces evictions and
+    re-bakes, must give a `.tnt` byte-identical to one exported under the
+    default budget.
   - The guard must hold.
-- **Measure:**
-  - memory and time at 16x16 and 40x40 units;
-  - stroke latency on screen;
-  - full export time, with a progress bar.
+- **Measure,** at 16x16 and 40x40 units, under the default and the low
+  budget, and put a table in NOTES.md:
+  - peak JS heap;
+  - GPU memory the editor holds;
+  - server memory (RSS);
+  - peak temporary disk use;
+  - stroke latency on screen and frame time while scrolling;
+  - full export time.
 - **Out of scope.** Do not start worker-based multi-core replay (see
   "After the cards"), but leave the shape engine callable per chunk so
   that it can come later.
@@ -1004,9 +1055,11 @@ Unique tiles per world, p50 / p90:
 Our art is noise everywhere, so without work nearly every slot is unique.
 A 20x20-unit map has about 100,000 slots.
 
-- **Budget.** A knob defaulting to 6,000 tiles. Retail mode has a hard
-  ceiling of 11,500, the largest count known to work; a Nanolathe-only
-  export may go higher. Show the count live in the export panel.
+- **Budget.** A knob defaulting to 6,000 tiles; show the count live in
+  the export panel. The format's hard limit is 65,535 (a `u16` index).
+  - A retail-safe check warns above 11,500 tiles, the most retail is
+    known to load, or above 1,280 cells a side. It warns but does not
+    refuse.
 - **Steps, in order:**
   - **(a) Measure.** On a 16x16-unit map, find and list every reason two
     level-ground tiles differ:
