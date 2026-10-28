@@ -1194,6 +1194,26 @@ adds its own specular term.
 - **Server and guard:** port 8844, CDP 9644, guard `--worlds crystal`.
   Every other world must match exactly.
 
+**Done (merged 8adee6c6e).**
+- The model is a Blinn lobe over a micro-roughened normal per material.
+  Its knobs are `shine<Material>`, `...Sharp`, `...Rough`, `...Scale`,
+  `shineStretch` and `shineWhite`. It applies after the highlight cap and
+  before the palette stage.
+- Crystal gloss is .3-.4 with roughness 1 at 8 px. The p99.8 luma of the
+  mounds went from 155 to 213 (retail 164-197). The other 24 windows are
+  exact.
+- The adopter how-to is in `$R/agent-E2/NOTES.md`.
+
+**Still open, for E6 and E7:**
+- Lava's banks take the ground's colour, so rock and slope gloss do
+  nothing there. Ground gloss at roughness 0 and sharpness about 20 puts
+  glints on sun-facing banks, but Lava needs a slope gate.
+- On near-white Ice the additive lobe saturates, so Ice reads rough, not
+  shiny.
+- Crystal's mean luma is still above retail.
+- Grain axis and stretch are global, not per material.
+- Nothing was tried with palette pairs.
+
 ### E3. Layered rock: relief, not ink (starts when the owner agrees)
 
 > **Green:** Retail cracks provide relief and have highlights, ours are
