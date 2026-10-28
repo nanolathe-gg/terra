@@ -1,11 +1,10 @@
 # Terrain editor prototype
 
-**Card D phase 3 is stopped at its exactness gate.** The branch contains a
-partial chunked editor for review; it is not accepted for landing. The second
-render candidate differs from the whole bake at one Ice frost pixel (maximum
-channel difference 24). The backlog requires stopping after two failed rounds.
-The existing 1024px study path remains separate. Do not treat the large-map
-client as verified: its full performance and budget-equivalence checks are unrun.
+Card D phase 3 adds maps up to 40×40 units with a scrolling viewport,
+bounded regional replay, live gestures, overlapping weather tiles and streamed
+export. The 1024px study keeps its existing rendering path. Phase 3 review
+measurements and the remaining GPU rounding difference are recorded in
+`/private/tmp/nanolathe-map-editor/agent-D/NOTES.md`. Phase 4 has not started.
 
 Card D phases 1 and 2 add playable terrain, features, starts and OTA settings.
 Limits and later phases are in [BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
@@ -29,11 +28,11 @@ world's derived catalogue is refreshed once per server run from its configured
 content roots, even when private files already exist.
 
 Open <http://127.0.0.1:8840/sculpt>. **Playable map** creates a blank map
-canvas. The accepted phase-1/2 scope is 1–4 units on each axis and a chosen sea level, initially the
+canvas. Choose 1–40 units on each axis and a sea level, initially the
 upper median TNT sea level of its retail world. Each unit is 512 playable
 pixels. A 4×4 map contains 130×136 cells, including the outer strips, and
 2080×2176 art pixels. Yellow outlines the playable rectangle; orange marks
-the height-dependent edge strips. Fit and 1× use the existing viewport.
+the height-dependent edge strips. Fit, 1×, 0.5× and the minimap navigator use a viewport-sized canvas. Export view PNG captures only the current view.
 
 The original 1024px study remains available. Draw a map with the existing
 terrain brushes, then use the feature tools. Water brush depths and material
@@ -75,11 +74,35 @@ The helper decodes and checks the TNT cells, feature anchors/fringe, tiles,
 minimap, OTA settings/starts and archive before publishing it.
 See [the export format contract](export/README.md).
 
-Full-size maps and chunked baking remain phase 3's unfinished acceptance
-work. The partial implementation on this branch adds regional fields and GPU resources, an LRU viewport compositor,
-streamed export, cancellation and incremental server documents. The default
-GPU/heap budgets are 512 MiB/1 GiB; the intended low GPU budget is 128 MiB.
-The field closure is still conservative and can exceed the heap budget for
-long connected strokes. Exact global weathering remains available only on the
-bounded maps; larger maps explicitly require turning Weathering off to export.
-Tile reuse policy remains phase 4 and has not started.
+Full-size maps keep the stroke graph as their source. Field prefix tiles replay
+with each brush's read apron; long connected coasts query earlier tiles without
+expanding one connected bounding box. Visible chunks and one surrounding margin
+are baked on demand. Scrolling uses an LRU image cache, while overview and the
+navigator use a coarse 128×128 height preview. A stroke, move, rotation, scale or
+height drag previews while held and commits one undo step; Escape cancels it.
+
+The GPU and page heap budgets default to 512 MiB and 1 GiB, with controls in
+**Map view and memory** (`gpuMB` / `heapMB` in the URL). The device requests
+default WebGPU limits. Mask storage counts its actual layer count. Every selected
+GPU budget uses the same canonical bake size chosen at the 128 MiB floor; lower
+budgets evict and re-bake more images. Changing chunk geometry can move isolated
+palette decisions because the GPU rounds interpolation differently. The remaining
+Ice frost decision is documented with raw field and float probes in NOTES.md.
+
+Maps with at most 1168 samples on their working side keep the existing global
+weather solver. Larger maps use fixed 256-cell weather cores, 64-cell blend
+overlap and another 128-cell solver apron. Tile seeds depend only on the map seed
+and tile coordinates, so cache size and renderer chunk boundaries do not change
+the result. Weather is lazy in the view; exports await it for both art and TNT
+corner heights. Field, weather and upload reservations share the page budget.
+
+**Save to server** writes graph/settings/objects and changed sparse mask chunks
+under `<assets-root>/documents/documents/<id>/`; **Reload document** restores that
+world/size/sea canvas. Chunks use stable coordinate keys. Sketch files remain an
+alternative to server documents.
+
+Export streams one tile-aligned PNG at a time to the helper. The helper keeps
+hashes, tile indices and attributes in memory, spills tile bytes under its own
+budget, and writes the indexed PNG and archive without a full-map image buffer.
+Cancel removes the exact temporary job and publishes no partial archive. More
+than 65536 distinct tiles is refused; the tile reuse policy is still phase 4.
