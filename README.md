@@ -18,7 +18,7 @@ writing to it. To use other content, repeat `--game-root DIR` in mount order.
 
 Open <http://127.0.0.1:8840/sculpt>. The **Playable map** section below the
 shape tools creates a blank map canvas, with 1–4 units on each axis and a
-chosen sea level (64 initially). Each unit is 512 playable pixels. A 4×4 map
+chosen sea level (the median TNT sea level of its retail world). Each unit is 512 playable pixels. A 4×4 map
 contains 130×136 cells, including the outer strips, and 2080×2176 pixels.
 The yellow dashed rectangle is the playable extent; orange lines mark the
 height-dependent edge strips. Fit and 1× use the existing viewport.
@@ -31,9 +31,9 @@ map needs deep water: TNT heights are unsigned bytes.
 
 **Export .ufo** uses a name and description, the chosen world's installed
 retail climate medians, and two fixed starts. It warns when corner heights
-need clamping to 0–255. Export geometry uses the quantized 16px corners;
-art is projected from height zero, while the editor retains its base-relative
-preview. It captures tile-aligned PNG chunks and sends them to the helper.
+need clamping to 0–255. Art uses the full-detail displayed field, clamped to the TNT byte range.
+Only the TNT attributes use quantized 16px corners. Art is projected from
+height zero, while the editor retains its base-relative preview. It captures tile-aligned PNG chunks and sends them to the helper.
 No extra noise or dithering is added by export. Zhon export stays disabled
 until the owner chooses a retail planet.
 

@@ -186,7 +186,7 @@ export class TerrainRenderer {
     this.uniform = this.layout.fields;
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.heightTexture}, this.height, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
+    this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
     this.setRoutes(new Float32Array(this.grid * this.grid));
     const variant = new URLSearchParams(location.search);
     for (const [key, value] of Object.entries(this.config.defaults || {}))
@@ -268,8 +268,8 @@ export class TerrainRenderer {
     if(body!==fringe)body.close();fringe.close();
     this.f('uGrid', this.grid);
     this.f('uSize', this.size);
-    this.f('uBase', this.config.baseHeight);
-    this.f('uSea', this.config.seaLevel);
+    this.f('uBase', this.config.baseHeight - this.config.seaLevel);
+    this.f('uSea', 0);
     this.f('uDetail', variant.get('relief') === 'base' ? 0.0 : (this.config.material?.surfaceRelief ?? 1.0));
     this.f('uFractureDepth', this.config.material?.fractureDepth ?? 1.0);
     this.i('uRockyCoasts', Boolean(this.config.material?.rockyCoasts));
@@ -446,13 +446,20 @@ export class TerrainRenderer {
     return {vertices: buffer(points, GPUBufferUsage.VERTEX), indices: buffer(index, GPUBufferUsage.INDEX), count: index.length};
   }
 
+  // Materials were authored at sea 0. Give every shader that same datum while
+  // keeping editable/picking heights absolute. Sea-0 uploads remain untouched,
+  // including shader source/compilation, so existing worlds keep their pixels.
+  textureHeights(height) {
+    return this.config.seaLevel===0 ? height : height.map(h => h-this.config.seaLevel);
+  }
+
   setHeight(height, grid) {
     this.fieldsDirty = true;
     if (height.length !== grid * grid) throw new Error('Invalid height field dimensions.');
     this.height = height;
     this.grid = grid;
     this.worldTextures(grid);
-    this.device.queue.writeTexture({texture: this.heightTexture}, height, {bytesPerRow: grid * 4}, [grid, grid]);
+    this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(height), {bytesPerRow: grid * 4}, [grid, grid]);
     this.f('uGrid', grid);
   }
 
@@ -702,7 +709,7 @@ export class TerrainRenderer {
     const v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const set = (name, value) => this.set(name, Number(value));
-    set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight); set('uSea', this.config.seaLevel);
+    set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
     set('uReliefScale', number('reliefScale', 28));
     set('uReliefAmount', number('reliefAmount', 0.5));
     set('uReliefBranch', number('reliefBranch', 2.0));

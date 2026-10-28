@@ -9,7 +9,7 @@ const canvas = $('terrain'), overlay = $('overlay'), ink = overlay.getContext('2
 const experiment = new URLSearchParams(location.search);
 let LOCAL_KEY = 'nanolathe-terrain-sculpt-v3' + (experiment.has('scratch')?'-'+experiment.get('scratch'):'');
 const NATURAL_COAST = experiment.get('coast')!=='restrained';
-const MIN_HEIGHT = -90, MAX_HEIGHT = 300;
+let MIN_HEIGHT = -90, MAX_HEIGHT = 300;
 const HELP = {
   plateau:'Paint a level crest above the height where this stroke begins. New strokes can build on top.',
   hill:'Paint a rounded ridge along any path. A later stroke adds more height to the existing ground.',
@@ -2097,7 +2097,7 @@ overlay.addEventListener('pointerup',endPointer); overlay.addEventListener('poin
 overlay.addEventListener('lostpointercapture',event => { if (stroke || pan || moving) endPointer(event); });
 overlay.addEventListener('pointerleave',() => { if (!stroke && !pan) cursor=null; schedule(false); }); overlay.addEventListener('contextmenu',event => event.preventDefault());
 function resize() {
-  if (!config) return; const viewport=$('viewport');
+  if (!config || !ready) return; const viewport=$('viewport');
   const scale=fitView?Math.max(.05,Math.min((viewport.clientWidth-28)/size,(viewport.clientHeight-28)/size)):1;
   if (!resizeMap(config.map,size,fitView,viewport,$('stage'),canvas,overlay)) { $('stage').style.width=size*scale+'px'; $('stage').style.height=size*scale+'px'; }
   if (fitView) { viewport.scrollLeft=viewport.scrollTop=0; } updateControls(); schedule();
@@ -2611,7 +2611,11 @@ function setKnob(key, value) {
 async function boot() {
   try {
     const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
-    configureMap(config,experiment);
+    if (experiment.has('mapX') || experiment.has('mapY')) {
+      const response=await fetch('/map-catalog.json'); if (!response.ok) throw new Error('Could not read map defaults from the installed content.');
+      config.exportCatalog=await response.json(); config.defaultSeaLevel=config.exportCatalog.worlds[config.biomeId]?.defaultSeaLevel;
+    }
+    configureMap(config,experiment); MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
     if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?1168:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
     if (config.variant) LOCAL_KEY+='-v-'+config.variant;
