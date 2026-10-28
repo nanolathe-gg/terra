@@ -12,7 +12,7 @@
 import {weatherMaterials} from './sculpt-material-weathering.js';
 import {transportSand} from './sculpt-sand.js';
 
-const MIN_HEIGHT=-90, MAX_HEIGHT=300, CHUNK_MS=8, PUBLISH_MS=85;
+const CHUNK_MS=8, PUBLISH_MS=85;
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
 const yieldTask=() => new Promise(resolve => setTimeout(resolve,0));
@@ -53,7 +53,12 @@ function noise(x,y,seed) {
 }
 
 async function weather(request) {
+  // Transport also works at sea 0: otherwise the coarser Float32 spacing at
+  // a raised datum changes droplet paths after repeated erosion/deposition.
+  const outputSea=request.seaLevel??0;
+  if (outputSea) request={...request,height:request.height.map(h => h-outputSea),baseHeight:request.baseHeight-outputSea,seaLevel:0};
   const started=performance.now(),{job,grid,size}=request,n=grid*grid,spacing=(size-1)/(grid-1);
+  const seaLevel=request.seaLevel??0,MIN_HEIGHT=seaLevel-90,MAX_HEIGHT=seaLevel+300;
   const broad=request.profile==='broad';
   const intensity=clamp(Number.isFinite(request.strength)?request.strength:1,0,2),budgetScale=Math.min(1,intensity);
   const talusAmount=clamp(Number.isFinite(request.talus)?request.talus:0,0,1);
@@ -79,7 +84,7 @@ async function weather(request) {
   async function deriveApron() {
     // Authored geometry support, not particle sediment or a random texture.
     // Higher steep samples contribute only to a 24-world-unit dry-foot collar.
-    const shoreLow=Math.max(12,baseHeight-6),reach=24,range=Math.ceil(reach/spacing),offsets=[];
+    const shoreLow=Math.max(seaLevel+12,baseHeight-6),reach=24,range=Math.ceil(reach/spacing),offsets=[];
     const strongest=new Float32Array(n),mass=new Float32Array(n),vx=new Float32Array(n),vy=new Float32Array(n);
     for (let dy=-range;dy<=range;dy++) for (let dx=-range;dx<=range;dx++) {
       const cells=Math.hypot(dx,dy),distance=cells*spacing;
@@ -141,7 +146,7 @@ async function weather(request) {
     for (let y=0;y<grid;y++) {
       for (let x=0;x<grid;x++) {
         const i=y*grid+x;
-        if (!mobility[i] || original[i]<=0) { output[i]=original[i]; continue; }
+        if (!mobility[i] || original[i]<=seaLevel) { output[i]=original[i]; continue; }
         const blend=.65*(1-smooth(.55,1.1,gradient[i]));
         if (!blend) continue;
         let delta=0,total=0;
@@ -168,6 +173,7 @@ async function weather(request) {
       // The apron is an optional derived output. It does not alter authored
       // samples, protection, hydraulic transport, or the existing off result.
       if (apron) { t[i]=apron[i]; output[i]=clamp(output[i]+3.5*t[i],MIN_HEIGHT,MAX_HEIGHT); }
+      if (outputSea) output[i]+=outputSea;
       if ((i&32767)===32767 && performance.now()>=deadline && await pause()) return false;
     }
     if (cancelled()) return false;
@@ -194,7 +200,7 @@ async function weather(request) {
     for (let x=0;x<grid;x++) {
       const i=y*grid+x,p=protection?protection[i]:0;
       if (protection && !Number.isFinite(p)) throw new Error('Weathering protection must be finite.');
-      if (!intensity || original[i]<=0 || p>=1) continue;
+      if (!intensity || original[i]<=seaLevel || p>=1) continue;
       let slope=gradient[i];
       for (let yy=Math.max(0,y-1);yy<=Math.min(grid-1,y+1);yy++) for (let xx=Math.max(0,x-1);xx<=Math.min(grid-1,x+1);xx++) slope=Math.max(slope,gradient[yy*grid+xx]);
       const weight=smooth(.035,.20,slope)*(1-clamp(p,0,1));
@@ -284,7 +290,7 @@ async function weather(request) {
     let dx=0,dy=0,speed=.6,water=rain,sediment=0;
     for (let life=0;life<44;life++) {
       read(x,y,sample);
-      if (sample[0]<=0) break;
+      if (sample[0]<=seaLevel) break;
       const gx=sample[1],gy=sample[2],slope=Math.hypot(gx,gy);
       if (slope<.006) { deposit(x,y,sediment); break; }
       dx=.22*dx-.78*gx; dy=.22*dy-.78*gy;
@@ -302,7 +308,7 @@ async function weather(request) {
       }
       const fall=Math.max(0,sample[0]-nextSample[0]),capacity=Math.max(.015,fall/stepWorld)*speed*water*3.5;
       traceFlow(x,y,water);
-      if (nextSample[0]<=0) { deposit(x,y,sediment); break; }
+      if (nextSample[0]<=seaLevel) { deposit(x,y,sediment); break; }
       if (sediment>capacity) sediment-=deposit(x,y,(sediment-capacity)*.32);
       else sediment+=erode(x,y,Math.min((capacity-sediment)*.18,Math.max(.012,fall*.25),1.4));
       speed=Math.sqrt(Math.max(.04,speed*speed+fall*.30)); water*=.96;

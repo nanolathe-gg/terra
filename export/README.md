@@ -1,4 +1,4 @@
-# Terrain editor export (Card D, phase 1)
+# Terrain editor export (Card D, phases 1 and 2)
 
 Build and inspect installed content:
 
@@ -12,17 +12,21 @@ go build -o /private/tmp/nanolathe-map-editor/agent-D/map-export ./tools/map-edi
 triples), and `installedNames` (map file basenames). The map names in
 `catalog.go` come from `repro/scenes`; their installed OTAs establish each
 world's planet. All mounted OTA/TNT pairs with that planet contribute to its
-climate medians. `sources` lists their logical OTA paths. Missing scene maps,
-conflicting planets, and Zhon can produce `disabledReason` instead of an
-exportable climate. The palette is read in memory, including the ordinary
-PCX recovery fallback.
+climate medians and `defaultSeaLevel` (the median TNT header sea level).
+For an even source count, both defaults use the upper middle value. `sources`
+lists their logical OTA paths. Missing scene maps, conflicting planets, and
+Zhon can produce `disabledReason` instead of an exportable climate and sea
+default. Disabled worlds omit `defaultSeaLevel`; a median of zero remains
+present. The palette is read in memory, including the ordinary PCX recovery
+fallback.
 
 Export a local manifest:
 
 ```sh
 /private/tmp/nanolathe-map-editor/agent-D/map-export \
   --input /private/tmp/editor-export/manifest.json \
-  --out /private/tmp/editor-export/maps
+  --out /private/tmp/editor-export/maps \
+  --features-root /private/tmp/nanolathe-map-editor/agent-D/features
 ```
 
 ```json
@@ -34,7 +38,10 @@ Export a local manifest:
   "unitsY": 4,
   "seaLevel": 32,
   "heights": [40, 40],
-  "chunks": [{"x": 0, "y": 0, "path": "art.png"}]
+  "chunks": [{"x": 0, "y": 0, "path": "art.png"}],
+  "features": [{"name": "RockMetal1", "x": 24, "z": 24}],
+  "starts": [{"x": 256, "z": 256}, {"x": 1792, "z": 1792}],
+  "settings": {"minWind": 500, "maxWind": 4500, "tidal": 25, "solar": 20, "gravity": 112, "surfaceMetal": 3, "mohoMetal": 40, "lava": false}
 }
 ```
 
@@ -51,22 +58,62 @@ Palette conversion uses exact RGB matches, then squared Euclidean RGB
 distance, with the lowest index winning ties. There is no noise or dithering.
 Only exact indexed 32×32 tiles are shared. The 252×252 minimap follows
 `research/formats/tnt.md` "Minimap": fit the play area to its long side and
-fill the unused short axis with palette index `0x64`.
+fill the unused short axis with palette index `0x64`. Each used pixel averages
+all indexed-art RGB values in its source block. Blocks use truncated integer
+boundaries, covering every play-area pixel exactly once; the engine's outer
+strips are excluded. RGB averages round to the nearest integer (half up), then
+use the same nearest-palette rule and lowest-index tie break as the art.
 
-The fixed starts are `(256,256)` and `(unitsX*512-256,unitsY*512-256)`;
-a one-unit axis uses 128px margins so its starts are distinct. Starts and
-climate are written through the same OTA fields as `internal/mapgen/ota.go`.
-Phase 1 places no features or resources beyond the world's surface metal.
+`features`, `starts` and `settings` are optional. Omitted features give bare
+terrain; omitted starts preserve the phase-1 pair at 256px margins (128px on
+one-unit axes); omitted settings use the world's retail medians. Explicit
+starts contain 1–10 distinct integer pixel positions inside the play area.
+Their order becomes `StartPos1` through `StartPosN`, and `numplayers` matches.
+
+Feature x/z are top-left anchor **cells**, rather than pixel positions. Every
+full footprint must lie inside the play area, without overlapping another.
+The name must appear in the prepared world's catalogue and its mounted TDF;
+footprints are checked against that TDF. A deterministic sorted name table
+supplies anchor indices, with `0xFFFE` in each remaining footprint cell.
+The terrain image must not contain feature sprites.
+
+A supplied settings object contains every field shown above. Integer values
+are nonnegative signed-32-bit OTA values, with minimum wind no greater than
+maximum wind; surface metal additionally fits the engine's byte store
+(0–255). `lava` is boolean. These are format/store bounds, not retail maxima.
+Starts and settings use the same OTA keys as `internal/mapgen/ota.go`.
+
+Prepare a private feature catalogue before exporting placed features:
+
+```sh
+go build -o /private/tmp/nanolathe-map-editor/agent-D/bin/map-features ./tools/map-editor/features
+/private/tmp/nanolathe-map-editor/agent-D/map-export --catalog > /private/tmp/nanolathe-map-editor/agent-D/map-catalog.json
+/private/tmp/nanolathe-map-editor/agent-D/bin/map-features \
+  --catalog /private/tmp/nanolathe-map-editor/agent-D/map-catalog.json \
+  --world green --out /private/tmp/nanolathe-map-editor/agent-D/features
+```
+
+The helper also accepts repeated `--root` flags. It writes
+`<out>/<world>/catalog.json`, first-frame PNGs and optional shadow PNGs,
+with authored GAF offsets and transparency. It counts TNT play-area anchors
+across the world's source maps, following `mapgenSource`; classification and
+deposit selection follow `mapgenFeatures`. Unlike that generator, the editor
+retains every drawn member instead of eight per vegetation category. Missing
+optional shadow sequences produce `null`; composite children retain their
+common anchor. A destination-dependent alternate child returns an explicit
+error, since one transparent PNG cannot represent it. All derived files
+stay outside the checkout and the content roots.
 
 The command writes `<name>.ufo` with stored HPI entries
 `maps/<name>.ota` and `maps/<name>.tnt`, plus `<name>-indexed.png` for image
 comparison. Before publishing, it reopens the staged archive through
 `vfs.NewArchive` (via `MountArchiveReader`), lists and reads both files,
-compares every TNT cell and tile, and parses the OTA and starts. Publication
+compares every TNT cell, feature record, tile and minimap byte, and parses
+the OTA settings and numbered starts. Publication
 is atomic per file and refuses an existing destination. Installed names are
 also refused case-insensitively. Content roots cannot be output directories.
 
 Stdout is one JSON result with `name`, `archive`, `indexed`, `widthCells`,
 `heightCells`, `uniqueTiles`, `tileSlots`, `exactPixels`, `nearestPixels`,
-`starts`, and `selfCheck` (`tnt`, `ota`, `archive` booleans). Output filenames
+`featureCount`, `starts`, and `selfCheck` (`tnt`, `ota`, `archive` booleans). Output filenames
 are basenames. Errors go to stderr with a nonzero exit status.

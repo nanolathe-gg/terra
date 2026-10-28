@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"slices"
@@ -24,10 +26,11 @@ type climate struct {
 }
 
 type worldInfo struct {
-	Planet         string   `json:"planet,omitempty"`
-	Climate        *climate `json:"climate,omitempty"`
-	Sources        []string `json:"sources"`
-	DisabledReason string   `json:"disabledReason,omitempty"`
+	Planet          string   `json:"planet,omitempty"`
+	DefaultSeaLevel *int     `json:"defaultSeaLevel,omitempty"`
+	Climate         *climate `json:"climate,omitempty"`
+	Sources         []string `json:"sources"`
+	DisabledReason  string   `json:"disabledReason,omitempty"`
 }
 
 type catalog struct {
@@ -37,8 +40,8 @@ type catalog struct {
 }
 
 // Only these map basenames are recorded here, from repro/scenes/*-1..3.json.
-// Planet names and climate are always read from mounted OTAs, never inferred
-// from an editor world ID. Keep this small list in step with those scenes.
+// Planet names, climate and sea defaults come from mounted OTA/TNT pairs,
+// never from an editor world ID. Keep this small list in step with those scenes.
 var worldExamples = []struct {
 	ID   string
 	Maps []string
@@ -55,6 +58,7 @@ var worldExamples = []struct {
 
 type catalogMap struct {
 	OTA     string
+	TNT     string
 	Planet  string
 	Climate climate
 }
@@ -94,7 +98,8 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 		if ext != ".ota" {
 			continue
 		}
-		if _, err := fs.Stat(strings.TrimSuffix(entry.Path, path.Ext(entry.Path)) + ".tnt"); err != nil {
+		tntPath := strings.TrimSuffix(entry.Path, path.Ext(entry.Path)) + ".tnt"
+		if _, err := fs.Stat(tntPath); err != nil {
 			if errors.Is(err, vfs.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
 				continue
 			}
@@ -108,7 +113,7 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 			return result, fmt.Errorf("read %s for world climate: %w", entry.Path, err)
 		}
 		planet, _ := ota.Global.StringValue("planet", "")
-		m := catalogMap{OTA: entry.Path, Planet: strings.TrimSpace(planet), Climate: otaClimate(ota)}
+		m := catalogMap{OTA: entry.Path, TNT: tntPath, Planet: strings.TrimSpace(planet), Climate: otaClimate(ota)}
 		maps = append(maps, m)
 		mapsByName[strings.ToLower(base)] = m
 	}
@@ -137,12 +142,22 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 		}
 		if world.DisabledReason == "" {
 			var climates []climate
+			var seaLevels []int
 			for _, m := range maps {
 				if strings.EqualFold(world.Planet, m.Planet) {
+					seaLevel, err := readSeaLevel(fs, m.TNT)
+					if err != nil {
+						return result, fmt.Errorf("read %s for world sea level: %w", m.TNT, err)
+					}
+					seaLevels = append(seaLevels, seaLevel)
 					world.Sources = append(world.Sources, m.OTA)
 					climates = append(climates, m.Climate)
 				}
 			}
+			// Use the same upper median as the climate defaults.
+			slices.Sort(seaLevels)
+			seaLevel := seaLevels[len(seaLevels)/2]
+			world.DefaultSeaLevel = &seaLevel
 			c := medianClimate(climates)
 			world.Climate = &c
 		}
@@ -150,6 +165,26 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 	}
 	result.Worlds["zhon"] = worldInfo{Sources: []string{}, DisabledReason: "Zhon has no retail planet or feature set; the owner must choose one before export"}
 	return result, nil
+}
+
+// Only the fixed header is needed for a new map's default [fmt tnt]
+// "Header (0x40 bytes)". Both supported versions put SeaLevel in this word;
+// avoid allocating and decoding terrain cells, tiles and features here.
+func readSeaLevel(fs vfs.FSOps, name string) (int, error) {
+	f, err := fs.Open(name)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	var header [0x40]byte
+	if _, err := io.ReadFull(f, header[:]); err != nil {
+		return 0, err
+	}
+	version := formats.Version(binary.LittleEndian.Uint32(header[:4]))
+	if version != formats.VersionCanonical && version != formats.VersionLegacy {
+		return 0, fmt.Errorf("unsupported TNT version 0x%04x", version)
+	}
+	return int(binary.LittleEndian.Uint32(header[0x24:0x28])), nil
 }
 
 func readPalette(fs vfs.FSOps) ([256][3]byte, error) {

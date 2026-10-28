@@ -85,7 +85,7 @@ func terrain(req exportRequest, manifestDir string, palette [256][3]byte) (forma
 			}
 		}
 	}
-	t.MinimapWidth, t.MinimapHeight, t.Minimap = minimap(t)
+	t.MinimapWidth, t.MinimapHeight, t.Minimap = minimap(t, palette)
 	return t, picture, exact, nearest, nil
 }
 
@@ -203,9 +203,12 @@ func (q *quantizer) index(r, g, b byte) (byte, bool) {
 }
 
 // Follow [fmt tnt] "Minimap" and internal/mapgen/paint.go: fit the play area
-// to a 252px long side, sample its indexed art, and fill the unused short axis
-// with 0x64. The raw terrain includes strips outside that play area.
-func minimap(t formats.TNTWrite) (int, int, []byte) {
+// to a 252px long side and fill the unused short axis with 0x64. Unlike the
+// generator's point sample, average every indexed-art pixel in each block,
+// round each RGB channel to its nearest integer, then use the nearest palette
+// RGB (lowest index on ties). Integer block boundaries partition the whole
+// play area, including the final source row and column; outer strips stay out.
+func minimap(t formats.TNTWrite, palette [256][3]byte) (int, int, []byte) {
 	const side = 252
 	playW, playH := t.Width*16-32, t.Height*16-128
 	usedW, usedH := side, side
@@ -215,15 +218,26 @@ func minimap(t formats.TNTWrite) (int, int, []byte) {
 		usedH = playH * side / playW
 	}
 	out := make([]byte, side*side)
+	quantize := newQuantizer(palette)
 	for y := 0; y < side; y++ {
 		for x := 0; x < side; x++ {
 			if x >= usedW || y >= usedH {
 				out[y*side+x] = 0x64
 				continue
 			}
-			wx, wy := x*playW/usedW, y*playH/usedH
-			index := int(t.TileIndices[(wy/tileSide)*(t.Width/2)+wx/tileSide])
-			out[y*side+x] = t.TileGraphics[index*tileSide*tileSide+(wy%tileSide)*tileSide+wx%tileSide]
+			x0, x1 := x*playW/usedW, (x+1)*playW/usedW
+			y0, y1 := y*playH/usedH, (y+1)*playH/usedH
+			r, g, b := 0, 0, 0
+			for wy := y0; wy < y1; wy++ {
+				for wx := x0; wx < x1; wx++ {
+					index := int(t.TileIndices[(wy/tileSide)*(t.Width/2)+wx/tileSide])
+					pixel := t.TileGraphics[index*tileSide*tileSide+(wy%tileSide)*tileSide+wx%tileSide]
+					c := palette[pixel]
+					r, g, b = r+int(c[0]), g+int(c[1]), b+int(c[2])
+				}
+			}
+			count := (x1 - x0) * (y1 - y0)
+			out[y*side+x], _ = quantize.index(byte((r+count/2)/count), byte((g+count/2)/count), byte((b+count/2)/count))
 		}
 	}
 	return side, side, out

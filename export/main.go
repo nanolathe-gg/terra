@@ -1,4 +1,4 @@
-// Command export turns a phase-1 terrain editor manifest into a playable map.
+// Command export turns a terrain editor manifest into a playable map.
 package main
 
 import (
@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/nanolathe-gg/nanolathe/formats"
+	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
 	"github.com/nanolathe-gg/nanolathe/vfs"
 )
 
@@ -26,14 +27,17 @@ func (r *rootsFlag) Set(s string) error {
 }
 
 type exportRequest struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	World       string  `json:"world"`
-	UnitsX      int     `json:"unitsX"`
-	UnitsY      int     `json:"unitsY"`
-	SeaLevel    *int    `json:"seaLevel"`
-	Heights     []int   `json:"heights"`
-	Chunks      []chunk `json:"chunks"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	World       string             `json:"world"`
+	UnitsX      int                `json:"unitsX"`
+	UnitsY      int                `json:"unitsY"`
+	SeaLevel    *int               `json:"seaLevel"`
+	Heights     []int              `json:"heights"`
+	Chunks      []chunk            `json:"chunks"`
+	Features    []featurePlacement `json:"features"`
+	Starts      requestedStarts    `json:"starts"`
+	Settings    requestedSettings  `json:"settings"`
 }
 
 type chunk struct {
@@ -57,6 +61,7 @@ type exportResult struct {
 	TileSlots     int       `json:"tileSlots"`
 	ExactPixels   int       `json:"exactPixels"`
 	NearestPixels int       `json:"nearestPixels"`
+	FeatureCount  int       `json:"featureCount"`
 	Starts        []start   `json:"starts"`
 	SelfCheck     selfCheck `json:"selfCheck"`
 }
@@ -80,6 +85,7 @@ func run() error {
 	catalogOnly := flag.Bool("catalog", false, "print installed worlds, palette and map names as JSON")
 	input := flag.String("input", "", "local JSON export manifest")
 	out := flag.String("out", "", "output directory for the UFO and indexed PNG")
+	featuresRoot := flag.String("features-root", "", "prepared feature catalogue root, required for placed features")
 	flag.Parse()
 	if flag.NArg() != 0 || (*catalogOnly && (*input != "" || *out != "")) || (!*catalogOnly && (*input == "" || *out == "")) {
 		return fmt.Errorf("use --catalog, or --input PATH --out DIR; --root may be repeated")
@@ -110,7 +116,11 @@ func run() error {
 	if err := refuseRootOutput(*out, roots); err != nil {
 		return err
 	}
-	result, err := exportMap(req, catalog, filepath.Dir(*input), *out)
+	allowed, err := readExportFeatures(fs, *featuresRoot, req, catalog)
+	if err != nil {
+		return err
+	}
+	result, err := exportMap(req, catalog, filepath.Dir(*input), *out, allowed)
 	if err != nil {
 		return err
 	}
@@ -170,6 +180,12 @@ func validateRequest(req exportRequest, catalog catalog) (worldInfo, error) {
 			return worldInfo{}, fmt.Errorf("corner height at cell (%d,%d) is %d, expected 0..255; clamp in the editor before export", i%w, i/w, height)
 		}
 	}
+	if req.Settings.Present {
+		if err := validateSettings(&req.Settings.Value); err != nil {
+			return worldInfo{}, err
+		}
+		world.Climate = &req.Settings.Value
+	}
 	return world, nil
 }
 
@@ -202,8 +218,16 @@ func validateText(field, value string) error {
 	return nil
 }
 
-func exportMap(req exportRequest, catalog catalog, manifestDir, out string) (*exportResult, error) {
+func exportMap(req exportRequest, catalog catalog, manifestDir, out string, allowed map[string]mapdata.Feature) (*exportResult, error) {
 	world, err := validateRequest(req, catalog)
+	if err != nil {
+		return nil, err
+	}
+	starts, err := mapStarts(req)
+	if err != nil {
+		return nil, err
+	}
+	names, featureCells, err := encodeFeatures(req, allowed)
 	if err != nil {
 		return nil, err
 	}
@@ -211,11 +235,9 @@ func exportMap(req exportRequest, catalog catalog, manifestDir, out string) (*ex
 	if err != nil {
 		return nil, err
 	}
-	// The fixed pair leaves a 256px margin on normal maps. A one-unit axis
-	// uses 128px instead, so its two starts remain distinct and in bounds.
-	playW, playH := req.UnitsX*512, req.UnitsY*512
-	mx, mz := min(256, playW/4), min(256, playH/4)
-	starts := []start{{mx, mz}, {playW - mx, playH - mz}}
+	if len(req.Features) > 0 {
+		t.FeatureNames, t.Features = names, featureCells
+	}
 	ota, err := encodeOTA(req, world, starts)
 	if err != nil {
 		return nil, err
@@ -275,7 +297,7 @@ func exportMap(req exportRequest, catalog catalog, manifestDir, out string) (*ex
 		Name: req.Name, Archive: archiveName, Indexed: indexedName,
 		WidthCells: t.Width, HeightCells: t.Height,
 		UniqueTiles: len(t.TileGraphics) / 1024, TileSlots: len(t.TileIndices),
-		ExactPixels: exact, NearestPixels: nearest, Starts: starts, SelfCheck: checked,
+		ExactPixels: exact, NearestPixels: nearest, FeatureCount: len(req.Features), Starts: starts, SelfCheck: checked,
 	}, nil
 }
 
