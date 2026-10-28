@@ -197,7 +197,6 @@ struct Uniforms {
     paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
     scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
     styleOn: i32,         // 1 once any cell carries a painted local style (relief, cracks, banding, face rock share)
-    cleanStones: f32,     // Archipelago: no stray stones where Debris is 0 and no scatter is painted (0: as before)
     // Lava bank lines (card B3): how the contour lines break up (all 0: the plain contours).
     bandRelief: f32,      // share of the relief height that bends the lines, so they fold round ribs and lumps
     bandWander: f32,      // phase wander of the lines, in line steps

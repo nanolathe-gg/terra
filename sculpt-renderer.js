@@ -662,7 +662,6 @@ export class TerrainRenderer {
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
     this.f('uFaceDark', variant.has('faceDark') ? Number(variant.get('faceDark')) : 0.0);
     this.f('uFlatBank', variant.has('flatBank') ? Number(variant.get('flatBank')) : 0.0);
-    this.f('uCleanStones', variant.has('cleanStones') ? Number(variant.get('cleanStones')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     this.f('uFlatShadow', variant.has('flatShadow') ? Number(variant.get('flatShadow')) : 0.0);
     this.f('uFlatOcclusion', variant.has('flatOcclusion') ? Number(variant.get('flatOcclusion')) : 0.4);
