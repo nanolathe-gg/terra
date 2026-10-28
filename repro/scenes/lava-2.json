@@ -1,0 +1,11 @@
+{"biome": "lava", "source": {"map": "red hot lava", "x": 1408, "y": 1600},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[380,40],[560,80]], {"card": {"diameter": 280, "amount": 50, "roughness": 20}}],
+  ["hill", [[900,420],[1060,430]], {"card": {"diameter": 320, "amount": 52, "roughness": 20}}],
+  ["hill", [[265,830]], {"card": {"diameter": 70, "amount": 26, "roughness": 20}}],
+  ["deep", [[400,300],[430,420]], {"card": {"diameter": 160, "roughness": 15, "fingers": 40}}],
+  ["deep", [[480,520],[560,640]], {"card": {"diameter": 280, "roughness": 15, "fingers": 40}}],
+  ["deep", [[560,660],[880,630]], {"card": {"diameter": 110, "roughness": 15, "fingers": 40}}],
+  ["deep", [[420,240],[560,200],[630,170],[700,60],[740,-20]], {"card": {"diameter": 70, "roughness": 15, "fingers": 40}}]
+ ]}

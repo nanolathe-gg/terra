@@ -601,6 +601,7 @@ export class TerrainRenderer {
     this.f('uFaceEdge', variant.has('faceEdge') ? Number(variant.get('faceEdge')) : 0.8);
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
+    this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
@@ -688,6 +689,7 @@ export class TerrainRenderer {
     set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandLine', number('bandLine', 0.5));
+    set('uBandWidth', number('bandWidth', 0));
     set('uBandStyle', number('bandStyle', 0), 'i');
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', Boolean(this.config.textures.beach));

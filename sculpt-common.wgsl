@@ -111,6 +111,7 @@ struct Uniforms {
     faceEdge: f32,
     mossFromGround: f32,
     lightCap: f32,
+    shadeDepth: f32,      // share of the directional shading kept (1: all)
     footRim: f32,
     crevice: f32,
     dither: f32,
@@ -173,6 +174,7 @@ struct Uniforms {
     bandSpacing: f32,     // height between bands, height units
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser
+    bandWidth: f32,       // bank lines (style 1): width at half depth, px (0: 1.6)
     sun: vec3f,           // the renderer's light, for lit crack walls
     crackMinor: f32,      // share of minor cracks inside blocks
     crackHairline: f32,   // share of hairline crazing

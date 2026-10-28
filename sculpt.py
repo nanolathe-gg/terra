@@ -26,7 +26,7 @@ KNOB_DEFAULTS = dict(
     groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
-    flatShadow=0, flatOcclusion=.4, lightCap=1.13,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1,
     faceVariation=.8, northFace=.7, mesaFlank=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
@@ -37,9 +37,9 @@ KNOB_DEFAULTS = dict(
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5,
-    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWater=0, sandBanding=0, sandBandSpacing=2,
+    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
-    fingers=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    fingers=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -85,8 +85,20 @@ WORLD_KNOBS = {
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=5, bandLine=.9,
-                 northFace=.7, fingers=1, worms=0, shoreEdge=1, slopeTexture=0),
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=5, bandLine=1,
+                 northFace=.7, fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
+                 # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
+                 bankPx=60,
+                 # Line cores are near black (luma 15-27 in 55-60 ground) and
+                 # ~2.5 px wide at half depth (measure/lava_bands.py lines
+                 # profiles); the thin 1.6 px V at 0.75 darkness read as faint
+                 # grain on the ground's palette noise.
+                 bandWidth=2.6, crackDark=.95),
+    # shadeDepth stays 1 on Lava: directional shading varies by map and
+    # window (luma on the east-west height gradient: 6-9 per unit slope on
+    # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle
+    # window (retail 7.6, ours 9.3) but pushed Red Hot Lava and Two Hills
+    # windows further away (retail 14.6 and 16.9; ours 12.9 and 12.3 at 1).
     # Crystal: dead-level violet ground (the flat sections sit at one height
     # or within 82-87), crater walls and rough ridges crazed by a near-black
     # polygonal crack web, plates rather than rills by eye, and no sand or
