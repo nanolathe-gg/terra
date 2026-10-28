@@ -215,6 +215,47 @@ fn slopeMark(pixel: vec2f, density: f32) -> f32 {
     return mark;
 }
 
+// Painted material masks (card C5). paintCoverage turns the planes into 0..1
+// coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
+// painted border breaks up as painted sand's does; an unpainted cell (raw 0)
+// stays exactly 0. Every colour is one the world already draws: its rock, its
+// slope cover (moss), its lightest ground or beach (snow), its ground darkened
+// as the shoreline band darkens it (wet).
+fn paintCoverage(p: vec2f) -> vec4f {
+    let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
+    let edge = ((terrainNoise(p * 0.5 + vec2f(21.0, 55.0)).r - 0.5) * 0.46 + (terrainNoise(p * 2.2 + vec2f(7.0, 99.0)).g - 0.5) * 0.20)
+             * smoothstep(vec4f(0.0), vec4f(0.2), raw);
+    return smoothstep(vec4f(0.30), vec4f(0.70), raw + edge);
+}
+// The lightest of the world's ground and beach materials, grain damped (snow
+// lies smoother than the ground it covers) and frosted: lifted 55% toward white,
+// as the sand block lifts the rock's colour by Sand light, so a dark ground
+// still reads as snow with its own tint. Lift 0 would be the bare material.
+fn snowMaterial(pixel: vec2f) -> vec3f {
+    const luma = vec3f(0.299, 0.587, 0.114);
+    var snow = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
+    var mean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
+    let beachMean = select(u.beachTexMean, u.beachBase.rgb, u.beachBase.a > 0.5);
+    if (u.beach != 0 && dot(beachMean, luma) > dot(mean, luma)) {
+        snow = based(pixelSampleLayer(slopeFringeTex, slopeFringeSamp, pixel, vec2f(textureDimensions(slopeFringeTex, 0)), 2).rgb, u.beachTexMean, u.beachBase);
+        mean = beachMean;
+    }
+    return saturate(mix(mix(snow, mean, 0.50), vec3f(1.0), 0.55));
+}
+// Moss: the world's slope cover (leaning toward its ground by Moss from
+// ground, as the face blend does), its brightness grain widened about the
+// cover's mean (not its hue, which would speckle) and a little darker, so a
+// patch reads as clumpy moss rather than ground.
+fn mossMaterial(pixel: vec2f) -> vec3f {
+    const luma = vec3f(0.299, 0.587, 0.114);
+    let cover = based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase);
+    let ground = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
+    let mean = mix(select(u.slopeTexMean, u.slopeBase.rgb, u.slopeBase.a > 0.5), select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5), u.mossFromGround);
+    let face = mix(cover, ground, u.mossFromGround);
+    let grain = dot(face, luma) / max(dot(mean, luma), 0.02);
+    return saturate(face * (1.0 + (grain - 1.0) * 0.8) * 0.85);
+}
+
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -623,6 +664,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let onRaised = smoothstep(u.strataZones[0].x, u.strataZones[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, painted, u.strata * u.strataContrast * onRaised);
     }
+    // Painted masks (card C5), after the world's own beds and before sand,
+    // which covers them. Rock also counts as exposed for the stones below.
+    var painted = vec4f(0.0);
+    if (u.paintOn != 0) {
+        painted = paintCoverage(p);
+        material = mix(material, rock, painted.x);
+        material = mix(material, snowMaterial(pixel), painted.y);
+        material = mix(material, mossMaterial(pixel), painted.w);
+        exposed = max(exposed, painted.x);
+    }
     if (u.reliefMode == 1) {
         // Procedural sand: a colour with two scales of grain, so it needs no
         // sampled art. Coverage comes from the bake.
@@ -684,6 +735,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         flatBank = u.flatBank * step(u.sea, bh) * (1.0 - smoothstep(u.base - 0.5, u.base + 0.5, bh));
     }
     material *= 1.0 - nearWater * 0.17 * (1.0 - flatBank);
+    // Painted wet or dark ground darkens as the shoreline band does, twice as strongly.
+    material *= 1.0 - painted.z * 0.34;
     let crystalMask = crystalField(p);
     if (crystalMask > 0.05) {
         // Retail Crystal (measure/crystal_geometry.py): flat tops take the

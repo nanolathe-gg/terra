@@ -490,8 +490,14 @@ export class TerrainRenderer {
   // painted; paintOn tells the shaders whether to read the texture at all.
   setMasks(planes) {
     const n = this.grid * this.grid;
+    // Four cells a read: this runs every frame a shape is dragged, and scanning
+    // five unpainted planes byte by byte cost 2 ms.
     let any = 0;
-    for (const a of planes) for (let i = 0; i < n && !any; i++) if (a[i]) any = 1;
+    for (const a of planes) {
+      const words = new Int32Array(a.buffer, a.byteOffset, n >> 2);
+      for (let i = 0; i < words.length && !any; i++) if (words[i]) any = 1;
+      for (let i = n & ~3; i < n && !any; i++) if (a[i]) any = 1;
+    }
     if (!any && !this.maskUploaded) return;
     this.fieldsDirty = true;
     if (this.maskBytes?.length !== n * 8) this.maskBytes = new Int8Array(n * 8);
