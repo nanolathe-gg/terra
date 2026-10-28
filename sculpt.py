@@ -137,6 +137,15 @@ KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight
 KNOB_DEFAULTS.update(hillLobes=0, hillSteps=8)
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
 KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
+# E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
+# a glint read on near-white ice (0: the lobe only adds light).
+KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
+# E6, Moon: pits on raised ground and slopes (0: none; the earlier look is wrinkles .8, worms .4, cracks .35 with no pits).
+KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
+# E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
+KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
+# E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
+KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -281,13 +290,22 @@ WORLD_KNOBS = {
     # Crisp dark marks on slopes, measured by measure/slope_marks.py on eight
     # Lunar maps: median ~5.4% of shaded 0.4-0.8 slopes in 1-40 px marks
     # (2.0-7.5% by map), ~1.9% of lit ones; long axis ~25-30 deg off vertical.
-    'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
+    # Card E6: retail's hills and crater walls are one rough, pitted surface from crest to
+    # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
+    # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
+    'moon': dict(crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+                 worms=0, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
                  # connected wrinkles and pits, so the joined wrinkles replace them.
-                 slopeMarks=0, wrinkles=.8),
+                 slopeMarks=0, wrinkles=0,
+                 # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
+                 # faint sheen with a fine round grain there (the plain keeps its own grain).
+                 pockmark=1, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
+                 shineGround=0, shineGroundSharp=12, shineGroundRough=.12, shineGroundScale=3,
+                 shineSlope=.06, shineSlopeSharp=30, shineSlopeRough=.12, shineSlopeScale=3,
+                 shineRock=.06, shineRockSharp=30, shineRockRough=.12, shineRockScale=3),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'
@@ -399,7 +417,7 @@ WORLD_KNOBS = {
     # sections, see sculpt_section_biome.py 'ice').
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
-    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=.2, crackMajor=.4, crackMinor=.3, crackHairline=.2,
+    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
                 crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
@@ -410,7 +428,20 @@ WORLD_KNOBS = {
                 # height 4 keeps the frost over the water level with the bank behind it
                 # (14 made a dark wall there); frostWet 1 keeps the band white instead of
                 # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
-                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=7, plateHeight=4, frostWet=1),
+                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=5, plateHeight=4, frostWet=1,
+                # Card E6: retail's common ice mountain (Etorrep Glacier, Polar Range) is one monotone,
+                # very rough, shiny slate-blue ice lit strongly: every face is the rock art (contrast
+                # .55) from the first slope to the crest, with a fine grain 2.5 px wide (stretch 2)
+                # that glints, no cracks, little lumpy relief, the shade kept blue and a lower ambient so
+                # the light and shade read strongly. Earlier look (snow and slate interleaved, cracks):
+                # the Ice variant 'snow'; retail's other type (ice-1) is the variant 'crystal'.
+                iceSlate=1, mineralDetail=.55, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
+                lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2,
+                shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5,
+                # Card E6, frost band against retail ice-1 (x330-430, 32-132 px inland): luma s.d. 52
+                # against 42 and blue gaps in .22 of the pixels against .05, so finer needles in more
+                # patches and small melt pockets, half again as many.
+                frostNeedles=.8, frostGaps=.3, frostGapReach=.7, frostGapSize=7),
 }
 
 
@@ -453,11 +484,33 @@ WORLD_VARIANTS = {
                       # rough blue-white grain (ground pattern contrast 2 gives it).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0)),
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0,
+                                 # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
+                                 iceSlate=0, mineralDetail=1, reliefAmount=.5, reliefScale=28, reliefLumps=.7, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                 shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
+        # Crystal mountains (card E6, retail ice-1): slate ruled with straight dark strokes in
+        # domains, snow-white lumps standing on the raised ground, soft relief, no glint.
+        'crystal': dict(label='Crystal mountains: straight strokes',
+                        knobs=dict(iceCrystal=1, iceCrest=.3, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
+        # Snow and slate (the mountains before card E6): white snow cover and dark slate interleaved,
+        # carved cracks, no sheen.
+        'snow': dict(label='Snow and slate: cracked mountains',
+                     knobs=dict(iceSlate=0, mineralDetail=1, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
+                                lightCap=1.13, ambient=.42, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white
         # snow) are not here: the dark faces come from the block's own shading,
         # which the colour knobs only reach through the tops (a darker crystal
         # colour darkened the top, not the sides). See NOTES, stage 3.
+    },
+    'moon': {
+        # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
+        # carved cracks, no pits and no sheen.
+        'cracked': dict(label='Cracked slopes: smooth tops',
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, shineGate=0, shineWhite=.35, shineStretch=1,
+                                   shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
+                                   shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
+                                   shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
     },
     'zhon': {
         # The river family (card B4): the reproduction windows' sections are

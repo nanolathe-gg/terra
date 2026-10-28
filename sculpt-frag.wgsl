@@ -298,6 +298,69 @@ fn wrinkleLines(pixel: vec2f, along: vec2f, across: vec2f, keep: f32, sun: vec2f
     return vec2f(dark, lit * (1.0 - dark));
 }
 
+// Moon pockmarks (card E6). Retail's hills and crater walls are one rough
+// pitted surface from crest to foot, with no cracks: small dark pits about
+// 2-3 px wide and 3-4 px tall, leaning with the retail glint axis, packed
+// close on shaded faces (near black on dark ground) and thin on lit ones. One
+// pit per cell of a lattice stretched along that axis, jittered and sized per
+// cell; density is the share of cells that hold one. Returns 0..1.
+fn pockPits(pixel: vec2f, size: f32, density: f32) -> f32 {
+    // Retail's pits cluster and thin in patches ~40 px across, so the lattice's evenness never shows.
+    let clump = 0.55 + 0.9 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
+    var pit = 0.0;
+    for (var layer = 0; layer < 2; layer++) {
+        // Layer 1: a finer, sparser set between the large pits.
+        let cell = select(size, size * 0.55, layer == 1);
+        let weight = select(1.0, 0.7, layer == 1);
+        let keep = select(density, density * 0.7, layer == 1) * clump;
+        let q = vec2f(dot(pixel, SHINE_ACROSS) / cell, dot(pixel, SHINE_ALONG) / (cell * 1.4));
+        let c = vec2i(floor(q));
+        for (var j = -1; j <= 1; j++) {
+            for (var i = -1; i <= 1; i++) {
+                let k = c + vec2i(i, j);
+                let r = markHash(k + vec2i(311 + 700 * layer, 977));
+                if (r.x >= keep) { continue; }
+                let centre = vec2f(k) + 0.15 + 0.7 * r.yz;
+                let d = (q - centre) / vec2f(mix(0.18, 0.4, r.w), mix(0.18, 0.4, fract(r.w * 7.3)));
+                pit = max(pit, weight * (1.0 - smoothstep(0.55, 1.0, dot(d, d))));
+            }
+        }
+    }
+    return pit;
+}
+
+// Ice crystal mountains (card E6). Retail's second ice mountain (ice-1) is slate
+// ruled with straight dark strokes, 1-2 px wide and 8-40 px long, spaced 3-6 px, in
+// domains ~36 px across that each keep one of three directions (two steep, one
+// shallow, as the window's strokes run); the strokes break into segments. Domains
+// are the nearest of a jittered lattice's points. Returns 0..1, 1 on a stroke.
+fn iceHatch(pixel: vec2f) -> f32 {
+    let cell = 36.0;
+    let c = vec2i(floor(pixel / cell));
+    var best = 1e9;
+    var id = vec4f(0.0);
+    var home = c;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let k = c + vec2i(i, j);
+            let r = markHash(k + vec2i(17, 53));
+            let d = length(pixel - (vec2f(k) + 0.15 + 0.7 * r.xy) * cell);
+            if (d < best) { best = d; id = r; home = k; }
+        }
+    }
+    // Steep leaning right (72 degrees) in 45% of domains, steep leaning left (110) in 40%, shallow (29) in 15%.
+    let angle = select(select(0.5, 1.92, id.z < 0.85), 1.26, id.z < 0.45) + (id.w - 0.5) * 0.25;
+    let along = vec2f(cos(angle), sin(angle));
+    let across = vec2f(-along.y, along.x);
+    let s = dot(pixel, across) / mix(3.6, 6.0, fract(id.w * 13.7));
+    let band = abs(fract(s) - 0.5);
+    let stroke = 1.0 - smoothstep(0.18, 0.32, band);
+    let rs = markHash(vec2i(i32(floor(s)), home.x * 7 + home.y * 13) + vec2i(101, 7));
+    // Some domains are bare, some strokes of a domain are missing, and the rest break into runs of 16-42 px.
+    let run = dot(pixel, along) / mix(16.0, 42.0, rs.x) + rs.y * 10.0;
+    return stroke * step(0.3, id.x) * step(0.35, rs.z) * step(0.45, fract(run));
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -415,7 +478,7 @@ fn shineNoise(q: vec2f) -> vec2f {
 // material code already settled (rock: exposed; slope cover: the face blend
 // and the sampled slope cover; sand and crystal from their baked fields).
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32, faceCover: f32,
-             slopeCover: f32, crystalMask: f32, sunSeen: f32) -> vec4f {
+             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32) -> vec4f {
     var sand = 0.0;
     if (u.reliefMode == 1) { sand = smoothstep(0.35, 0.95, bakedFields(p).a); }
     if (u.beach != 0) { sand = max(sand, smoothstep(0.25, 0.75, beachField(p))); }
@@ -441,6 +504,11 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     // Sharpness follows the gloss that uses it, grain scale the roughness.
     focus = max(focus / max(gloss, 1e-4), 1.0);
     scale = max(scale / max(rough, 1e-4), 1.0);
+    // Card E6: the sheen and its grain only sit on raised ground and slopes (Moon's plain keeps its own
+    // grain); shineGate 0 is every world's earlier shine.
+    let reach = mix(1.0, landform, u.shineGate);
+    rough *= reach;
+    gloss *= reach;
     var micro = g;
     if (rough > 0.0) {
         let q = vec2f(dot(pixel, SHINE_ACROSS) / scale, dot(pixel, SHINE_ALONG) / (scale * max(u.shineStretch, 1.0)));
@@ -452,6 +520,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     let litAfter = max(0.0, dot(grained, u.light));
     let lit = clamp((u.ambient + 0.95 * litAfter) / (u.ambient + 0.95 * litBefore), 0.5, 1.6);
     var glint = vec3f(0.0);
+    var dim = 1.0;
     if (gloss > 0.0) {
         let halfway = normalize(u.light + SHINE_VIEW);
         let lobe = pow(max(dot(grained, halfway), 0.0), focus) * smoothstep(0.0, 0.15, dot(grained, u.light));
@@ -460,8 +529,13 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
         let body = smoothstep(0.04, 0.22, top);
         let tint = mix(material / max(top, 0.05), vec3f(1.0), u.shineWhite);
         glint = tint * (gloss * lobe * sunSeen * body);
+        // Card E6, shine on near-white ice: adding light to a body already near white only clips, so
+        // the glint has nothing to stand against and the surface reads rough, not shiny. The headroom
+        // takes light off the body wherever the lobe is low and leaves it at the lobe's peak, so a
+        // glint is a bright fleck over a body a little duller than the plain's.
+        if (u.shineHeadroom > 0.0) { dim = 1.0 - u.shineHeadroom * clamp(gloss, 0.0, 1.0) * (1.0 - clamp(lobe, 0.0, 1.0)) * body; }
     }
-    return vec4f(glint, lit);
+    return vec4f(glint, lit * dim);
 }
 
 // E10 (Lava): retail draws the step between two shore layers as a dark line whichever way it faces, where a
@@ -1036,6 +1110,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
         var share = mix(u.rockShare.x, u.rockShare.y, smoothstep(u.faceSlope.y, u.faceSlope.y * 1.8, slope));
         var lowGate = lowBank;
+        // Ice monotone mountains (card E6): retail's common ice mountain is one slate-blue material
+        // from the first slope to the crest, not snow and rock interleaved: all face, all rock.
+        if (u.iceSlate > 0.0) {
+            face = max(face, smoothstep(0.12, 0.3, faceSlope) * (1.0 - route) * (1.0 - sandBar) * u.iceSlate);
+            share = mix(share, 1.0, u.iceSlate);
+        }
         // Painted face style (card C5): below 0 less of the face is rock, above 0 more.
         if (u.styleOn != 0) {
             let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));
@@ -1260,6 +1340,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let dark = 1.0 - smoothstep(0.45, 0.70, dot(material, vec3f(0.299, 0.587, 0.114)));
         material *= mix(1.0, u.hillLight, smoothstep(u.base + 1.0, u.base + 10.0, baseHeight(p)) * dark);
     }
+    // Ice crystal mountains (card E6): snow-white lumps ~30-50 px across stand on the raised ground (retail ice-1:
+    // six or seven rounded white caps on one mountain), a ragged edge, taken before the light so they shade as snow.
+    if (u.iceCrest > 0.0) {
+        let lumps = terrainNoise(p * 0.05 + vec2f(31.0, 7.0)).r + (n.b - 0.5) * 0.12;
+        let raised = smoothstep(u.base + 12.0, u.base + 40.0, h);
+        let crest = smoothstep(0.0, 0.05, lumps - mix(0.75, 0.45, u.iceCrest)) * raised;
+        material = mix(material, snowMaterial(pixel), crest);
+        exposed *= 1.0 - crest;
+    }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
         // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
@@ -1267,16 +1356,29 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let fall = clamp(1.0 - shading, 0.0, 1.0) * u.shadeBlue;
         color = material * (shading + fall * vec3f(0.0, 0.35, 0.85));
     }
+    // Raised or sloped ground (card E6): the footprint of the shine gate and of Moon's pockmarks; level plain is 0.
+    // Raised ground counts whole, tops included, where a crater's floor counts only where it slopes.
+    var landform = 1.0;
+    if (u.shineGate > 0.0 || u.pockmark > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
+    if (u.iceCrystal > 0.0) {
+        // Straight strokes over the rock faces, darker the more rock shows (card E6; after shadeBlue, which rebuilds the colour).
+        color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
+    }
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }
         color = color * shine.w + shine.xyz;
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
+    if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
+        let shaded = 1.0 - clamp(shading, 0.0, 1.0);
+        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, shaded));
+        color *= 1.0 - pits * landform * mix(0.5, 0.92, shaded);
+    }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on
         // lit faces of the same slope).

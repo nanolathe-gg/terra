@@ -304,7 +304,8 @@ export class TerrainRenderer {
     this.f('uRockStart', threshold - feather * 0.5);
     this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
-    this.f('uMineralDetail', variant.get('grain') === 'strong' ? 2.4 : 1.0);
+    // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
+    this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1));
     const rockMean = variant.get('rock') === 'hill' ? material.hillRockMeanRGB : material.rockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
     this.i('uShapeCoverage', variant.get('coverage') === 'form');
@@ -778,6 +779,14 @@ export class TerrainRenderer {
     this.f('uFlowStreak', variant.has('flowStreak') ? Number(variant.get('flowStreak')) : 0.5);
     this.f('uFlowStreakLen', variant.has('flowStreakLen') ? Number(variant.get('flowStreakLen')) : 140);
     this.f('uFlowBank', variant.has('flowBank') ? Number(variant.get('flowBank')) : 0.9);
+    // E6: shine roughness gate and headroom (0: the earlier shine exactly).
+    this.f('uShineGate', variant.has('shineGate') ? Number(variant.get('shineGate')) : 0);
+    this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
+    this.f('uPockmark', variant.has('pockmark') ? Number(variant.get('pockmark')) : 0);
+    this.f('uPockSize', variant.has('pockSize') ? Number(variant.get('pockSize')) : 5);
+    this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
+    this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
+    this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
     this.fieldsDirty = true;
   }
 
