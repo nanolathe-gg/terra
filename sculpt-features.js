@@ -351,7 +351,7 @@ export async function mountMapFeatures(api) {
 
   function draw(ink,view=null) {
     controls.disabled=!enabled(); ink.save(); ink.imageSmoothingEnabled=false;
-    const sorted=placements.map((p,i) => ({p,i,d:definition(p.name)})).filter(({p,d}) => { if (!view) return true; const at=featurePoint(p,d),reach=Math.max(d.sprite?.width||0,d.sprite?.height||0,d.shadow?.width||0,d.shadow?.height||0,32); return at.x+reach>=view.x && at.x-reach<=view.x+view.width && at.z+reach>=view.y && at.z-reach<=view.y+view.height; }).sort((a,b) => (a.p.z*CELL+a.d.footprintZ*8)-(b.p.z*CELL+b.d.footprintZ*8) || ordered(a.p,b.p));
+    const sorted=placements.map((p,i) => ({p,i,d:definition(p.name)})).filter(({p,d}) => { if (!view) return true; const at={x:p.x*CELL+d.footprintX*8,z:p.z*CELL+d.footprintZ*8+config.baseHeight/2},reach=Math.max(d.sprite?.width||0,d.sprite?.height||0,d.shadow?.width||0,d.shadow?.height||0,32)+128; return at.x+reach>=view.x && at.x-reach<=view.x+view.width && at.z+reach>=view.y && at.z-reach<=view.y+view.height; }).sort((a,b) => (a.p.z*CELL+a.d.footprintZ*8)-(b.p.z*CELL+b.d.footprintZ*8) || ordered(a.p,b.p));
     for (const {p,d} of sorted) {
       const at=featurePoint(p,d);
       for (const [sprite,translucent] of [[d.shadow,d.shadTrans],[d.sprite,d.animTrans]]) {
