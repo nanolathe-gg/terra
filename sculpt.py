@@ -109,6 +109,22 @@ KNOB_DEFAULTS.update(faceRock=0, rockMoss=1, rockDetail=1, shineOutside=1,
                      bedFlow=1, bedBend=0, bedPunch=0,
                      scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
                      facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
+# E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
+# shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
+# its depth with broad noise so the band's width and outline vary along the shore; bedFlat
+# lights the lit bed by its own relief only (no slope shading across the shelf); bedMottle is
+# the bed's mid-scale mottle as a share of brightness.
+KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0, bedMottle=0)
+# E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
+# crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
+# bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
+# rocky faces are cut from ~1); bedDots / bedDotCell draw dark dots in the lit bed.
+KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots=0, bedDotCell=14)
+# E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
+# dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
+# the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
+# the ring texture's own); bedMottleScale sizes the bed's mottle lumps against Green's.
+KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, bedMottleScale=1, stepSoftPx=1)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -158,7 +174,13 @@ WORLD_KNOBS = {
                   bedFlow=0, bedBend=2.5, bedPunch=1,
                   scratchDepth=3.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
                   facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,
-                  shineRock=.5, shineRockSharp=14, shineRockRough=.12, shineRockScale=5, shineWhite=1, shineOutside=.3),
+                  shineRock=.5, shineRockSharp=14, shineRockRough=.12, shineRockScale=5, shineWhite=1, shineOutside=.3,
+                  # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
+                  # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
+                  # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
+                  # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
+                  # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
+                  stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1, bedMottle=.08),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
@@ -170,7 +192,17 @@ WORLD_KNOBS = {
                 # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
                 # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
                 # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
-                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1),
+                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1,
+                # E11 (round 7 report: "darker dots", "cracks too soft", "edge against the deep
+                # water seems shaded"). Retail's lilac lake has dark dots of 3-4 px every 12-20 px
+                # (dark components >= 3 px average 6.5-11 px, ours 4.3-6.7); the step is a true
+                # threshold. Under a cracked-bed stroke (red-3's shelf) it sits at depth 14, where
+                # retail's lilac share falls from .91 (0-6) / .66 (6-12) to .27 (12-18) / .17;
+                # the lake (red-2) is lilac to its full depth 24 and keeps the world's 22. The
+                # cracked bed is cut as rocky ground and keeps its crevices through the tint
+                # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
+                stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6, bedMottle=.07,
+                crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
@@ -194,7 +226,17 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1.25, ringFade=1, fringeStyle='rings',
-                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20),
+                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20,
+                        # E11 (round 7 report: "weird black/dark lines around the hills" and "more
+                        # noticeable circle features in the red fringe"): the dark lines were the
+                        # first band risers on the hill's foot (banding 0 removes them, crack knobs do
+                        # not), so band lines start 8 units above the base; retail's fringe is 8-12
+                        # thin wavy crimson lines 2-4 px apart hugging the hill's outline, which the
+                        # contour pass draws from the mineral field's falloff (so they follow the
+                        # outline, not the screen). Reef bars carry retail's dappled texture
+                        # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
+                        bandFoot=8, ringContrast=.55, ringCount=12, ringSize=.3,
+                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottle=.09, bedMottleScale=1.2),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient

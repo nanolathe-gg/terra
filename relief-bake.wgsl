@@ -909,7 +909,10 @@ fn bake(p: vec2f) -> vec4f {
     // doubles it up to twice and never drops below 0.8 times the painted amount.
     let banding = select(u.banding * (1.0 + style.z), max(u.banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
     if (u.bandStyle != 1) { bandsAt = contourBands(p, h, slope, fall, banding); }
-    let bands = bandsAt.xy * (1.0 - route);
+    var bands = bandsAt.xy * (1.0 - route);
+    // E11: the dark lines round Archipelago's hills were the first contour risers on the
+    // hill's foot; retail has red fringe lines there instead (fringeContours draws those).
+    if (u.bandFoot > 0.0) { bands.y *= smoothstep(u.base + 0.5 * u.bandFoot, u.base + u.bandFoot, h); }
     height += bands.x;
     var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
@@ -943,7 +946,7 @@ fn bake(p: vec2f) -> vec4f {
     var crackedBed = false;
     if (u.waterOn != 0 && h <= u.sea + 1.0) { crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5; }
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
-    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, 0.8), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
+    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, u.bedCrackSlope), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
     var broken = 0.0;

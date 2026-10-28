@@ -1,13 +1,14 @@
 {"biome": "red", "source": {"map": "gods of war", "x": 256, "y": 576},
  "ground": true, "query": "",
  "strokes": [
-  ["deep", [[740, -190], [1240, 340]], {"card": {"waterBed": 3, "diameter": 820, "roughness": 30}}],
-  ["deep", [[460, -100], [740, 190], [940, 440], [1140, 660]], {"card": {"waterBed": 3, "diameter": 620, "roughness": 30}}],
-  ["deep", [[60, 90], [200, 60], [330, 120], [450, 220], [510, 320], [535, 420], [600, 520], [730, 590], [860, 690], [980, 820], [1080, 980]], {"card": {"waterBed": 3, "diameter": 560, "roughness": 30, "profile": 1, "apronPx": 30, "apronHeight": 15, "facePx": 90, "faceCurve": 0, "shelfPx": 70, "shelfDepth": 12, "shelfSteps": 0}}],
+  ["deep", [[740, -190], [1240, 340]], {"card": {"waterBed": 3, "diameter": 820, "roughness": 30, "shelves": 0}}],
+  ["deep", [[460, -100], [740, 190], [940, 440], [1140, 660]], {"card": {"waterBed": 3, "diameter": 620, "roughness": 30, "shelves": 0}}],
+  ["deep", [[60, 90], [200, 60], [330, 120], [450, 220], [510, 320], [535, 420], [600, 520], [730, 590], [860, 690], [980, 820], [1080, 980]], {"card": {"waterBed": 3, "diameter": 560, "roughness": 30, "profile": 1, "apronPx": 30, "apronHeight": 15, "facePx": 90, "faceCurve": 0, "shelfPx": 190, "shelfDepth": 8, "shelfSteps": 0, "shelves": 0}}],
   ["deep", [[-60, 1060], [60, 880]], {"card": {"waterBed": 3, "diameter": 360, "roughness": 40}}],
   ["paint", [[260, 240], [380, 330], [460, 430], [480, 520]], {"card": {"diameter": 150, "amount": 100, "paintChannel": 1}}],
   ["paint", [[450, 560], [460, 680]], {"card": {"diameter": 140, "amount": 100, "paintChannel": 1}}],
   ["paint", [[560, 740], [700, 770], [800, 880]], {"card": {"diameter": 130, "amount": 100, "paintChannel": 1}}],
   ["paint", [[60, 700], [160, 800], [240, 880]], {"card": {"diameter": 200, "amount": 100, "paintChannel": 1}}],
-  ["paint", [[20, 270], [130, 290]], {"card": {"diameter": 120, "amount": 100, "paintChannel": 1}}]
+  ["paint", [[20, 270], [130, 290]], {"card": {"diameter": 120, "amount": 100, "paintChannel": 1}}],
+  ["deep", [[640, 330], [770, 520]], {"card": {"waterBed": 3, "diameter": 300, "roughness": 30, "shelves": 0}}]
  ]}

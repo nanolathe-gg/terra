@@ -478,17 +478,104 @@ fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) 
     return smoothstep(at - reach, at + reach, d);
 }
 
+// E11: value noise for the shelf's wander (smooth, 0..1, four lattice hashes).
+fn shelfHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
+fn shelfNoise(q: vec2f) -> f32 {
+    let i = floor(q);
+    let f = fract(q);
+    let s = f * f * (3.0 - 2.0 * f);
+    return mix(mix(shelfHash(i), shelfHash(i + vec2f(1.0, 0.0)), s.x), mix(shelfHash(i + vec2f(0.0, 1.0)), shelfHash(i + vec2f(1.0, 1.0)), s.x), s.y);
+}
+
+// The shallow-to-deep step with a true threshold (E11, Green and Red). The ragged
+// stairs are pixel blocks in the picture, not in depth: depth units would turn a
+// flat shelf into a wide fuzzy band (green-3's blurry middle), so the 2-px block
+// jitter is scaled by the bed's own gradient. The step's depth wanders with broad
+// noise (shelfWander units over shelfScale px), so the band's outline and width
+// vary along the shore instead of following it at a fixed offset.
+fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32, cracked: bool) -> f32 {
+    var at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
+    if (cracked && u.crackedStep > 0.0) { at = u.crackedStep; }
+    let grad = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
+                                  baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
+    let block = floor(pixel / 2.0);
+    let jitter = fract(sin(dot(block, vec2f(39.3467, 11.135))) * 43758.5453) - 0.5;
+    let q = p / max(u.shelfScale, 8.0);
+    let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
+    // The wander fades in with depth, so the shore side of the band keeps its own width.
+    let d = depth - jitter * 4.0 * max(grad, 0.05);
+    return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
+}
+
+// E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
+// lines 2-4 px apart that follow the hill's outline (a hill's border, not a texture laid on
+// the screen). The mineral field's own falloff is the outline's distance measure: the
+// weathering worker's source falls off about exponentially from the hill, so lines at equal
+// steps of its logarithm are equally spaced in px, whatever the hill's shape. Pixel width
+// comes from the field's gradient. field: the material field's source (.b); returns the
+// line colour and its weight.
+fn fringeField(q: vec2f) -> f32 {
+    return log(max(materialFieldAt((q / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid).b, 1e-4));
+}
+fn fringeContours(p: vec2f, field: f32) -> vec4f {
+    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return vec4f(0.0); }
+    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
+    if (field < outer * 0.5 || field > 0.65) { return vec4f(0.0); }
+    const e = 2.0;
+    let grad = 0.5 / e * length(vec2f(fringeField(p + vec2f(e, 0.0)) - fringeField(p - vec2f(e, 0.0)),
+                                      fringeField(p + vec2f(0.0, e)) - fringeField(p - vec2f(0.0, e))));
+    let scale = max(u.ringCount, 1.0) / max(log(0.3 / outer), 0.5);
+    let wobble = (shelfNoise(p / 7.0 + 13.0) - 0.5) * 1.7 + (shelfNoise(p / 2.6 + 71.0) - 0.5) * 0.8;
+    let k = -log(max(field, 1e-4)) * scale + wobble;
+    let rate = max(grad * scale, 0.02);
+    let f = fract(k);
+    let line = 1.0 - smoothstep(0.3, 0.9, min(f, 1.0 - f) / rate);
+    let dash = smoothstep(0.25, 0.6, shelfNoise(p / 8.0 + 91.0));
+    let zone = smoothstep(outer * 0.5, outer * 3.0, field) * (1.0 - smoothstep(0.25, 0.6, field)) * smoothstep(0.04, 0.12, rate);
+    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
+    return vec4f(tone, line * dash * zone * u.ringContrast);
+}
+
+// E11: the lit bed's mid-scale mottle. Retail's shallows are lit ground whose lumps of 4-17 px
+// read as crisp patches, not clouds (luma s.d. after a 5-px blur 5.6-7.5 against ours 2.8-3.9
+// with the fine grain alone), so the noise is cut at a threshold roughened by a pixel hash.
+// pixel: the screen pixel (the grain). Returns -1..1.
+fn bedMottleField(p: vec2f, pixel: vec2f) -> f32 {
+    let z = u.bedMottleScale;
+    let m = shelfNoise(p / (3.2 * z) + 31.0) * 0.5 + shelfNoise(p / (6.5 * z) + 7.0) * 0.3 + shelfNoise(p / (15.0 * z) + 53.0) * 0.2;
+    let grain = fract(sin(dot(floor(pixel), vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
+    return smoothstep(0.3, 0.7, 0.5 + (m - 0.5) * 2.2 + grain * 0.45) * 2.0 - 1.0;
+}
+
+// E11: dark dots in the lit bed. Retail's lilac lake shows small dark dots (3-4 px, one every
+// 12-20 px, blue-purple) that the ground tiles' fine grain does not give (dark components
+// of >= 3 px average 6.5-11 px in retail against 4.3-6.7 in ours). One jittered dot per
+// cell of bedDotCell screen px, a share of cells empty; 0..1 coverage.
+fn bedDotField(pixel: vec2f) -> f32 {
+    let cell = max(u.bedDotCell, 6.0);
+    let c = floor(pixel / cell);
+    let r = vec2f(shelfHash(c + 3.1), shelfHash(c + 91.7));
+    let centre = (c + 0.2 + 0.6 * r) * cell;
+    let radius = 1.5 + 1.0 * shelfHash(c + 47.3);
+    let present = step(0.3, shelfHash(c + 11.9));
+    return present * (1.0 - smoothstep(radius - 0.6, radius + 0.4, length(pixel - centre)));
+}
+
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
 // bedTint is how much of the bed's own colour the tint replaces.
-fn litBed(bed: vec3f) -> vec3f {
+fn litBed(bed: vec3f, cracked: bool) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
     // as soft darker blue, never as black rims), so the dark side carries less.
-    let ratio = clamp(dot(bed, luma) / level, 0.25, 2.0);
-    let light = pow(ratio, select(u.bedContrast * 0.6, u.bedContrast, ratio >= 1.0));
+    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides.
+    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked && u.crackedContrast > 0.0), 2.0);
+    var contrast = u.bedContrast;
+    var darkSide = 0.6;
+    if (cracked && u.crackedContrast > 0.0) { contrast = u.crackedContrast; darkSide = 1.0; }
+    let light = pow(ratio, select(contrast * darkSide, contrast, ratio >= 1.0));
     let tint = u.shallowMean * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
@@ -644,6 +731,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     let warmGrain = 0.52 - dot(body, vec3f(0.299, 0.587, 0.114));
                     warm = clamp(warm + warmGrain * 0.5 * 4.0 * warm * (1.0 - warm), 0.0, 1.0);
                     transitionGround = mix(transitionGround, body, warm);
+                    let contours = fringeContours(p, sediments.b);
+                    transitionGround = mix(transitionGround, contours.rgb, contours.a);
                     if (u.transitionDetail > 0.0) {
                         let groundLow = textureSampleLevel(grassTex, grassSamp, pixel / 512.0, 3.0).rgb;
                         let ringLow = textureSampleLevel(mineralRingTex, mineralRingSamp, pixel / 512.0, 3.0).rgb;
@@ -672,6 +761,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     var margin = mix(grass, fringe, veil * 0.55);
                     let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
+                    let contours = fringeContours(p, sediments.b);
+                    margin = mix(margin, contours.rgb, contours.a);
                     let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12)
                              * smoothstep(0.02, 0.35, sediments.a);
                     margin = mix(margin, face, core);
@@ -1149,7 +1240,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
-        if (edgeHard > 0.0) { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
+        if (edgeHard > 0.0) {
+            if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
+            else { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
+        }
         let waterSize = vec2f(textureDimensions(waterTex, 0));
         let grain = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
@@ -1162,7 +1256,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // The bed is the level ground under the sun and shade at this pixel: the slope
             // and rock materials of its banks are not drawn through the water.
             // A cracked bed keeps its drawn material, cracks and all.
-            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * shading, color, crackedBed)), bedLit); }
+            // E11 bedFlat: light the bed by its own relief only. A shelf's slope toward the deep
+            // would otherwise shade the pale bed darker over a hundred px and read as blur.
+            var bedShade = shading;
+            if (u.bedFlat > 0.0) {
+                let own = normalize(vec3f(-(g - broad), 1.0));
+                bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
+            }
+            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
+            if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
+            if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed && edgeHard > 0.0) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.

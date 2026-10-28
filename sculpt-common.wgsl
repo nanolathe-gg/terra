@@ -284,6 +284,23 @@ struct Uniforms {
     facetSeam: f32,       // how dark the creases between facets are (0: lit like the facets)
     facetSkew: f32,       // facets' tilt in y as a share of their tilt in x (the picture squeezes steep y tilts: 1 as before, lower keeps them readable)
     facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
+    // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
+    stepSharp: f32,       // Green, Red: the shallow-to-deep step is a true threshold, ragged by pixels (0: the earlier smoothed step)
+    shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
+    shelfScale: f32,      // size of that wander, world px
+    crackedStep: f32,     // Red: depth of the shallow-to-deep step under a cracked-bed stroke (0: the world's own step)
+    crackedContrast: f32, // Red: how much of the cracked bed's light and cracks carry through its tint (0: bedContrast's own, compressed, path)
+    bedCrackSlope: f32,   // Red (bake): the slope the cracked bed's cracks are cut for; the land's cracked faces are steeper (.8: as before)
+    bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
+    bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
+    stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
+    bedMottleScale: f32,  // size of the bed's mottle lumps against Green's (1: 3-15 px; Archipelago's reef bars use larger blotches)
+    bandFoot: f32,        // Archipelago (bake): no band lines on the hill's foot below this height above the dry base (0: lines everywhere)
+    ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
+    ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
+    ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
+    bedMottle: f32,       // the lit bed's mid-scale mottle: lit lumps of 4-17 px, as a share of brightness (0: none; Green)
+    bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
