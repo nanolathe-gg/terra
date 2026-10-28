@@ -267,16 +267,19 @@ WORLD_KNOBS = {
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
-                    crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.08, crystalSeam=1,
+                    crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
                     plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=14,
                     # Shine (card E2): retail Crystal is much shinier. Silver-lilac streaks run along
                     # the ground's grain on facets that face the sun's side; tops and the rock and
                     # slope plates round them take a sharp lobe over strong grain, and the level
                     # plain stays matte. Highlights are neutral (retail's brightest entries on the
                     # mounds are grey 155/171/187 and pinkish 187,147,195, not the blue lilac).
-                    shineCrystal=.4, shineCrystalSharp=100, shineCrystalRough=1, shineCrystalScale=8,
-                    shineRock=.3, shineRockSharp=100, shineRockRough=1, shineRockScale=8,
-                    shineSlope=.25, shineSlopeSharp=100, shineSlopeRough=1, shineSlopeScale=8,
+                    # E7 retune after the facets: a broader lobe (sharp 100 -> 70) with less gloss
+                    # (.4/.3/.25 -> .3/.22/.18) and a lighter top (crystalTone 1.08 -> 1.16) puts more
+                    # of the mound at luma 80-130, where retail's tops sit, without lifting the tail.
+                    shineCrystal=.3, shineCrystalSharp=70, shineCrystalRough=1, shineCrystalScale=8,
+                    shineRock=.22, shineRockSharp=70, shineRockRough=1, shineRockScale=8,
+                    shineSlope=.18, shineSlopeSharp=70, shineSlopeRough=1, shineSlopeScale=8,
                     shineStretch=3, shineWhite=1,
                     # E7: crumpled multi-facet column tops.
                     crystalFacet=.7,
