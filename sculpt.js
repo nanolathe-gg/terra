@@ -64,6 +64,8 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:[
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
 // card startStroke builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
 const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
+// Card E8: the kinds whose feet may be ragged and bumpy (baseVary, baseBump).
+const BASE_KINDS=['plateau','offset','hill','mountain'];
 // Line features (card C4): spurs, crest variation and crater rim sectors. All
 // default off; spurs and crest options turn a hill or mountain into a ridge
 // built from tapering pieces (ridgePieces), rim options reshape a crater's rim.
@@ -186,8 +188,8 @@ const SHAPE_FIELDS=[
   ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
   ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
   // E8 (Painted Desert): ragged feet and bumpy aprons.
-  ['baseVary','base-vary','Foot outline raggedness (px)',['plateau','offset'],0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
-  ['baseBump','base-bump','Foot bumps (height units)',['plateau','offset'],0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
+  ['baseVary','base-vary','Foot outline raggedness (px)',BASE_KINDS,0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
+  ['baseBump','base-bump','Foot bumps (height units)',BASE_KINDS,0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
 ];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
@@ -965,10 +967,10 @@ function fissureCell(s,i,wx,wy,lx,ly,cx,cy,t) {
 // (height units, 30, 13 and 6.5 px) ride on the apron and the foot of the face (w: the stroke's rise share
 // here) and leave a plateau's face, cap and the plain alone. Both depend only on the
 // cell's own position in the shape's frame, so replay stays exact.
-// A plateau's shift fades in over its outer half (r from .5 to .95), so its rings stay smooth and
-// only the foot strays; the amount is capped at 15% of the radius so a small butte keeps its shape.
-const baseOutline=(s,lx,ly,r,radius) => Math.min(s.baseVary,.15*radius)*(s.kind==='plateau'?smooth(.5,.95,r):1)*(.6*valueNoise(lx/55,ly/55,s.seed^0x2e83)+.4*valueNoise(lx/21,ly/21,s.seed^0x71d5));
-const baseBumps=(s,lx,ly,w) => s.baseBump*smooth(.03,s.kind==='plateau'?.12:.2,w)*(s.kind==='plateau'?1-smooth(.12,.3,w):1)*(.55*valueNoise(lx/30,ly/30,s.seed^0x4c91)+.3*valueNoise(lx/13,ly/13,s.seed^0x1a77)+.25*valueNoise(lx/6.5,ly/6.5,s.seed^0x63d9));
+// A plateau, hill or mountain takes the shift only over its outer half (r from .5 to .95), so its rings
+// stay smooth and only the foot strays; the amount is capped at 15% of the radius so a small butte keeps its shape.
+const baseOutline=(s,lx,ly,r,radius) => Math.min(s.baseVary,.15*radius)*(s.kind==='offset'?1:smooth(.5,.95,r))*(.6*valueNoise(lx/55,ly/55,s.seed^0x2e83)+.4*valueNoise(lx/21,ly/21,s.seed^0x71d5));
+const baseBumps=(s,lx,ly,w) => s.baseBump*smooth(.03,s.kind==='offset'?.2:.12,w)*(s.kind==='offset'?1:1-smooth(.12,.3,w))*(.55*valueNoise(lx/30,ly/30,s.seed^0x4c91)+.3*valueNoise(lx/13,ly/13,s.seed^0x1a77)+.25*valueNoise(lx/6.5,ly/6.5,s.seed^0x63d9));
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
   const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind)) && experiment.get('edges')==='natural';
@@ -1078,7 +1080,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
     let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
     if (pc) r/=pc.r0+(pc.r1-pc.r0)*t;
-    if (s.baseVary>0 && (s.kind==='plateau' || s.kind==='offset')) r-=baseOutline(s,lx,ly,r,radius)/(radius*width*bankScale);
+    if (s.baseVary>0 && BASE_KINDS.includes(s.kind)) r-=baseOutline(s,lx,ly,r,radius)/(radius*width*bankScale);
     if (waterTool && s.fingers>0 && !(s.fingerCoast>=.5) && r>(s.fingerBlunt>=.5?.1:.25) && r<1.6) {
       // Shift the waterline across the coast band (coast near r 0.67). Thumbs
       // reach tens of px, so their band is set in px, not as a share of a small lake.
@@ -1199,7 +1201,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (s.kind==='shallow' && s.shallowMode==='passage') value=Math.max(base,value);
     }
     else if (s.kind==='smooth') value=base+(s.smoothTarget[i]-base)*w*clamp(s.amount/100,0,1);
-    if (s.baseBump>0 && (s.kind==='plateau' || s.kind==='offset')) value+=baseBumps(s,lx,ly,w);
+    if (s.baseBump>0 && BASE_KINDS.includes(s.kind)) value+=baseBumps(s,lx,ly,w);
     if (s.prof) value+=sectionLift;
     heights[i]=clamp(value,MIN_HEIGHT,MAX_HEIGHT);
     if (s.kind!=='smooth' && value!==base) routes[i]=s.routeBase[i]*(1-influence);
