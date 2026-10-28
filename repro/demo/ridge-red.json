@@ -1,0 +1,105 @@
+{
+ "biome": "red",
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "mountain",
+   [
+    [
+     150,
+     300
+    ],
+    [
+     300,
+     340
+    ],
+    [
+     440,
+     400
+    ],
+    [
+     560,
+     470
+    ],
+    [
+     700,
+     500
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 190,
+     "amount": 55,
+     "roughness": 35,
+     "softness": 100,
+     "crestVary": 70,
+     "crestTaper": 60,
+     "crestJag": 70,
+     "spurCount": 6,
+     "spurLength": 160,
+     "spurSpread": 55,
+     "spurWidth": 110,
+     "spurTaper": 50,
+     "spurHeight": 85
+    }
+   }
+  ],
+  [
+   "mountain",
+   [
+    [
+     200,
+     760
+    ],
+    [
+     360,
+     700
+    ],
+    [
+     520,
+     760
+    ],
+    [
+     660,
+     800
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 150,
+     "amount": 50,
+     "roughness": 20,
+     "softness": 100
+    }
+   }
+  ],
+  [
+   "mountain",
+   [
+    [
+     760,
+     650
+    ],
+    [
+     880,
+     780
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 130,
+     "amount": 40,
+     "roughness": 25,
+     "softness": 100,
+     "crestVary": 60,
+     "crestJag": 30,
+     "spurCount": 3,
+     "spurLength": 100,
+     "spurWidth": 110,
+     "spurTaper": 50
+    }
+   }
+  ]
+ ]
+}

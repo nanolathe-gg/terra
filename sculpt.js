@@ -56,6 +56,11 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:[
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
 // card startStroke builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
 const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
+// Line features (card C4): spurs, crest variation and crater rim sectors. All
+// default off; spurs and crest options turn a hill or mountain into a ridge
+// built from tapering pieces (ridgePieces), rim options reshape a crater's rim.
+const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','crestJag','crestVary','crestTaper','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
+const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.spurCount)>=1 || o.crestJag>0 || o.crestVary>0 || o.crestTaper>0);
 const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
 // Painted masks (card C5): five signed-byte planes per cell, rock, snow or ice,
 // wet ground and moss (0..127 of full) and scatter density (-127..127), where
@@ -86,6 +91,19 @@ const SHAPE_FIELDS=[
   ['shelfPx','sec-shelf-px','Shelf width (px)',['deep','shallow'],0,200,2,1,'A submerged shelf between the waterline and the drop to the bed.'],
   ['shelfDepth','sec-shelf-depth','Shelf depth (units below sea)',['deep','shallow'],0,30,1,1,'How far below the sea the shelf lies (never deeper than the bed).'],
   ['shelfSteps','sec-shelf-steps','Shelf steps',['deep','shallow'],0,6,1,1,'0: one sloping bench; more: layered flat shelves, one below another.'],
+  ['spurCount','spur-count','Spurs',['hill','mountain','crater'],0,12,1,1,'Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape\'s own seed. Each joins its parent at the crest.'],
+  ['spurLength','spur-length','Spur length (px)',['hill','mountain','crater'],20,400,10,1,'Average reach of a spur; each runs from about half to one and a half times this.'],
+  ['spurSpread','spur-spread','Spur angle spread',['hill','mountain','crater'],0,100,5,100,'0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding.'],
+  ['spurWidth','spur-width','Spur width',['hill','mountain','crater'],20,200,5,100,'A spur\'s width at its root, as a share of the ridge\'s own (a crater\'s radius, on a crater); it flares a little where it joins.'],
+  ['spurTaper','spur-taper','Spur taper',['hill','mountain','crater'],0,100,5,100,'How much a spur narrows and lowers toward its tip.'],
+  ['spurHeight','spur-height','Spur height',['hill','mountain','crater'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the crater\'s rim height).'],
+  ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
+  ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
+  ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain'],0,100,5,100,'The ridge narrows and lowers toward both ends of its path.'],
+  ['rimSectors','rim-sectors','Rim sectors',['crater'],0,8,1,1,'Split the rim into this many sectors of different height and width (a lopsided ring, not an even one).'],
+  ['rimUnequal','rim-unequal','Sector inequality',['crater'],0,100,5,100,'How different the sectors are: 0 equal; 100 from a faint low ridge to a tall, broad massif.'],
+  ['rimGaps','rim-gaps','Rim gaps',['crater'],0,4,1,1,'Deliberate breaks in the rim, where it sinks to a low saddle.'],
+  ['rimGapWidth','rim-gap-width','Gap width (degrees)',['crater'],10,180,5,1,'Angular width of each gap; a wide one leaves an open crescent.'],
   ['shorePlates','shore-plates','Shore plates',['deep','shallow'],0,1,1,1,'Add a band of broken plates on this stroke only. Off preserves the original water shape.'],
   ['plateWaterPx','plate-water-px','Plates: water width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline into the water.'],
   ['plateLandPx','plate-land-px','Plates: land width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
@@ -201,7 +219,12 @@ function updateControls() {
   const parametric=Number($('sec-profile').value)>=.5;
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
-  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
+  // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
+  const gate={spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps'};
+  // On a crater, the crest options only shape its spurs.
+  if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
+  const gated=key => gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0);
+  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   $('section-preview-control').hidden=!SECTION_KINDS.includes(tool) || !parametric;
   if (!$('section-preview-control').hidden) drawSection();
   $('bank-value').textContent=$('bank-width').value+'%';
@@ -337,18 +360,19 @@ function startStroke(kind,p,options={}) {
   const turn=frame?Math.atan2(frame[1],frame[0]):0;
   const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8+turn;
   // A hill with a parametric cross-section is the plain swept hill (like the mountain), not the shouldered ridge.
-  const sec=Object.fromEntries(SECTION_KEYS.map(k => [k,options[k]??shapeValue(k)])),shouldered=kind==='hill' && experiment.get('forms')==='shouldered' && !(sec.profile>=.5);
+  const sec=Object.fromEntries(SECTION_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge=Object.fromEntries(RIDGE_KEYS.map(k => [k,options[k]??shapeValue(k)])),shouldered=kind==='hill' && experiment.get('forms')==='shouldered' && !(sec.profile>=.5) && !ridgeOn(kind,ridge);
   const made={kind,shouldered,base,protectBase:copy(protection,work?.protect),routeBase:copy(routes,work?.route),crackBase:copy(cracks,work?.crack),coverBase:copy(cover,work?.cover),crystalBase:copy(crystal,work?.crystal),node:options.node,cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount'].map(k => [k,options[k]??shapeValue(k)])),...sec,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount'].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
   made.masks=maskSetup(made,work);
+  made.rim=rimSetup(made);
   return made;
 }
 // Painted masks (card C5). What each choice writes, as [plane, target]; the
@@ -563,6 +587,155 @@ function drawSection() {
   g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
   g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(c.water?'bank top':'foot',pad,10); g.textAlign='right'; g.fillText(c.water?'bed':'cap',W-pad,10); g.textAlign='left';
 }
+// Line features (card C4). A ridge (a hill or mountain with spurs or crest
+// options) is swept as short pieces, each with width and height multipliers at
+// its two ends that dab() reads as s.piece, so the crest swells, narrows and
+// tapers along its path and every spur is simply more pieces on the same
+// stroke: the nearest influence wins, so a spur meets its parent at the crest
+// with no seam and no detached lump. Spur geometry comes from the stroke seed
+// and the path alone, never from the heights, and each cell reads only its own
+// position and the pieces, so region replay stays exact.
+const rand01=(seed,a,b) => hash(a,b,seed)*.5+.5;
+const mkPiece=(a,b,r0,r1,h0,h1,jag) => ({a,b,r0,r1,h0,h1,jag,reach:Math.max(r0,r1),mean:(r0+r1)/2});
+// Width and height multipliers at arc length a of a line len long: slow noise
+// along the line (crest variation), then the taper. A spur (ends false) narrows
+// from a flared root to a blunt tip (never under 0.38 of its root width, where
+// the height has fallen to 0.3); a main crest (ends true) narrows
+// toward both of its ends and is full in the middle.
+function lineMultipliers(s,a,len,salt,taper,ends) {
+  const R=s.radius,f=len>0?clamp(a/len,0,1):0,u=ends?1-smooth(0,.4,Math.min(f,1-f)):smooth(0,1,f),n=valueNoise(a/(R*2.2),.37,s.seed^salt),m=valueNoise(a/(R*1.6),2.9,s.seed^(salt+0x55));
+  return [clamp(1+.45*s.crestVary*n,.6,1.4)*(1-.62*taper*u)*(ends?1:1+.5*(1-smooth(0,.4,f))),(1-.45*s.crestVary*(.5-.5*m))*(1-.7*taper*u)];
+}
+// Spurs from roots [{x,y,heading,k}]: each a wandering four-point line that
+// narrows and lowers toward its tip, laid out as three pieces. A root height
+// fade lets a spur rise out of a crater rim instead of stacking on it.
+function spurPieces(s,roots,fade,jag) {
+  const kf=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,spread=s.spurSpread,out=[];
+  for (const root of roots) {
+    const k=root.k,len=s.spurLength*kf*(.55+.9*rand01(s.seed,k,14)),step=len/3,curl=(.1+.3*spread)*Math.PI,rootR=s.spurWidth*(.85+.3*rand01(s.seed,k,15)),salt=0x300+k*97;
+    let x=root.x,y=root.y,h=root.heading;
+    for (let j=0;j<3;j++) {
+      h+=(rand01(s.seed,k,20+j)-.5)*curl;
+      const nx=x+Math.cos(h)*step,ny=y+Math.sin(h)*step,m0=lineMultipliers(s,step*j,len,salt,s.spurTaper,false),m1=lineMultipliers(s,step*(j+1),len,salt,s.spurTaper,false);
+      out.push(mkPiece({x,y},{x:nx,y:ny},rootR*m0[0],rootR*m1[0],s.spurHeight*m0[1]*(j?1:fade),s.spurHeight*m1[1],jag));
+      x=nx; y=ny;
+    }
+  }
+  return out;
+}
+// The pieces of a ridge: the main crest cut into capsules of the same length
+// sweep() uses, then its spurs rooted along the path (alternating sides, angle
+// from the tangent by Spur angle spread). A single click grows spurs radiating
+// from the point.
+function ridgePieces(s,path) {
+  const cum=[0],longest=Math.max(16,s.radius*1.5),out=[];
+  for (let k=1;k<path.length;k++) cum.push(cum[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
+  const L=cum[cum.length-1],jag=s.crestJag;
+  if (path.length<2) out.push(mkPiece(path[0],null,1,1,1,1,jag));
+  for (let k=1;k<path.length;k++) {
+    const a=path[k-1],b=path[k],len=cum[k]-cum[k-1],n=Math.max(1,Math.ceil(len/longest));
+    for (let j=0;j<n;j++) {
+      const f0=j/n,f1=(j+1)/n,m0=lineMultipliers(s,cum[k-1]+len*f0,L,0x71d,s.crestTaper,true),m1=lineMultipliers(s,cum[k-1]+len*f1,L,0x71d,s.crestTaper,true);
+      out.push(mkPiece({x:a.x+(b.x-a.x)*f0,y:a.y+(b.y-a.y)*f0},{x:a.x+(b.x-a.x)*f1,y:a.y+(b.y-a.y)*f1},m0[0],m1[0],m0[1],m1[1],jag));
+    }
+  }
+  const N=Math.round(clamp(s.spurCount,0,12));
+  if (N<1) return out;
+  const roots=[],spread=s.spurSpread,phase=rand01(s.seed,7,0x4b1)*Math.PI*2;
+  for (let k=0;k<N;k++) {
+    if (L<=0) { roots.push({x:path[0].x,y:path[0].y,heading:phase+Math.atan2(s.rot[1],s.rot[0])+Math.PI*2*(k+(rand01(s.seed,k,11)-.5)*.5)/N,k}); continue; }
+    const at=L*(.08+.84*(k+.2+.6*rand01(s.seed,k,11))/N),side=((k+(rand01(s.seed,k,12)<.25?1:0))&1)?1:-1;
+    let i=1; while (i<cum.length-1 && cum[i]<at) i++;
+    const a=path[i-1],b=path[i],f=(at-cum[i-1])/Math.max(cum[i]-cum[i-1],1e-6);
+    roots.push({x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f,heading:Math.atan2(b.y-a.y,b.x-a.x)+side*(.7+.95*spread)*(.75+.5*rand01(s.seed,k,13)),k});
+  }
+  return out.concat(spurPieces(s,roots,1,jag));
+}
+// The crater's lobed outline at an authoring-frame position, as dab's crater
+// draws it (a spur must start at the rim crest, and stay out of the bowl).
+function craterLobe(s,lx,ly) {
+  const R=s.radius,sc=Math.max(R*.55,8);
+  return 1+s.rough*(.38*valueNoise(lx/(R*.95),ly/(R*.95),s.seed^0x4a7)+.22*valueNoise(lx/sc,ly/sc,s.seed^0x1c3)+.1*valueNoise(lx/(sc*.6),ly/(sc*.6),s.seed^0x2d9));
+}
+// What dab() multiplies a piece's weight by at t along it: the height
+// multiplier, then the jagged crest, whose peaks keep full height and whose
+// dips (position noise, about a quarter and a tenth of the radius wide)
+// bite down to Crest irregularity times 0.6 of it.
+function ridgeRise(s,pc,t,lx,ly,wx,wy) {
+  let h=pc.h0+(pc.h1-pc.h0)*t;
+  // A crater's spurs fade out toward the bowl: none start inside the rim.
+  if (pc.hole) { const o=pc.hole,rr=Math.hypot(wx-o.x,wy-o.y)/(o.s.radius*craterLobe(o.s,lx,ly)); h*=smooth(.92,1.2,rr); }
+  if (pc.jag>0) { const R=s.radius,n=.6*valueNoise(lx/(R*.28),ly/(R*.28),s.seed^0x6b1)+.4*valueNoise(lx/(R*.11),ly/(R*.11),s.seed^0x1d7); h*=1-pc.jag*.6*(.5-.5*n); }
+  return h;
+}
+function sweepRidge(s,points) {
+  const path=simplifyPath(points,Math.max(1,s.radius*.04));
+  for (const pc of ridgePieces(s,path)) { s.piece=pc; dab(s,pc.a,pc.b); }
+  s.piece=null; s.path=points.slice(); s.last=s.end=points[points.length-1];
+}
+// Crater rim sectors and gaps. The rim is split into sectors, each with its
+// own height and width, blended smoothly from one to the next round the ring
+// (centres a little off even spacing); gaps sink the rim to a low saddle over
+// an angular window. Angles are in the shape's own frame, so turning the
+// shape turns its sectors. Returns null when both are off.
+function rimSetup(s) {
+  if (s.kind!=='crater') return null;
+  const N=Math.round(clamp(s.rimSectors,0,8)),G=Math.round(clamp(s.rimGaps,0,4));
+  if (N<2 && G<1) return null;
+  const rnd=(a,b) => rand01(s.seed,a,b+0x3c5),u=clamp(s.rimUnequal,0,1),tau=Math.PI*2,phase=rnd(0,1)*tau,sect=[],gaps=[];
+  // A strong sector is both tall and broad; a weak one low and narrow.
+  if (N>=2) for (let k=0;k<N;k++) { const q=rnd(k,2); sect.push({a:phase+tau*(k+(rnd(k,3)-.5)*.5)/N,h:1-.85*u*(1-q),w:1+u*(1.8*q*(.6+.4*rnd(k,4))-.4)}); }
+  const gphase=rnd(9,9)*tau;
+  for (let k=0;k<G;k++) gaps.push(gphase+tau*(k+(rnd(k,5)-.5)*.4)/G);
+  return {sect,rel:sect.map(c => c.a-sect[0].a),gaps,hw:clamp(s.rimGapWidth,10,180)*Math.PI/360};
+}
+const rimOut=[1,1];
+function rimFactors(rim,ang) {
+  const tau=Math.PI*2,sect=rim.sect,n=sect.length;
+  let h=1,w=1;
+  if (n>1) {
+    const d=(((ang-sect[0].a)%tau)+tau)%tau;
+    let i=0; while (i<n-1 && rim.rel[i+1]<=d) i++;
+    const j=(i+1)%n,span=(i<n-1?rim.rel[i+1]:tau)-rim.rel[i],t=smooth(0,1,(d-rim.rel[i])/Math.max(span,1e-6));
+    h=sect[i].h+(sect[j].h-sect[i].h)*t; w=sect[i].w+(sect[j].w-sect[i].w)*t;
+  }
+  for (const g of rim.gaps) { const dist=Math.abs((((ang-g+Math.PI)%tau)+tau)%tau-Math.PI); h*=.08+.92*smooth(.5*rim.hw,rim.hw,dist); }
+  rimOut[0]=h; rimOut[1]=w;
+  return rimOut;
+}
+// Spurs off a crater's rim: a child mountain stroke (as craterlets are child
+// craters) whose pieces start just outside the rim crest, at seeded angles round
+// the ring, and rise out of it. It borrows the crater's seed, so it reads the
+// same noise fields, and adds to the finished crater: smooth, never a seam.
+const rimSpurKeys=new WeakMap();
+function addRimSpurs(n,s) {
+  const count=Math.round(clamp(s.spurCount||0,0,12));
+  if (count<1) return;
+  const framed=!isIdentity(n.frame),turn=framed?Math.atan2(n.frame[1],n.frame[0]):0,inv=framed?invert(n.frame):null,c=n.points[n.points.length>>1],R=s.radius;
+  const phase=rand01(s.seed,7,0x4b1)*Math.PI*2,roots=[];
+  for (let k=0;k<count;k++) {
+    const ang=phase+Math.PI*2*(k+(rand01(s.seed,k,0x4b2)-.5)*.6)/count+turn,dx=Math.cos(ang),dy=Math.sin(ang),wx=c.x+dx*R,wy=c.y+dy*R;
+    // The rim's own lobed outline (as dab's crater), so a spur starts at the crest, not inside the bowl.
+    const lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
+    const lobe=craterLobe(s,lx,ly);
+    roots.push({x:c.x+dx*R*lobe*1.02,y:c.y+dy*R*lobe*1.02,heading:ang+(rand01(s.seed,k,0x4b3)-.5)*s.spurSpread*1.2,k});
+  }
+  const pieces=spurPieces(s,roots,.4,s.crestJag),hole={x:c.x,y:c.y,s};
+  for (const pc of pieces) pc.hole=hole;
+  let keys=rimSpurKeys.get(n); if (!keys) rimSpurKeys.set(n,keys={});
+  let rect=null;
+  if (framed) {
+    let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
+    for (const pc of pieces) for (const q of [pc.a,pc.b]) { ax=Math.min(ax,q.x); ay=Math.min(ay,q.y); bx=Math.max(bx,q.x); by=Math.max(by,q.y); }
+    const reach=R*1.5+12*spacing,box=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
+    rect={x0:Math.max(box.x0,Math.floor((ax-reach)/spacing)),y0:Math.max(box.y0,Math.floor((ay-reach)/spacing)),x1:Math.min(box.x1,Math.ceil((bx+reach)/spacing)),y1:Math.min(box.y1,Math.ceil((by+reach)/spacing))};
+  }
+  const work=borrowWork();
+  try {
+    const t=startStroke('mountain',roots[0],{...n.params,radius:R,amount:s.amount*.34,rough:s.rough*.8,softness:.8,cracks:0,craterlets:0,craterEjecta:0,spurCount:0,rimSectors:0,rimGaps:0,crestJag:0,crestVary:0,crestTaper:0,profile:0,seed:s.seed,frame:n.frame,node:keys,rect,work});
+    for (const pc of pieces) { t.piece=pc; dab(t,pc.a,pc.b); }
+  } finally { workDepth--; }
+}
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
   const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind)) && experiment.get('edges')==='natural';
@@ -572,7 +745,8 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   // Dry bank of a fixed width on the ground (Lava; 0 keeps the old share).
   const bankPx=waterTool && !s.prof?(s.bankPx??0):0;
   const faceWidth=.66+(s.softness-.5)*.9,backWidth=s.softness===.5?1.34:2-faceWidth;
-  const radius=s.radius,amp=s.rough*radius*(naturalWater ? 1.1 : naturalPlateau ? .95 : shoulderedHill ? .85 : s.kind==='crater' ? .45 : .2);
+  // A ridge piece (card C4) scales this dab's width and wobble; null leaves every value as before.
+  const pc=s.piece,radius=s.radius,amp=s.rough*radius*(naturalWater ? 1.1 : naturalPlateau ? .95 : shoulderedHill ? .85 : s.kind==='crater' ? .45 : .2)*(pc?pc.mean:1);
   const macro=naturalWater || naturalPlateau;
   const noiseX=macro?s.noise.coastX:s.noise.x,noiseY=macro?s.noise.coastY:s.noise.y;
   const nx=sample(noiseX,p.x,p.y),ny=sample(noiseY,p.x,p.y);
@@ -591,7 +765,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const bumpy=['hill','mountain','lower'].includes(s.kind);
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
   const northWiden=s.northFace??0;
-  const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
+  const extent=crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
@@ -627,11 +801,16 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       const floorEdge=.25+.45*(1-s.softness);
       const rimNoise=valueNoise(lx/(sc*.8),ly/(sc*.8),s.seed^0x3e1);
       // Low-frequency rim noise lets whole sectors of rim sink away.
-      const rimHeight=s.amount*.34*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
-      const rimWidth=(.16+.2*s.softness)*(1+.35*n2);
+      let rimHeight=s.amount*.34*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
+      const rimWidth0=(.16+.2*s.softness)*(1+.35*n2);
+      let rimWidth=rimWidth0;
+      // Sectors and gaps (card C4), by angle in the shape's own frame.
+      if (s.rim) { const f=rimFactors(s.rim,Math.atan2(wy-cy,wx-cx)-Math.atan2(s.rot[1],s.rot[0])); rimHeight*=f[0]; rimWidth*=f[1]; }
       const bowl=rb<1?1-smooth(floorEdge,1,rb):0;
       const apronReach=1-smooth(1.15+.35*n1,1.85,rr);
-      const rim=rr<1?Math.exp(-(((rr-1)/rimWidth)**2)):Math.exp(-(((rr-1)/(rimWidth*2.4))**2))*apronReach;
+      // A wide sector broadens the rim on its inner side; the outer apron keeps the ring's own width,
+      // and falls away faster with sectors or gaps, as the steep outer slope of a retail broken rim does.
+      const rim=rr<1?Math.exp(-(((rr-1)/rimWidth)**2)):Math.exp(-(((rr-1)/(rimWidth0*(s.rim?1.4:2.4)))**2))*apronReach;
       const lumps=s.rough*(6*n2+3*n1+2*s.noise.detail[i])*(rr<1.3?1:0);
       // Ejecta: beyond the rim the throw-out breaks into scattered,
       // ragged patches that thin outward (retail lunar sections).
@@ -664,6 +843,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     // independently and vary its width. Repeated dabs do not add fresh noise.
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
     let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
+    if (pc) r/=pc.r0+(pc.r1-pc.r0)*t;
     if (waterTool && s.fingers>0 && r>.25 && r<1.6) {
       // Shift the waterline across the coast band (coast near r 0.67).
       const len=Math.sqrt(dx*dx+dy*dy)||1,band=1-smooth(.45,.9,Math.abs(r-.67));
@@ -731,6 +911,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     else if (s.kind==='mountain') w=(1-r*r)**(3.5*2**((.5-s.softness)*1.5));
     else w=1-smooth(0,1,r);
     if (s.prof) w=crossSection(s,i,r,radius*width*bankScale);
+    if (pc) w*=ridgeRise(s,pc,t,lx,ly,wx,wy);
     if (bumpy && !shoulderedHill) w=clamp(w*(1+s.rough*.09*s.noise.detail[i]),0,1);
     // Most brushes union influences; the swept hill instead uses its nearest
     // curve section. Neither adds height merely because the pointer dwells.
@@ -809,6 +990,7 @@ function simplifyPath(points,tolerance) {
   return points.filter((_,k) => keep[k]);
 }
 function sweep(s,points) {
+  if (s.ridge) { sweepRidge(s,points); return; }
   const path=simplifyPath(points,Math.max(1,s.radius*.04)),longest=Math.max(16,s.radius*1.5);
   dab(s,path[0]);
   for (let k=1;k<path.length;k++) {
@@ -1163,7 +1345,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1243,6 +1425,7 @@ function addCraterlets(n,s) {
       dab(t,p);
     } finally { workDepth--; }
   }
+  addRimSpurs(n,s);
 }
 // The per-cell fields every shape may write, keyed as in prefix snapshots:
 // heights, protection, routes, cracks, cover (sand/ground paint), crystal.
@@ -1270,9 +1453,13 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  const r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0):0);
+  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
+  // Spurs (card C4) reach up to one and a half spur lengths past the ridge or rim, plus their own width.
+  // A ridge's crest also swells to 1.4 of its radius and a spur's root flares to about 1.7 times Spur width.
+  if (ridgeOn(n.kind,q)) r+=radius;
+  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*1.6*k+radius*Math.max(1,(q.spurWidth||.8)*1.7); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};

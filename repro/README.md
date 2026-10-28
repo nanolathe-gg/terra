@@ -68,3 +68,10 @@ them). A paint stroke is `["paint", points, {"card": {"paintChannel": n, ...}}]`
 with `paintChannel` 1 rock, 2 snow or ice, 3 wet ground, 4 moss, 5 denser scatter,
 6 sparser scatter, 7 erase all masks; a landform paints its own footprint with
 `maskChannel` (0 off, 1..6 as above) and `maskAmount` (percent).
+
+The line-feature demos (card C4) are `ridge-moon` (a lopsided ring with rim
+sectors, an open crescent with a rim gap, a crater with radiating spurs and a
+tapering, jagged crescent ridge with spurs), `ridge-red` (branching rugged
+mountain ridges) and `ridge-lava` (low winding hill ridges and a radiating
+lump); their options are Spurs, Crest irregularity, Crest width and height
+variation, Crest taper, Rim sectors and Rim gaps.

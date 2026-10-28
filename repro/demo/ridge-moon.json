@@ -1,0 +1,134 @@
+{
+ "biome": "moon",
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "crater",
+   [
+    [
+     250,
+     250
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 260,
+     "amount": 110,
+     "roughness": 40,
+     "craterlets": 0,
+     "craterEjecta": 0,
+     "rimSectors": 4,
+     "rimUnequal": 90
+    }
+   }
+  ],
+  [
+   "crater",
+   [
+    [
+     740,
+     250
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 300,
+     "amount": 120,
+     "roughness": 40,
+     "craterlets": 0,
+     "craterEjecta": 0,
+     "rimSectors": 3,
+     "rimUnequal": 100,
+     "rimGaps": 1,
+     "rimGapWidth": 130
+    }
+   }
+  ],
+  [
+   "hill",
+   [
+    [
+     270,
+     760
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 300,
+     "amount": 22,
+     "roughness": 40,
+     "softness": 88
+    }
+   }
+  ],
+  [
+   "crater",
+   [
+    [
+     270,
+     760
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 120,
+     "amount": 120,
+     "roughness": 40,
+     "craterlets": 0,
+     "craterEjecta": 0,
+     "spurCount": 7,
+     "spurLength": 140,
+     "spurSpread": 60,
+     "spurWidth": 90,
+     "spurTaper": 80,
+     "spurHeight": 100,
+     "crestJag": 60,
+     "crestVary": 50
+    }
+   }
+  ],
+  [
+   "hill",
+   [
+    [
+     560,
+     700
+    ],
+    [
+     650,
+     640
+    ],
+    [
+     760,
+     650
+    ],
+    [
+     840,
+     720
+    ],
+    [
+     850,
+     830
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 130,
+     "amount": 45,
+     "roughness": 25,
+     "softness": 88,
+     "crestVary": 70,
+     "crestTaper": 70,
+     "crestJag": 50,
+     "spurCount": 5,
+     "spurLength": 110,
+     "spurSpread": 40,
+     "spurWidth": 80,
+     "spurTaper": 80,
+     "spurHeight": 75
+    }
+   }
+  ]
+ ]
+}

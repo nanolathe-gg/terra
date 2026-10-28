@@ -1,0 +1,113 @@
+{
+ "biome": "lava",
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "hill",
+   [
+    [
+     40,
+     330
+    ],
+    [
+     200,
+     300
+    ],
+    [
+     360,
+     360
+    ],
+    [
+     520,
+     330
+    ],
+    [
+     700,
+     380
+    ],
+    [
+     900,
+     340
+    ],
+    [
+     1000,
+     360
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 192,
+     "amount": 38,
+     "roughness": 40,
+     "softness": 100,
+     "crestVary": 80,
+     "crestTaper": 50,
+     "crestJag": 50,
+     "spurCount": 4,
+     "spurLength": 140,
+     "spurSpread": 70,
+     "spurWidth": 100,
+     "spurTaper": 60,
+     "spurHeight": 60
+    }
+   }
+  ],
+  [
+   "hill",
+   [
+    [
+     300,
+     700
+    ],
+    [
+     420,
+     650
+    ],
+    [
+     560,
+     720
+    ],
+    [
+     640,
+     820
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 168,
+     "amount": 38,
+     "roughness": 45,
+     "softness": 100,
+     "crestVary": 90,
+     "crestTaper": 60,
+     "crestJag": 40
+    }
+   }
+  ],
+  [
+   "hill",
+   [
+    [
+     800,
+     760
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 156,
+     "amount": 38,
+     "roughness": 40,
+     "softness": 100,
+     "crestVary": 70,
+     "crestJag": 40,
+     "spurCount": 5,
+     "spurLength": 110,
+     "spurSpread": 100,
+     "spurWidth": 80,
+     "spurTaper": 60
+    }
+   }
+  ]
+ ]
+}
