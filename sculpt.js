@@ -85,6 +85,7 @@ const SHAPE_FIELDS=[
   ['mesaFlank','mesa-flank','Mesa flanks',['plateau'],0,100,5,100,'A narrower cap with a sharp edge and wide, even flanks to a concave foot (Painted Desert mesas).'],
   ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
+  ['fingerBlunt','finger-blunt','Blunt fingers (0 pointed, 1 thumbs)',['deep','shallow'],0,1,1,1,'Fingers as retail Lava draws them: 25-35 px thumbs with rounded tips and inlets, not pointed teeth.'],
   ['bankPx','bank-px','Dry bank (px)',['deep','shallow'],0,160,2,1,'Width of the dry bank from the waterline to the level ground, whatever the shape\'s size (0: a share of the shape, set by Bank width).'],
   ['profile','sec-profile','Cross-section (0 classic, 1 parametric)',SECTION_KINDS,0,1,1,1,'0 keeps this kind\'s own curve. 1 builds the profile from the options below, in pixels from the outer edge, so it keeps its size whatever the brush diameter. Mesa flanks, Wider north faces and Beach flatness are then ignored; Slope softness and (on water) Dry bank only set the default face width.'],
   ['apronPx','sec-apron-px','Apron width (px)',SECTION_KINDS,0,160,2,1,'A gentle concave skirt at the foot (talus, desert aprons; on water, the beach at the waterline).'],
@@ -398,7 +399,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','fingerBlunt','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -453,14 +454,14 @@ function applyShapeMask(s) {
 // coast, so each rib is a finger along the normal; a rib's crest reaches
 // farthest, so fingers taper. Returns the waterline shift in world px
 // (+: land reaches into the water).
-function fingerRibs(x,y,tx,ty,period,salt) {
+function fingerRibs(x,y,tx,ty,period,salt,leanMax=.26) {
   const qx=x/period,qy=y/period,cx=Math.floor(qx),cy=Math.floor(qy),fx=qx-cx,fy=qy-cy;
   let sum=0,weight=0;
   for (let j=-2;j<=1;j++) for (let i=-2;i<=1;i++) {
     const a=hash(cx-i,cy-j,salt)*.5+.5,b=hash(cx-i,cy-j,salt^0x5bd1)*.5+.5,c=hash(cx-i,cy-j,salt^0x2f6a);
     const px=fx+i-a*.5,py=fy+j-b*.5,w=Math.exp(-(px*px+py*py)*2);
     // Each finger leans its own way off the normal.
-    const lean=c*.26,dx=tx*Math.cos(lean)-ty*Math.sin(lean),dy=tx*Math.sin(lean)+ty*Math.cos(lean);
+    const lean=c*leanMax,dx=tx*Math.cos(lean)-ty*Math.sin(lean),dy=tx*Math.sin(lean)+ty*Math.cos(lean);
     sum+=Math.cos((px*dx+py*dy)*6.283185+c*3.1)*w; weight+=w;
   }
   return sum/weight;
@@ -472,7 +473,7 @@ function fingerRibs(x,y,tx,ty,period,salt) {
 const fingerCaches=new WeakMap();
 function fingerCache(s) {
   if (s.fingerField) return s.fingerField;
-  const key=`${s.seed}|${s.radius}|${s.rough}|${s.bankWidth}`;
+  const key=`${s.seed}|${s.radius}|${s.rough}|${s.bankWidth}|${s.fingerBlunt}`;
   let c=s.node?fingerCaches.get(s.node):null;
   if (!c || c.key!==key) { c={key,field:new Float32Array(grid*grid).fill(NaN)}; if (s.node) fingerCaches.set(s.node,c); }
   return s.fingerField=c.field;
@@ -495,6 +496,22 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
     // (tip/middle ~0.6), inlets to points (~0.4); axes within ~15 degrees of
     // the normal. A rib's positive half is flattened (blunt) and its negative
     // half sharpened (pointed); small lumps vary widths.
+    if (s.fingerBlunt>=.5) {
+      // Thumbs (card B3): retail's long fingers (Kill the Middle) are 25-35 px
+      // wide, 40-70 px long, 70-90 px apart, with near-parallel sides, rounded
+      // tips and rounded inlets between. The ribs' phase gives each finger's
+      // angle from its axis; the outline across a finger is an ellipse arc, so
+      // the tip is blunt, and the lumps die out toward the tip (they pinched
+      // thin finger ends into pointed wedges and islets).
+      const crest=clamp(fingerRibs(wx,wy,tx,ty,76,s.seed^0x71f3,.1)/.55,-1,1),ang=(1-crest)/.7;
+      const thumb=ang<1?Math.sqrt(1-ang*ang)*smooth(0,.4,1-ang):0;
+      const reach=46*(.75+.5*(valueNoise(wx/120,wy/120,s.seed^0x6a1)*.5+.5));
+      const long=smooth(.3,.75,valueNoise(wx/160,wy/160,s.seed^0x4e11));
+      const lumps=(valueNoise(wx/14,wy/14,s.seed^0x5c1)*2.5+valueNoise(wx/5,wy/5,s.seed^0x3a7))*(1-.85*thumb);
+      v=thumb*reach*(1+long*.9)+lumps;
+      if (i>=0) field[i]=v;
+      return v*amount;
+    }
     const rib=clamp(fingerRibs(wx,wy,tx,ty,46,s.seed^0x71f3)*1.6,-1,1);
     const shaped=rib>0?Math.pow(rib,.6):-Math.pow(-rib,1.5);
     const reach=20*(.8+.4*(valueNoise(wx/120,wy/120,s.seed^0x6a1)*.5+.5));
@@ -998,10 +1015,19 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
     let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
     if (pc) r/=pc.r0+(pc.r1-pc.r0)*t;
-    if (waterTool && s.fingers>0 && r>.25 && r<1.6) {
-      // Shift the waterline across the coast band (coast near r 0.67).
-      const len=Math.sqrt(dx*dx+dy*dy)||1,band=1-smooth(.45,.9,Math.abs(r-.67));
-      if (band>0) r+=band*fingerShift(s,i,wx,wy,dx/len,dy/len,s.fingers)/(radius*width*bankScale);
+    if (waterTool && s.fingers>0 && r>(s.fingerBlunt>=.5?.1:.25) && r<1.6) {
+      // Shift the waterline across the coast band (coast near r 0.67). Thumbs
+      // reach tens of px, so their band is set in px, not as a share of a small lake.
+      const len=Math.sqrt(dx*dx+dy*dy)||1,band=1-smooth(.45,.9,Math.abs(r-.67)*(s.fingerBlunt>=.5?Math.min(1,radius*width*bankScale/180):1));
+      if (band>0 && s.fingerBlunt>=.5) {
+        // Thumbs read the ribs at the coast point on this cell's radial line, so every
+        // cell along the line gets one shift: a finger is a solid prism from the
+        // coast to its tip and cannot leave islets in the lava. A small lake grows shorter
+        // fingers (its few fingers would make a star).
+        const along=(.67*radius*width*bankScale-len)/len,fx=wx+dx*along,fy=wy+dy*along,gx=Math.round(fx/spacing),gy=Math.round(fy/spacing);
+        r+=band*fingerShift(s,gx>=0 && gy>=0 && gx<grid && gy<grid?gy*grid+gx:-1,gx*spacing,gy*spacing,dx/len,dy/len,s.fingers*clamp(radius*width*bankScale/140,.35,1))/(radius*width*bankScale);
+      }
+      else if (band>0) r+=band*fingerShift(s,i,wx,wy,dx/len,dy/len,s.fingers)/(radius*width*bankScale);
     }
     if (bankPx>0 && s.base[i]>config.seaLevel) {
       // Retail Lava banks keep one width whatever the lake's size: the
@@ -1499,7 +1525,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','fingerBlunt'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -2361,7 +2387,7 @@ const KNOBS = [
   ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Level-ground lumps',0,3,.05,1.2],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south (0: due west)',-1,1,.05,1],['ambient','Ambient (unlit share)',0,.8,.02,.42]]],
-  ['Faces', [['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['slopeMarks','Dark marks on slopes (Moon)',0,1,.05,0]]],
+  ['Faces', [['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['slopeMarks','Dark marks on slopes (Moon)',0,1,.05,0],['wrinkles','Joined wrinkles on slopes (Moon)',0,1,.05,0]]],
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35],['boulderRound','Roundness',0,1,.05,0]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
@@ -2372,7 +2398,7 @@ const KNOBS = [
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackJagged','Jaggedness',0,1,.05,.6],['crackNetwork','Majors: rills to plates',0,1,.05,.35],['crackReach','Reach onto gentle slopes',0,1,.05,.6],
     ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
-  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
+  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandRelief','Bank lines bent by relief',0,1,.05,0],['bandWander','Bank line wander',0,2,.05,0],['bandGaps','Bank line gaps',0,1,.05,0],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
   ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline',0,1,.05,1],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],

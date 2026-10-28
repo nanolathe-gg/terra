@@ -27,7 +27,7 @@ KNOB_DEFAULTS = dict(
     groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
-    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, sandCrown=0,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
     faceVariation=.8, northFace=.7, mesaFlank=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
@@ -40,9 +40,9 @@ KNOB_DEFAULTS = dict(
     crystalVariation=.5, crystalTiers=0,
     shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1,
-    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
+    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
-    fingers=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    fingers=0, fingerBlunt=0, bankPx=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
@@ -120,7 +120,11 @@ WORLD_KNOBS = {
     # (2.0-7.5% by map), ~1.9% of lit ones; long axis ~25-30 deg off vertical.
     'moon': dict(crackSeverity=.35, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=.4, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
-                 sunTilt=0, faceFill=0, ambient=.25, slopeMarks=.4),
+                 sunTilt=0, faceFill=0, ambient=.25,
+                 # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
+                 # on a narrow wall, as a toothed lip; retail's slopes are crazed with
+                 # connected wrinkles and pits, so the joined wrinkles replace them.
+                 slopeMarks=0, wrinkles=.8),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'
@@ -136,15 +140,19 @@ WORLD_KNOBS = {
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=5, bandLine=1,
-                 northFace=.7, fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=1, bandStyle=1, bandSpacing=7, bandLine=1,
+                 northFace=.7, fingers=1, fingerBlunt=1, worms=0, shoreEdge=1, slopeTexture=0,
                  # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
                  bankPx=60,
                  # Line cores are near black (luma 15-27 in 55-60 ground) and
                  # ~2.5 px wide at half depth (measure/lava_bands.py lines
                  # profiles); the thin 1.6 px V at 0.75 darkness read as faint
                  # grain on the ground's palette noise.
-                 bandWidth=2.6, crackDark=.95),
+                 bandWidth=2.3, crackDark=.95,
+                 # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
+                 # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
+                 # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
+                 bandRelief=.4, bandWander=.5, bandGaps=.15),
     # shadeDepth stays 1 on Lava: directional shading varies by map and
     # window (luma on the east-west height gradient: 6-9 per unit slope on
     # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle

@@ -215,6 +215,60 @@ fn slopeMark(pixel: vec2f, density: f32) -> f32 {
     return mark;
 }
 
+// Moon joined wrinkles (card B3). The retail Lunar walls are crazed with
+// connected curving dark lines and small closed pits, not the isolated specks
+// slopeMark draws: lines 1-2 px wide that run along the contour, fork, close
+// into loops and fade out, on faces of every steepness. They are the zero
+// crossings of a stretched, warped value noise, so they join by construction;
+// a finite-difference gradient gives every line one width whatever the noise
+// slope. Drawn in screen pixels like the marks. Returns (dark line, lit flank).
+fn wrinkleNoise(q: vec2f) -> f32 {
+    let c = floor(q);
+    let f = fract(q);
+    let fade = f * f * (3.0 - 2.0 * f);
+    let a = markHash(vec2i(c)).x;
+    let b = markHash(vec2i(c) + vec2i(1, 0)).x;
+    let d = markHash(vec2i(c) + vec2i(0, 1)).x;
+    let e = markHash(vec2i(c) + vec2i(1, 1)).x;
+    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+fn wrinkleField(pixel: vec2f, along: vec2f, across: vec2f, stretch: vec2f, salt: f32) -> f32 {
+    let warp = vec2f(wrinkleNoise(pixel / 19.0 + salt), wrinkleNoise(pixel / 19.0 + salt + 31.7)) * 5.0;
+    let d = pixel + warp;
+    return wrinkleNoise(vec2f(dot(d, along) / stretch.x, dot(d, across) / stretch.y) + salt * 1.7);
+}
+fn wrinkleLines(pixel: vec2f, along: vec2f, across: vec2f, keep: f32, sun: vec2f, steep: f32) -> vec2f {
+    var dark = 0.0;
+    var lit = 0.0;
+    for (var layer = 0; layer < 2; layer++) {
+        // Layer 0: wrinkles stretched along the axis; layer 1: pits, dark cells ~5 px
+        // across that pack closer on steeper faces (the retail walls are near-black pits
+        // with light between them), from the same kind of noise.
+        let stretch = select(vec2f(30.0, 6.5), vec2f(5.5, 3.5), layer == 1);
+        let salt = 3.0 + 40.0 * f32(layer);
+        let n0 = wrinkleField(pixel, along, across, stretch, salt);
+        let gateAt = mix(0.7, -0.25, keep);
+        let present = smoothstep(gateAt, gateAt + 0.25, 0.7 * wrinkleNoise(pixel / 31.0 + 7.0 + 11.0 * f32(layer)) + 0.5 * wrinkleNoise(pixel / 11.0 + 91.0 + 5.0 * f32(layer)));
+        if (layer == 1) {
+            let bound = mix(-0.55, -0.22, steep);
+            dark = max(dark, (1.0 - smoothstep(bound - 0.05, bound + 0.05, n0)) * mix(0.35, 0.9, steep) * smoothstep(0.1, 0.4, steep + 0.3 * present));
+            continue;
+        }
+        let nx = wrinkleField(pixel + vec2f(1.0, 0.0), along, across, stretch, salt);
+        let ny = wrinkleField(pixel + vec2f(0.0, 1.0), along, across, stretch, salt);
+        let grad = vec2f(nx - n0, ny - n0);
+        let g = max(length(grad), 1e-3);
+        // Lines where the noise crosses zero; present in patches.
+        let d = abs(n0) / g;
+        dark = max(dark, (1.0 - smoothstep(0.55, 1.7, d)) * present);
+        // The flank on the sun side of the line, 2-3 px off.
+        let toLight = select(-1.0, 1.0, dot(grad, sun) > 0.0);
+        let dl = abs(n0 - toLight * 2.4 * g) / g;
+        lit = max(lit, (1.0 - smoothstep(0.5, 1.8, dl)) * present);
+    }
+    return vec2f(dark, lit * (1.0 - dark));
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -807,6 +861,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // The flanks brighten shaded ground only, never past the lit material.
             if (mark > 0.0) { color *= 1.0 - 0.62 * mark; }
             else if (mark < 0.0) { color = min(color * (1.0 + 0.32 * away), max(color, material * 0.9)); }
+        }
+    }
+    if (u.wrinkles > 0.0 && h > u.sea + 1.0) {
+        // Joined wrinkles (Moon): on every slope, more on faces turned from the light.
+        let away = smoothstep(-0.05, 0.10, dot(broad, normalize(u.light.xy)));
+        let gate = smoothstep(0.05, 0.30, slope) * mix(0.55, 1.0, away);
+        if (gate > 0.0) {
+            // The long axis stays fixed on the screen, ~27 degrees off vertical as the
+            // retail marks' (measure/slope_marks.py): a frame turned with the local slope
+            // would scramble the phase, its angle error growing with the distance from the origin.
+            let lines = wrinkleLines(pixel, vec2f(0.454, 0.891), vec2f(0.891, -0.454), u.wrinkles, normalize(u.light.xy), smoothstep(0.2, 0.8, slope));
+            let depthDark = (0.2 + 0.3 * smoothstep(0.15, 0.8, slope)) * gate;
+            color *= 1.0 - depthDark * lines.x;
+            color = min(color * (1.0 + 0.2 * away * gate * lines.y), max(color, material * 0.9));
         }
     }
     if (h < u.sea + 1.0) {

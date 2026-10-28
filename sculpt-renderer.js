@@ -655,6 +655,7 @@ export class TerrainRenderer {
     this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
     this.f('uAmbient', variant.has('ambient') ? Number(variant.get('ambient')) : 0.42);
     this.f('uSlopeMarks', variant.has('slopeMarks') ? Number(variant.get('slopeMarks')) : 0);
+    this.f('uWrinkles', variant.has('wrinkles') ? Number(variant.get('wrinkles')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
@@ -752,6 +753,9 @@ export class TerrainRenderer {
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));
     set('uBandStyle', number('bandStyle', 0), 'i');
+    set('uBandRelief', number('bandRelief', 0));
+    set('uBandWander', number('bandWander', 0));
+    set('uBandGaps', number('bandGaps', 0));
     set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', Boolean(this.config.textures.beach));
     set('uSandBanding', number('sandBanding', 0));
