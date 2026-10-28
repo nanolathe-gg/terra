@@ -104,7 +104,11 @@ branches and the projection fix below, so re-render before judging.
 4. **Gate new behaviour per world.** Add a knob to `KNOB_DEFAULTS` in
    `sculpt.py` whose default reproduces the old output exactly, and set it
    only in your world's `WORLD_KNOBS` entry. Brush shape options go in
-   `SHAPE_FIELDS` (`sculpt.js`) with a default of off. In the shaders,
+   `SHAPE_FIELDS` (`sculpt.js`) with a default of off. Wire a shape option
+   in all four places, or it is silently dropped on replay or save: its
+   `SHAPE_FIELDS` entry, the card object `startStroke` builds
+   (`options.<key>??shapeValue('<key>')`), `strokeParams`, and a
+   `KNOB_DEFAULTS` entry in `sculpt.py` (`worldDefault` reads it). In the shaders,
    append new uniforms to `struct Uniforms` (`sculpt-common.wgsl`) with a
    comment naming the world, pass them in `sculpt-renderer.js`, and put new
    shading in its own function. Never change another world's defaults.
@@ -426,6 +430,11 @@ strokes.
   `(floor(q) + smooth(1 - ledge, 1, fract(q))) / n`, where
   `q = p * n + terraceJitter * noise(lx, ly)`. It is the contour-band
   idea from `relief-bake.wgsl`, but in the heights.
+- **Code layout.** Put the parametric path in one new function (for
+  example `crossSection(s, r, ...)`), called from a single new line in
+  `dab()`. Do the per-stroke precomputation in one block in
+  `startStroke`. Other cards edit the same water path in `dab()`, and this
+  keeps the merges additive.
 - **Locality.** Every cell's value depends only on its own position. Region
   replay must stay exact: `sculptDebug.replayAll()` reports mismatch 0
   after editing a shape.
@@ -502,6 +511,14 @@ lets reviews use numbers where images are not needed.
 - Sample at least 20 seeded windows of 1024 px per world from the retail
   exports (for Zhon, the sections).
 - Compute the same metrics and report the 10th-90th percentiles.
+
+**Pitfalls:**
+- Section crops (Zhon) have about 31 black rows at the top, where the
+  projection shift reaches above the section. Mask all-zero rows in the
+  picture metrics.
+- The plain height for the shore band is `plain` in `crop.json` for
+  retail, and the world's `baseHeight` for ours: 24, or 8 for Archipelago
+  and Zhon. Our sea is 0, and both height files are heights above sea.
 
 **Output.** `stats.json`, and `stats.md` with one table per world:
 - the family range;
