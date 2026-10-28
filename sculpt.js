@@ -22,7 +22,7 @@ const HELP = {
   sand:'Paint sand cover: the ground under the brush becomes sand (on slopes too, so a hill set in sand has sandy feet). Heights do not change.',
   grass:'Paint ground cover: clears sand (painted or weathered) back to the world\'s own ground, such as grass. Heights do not change.',
   paint:'Paint a material over the ground, or a scatter density: rock showing through, snow or ice, wet (dark) ground and moss take the world\'s own materials; denser or sparser scatter multiplies the World panel\'s Boulders and Debris (at 0 nothing shows). Strength is how fully it paints, Softness the edge. Heights do not change.',
-  erase:'Paint plain ground: hills, water, craters, cracks and painted masks under the brush return to the dry base level, with a natural edge.',
+  erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
@@ -62,13 +62,17 @@ const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
 const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','crestJag','crestVary','crestTaper','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
 const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.spurCount)>=1 || o.crestJag>0 || o.crestVary>0 || o.crestTaper>0);
 const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
-// Painted masks (card C5): five signed-byte planes per cell, rock, snow or ice,
-// wet ground and moss (0..127 of full) and scatter density (-127..127), where
-// 0 changes nothing. 'paint' is the brush; the landforms below can also paint
-// inside their own footprint (maskChannel, 0 off).
-const MASK_KEYS=['mr','ms','mw','mm','md'];
+// Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
+// nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
+// density, and four local style settings (stage 2: relief strength, cracks,
+// banding and face rock share, each -127..127 about the world's own value).
+// 'paint' is the brush; the landforms below can also paint inside their own
+// footprint (maskChannel, and styleRelief .. styleFace).
+const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf'];
 const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
+const STYLE_CHOICES=[[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
+const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -119,9 +123,14 @@ const SHAPE_FIELDS=[
   ['crystalTop','crystal-top','Flat tops',['crystal'],0,95,5,100,'0: pointed; higher cuts the tops level (a flat-topped prism).'],
   ['crystalLean','crystal-lean','Lean',['crystal'],0,100,5,100,'How far each apex leans off its base centre.'],
   ['crystalVariation','crystal-variation','Variation',['crystal'],0,100,5,100,'Spread of sizes, heights and side counts.'],
-  ['paintChannel','paint-channel','Paint',['paint'],1,7,1,1,'What the brush paints. Scatter multiplies the World panel\'s Boulders and Debris amounts; Erase clears every mask under the brush.',[...MASK_CHOICES,[7,'Erase all masks']]],
+  ['paintChannel','paint-channel','Paint',['paint'],1,15,1,1,'What the brush paints. Denser scatter supplies its own stones where the World panel\'s Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world\'s own value; Strength is how far. Erase clears every mask and style under the brush.',[...MASK_CHOICES,...STYLE_CHOICES,[7,'Erase all masks and style']]],
   ['maskChannel','mask-channel','Paint inside the shape',MASK_SHAPES,0,6,1,1,'Also paint a mask over the shape\'s own footprint, strongest where the shape is (a rocky mesa, a mossy hill).',[[0,'Off'],...MASK_CHOICES]],
   ['maskAmount','mask-amount','Shape paint strength',MASK_SHAPES,5,100,5,100,'How fully the shape paints its mask.'],
+  // Local style inside the shape (card C5 stage 2): each is a change about the world's own value, 0 none.
+  ['styleRelief','style-relief','Style: relief strength',MASK_SHAPES,-100,100,5,100,'Relief (ribs, lumps) inside the shape: below 0 smoother, above 0 stronger, up to 4x.'],
+  ['styleCracks','style-cracks','Style: cracks',MASK_SHAPES,-100,100,5,100,'Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none).'],
+  ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
+  ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
 ];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
@@ -367,7 +376,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount'].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','paintChannel','maskChannel','maskAmount',...STYLE_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -381,29 +390,35 @@ function startStroke(kind,p,options={}) {
 // toward its target by the stroke's influence, so repeated dabs never add up.
 // Rock, snow and moss are surface materials: painting one clears the other two
 // (a soft edge fades the old one out as the new one comes in), as the cover
-// brushes replace each other. Wet ground only darkens, so it layers on any of them.
-const MASK_WRITES=[null,[[0,127],[1,0],[3,0]],[[1,127],[0,0],[3,0]],[[2,127]],[[3,127],[0,0],[1,0]],[[4,127]],[[4,-127]],[[0,0],[1,0],[2,0],[3,0],[4,0]]];
+// brushes replace each other. Wet ground only darkens, so it layers on any of
+// them. Planes: 0 rock 1 snow 2 wet 3 moss 4 scatter 5 relief 6 cracks 7 banding 8 face.
+const MASK_WRITES=[null,[[0,127],[1,0],[3,0]],[[1,127],[0,0],[3,0]],[[2,127]],[[3,127],[0,0],[1,0]],[[4,127]],[[4,-127]],
+  [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0]],
+  [[5,127]],[[5,-127]],[[6,127]],[[6,-127]],[[7,127]],[[7,-127]],[[8,127]],[[8,-127]]];
 function maskSetup(s,work) {
-  const choice=Math.round(s.kind==='paint'?s.paintChannel:s.kind==='erase'?7:MASK_SHAPES.includes(s.kind)?s.maskChannel:0);
-  const writes=MASK_WRITES[choice];
-  if (!writes) return null;
+  const shape=MASK_SHAPES.includes(s.kind);
+  const choice=Math.round(s.kind==='paint'?s.paintChannel:s.kind==='erase'?7:shape?s.maskChannel:0);
+  // [plane, target, gain] per write: gain scales the influence (the shape's paint strength; a style write's target already carries its amount).
+  const writes=(MASK_WRITES[choice]||[]).map(([j,t]) => [j,t,shape?clamp(s.maskAmount,0,1):1]);
+  if (shape) STYLE_KEYS.forEach((k,j) => { const v=clamp(s[k]||0,-1,1); if (Math.abs(v)>=.005) writes.push([5+j,Math.round(127*v),1]); });
+  if (!writes.length) return null;
   // Replays borrow the planes from the work pool, as the other base fields.
   const pool=work?(work.masks??=maskPlanes.map(a => new Int8Array(a.length))):null;
   const base=maskPlanes.map((a,j) => { if (!pool) return a.slice(); pool[j].set(a); return pool[j]; });
-  return {base:Object.fromEntries(MASK_KEYS.map((k,j) => [k,base[j]])),n:writes.length,plane:writes.map(([j]) => maskPlanes[j]),from:writes.map(([j]) => base[j]),target:writes.map(([,t]) => t)};
+  return {base:Object.fromEntries(MASK_KEYS.map((k,j) => [k,base[j]])),n:writes.length,plane:writes.map(([j]) => maskPlanes[j]),from:writes.map(([j]) => base[j]),target:writes.map(([,t]) => t),gain:writes.map(([,,g]) => g),shape};
 }
-function paintCell(m,i,f) { for (let k=0;k<m.n;k++) { const b=m.from[k][i]; m.plane[k][i]=Math.round(b+(m.target[k]-b)*f); } }
+function paintCell(m,i,f) { for (let k=0;k<m.n;k++) { const b=m.from[k][i]; m.plane[k][i]=Math.round(b+(m.target[k]-b)*f*m.gain[k]); } }
 const copyMask=(m,i,j) => { for (let k=0;k<m.n;k++) m.plane[k][j]=m.plane[k][i]; };
 const maskSnapshot=() => Object.fromEntries(MASK_KEYS.map((k,j) => [k,maskPlanes[j].slice()]));
 function clearMasks() { for (const a of maskPlanes) a.fill(0); }
-// A landform's Paint inside option: its channel over the footprint, weighted
-// by the influence its dabs left in s.weights, so the paint follows the
-// shape's outline and softness. Applied once the shape is settled, like cracks.
+// A landform's Paint inside and Style options: over the footprint, weighted by
+// the influence its dabs left in s.weights, so the paint follows the shape's
+// outline and softness. Applied once the shape is settled, like cracks.
 function applyShapeMask(s) {
   const m=s.masks;
-  if (!m || !MASK_SHAPES.includes(s.kind) || !(s.maskChannel>=.5)) return;
-  const f=clamp(s.maskAmount,0,1),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
-  for (let y=c.y0;y<=c.y1;y++) for (let i=y*grid+c.x0,end=y*grid+c.x1;i<=end;i++) if (s.weights[i]>0) paintCell(m,i,s.weights[i]*f);
+  if (!m || !m.shape) return;
+  const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
+  for (let y=c.y0;y<=c.y1;y++) for (let i=y*grid+c.x0,end=y*grid+c.x1;i<=end;i++) if (s.weights[i]>0) paintCell(m,i,s.weights[i]);
 }
 // Finger coasts (Lava): an interlocking fringe of tapered land fingers and
 // lava inlets across the waterline. Measured on the retail Lava coast
@@ -1345,7 +1360,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -2383,10 +2398,19 @@ async function boot() {
 // Read-only hook for capture tools: the displayed (refined) heights.
 // bakeMs and drawMs resolve to milliseconds from submit to GPU completion;
 // bakeGpuMs and drawMs's gpuMs are the pass's own GPU time (timestamp queries).
+function replayDetail() {
+  flushEval();
+  const keys=['h',...MASK_KEYS],now=live(),before=keys.map(k => now[k].slice()),worst={};
+  prefix=[]; evaluate(0);
+  keys.forEach((k,j) => { let w=0; for (let i=0;i<before[j].length;i++) w=Math.max(w,Math.abs(before[j][i]-now[k][i])); worst[k]=w; });
+  return worst;
+}
 window.sculptDebug = {state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
-  replayAll: () => { flushEval(); const keys=['h',...MASK_KEYS],now=live(),before=keys.map(k => now[k].slice()); prefix=[]; evaluate(0); let worst=0; keys.forEach((k,j) => { for (let i=0;i<before[j].length;i++) worst=Math.max(worst,Math.abs(before[j][i]-now[k][i])); }); return worst; },
+  replayAll: () => Math.max(...Object.values(replayDetail())),
+  // replayDetail: the same, per field key (h, then the mask planes).
+  replayDetail,
   // masks: per plane [sum, non-zero cells], to compare channels across a save and load; sketch and loadSketch round-trip a recipe.
   masks: () => maskPlanes.map(a => { let sum=0,count=0; for (let i=0;i<a.length;i++) if (a[i]) { sum+=a[i]; count++; } return [sum,count]; }), sketch: () => JSON.parse(JSON.stringify(sketch())), loadSketch: s => { loadSketch(s); }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get biome() { return config.biomeId; }, get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 boot();
