@@ -284,6 +284,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let weather = weatherAt(p / (u.size - 1.0)).rg;
     let slope = length(broad);
     let route = routeProtection(p);
+    // Painted masks (card C5): coverage of rock, snow, wet ground and moss.
+    // Rock takes the face treatment below; the others mix after the beds.
+    var painted = vec4f(0.0);
+    if (u.paintOn != 0) { painted = paintCoverage(p); }
     let flatLight = u.ambient + 0.95 * u.light.z;
     var lighting = (u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
     lighting = min(lighting, u.lightCap);
@@ -584,8 +588,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Lump-scale noise breaks the face's upper and lower edges.
         let edgeNoise = terrainNoise(p * 1.5 + vec2f(53.0, 11.0));
         let faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * u.faceEdge);
-        let face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
-        let share = mix(u.rockShare.x, u.rockShare.y, smoothstep(u.faceSlope.y, u.faceSlope.y * 1.8, slope));
+        var face = smoothstep(u.faceSlope.x, u.faceSlope.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
+        var share = mix(u.rockShare.x, u.rockShare.y, smoothstep(u.faceSlope.y, u.faceSlope.y * 1.8, slope));
+        var lowGate = lowBank;
+        // Painted rock counts as face whatever the slope, and is mostly rock.
+        // (A branch of its own: rewriting the expressions above in place moved
+        // a few pixels of other worlds through the compiler's float ordering.)
+        if (u.paintOn != 0) {
+            face = max(face, painted.x * (1.0 - sandBar));
+            share = mix(share, 0.92, painted.x);
+            lowGate = max(lowBank, painted.x);
+        }
         let fine = terrainNoise(p * 3.0 + vec2f(19.0, 7.0));
         // Gullies at channel scale expose rock in streaks down the slope.
         let wide = 0.25 * (surfaceHeight(p - vec2f(7.0, 0.0)) + surfaceHeight(p + vec2f(7.0, 0.0))
@@ -595,7 +608,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                   + (fine.g - 0.5) * u.faceScore.z + (n.r - 0.5) * u.faceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.
         let threshold = mix(1.4, -0.9, share);
-        let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowBank;
+        let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
@@ -655,21 +668,25 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let split = clamp(1.0 - share * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
         let edge = clamp(1.5 * max(slope, 0.05) / S, 0.01, 0.2);
         let isB = smoothstep(split - edge, split + edge, f) * (1.0 - smoothstep(1.0 - edge, 1.0, f));
-        let bed = mix(strataSlot(z.y), strataSlot(z.z), isB);
+        // Painted rock (card C5) in a world with beds takes the colour its
+        // highest ground is painted with (its top zone's main bed: Painted
+        // Desert's grey buttes), not the alternating beds or the brown rock art.
+        let rockBed = strataSlot(u.strataZones[max(u.strataZoneCount - 1, 0)].y);
+        let bed = mix(mix(strataSlot(z.y), strataSlot(z.z), isB), rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
-        let painted = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
+        let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
         let onRaised = smoothstep(u.strataZones[0].x, u.strataZones[0].x + 1.5, hr) * (1.0 - route);
-        material = mix(material, painted, u.strata * u.strataContrast * onRaised);
+        material = mix(material, bedColour, max(u.strata * u.strataContrast * onRaised, u.strata * painted.x));
     }
     // Painted masks (card C5), after the world's own beds and before sand,
-    // which covers them. Rock also counts as exposed for the stones below.
-    var painted = vec4f(0.0);
+    // which covers them. Rock went through the face treatment above; where a
+    // world has none (microRock 0) it is the plain rock material.
     if (u.paintOn != 0) {
-        painted = paintCoverage(p);
-        material = mix(material, rock, painted.x);
+        let faceHandled = select(0.0, 1.0, u.reliefMode == 1 && u.microRock > 0.0);
+        material = mix(material, rock, painted.x * (1.0 - faceHandled));
         material = mix(material, snowMaterial(pixel), painted.y);
         material = mix(material, mossMaterial(pixel), painted.w);
         exposed = max(exposed, painted.x);

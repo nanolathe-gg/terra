@@ -512,6 +512,20 @@ fn bake(p: vec2f) -> vec4f {
     let h = baseHeight(p);
     let g = broadGradient(p);
     let slope = length(g);
+    // Painted rock and moss (card C5) take relief like a face: for the relief's
+    // gain and amplitude and the cracks' reach the ground there counts as
+    // sloped (rock like 0.8, moss half as much), so level painted ground gets
+    // ribs, lumps and cracks instead of a flat stain. The real slope still
+    // sets the fall line.
+    var paintRock = 0.0;
+    var faceSlope = slope;
+    var paintFall = vec2f(0.0, 1.0);
+    if (u.paintOn != 0) {
+        paintFall = normalize(vec2f(valueNoise(p / 60.0 + 3.0), valueNoise(p / 60.0 + 9.0)) + vec2f(1e-3));
+        let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
+        paintRock = smoothstep(0.2, 0.8, raw.r);
+        faceSlope = max(slope, 0.8 * max(paintRock, 0.5 * smoothstep(0.2, 0.8, raw.a)));
+    }
     // Only a route's graded surface stays smooth; its steep shoulders are
     // ordinary faces and take relief like any other (no smooth dark band).
     // Crystal cells (Crystals brush) keep clean flat faces: no relief,
@@ -521,7 +535,7 @@ fn bake(p: vec2f) -> vec4f {
     let crystalRaw = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).a;
     let crystalCell = smoothstep(0.15, 0.6, crystalRaw);
     let route = max(routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p)))), crystalCell);
-    let crackMask = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).g;
+    let crackMask = max(textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).g, 0.6 * paintRock);
     // Retail level ground is not dead flat in the art: faint embossed lumps
     // at 10-30 px. Appearance only; exported heights stay level.
     var plain = 0.0;
@@ -532,10 +546,10 @@ fn bake(p: vec2f) -> vec4f {
     // Level crests and graded routes stay smooth; relief grows with slope.
     // Gentle slopes carry low lumps too, so ground turned from the sun is
     // textured rather than a smooth gradient; level ground stays level.
-    let gain = max(smoothstep(0.08, 0.60, slope), u.gentleRelief * smoothstep(0.015, 0.10, slope))
+    let gain = max(smoothstep(0.08, 0.60, faceSlope), u.gentleRelief * smoothstep(0.015, 0.10, faceSlope))
              * smoothstep(-12.0, 10.0, h) * (1.0 - route);
     var fall = vec2f(0.0, 1.0);
-    if (slope > 1e-5) { fall = g / slope; }
+    if (slope > 1e-5) { fall = g / slope; } else { fall = paintFall; }
 
     var acc = vec3f(0.0);
     var amplitude = 1.0;
@@ -575,7 +589,7 @@ fn bake(p: vec2f) -> vec4f {
     // Steeper ground carries proportionally taller ribs.
     let patchy = mix(1.0, 0.35 + 1.3 * (valueNoise(p / 90.0 + 5.0) * 0.5 + 0.5), u.reliefPatchy);
     // Height scales with slope, with a floor so gentle lumps are visible.
-    var height = value * u.reliefAmount * max(clamp(slope, 0.0, 2.5), 0.25 * u.gentleRelief) * u.reliefScale * gain * patchy;
+    var height = value * u.reliefAmount * max(clamp(faceSlope, 0.0, 2.5), 0.25 * u.gentleRelief) * u.reliefScale * gain * patchy;
     height += plain;
     // Lunar regolith: fine wormy ridges on any slope, fading onto the
     // level dust, as on the retail Moon sections.
@@ -620,11 +634,11 @@ fn bake(p: vec2f) -> vec4f {
     // Sand buries relief beneath it.
     height *= 1.0 - 0.8 * buried;
     // Cracks, carved into the relief; sand fills them.
-    var crackAt = cracks(p, fall, slope, crackMask * (1.0 - route), h) * (1.0 - buried);
+    var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h) * (1.0 - buried);
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
     var broken = 0.0;
-    if (u.cracksOn == 1) { broken = smoothstep(0.0, 0.5, crackMask) * u.crackBlocks * smoothstep(0.5, 1.2, slope) * (1.0 - route); }
+    if (u.cracksOn == 1) { broken = smoothstep(0.0, 0.5, crackMask) * u.crackBlocks * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route); }
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast. Nor lifts the bed above it.
