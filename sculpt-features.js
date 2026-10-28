@@ -44,7 +44,7 @@ export async function mountMapFeatures(api) {
   const definitions=new Map(),images=new Map(),buttons=new Map(),panPointers=new Set();
   const root=doc.createElement('section'); root.className='section'; root.id='map-features-panel';
   root.innerHTML=`<h3>Features and starts</h3><fieldset id="map-features-controls" style="border:0;padding:0;margin:0;min-width:0" disabled>
-    <div class="row" data-tools style="flex-wrap:wrap"></div>
+    <div class="tools" data-tools style="margin-top:9px"></div>
     <p class="small" data-help></p><p class="small" data-catalogue></p>
     <div data-catalogue-controls><div class="row"><label>Kind <select data-filter><option value="all">All features</option><option value="tree">Trees</option><option value="foliage">Foliage</option><option value="rock">Rocks</option><option value="deposit">Metal deposits</option><option value="other">Other</option></select></label></div>
     <div data-catalogue-list style="max-height:220px;overflow:auto;margin:8px 0"></div><p class="small" data-selected></p></div>
