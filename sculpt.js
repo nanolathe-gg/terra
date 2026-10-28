@@ -51,6 +51,11 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:[
 // Shape options: per-shape settings, shown for the tools they apply to and
 // kept in each shape, so a selected shape can be changed like a new stroke.
 // Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
+// Cross-section (card C1): the kinds that take the parametric profile, and the
+// options that describe it. Wired like every shape option: SHAPE_FIELDS, the
+// card startStroke builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
+const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
+const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -60,6 +65,19 @@ const SHAPE_FIELDS=[
   ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
   ['bankPx','bank-px','Dry bank (px)',['deep','shallow'],0,160,2,1,'Width of the dry bank from the waterline to the level ground, whatever the shape\'s size (0: a share of the shape, set by Bank width).'],
+  ['profile','sec-profile','Cross-section (0 classic, 1 parametric)',SECTION_KINDS,0,1,1,1,'0 keeps this kind\'s own curve. 1 builds the profile from the options below, in pixels from the outer edge, so it keeps its size whatever the brush diameter. Mesa flanks, Wider north faces and Beach flatness are then ignored; Slope softness and (on water) Dry bank only set the default face width.'],
+  ['apronPx','sec-apron-px','Apron width (px)',SECTION_KINDS,0,160,2,1,'A gentle concave skirt at the foot (talus, desert aprons; on water, the beach at the waterline).'],
+  ['apronHeight','sec-apron-height','Apron height',SECTION_KINDS,0,60,5,100,'Share of the whole rise (of the bank, on water) reached at the apron\'s top.'],
+  ['facePx','sec-face-px','Face width (px)',SECTION_KINDS,0,240,2,1,'Width of the steep face above the apron (0: a share of the brush set by Slope softness; on water, from Dry bank).'],
+  ['faceCurve','sec-face-curve','Face curve (− concave, + convex)',SECTION_KINDS,-100,100,5,100,'Concave: a soft foot and a crisp top edge. Convex: a crisp foot and a rounded shoulder.'],
+  ['terraces','sec-terraces','Terraces',SECTION_KINDS,0,8,1,1,'Cut the face into this many flat ledges with risers between them.'],
+  ['ledge','sec-ledge','Ledge (flat share of a step)',SECTION_KINDS,0,90,5,100,'How much of each step is flat; the rest is the riser.'],
+  ['terraceJitter','sec-terrace-jitter','Terrace variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
+  ['lip','sec-lip','Lip (units; − rounds the edge)',SECTION_KINDS,-30,30,1,1,'A raised rim at the top of the face; a negative value rounds the edge off.'],
+  ['crown','sec-crown','Crown roundness',['hill','mountain'],0,100,5,100,'The cap above the face: 0 is a point (or flat, with a short Face width); 100 a wide rounded dome.'],
+  ['shelfPx','sec-shelf-px','Shelf width (px)',['deep','shallow'],0,200,2,1,'A submerged shelf between the waterline and the drop to the bed.'],
+  ['shelfDepth','sec-shelf-depth','Shelf depth (units below sea)',['deep','shallow'],0,30,1,1,'How far below the sea the shelf lies (never deeper than the bed).'],
+  ['shelfSteps','sec-shelf-steps','Shelf steps',['deep','shallow'],0,6,1,1,'0: one sloping bench; more: layered flat shelves, one below another.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound)',['crystal'],0,1,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world).'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
   ['crystalSize','crystal-size','Crystal width (px)',['crystal'],6,640,2,1,'Crystals: typical base width. Column mound: column top width (retail ~15).'],
@@ -288,15 +306,19 @@ function startStroke(kind,p,options={}) {
   // Directions drawn from noise live in the authoring frame; turn them with it.
   const turn=frame?Math.atan2(frame[1],frame[0]):0;
   const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8+turn;
-  return {kind,base,protectBase:copy(protection,work?.protect),routeBase:copy(routes,work?.route),crackBase:copy(cracks,work?.crack),coverBase:copy(cover,work?.cover),crystalBase:copy(crystal,work?.crystal),node:options.node,cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
+  // A hill with a parametric cross-section is the plain swept hill (like the mountain), not the shouldered ridge.
+  const sec=Object.fromEntries(SECTION_KEYS.map(k => [k,options[k]??shapeValue(k)])),shouldered=kind==='hill' && experiment.get('forms')==='shouldered' && !(sec.profile>=.5);
+  const made={kind,shouldered,base,protectBase:copy(protection,work?.protect),routeBase:copy(routes,work?.route),crackBase:copy(cracks,work?.crack),coverBase:copy(cover,work?.cover),crystalBase:copy(crystal,work?.crystal),node:options.node,cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation'].map(k => [k,options[k]??shapeValue(k)])),baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
-    distances:kind==='hill' && experiment.get('forms')==='shouldered'?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
+    ...Object.fromEntries(['crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation'].map(k => [k,options[k]??shapeValue(k)])),...sec,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
+  made.prof=sectionSetup(made);
+  return made;
 }
 // Finger coasts (Lava): an interlocking fringe of tapered land fingers and
 // lava inlets across the waterline. Measured on the retail Lava coast
@@ -360,14 +382,107 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
   }
   return v*amount;
 }
+// Parametric cross-section (card C1; profile 1). Everything is measured in px
+// inward from the stroke's outer edge (the foot), so a form keeps its size
+// whatever the brush diameter, and every cell reads only its own position and
+// the stroke's fields, so region replay stays exact. Land runs apron -> face
+// (optionally terraced) -> cap; water runs plain -> bank face -> apron at the
+// waterline -> shelf -> drop -> bed. Widths are scaled along the outline by the
+// broad world-space noise fields times Face width variation, so a face does
+// not keep one width round an arc. The lip is height added on top of the
+// profile, not part of it: the profile alone stays monotone in the distance
+// from the path, which the union of a sweep's dabs (nearest wins) relies on.
+let sectionLift=0;
+function sectionSetup(s) {
+  if (!(s.profile>=.5) || !SECTION_KINDS.includes(s.kind)) return null;
+  const water=s.kind==='deep' || s.kind==='shallow',dome=s.kind==='hill' || s.kind==='mountain',crown=dome?s.crown:0;
+  // Per-step height wobble weights: each riser level mixes two noise fields
+  // with its own phase, so neighbouring risers wander independently.
+  const wobC=new Float32Array(10),wobS=new Float32Array(10);
+  for (let m=0;m<10;m++) { wobC[m]=Math.cos(2.4*m+1); wobS[m]=Math.sin(2.4*m+1); }
+  return {water,dome,bed:s.kind==='deep'?-55:-7,
+    apron:s.apronPx,apronHeight:s.apronHeight,face:s.facePx,faceShare:clamp(.38+(s.softness-.5)*.6,.1,.88),curve:s.faceCurve,
+    steps:Math.round(clamp(s.terraces,0,8)),flat:Math.min(s.ledge,.95),jitter:s.terraceJitter,lip:s.lip,
+    // A dome's face stops short of the crest; the crown is what is left, rising the last 45% of the way.
+    capWidth:.55*crown,capRise:.45*crown,capExp:1+2*crown,
+    bank:s.bankPx,shelf:s.shelfPx,shelfDepth:s.shelfDepth,shelfSteps:Math.round(clamp(s.shelfSteps,0,6)),vary:(s.faceVariation??.8)*.5,wobC,wobS};
+}
+// Level of riser m of n (0 at the foot, 1 at the top), wobbled between the ends.
+const terraceLevel=(c,m,n,nA,nB) => m/n+(m>0 && m<n?c.jitter*.3/n*(nA*c.wobC[m]+nB*c.wobS[m]):0);
+// Step the unstepped face share g (card formula): q = g n + jitter noise, level
+// floor(q) then a smooth riser over the last (1 - ledge) of the step. The
+// noise is windowed to 0 at the foot and the top, so the cap stays at full
+// height, and bounded so q stays monotone in g.
+function terrace(c,g,n,nj,nA,nB) {
+  const a=clamp(c.jitter*nj,-.22*n,.22*n),q=g*n+a*4*g*(1-g),k=Math.max(0,Math.min(Math.floor(q),n-1));
+  const lo=terraceLevel(c,k,n,nA,nB),hi=terraceLevel(c,k+1,n,nA,nB);
+  return lo+(hi-lo)*smooth(c.flat,1,q-k);
+}
+// Rise at d px from the foot, as a share of the whole amount: the apron (a
+// concave skirt reaching apronHeight) then the face up to pt. Convex faces
+// are steep at the foot and round over; concave ones start soft and end crisp.
+function faceRise(c,d,A,F,pt,n,nj,nA,nB) {
+  if (d<=0) return 0;
+  const ah=A>0?Math.min(c.apronHeight,.9*pt):0;
+  if (d<A) return ah*Math.pow(d/A,1.5);
+  if (d>=A+F) return pt;
+  const u=(d-A)/F,k=Math.abs(c.curve);
+  let g=smooth(0,1,u);
+  if (k>0) g+=((c.curve>0?1-Math.pow(1-u,2.4):Math.pow(u,2.4))-g)*k;
+  return ah+(pt-ah)*(n>0?terrace(c,g,n,nj,nA,nB):g);
+}
+// The lip's shape: t px down the face from its top (negative on the cap side).
+const lipRim=(t,F) => t>=0?1-smooth(0,.45*F,t):1-smooth(0,clamp(.4*F,5,30),-t);
+function landSection(c,d,reach,kw,ka,nj,nA,nB) {
+  let A=c.apron*ka,F=(c.face>0?c.face:c.dome?Math.max((1-c.capWidth)*reach-c.apron,.1*reach):c.faceShare*reach)*kw;
+  if (A+F>.98*reach) { const k=.98*reach/(A+F); A*=k; F*=k; }
+  const top=A+F,pt=1-c.capRise;
+  let p=1;
+  if (d<top) p=faceRise(c,d,A,F,pt,c.steps,nj,nA,nB);
+  else if (c.capRise>0) p=pt+c.capRise*(1-Math.pow(1-Math.min((d-top)/Math.max(reach-top,1e-3),1),c.capExp));
+  sectionLift=c.lip!==0?c.lip*lipRim(top-d,F):0;
+  return p;
+}
+// Surface height of a deep or shallow stroke at d px from its outer edge, on
+// ground of height base. The dry bank is the land profile run from the
+// waterline (its foot) up to the plain; the lip needs room beyond the bank's
+// top to fade out, so a lipped bank starts that far inside the stroke.
+function waterSection(c,d,reach,base,kw,ka,nj,nA,nB) {
+  const sea=config.seaLevel;
+  let A=c.apron*ka,F=(c.face>0?c.face:c.bank>0?Math.max(c.bank-c.apron,6):.4*reach)*kw,S=c.shelf>0 && c.shelfDepth>0?c.shelf*ka:0;
+  let I=c.lip!==0?clamp(.4*F,5,30):0;
+  const total=I+A+F+S;
+  if (total>.92*reach) { const k=.92*reach/total; I*=k; A*=k; F*=k; S*=k; }
+  const B=A+F,rest=I+B+S,depth=Math.min(c.shelfDepth,.7*(sea-c.bed));
+  let v;
+  if (d<I) v=base;
+  else if (d<I+B) { const p=faceRise(c,B-(d-I),A,F,1,c.steps,nj,nA,nB); v=base>sea?sea+(base-sea)*p:base; }
+  else if (d<rest) { const u=(d-I-B)/S; v=Math.min(base,sea-depth*(c.shelfSteps>0?1-terrace(c,1-u,c.shelfSteps,nj,nA,nB):smooth(0,.35,u))); }
+  else { const top=S>0?sea-depth:sea; v=Math.min(base,top+(c.bed-top)*smooth(0,1,(d-rest)/(.7*(reach-rest)))); }
+  sectionLift=c.lip!==0?c.lip*lipRim(d-I,F):0;
+  return v;
+}
+// The one call dab() makes: the weight w (0 at the foot, 1 at the full rise or
+// the bed) for the cell at index i, r of the way out to the foot, whose
+// outline reaches `reach` px. The lip is left in sectionLift for the caller.
+function crossSection(s,i,r,reach) {
+  sectionLift=0;
+  const c=s.prof,nz=s.noise,d=(1-r)*reach;
+  if (d<=0) return 0;
+  const kw=clamp(1+c.vary*nz.coastWidth[i],.4,1.8),ka=clamp(1+c.vary*nz.shelf[i],.4,1.8),nj=nz.coastX[i],nA=nz.coastY[i],nB=nz.x[i];
+  if (!c.water) return landSection(c,d,reach,kw,ka,nj,nA,nB);
+  const base=s.base[i];
+  if (base-c.bed<.5) return 0;
+  return clamp((base-waterSection(c,d,reach,base,kw,ka,nj,nA,nB))/(base-c.bed),0,1);
+}
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
   const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind)) && experiment.get('edges')==='natural';
-  const shoulderedHill=s.kind==='hill' && experiment.get('forms')==='shouldered';
+  const shoulderedHill=s.shouldered;
   const waterTool=s.kind==='deep' || s.kind==='shallow';
   const bankScale=waterTool?2**((s.bankWidth-.5)*1.3):1;
   // Dry bank of a fixed width on the ground (Lava; 0 keeps the old share).
-  const bankPx=waterTool?(s.bankPx??0):0;
+  const bankPx=waterTool && !s.prof?(s.bankPx??0):0;
   const faceWidth=.66+(s.softness-.5)*.9,backWidth=s.softness===.5?1.34:2-faceWidth;
   const radius=s.radius,amp=s.rough*radius*(naturalWater ? 1.1 : naturalPlateau ? .95 : shoulderedHill ? .85 : s.kind==='crater' ? .45 : .2);
   const macro=naturalWater || naturalPlateau;
@@ -526,6 +641,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     }
     else if (s.kind==='mountain') w=(1-r*r)**(3.5*2**((.5-s.softness)*1.5));
     else w=1-smooth(0,1,r);
+    if (s.prof) w=crossSection(s,i,r,radius*width*bankScale);
     if (bumpy && !shoulderedHill) w=clamp(w*(1+s.rough*.09*s.noise.detail[i]),0,1);
     // Most brushes union influences; the swept hill instead uses its nearest
     // curve section. Neither adds height merely because the pointer dwells.
@@ -558,7 +674,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (naturalWater && core) value=Math.min(value,base+(-55-base)*core);
       // Reshape only the dry part of an ordinary low bank. The waterline,
       // guided deep bed and elevated coastal terrain retain their positions.
-      if (s.beachFlatness!==.5 && base>config.seaLevel && base<=config.baseHeight+1 && value>config.seaLevel) {
+      if (s.beachFlatness!==.5 && !s.prof && base>config.seaLevel && base<=config.baseHeight+1 && value>config.seaLevel) {
         const above=(value-config.seaLevel)/(base-config.seaLevel);
         value=config.seaLevel+(base-config.seaLevel)*above**(2**((s.beachFlatness-.5)*2.4));
       }
@@ -567,6 +683,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (s.kind==='shallow' && s.shallowMode==='passage') value=Math.max(base,value);
     }
     else if (s.kind==='smooth') value=base+(s.smoothTarget[i]-base)*w*clamp(s.amount/100,0,1);
+    if (s.prof) value+=sectionLift;
     heights[i]=clamp(value,MIN_HEIGHT,MAX_HEIGHT);
     if (s.kind!=='smooth' && value!==base) routes[i]=s.routeBase[i]*(1-influence);
     // Design intent survives weathering: buildable crests and shallow routes
@@ -727,7 +844,7 @@ function stampCrystals(s) {
 }
 function extendStroke(s,p) {
   if (s.kind==='crystal') { if (Math.hypot(p.x-s.last.x,p.y-s.last.y)>=1) { s.path.push(p); s.last=s.end=p; stampCrystals(s); } return; }
-  if (s.kind==='hill' && experiment.get('forms')==='shouldered') {
+  if (s.shouldered) {
     if (Math.hypot(p.x-s.last.x,p.y-s.last.y)<.2) return;
     // The first span replaces the point preview once its direction is known.
     // Exact nearest points along each segment avoid a cadence of round dabs.
@@ -740,7 +857,7 @@ function extendStroke(s,p) {
   s.last=p; s.end=p; s.path.push(p);
 }
 function settleHill(s) {
-  if (s.kind!=='hill' || experiment.get('forms')!=='shouldered' || s.path.length<3) return;
+  if (!s.shouldered || s.path.length<3) return;
   // Round guidance corners before sweeping the final ridge. The live field is
   // still drawn immediately; release replaces its abrupt segment junctions.
   let path=[s.path[0]];
@@ -886,7 +1003,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,cracks:s.cracks}; }
+function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -919,7 +1036,7 @@ function replayShape(n,work) {
     rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
   if (n.kind==='crystal') { s.path=pts.slice(); stampCrystals(s); return; }
   if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
-  if (n.kind==='hill' && experiment.get('forms')==='shouldered' && experiment.get('replay')!=='full') {
+  if (s.shouldered && experiment.get('replay')!=='full') {
     // The settled ridge replaces every live dab, so replay goes straight to
     // it: the same accepted path and face side, without the discarded pass.
     const path=[pts[0]];
@@ -930,7 +1047,7 @@ function replayShape(n,work) {
       settleHill(s); applyCracks(s); return;
     }
   }
-  if (n.kind==='hill' && experiment.get('forms')==='shouldered') { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
+  if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
   else sweep(s,pts);
   if (n.kind==='crater') addCraterlets(n,s);
   applyCracks(s);
