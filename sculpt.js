@@ -616,18 +616,19 @@ function crystalList(s) {
   const path=simplifyPath(s.path,Math.max(1,s.radius*.05)),lengths=[0];
   for (let k=1;k<path.length;k++) lengths.push(lengths[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
   const total=lengths[lengths.length-1],count=Math.max(1,Math.round(s.crystalCount*(1+total/Math.max(8,s.radius*1.2))));
-  const variation=s.crystalVariation,turn=Math.atan2(s.rot[1],s.rot[0]),out=[];
+  const variation=s.crystalVariation,turn=Math.atan2(s.rot[1],s.rot[0]),scale=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,crystalSize=s.crystalSize*scale,out=[];
   for (let k=0;k<count;k++) {
     // Along the path by length, then within the brush radius; denser and
-    // taller toward the middle of the cluster.
+    // taller toward the middle of the cluster. Offsets and lean turn with
+    // the frame; width scales with it, as the cluster radius already does.
     const along=rnd(k,1)*total; let j=1; while (j<path.length-1 && lengths[j]<along) j++;
     const a=path[j-1],b=path[j]||a,f=lengths[j]>lengths[j-1]?(along-lengths[j-1])/(lengths[j]-lengths[j-1]):0;
-    const spread=Math.pow(rnd(k,2),.8),angle=rnd(k,3)*Math.PI*2;
+    const spread=Math.pow(rnd(k,2),.8),angle=rnd(k,3)*Math.PI*2+turn;
     const cx=a.x+(b.x-a.x)*f+Math.cos(angle)*spread*s.radius,cy=a.y+(b.y-a.y)*f+Math.sin(angle)*spread*s.radius;
-    const width=s.crystalSize*(1+variation*(rnd(k,4)-.5)*1.2)*(1-.4*spread);
-    const height=s.amount*(1-.45*spread)*(1+variation*(rnd(k,5)-.5))*Math.min(1.3,width/Math.max(4,s.crystalSize));
+    const width=crystalSize*(1+variation*(rnd(k,4)-.5)*1.2)*(1-.4*spread);
+    const height=s.amount*(1-.45*spread)*(1+variation*(rnd(k,5)-.5))*Math.min(1.3,width/(Math.max(4,s.crystalSize)*scale));
     const sides=clamp(Math.round(s.crystalSides+variation*(rnd(k,6)-.5)*2.4),3,12);
-    const R=width/2,lean=s.crystalLean*R*.75*rnd(k,7),leanAngle=rnd(k,8)*Math.PI*2;
+    const R=width/2,lean=s.crystalLean*R*.75*rnd(k,7),leanAngle=rnd(k,8)*Math.PI*2+turn;
     const edges=Array.from({length:sides},(_,e) => {
       const t=turn+rnd(k,9)*Math.PI*2+(e+.5)*Math.PI*2/sides;
       return {nx:Math.cos(t),ny:Math.sin(t),d:R*Math.cos(Math.PI/sides)*(1+s.rough*.35*(rnd(k,20+e)-.5))};
@@ -985,7 +986,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  const r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0):0);
+  const r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
