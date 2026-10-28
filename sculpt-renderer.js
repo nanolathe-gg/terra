@@ -818,6 +818,10 @@ export class TerrainRenderer {
     this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
     this.f('uPockmark', variant.has('pockmark') ? Number(variant.get('pockmark')) : 0);
     this.f('uPockSize', variant.has('pockSize') ? Number(variant.get('pockSize')) : 5);
+    // G8 (Moon).
+    this.f('uMoonCups', variant.has('moonCups') ? Number(variant.get('moonCups')) : 0);
+    this.f('uMoonCupSize', variant.has('moonCupSize') ? Number(variant.get('moonCupSize')) : 5.5);
+    this.f('uMoonCupDepth', variant.has('moonCupDepth') ? Number(variant.get('moonCupDepth')) : 1.4);
     this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
     this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
