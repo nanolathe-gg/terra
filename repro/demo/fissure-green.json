@@ -1,0 +1,119 @@
+{
+ "biome": "green",
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "mountain",
+   [
+    [
+     512,
+     500
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 440,
+     "amount": 120,
+     "roughness": 45,
+     "cracks": 0,
+     "maskChannel": 1,
+     "maskAmount": 85
+    }
+   }
+  ],
+  [
+   "fissure",
+   [
+    [
+     330,
+     430
+    ],
+    [
+     420,
+     470
+    ],
+    [
+     520,
+     500
+    ],
+    [
+     640,
+     560
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 100,
+     "amount": 30,
+     "fissureWidth": 10,
+     "fissureJag": 60,
+     "fissureBranches": 4,
+     "fissureBranchLen": 70,
+     "fissureBranchSpread": 60,
+     "fissureTaper": 60,
+     "fissureCrack": 50,
+     "fissureDark": 100
+    }
+   }
+  ],
+  [
+   "fissure",
+   [
+    [
+     470,
+     330
+    ],
+    [
+     510,
+     400
+    ],
+    [
+     560,
+     440
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 100,
+     "amount": 30,
+     "fissureWidth": 10,
+     "fissureJag": 70,
+     "fissureBranches": 2,
+     "fissureBranchLen": 50,
+     "fissureCrack": 50,
+     "fissureDark": 100
+    }
+   }
+  ],
+  [
+   "fissure",
+   [
+    [
+     560,
+     620
+    ],
+    [
+     620,
+     600
+    ],
+    [
+     700,
+     640
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 100,
+     "amount": 30,
+     "fissureWidth": 10,
+     "fissureJag": 70,
+     "fissureBranches": 1,
+     "fissureBranchLen": 40,
+     "fissureCrack": 50,
+     "fissureDark": 100
+    }
+   }
+  ]
+ ]
+}

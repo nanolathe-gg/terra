@@ -75,3 +75,8 @@ tapering, jagged crescent ridge with spurs), `ridge-red` (branching rugged
 mountain ridges) and `ridge-lava` (low winding hill ridges and a radiating
 lump); their options are Spurs, Crest irregularity, Crest width and height
 variation, Crest taper, Rim sectors and Rim gaps.
+
+The fissure demos (card C4 stage 2) are `fissure-desert` (jagged cuts with
+branches across a mesa's cap and face), `fissure-ice` (one branching crevasse
+through a snow shore), `fissure-green` (cuts across a hill with its own painted
+rock) and `fissure-red` (a polygonal fracture network on a low platform; Mode 1).
