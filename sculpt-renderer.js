@@ -737,6 +737,20 @@ export class TerrainRenderer {
     set('uCrackHairline', number('crackHairline', 0.6));
     set('uCrackBlocks', number('crackBlocks', 0.6));
     set('uCrackMajor', number('crackMajor', 0.8));
+    // Rock structure (card E3); 0 is the scattered rock every world had.
+    set('uRockOrder', number('rockOrder', 0));
+    set('uBedSpacing', number('bedSpacing', 12));
+    set('uBedVary', number('bedVary', 0.5));
+    set('uBedDip', number('bedDip', 0));
+    set('uBedDipDir', number('bedDipDir', 90));
+    set('uBedLedge', number('bedLedge', 0.5));
+    set('uBedLip', number('bedLip', 1));
+    set('uJointSpacing', number('jointSpacing', 36));
+    set('uJointAngle', number('jointAngle', 0));
+    set('uJointDepth', number('jointDepth', 2));
+    set('uJointRun', number('jointRun', 120));
+    set('uJointGaps', number('jointGaps', 0.3));
+    set('uCrackStyle', number('crackStyle', 0));
     if (this.sun) this.v('uSun', this.sun);
     set('uCracksOn', preview && v.get('previewCracks') !== '1' ? 0 : 1);
     set('uWindAngle', number('wind', 20));

@@ -205,6 +205,20 @@ struct Uniforms {
     wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
     // Crystal shore slabs (card C2).
     crystalSeam: f32,     // submerged crystal-field cells: 1 paints the seam marks dark and the slab fill paler (0: water as before)
+    // Rock structure (card E3: Green, Red, Painted Desert). All 0 is today's scattered rock.
+    rockOrder: f32,       // 0 scattered relief, blocks and cracks; 1 coherent beds and joints with the scatter held back
+    bedSpacing: f32,      // bed thickness, height units
+    bedVary: f32,         // how much beds differ in thickness (0 even, 1 very)
+    bedDip: f32,          // bed tilt, height units per px
+    bedDipDir: f32,       // direction the beds tilt down toward, degrees (0 east, 90 south)
+    bedLedge: f32,        // how far each bed steps (0 the smooth face, 1 flat treads and short risers)
+    bedLip: f32,          // lit lip on each ledge and the shaded notch under it, height units
+    jointSpacing: f32,    // distance between joints, world px
+    jointAngle: f32,      // joints' lean from the screen's north-south, degrees
+    jointDepth: f32,      // groove depth, height units
+    jointRun: f32,        // typical length of an unbroken joint, world px
+    jointGaps: f32,       // share of each joint's length that is missing (0: the whole face)
+    crackStyle: f32,      // cracks: 0 ink (dark floor), 1 relief (carved groove with a lit lip)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
