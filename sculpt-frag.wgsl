@@ -59,6 +59,19 @@ fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[cla
 // the middle of a lobe's rim, where its slope makes the ribbon that wide; the bumpy apron
 // wanders it and the gaps break it into stretches.
 // hf: the height above the plain; slope: units per px, which sets the edge softness.
+// Card E8: the beds of one zone at height hr as a colour, for painted rock, whose height is
+// not the zone's (the same split and share as the strata block; no edge softening, as a
+// painted mesa's rock is mostly gentle).
+fn rockStrata(hr: f32, zone: i32, paint: f32) -> vec3f {
+    if (paint <= 0.0) { return strataSlot(u.strataZones[zone].y); }
+    let z = u.strataZones[zone];
+    let S = max(u.strataZoneSpace[zone].x, 0.5);
+    let t = hr / S;
+    let k = floor(t);
+    let split = clamp(1.0 - z.w * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
+    let isB = smoothstep(split - 0.04, split + 0.04, fract(t));
+    return mix(strataSlot(z.y), strataSlot(z.z), isB);
+}
 fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     let wander = (terrainNoise(p * 0.03 + vec2f(41.0, 7.0)).r - 0.5) * 2.0 * u.baseBandWander
                + (terrainNoise(p * 0.35 + vec2f(5.0, 63.0)).g - 0.5) * 1.5;
@@ -878,7 +891,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Painted rock (card C5) in a world with beds takes the colour its
         // highest ground is painted with (its top zone's main bed: Painted
         // Desert's grey buttes), not the alternating beds or the brown rock art.
-        let rockBed = strataSlot(u.strataZones[max(u.strataZoneCount - 1, 0)].y);
+        let topZone = max(u.strataZoneCount - 1, 0);
+        var rockBed = strataSlot(u.strataZones[topZone].y);
+        // Card E8: the strata run through the rock itself, so painted rock carries the top
+        // zone's own beds (its grey with the lines), not one flat colour, wherever it is painted.
+        if (u.strataZoneSpace[topZone].x > 0.0) { rockBed = rockStrata(hr, topZone, painted.x); }
         let bed = mix(mix(strataSlot(z.y), strataSlot(z.z), isB), rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
