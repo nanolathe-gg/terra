@@ -704,6 +704,8 @@ export class TerrainRenderer {
     this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
     this.v('uShallowMean', (this.config.water?.shallowMeanRGB || this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
+    this.f('uRingFade', variant.has('ringFade') ? Number(variant.get('ringFade')) : 0);
+    this.f('uHillLight', variant.has('hillLight') ? Number(variant.get('hillLight')) : 1);
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
     this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);

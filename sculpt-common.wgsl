@@ -217,6 +217,8 @@ struct Uniforms {
     shallowMean: vec3f,   // mean colour of the shallow water art: the lit bed's tint
     bedBright: f32,       // brightness of the tinted bed (1: the tint as it is)
     bedContrast: f32,     // how much of the bed's light carries through the tint (1: all, 0: flat tint)
+    hillLight: f32,       // brightness of the hill cover's material (Archipelago; 1: as drawn)
+    ringFade: f32,        // how gradually the mineral ring fades out from the hill (0: as drawn; Archipelago)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

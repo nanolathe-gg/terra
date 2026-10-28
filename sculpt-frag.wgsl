@@ -486,9 +486,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     let body = pixelSampleLayer(slopeFringeTex, slopeFringeSamp, pixel, vec2f(512.0), 1).rgb;
                     let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
                     let arrivals = max(source * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-                    var fine = smoothstep(0.002, 0.23, arrivals);
+                    var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
-                    let fill = smoothstep(0.018, 0.17, arrivals);
+                    let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     let ringWeight = fine * mix(fill, 1.0, vein) * u.ringAmount;
                     transitionGround = mix(grass, ring, ringWeight);
                     var warm = smoothstep(0.02, 0.54, source);
@@ -517,11 +517,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     let ring = pixelSample(mineralRingTex, mineralRingSamp, pixel, vec2f(512.0)).rgb;
                     let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
                     let arrivals = max(sediments.b * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-                    var fine = smoothstep(0.002, 0.23, arrivals);
+                    var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
                     let veil = smoothstep(0.06, 0.78, zone);
                     var margin = mix(grass, fringe, veil * 0.55);
-                    let fill = smoothstep(0.018, 0.17, arrivals);
+                    let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
                     let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12)
                              * smoothstep(0.02, 0.35, sediments.a);
@@ -888,6 +888,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             near = max(near, step(0.3, crystalField(p + dir * 11.0)) * 0.35);
         }
         material *= 1.0 - 0.3 * near;
+    }
+    // Archipelago's hills are lighter than their material draws them: retail's mound
+    // pixels average 1.14-1.18 times ours in each channel in all three windows.
+    // Only the hill's own dark cover is lifted: sand at the foot is already light and would clip.
+    if (u.hillLight != 1.0) {
+        let dark = 1.0 - smoothstep(0.45, 0.70, dot(material, vec3f(0.299, 0.587, 0.114)));
+        material *= mix(1.0, u.hillLight, smoothstep(u.base + 1.0, u.base + 10.0, baseHeight(p)) * dark);
     }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
