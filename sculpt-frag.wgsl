@@ -424,8 +424,9 @@ fn shelfNoise(q: vec2f) -> f32 {
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
 // noise (shelfWander units over shelfScale px), so the band's outline and width
 // vary along the shore instead of following it at a fixed offset.
-fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32) -> f32 {
-    let at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
+fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32, cracked: bool) -> f32 {
+    var at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
+    if (cracked && u.crackedStep > 0.0) { at = u.crackedStep; }
     let grad = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
                                   baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
     let block = floor(pixel / 2.0);
@@ -447,17 +448,35 @@ fn bedMottleField(p: vec2f, pixel: vec2f) -> f32 {
     return smoothstep(0.3, 0.7, 0.5 + (m - 0.5) * 2.2 + grain * 0.45) * 2.0 - 1.0;
 }
 
+// E11: dark dots in the lit bed. Retail's lilac lake shows small dark dots (3-4 px, one every
+// 12-20 px, blue-purple) that the ground tiles' fine grain does not give (dark components
+// of >= 3 px average 6.5-11 px in retail against 4.3-6.7 in ours). One jittered dot per
+// cell of bedDotCell screen px, a share of cells empty; 0..1 coverage.
+fn bedDotField(pixel: vec2f) -> f32 {
+    let cell = max(u.bedDotCell, 6.0);
+    let c = floor(pixel / cell);
+    let r = vec2f(shelfHash(c + 3.1), shelfHash(c + 91.7));
+    let centre = (c + 0.2 + 0.6 * r) * cell;
+    let radius = 1.5 + 1.0 * shelfHash(c + 47.3);
+    let present = step(0.3, shelfHash(c + 11.9));
+    return present * (1.0 - smoothstep(radius - 0.6, radius + 0.4, length(pixel - centre)));
+}
+
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
 // bedTint is how much of the bed's own colour the tint replaces.
-fn litBed(bed: vec3f) -> vec3f {
+fn litBed(bed: vec3f, cracked: bool) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
     // as soft darker blue, never as black rims), so the dark side carries less.
-    let ratio = clamp(dot(bed, luma) / level, 0.25, 2.0);
-    let light = pow(ratio, select(u.bedContrast * 0.6, u.bedContrast, ratio >= 1.0));
+    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides.
+    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked && u.crackedContrast > 0.0), 2.0);
+    var contrast = u.bedContrast;
+    var darkSide = 0.6;
+    if (cracked && u.crackedContrast > 0.0) { contrast = u.crackedContrast; darkSide = 1.0; }
+    let light = pow(ratio, select(contrast * darkSide, contrast, ratio >= 1.0));
     let tint = u.shallowMean * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
@@ -1097,7 +1116,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
         if (edgeHard > 0.0) {
-            if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth); }
+            if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
             else { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
         }
         let waterSize = vec2f(textureDimensions(waterTex, 0));
@@ -1119,7 +1138,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 let own = normalize(vec3f(-(g - broad), 1.0));
                 bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
             }
-            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color, crackedBed)), bedLit); }
+            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
+            if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
             if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight

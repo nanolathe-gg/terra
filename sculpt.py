@@ -102,6 +102,11 @@ for _m in SHINE_MATERIALS:
 # lights the lit bed by its own relief only (no slope shading across the shelf); bedMottle is
 # the bed's mid-scale mottle as a share of brightness.
 KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0, bedMottle=0)
+# E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
+# crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
+# bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
+# rocky faces are cut from ~1); bedDots / bedDotCell draw dark dots in the lit bed.
+KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots=0, bedDotCell=14)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -156,7 +161,17 @@ WORLD_KNOBS = {
                 # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
                 # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
                 # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
-                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1),
+                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1,
+                # E11 (round 7 report: "darker dots", "cracks too soft", "edge against the deep
+                # water seems shaded"). Retail's lilac lake has dark dots of 3-4 px every 12-20 px
+                # (dark components >= 3 px average 6.5-11 px, ours 4.3-6.7); the step is a true
+                # threshold. Under a cracked-bed stroke (red-3's shelf) it sits at depth 14, where
+                # retail's lilac share falls from .91 (0-6) / .66 (6-12) to .27 (12-18) / .17;
+                # the lake (red-2) is lilac to its full depth 24 and keeps the world's 22. The
+                # cracked bed is cut as rocky ground and keeps its crevices through the tint
+                # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
+                stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6, bedMottle=.07,
+                crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.

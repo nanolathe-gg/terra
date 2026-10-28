@@ -818,7 +818,7 @@ fn bake(p: vec2f) -> vec4f {
     var crackedBed = false;
     if (u.waterOn != 0 && h <= u.sea + 1.0) { crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5; }
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
-    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, 0.8), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
+    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, u.bedCrackSlope), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
     var broken = 0.0;

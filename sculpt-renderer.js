@@ -685,6 +685,10 @@ export class TerrainRenderer {
     this.f('uStepSharp', variant.has('stepSharp') ? Number(variant.get('stepSharp')) : 0);
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
     this.f('uShelfScale', variant.has('shelfScale') ? Number(variant.get('shelfScale')) : 100);
+    this.f('uCrackedStep', variant.has('crackedStep') ? Number(variant.get('crackedStep')) : 0);
+    this.f('uCrackedContrast', variant.has('crackedContrast') ? Number(variant.get('crackedContrast')) : 0);
+    this.f('uBedDots', variant.has('bedDots') ? Number(variant.get('bedDots')) : 0);
+    this.f('uBedDotCell', variant.has('bedDotCell') ? Number(variant.get('bedDotCell')) : 14);
     this.f('uBedMottle', variant.has('bedMottle') ? Number(variant.get('bedMottle')) : 0);
     this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
@@ -768,6 +772,7 @@ export class TerrainRenderer {
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
     set('uBedRelief', number('bedRelief', 0));
+    set('uBedCrackSlope', number('bedCrackSlope', 0.8));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackLength', number('crackLength', 2));
