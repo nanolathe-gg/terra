@@ -1,5 +1,5 @@
 {"biome": "desert", "source": {"map": "the desert triad", "x": 1216, "y": 960},
- "ground": true, "query": "",
+ "ground": true, "query": "variant=triad",
  "strokes": [
   ["plateau", [[205, 165]], {"card": {"diameter": 280, "amount": 90, "roughness": 26, "softness": 30, "apronPx": 55, "apronHeight": 20, "facePx": 50}}],
   ["mountain", [[540, 570]], {"card": {"diameter": 170, "amount": 45, "roughness": 25, "softness": 50}}],

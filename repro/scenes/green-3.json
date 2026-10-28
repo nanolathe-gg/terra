@@ -1,5 +1,5 @@
 {"biome": "green", "source": {"map": "the barrier reef", "x": 128, "y": 1152},
- "ground": true, "query": "",
+ "ground": true, "query": "variant=evad",
  "strokes": [
   ["hill", [[60,250],[180,210],[220,280]], {"card": {"diameter": 340, "amount": 62, "roughness": 15}}],
   ["hill", [[480,10],[540,20]], {"card": {"diameter": 120, "amount": 28, "roughness": 30}}],

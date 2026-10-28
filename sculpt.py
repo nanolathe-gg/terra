@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local common-surface terrain experiment; no engine integration."""
 import argparse
+import copy
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -168,6 +169,66 @@ WORLD_KNOBS = {
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
                 crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2),
 }
+
+
+# Variants (card C5 stage 3): named presets laid over a world's own, for the
+# places where one retail family splits into distinct looks. A variant is knob
+# values on top of WORLD_KNOBS, plus optionally world colours ('colors') and
+# other config keys ('config', e.g. strataZones). A world's own preset is its
+# default, so nothing changes unless a variant is chosen (World panel, or
+# `variant=<id>` in the page's address). Every knob must be in KNOB_DEFAULTS.
+WORLD_VARIANTS = {
+    'green': {
+        # Evad River Delta and the Barrier Reef: rounded hills with soft
+        # shading, no terrace contour lines; grey rock only as a sparse dark rim
+        # at the foot (repro windows green-1, green-3, census green-07..12).
+        # The default (Great Divide) keeps its dense terraces and rock faces.
+        'evad': dict(label='Evad River: smooth slopes',
+                     knobs=dict(banding=0, bandLine=0, faceStreak=0, faceDark=.3, crackSeverity=.3, crackBlocks=.3, reliefAmount=.5, microRock=.7)),
+    },
+    'ice': {
+        # Icy Bergs: periwinkle-white blocks standing in blue water (repro
+        # window ice-2: block mean (177,196,247); the default's (220,225,232)).
+        # The Ice blocks are Crystals-brush stamps, so their colour is the
+        # world's crystal colour; side faces are that colour times 0.38 times
+        # crystalFace.
+        'bergs': dict(label='Icy Bergs: blue blocks',
+                      colors=dict(crystal='#8ea6ee'),
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4)),
+        # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white
+        # snow) are not here: the dark faces come from the block's own shading,
+        # which the colour knobs only reach through the tops (a darker crystal
+        # colour darkened the top, not the sides). See NOTES, stage 3.
+    },
+    'desert': {
+        # Desert Triad: tall grey buttes with thin reddish bed lines, dark
+        # shaded flanks and long dark cracks, beside Painted Desert's broad
+        # orange and cream mesas (repro window desert-2).
+        'triad': dict(label='Desert Triad: grey buttes',
+                      knobs=dict(strataSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
+                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3),
+                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .22], [60, 2, 0, .2], [95, 1, 2, .35]])),
+    },
+}
+for _world, _variants in WORLD_VARIANTS.items():
+    for _id, _v in _variants.items():
+        _unknown = set(_v.get('knobs', {})) - set(KNOB_DEFAULTS)
+        assert not _unknown, f'variant {_world}/{_id} sets unknown knobs {sorted(_unknown)}'
+
+
+def apply_variant(config, biome, variant):
+    """A copy of one world's config with a variant laid over it, or None for
+    an unknown variant."""
+    v = WORLD_VARIANTS.get(biome, {}).get(variant)
+    if v is None:
+        return None
+    out = copy.deepcopy(config)
+    out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
+    out['baseColors'] = dict(config.get('colors', {}))
+    out['colors'] = {**config.get('colors', {}), **v.get('colors', {})}
+    out.update(copy.deepcopy(v.get('config', {})))
+    out['variant'] = variant
+    return out
 
 
 def biome_config(biome, assets):
@@ -364,6 +425,7 @@ def main():
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns
+        config['variants'] = {k: v['label'] for k, v in WORLD_VARIANTS.get(config['biomeId'], {}).items()}
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -379,6 +441,13 @@ def main():
                 if config is None:
                     self.send_error(404, f'unknown or unavailable world: {biome}')
                     return
+                # A variant of the world (card C5 stage 3); none is the world's own preset.
+                variant = parse_qs(urlsplit(self.path).query).get('variant', [''])[0]
+                if variant:
+                    config = apply_variant(config, biome, variant)
+                    if config is None:
+                        self.send_error(404, f'unknown variant {variant} of world {biome}')
+                        return
                 body = json.dumps(config).encode()
                 content_type = 'application/json'
             else:

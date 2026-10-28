@@ -1,4 +1,4 @@
-{"biome": "ice", "source": {"map": "icy bergs", "x": 3840, "y": 1536}, "ground": true, "query": "",
+{"biome": "ice", "source": {"map": "icy bergs", "x": 3840, "y": 1536}, "ground": true, "query": "variant=bergs",
  "strokes": [
   ["offset", [[512, 512]], {"card": {"diameter": 2600, "amount": -80, "roughness": 20}}],
   ["crystal", [[640, 580]], {"card": {"diameter": 80, "amount": 170, "crystalSize": 600, "crystalCount": 1, "crystalSides": 5, "crystalTop": 50, "crystalLean": 30, "roughness": 40}}],
