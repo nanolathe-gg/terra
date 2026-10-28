@@ -125,7 +125,8 @@ WORLD_KNOBS = {
     # tops stepped ~16 units (measure/crystal_geometry.py).
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
-                    crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1),
+                    crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
+                    crystalGrain=1, crystalFace=0, crystalInk=1, crystalTone=1.08),
     # Ice: level snow (flats at exactly 85 and 170), rounded snow mounds whose
     # shaded faces are smooth slate streaks with no crack network, and a
     # pack-ice shelf instead of a beach; its banks into the water are white
