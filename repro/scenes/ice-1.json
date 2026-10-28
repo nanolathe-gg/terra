@@ -1,7 +1,7 @@
 {"biome": "ice", "source": {"map": "ice scream", "x": 1920, "y": 1600}, "ground": true, "query": "",
  "strokes": [
-  ["offset", [[100, -150], [110, 500], [100, 1150]], {"card": {"diameter": 760, "amount": -18, "roughness": 45}}],
-  ["deep", [[40, -100], [50, 500], [30, 1100]], {"card": {"diameter": 520, "shelves": 70, "roughness": 22}}],
+  ["offset", [[190, -150], [200, 500], [190, 1150]], {"card": {"diameter": 760, "amount": -18, "roughness": 45}}],
+  ["deep", [[130, -100], [140, 500], [120, 1100]], {"card": {"diameter": 520, "shelves": 70, "roughness": 22}}],
   ["mountain", [[900, 260], [930, 500], [910, 760]], {"card": {"diameter": 520, "amount": 140, "roughness": 75, "softness": 40}}],
   ["hill", [[820, 380], [870, 420]], {"card": {"diameter": 160, "amount": 30, "roughness": 60}}],
   ["hill", [[960, 960], [1060, 980]], {"card": {"diameter": 200, "amount": 22, "roughness": 40}}],
