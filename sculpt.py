@@ -45,6 +45,8 @@ KNOB_DEFAULTS = dict(
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
+    # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
+    flatBank=0,
     # Cross-section (card C1): profile 0 keeps each brush's own curve; the rest
     # only matter once a stroke sets profile 1 (px, units or shares as labelled).
     profile=0, apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
@@ -76,7 +78,10 @@ WORLD_KNOBS = {
                   faceStreak=1, faceDark=.35),
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
                 reliefAmount=.2, slopeTexture=0, microRock=0),
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68),
+    # Retail sand runs level to a crisp waterline (hundred isles, canal
+    # crossing): flatBank keeps the bank from the shaded lip and the
+    # dashed contour lines the 3.7-unit bands drew across it.
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68, flatBank=1),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
