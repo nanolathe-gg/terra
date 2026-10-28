@@ -221,6 +221,19 @@ WORLD_VARIANTS = {
         # which the colour knobs only reach through the tops (a darker crystal
         # colour darkened the top, not the sides). See NOTES, stage 3.
     },
+    'zhon': {
+        # The river family (card B4): the reproduction windows' sections are
+        # river sections, whose water is brown at the shore and dark olive in
+        # the deeps, not the coast's grey-green and teal. The textures come
+        # from the family's other sections (sculpt_section_biome.river_water);
+        # 'river' names the config block they are prepared into.
+        # The river's colour by depth reaches its deep end by ~40 units, not
+        # the coast's 60 (windows zhon-1..3 at 34-44 / 44-56: R 57 / 40), and
+        # it varies over a short reach, so the depth average is tighter. Mean
+        # RGB error to retail over depth bins, zhon-2: coast water 44.5, river
+        # textures on the coast ramp 50.2, with these two knobs 28.2.
+        'river': dict(label='River sections: brown water', river=True, knobs=dict(deepDepth=38, waterSoft=16)),
+    },
     'desert': {
         # Desert Triad: tall grey buttes with thin reddish bed lines, dark
         # shaded flanks and long dark cracks, beside Painted Desert's broad
@@ -245,11 +258,37 @@ def apply_variant(config, biome, variant):
         return None
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
+    if v.get('river'):
+        # Swap in the world's river water (textures, ramp, mean colours).
+        for key, value in copy.deepcopy(config['river']).items():
+            out[key] = {**out.get(key, {}), **value}
     out['baseColors'] = dict(config.get('colors', {}))
     out['colors'] = {**config.get('colors', {}), **v.get('colors', {})}
     out.update(copy.deepcopy(v.get('config', {})))
     out['variant'] = variant
     return out
+
+
+# Red's shallow water, lifted toward retail's (card B4). The quilted purple is
+# the mean of the coast sections' interiors. Across the three Red windows the
+# retail pixels at depths 0-12 average (106, 65, 117) against the texture as
+# drawn (91, 53, 109): brighter by 15 in red and 12 in green, and the pools of
+# red-2 reach (125, 80, 138). A share of the texture is replaced by a light
+# lilac, which lifts the level and keeps the grain and the hue family.
+RED_SHALLOW_LIFT = 0.18
+RED_SHALLOW_LILAC = (200, 150, 170)
+
+
+def lighten_red_shallows(config, assets):
+    import numpy as np
+    from PIL import Image
+    src = Path(assets) / 'red-water-shallow.png'
+    img = np.asarray(Image.open(src).convert('RGB'), np.float32)
+    lit = (img * (1 - RED_SHALLOW_LIFT) + np.asarray(RED_SHALLOW_LILAC, np.float32) * RED_SHALLOW_LIFT).round().astype(np.uint8)
+    Image.fromarray(lit).save(Path(assets) / 'red-water-shallow-lit.png')
+    config['textures']['waterShallow'] = '/sculpt-assets/red-water-shallow-lit.png'
+    mean = lit.reshape(-1, 3).mean(axis=0).tolist()
+    config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
 
 
 def biome_config(biome, assets):
@@ -306,6 +345,8 @@ def biome_config(biome, assets):
         config['material'].update(shallowDepth=24, deepDepth=60)
     if biome in ('red', 'desert'):
         config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0')
+        if biome == 'red':
+            lighten_red_shallows(config, assets)
         config['material'].update(rockyCoasts=True, surfaceRelief=1.25, fractureDepth=1.25,
                                   slopeStart=.06, slopeFull=.30, slopeFloor=-4.0, slopeDry=5.0)
     elif biome == 'archipelago':
@@ -416,6 +457,8 @@ def biome_config(biome, assets):
             config['textures']['palette'] = '/sculpt-assets/palette-pairs-desert.png'
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
+    if 'river' in config:
+        config['river']['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['river']['textures'].items()}
     config['biomes'] = BIOME_NAMES
     return config
 
@@ -480,6 +523,7 @@ def main():
                     biome, _, leaf = path.removeprefix('/sculpt-assets/').partition('/')
                     if biome in configs:
                         allowed = {v.rsplit('/', 1)[-1] for v in configs[biome]['textures'].values()}
+                        allowed.update(v.rsplit('/', 1)[-1] for v in configs[biome].get('river', {}).get('textures', {}).values())
                         allowed.update(('rock-restrained.png', 'rock-structural.png', 'noise-ridged-gaussian.png'))
                         if leaf in allowed:
                             file = assets[biome] / leaf

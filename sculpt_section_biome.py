@@ -86,7 +86,15 @@ RECIPES = {
         'rock_band': [.45, .95],
         'water': {'kinds': ['coast sandy', 'coast sandy savannah'],
                   'deep_reference': 'low flats/59f53dfd',
-                  'beach_reference': 'low flats/0717093d', 'beach_kinds': ['coast sandy savannah']},
+                  'beach_reference': 'low flats/0717093d', 'beach_kinds': ['coast sandy savannah'],
+                  # The river variant (card B4): brown shallows and dark olive
+                  # deeps from the one river-mouth section the reproduction
+                  # windows do not cut (65a3d59f; its colour by depth, brown 97
+                  # at 3-6 to olive 36 at 44-60, matches the windows'). The
+                  # family's 50 small sections are uniform maroon at every
+                  # depth, a different reach, so they stay out.
+                  'river': {'kind': 'low savannah rivers', 'only': ['65a3d59f'],
+                            'bands': {'shallow': [0, 10], 'mid': [20, 30], 'deep': [44, 60]}}},
         'seed': 5590213,
     },
     # Retail Lava. One brown ground (flats/low-land; high-land and
@@ -685,6 +693,8 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
             report['beach'].update(measure_beach(water, families['beach'], reference_mask, sea,
                                                  recipe['water']['beach_kinds']))
         material.update(shallowDepth=water['shallowDepth'], deepDepth=water['deepDepth'])
+        if recipe['water'].get('river'):
+            river_keys = river_water(catalog, recipe['water']['river'], sea, seed, arrays, world, report)
     else:
         mare = catalog.section(recipe['mare_reference'])
         mare_patches, mare_records = pool([mare], lambda s: np.ones(s.idx.shape, bool), 64, 40, 32, 12, 'mare')
@@ -736,6 +746,21 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
     }
     if water and 'midDepth' in material:
         config['water']['midRGB'] = mean('water-mid')
+    if water and recipe['water'].get('river'):
+        # What the river variant swaps in: its three water textures and a
+        # ramp read off the retail river family's colour by depth (brown at
+        # the shore, dark olive from ~45 units down: windows zhon-1..3 at 0-3 /
+        # 26-34 / 44-56: R 97-109 / 61-65 / 39-45).
+        rtex = {**textures, 'water': '/sculpt-assets/' + river_keys['deep'] + '.png',
+                'waterShallow': '/sculpt-assets/' + river_keys['shallow'] + '.png',
+                'waterMid': '/sculpt-assets/' + river_keys['mid'] + '.png'}
+        rmean = lambda band: [round(float(v), 2) for v in actual[river_keys[band]].mean(axis=(0, 1))]
+        config['river'] = {
+            'textures': rtex,
+            'material': {**material, 'shallowDepth': 0, 'deepDepth': 50, 'midDepth': 25},
+            'water': {'meanRGB': rmean('deep'), 'deepRGB': rmean('deep'), 'shallowRGB': rmean('shallow'),
+                      'shallowMeanRGB': rmean('shallow'), 'mean': [v / 255 for v in rmean('deep')], 'grainRGB': [1., 1., 1.],
+                      'midRGB': rmean('mid')}}
     contact(out, world, actual, pools)
     report.update(config=config, generation_seconds=round(time.perf_counter() - start, 1),
                   output_sha256={name: digest(out / (name + '.png')) for name in actual},
@@ -747,6 +772,26 @@ def prepare_section_biome(world: str, out: Path, root: Path = None) -> dict:
                           'use their own bed height, which may misplace the shelf by a few pixels.'])
     report_path.write_text(json.dumps(report, indent=1) + '\n')
     return config
+
+
+def river_water(catalog, spec, sea, seed, arrays, world, report):
+    """River-family water textures by depth below the shoreline (shallow, mid
+    and deep bands), quilted from the family's sections with the same patch
+    rules as the coastal water, and the config pieces a variant swaps in."""
+    sections = [s for s in catalog.kind(spec['kind']) if s.name.split('/')[-1] in spec['only']]
+    means = {}
+    for band, (lo, hi) in spec['bands'].items():
+        def select(s, lo=lo, hi=hi):
+            depth = sea - s.height
+            water = (depth >= lo) & (depth <= hi) & (s.height < sea)
+            return water & (distance_transform_edt(s.height < sea) > 4)
+        patches, records = pool(sections, select, 24, 30, 16, 4, 'river ' + band + ' water', fill=.8, typical=(.1, .9))
+        key = world + '-river-' + band
+        arrays[key], quilt_info = quilt(patches, size=256, patch=24, overlap=10, seed=seed + 20 + len(means))
+        report['river_' + band] = {'pool_count': len(records), 'patches': records, 'quilt': quilt_info,
+                                   'depth_band': [lo, hi], 'sections': [s.name for s in sections]}
+        means[band] = key
+    return means
 
 
 def measure_beach(water, beach_family, ground_family, sea, kinds):
