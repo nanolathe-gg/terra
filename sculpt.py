@@ -76,7 +76,11 @@ WORLD_KNOBS = {
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
-                  faceStreak=1, faceDark=.35),
+                  faceStreak=1, faceDark=.35,
+                  # Great Divide's terraces are short dashes stacked like
+                  # scales, not long smooth lines (thin dark lines per
+                  # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
+                  bandJag=1),
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
                 reliefAmount=.2, slopeTexture=0, microRock=0),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
