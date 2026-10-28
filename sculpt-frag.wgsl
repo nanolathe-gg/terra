@@ -365,6 +365,35 @@ fn moonCups(pixel: vec2f, size: f32, density: f32, depth: f32) -> vec3f {
     return vec3f(grad, cavity);
 }
 
+// G8 (Moon): the stringy relief of the shaded flank. Retail's steep walls are crossed by thin light
+// and dark strokes, 1-2 px wide and 5-12 px long, leaning with the glint axis whichever way the wall
+// turns; they are relief the sun shades, so the strokes whose wall faces it are light and the rest
+// stay dark. Two octaves of value noise stretched along that axis; returns the height gradient they
+// add (the noise's own derivative, so there is no finite difference to alias at this scale).
+fn moonNoiseD(x: vec2f, salt: i32) -> vec3f {
+    let i = vec2i(floor(x));
+    let f = fract(x);
+    let w = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    let dw = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+    let a = markHash(i + vec2i(salt, 5)).x;
+    let b = markHash(i + vec2i(1 + salt, 5)).x;
+    let c = markHash(i + vec2i(salt, 6)).x;
+    let d = markHash(i + vec2i(1 + salt, 6)).x;
+    let value = a + (b - a) * w.x + (c - a) * w.y + (a - b - c + d) * w.x * w.y;
+    let slope = dw * vec2f((b - a) + (a - b - c + d) * w.y, (c - a) + (a - b - c + d) * w.x);
+    return vec3f(value, slope);
+}
+fn moonRibs(pixel: vec2f) -> vec2f {
+    let across = dot(pixel, SHINE_ACROSS);
+    let along = dot(pixel, SHINE_ALONG);
+    let a = moonNoiseD(vec2f(across / 2.0, along / 5.5), 9100);
+    let b = moonNoiseD(vec2f(across / 1.2 + 31.0, along / 2.6 + 7.0), 9300);
+    // Height 2 (a - .5) + (b - .5); the chain rule takes each octave's derivative back to pixels.
+    let ga = a.y * 2.0 / 2.0 * SHINE_ACROSS + a.z * 2.0 / 5.5 * SHINE_ALONG;
+    let gb = b.y / 1.2 * SHINE_ACROSS + b.z / 2.6 * SHINE_ALONG;
+    return ga + gb;
+}
+
 // Ice crystal mountains (card E6). Retail's second ice mountain (ice-1) is slate
 // ruled with straight dark strokes, 1-2 px wide and 8-40 px long, spaced 3-6 px, in
 // domains ~36 px across that each keep one of three directions (two steep, one
@@ -1422,6 +1451,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let shaded = 1.0 - clamp(shading, 0.0, 1.0);
         let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, shaded));
         color *= 1.0 - pits * landform * mix(0.5, 0.92, shaded);
+    }
+    if (u.moonRibs > 0.0 && h > u.sea + 1.0) {
+        // G8 (Moon): the shaded flank's strokes, on steep ground of every facing, more where turned from the sun.
+        let turnedRib = 1.0 - clamp(shading, 0.0, 1.0);
+        let wall = u.moonRibs * smoothstep(0.15, 0.5, slope) * smoothstep(0.12, 0.5, turnedRib);
+        if (wall > 0.0) {
+            let seenRib = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
+            let beforeRib = max(0.0, dot(normal, u.light));
+            let afterRib = max(0.0, dot(normalize(vec3f(-(g + u.moonRibDepth * moonRibs(pixel)), 1.0)), u.light));
+            let strokes = clamp((u.ambient + 0.95 * afterRib * seenRib) / (u.ambient + 0.95 * beforeRib * seenRib), 0.3, 2.6);
+            color *= mix(1.0, strokes * (1.0 - u.moonRibDark * smoothstep(0.1, 0.55, turnedRib)), wall);
+        }
     }
     if (u.moonCups > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
         // G8 (Moon): lit cups, many on shaded steep faces, few on lit ground, none on the flat top. The

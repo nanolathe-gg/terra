@@ -143,6 +143,8 @@ KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 # G8, Moon: lit cups (0: none; the pockmark dots above are separate). Size is the spacing across the glint axis in px, depth the wall steepness.
 KNOB_DEFAULTS.update(moonCups=0, moonCupSize=5.5, moonCupDepth=1.4)
+# G8, Moon: stringy light and dark strokes down steep faces (0: none), their steepness and the darkening of faces turned from the sun.
+KNOB_DEFAULTS.update(moonRibs=0, moonRibDepth=1, moonRibDark=0)
 # E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
@@ -307,7 +309,10 @@ WORLD_KNOBS = {
                  # 'cracked' restore them.
                  # G8: pits are lit cups (moonCups) from the visual study, not E6's dots (pockmark, now the
                  # Moon variant 'pitted'): small, on shaded steep faces, few on lit ground, none on tops.
-                 moonCups=1,
+                 moonCups=1, moonCupSize=6.5,
+                 # G8: steep faces turned from the sun are near black and stringy (strokes 1-2 px wide, 5-12 px
+                 # long, leaning with the glint axis): relief the sun shades, with a little less light overall.
+                 moonRibs=1, moonRibDepth=.9, moonRibDark=.15,
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
                  pockmark=0, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
@@ -514,11 +519,11 @@ WORLD_VARIANTS = {
     'moon': {
         # Pitted (card E6): one pitted surface from crest to foot, dots 4 x 6 px at one density over all raised
         # ground, a trace of sheen, no cracks. The default's lit cups (G8) replace it.
-        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, banding=.3)),
+        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, moonRibs=0, banding=.3)),
         # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
         # carved cracks, no pits and no sheen.
         'cracked': dict(label='Cracked slopes: smooth tops',
-                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, moonRibs=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
                                    shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
                                    shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
                                    shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
