@@ -59,7 +59,7 @@ const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
 // Line features (card C4): spurs, crest variation and crater rim sectors. All
 // default off; spurs and crest options turn a hill or mountain into a ridge
 // built from tapering pieces (ridgePieces), rim options reshape a crater's rim.
-const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','crestJag','crestVary','crestTaper','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
+const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','crestJag','crestVary','crestTaper','rimHeight','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
 const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.spurCount)>=1 || o.crestJag>0 || o.crestVary>0 || o.crestTaper>0);
 const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
 // Painted masks (card C5): five signed-byte planes per cell, rock, snow or ice,
@@ -100,6 +100,7 @@ const SHAPE_FIELDS=[
   ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
   ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
   ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain'],0,100,5,100,'The ridge narrows and lowers toward both ends of its path.'],
+  ['rimHeight','rim-height','Rim height (share of depth)',['crater'],0,150,1,100,'How high the rim stands, as a share of the crater\'s Depth (34% is the usual rim); the bowl floor does not change, so a tall rim needs no deeper bowl.'],
   ['rimSectors','rim-sectors','Rim sectors',['crater'],0,8,1,1,'Split the rim into this many sectors of different height and width (a lopsided ring, not an even one).'],
   ['rimUnequal','rim-unequal','Sector inequality',['crater'],0,100,5,100,'How different the sectors are: 0 equal; 100 from a faint low ridge to a tall, broad massif.'],
   ['rimGaps','rim-gaps','Rim gaps',['crater'],0,4,1,1,'Deliberate breaks in the rim, where it sinks to a low saddle.'],
@@ -732,7 +733,7 @@ function addRimSpurs(n,s) {
   }
   const work=borrowWork();
   try {
-    const t=startStroke('mountain',roots[0],{...n.params,radius:R,amount:s.amount*.34,rough:s.rough*.8,softness:.8,cracks:0,craterlets:0,craterEjecta:0,spurCount:0,rimSectors:0,rimGaps:0,crestJag:0,crestVary:0,crestTaper:0,profile:0,seed:s.seed,frame:n.frame,node:keys,rect,work});
+    const t=startStroke('mountain',roots[0],{...n.params,radius:R,amount:s.amount*s.rimHeight,rough:s.rough*.8,softness:.8,cracks:0,craterlets:0,craterEjecta:0,spurCount:0,rimSectors:0,rimGaps:0,crestJag:0,crestVary:0,crestTaper:0,profile:0,seed:s.seed,frame:n.frame,node:keys,rect,work});
     for (const pc of pieces) { t.piece=pc; dab(t,pc.a,pc.b); }
   } finally { workDepth--; }
 }
@@ -801,7 +802,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       const floorEdge=.25+.45*(1-s.softness);
       const rimNoise=valueNoise(lx/(sc*.8),ly/(sc*.8),s.seed^0x3e1);
       // Low-frequency rim noise lets whole sectors of rim sink away.
-      let rimHeight=s.amount*.34*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
+      let rimHeight=s.amount*s.rimHeight*clamp(1.1*(rimNoise*.5+.5)+.5*n0*s.rough-.15*s.rough,0,1.5);
       const rimWidth0=(.16+.2*s.softness)*(1+.35*n2);
       let rimWidth=rimWidth0;
       // Sectors and gaps (card C4), by angle in the shape's own frame.
