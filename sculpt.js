@@ -29,7 +29,7 @@ const HELP = {
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
-let mapUpdate=() => {};
+let mapUpdate=() => {},exportSurface=null;
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
@@ -2395,8 +2395,8 @@ $('file').addEventListener('change',async () => {
   try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
-function renderExportView(corners) {
-  if (corners) { renderer.setHeight(exportMapField(config.map,corners,size,grid),grid); heightDirty=false; }
+function renderExportView(forMap=false) {
+  if (forMap) { exportSurface??=renderer.height; renderer.setHeight(exportMapField(exportSurface),grid); heightDirty=false; }
   if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); heightDirty=false; }
   const start=performance.now(),stats=renderer.draw({quality:'full',clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
   drawTiming(stats,performance.now()-start,'full');
@@ -2667,7 +2667,7 @@ async function boot() {
       } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); }
     }
     $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
-    mountMapExport({config,canvas,ready:canExport,revision:() => revision+':'+weatherJob,samples:() => { const display=previewHeight(); return (x,y) => sample(display,x,y); },render:renderExportView,restore:() => { heightDirty=true; schedule(); },onUpdate:fn => { mapUpdate=fn; },busy:on => { loading=on; $('editor').disabled=on; $('world-editor').disabled=on; overlay.style.pointerEvents=on?'none':''; }});
+    mountMapExport({config,canvas,ready:canExport,revision:() => revision+':'+weatherJob,samples:() => { const display=renderer.height; return (x,y) => sample(display,x,y); },render:renderExportView,restore:() => { if (exportSurface) { renderer.setHeight(exportSurface,grid); exportSurface=null; } schedule(); },onUpdate:fn => { mapUpdate=fn; },busy:on => { loading=on; $('editor').disabled=on; $('world-editor').disabled=on; overlay.style.pointerEvents=on?'none':''; }});
     updateControls(); resize(); schedule(); queueWeather();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
@@ -2681,7 +2681,7 @@ function replayDetail() {
   keys.forEach((k,j) => { let w=0; for (let i=0;i<before[j].length;i++) w=Math.max(w,Math.abs(before[j][i]-now[k][i])); worst[k]=w; });
   return worst;
 }
-window.sculptDebug = {state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; },
+window.sculptDebug = {capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),

@@ -15,7 +15,8 @@ export function mountMapExport(api) {
     const url=new URL(location.href); url.searchParams.set('mapX',x); url.searchParams.set('mapY',y); url.searchParams.set('sea',sea); url.searchParams.set('scratch','map-'+Date.now()); url.searchParams.delete('pendingSketch'); location.href=url;
   };
   const update=() => { $('map-export').disabled=busy || !map || !catalogue?.worlds?.[config.biomeId]?.climate || !api.ready(); };
-  fetch('/map-catalog.json').then(async r => { const data=await r.json(); if (!r.ok) throw new Error(data.error||'Catalogue unavailable'); catalogue=data; const w=data.worlds[config.biomeId]; $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.`:'Export disabled: '+(w?.disabledReason||'no retail planet was established for this world.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
+  const readCatalogue=config.exportCatalog?Promise.resolve(config.exportCatalog):fetch('/map-catalog.json').then(async r => { const data=await r.json(); if (!r.ok) throw new Error(data.error||'Catalogue unavailable'); return data; });
+  readCatalogue.then(data => { catalogue=data; const w=data.worlds[config.biomeId]; if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.`:'Export disabled: '+(w?.disabledReason||'no retail planet was established for this world.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
   api.onUpdate(update);
   async function exportMap(name=$('map-name').value,description=$('map-description').value) {
     if (!map || !catalogue?.worlds?.[config.biomeId]?.climate) throw new Error('Export is unavailable for this canvas or world.');
@@ -25,7 +26,7 @@ export function mountMapExport(api) {
     busy=true; update(); api.busy(true); $('map-download').replaceChildren();
     try {
       $('map-export-state').textContent=warning+'Capturing projected terrain chunks…';
-      api.render(sampled.heights);
+      api.render(true);
       // Take a synchronous copy before PNG encoding yields: WebGPU's next
       // presentation can discard the drawing buffer at an animation frame.
       const snapshot=new OffscreenCanvas(api.canvas.width,api.canvas.height); snapshot.getContext('2d').drawImage(api.canvas,0,0); api.restore();
