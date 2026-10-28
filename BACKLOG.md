@@ -1480,6 +1480,36 @@ most visible first: the frost band's fine lines and blue gaps, the berg's
 lit faces and crease, the submerged shelf, then ice-3's speckle. Rule 8
 applies to each, and whatever is left stays open.
 
+**Done (merged eaf4c141f; EXPERIMENTS rows 104-108).**
+- **Moon:** hills and crater walls are one pitted surface with no cracks
+  (`pockmark`, `pockSize`), with a trace of sheen on raised ground only
+  (`shineGate` in the model). The old look is the Moon variant
+  `cracked`.
+- **Ice mountains:** the default is monotone, very rough slate
+  (`iceSlate`, `mineralDetail`; renamed from E6's `rockDetail` at merge,
+  because E9 uses that name). The variant `crystal` (`iceCrystal`,
+  `iceCrest`) is ice-1's type, and ice-1 uses it. `snow` is the earlier
+  mountain.
+- **Frost band:** finer needles and smaller melt pockets. Its luma and
+  s.d. now match retail's.
+- Ice-3's speckle is gone: its fine-detail energy is 12.7 against
+  retail's 13.0.
+- `shineHeadroom` is in the model but unused. It did not stop the
+  saturation on ice-3 and only darkened it.
+
+**Still open:**
+- **Moon:** retail's fine diagonal streaks on lit faces and its folded
+  ridges are missing. The pits read as a lattice, and the tops are
+  lighter than retail's.
+- **Ice crystal style:** the strokes are thinner and sparser than
+  retail's hatching, and the shaded east side takes none.
+- **Frost band:** the blue gaps read as dotted pits, and there is no
+  ragged edge or Y-shaped seams.
+- **Berg:** the lit faces are darker than retail's, and the crease is
+  missing.
+- **Submerged shelf:** not built. Retail's water there shifts violet at
+  equal luma, which is E11's water path.
+
 ### E7. Crystal (wave 2, after E2)
 
 > Retail is much shinier. Retail crystals all have size variation and some
@@ -1654,6 +1684,28 @@ applies.
   shows them dark at every facing) and lava-3's tall hill, which is
   still a cone.
 - **Server and guard:** port 8851, CDP 9651, guard `--worlds lava`.
+
+**Done (merged 692da9655, knob renamed 7dc86c9a3; EXPERIMENTS rows
+109-112).**
+- Lava-1 has 11 uneven layers, and a dark crease at each step's foot
+  shows the lines on every bank.
+- Lava-2's circular style is round bites cut from the bank, layer after
+  layer. Its median band is 57.7 px, as retail's. `layerStyle` 1 is now
+  bites; the old stepped mounds are 2.
+- Fingers are flat and blunt. Amount, size, distribution and height are
+  per-stroke options; the default is small. `repro/demo/lava-fingers-cranked.json`
+  shows them turned up.
+- Rock shine is gated by slope (`shineSlopeGate`; E6's `shineGate` is a
+  different knob).
+- Hills can be stacked lobes; lava-3's hill uses them.
+
+**Still open:**
+- Lines are cleaner than retail's, and retail's banks are darker.
+- Lava-2's bites are too even in size, with outlines that are too black.
+- Large fingers have square tips; on curves they become wedges.
+- Lava-3's hill is lighter than retail's, with no black far side.
+- Changing a shape option leaves Export disabled for over 20 s (card A1's
+  defect).
 
 ### E11. Shallow water and Archipelago, round 2 (wave 2)
 
