@@ -185,7 +185,13 @@ const SHAPE_FIELDS=[
   ['styleCracks','style-cracks','Style: cracks',MASK_SHAPES,-100,100,5,100,'Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none).'],
   ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
   ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
+  // E7
+  ['crystalFacet','crystal-facet','Facet tilt (column mound)',['crystal'],0,100,5,100,'Column mound: tilts each column\'s top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops.'],
+  ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal'],0,100,5,100,'Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width.'],
+  ['crystalSmooth','crystal-smooth','Smooth hill between crystals (column mound)',['crystal'],0,100,5,100,'Column mound: the share of the widest columns (and some of the middle ones) left as smooth hill with no flat top, taking the world\'s hill relief. 0 tiles the whole mound.'],
+  ['craterFacets','crater-facets','Crystal facets',['crater'],0,100,5,100,'Crater: tiles the bowl, rim and apron with polygonal facets (planes fitted to the crater\'s own surface, stepped a few units from each other), so its contours are straight-edged like crystal. 0 keeps the smooth crater.'],
 ];
+const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
@@ -440,7 +446,9 @@ function startStroke(kind,p,options={}) {
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
     ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
-    smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
+    smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null,
+    // E7
+    ...Object.fromEntries(E7_KEYS.map(k => [k,options[k]??shapeValue(k)]))};
   made.prof=sectionSetup(made);
   made.masks=maskSetup(made,work);
   made.rim=rimSetup(made);
@@ -1688,6 +1696,12 @@ function crystalList(s) {
 // or down from its neighbours (median ~16 units, ~40% flush). Crystal cells
 // carry the column's brightness jitter (0.8-1.0) and mark the edges between
 // columns (0.5), where the shader inks the outline.
+const FACET_SLOPE=1; // units per px at Facet tilt 1 (E7)
+// Size variation (E7): a mound's columns come in three widths (shares of Column width) and
+// the width changes over the mound from a smooth noise field and the mound's own height.
+const SIZE_LEVELS=[1,.55,.3],SIZE_STEP=[1,.65,.4];
+// Smooth hill between crystals (E7): the share of columns of each width left as bare hill.
+const BARE_SHARE=[1,.4,0];
 function stampColumns(s) {
   const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},path=simplifyPath(s.path,Math.max(1,s.radius*.05));
   const R=s.radius,H=s.amount,L=Math.max(4,s.crystalSize),inv=s.inv;
@@ -1705,32 +1719,69 @@ function stampColumns(s) {
   const pad=R*1.4;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity; for (const p of path) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   const rect={x0:Math.max(c.x0,Math.floor((ax-pad)/spacing)),y0:Math.max(c.y0,Math.floor((ay-pad)/spacing)),x1:Math.min(c.x1,Math.ceil((bx+pad)/spacing)),y1:Math.min(c.y1,Math.ceil((by+pad)/spacing))};
-  const columns=new Map();
-  const column=(i,j) => {
-    const key=i*65536+j; let k=columns.get(key);
+  const facet=clamp(s.crystalFacet,0,1)*FACET_SLOPE,sizeVar=clamp(s.crystalSizeVar,0,1),levels=sizeVar>0?SIZE_LEVELS.length:1,smoothShare=clamp(s.crystalSmooth,0,1);
+  const columns=SIZE_LEVELS.map(() => new Map());
+  // Which width a column's centre asks for: finer where the noise and the mound's height are high.
+  const levelAt=(x,y,m) => {
+    if (!(sizeVar>0)) return 0;
+    const f=.5+.32*valueNoise(x/64,y/64,s.seed^0x51a)+.18*valueNoise(x/27,y/27,s.seed^0x2e7)+.3*(m/H-.5);
+    return f>1.17-.4*sizeVar?2:f>.84-.3*sizeVar?1:0;
+  };
+  const column=(lv,i,j) => {
+    const key=i*65536+j; let k=columns[lv].get(key);
     if (!k) {
       // Column centre in the shape's own frame, then to the world.
-      const lx=(i+.5+(rnd(i,j,1)-.5)*.9)*L,ly=(j+.5+(rnd(i,j,2)-.5)*.9)*L;
+      const Ll=L*SIZE_LEVELS[lv],o=lv*16;
+      const lx=(i+.5+(rnd(i,j,1+o)-.5)*.9)*Ll,ly=(j+.5+(rnd(i,j,2+o)-.5)*.9)*Ll;
       const f=s.inv?invert(s.inv):null,wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly;
       const m=mound(wx,wy),e=2,gx=(mound(wx+e,wy)-mound(wx-e,wy))/(2*e),gy=(mound(wx,wy+e)-mound(wx,wy-e))/(2*e);
-      const flush=rnd(i,j,3)<.4,step=flush?0:(rnd(i,j,4)-.35)*2*s.crystalStep*(.5+s.crystalVariation);
-      k={lx,ly,wx,wy,m,gx,gy,step,shade:.8+.2*rnd(i,j,5)}; columns.set(key,k);
+      const flush=rnd(i,j,3+o)<.4,step=flush?0:(rnd(i,j,4+o)-.35)*2*s.crystalStep*(.5+s.crystalVariation)*SIZE_STEP[lv];
+      k={lx,ly,wx,wy,m,gx,gy,step,shade:.8+.2*rnd(i,j,5+o),on:levelAt(wx,wy,m)===lv,bare:smoothShare>0 && rnd(i,j,12+o)<smoothShare*BARE_SHARE[lv]}; columns[lv].set(key,k);
+      // Facets (E7): the top is one plane tilted at a random heading, or two that meet at a
+      // crease through the column's centre (a ridge or a valley). Headings turn with the frame.
+      if (facet>0) {
+        const mag=a => facet*(.2+.8*rnd(i,j,a+o)),h0=rnd(i,j,6+o)*Math.PI*2,h1=h0+Math.PI*(.5+rnd(i,j,7+o)),m0=mag(8),m1=rnd(i,j,9+o)<.3?0:mag(10);
+        k.ax=Math.cos(h0)*m0; k.ay=Math.sin(h0)*m0; k.bx=Math.cos(h1)*m1; k.by=Math.sin(h1)*m1; k.ridge=rnd(i,j,11+o)<.5;
+      }
     }
     return k;
   };
   for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
     const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
-    const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,d1=Infinity,d2=Infinity;
-    for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
-      const k=column(i,j),d=Math.hypot(lx-k.lx,ly-k.ly);
-      if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d;
+    // The nearest column centre of any width that is in use here (the widest width's, as before, when there is one).
+    for (let lv=0;lv<levels;lv++) {
+      const Ll=L*SIZE_LEVELS[lv],ci=Math.floor(lx/Ll),cj=Math.floor(ly/Ll);
+      for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
+        const k=column(lv,i,j);
+        if (!k.on && levels>1) continue;
+        const d=Math.hypot(lx-k.lx,ly-k.ly);
+        if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d;
+      }
     }
-    if (!best || best.m<=1) continue;
+    if (!best) {
+      // No width in use is near: fall back to the widest columns whatever they asked for.
+      const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+      for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
+        const k=column(0,i,j),d=Math.hypot(lx-k.lx,ly-k.ly);
+        if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d;
+      }
+    }
+    if (best.m<=1) continue;
+    // A bare column is the mound's own smooth hill: no flat top, no crystal mark, no protection, so the bake gives it relief.
+    if (best.bare) {
+      const hill=mound(wx,wy);
+      if (hill>.5) heights[y*grid+x]=clamp(s.base[y*grid+x]+hill,MIN_HEIGHT,MAX_HEIGHT);
+      continue;
+    }
     // Crystal repro 1–3: inheriting the mound incline made continuous dark
     // walls. Preserve the envelope but expose separate column tops.
     const incline=best.gx*(wx-best.wx)+best.gy*(wy-best.wy);
-    const top=s.crystalTiers>0?best.m+incline*(1-clamp(s.crystalTiers,0,1))+best.step:best.m+best.gx*(wx-best.wx)+best.gy*(wy-best.wy)+best.step;
+    let top=s.crystalTiers>0?best.m+incline*(1-clamp(s.crystalTiers,0,1))+best.step:best.m+best.gx*(wx-best.wx)+best.gy*(wy-best.wy)+best.step;
+    if (facet>0) {
+      const ox=lx-best.lx,oy=ly-best.ly,pa=best.ax*ox+best.ay*oy,pb=best.bx*ox+best.by*oy;
+      top+=best.ridge?Math.min(pa,pb):Math.max(pa,pb);
+    }
     const h=Math.max(0,top),i=y*grid+x;
     if (h<=.5) continue;
     heights[i]=clamp(s.base[i]+h,MIN_HEIGHT,MAX_HEIGHT); protection[i]=1;
@@ -1986,7 +2037,9 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+  // E7
+  ...Object.fromEntries(E7_KEYS.map(k => [k,s[k]]))}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -2034,7 +2087,7 @@ function replayShape(n,work) {
   else sweep(s,pts);
   if (hasCoastPass(n.kind,s)) stampCoastShore(s);
   if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
-  if (n.kind==='crater') addCraterlets(n,s);
+  if (n.kind==='crater') { facetCrater(s); addCraterlets(n,s); }
   applyCracks(s);
 }
 function applyCracks(s) {
@@ -2043,6 +2096,48 @@ function applyCracks(s) {
   // amount. The bake carves the fissures from this field.
   if (!(s.cracks>0) || !['hill','mountain','plateau','crater','offset'].includes(s.kind)) return;
   for (const i of clipCells()) if (s.weights[i]>0) cracks[i]=Math.max(cracks[i],Math.min(1,s.weights[i]*1.6)*s.cracks);
+}
+// Crater facets (E7): retail's Crystal hollows and knobs have straight-edged
+// polygonal contours, not the soft round bowl. After the crater is cut, its
+// cells (the bowl, rim and apron, wherever it moved the ground) are tiled with
+// Voronoi facets: each takes the plane through the crater's own surface at the
+// facet's centre (height and slope read from the finished crater, so the
+// profile is kept) and steps a few units off its neighbours. The facet size
+// follows the crater's radius. Strength blends from the smooth crater (0) to
+// the facets (1).
+function facetCrater(s) {
+  const strength=clamp(s.craterFacets,0,1); if (!(strength>0)) return;
+  const L=clamp(s.radius*.36,14,36),inv=s.inv,f=inv?invert(inv):null,snap=heights.slice();
+  const rnd=(i,j,a) => { let x=Math.imul(i*73856093^j*19349663^((s.seed>>>0)+a*83492791),2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
+  // Seed planes read the crater's own cells and the stroke's starting ground elsewhere, never the live field: in a region
+  // replay the cells outside the clip hold the state after later shapes, which must not tilt these facets.
+  const at=(gx,gy) => { const k=clamp(gy,0,grid-1)*grid+clamp(gx,0,grid-1); return s.weights[k]>0?snap[k]:s.base[k]; };
+  const seeds=new Map(),seed=(i,j) => {
+    const key=i*65536+j; let k=seeds.get(key);
+    if (!k) {
+      const lx=(i+.5+(rnd(i,j,1)-.5)*.9)*L,ly=(j+.5+(rnd(i,j,2)-.5)*.9)*L,wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly;
+      const gx=Math.round(wx/spacing),gy=Math.round(wy/spacing);
+      // The surface's height and slope at the centre, over a few cells so the crater's own lumps do not set it.
+      const e=3;
+      k={lx,ly,wx,wy,h:at(gx,gy),dx:(at(gx+e,gy)-at(gx-e,gy))/(2*e*spacing),dy:(at(gx,gy+e)-at(gx,gy-e))/(2*e*spacing),step:(rnd(i,j,3)-.5)*6,shade:.7+.17*rnd(i,j,5)};
+      seeds.set(key,k);
+    }
+    return k;
+  };
+  for (const i of clipCells()) {
+    if (!(s.weights[i]>0)) continue;
+    const relief=snap[i]-s.base[i]; if (Math.abs(relief)<.6) continue;
+    const x=i%grid,y=(i-x)/grid,wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
+    const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    let best=null,d1=Infinity,d2=Infinity;
+    for (let j=cj-1;j<=cj+1;j++) for (let u=ci-1;u<=ci+1;u++) { const k=seed(u,j),d=Math.hypot(lx-k.lx,ly-k.ly); if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d; }
+    const facet=best.h+best.dx*(wx-best.wx)+best.dy*(wy-best.wy)+best.step*smooth(0,4,Math.abs(relief));
+    const value=snap[i]+(facet-snap[i])*strength;
+    heights[i]=clamp(s.base[i]>config.seaLevel+1?Math.max(value,config.seaLevel+1.5):value,MIN_HEIGHT,MAX_HEIGHT);
+    // Facets are crystal cells, as a column mound's are: the bake keeps them clean and the shader draws their tops and inks their edges.
+    if (Math.abs(relief)>=2) { protection[i]=1; crystal[i]=d2-d1<Math.max(1.2,spacing*.6)?.5:best.shade; }
+  }
+  heightDirty=true;
 }
 const craterletKeys=new WeakMap();
 const craterletRand=(seed,k,a) => { let x=Math.imul((seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
@@ -2509,7 +2604,7 @@ function endPointer(event) {
   if (stroke && event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   const hadStroke=Boolean(stroke);
   const rawPath=stroke?stroke.path.map(p => ({...p})):null;
-  if (stroke) { settleHill(stroke); settleRamp(stroke); if (stroke.kind==='crater') addCraterlets({points:rawPath,params:strokeParams(stroke)},stroke); }
+  if (stroke) { settleHill(stroke); settleRamp(stroke); if (stroke.kind==='crater') { facetCrater(stroke); addCraterlets({points:rawPath,params:strokeParams(stroke)},stroke); } }
   if (stroke) { applyCracks(stroke); prefix[nodes.length]={h:stroke.base,p:stroke.protectBase,r:stroke.routeBase,c:stroke.crackBase,v:stroke.coverBase,x:stroke.crystalBase,...(stroke.masks?stroke.masks.base:maskSnapshot())}; nodes.push({kind:stroke.kind,points:rawPath,params:strokeParams(stroke),seed:stroke.seed}); prefix.length=nodes.length; evaluate(nodes.length-1); renderLayers(); }
   if (stroke) lastWaterStroke=['deep','shallow'].includes(stroke.kind)?stroke:null;
   stroke=null; pan=null; pointerId=null;

@@ -96,6 +96,8 @@ SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
+# E7 (Crystal): every knob's default is the earlier output.
+KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFacets=0, crystalShallow=0, crystalShallowPx=10)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -265,17 +267,31 @@ WORLD_KNOBS = {
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
-                    crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.08, crystalSeam=1,
-                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=20,
+                    crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
+                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=14,
                     # Shine (card E2): retail Crystal is much shinier. Silver-lilac streaks run along
                     # the ground's grain on facets that face the sun's side; tops and the rock and
                     # slope plates round them take a sharp lobe over strong grain, and the level
                     # plain stays matte. Highlights are neutral (retail's brightest entries on the
                     # mounds are grey 155/171/187 and pinkish 187,147,195, not the blue lilac).
-                    shineCrystal=.4, shineCrystalSharp=100, shineCrystalRough=1, shineCrystalScale=8,
-                    shineRock=.3, shineRockSharp=100, shineRockRough=1, shineRockScale=8,
-                    shineSlope=.25, shineSlopeSharp=100, shineSlopeRough=1, shineSlopeScale=8,
-                    shineStretch=3, shineWhite=1),
+                    # E7 retune after the facets: a broader lobe (sharp 100 -> 70) with less gloss
+                    # (.4/.3/.25 -> .3/.22/.18) and a lighter top (crystalTone 1.08 -> 1.16) puts more
+                    # of the mound at luma 80-130, where retail's tops sit, without lifting the tail.
+                    shineCrystal=.3, shineCrystalSharp=70, shineCrystalRough=1, shineCrystalScale=8,
+                    shineRock=.22, shineRockSharp=70, shineRockRough=1, shineRockScale=8,
+                    shineSlope=.18, shineSlopeSharp=70, shineSlopeRough=1, shineSlopeScale=8,
+                    shineStretch=3, shineWhite=1,
+                    # E7: crumpled multi-facet column tops.
+                    crystalFacet=.7,
+                    # E7: three column widths mixed over a mound, the small ones at the crest.
+                    crystalSizeVar=.7,
+                    # E7: some columns stay smooth hill between the crystals.
+                    crystalSmooth=.35,
+                    # E7: craters tiled with crystal facets.
+                    craterFacets=1,
+                    # E7: shallow water carries a mosaic of small crystal cells; the shore slabs
+                    # shrink from 20 to 14 px (retail's band is a fine mesh, plates 12-80 px).
+                    crystalShallow=1, crystalShallowPx=10),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,

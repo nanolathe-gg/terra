@@ -681,6 +681,9 @@ export class TerrainRenderer {
     this.set('uShine', shine);
     this.f('uShadeBlue', variant.has('shadeBlue') ? Number(variant.get('shadeBlue')) : 0);
     this.f('uFrostWet', variant.has('frostWet') ? Number(variant.get('frostWet')) : 0);
+    // E7 (Crystal): shallow water's crystal mosaic.
+    this.f('uCrystalShallow', variant.has('crystalShallow') ? Number(variant.get('crystalShallow')) : 0);
+    this.f('uCrystalShallowPx', variant.has('crystalShallowPx') ? Number(variant.get('crystalShallowPx')) : 10);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);

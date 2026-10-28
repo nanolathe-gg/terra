@@ -320,6 +320,46 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
     return mix(color, slab, submerged);
 }
 
+// Crystal shallows (card E7): retail's shallow Crystal water, everywhere it is
+// shallow, is a mosaic of small crystals: cells about 6-14 px across, each with its
+// own brightness and a slight lean (lighter toward one side), outlined by a thin
+// dark seam. The bed is art in retail (the TNT height grid is 16 px), so this
+// is drawn from position, not from heights. The cells fade out as the water
+// deepens, and stand aside where the larger shore slabs (the crystal field's
+// marks) already cover the water.
+// One layer of the mosaic: the nearest cell's hash, its lean and the distance to its seam, in cells of `size` px.
+struct ShallowCell { id: vec4f, lean: f32, edge: f32 }
+fn shallowCell(p: vec2f, size: f32, salt: i32) -> ShallowCell {
+    let q = p / size;
+    let cell = vec2i(floor(q));
+    let at = fract(q);
+    var d1 = 8.0;
+    var d2 = 8.0;
+    var id = vec4f(0.0);
+    var off = vec2f(0.0);
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let h = markHash(cell + vec2i(i + salt, j));
+            let pt = vec2f(f32(i), f32(j)) + 0.5 + (h.xy - 0.5) * 0.9 - at;
+            let d = length(pt);
+            if (d < d1) { d2 = d1; d1 = d; id = h; off = -pt; }
+            else if (d < d2) { d2 = d; }
+        }
+    }
+    return ShallowCell(id, dot(off, normalize(id.zw - 0.5 + vec2f(0.001))) * 0.5, (d2 - d1) * 0.5 * size);
+}
+fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: f32) -> vec3f {
+    let size = max(u.crystalShallowPx, 4.0);
+    // Two scales, as retail's mosaic has: a share of the water keeps cells 2.2 times as wide, the rest the fine ones.
+    let big = shallowCell(p, size * 2.2, 7919);
+    var c = shallowCell(p, size, 0);
+    if (big.id.y < 0.4) { c = big; }
+    let seam = 1.0 - smoothstep(0.3, 1.2, c.edge);
+    let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * c.lean;
+    let w = u.crystalShallow * submerged * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
+    return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * 0.55 * seam);
+}
+
 // Shine and roughness (card E2). Nanolathe look, not a retail claim: a
 // Blinn lobe over a micro-roughened surface normal, per material, added to
 // the lit colour (so it passes the highlight cap) before the palette stage.
@@ -1095,6 +1135,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
         if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
+        if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
     }
     if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {
         // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just
