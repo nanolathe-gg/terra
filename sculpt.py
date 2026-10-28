@@ -92,7 +92,14 @@ WORLD_KNOBS = {
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
                   # grid upsampled), so the step sits at 40 and nothing fades.
-                  bedLit=1, bedTint=1, bedContrast=.6, bedBright=1.12, bedRelief=1.4, deepEdge=1, deepEdgeDepth=40),
+                  bedLit=1, bedTint=1, bedContrast=.6, bedBright=1.12, bedRelief=1.4, deepEdge=1, deepEdgeDepth=40,
+                  # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
+                  # lumps only in patches, which the Paint brush's Ground lumps makes. On
+                  # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
+                  # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
+                  # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
+                  # The undulation knobs and Level-ground lumps still work.
+                  undulation=0, plainRelief=0),
     # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
     # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
     # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
