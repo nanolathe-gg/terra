@@ -816,6 +816,18 @@ export class TerrainRenderer {
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
+    // E9 (Green rock faces).
+    set('uGullyDepth', number('gullyDepth', 0));
+    set('uGullySpacing', number('gullySpacing', 40));
+    set('uGullyWidth', number('gullyWidth', 14));
+    set('uGullyAngle', number('gullyAngle', -20));
+    set('uGullyRun', number('gullyRun', 160));
+    set('uGullyGaps', number('gullyGaps', 0.3));
+    set('uGullyShade', number('gullyShade', 0));
+    set('uRibTilt', number('ribTilt', 0));
+    set('uBedFlow', number('bedFlow', 1));
+    set('uBedBend', number('bedBend', 0));
+    set('uBedPunch', number('bedPunch', 0));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});

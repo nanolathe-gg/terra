@@ -97,7 +97,9 @@ KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
-KNOB_DEFAULTS.update(faceRock=0, rockMoss=1)
+KNOB_DEFAULTS.update(faceRock=0, rockMoss=1,
+                     gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
+                     bedFlow=1, bedBend=0, bedPunch=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -120,7 +122,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
-                  bedLip=1, bedLedge=.55, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
+                  bedLip=1.8, bedLedge=.6, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -135,8 +137,10 @@ WORLD_KNOBS = {
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
                   undulation=0, plainRelief=0,
-                  # E9 (Green rock faces).
-                  faceRock=1, rockMoss=.15),
+                  # E9 (Green rock faces): gullies and ribs, with beds that run on across them.
+                  faceRock=1, rockMoss=.15,
+                  gullyDepth=14, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=2, ribTilt=.35,
+                  bedFlow=0, bedBend=2.5, bedPunch=1,),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail

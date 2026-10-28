@@ -249,6 +249,17 @@ struct Uniforms {
     // E9 (Green rock faces). Every default reproduces the earlier output exactly.
     faceRock: f32,        // painted rock's interior is rock, with moss kept to its edges (0: moss blobs inside as before; 1: none inside)
     rockMoss: f32,        // how much of the rock art's own green (fractured and weathered tiles) is kept (1: all, as before; 0: none)
+    gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
+    gullySpacing: f32,    // distance between gully lines, world px
+    gullyWidth: f32,      // gully width across, world px
+    gullyAngle: f32,      // gully lean from the screen's north-south, degrees
+    gullyRun: f32,        // typical length of an unbroken gully, world px
+    gullyGaps: f32,       // share of each gully's length that is missing
+    gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
+    ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
+    bedFlow: f32,         // how far joints break and shift the beds (1: as before; 0: continuous beds)
+    bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
+    bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
