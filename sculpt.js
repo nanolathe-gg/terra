@@ -228,6 +228,8 @@ function updateControls() {
   $('shallow-mode-control').hidden=tool!=='shallow';
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
+  // A fissure's outline is its own jaggedness; Roughness would do nothing.
+  $('roughness').closest('.control').hidden=tool==='fissure';
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(tool);
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
@@ -1558,7 +1560,7 @@ function addCraterlets(n,s) {
     }
     const work=borrowWork();
     try {
-      const t=startStroke('crater',p,{...n.params,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0,frame:n.frame,node:keys[k],rect,work});
+      const t=startStroke('crater',p,{...n.params,rimHeight:s.rimHeight,radius:small,amount:s.amount*(.25+.3*h(4)),seed:(s.seed+k*2654435761)>>>0,craterlets:0,frame:n.frame,node:keys[k],rect,work});
       dab(t,p);
     } finally { workDepth--; }
   }
