@@ -166,16 +166,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const p=localPoint(event),start=performance.now();
     if(api.currentTool()==='move'){
       const screenPoint=screen(event),selected=api.selection(),handles=moveHandles(selected),hit=handles&&['rotate','scale'].find(k=>Math.hypot(screenPoint.x-handles[k].x,screenPoint.z-handles[k].y)<12/scale);
-      const index=hit?selected:api.selectAt(p);if(index<0)return;const h=moveHandles(index);if(api.beginMove(index)===false)return;gesture={id:event.pointerId,type:'move',index,start,p,screen:screenPoint,handles:h,amount:api.graph()[index]?.params?.amount??0,action:event.shiftKey?'amount':hit||'move'};
-    }else{api.beginStroke(api.currentTool(),p,api.strokeOptions());gesture={id:event.pointerId,type:'stroke',points:[p],start};}
+      const index=hit?selected:api.selectAt(p);if(index<0)return;const h=moveHandles(index);if(api.beginMove(index)===false)return;gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:api.graph()[index]?.params?.amount??0,action:event.shiftKey?'amount':hit||'move'};
+    }else{api.beginStroke(api.currentTool(),p,api.strokeOptions());gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'stroke',points:[p],start};}
     pendingStrokeTime=start;metadata?.update?.();schedule();
   });
   function preview(event,final=false){
     hover=pickWorld(screen(event));
-    if(gesture?.id!==event.pointerId)return;
-    if(gesture.type==='stroke'&&Math.hypot(hover[0]-gesture.points.at(-1).x,hover[1]-gesture.points.at(-1).y)>(final?0:3)){gesture.points.push({x:hover[0],y:hover[1]});pendingStrokeTime=performance.now();api.previewStroke(gesture.points);}
+    // A stationary release must not pick the newly raised surface again.
+    if(gesture?.id!==event.pointerId||gesture.clientX===event.clientX&&gesture.clientY===event.clientY)return;
+    if(gesture.type==='stroke'&&Math.hypot(hover[0]-gesture.points.at(-1).x,hover[1]-gesture.points.at(-1).y)>(final?0:3)){gesture.clientX=event.clientX;gesture.clientY=event.clientY;gesture.points.push({x:hover[0],y:hover[1]});pendingStrokeTime=performance.now();api.previewStroke(gesture.points);}
     else if(gesture.type==='move'){
-      const q=screen(event),h=gesture.handles,c=h.pivot,around=(a,b,c1,d)=>[a,b,c1,d,c.x-a*c.x-c1*c.y,c.y-b*c.x-d*c.y];let edit;
+      gesture.clientX=event.clientX;gesture.clientY=event.clientY;const q=screen(event),h=gesture.handles,c=h.pivot,around=(a,b,c1,d)=>[a,b,c1,d,c.x-a*c.x-c1*c.y,c.y-b*c.x-d*c.y];let edit;
       if(gesture.action==='rotate'){const angle=Math.atan2(q.z-h.centre.y,q.x-h.centre.x)-Math.atan2(gesture.screen.z-h.centre.y,gesture.screen.x-h.centre.x);edit={matrix:around(Math.cos(angle),Math.sin(angle),-Math.sin(angle),Math.cos(angle))};}
       else if(gesture.action==='scale'){const k=clamp(Math.hypot(q.x-h.centre.x,q.z-h.centre.y)/Math.max(1,Math.hypot(gesture.screen.x-h.centre.x,gesture.screen.z-h.centre.y)),.2,4);edit={matrix:around(k,0,0,k)};}
       else if(gesture.action==='amount')edit={amount:gesture.amount+(gesture.screen.z-q.z)*1.5};
