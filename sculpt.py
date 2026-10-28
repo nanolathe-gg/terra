@@ -136,6 +136,10 @@ KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight
 KNOB_DEFAULTS.update(hillLobes=0, hillSteps=8)
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
 KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
+# G5 (Lava): contour layers wander in two dimensions (layers of amplitude; 0 follows the shore only) and spread in width (0 none).
+KNOB_DEFAULTS.update(lavaMeander=0, lavaSpread=0, lavaCircleVary=0)
+# G5 (Lava), shader knob: the bank crease breaks into dashes of varying darkness (0: unbroken).
+KNOB_DEFAULTS.update(lavaCreaseVary=0)
 # E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
 # a glint read on near-white ice (0: the lobe only adds light).
 KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
@@ -352,6 +356,9 @@ WORLD_KNOBS = {
                  # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
                  # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
                  layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
+                 # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),
+                 # its circles differ in size and spacing, and its step lines fade and break along their length.
+                 lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.3,
                  shineSlopeGate=.7, shineWhite=.3, shineStretch=3,
                  shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
                  shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),

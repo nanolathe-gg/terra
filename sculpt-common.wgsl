@@ -312,6 +312,8 @@ struct Uniforms {
     // E10 (Lava).
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
     shineSlopeGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)
+    // G5 (Lava).
+    lavaCreaseVary: f32,  // how far the dark crease at the bank steps breaks into dashes of varying darkness along each line (0: unbroken, as before)
     // E6 (shine fix: Moon, Ice).
     shineGate: f32,       // shine roughness only on raised ground and slopes, not the level plain (0: everywhere, as before; 1: only there)
     shineHeadroom: f32,   // dim the lit body where the lobe is low, so glints stand against it on near-white ice (0: additive only, as before)

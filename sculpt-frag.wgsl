@@ -552,7 +552,9 @@ fn layerCreaseTerm(p: vec2f) -> f32 {
     if (bank <= 0.0) { return 0.0; }
     const r = 2.5;
     let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
-    return bank * smoothstep(0.1, 0.5, around - h);
+    // G5: retail's step lines fade and break along their length; a noise of ~14 px takes whole stretches out and weakens others.
+    let dash = 1.0 - u.lavaCreaseVary * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
+    return bank * smoothstep(0.1, 0.5, around - h) * dash;
 }
 // E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
 // weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
