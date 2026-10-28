@@ -89,5 +89,5 @@ rock) and `fissure-red` (a polygonal fracture network on a low platform; Mode 1)
 Variants (card C5 stage 3): a world may offer named presets over its own, listed in
 `WORLD_VARIANTS` (`sculpt.py`) and chosen in the World panel's Variant drop-down. A
 scene names one in its `query`: `"query": "variant=evad"` (green: Evad River and
-Barrier Reef smooth slopes; ice: `bergs`; desert: `triad`). With no variant a scene
+Barrier Reef rounded hills with irregular, broken slopes; ice: `bergs`; desert: `triad`). With no variant a scene
 renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt in.

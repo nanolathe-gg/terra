@@ -197,6 +197,7 @@ struct Uniforms {
     paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
     scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
     styleOn: i32,         // 1 once any cell carries a painted local style (relief, cracks, banding, face rock share)
+    cleanStones: f32,     // Archipelago: no stray stones where Debris is 0 and no scatter is painted (0: as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

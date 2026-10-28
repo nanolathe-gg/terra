@@ -46,6 +46,10 @@ KNOB_DEFAULTS = dict(
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
+    # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
+    flatBank=0,
+    # No stray rock specks on level ground where Debris is 0 (Archipelago's sand).
+    cleanStones=0,
     # Cross-section (card C1): profile 0 keeps each brush's own curve; the rest
     # only matter once a stroke sets profile 1 (px, units or shares as labelled).
     profile=0, apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
@@ -74,10 +78,25 @@ WORLD_KNOBS = {
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
-                  faceStreak=1, faceDark=.35),
+                  faceStreak=1, faceDark=.35,
+                  # Great Divide's terraces are short dashes stacked like
+                  # scales, not long smooth lines (thin dark lines per
+                  # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
+                  bandJag=1),
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
                 reliefAmount=.2, slopeTexture=0, microRock=0),
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.55, bandLine=.68),
+    # Retail sand runs level to a crisp waterline (hundred isles, canal
+    # crossing): flatBank keeps the bank from the shaded lip and the
+    # dashed contour lines the 3.7-unit bands drew across it.
+    # Retail's plain is dead flat (dry heights 6, 2 and 1 in the three
+    # windows, no spread), so no undulation: it dipped the plain to 1.6-2.2
+    # above the sea, where the surface's relief crossed the water test and
+    # drew blue pinholes in dry sand, and its slopes gave the grey blotches.
+    # Mounds (retail: olive-grey, 6-13% of mound pixels darker than luma 45,
+    # ours 28-31%): keep half the directional shading, ambient occlusion and
+    # cast shadow, and a lighter crack floor.
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, bandLine=.68, flatBank=1,
+                        undulation=0, shadeDepth=.5, cleanStones=1),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
@@ -167,11 +186,18 @@ WORLD_KNOBS = {
 WORLD_VARIANTS = {
     'green': {
         # Evad River Delta and the Barrier Reef: rounded hills with soft
-        # shading, no terrace contour lines; grey rock only as a sparse dark rim
+        # shading, no regular terrace combs; grey rock only as a sparse dark rim
         # at the foot (repro windows green-1, green-3, census green-07..12).
         # The default (Great Divide) keeps its dense terraces and rock faces.
-        'evad': dict(label='Evad River: smooth slopes',
-                     knobs=dict(banding=0, bandLine=0, faceStreak=0, faceDark=.3, crackSeverity=.3, crackBlocks=.3, reliefAmount=.5, microRock=.7)),
+        # The slopes' relief is broken and irregular, not smooth: a few faint
+        # terrace dashes (banding .35 with the world's bandJag) and dark
+        # branching cracks that reach down onto moderate slopes (crack depth
+        # .45, floor darkness .55, reach .75), as the retail hills' rims show.
+        # Thin dark lines per pixel in green-1 / green-3: retail .0559 / .0449,
+        # smooth variant .0445 / .0425, this .0547 / .0504.
+        'evad': dict(label='Evad River: broken slopes',
+                     knobs=dict(banding=.35, bandLine=.84, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
+                                crackReach=.75, reliefAmount=.5, microRock=.7)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
