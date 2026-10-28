@@ -189,7 +189,7 @@ WORLD_KNOBS = {
                     # slope plates round them take a sharp lobe over strong grain, and the level
                     # plain stays matte. Highlights are neutral (retail's brightest entries on the
                     # mounds are grey 155/171/187 and pinkish 187,147,195, not the blue lilac).
-                    shineCrystal=.38, shineCrystalSharp=100, shineCrystalRough=1, shineCrystalScale=8,
+                    shineCrystal=.4, shineCrystalSharp=100, shineCrystalRough=1, shineCrystalScale=8,
                     shineRock=.3, shineRockSharp=100, shineRockRough=1, shineRockScale=8,
                     shineSlope=.25, shineSlopeSharp=100, shineSlopeRough=1, shineSlopeScale=8,
                     shineStretch=3, shineWhite=1),
