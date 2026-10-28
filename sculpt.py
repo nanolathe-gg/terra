@@ -100,8 +100,8 @@ for _m in SHINE_MATERIALS:
 # the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
 # (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
 KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight=0, layerVary=0, layerCircle=26)
-# E10 (Lava), shader knob: a dark crease at the foot of each bank step.
-KNOB_DEFAULTS.update(layerCrease=0)
+# E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
+KNOB_DEFAULTS.update(layerCrease=0, shineGate=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -255,8 +255,12 @@ WORLD_KNOBS = {
                  bandRelief=.4, bandWander=.5, bandGaps=.15,
                  # E10: lava-1's layers are many and uneven (11 of ~9 px, widths and risers vary along the shore,
                  # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
-                 # fingers are small, flat tongues (amount, size and distribution are per-stroke options).
-                 layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4),
+                 # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
+                 # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
+                 layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
+                 shineGate=.7, shineWhite=.3, shineStretch=3,
+                 shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
+                 shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),
     # shadeDepth stays 1 on Lava: directional shading varies by map and
     # window (luma on the east-west height gradient: 6-9 per unit slope on
     # the lake maps, 14-18 on the hilly ones). 0.4 matched a Kill the Middle

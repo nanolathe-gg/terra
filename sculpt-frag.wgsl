@@ -407,6 +407,14 @@ fn layerCreaseTerm(p: vec2f) -> f32 {
     let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
     return bank * smoothstep(0.1, 0.5, around - h);
 }
+// E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
+// weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
+// shineGate and above, none at a third of it and below.
+fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
+    let gate = smoothstep(u.shineGate * 0.35, u.shineGate, slope);
+    return vec4f(shine.xyz * gate, mix(1.0, shine.w, gate));
+}
+
 // The shallow-to-deep step (card E1). Retail's step is a hard edge with
 // ragged stairs, not the ramp's gradual blend: the step sits at one depth (the
 // ramp's midpoint unless the world names one), is read off the bed's own depth
@@ -1004,7 +1012,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        let shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        if (u.shineGate > 0.0) { shine = shineSlopeGated(shine, slope); }
         color = color * shine.w + shine.xyz;
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }

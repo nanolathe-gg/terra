@@ -248,6 +248,7 @@ struct Uniforms {
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
     // E10 (Lava).
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
+    shineGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
