@@ -342,6 +342,31 @@ Knob tuning cannot draw what the brushes cannot shape. These cards add
 tools. They do not rename or fold old knobs: leave `mesaFlank`, `bankPx`,
 `beachFlatness`, `northFace`, `shelves` and the rest as they are.
 
+**Census result (C0, 2026-10-27).** 108 windows from 30 retail maps and
+six Zhon section families; 62 features; 18 yes, 39 roughly, 5 no. Page:
+`/private/tmp/nanolathe-map-editor/agent-C0/census/index.html`;
+`census.json` beside it. The missing families, ranked by worlds x
+frequency x prominence:
+
+| Rank | Missing family | Card |
+| --- | --- | --- |
+| 1 | Independent faces, ledges and height profiles | C1 |
+| 2 | Local surface patterns and connected relief | C5 (local style), B cards |
+| 3 | Flat beaches and compact low-bank profiles | C1 |
+| 4 | Branching ridges, spurs and broken rims | C4 |
+| 5 | Interlocking shore slabs and broken ice shelves | C2 |
+| 6 | Long, branching fissures placed by hand | C4 |
+| 7 | Local rock, dark-ground and wet-ground masks | C5 |
+| 8 | Irregular cracked mesa and butte aprons | C1 |
+| 9 | Varied column-mound and scarp composition | B1 |
+| 10 | Compact rounded rock domes | C1 (crown), B4 |
+
+What the census did not find:
+- Lava crust plates: 0 of 12 windows, so C2 has no Lava preset.
+- Ice pressure ridges and broad floe fields, Zhon bars and braids,
+  dunes, true fans and reefs: none clearly established in the samples.
+  Build these only if the owner asks.
+
 Order:
 - **Now:** C0 and C3. Neither edits the editor.
 - **Next:** C1. B2-B4 wait for it, because Green's ledges, Archipelago's
@@ -452,6 +477,8 @@ strokes.
 - Use it in green-2 (Great Divide's wide terraced face), desert-1..3
   (aprons and buttes), red-1..3 (layered shelves) and archipelago-1..3
   (level beaches with no lip).
+- Also cover the census's compact low banks (rank 3) and rounded rock
+  domes (rank 10, through `crown`).
 - Set those worlds' `TOOL_PRESETS` and switch those scenes' strokes to
   the profile. Here scene edits are the point: commit them separately.
 - Guard: `--worlds green,desert,red,archipelago`.
@@ -473,13 +500,13 @@ strokes, or a separate "shore band" brush if that is simpler.
 - edge light and shade;
 - material: snow or ice, rock slab, lava crust, sand.
 
-**Presets:**
-- Ice: floes (B1's).
-- Crystal: low interlocking rubble slabs. Codex: "low rocky shore rubble
-  is replaced by small scattered prisms".
-- Red: rocky shelf slabs at banks. Codex: "broad layered or rocky
-  bank/shelf structure".
-- Lava: crust plates near banks, if C0 finds them.
+**Presets** (census counts out of 12 windows):
+- Crystal first (9 of 12): low interlocking slabs. Codex: "low rocky
+  shore rubble is replaced by small scattered prisms".
+- Red (2 of 12): rocky shelf slabs at banks. Codex: "broad layered or
+  rocky bank/shelf structure".
+- Ice: B1's floes (1 of 12 windows, but clear in Ice Scream).
+- Lava: none (0 of 12).
 
 Start from B1's notes. Guard each preset by its world.
 
