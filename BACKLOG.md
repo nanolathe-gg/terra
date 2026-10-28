@@ -664,9 +664,16 @@ The census did not establish channels with bars or braids; leave them out.
 - the draw is back at 16 textures;
 - green-2's face is now a wide dark rock band.
 
+*Round 3 is done (merged 2026-10-28, 46e09f51b):*
+- region replay is exact for nodes that sample their own height point
+  (plateau, crater, ramp; it was off by up to 40.7);
+- mask edges follow the relief;
+- world variants: green `evad`, ice `bergs`, desert `triad`;
+- green-1, green-3, ice-2 and desert-2 opt in.
+
 *Still open:*
-- masked edges are hard cut-outs (being fixed);
-- a region-replay bug with craterlets (being fixed);
+- no Polar Range variant: its dark block faces need a shading change;
+- an unknown `variant=` gives a generic error;
 - face-rock style does nothing on Red;
 - moss in Red, Desert and Lava looks like rubble.
 
