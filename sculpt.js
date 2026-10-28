@@ -3190,7 +3190,7 @@ const KNOBS = [
   // F1: drawn only where a flow bake exists.
   ['Current and sediment', [['flowTint','Sediment tint strength',0,1,.05,1],['flowShallow','Tint kept in the shallows',0,1,.05,.85],['flowStreak','Streak contrast',0,1,.05,.5],['flowStreakLen','Streak length (px)',8,160,4,140],['flowBank','Bank tint strength',0,1.5,.05,.9]]],
   // E10 (Lava)
-  ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['shineGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
+  ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds

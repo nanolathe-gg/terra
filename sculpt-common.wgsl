@@ -311,7 +311,7 @@ struct Uniforms {
     sedimentColors: array<vec4f, 3>,   // rgb of the three sediments the bake carries (set by the bake's node)
     // E10 (Lava).
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
-    shineGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)
+    shineSlopeGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

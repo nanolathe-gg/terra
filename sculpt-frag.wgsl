@@ -478,9 +478,9 @@ fn layerCreaseTerm(p: vec2f) -> f32 {
 }
 // E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
 // weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
-// shineGate and above, none at a third of it and below.
+// shineSlopeGate and above, none at a third of it and below.
 fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
-    let gate = smoothstep(u.shineGate * 0.35, u.shineGate, slope);
+    let gate = smoothstep(u.shineSlopeGate * 0.35, u.shineSlopeGate, slope);
     return vec4f(shine.xyz * gate, mix(1.0, shine.w, gate));
 }
 
@@ -1273,7 +1273,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
-        if (u.shineGate > 0.0) { shine = shineSlopeGated(shine, slope); }
+        if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }
         color = color * shine.w + shine.xyz;
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }

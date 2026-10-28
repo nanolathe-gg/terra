@@ -136,7 +136,7 @@ KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight
 # E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
 KNOB_DEFAULTS.update(hillLobes=0, hillSteps=8)
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
-KNOB_DEFAULTS.update(layerCrease=0, shineGate=0)
+KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -335,7 +335,7 @@ WORLD_KNOBS = {
                  # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
                  # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
                  layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
-                 shineGate=.7, shineWhite=.3, shineStretch=3,
+                 shineSlopeGate=.7, shineWhite=.3, shineStretch=3,
                  shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
                  shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),
     # shadeDepth stays 1 on Lava: directional shading varies by map and
