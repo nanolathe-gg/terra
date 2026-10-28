@@ -115,7 +115,8 @@ WORLD_KNOBS = {
     # drew blue pinholes in dry sand, and its slopes gave the grey blotches.
     # Mounds (retail: olive-grey, 6-13% of mound pixels darker than luma 45,
     # ours 28-31%): keep half the directional shading, ambient occlusion and
-    # cast shadow, and a lighter crack floor.
+    # cast shadow, and a lighter crack floor (card B2; card E1 below lowers
+    # the directional share to 0.3 with a lift of the hill cover).
     # Water (card E1): the shallows are the lit sand bed under a blue tint. Their
     # edge is a fade by default (retail's halo round an island and its reef bars
     # fade over 30-40 px); a stroke may set a hard step, which sits at depth 20.
