@@ -112,6 +112,9 @@ struct Uniforms {
     mossFromGround: f32,
     lightCap: f32,
     shadeDepth: f32,      // share of the directional shading kept (1: all)
+    ambient: f32,       // unlit share of the light (0.42; Moon lower: no sky)
+    slopeMarks: f32,    // Moon: density of crisp dark marks on slopes (0: none)
+    sandCrown: f32,     // painted sand stays sand to the crown, no rock (Zhon sand bars)
     footRim: f32,
     crevice: f32,
     dither: f32,

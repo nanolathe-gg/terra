@@ -553,7 +553,10 @@ export class TerrainRenderer {
     this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
     this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
     const front = this.variant.get('lighting') === 'front';
-    const sun = [light === 'alternate' ? 0.72 : -0.72, front ? 0.38 : -0.38, 0.82];
+    // sunTilt scales the light's north-south component (1: as before; Moon 0,
+    // lit from due west as every retail Lunar map measures).
+    const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
+    const sun = [light === 'alternate' ? 0.72 : -0.72, (front ? 0.38 : -0.38) * tilt, 0.82];
     const length = Math.hypot(...sun);
     this.v('uLight', sun.map(v => v / length));
     // Lit crack walls are baked for this light.
@@ -602,6 +605,9 @@ export class TerrainRenderer {
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
+    this.f('uAmbient', variant.has('ambient') ? Number(variant.get('ambient')) : 0.42);
+    this.f('uSlopeMarks', variant.has('slopeMarks') ? Number(variant.get('slopeMarks')) : 0);
+    this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
