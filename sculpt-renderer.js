@@ -491,12 +491,13 @@ export class TerrainRenderer {
     const n = this.grid * this.grid;
     // Four cells a read: this runs every frame a shape is dragged, and scanning
     // five unpainted planes byte by byte cost 2 ms.
-    let any = 0;
-    for (const a of planes) {
+    const painted = planes.map(a => {
       const words = new Int32Array(a.buffer, a.byteOffset, n >> 2);
-      for (let i = 0; i < words.length && !any; i++) if (words[i]) any = 1;
-      for (let i = n & ~3; i < n && !any; i++) if (a[i]) any = 1;
-    }
+      for (let i = 0; i < words.length; i++) if (words[i]) return 1;
+      for (let i = n & ~3; i < n; i++) if (a[i]) return 1;
+      return 0;
+    });
+    const any = painted.some(Boolean) ? 1 : 0;
     if (!any && !this.maskUploaded) return;
     this.fieldsDirty = true;
     if (this.maskBytes?.length !== n * 8) this.maskBytes = new Int8Array(n * 8);
@@ -506,6 +507,7 @@ export class TerrainRenderer {
     this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 2]);
     this.maskUploaded = Boolean(any);
     this.i('uPaintOn', any);
+    this.i('uScatterOn', painted[4]);
   }
 
   setMaterialField(field) {

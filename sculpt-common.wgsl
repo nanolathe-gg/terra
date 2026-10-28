@@ -195,6 +195,7 @@ struct Uniforms {
     crystalTone: f32,     // crystal top brightness (1: as before)
     // Painted masks (card C5).
     paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
+    scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
