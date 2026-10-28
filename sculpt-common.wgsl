@@ -322,6 +322,10 @@ struct Uniforms {
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
     iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
+    // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
+    shoalBump: f32,       // the shallow bed's lit bumps: slope of the lumps the sun lights (0: none, as before)
+    shoalBumpPx: f32,     // size of those lumps, screen px
+    shoalDither: f32,     // the palette dither's strength on the lit shallow bed, as a share of the water's own (1: as before)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

@@ -821,6 +821,10 @@ export class TerrainRenderer {
     this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
     this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
+    // G1: shallow water round 3; every default is the earlier look.
+    this.f('uShoalBump', variant.has('shoalBump') ? Number(variant.get('shoalBump')) : 0);
+    this.f('uShoalBumpPx', variant.has('shoalBumpPx') ? Number(variant.get('shoalBumpPx')) : 6);
+    this.f('uShoalDither', variant.has('shoalDither') ? Number(variant.get('shoalDither')) : 1);
     this.fieldsDirty = true;
   }
 

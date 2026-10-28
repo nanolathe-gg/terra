@@ -659,6 +659,24 @@ fn bedDotField(pixel: vec2f) -> f32 {
     return present * (1.0 - smoothstep(radius - 0.6, radius + 0.4, length(pixel - centre)));
 }
 
+// G1: the shallow bed's lit bumps. Retail's shallows read as lit, bumpy ground under a tint: lumps
+// with a bright side toward the sun and a shaded side away from it, not noise. The bumps are a
+// height field of three octaves (about 5, 9 and 17 px at shoalBumpPx 6, weighted so each octave
+// gives about the same slope), lit like the ground by the same sun, and returned as the light
+// they change against level ground (1 on a flat). Positions are the world position only.
+fn shoalHeight(p: vec2f) -> f32 {
+    let z = max(u.shoalBumpPx, 2.0) / 6.0;
+    return shelfNoise(p / (5.0 * z) + 11.0) * 0.5 + shelfNoise(p / (9.0 * z) + 47.0) * 0.8 + shelfNoise(p / (17.0 * z) + 83.0) * 1.4;
+}
+fn shoalBumpLight(p: vec2f) -> f32 {
+    const e = 1.0;
+    let slope = u.shoalBump * 0.5 / e * vec2f(shoalHeight(p + vec2f(e, 0.0)) - shoalHeight(p - vec2f(e, 0.0)),
+                                              shoalHeight(p + vec2f(0.0, e)) - shoalHeight(p - vec2f(0.0, e)));
+    let normal = normalize(vec3f(-slope, 1.0));
+    let flatLight = u.ambient + 0.95 * u.light.z;
+    return min((u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight, u.lightCap);
+}
+
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
@@ -1416,6 +1434,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     if (u.flowOn != 0 && h > u.sea - 1.0) { color = flowBank(color, p); }
+    var shoalWeight = 0.0;   // G1: how much of this pixel is lit shallow bed, for the palette dither below
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
         // Sediment mottling varies apparent water colour without changing the
@@ -1475,6 +1494,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
             }
             if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
+            // The bumps' light moves red and green more than blue, so a shaded lump goes toward deep blue
+            // and a lit one toward pale blue, where a plain multiply lands between the palette's blues (teal).
+            // Only hard-step water takes them, as the mottle: Archipelago's lakes and channels stay smooth, as retail's.
+            if (u.shoalBump > 0.0 && bedLit > 0.0 && edgeHard > 0.0) { shallow *= 1.0 + (shoalBumpLight(p) - 1.0) * vec3f(1.0, 1.0, 0.4) * bedLit; }
             if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
             if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed && edgeHard > 0.0) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);
@@ -1491,6 +1514,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // far from shore; there is no fixed-width coastal blue collar.
         if (u.flowOn != 0) { water = flowWater(water, p, deep); }
         var submerged = smoothstep(-0.2, 2.8, depth);
+        shoalWeight = (1.0 - deep) * submerged * bedLit * select(0.0, 1.0, edgeHard > 0.0);
         if (shoreHard > 0.0) {
             // Retail waterlines are hard edges with small stair-step notches,
             // not soft fades: threshold depth against pixel-block jitter.
@@ -1541,7 +1565,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let fc = floor(fragCoord);
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
-        let ditherStrength = select(u.dither * u.landDither, u.dither, h < u.sea + 1.0);
+        let ditherStrength = select(u.dither * u.landDither, u.dither * mix(1.0, u.shoalDither, shoalWeight), h < u.sea + 1.0);
         // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
         // local checkerboards, which read as one colour; a noise threshold
         // clumped them into speckles.
