@@ -86,9 +86,19 @@ WORLD_KNOBS = {
                   # Great Divide's terraces are short dashes stacked like
                   # scales, not long smooth lines (thin dark lines per
                   # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
-                  bandJag=1),
+                  bandJag=1,
+                  # Water (card E1). Retail Green's shallows are the lit bed under a
+                  # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
+                  # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
+                  # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
+                  # grid upsampled), so the step sits at 40 and nothing fades.
+                  bedLit=1, bedTint=1, bedContrast=.6, bedBright=1.12, bedRelief=1.4, deepEdge=1, deepEdgeDepth=40),
+    # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
+    # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
+    # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
     'red': dict(crackSeverity=.4, crackReach=.5, crackDark=.35, crackWidth=.7, banding=.3, bandLine=1,
-                reliefAmount=.2, slopeTexture=0, microRock=0),
+                reliefAmount=.2, slopeTexture=0, microRock=0,
+                bedLit=1, bedTint=1, bedContrast=.8, bedBright=1.1, bedRelief=1, deepEdge=1),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
@@ -99,8 +109,12 @@ WORLD_KNOBS = {
     # Mounds (retail: olive-grey, 6-13% of mound pixels darker than luma 45,
     # ours 28-31%): keep half the directional shading, ambient occlusion and
     # cast shadow, and a lighter crack floor.
+    # Water (card E1): the shallows are the lit sand bed under a blue tint. Their
+    # edge is a fade by default (retail's halo round an island and its reef bars
+    # fade over 30-40 px); a stroke may set a hard step, which sits at depth 20.
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, bandLine=.68, flatBank=1,
-                        undulation=0, shadeDepth=.5),
+                        undulation=0, shadeDepth=.5,
+                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
