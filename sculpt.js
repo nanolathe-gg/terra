@@ -552,11 +552,12 @@ const rand01=(seed,a,b) => hash(a,b,seed)*.5+.5;
 const mkPiece=(a,b,r0,r1,h0,h1,jag) => ({a,b,r0,r1,h0,h1,jag,reach:Math.max(r0,r1),mean:(r0+r1)/2});
 // Width and height multipliers at arc length a of a line len long: slow noise
 // along the line (crest variation), then the taper. A spur (ends false) narrows
-// from a flared root to a near-point tip; a main crest (ends true) narrows
+// from a flared root to a blunt tip (never under 0.38 of its root width, where
+// the height has fallen to 0.3); a main crest (ends true) narrows
 // toward both of its ends and is full in the middle.
 function lineMultipliers(s,a,len,salt,taper,ends) {
   const R=s.radius,f=len>0?clamp(a/len,0,1):0,u=ends?1-smooth(0,.4,Math.min(f,1-f)):smooth(0,1,f),n=valueNoise(a/(R*2.2),.37,s.seed^salt),m=valueNoise(a/(R*1.6),2.9,s.seed^(salt+0x55));
-  return [clamp(1+.7*s.crestVary*n,.35,1.8)*(1-.9*taper*u)*(ends?1:1+.5*(1-smooth(0,.4,f))),(1-.45*s.crestVary*(.5-.5*m))*(1-.7*taper*u)];
+  return [clamp(1+.45*s.crestVary*n,.6,1.4)*(1-.62*taper*u)*(ends?1:1+.5*(1-smooth(0,.4,f))),(1-.45*s.crestVary*(.5-.5*m))*(1-.7*taper*u)];
 }
 // Spurs from roots [{x,y,heading,k}]: each a wandering four-point line that
 // narrows and lowers toward its tip, laid out as three pieces. A root height
@@ -595,7 +596,7 @@ function ridgePieces(s,path) {
   if (N<1) return out;
   const roots=[],spread=s.spurSpread,phase=rand01(s.seed,7,0x4b1)*Math.PI*2;
   for (let k=0;k<N;k++) {
-    if (L<=0) { roots.push({x:path[0].x,y:path[0].y,heading:phase+Math.PI*2*(k+(rand01(s.seed,k,11)-.5)*.5)/N,k}); continue; }
+    if (L<=0) { roots.push({x:path[0].x,y:path[0].y,heading:phase+Math.atan2(s.rot[1],s.rot[0])+Math.PI*2*(k+(rand01(s.seed,k,11)-.5)*.5)/N,k}); continue; }
     const at=L*(.08+.84*(k+.2+.6*rand01(s.seed,k,11))/N),side=((k+(rand01(s.seed,k,12)<.25?1:0))&1)?1:-1;
     let i=1; while (i<cum.length-1 && cum[i]<at) i++;
     const a=path[i-1],b=path[i],f=(at-cum[i-1])/Math.max(cum[i]-cum[i-1],1e-6);
@@ -759,8 +760,9 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (s.rim) { const f=rimFactors(s.rim,Math.atan2(wy-cy,wx-cx)-Math.atan2(s.rot[1],s.rot[0])); rimHeight*=f[0]; rimWidth*=f[1]; }
       const bowl=rb<1?1-smooth(floorEdge,1,rb):0;
       const apronReach=1-smooth(1.15+.35*n1,1.85,rr);
-      // A wide sector broadens the rim on its inner side; the outer apron keeps the ring's own width.
-      const rim=rr<1?Math.exp(-(((rr-1)/rimWidth)**2)):Math.exp(-(((rr-1)/(rimWidth0*2.4))**2))*apronReach;
+      // A wide sector broadens the rim on its inner side; the outer apron keeps the ring's own width,
+      // and falls away faster with sectors or gaps, as the steep outer slope of a retail broken rim does.
+      const rim=rr<1?Math.exp(-(((rr-1)/rimWidth)**2)):Math.exp(-(((rr-1)/(rimWidth0*(s.rim?1.4:2.4)))**2))*apronReach;
       const lumps=s.rough*(6*n2+3*n1+2*s.noise.detail[i])*(rr<1.3?1:0);
       // Ejecta: beyond the rim the throw-out breaks into scattered,
       // ragged patches that thin outward (retail lunar sections).
@@ -1403,7 +1405,9 @@ function nodeBounds(n) {
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // Spurs (card C4) reach up to one and a half spur lengths past the ridge or rim, plus their own width.
-  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*1.6*k+radius*.8; }
+  // A ridge's crest also swells to 1.4 of its radius and a spur's root flares to about 1.7 times Spur width.
+  if (ridgeOn(n.kind,q)) r+=radius;
+  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*1.6*k+radius*Math.max(1,(q.spurWidth||.8)*1.7); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
