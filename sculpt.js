@@ -348,7 +348,10 @@ function startStroke(kind,p,options={}) {
 // brush, Ground (erase) and a landform's Paint inside option all go through
 // paintCell, which moves a plane from the value it had before the stroke
 // toward its target by the stroke's influence, so repeated dabs never add up.
-const MASK_WRITES=[null,[[0,127]],[[1,127]],[[2,127]],[[3,127]],[[4,127]],[[4,-127]],[[0,0],[1,0],[2,0],[3,0],[4,0]]];
+// Rock, snow and moss are surface materials: painting one clears the other two
+// (a soft edge fades the old one out as the new one comes in), as the cover
+// brushes replace each other. Wet ground only darkens, so it layers on any of them.
+const MASK_WRITES=[null,[[0,127],[1,0],[3,0]],[[1,127],[0,0],[3,0]],[[2,127]],[[3,127],[0,0],[1,0]],[[4,127]],[[4,-127]],[[0,0],[1,0],[2,0],[3,0],[4,0]]];
 function maskSetup(s,work) {
   const choice=Math.round(s.kind==='paint'?s.paintChannel:s.kind==='erase'?7:MASK_SHAPES.includes(s.kind)?s.maskChannel:0);
   const writes=MASK_WRITES[choice];
