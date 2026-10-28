@@ -2459,13 +2459,26 @@ function setMapBusy(on) {
   for (const id of ['weather','clay','light']) $(id).disabled=on;
   overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on;
 }
+function uniformAuthored({x=0,y=0,width=0,height=width,apron=0}={}) {
+  if (![x,y,width,height,apron].every(Number.isFinite) || width<0 || height<0 || apron<0) return null;
+  const rect={x0:clamp(Math.floor((x-apron)/spacing),0,worldGrid-1),y0:clamp(Math.floor((y-apron)/spacing),0,worldGrid-1),x1:clamp(Math.ceil((x+width+apron)/spacing),0,worldGrid-1),y1:clamp(Math.ceil((y+height+apron)/spacing),0,worldGrid-1)};
+  let h=Math.fround(config.baseHeight);
+  if (!Number.isFinite(h) || h<MIN_HEIGHT || h>MAX_HEIGHT) return null;
+  for (const n of nodes) if (!n.hidden) {
+    if (n.points?.length) { if (overlaps(nodeBounds(n),rect)) return null; continue; }
+    if (n.kind==='ground') { if ((n.amplitude??8)!==0 || !Number.isFinite(n.wavelength??160) || (n.wavelength??160)<1 || !Number.isFinite(n.coverage??.5)) return null; }
+    else if (n.kind==='compact') { if (h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor); }
+    else return null;
+  }
+  return Number.isFinite(h)?{h,p:0,r:0}:null;
+}
 function regionalStats() {
   const stats=regionalFields.stats(),arrays=new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(a => ArrayBuffer.isView(a)));
   const weatherBytes=Array.from(arrays).reduce((sum,a) => sum+a.byteLength,0);
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
-  read:readRegional,readAuthored:request => regionalFields.read(request),sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),
+  read:readRegional,readAuthored:request => regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); cancelWeather(); nodes=deserializeNodes(list); prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
