@@ -381,10 +381,15 @@ WORLD_VARIANTS = {
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: grey buttes',
                       knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
-                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3),
-                      # Card E8: retail's grey buttes carry orange lines 15 units apart (median over the
-                      # lit flanks above 60, 14 px) and ~4.4 units wide, not 4 apart.
-                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .3], [60, 2, 0, .3], [95, 1, 2, .35]],
+                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
+                                 # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
+                                 # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
+                                 # 0.4%). Ambient .12 gives 0% and 1.0%.
+                                 ambient=.12),
+                      # Card E8: retail's grey buttes carry rust-pink lines (slot 4, (175,111,90), the nearest
+                      # slot to the measured (149,88,86)) 15 units apart (median over the lit flanks above 60,
+                      # 14 px) and ~4.4 units wide, not 4 apart.
+                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 3, .3], [60, 2, 3, .3], [95, 1, 2, .35]],
                                   strataZoneSpacing=[4, 12, 14, 14])),
     },
 }
