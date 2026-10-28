@@ -331,7 +331,7 @@ WORLD_KNOBS = {
                 # the light and shade read strongly. Earlier look (snow and slate interleaved, cracks):
                 # the Ice variant 'snow'; retail's other type (ice-1) is the variant 'crystal'.
                 iceSlate=1, rockDetail=.55, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
-                lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2, shineHeadroom=.3,
+                lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2,
                 shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5,
                 # Card E6, frost band against retail ice-1 (x330-430, 32-132 px inland): luma s.d. 52
                 # against 42 and blue gaps in .22 of the pixels against .05, so finer needles in more
