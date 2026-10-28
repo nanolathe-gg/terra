@@ -103,9 +103,14 @@ export class TerrainRenderer {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw new Error(NO_WEBGPU + ' No WebGPU adapter is available (is hardware acceleration off?).');
     // The draw reads 16 textures in its fragment stage, WebGPU's guaranteed
-    // default per stage, as the WebGL renderer used all 16 texture units.
+    // default per stage, as the WebGL renderer used all 16 texture units. The
+    // painted masks (card C5) are the 17th, so ask for one more; adapters
+    // report far more (48 on Apple GPUs), and only a 16-texture device refuses.
     const features = adapter.features.has('timestamp-query') ? ['timestamp-query'] : [];
-    const device = this.device = await adapter.requestDevice({requiredFeatures: features});
+    const stageTextures = 17;
+    if (adapter.limits.maxSampledTexturesPerShaderStage < stageTextures)
+      throw new Error(NO_WEBGPU + ` This adapter samples only ${adapter.limits.maxSampledTexturesPerShaderStage} textures per shader stage; the editor needs ${stageTextures}.`);
+    const device = this.device = await adapter.requestDevice({requiredFeatures: features, requiredLimits: {maxSampledTexturesPerShaderStage: stageTextures}});
     device.lost.then(info => { if (info.reason !== 'destroyed') this.reportError(`device lost: ${info.message}`); });
     device.addEventListener('uncapturederror', event => this.reportError(event.error.message));
     this.format = navigator.gpu.getPreferredCanvasFormat();
@@ -148,7 +153,7 @@ export class TerrainRenderer {
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
       {binding: 0, visibility: both, buffer: {type: 'uniform'}},
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(3, both), texture(4, both), texture(5, both), texture(6, both),
-      sampler(7, both), sampler(8, both)]});
+      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(0, F), sampler(1, F), texture(2, F), sampler(3, F), texture(4, F, 'float', '2d-array'), sampler(5, F),
@@ -350,15 +355,21 @@ export class TerrainRenderer {
   // amount, painted sand and ground cover), weathering and material fields.
   worldTextures(grid) {
     if (this.worldGrid === grid) return;
-    for (const t of [this.heightTexture, this.routeTexture, this.weatherTexture, this.materialFieldTexture]) t?.destroy();
+    for (const t of [this.heightTexture, this.routeTexture, this.weatherTexture, this.materialFieldTexture, this.maskTexture]) t?.destroy();
     const make = (label, format) => this.device.createTexture({label, size: [grid, grid], format,
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     this.heightTexture = make('height', 'r32float');
     this.routeTexture = make('routes', 'rgba8unorm');
     this.weatherTexture = make('weather', 'rgba8unorm');
     this.materialFieldTexture = make('material field', 'rgba8unorm');
+    // Painted masks (card C5), two layers of signed bytes so an unpainted
+    // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
+    // layer 1 scatter density (r; the rest is spare). Fresh textures are zero.
+    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, 2], format: 'rgba8snorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     this.worldGrid = grid;
     this.bindGroups = {};
+    this.maskUploaded = false;
   }
 
   // Base colours chosen for a world: {ground, slope, rock, sand, beach,
@@ -457,7 +468,7 @@ export class TerrainRenderer {
     this.device.queue.writeTexture({texture: this.weatherTexture}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
   }
 
-  setRoutes(routes, crackLines, cover, crystal) {
+  setRoutes(routes, crackLines, cover, crystal, masks) {
     // Red: route protection; green: the shapes' crack amount; blue: painted
     // cover, signed about one half (above: sand, below: the world's ground);
     // alpha: crystal cells.
@@ -470,6 +481,26 @@ export class TerrainRenderer {
     }
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.routeTexture}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
+    if (masks) this.setMasks(masks);
+  }
+
+  // Painted masks (card C5): five signed-byte planes, rock, snow or ice, wet
+  // ground and moss (0..127) and scatter density (-127..127), interleaved into
+  // maskTexture's two layers. Nothing is uploaded while nothing has ever been
+  // painted; paintOn tells the shaders whether to read the texture at all.
+  setMasks(planes) {
+    const n = this.grid * this.grid;
+    let any = 0;
+    for (const a of planes) for (let i = 0; i < n && !any; i++) if (a[i]) any = 1;
+    if (!any && !this.maskUploaded) return;
+    this.fieldsDirty = true;
+    if (this.maskBytes?.length !== n * 8) this.maskBytes = new Int8Array(n * 8);
+    const bytes = this.maskBytes, [rock, snow, wet, moss, scatter] = planes;
+    for (let i = 0; i < n; i++) { bytes[i * 4] = rock[i]; bytes[i * 4 + 1] = snow[i]; bytes[i * 4 + 2] = wet[i]; bytes[i * 4 + 3] = moss[i]; bytes[n * 4 + i * 4] = scatter[i]; }
+    this.worldTextures(this.grid);
+    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 2]);
+    this.maskUploaded = Boolean(any);
+    this.i('uPaintOn', any);
   }
 
   setMaterialField(field) {
@@ -486,7 +517,8 @@ export class TerrainRenderer {
       {binding: 0, resource: {buffer: this.uniformBuffer}},
       ...[this.heightTexture, this.textures.noise.texture, this.textures[this.bound.uFractures].texture, this.weatherTexture,
         this.materialFieldTexture, kind === 'bake' ? this.routeTexture : this.fieldsTexture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
-      {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat}]});
+      {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat},
+      {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})}]});
   }
 
   // Group 1. The mineral-ring binding takes the chosen fringe texture, or

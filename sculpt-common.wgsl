@@ -193,6 +193,8 @@ struct Uniforms {
     crystalFace: f32,     // crystal side-face colour, times crystal colour x 0.38 (1: as before)
     crystalInk: f32,      // crystal outlines: 0 soft 92% dark, 1 crisp pure black
     crystalTone: f32,     // crystal top brightness (1: as before)
+    // Painted masks (card C5).
+    paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -213,6 +215,10 @@ struct Uniforms {
 // clamped and linearly filtered; noise and fractures repeat.
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
+// Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
+// Layer 0: r rock, g snow or ice, b wet ground, a moss (0..1). Layer 1: r
+// scatter density (-1 none .. +1 densest; 0 leaves the world's own).
+@group(0) @binding(9) var masksTex: texture_2d_array<f32>;
 
 #ifndef BAKE
 struct VertexOut {
