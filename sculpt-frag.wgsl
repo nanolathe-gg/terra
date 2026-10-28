@@ -276,7 +276,11 @@ fn wrinkleLines(pixel: vec2f, along: vec2f, across: vec2f, keep: f32, sun: vec2f
 // slope cover (moss), its lightest ground or beach (snow), its ground darkened
 // as the shoreline band darkens it (wet).
 fn paintCoverage(p: vec2f, slope: f32, hollow: f32) -> vec4f {
+#ifdef CHUNK
+    let raw = textureSampleLevel(masksTex, linearClamp, maskUv(p), 0, 0.0);
+#else
     let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
+#endif
     return paintEdge(p, raw, slope, hollow);
 }
 // The lightest of the world's ground and beach materials, grain damped (snow
@@ -431,7 +435,11 @@ fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * sm
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
+#ifdef CHUNK
+    let fragCoord = vec2f(v.position.x + u.chunkScreenOrigin.x, u.size - (v.position.y + u.chunkScreenOrigin.y));
+#else
     let fragCoord = vec2f(v.position.x, u.size - v.position.y);
+#endif
     let p = v.world;
     // TA's fixed camera permits a native-pixel material grain. World-XY
     // sampling stretches that grain over projected south-facing slopes.

@@ -22,11 +22,24 @@ function preprocess(source, common, defines) {
   const out = [], keep = [];
   for (const line of source.replace('/*COMMON*/', common).split('\n')) {
     const m = line.match(/^\s*#(ifdef|ifndef|else|endif)\b\s*(\w*)/);
-    if (!m) { out.push(keep.every(Boolean) ? line : ''); continue; }
-    if (m[1] === 'ifdef' || m[1] === 'ifndef') keep.push((m[1] === 'ifdef') === defines.has(m[2]));
-    else if (m[1] === 'else') keep.push(!keep.pop());
-    else keep.pop();
-    out.push('');
+    if (!m) {
+      if (keep.every(k => k.enabled)) out.push(line);
+      // CHUNK alternatives disappear completely from the whole-map source.
+      // Its shader text stays identical, including the old BAKE blank lines:
+      // even an unused branch can otherwise change float compilation.
+      else if (!keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
+      continue;
+    }
+    let chunk = false;
+    if (m[1] === 'ifdef' || m[1] === 'ifndef') {
+      chunk = m[2] === 'CHUNK';
+      keep.push({name: m[2], enabled: (m[1] === 'ifdef') === defines.has(m[2])});
+    } else {
+      chunk = keep.at(-1)?.name === 'CHUNK';
+      if (m[1] === 'else') keep.at(-1).enabled = !keep.at(-1).enabled;
+      else keep.pop();
+    }
+    if (!chunk && !keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
   }
   return out.join('\n');
 }
@@ -77,6 +90,11 @@ export class TerrainRenderer {
     return self;
   }
 
+  static async createChunked(canvas, config) {
+    const {ChunkTerrainRenderer} = await import('./sculpt-chunk-renderer.js');
+    return ChunkTerrainRenderer.create(canvas, config);
+  }
+
   constructor(canvas, config) {
     if (!navigator.gpu) throw new Error(NO_WEBGPU + ' This browser does not offer it' + (window.isSecureContext ? '.' : ' on an insecure page; open it from localhost or https.'));
     this.canvas = canvas;
@@ -121,7 +139,8 @@ export class TerrainRenderer {
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    this.layout = uniformLayout(common);
+    const defines = this.chunked ? new Set(['CHUNK']) : new Set();
+    this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
     this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
@@ -137,9 +156,9 @@ export class TerrainRenderer {
       return module;
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
-      compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
-      compile('sculpt-frag.wgsl', preprocess(frag, common, new Set())),
-      compile('relief-bake.wgsl', preprocess(bake, common, new Set(['BAKE'])))]);
+      compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
+      compile('sculpt-frag.wgsl', preprocess(frag, common, defines)),
+      compile('relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
     // bake (binding 6 is the fields for the draw, the routes for the bake).
@@ -640,6 +659,7 @@ export class TerrainRenderer {
       depthStencilAttachment: {view: this.depthView, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard'},
       timestampWrites: timer?.timestampWrites});
     pass.setPipeline(this.drawPipeline);
+    if (this.chunkViewport) pass.setViewport(...this.chunkViewport, 0, 1);
     pass.setBindGroup(0, this.commonBindGroup('draw'));
     pass.setBindGroup(1, this.materialBindGroup(fringeTexture));
     const mesh = this.meshes[full ? 1 : 0];
@@ -819,7 +839,7 @@ export class TerrainRenderer {
     pass.setPipeline(this.bakePipeline);
     pass.setBindGroup(0, this.commonBindGroup('bake'));
     pass.setBindGroup(1, this.fieldsOut);
-    pass.dispatchWorkgroups(Math.ceil(this.size / 8), Math.ceil(this.size / 8));
+    pass.dispatchWorkgroups(Math.ceil((this.bakeWidth ?? this.size) / 8), Math.ceil((this.bakeHeight ?? this.size) / 8));
     pass.end();
     if (own) {
       timer?.encode(encoder);

@@ -246,6 +246,18 @@ struct Uniforms {
     // Ice (card E5).
     shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
+#ifdef CHUNK
+    // Card D: bounded regional fields, with every position on the world lattice.
+    chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
+    chunkGridSize: vec2f,     // padded regional texture dimensions
+    chunkGridCount: vec2f,    // supplied samples (padding repeats their last row/column)
+    chunkFieldsOrigin: vec2f, // integer world pixel at baked texel (0,0)
+    chunkFieldsSize: vec2f,
+    chunkScreenOrigin: vec2f, // preview screen pixels; export adds floor(base/2)
+    chunkScreenSize: vec2f,
+    chunkRasterOrigin: vec2f,
+    chunkRasterSize: f32,
+#endif
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -283,7 +295,12 @@ struct Uniforms {
 // Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,
 // 4 at +1 (two doublings).
 fn styleScale(f: f32) -> f32 { return select(1.0 + f, exp2(2.0 * f), f > 0.0); }
+#ifdef CHUNK
+fn regionalUv(uv: vec2f) -> vec2f { return (uv * u.grid - u.chunkGridOrigin) / u.chunkGridSize; }
+fn maskUv(p: vec2f) -> vec2f { return regionalUv((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid); }
+#else
 fn maskUv(p: vec2f) -> vec2f { return (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid; }
+#endif
 
 // Slope averaged over about 14 px: the relief a painted edge follows changes
 // over tens of pixels, not at the 5 px the shading's slope does.
@@ -319,8 +336,13 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
     return f * smoothstep(0.30, 0.60, abs(f) + (steep * 0.25 + lobes * 0.4 + grain * 0.6) * held);
 }
 
+#ifdef CHUNK
+fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 0, 0.0); }
+fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 1, 0.0); }
+#else
 fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 0, 0.0); }
 fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 1, 0.0); }
+#endif
 
 #ifndef BAKE
 struct VertexOut {
@@ -335,8 +357,15 @@ fn glslMod(x: vec2f, y: f32) -> vec2f { return x - y * floor(x / y); }
 
 fn baseHeight(p: vec2f) -> f32 {
     let q = clamp(p / (u.size - 1.0), vec2f(0.0), vec2f(1.0)) * (u.grid - 1.0);
+#ifdef CHUNK
+    let globalA = vec2i(floor(q));
+    let globalB = min(globalA + 1, vec2i(i32(u.grid) - 1));
+    let a = clamp(globalA - vec2i(u.chunkGridOrigin), vec2i(0), vec2i(u.chunkGridCount) - 1);
+    let b = clamp(globalB - vec2i(u.chunkGridOrigin), vec2i(0), vec2i(u.chunkGridCount) - 1);
+#else
     let a = vec2i(floor(q));
     let b = min(a + 1, vec2i(i32(u.grid) - 1));
+#endif
     let f = fract(q);
     return mix(mix(textureLoad(heightTex, a, 0).r,
                    textureLoad(heightTex, vec2i(b.x, a.y), 0).r, f.x),
@@ -359,10 +388,18 @@ fn terrainNoise(p: vec2f) -> vec4f {
 
 #ifdef BAKE
 fn routeProtection(p: vec2f) -> f32 {
+#ifdef CHUNK
+    return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).r;
+#else
     return textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).r;
+#endif
 }
 #else
+#ifdef CHUNK
+fn bakedFields(p: vec2f) -> vec4f { let q = clamp(p, vec2f(0.0), vec2f(u.size - 1.0)); return textureSampleLevel(fieldsTex, linearClamp, ((q + 0.5) - u.chunkFieldsOrigin) / u.chunkFieldsSize, 0.0); }
+#else
 fn bakedFields(p: vec2f) -> vec4f { return textureSampleLevel(fieldsTex, linearClamp, (p + 0.5) / u.size, 0.0); }
+#endif
 // Green: route protection 0..1, beach as negative, or 2 + crystal cover.
 fn routeProtection(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(max(g, 0.0), 1.0, g > 1.5); }
 fn beachField(p: vec2f) -> f32 { return max(-bakedFields(p).g, 0.0); }
