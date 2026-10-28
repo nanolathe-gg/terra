@@ -220,9 +220,9 @@ WORLD_KNOBS = {
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
                  pockmark=1, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
-                 shineGround=.1, shineGroundSharp=12, shineGroundRough=.35, shineGroundScale=3,
-                 shineSlope=.12, shineSlopeSharp=30, shineSlopeRough=.35, shineSlopeScale=3,
-                 shineRock=.12, shineRockSharp=30, shineRockRough=.35, shineRockScale=3),
+                 shineGround=0, shineGroundSharp=12, shineGroundRough=.12, shineGroundScale=3,
+                 shineSlope=.06, shineSlopeSharp=30, shineSlopeRough=.12, shineSlopeScale=3,
+                 shineRock=.06, shineRockSharp=30, shineRockRough=.12, shineRockScale=3),
     # Zhon: no sand ring round hills on grass; sand is painted (Sand cover)
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'

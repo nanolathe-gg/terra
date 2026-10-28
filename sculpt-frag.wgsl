@@ -1094,8 +1094,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
         let shaded = 1.0 - clamp(shading, 0.0, 1.0);
-        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.35, 1.0, shaded));
-        color *= 1.0 - pits * landform * mix(0.3, 0.92, shaded);
+        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, shaded));
+        color *= 1.0 - pits * landform * mix(0.5, 0.92, shaded);
     }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on
