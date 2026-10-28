@@ -110,8 +110,8 @@ KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots
 # E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
 # dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
 # the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
-# the ring texture's own).
-KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1)
+# the ring texture's own); bedMottleScale sizes the bed's mottle lumps against Green's.
+KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, bedMottleScale=1, stepSoftPx=1)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -207,8 +207,10 @@ WORLD_KNOBS = {
                         # not), so band lines start 8 units above the base; retail's fringe is 8-12
                         # thin wavy crimson lines 2-4 px apart hugging the hill's outline, which the
                         # contour pass draws from the mineral field's falloff (so they follow the
-                        # outline, not the screen).
-                        bandFoot=8, ringContrast=.55, ringCount=12, ringSize=.3),
+                        # outline, not the screen). Reef bars carry retail's dappled texture
+                        # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
+                        bandFoot=8, ringContrast=.55, ringCount=12, ringSize=.3,
+                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottle=.09, bedMottleScale=1.2),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient

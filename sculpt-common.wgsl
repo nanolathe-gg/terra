@@ -255,6 +255,8 @@ struct Uniforms {
     bedCrackSlope: f32,   // Red (bake): the slope the cracked bed's cracks are cut for; the land's cracked faces are steeper (.8: as before)
     bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
     bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
+    stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
+    bedMottleScale: f32,  // size of the bed's mottle lumps against Green's (1: 3-15 px; Archipelago's reef bars use larger blotches)
     bandFoot: f32,        // Archipelago (bake): no band lines on the hill's foot below this height above the dry base (0: lines everywhere)
     ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
     ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge

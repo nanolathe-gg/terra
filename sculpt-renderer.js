@@ -689,6 +689,8 @@ export class TerrainRenderer {
     this.f('uCrackedContrast', variant.has('crackedContrast') ? Number(variant.get('crackedContrast')) : 0);
     this.f('uBedDots', variant.has('bedDots') ? Number(variant.get('bedDots')) : 0);
     this.f('uBedDotCell', variant.has('bedDotCell') ? Number(variant.get('bedDotCell')) : 14);
+    this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
+    this.f('uBedMottleScale', variant.has('bedMottleScale') ? Number(variant.get('bedMottleScale')) : 1);
     this.f('uRingContrast', variant.has('ringContrast') ? Number(variant.get('ringContrast')) : 0);
     this.f('uRingCount', variant.has('ringCount') ? Number(variant.get('ringCount')) : 7);
     this.f('uRingSize', variant.has('ringSize') ? Number(variant.get('ringSize')) : 1);

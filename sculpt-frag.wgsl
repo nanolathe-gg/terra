@@ -435,7 +435,7 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32, cracked: bool) -> f32 {
     let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
     // The wander fades in with depth, so the shore side of the band keeps its own width.
     let d = depth - jitter * 4.0 * max(grad, 0.05);
-    return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / max(grad, 0.04));
+    return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
 }
 
 // E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
@@ -472,7 +472,8 @@ fn fringeContours(p: vec2f, field: f32) -> vec4f {
 // with the fine grain alone), so the noise is cut at a threshold roughened by a pixel hash.
 // pixel: the screen pixel (the grain). Returns -1..1.
 fn bedMottleField(p: vec2f, pixel: vec2f) -> f32 {
-    let m = shelfNoise(p / 3.2 + 31.0) * 0.5 + shelfNoise(p / 6.5 + 7.0) * 0.3 + shelfNoise(p / 15.0 + 53.0) * 0.2;
+    let z = u.bedMottleScale;
+    let m = shelfNoise(p / (3.2 * z) + 31.0) * 0.5 + shelfNoise(p / (6.5 * z) + 7.0) * 0.3 + shelfNoise(p / (15.0 * z) + 53.0) * 0.2;
     let grain = fract(sin(dot(floor(pixel), vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
     return smoothstep(0.3, 0.7, 0.5 + (m - 0.5) * 2.2 + grain * 0.45) * 2.0 - 1.0;
 }
@@ -1173,7 +1174,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
             if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
-            if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
+            if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed && edgeHard > 0.0) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
