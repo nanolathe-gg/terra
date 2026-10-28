@@ -103,6 +103,8 @@ export class TerrainRenderer {
     if (!this.context) throw new Error(NO_WEBGPU + ' The page could not get a WebGPU canvas.');
     this.grid = config.grid;
     this.size = config.size;
+    this.maskPlaneCount = config.maskKeys?.length ?? 14;
+    this.maskLayers = Math.max(1, Math.ceil(this.maskPlaneCount / 4));
     this.height = new Float32Array(this.grid * this.grid).fill(config.baseHeight);
     this.timers = [];
     this.lastGPU = null;
@@ -380,14 +382,15 @@ export class TerrainRenderer {
     // the material field (one texture binding for both, see initialize).
     this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 2], format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    // Painted masks (card C5), four layers of signed bytes so an unpainted
+    // Painted masks (card C5), signed bytes so an unpainted
     // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
     // layer 1 scatter density, relief, cracks, banding; layer 2 face rock share,
     // then the water choices (shore edge, shallow-to-deep edge, bed; card E1);
     // layer 3 ground lumps (the rest is spare). Plane k of the page is layer
     // k >> 2, channel k & 3. Fresh textures are zero.
-    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, 4], format: 'rgba8snorm',
+    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, this.maskLayers], format: 'rgba8snorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
+    this.maskAllocatedLayers = this.maskLayers;
     this.worldGrid = grid;
     this.bindGroups = {};
     this.maskUploaded = false;
@@ -522,9 +525,24 @@ export class TerrainRenderer {
   // read of the texture, and the render it feeds, as it was.
   setMasks(planes) {
     const n = this.grid * this.grid;
+    this.maskPlaneCount = planes.length;
+    this.maskLayers = Math.max(1, Math.ceil(planes.length / 4));
+    if (this.maskLayers > this.device.limits.maxTextureArrayLayers) throw new Error('nanolathe: mask planes exceed the device texture array limit');
+    this.worldTextures(this.grid);
+    if (this.maskAllocatedLayers !== this.maskLayers) {
+      this.maskTexture.destroy();
+      this.maskTexture = this.device.createTexture({label: 'masks', size: [this.grid, this.grid, this.maskLayers], format: 'rgba8snorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
+      this.maskAllocatedLayers = this.maskLayers;
+      this.maskUploaded = true;
+      this.bindGroups = {};
+    }
     // Four cells a read: this runs every frame a shape is dragged, and scanning
     // five unpainted planes byte by byte cost 2 ms.
     const painted = planes.map(a => {
+      if (!a) return 0;
+      if (a.length !== n) throw new Error('nanolathe: invalid mask plane dimensions');
+      if (!a.buffer || a.byteOffset % 4) return a.some(Boolean) ? 1 : 0;
       const words = new Int32Array(a.buffer, a.byteOffset, n >> 2);
       for (let i = 0; i < words.length; i++) if (words[i]) return 1;
       for (let i = n & ~3; i < n; i++) if (a[i]) return 1;
@@ -533,14 +551,14 @@ export class TerrainRenderer {
     const any = painted.some(Boolean) ? 1 : 0;
     if (!any && !this.maskUploaded) return;
     this.fieldsDirty = true;
-    if (this.maskBytes?.length !== n * 16) this.maskBytes = new Int8Array(n * 16);
+    if (this.maskBytes?.length !== n * this.maskLayers * 4) this.maskBytes = new Int8Array(n * this.maskLayers * 4);
     const bytes = this.maskBytes;
-    planes.forEach((a, k) => { const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, 4]);
+    bytes.fill(0);
+    planes.forEach((a, k) => { if (!a) return; const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
+    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, this.maskLayers]);
     this.maskUploaded = Boolean(any);
     this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
-    this.i('uScatterOn', painted[4]);
+    this.i('uScatterOn', painted[4] || 0);
     this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);

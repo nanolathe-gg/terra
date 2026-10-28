@@ -19,16 +19,18 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     canvas.width=1;canvas.height=1;
     super(canvas,{...config,size:1,grid:1});
     this.sourceConfig=config;this.chunked=true;this.resources=new Map();
-    this.budgetBytes=config.gpuBudgetBytes??(config.gpuBudgetMB??512)*MB;this.peakBytes=0;this.evictions=0;
-    this._busy=false;this.disposed=false;this.outputBytes=0;
+    this.budgetBytes=config.gpuBudgetBytes??(config.gpuBudgetMB??512)*MB;this.reservedBytes=config.gpuReservedBytes??0;
+    this.peakBytes=0;this.peakBudgetedBytes=0;this.peakCPUBytes=0;this.evictions=0;
+    this._busy=false;this.disposed=false;this.outputBytes=0;this.cpuWorkingBytes=0;
   }
   async initialize() {
     await super.initialize();
     this.config=this.sourceConfig;this.size=this.config.worldSize??this.config.size;this.grid=this.config.worldGrid??this.config.grid;
-    for(const [key,bytes] of [['heightTexture',4],['routeTexture',4],['gridTexture',8],['maskTexture',16],['fieldsTexture',8]])
+    for(const [key,bytes] of [['heightTexture',4],['routeTexture',4],['gridTexture',8],['maskTexture',this.maskLayers*4],['fieldsTexture',8]])
       this.track(this[key],key,bytes,'working');
     this.track(this.uniformBuffer,'uniforms',this.layout.size,'shared');
-    this.fixedBytes=this.residentBytes;
+    this.height=null;
+    this.fixedBytes=[...this.resources.values()].filter(r=>r.kind==='materials'||r.kind==='shared').reduce((n,r)=>n+r.bytes,0);
     this.limit=this.device.limits.maxTextureDimension2D;
     this.setColors();this.recommendedChunkSize=this.chunkSize();
   }
@@ -39,19 +41,29 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   timer() { return null; }
   track(resource,label,bytes,kind) {
     if(resource)this.resources.set(resource,{label,bytes,kind});
-    this.peakBytes=Math.max(this.peakBytes,this.residentBytes);return resource;
+    this.recordMemory();return resource;
   }
   release(resource) { if(!resource)return;resource.destroy();this.resources.delete(resource); }
   get residentBytes() { let n=this.outputBytes;for(const r of this.resources.values())n+=r.bytes;return n; }
+  get cpuRetainedBytes() { return (this.uniformData?.byteLength??0)+(this.height?.byteLength??0)+(this.maskBytes?.byteLength??0); }
+  recordMemory() {
+    this.peakBytes=Math.max(this.peakBytes,this.residentBytes);
+    this.peakBudgetedBytes=Math.max(this.peakBudgetedBytes,this.residentBytes+this.reservedBytes);
+    this.peakCPUBytes=Math.max(this.peakCPUBytes,this.cpuRetainedBytes+this.cpuWorkingBytes);
+  }
   get busy() { return this._busy; }
   stats() {
     const byKind={};for(const r of this.resources.values())byKind[r.kind]=(byKind[r.kind]??0)+r.bytes;
     return {residentBytes:this.residentBytes,peakBytes:this.peakBytes,budgetBytes:this.budgetBytes,outputBytes:this.outputBytes,
+      retainedBytes:this.fixedBytes,workingBytes:(byKind.working??0)+(byKind.mesh??0)+this.outputBytes,
+      reservedBytes:this.reservedBytes,budgetedBytes:this.residentBytes+this.reservedBytes,peakBudgetedBytes:this.peakBudgetedBytes,
+      cpuRetainedBytes:this.cpuRetainedBytes,cpuWorkingBytes:this.cpuWorkingBytes,cpuUploadBytes:this.cpuUploadBytes??0,cpuPeakBytes:this.peakCPUBytes,
       textureBytes:this.outputBytes+[...this.resources].filter(([r])=>'format' in r).reduce((n,[,v])=>n+v.bytes,0),
       bufferBytes:[...this.resources].filter(([r])=>!('format' in r)).reduce((n,[,v])=>n+v.bytes,0),
       resources:this.resources.size,byKind,busy:this.busy,evictions:this.evictions,recommendedChunkSize:this.recommendedChunkSize,
       limits:{maxTextureDimension2D:this.device?.limits.maxTextureDimension2D,maxBufferSize:this.device?.limits.maxBufferSize,
-        maxSampledTexturesPerShaderStage:this.device?.limits.maxSampledTexturesPerShaderStage},uploadBytes:this.uploadBytes??0};
+        maxSampledTexturesPerShaderStage:this.device?.limits.maxSampledTexturesPerShaderStage,maxTextureArrayLayers:this.device?.limits.maxTextureArrayLayers},
+      maskPlaneCount:this.maskPlaneCount,maskLayers:this.maskLayers,uploadBytes:this.uploadBytes??0};
   }
   materialTexture(label,images,options) {
     const loaded=super.materialTexture(label,images,options),{width,height}=images[0];
@@ -109,38 +121,49 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       fieldsX,fieldsY,fieldsWidth:fieldsEndX-fieldsX+1,fieldsHeight:fieldsEndY-fieldsY+1,
       screenOrigin:[x,y+shift],mesh:{col0,col1,row0,row1,resolution},reach};
   }
-  estimate(region,width,height) {
+  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount) {
     const field=pow2(region.fieldsWidth)*pow2(region.fieldsHeight)*8;
-    const input=pow2(region.gridWidth)*pow2(region.gridHeight)*32;
+    const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(16+maskLayers*4);
     const m=region.mesh,cols=m.col1-m.col0,rows=m.row1-m.row0;
-    return {field,input,mesh:(cols+1)*(rows+1)*8+cols*rows*24,output:width*height*12};
+    const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24),output=width*height*12;
+    return {field,input,mesh,output,maskPlaneCount,maskLayers,workingBytes:field+input+mesh+output,
+      retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+mesh+output,
+      cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:Math.max(input,mesh),cpuPeakBytes:this.cpuRetainedBytes+Math.max(input,mesh)};
   }
   chunkSize(maximum=this.config.chunkSize??512,options={}) {
     let size=Math.floor(maximum/32)*32;
     while(size>=32) {
       const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size},options),e=this.estimate(region,size,size);
       if(Math.max(pow2(region.fieldsWidth),pow2(region.fieldsHeight),pow2(region.gridWidth),pow2(region.gridHeight),size)<=this.limit&&
-        this.fixedBytes+e.field+e.input+e.mesh+e.output<=this.budgetBytes)return size;
+        e.gpuBytes<=this.budgetBytes)return size;
       size=Math.floor(size/64)*32;
     }
     throw new Error('nanolathe: terrain materials and a 32 px chunk exceed the GPU memory budget');
   }
-  setBudget(bytes) { return this.setBudgetMB(bytes/MB); }
-  setBudgetMB(value) { if(!Number.isFinite(value)||value<=0)throw new Error('nanolathe: invalid GPU memory budget');this.budgetBytes=value*MB;if(this.residentBytes>this.budgetBytes)this.evict();this.recommendedChunkSize=this.chunkSize();return this.recommendedChunkSize; }
+  // Reserve the parent's copied output images against the same terrain budget.
+  // Estimates count application texture formats and buffers, not driver overhead.
+  setBudget(bytes,reservedBytes=this.reservedBytes) { return this.setBudgetMB(bytes/MB,reservedBytes); }
+  setBudgetMB(value,reservedBytes=this.reservedBytes) {
+    if(!Number.isFinite(value)||value<=0||!Number.isFinite(reservedBytes)||reservedBytes<0)throw new Error('nanolathe: invalid GPU memory budget');
+    this.budgetBytes=value*MB;this.reservedBytes=reservedBytes;
+    if(this.residentBytes+this.reservedBytes>this.budgetBytes)this.evict();
+    this.recommendedChunkSize=this.chunkSize();this.recordMemory();return this.recommendedChunkSize;
+  }
   texture(label,width,height,layers,format,bytes,usage,kind='working') {
     return this.track(this.device.createTexture({label,size:[width,height,layers],format,usage}),label,width*height*layers*bytes,kind);
   }
   allocate(region,gridWidth,gridHeight,width,height) {
     this.evict();
     const fw=pow2(region.fieldsWidth),fh=pow2(region.fieldsHeight),gw=pow2(gridWidth),gh=pow2(gridHeight);
-    const e=this.estimate({...region,gridWidth,gridHeight},width,height),required=this.residentBytes+e.field+e.input+e.mesh+e.output;
+    const e=this.estimate({...region,gridWidth,gridHeight},width,height),required=e.gpuBytes;
     if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes)
       throw new Error(`nanolathe: chunk needs ${Math.ceil(required/MB)} MB of GPU memory; use chunks of ${this.chunkSize()} px or smaller`);
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST;
     this.heightTexture=this.texture('chunk height',gw,gh,1,'r32float',4,read);
     this.routeTexture=this.texture('chunk routes',gw,gh,1,'rgba8unorm',4,read);
     this.gridTexture=this.texture('chunk weather and material',gw,gh,2,'rgba8unorm',4,read);
-    this.maskTexture=this.texture('chunk masks',gw,gh,4,'rgba8snorm',4,read);
+    if(this.maskLayers>this.device.limits.maxTextureArrayLayers)throw new Error('nanolathe: mask planes exceed the device texture array limit');
+    this.maskTexture=this.texture('chunk masks',gw,gh,this.maskLayers,'rgba8snorm',4,read);
     this.fieldsTexture=this.texture('chunk fields',fw,fh,1,'rgba16float',8,T.STORAGE_BINDING|T.TEXTURE_BINDING);
     this.fieldsOut=this.device.createBindGroup({label:'chunk fields out',layout:this.bakePipeline.getBindGroupLayout(1),entries:[{binding:0,resource:this.fieldsTexture.createView()}]});
     this.canvas.width=width;this.canvas.height=height;this.outputBytes=width*height*8;
@@ -156,16 +179,22 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[width,height]);
     this.meshes=[this.regionMesh(region.mesh),null];this.meshes[1]=this.meshes[0];
     this.bindGroups={};this.fieldsDirty=true;
-    this.peakBytes=Math.max(this.peakBytes,this.residentBytes);return {gw,gh,fw,fh};
+    this.recordMemory();return {gw,gh,fw,fh};
   }
   regionMesh({col0,col1,row0,row1,resolution}) {
     const cols=col1-col0,rows=row1-row0,points=new Float32Array((cols+1)*(rows+1)*2),indices=new Uint32Array(cols*rows*6);
     let at=0;for(let y=row0;y<=row1;y++)for(let x=col0;x<=col1;x++){points[at++]=x/resolution;points[at++]=y/resolution;}
     at=0;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const a=y*(cols+1)+x,b=a+cols+1;indices.set([a,b,a+1,a+1,b,b+1],at);at+=6;}
+    this.cpuWorkingBytes=points.byteLength+indices.byteLength;this.cpuUploadBytes=this.cpuWorkingBytes;this.recordMemory();
     const buffer=(data,usage)=>{if(data.byteLength>this.device.limits.maxBufferSize)throw new Error('nanolathe: chunk mesh exceeds the device buffer limit');const b=this.track(this.device.createBuffer({label:'chunk mesh',size:Math.max(4,data.byteLength),usage:usage|GPUBufferUsage.COPY_DST}),'chunk mesh',Math.max(4,data.byteLength),'mesh');if(data.byteLength)this.device.queue.writeBuffer(b,0,data);return b;};
-    return {vertices:buffer(points,GPUBufferUsage.VERTEX),indices:buffer(indices,GPUBufferUsage.INDEX),count:indices.length};
+    const mesh={vertices:buffer(points,GPUBufferUsage.VERTEX),indices:buffer(indices,GPUBufferUsage.INDEX),count:indices.length};
+    this.cpuWorkingBytes=0;return mesh;
   }
-  upload(request,region,{gw,gh}) {
+  maskPlanes(request) {
+    const supplied=request.maskPlanes??request.masks;
+    return Array.isArray(supplied)?supplied:(this.config.maskKeys??MASK_KEYS).map(k=>supplied?.[k]??request.fields?.[k]);
+  }
+  upload(request,region,{gw,gh},planes) {
     const fields=request.fields,n=request.gridWidth*(request.gridHeight??request.gridWidth),w=request.gridWidth,h=request.gridHeight??request.gridWidth;
     if(!fields?.h||fields.h.length!==n)throw new Error('nanolathe: invalid regional height field');
     const spacing=request.gridSpacing??region.gridSpacing,origin=request.gridOrigin??region.gridOrigin;
@@ -176,21 +205,24 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(ox>need[0]||oy>need[1]||ox+w<need[0]+region.gridWidth||oy+h<need[1]+region.gridHeight)
       throw new Error('nanolathe: regional fields do not cover the shader apron; call requiredRegion first');
     this.f('uChunkGridOrigin',[ox,oy]);
-    const pixels=gw*gh,height=new Float32Array(pixels),routes=new Uint8Array(pixels*4),grid=new Uint8Array(pixels*8),masks=new Int8Array(pixels*16);
-    const planes=request.masks??MASK_KEYS.map(k=>fields[k]),painted=new Array(14).fill(0),toByte=v=>Math.round(clamp(v??0,0,1)*255);
+    for(const plane of planes)if(plane&&plane.length!==n)throw new Error('nanolathe: invalid regional mask plane dimensions');
+    const pixels=gw*gh,height=new Float32Array(pixels),routes=new Uint8Array(pixels*4),grid=new Uint8Array(pixels*8),masks=new Int8Array(pixels*this.maskLayers*4);
+    const painted=new Array(planes.length).fill(0),toByte=v=>Math.round(clamp(v??0,0,1)*255);
+    this.uploadBytes=height.byteLength+routes.byteLength+grid.byteLength+masks.byteLength;
+    this.cpuWorkingBytes=this.uploadBytes;this.cpuUploadBytes=Math.max(this.cpuUploadBytes,this.uploadBytes);this.recordMemory();
     const weather=request.weather??fields.weather,material=request.material??fields.material;
     for(let y=0;y<gh;y++)for(let x=0;x<gw;x++) {
       const src=Math.min(y,h-1)*w+Math.min(x,w-1),dst=y*gw+x;
       height[dst]=(request.exportArt?clamp(fields.h[src],0,255):fields.h[src])-this.config.seaLevel;
       routes[dst*4]=toByte(fields.r?.[src]);routes[dst*4+1]=toByte(fields.c?.[src]);routes[dst*4+2]=Math.round((clamp(fields.v?.[src]??0,-1,1)*.5+.5)*255);routes[dst*4+3]=toByte(fields.x?.[src]);
-      for(let k=0;k<14;k++){const v=planes[k]?.[src]??0;masks[(k>>2)*pixels*4+dst*4+(k&3)]=v;painted[k]||=v!==0?1:0;}
+      for(let k=0;k<planes.length;k++){const v=planes[k]?.[src]??0;masks[(k>>2)*pixels*4+dst*4+(k&3)]=v;painted[k]||=v!==0?1:0;}
       for(let k=0;k<4;k++){grid[dst*4+k]=toByte(Array.isArray(weather)?weather[k]?.[src]:weather?.[['flow','deposit','talus','sand'][k]]?.[src]);grid[pixels*4+dst*4+k]=toByte(material?.[src*4+k]);}
     }
     const q=this.device.queue;q.writeTexture({texture:this.heightTexture},height,{bytesPerRow:gw*4},[gw,gh]);q.writeTexture({texture:this.routeTexture},routes,{bytesPerRow:gw*4},[gw,gh]);
-    q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,2]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,4]);
+    q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,2]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,this.maskLayers]);
     const flags=request.maskFlags??{paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,12).some(Boolean)||painted[13],lumpOn:painted[12]};
     for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
-    this.materialReady=Boolean(material);this.uploadBytes=height.byteLength+routes.byteLength+grid.byteLength+masks.byteLength;
+    this.materialReady=Boolean(material);this.cpuWorkingBytes=0;
   }
   // A reusable canvas is returned. Copy it before the next renderChunk; the
   // caller must count its retained bitmap/canvas bytes separately from stats.
@@ -202,7 +234,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
       const region=this.requiredRegion(request,options),w=request.gridWidth??region.gridWidth,h=request.gridHeight??w;
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
-      const dimensions=this.allocate(region,w,h,request.width,request.height);this.upload(request,region,dimensions);
+      const planes=this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
+      this.recommendedChunkSize=this.chunkSize();
+      const dimensions=this.allocate(region,w,h,request.width,request.height);this.upload(request,region,dimensions,planes);
       this.activeRegion=region;
       const result=super.draw({...options,quality:options.quality??'full'});
       // A WebGPU presentation image expires at the next browser frame. Copy
@@ -210,7 +244,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.outputCanvas.getContext('2d').drawImage(this.canvas,0,0);
       await this.device.queue.onSubmittedWorkDone();
       return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,exportArt:Boolean(request.exportArt),outputBytes:request.width*request.height*4,region,stats:{...this.stats(),busy:false}};
-    } finally { this._busy=false; }
+    } finally { this._busy=false;this.cpuWorkingBytes=0; }
   }
   evict() {
     for(const [resource,entry] of [...this.resources])if(entry.kind==='working'||entry.kind==='mesh')this.release(resource);
