@@ -37,6 +37,7 @@ function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.loa
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
 let mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
+let regionalPrefixSample=null,regionalNoiseMeta=new WeakMap(),regionalConnects=null,regionalCoastCandidate=false,regionalCoastRaw=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
 const gridX=x => (x+originCellX)*spacing, gridY=y => (y+originCellY)*spacing;
@@ -358,6 +359,7 @@ function makeNoise(s) {
   for (const field of Object.keys(NOISE_FIELDS)) {
     const a=out[field]=new Float32Array(grid*grid);
     for (let z=0;z<grid;z++) for (let col=0;col<grid;col++) a[z*grid+col]=noiseValue(field,s,gridX(col),gridY(z));
+    if (regionalReplay) regionalNoiseMeta.set(a,{field,seed:s,inv:null});
   }
   return out;
 }
@@ -384,6 +386,7 @@ function framedNoise(node,seed,frame,rect) {
     const inv=invert(frame),out={};
     for (const field of Object.keys(NOISE_FIELDS)) {
       const a=out[field]=new Float32Array(grid*grid);
+      regionalNoiseMeta.set(a,{field,seed,inv});
       for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
         const wx=gridX(x),wy=gridY(y),lx=inv[0]*wx+inv[2]*wy+inv[4],ly=inv[1]*wx+inv[3]*wy+inv[5],gx=Math.round(lx/spacing),gy=Math.round(ly/spacing);
         a[y*grid+x]=noiseValue(field,seed,gx>=0 && gy>=0 && gx<worldGrid && gy<worldGrid?gx*spacing:lx,gx>=0 && gy>=0 && gx<worldGrid && gy<worldGrid?gy*spacing:ly);
@@ -413,7 +416,24 @@ function framedNoise(node,seed,frame,rect) {
   }
   return out;
 }
+// A brush samples noise at path points even when those points are in another
+// tile. Reconstruct the full lattice's float32 samples before interpolation;
+// clamping a path point to this working window changes its outline and phase.
+function sampleRegionalNoise(meta,x,y) {
+  const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
+  const cell=(cx,cy) => {
+    let wx=cx*spacing,wy=cy*spacing;
+    if (meta.inv) {
+      const m=meta.inv,lx=m[0]*wx+m[2]*wy+m[4],ly=m[1]*wx+m[3]*wy+m[5],qx=Math.round(lx/spacing),qy=Math.round(ly/spacing);
+      const inside=qx>=0 && qy>=0 && qx<worldGrid && qy<worldGrid; wx=inside?qx*spacing:lx; wy=inside?qy*spacing:ly;
+    }
+    return Math.fround(noiseValue(meta.field,meta.seed,wx,wy));
+  };
+  return (cell(ix,iy)*(1-fx)+cell(jx,iy)*fx)*(1-fy)+(cell(ix,jy)*(1-fx)+cell(jx,jy)*fx)*fy;
+}
 function sample(field,x,y) {
+  const meta=regionalReplay && regionalNoiseMeta.get(field);
+  if (meta && (x/spacing<originCellX || y/spacing<originCellY || x/spacing>originCellX+grid-1 || y/spacing>originCellY+grid-1)) return sampleRegionalNoise(meta,x,y);
   const gx=clamp(x/spacing-originCellX,0,grid-1),gy=clamp(y/spacing-originCellY,0,grid-1),ix=Math.floor(gx),iy=Math.floor(gy);
   const jx=Math.min(ix+1,grid-1),jy=Math.min(iy+1,grid-1),fx=gx-ix,fy=gy-iy;
   return (field[iy*grid+ix]*(1-fx)+field[iy*grid+jx]*fx)*(1-fy)+(field[jy*grid+ix]*(1-fx)+field[jy*grid+jx]*fx)*fy;
@@ -445,6 +465,7 @@ function startStroke(kind,p,options={}) {
   const copy=(src,dst) => { if (!dst) return src.slice(); dst.set(src); return dst; };
   const base=copy(heights,work?.base);
   const strokeSeed=options.seed ?? seed,frame=isIdentity(options.frame)?null:options.frame;
+  const prefixSample=regionalPrefixSample && ['plateau','crater','ramp'].includes(kind)?regionalPrefixSample:null;
   const strokeNoise=frame?framedNoise(options.node,strokeSeed,frame,options.rect):noiseFor(strokeSeed);
   // Directions drawn from noise live in the authoring frame; turn them with it.
   const turn=frame?Math.atan2(frame[1],frame[0]):0;
@@ -457,7 +478,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:prefixSample?prefixSample(p.x,p.y):sample(options.pre??base,p.x,p.y),pre:options.pre,prefixSample,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -549,16 +570,18 @@ function fingerCache(s) {
   if (!c || c.key!==key) { c={key,field:new Float32Array(grid*grid).fill(NaN)}; if (s.node) fingerCaches.set(s.node,c); }
   return s.fingerField=c.field;
 }
-function fingerShift(s,i,wx,wy,nx,ny,amount) {
-  const field=fingerCache(s),inv=s.inv;
+function fingerShift(s,i,wx,wy,nx,ny,amount,worldKey=false) {
+  const field=regionalReplay?(s.fingerValues??=new Map()):fingerCache(s),inv=s.inv;
   if (inv) {
     // Into the shape's frame: position, and the coast normal's direction.
     const lx=inv[0]*wx+inv[2]*wy+inv[4],ly=inv[1]*wx+inv[3]*wy+inv[5],mx=inv[0]*nx+inv[2]*ny,my=inv[1]*nx+inv[3]*ny,ml=Math.hypot(mx,my)||1;
     wx=lx; wy=ly; nx=mx/ml; ny=my/ml;
     const gx=Math.round(wx/spacing),gy=Math.round(wy/spacing);
-    i=gx>=originCellX && gy>=originCellY && gx<originCellX+grid && gy<originCellY+grid?(gy-originCellY)*grid+gx-originCellX:-1;
+    i=regionalReplay?gx>=0 && gy>=0 && gx<worldGrid && gy<worldGrid?gy*worldGrid+gx:-1:gx>=originCellX && gy>=originCellY && gx<originCellX+grid && gy<originCellY+grid?(gy-originCellY)*grid+gx-originCellX:-1;
+  } else if (regionalReplay && (i>=0 || worldKey)) {
+    const gx=Math.round(wx/spacing),gy=Math.round(wy/spacing); i=gx>=0 && gy>=0 && gx<worldGrid && gy<worldGrid?gy*worldGrid+gx:-1;
   }
-  let v=i>=0?field[i]:NaN;
+  let v=i>=0?(regionalReplay?field.get(i)??NaN:field[i]):NaN;
   if (Number.isNaN(v)) {
     const tx=-ny,ty=nx;
     // Retail coasts (measure/lava_fingers): a land finger and a lava inlet
@@ -580,7 +603,7 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
       const long=smooth(.3,.75,valueNoise(wx/160,wy/160,s.seed^0x4e11));
       const lumps=(valueNoise(wx/14,wy/14,s.seed^0x5c1)*2.5+valueNoise(wx/5,wy/5,s.seed^0x3a7))*(1-.85*thumb);
       v=thumb*reach*(1+long*.9)+lumps;
-      if (i>=0) field[i]=v;
+      if (i>=0) { if (regionalReplay) field.set(i,Math.fround(v)); else field[i]=v; }
       return v*amount;
     }
     const rib=clamp(fingerRibs(wx,wy,tx,ty,46,s.seed^0x71f3)*1.6,-1,1);
@@ -589,7 +612,7 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
     const long=smooth(.3,.75,valueNoise(wx/160,wy/160,s.seed^0x4e11));
     const lumps=valueNoise(wx/14,wy/14,s.seed^0x5c1)*2.5+valueNoise(wx/5,wy/5,s.seed^0x3a7);
     v=(shaped>0?shaped*reach*(1+long*1.2):shaped*reach*1.1)+lumps;
-    if (i>=0) field[i]=v;
+    if (i>=0) { if (regionalReplay) field.set(i,Math.fround(v)); else field[i]=v; }
   }
   return v*amount;
 }
@@ -1096,7 +1119,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
         // coast to its tip and cannot leave islets in the lava. A small lake grows shorter
         // fingers (its few fingers would make a star).
         const along=(.67*radius*width*bankScale-len)/len,fx=wx+dx*along,fy=wy+dy*along,gx=Math.round(fx/spacing),gy=Math.round(fy/spacing);
-        r+=band*fingerShift(s,gx>=originCellX && gy>=originCellY && gx<originCellX+grid && gy<originCellY+grid?(gy-originCellY)*grid+gx-originCellX:-1,gx*spacing,gy*spacing,dx/len,dy/len,s.fingers*clamp(radius*width*bankScale/140,.35,1))/(radius*width*bankScale);
+        r+=band*fingerShift(s,gx>=originCellX && gy>=originCellY && gx<originCellX+grid && gy<originCellY+grid?(gy-originCellY)*grid+gx-originCellX:-1,gx*spacing,gy*spacing,dx/len,dy/len,s.fingers*clamp(radius*width*bankScale/140,.35,1),true)/(radius*width*bankScale);
       }
       else if (band>0) r+=band*fingerShift(s,i,wx,wy,dx/len,dy/len,s.fingers)/(radius*width*bankScale);
     }
@@ -1490,7 +1513,7 @@ function stampCoastShore(s) {
   const box=coastBox(s,reach);
   if (!box) return;
   if (fingers) coastFingers(s,sea,box);
-  if (layers) coastLayers(s,sea,box);
+  if (layers && !regionalCoastCandidate) coastLayers(s,sea,box);
   heightDirty=true;
 }
 function coastBox(s,reach) {
@@ -1593,6 +1616,7 @@ function coastFingers(s,sea,box) {
       heights[i]=clamp(sea+low*(.7+.3*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
     } else if (sd[i]>0 && sd[i]<-f) heights[i]=clamp(sea-.5-2.5*(1-sd[i]/-f),MIN_HEIGHT,MAX_HEIGHT);
   }
+  if (regionalCoastCandidate) { regionalCoastRaw=raw; return; }
   // A tongue is land joined to land: flood out from the ground that was already dry, and
   // give back any new land the flood does not reach (a tip read across a bend of the coast).
   const seen=new Uint8Array(n),queue=new Int32Array((box.x1-box.x0+1)*(box.y1-box.y0+1));
@@ -1606,7 +1630,24 @@ function coastFingers(s,sea,box) {
     if (y>box.y0) grow(i-grid);
     if (y<box.y1) grow(i+grid);
   }
-  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (!seen[i] && heights[i]>sea) heights[i]=raw[i];
+  if (regionalConnects) {
+    // A locally unseeded island may join the original land beyond this
+    // window. Follow just that candidate component through cached prefix
+    // tiles; a long coast never forces its bounding box into working memory.
+    const candidate=heights.slice(),local={h:candidate,raw,grid,x0:originCellX,y0:originCellY,x1:originCellX+grid-1,y1:originCellY+grid-1,sea};
+    for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
+      const first=y*grid+x; if (seen[first] || !(candidate[first]>sea)) continue;
+      head=0; tail=0; let boundary=false; seen[first]=2; queue[tail++]=first;
+      const visit=j => { if (!seen[j] && candidate[j]>sea) { seen[j]=2; queue[tail++]=j; } };
+      while (head<tail) {
+        const i=queue[head++],cx=i%grid,cy=(i-cx)/grid;
+        if (cx===box.x0 || cx===box.x1 || cy===box.y0 || cy===box.y1) boundary=true;
+        if (cx>box.x0) visit(i-1); if (cx<box.x1) visit(i+1); if (cy>box.y0) visit(i-grid); if (cy<box.y1) visit(i+grid);
+      }
+      const joined=boundary && regionalConnects(originCellX+x,originCellY+y,local);
+      for (let k=0;k<tail;k++) { const i=queue[k]; seen[i]=joined?1:3; if (!joined) heights[i]=raw[i]; }
+    }
+  } else for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (!seen[i] && heights[i]>sea) heights[i]=raw[i];
 }
 // The lowest layer stands LAYER_FOOT units above the lava (retail's first shelf is
 // 6-10 above it) and is reached over LAYER_WALL px: a ledge nearer the water than
@@ -1949,7 +1990,7 @@ function rampSegment(s,a,b) {
 function gradeRamp(s) {
   const field=s.rampField;
   if (!field?.length) return;
-  const ref=s.pre??s.base,ah=sample(ref,s.start.x,s.start.y),bh=sample(ref,s.end.x,s.end.y);
+  const ref=s.pre??s.base,ah=s.prefixSample?s.prefixSample(s.start.x,s.start.y):sample(ref,s.start.x,s.start.y),bh=s.prefixSample?s.prefixSample(s.end.x,s.end.y):sample(ref,s.end.x,s.end.y);
   // A new endpoint changes the grade along the whole path, but only covered
   // samples are visited. Heights always come from the captured starting field.
   for (const i of field.touched) {
@@ -1969,7 +2010,7 @@ function gradeRamp(s) {
 }
 function ramp(s,p) {
   if (Math.hypot(p.x-s.end.x,p.y-s.end.y)<1e-4) return;
-  rampSegment(s,s.end,p); s.last=p; s.end=p; s.path.push(p); gradeRamp(s);
+  rampSegment(s,s.end,p); s.last=p; s.end=p; s.path.push(p); if (!regionalReplay) gradeRamp(s);
 }
 function settleRamp(s) {
   if (s.kind!=='ramp' || s.path.length<3) return;
@@ -2039,8 +2080,9 @@ function replayShape(n,work) {
   const pts=n.points,b=nodeBounds(n),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
   const s=startStroke(n.kind,pts[0],{...shapeDefaults(),...n.params,seed:n.seed,frame:n.frame,node:n,work,pre:regionPre?.h,
     rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
+  if (n.regionalSpurs) { addRimSpurs(n,s); return; }
   if (n.kind==='crystal') { s.path=pts.slice(); stampCrystals(s); return; }
-  if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); return; }
+  if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); if (regionalReplay) gradeRamp(s); return; }
   if (s.shouldered && experiment.get('replay')!=='full') {
     // The settled ridge replaces every live dab, so replay goes straight to
     // it: the same accepted path and face side, without the discarded pass.
@@ -2055,9 +2097,10 @@ function replayShape(n,work) {
   if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
   else sweep(s,pts);
   if (hasCoastPass(n.kind,s)) stampCoastShore(s);
+  if (regionalCoastCandidate) return;
   if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
-  if (n.kind==='crater') addCraterlets(n,s);
-  applyCracks(s);
+  if (n.kind==='crater' && !n.regionalBody && !n.regionalChild) addCraterlets(n,s);
+  if (!n.regionalChild) applyCracks(s);
 }
 function applyCracks(s) {
   applyShapeMask(s);
@@ -2204,7 +2247,7 @@ function evaluateRegion(from,rect) {
   prefix.length=nodes.length; heightDirty=true; markChanged();
 }
 function evaluate(from=0,rect=null) {
-  if (regionalFields && !regionalReplay) { prefix=[]; regionalFields.changed(rect); heightDirty=true; markChanged(); return; }
+  if (regionalFields && !regionalReplay) { prefix=[]; regionalFields.changed(regionalDirtyRect(from,rect),regionalStages(nodes.slice(0,from)).length); heightDirty=true; markChanged(); return; }
   const evalStart=performance.now();
   // Shore distance depends on neighbouring heights; replay the full suffix
   // when it contains a plate band or a coast pass (joined-coast fingers, shore
@@ -2219,31 +2262,88 @@ function evaluate(from=0,rect=null) {
   lastEvalMs=performance.now()-evalStart;
 }
 
-function makeRegionalFields() {
-  return createRegionalFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,bounds:nodeBounds,replay:replayWindow,baseCell:(x,y) => {
-    let h=Math.fround(config.baseHeight);
-    for (const n of nodes) if (!n.hidden) {
-      if (n.kind==='ground') h=Math.fround(groundHeight(n,h,0,x*spacing,y*spacing));
-      else if (n.kind==='compact' && h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor);
+// Satellite crater baselines see the completed bowl and preceding satellites.
+// Split those steps into prefix stages rather than pulling a whole crater into
+// every touched tile. Their dabs do not write the parent's masks/crack field,
+// so applying that parent-only field before its satellites preserves ordering.
+function regionalStages(list=nodes) {
+  const out=[];
+  for (const n of list) {
+    if (n.hidden) continue;
+    if (n.kind!=='crater') { out.push(n); continue; }
+    const q={...shapeDefaults(),...n.params},s=n.seed??seed;
+    out.push({...n,regionalBody:true});
+    for (let k=0;k<Math.round(q.craterlets||0);k++) {
+      const {p,small}=craterletSpot(n,s,q.radius,k);
+      out.push({...n,points:[p],params:{...q,radius:small,amount:q.amount*(.25+.3*craterletRand(s,k,4)),craterlets:0},seed:(s+k*2654435761)>>>0,regionalChild:true});
     }
-    return h;
-  }});
+    if (Math.round(q.spurCount)>=1) out.push({...n,regionalSpurs:true});
+  }
+  return out;
 }
-// All existing brush functions run unchanged apart from their grid origin.
-// No node owns a field snapshot or a world-sized noise array in map mode.
-function replayWindow(rect) {
-  const active=nodes.filter(n => !n.hidden && (!n.points || overlaps(nodeBounds(n),rect)));
-  const saved={grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,workDepth,work:workPool.slice(),noises:Array.from(noiseCache),framedBuffers,fingerCaches};
+function regionalReadApron(n) {
+  if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
+  const q={...shapeDefaults(),...n.params},bank=2**(((q.bankWidth??.5)-.5)*1.3);
+  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):n.kind==='hill' && experiment.get('forms')==='shouldered' && !(q.profile>=.5) && !ridgeOn(n.kind,q)?4:0;
+  // A framed finger cache is keyed on authoring cells; include every world
+  // cell that can share that key. Radial thumbs can share a coastal key from
+  // both sides of the radial band, so their first-call order needs that band.
+  if (['deep','shallow'].includes(n.kind) && q.fingers>0) {
+    if (n.frame) cells+=Math.ceil(2*Math.max(Math.hypot(n.frame[0],n.frame[1]),Math.hypot(n.frame[2],n.frame[3])))+2;
+    if (!(q.fingerCoast>=.5) && q.fingerBlunt>=.5) cells+=Math.ceil(3.6*q.radius*bank/spacing)+2;
+  }
+  if (hasCoastPass(n.kind,q)) {
+    // Signed-distance normals read ten neighbours and a derivative. A new
+    // tongue can reach another tongue before reaching its original shore,
+    // so keep the connection band as well as the visible finger reach.
+    if (q.fingerCoast>=.5 && q.fingers>0) cells+=Math.ceil(3*(.5*q.radius*bank+spacing*3)/spacing)+32;
+    if (Math.round(q.shoreLayers)>=1) cells+=Math.ceil(coastLayerReach(q)/spacing)+2;
+  }
+  if (['deep','shallow','offset'].includes(n.kind) && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
+  return cells;
+}
+// A remote baseline can change a later shape far outside the edited cells.
+// This is dirty-output metadata only: it never enlarges a field read window.
+function regionalDirtyRect(from,rect) {
+  if (!rect) return null;
+  let dirty={...rect};
+  const pointTouched=p => { const x=p.x/spacing,y=p.y/spacing; return overlaps(dirty,{x0:Math.floor(x),y0:Math.floor(y),x1:Math.ceil(x),y1:Math.ceil(y)}); };
+  for (let i=Math.max(0,from+1);i<nodes.length;i++) {
+    const n=nodes[i]; if (n.hidden || !n.points?.length) continue;
+    const b=nodeBounds(n),points=['plateau','crater'].includes(n.kind)?[n.points[0]]:n.kind==='ramp'?[n.points[0],n.points[n.points.length-1]]:[];
+    if (n.kind==='crater') for (let k=0;k<Math.round(n.params?.craterlets??worldDefault('craterlets'));k++) points.push(craterletSpot(n,n.seed??seed,n.params?.radius??40,k).p);
+    if (points.some(pointTouched)) { dirty=unionRect(dirty,b); continue; }
+    const pad=regionalReadApron(n),reach={x0:Math.max(0,dirty.x0-pad),y0:Math.max(0,dirty.y0-pad),x1:Math.min(worldGrid-1,dirty.x1+pad),y1:Math.min(worldGrid-1,dirty.y1+pad)};
+    if (pad && overlaps(reach,b)) dirty=unionRect(dirty,{x0:Math.max(reach.x0,b.x0),y0:Math.max(reach.y0,b.y0),x1:Math.min(reach.x1,b.x1),y1:Math.min(reach.y1,b.y1)});
+  }
+  return dirty;
+}
+function makeRegionalFields() {
+  return createRegionalFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,stages:regionalStages,bounds:nodeBounds,
+    readApron:regionalReadApron,pointReads:n => ['plateau','crater'].includes(n.kind)?[n.points[0]]:n.kind==='ramp'?[n.points[0],n.points[n.points.length-1]]:[],
+    baseCell:(x,y) => {
+      let h=Math.fround(config.baseHeight);
+      for (const n of nodes) if (!n.hidden) {
+        if (n.kind==='ground') h=Math.fround(groundHeight(n,h,0,x*spacing,y*spacing));
+        else if (n.kind==='compact' && h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor);
+      }
+      return h;
+    },workspaceBytesPerCell:FIELD_KEYS.reduce((v,k) => v+(MASK_KEYS.includes(k)?3:12),0)+Object.keys(NOISE_FIELDS).length*8+96,replay:replayWindow});
+}
+// Every application receives a bounded prefix window. Temporary global views
+// let the existing brush routines keep their row strides; no node retains a
+// field snapshot or world-sized noise array in map mode.
+function replayWindow(rect,{node,fields,sample:prefixSample,connects,mode}) {
+  const saved={grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,regionalPrefixSample,regionalNoiseMeta,regionalConnects,regionalCoastCandidate,regionalCoastRaw,workDepth,work:workPool.slice(),noises:Array.from(noiseCache),framedBuffers,fingerCaches};
   const started=performance.now();
   try {
-    grid=rect.x1-rect.x0+1; originCellX=rect.x0; originCellY=rect.y0; regionalReplay=true;
-    const n=grid*grid;
-    heights=new Float32Array(n).fill(config.baseHeight); protection=new Float32Array(n); routes=new Float32Array(n); cracks=new Float32Array(n); cover=new Float32Array(n); crystal=new Float32Array(n); maskPlanes=MASK_KEYS.map(() => new Int8Array(n));
+    grid=rect.x1-rect.x0+1; originCellX=rect.x0; originCellY=rect.y0; regionalReplay=true; regionalPrefixSample=prefixSample; regionalNoiseMeta=new WeakMap(); regionalConnects=connects; regionalCoastCandidate=mode==='coast'; regionalCoastRaw=null;
+    ({h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal}=fields); maskPlanes=MASK_KEYS.map(k => fields[k]);
     clip=null; regionPre=null; workDepth=0; workPool.length=0; noiseCache.clear(); framedBuffers=new WeakMap(); fingerCaches=new WeakMap();
-    for (const node of active) applyNode(node);
-    return live();
+    applyNode(node);
+    return regionalCoastCandidate?{...live(),raw:regionalCoastRaw??heights}:live();
   } finally {
-    ({grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,workDepth,framedBuffers,fingerCaches}=saved);
+    ({grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,regionalPrefixSample,regionalNoiseMeta,regionalConnects,regionalCoastCandidate,regionalCoastRaw,workDepth,framedBuffers,fingerCaches}=saved);
     workPool.splice(0,workPool.length,...saved.work); noiseCache.clear(); for (const [key,value] of saved.noises) noiseCache.set(key,value);
     lastEvalMs=performance.now()-started;
   }
@@ -2310,7 +2410,7 @@ function regionalStats() {
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
-  read:readRegional,sample:sampleRegional,cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),
+  read:readRegional,readAuthored:request => regionalFields.read(request),sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); cancelWeather(); nodes=deserializeNodes(list); prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
