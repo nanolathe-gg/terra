@@ -120,7 +120,14 @@ WORLD_KNOBS = {
     # edge is a fade by default (retail's halo round an island and its reef bars
     # fade over 30-40 px); a stroke may set a hard step, which sits at depth 20.
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, bandLine=.68, flatBank=1,
-                        undulation=0, shadeDepth=.5,
+                        undulation=0, shadeDepth=.3,
+                        # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
+                        # against retail's (102, 92, 76) in windows 2 and 3, with 15% of them under
+                        # luma 45 (retail 5-6%). Hill cover x1.25 and a third of the directional
+                        # shading give (103, 92, 76) and 7% dark. The ring is the curved 'Nested
+                        # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
+                        # fading over a longer reach.
+                        hillLight=1.25, ringFade=1, fringeStyle='rings',
                         bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
@@ -395,7 +402,7 @@ def biome_config(biome, assets):
         config['material'].update(rockyCoasts=False, surfaceRelief=.45, fractureDepth=.35,
                                   slopeStart=.08, slopeFull=.35, slopeFloor=6.0, slopeDry=8.0,
                                   slopeOnLowBanks=False, elevatedCover=[0, 30, .92], rampMaterial=1.0,
-                                  groundFringe=True, ringAmount=.95, ringSpread=.7, ringVariation=.75,
+                                  groundFringe=True, ringAmount=.7, ringSpread=.35, ringVariation=.5,
                                   fringeSignal=[1, -1, 0, 0], fringeRange=[.08, .28], materialWeathering=1.0,
                                   transitionDetail=.65)
     elif biome == 'moon':
