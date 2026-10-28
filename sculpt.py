@@ -59,6 +59,11 @@ KNOB_DEFAULTS = dict(
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
+    # Water looks (card E1). The three stroke options are 0 (the world's own),
+    # 1 or 2; the world knobs default to the earlier noise water, a ramp from
+    # shallow to deep colour, and level ground with no painted lumps beyond
+    # plainRelief's.
+    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, fringeStyle='veins', bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
@@ -105,7 +110,20 @@ WORLD_KNOBS = {
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
                   bedLip=1, bedLedge=.55, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
-                  crackStyle=1),
+                  crackStyle=1,
+                  # Water (card E1). Retail Green's shallows are the lit bed under a
+                  # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
+                  # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
+                  # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
+                  # grid upsampled), so the step sits at 40 and nothing fades.
+                  bedLit=1, bedTint=1, bedContrast=.45, bedBright=1, bedRelief=1, deepEdge=1, deepEdgeDepth=40,
+                  # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
+                  # lumps only in patches, which the Paint brush's Ground lumps makes. On
+                  # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
+                  # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
+                  # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
+                  # The undulation knobs and Level-ground lumps still work.
+                  undulation=0, plainRelief=0),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
@@ -113,7 +131,11 @@ WORLD_KNOBS = {
     'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3, bandLine=1,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
-                jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160, jointGaps=.4),
+                jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160, jointGaps=.4,
+                # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
+                # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
+                # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
+                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
@@ -123,9 +145,21 @@ WORLD_KNOBS = {
     # drew blue pinholes in dry sand, and its slopes gave the grey blotches.
     # Mounds (retail: olive-grey, 6-13% of mound pixels darker than luma 45,
     # ours 28-31%): keep half the directional shading, ambient occlusion and
-    # cast shadow, and a lighter crack floor.
+    # cast shadow, and a lighter crack floor (card B2; card E1 below lowers
+    # the directional share to 0.3 with a lift of the hill cover).
+    # Water (card E1): the shallows are the lit sand bed under a blue tint. Their
+    # edge is a fade by default (retail's halo round an island and its reef bars
+    # fade over 30-40 px); a stroke may set a hard step, which sits at depth 20.
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, bandLine=.68, flatBank=1,
-                        undulation=0, shadeDepth=.5),
+                        undulation=0, shadeDepth=.3,
+                        # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
+                        # against retail's (102, 92, 76) in windows 2 and 3, with 15% of them under
+                        # luma 45 (retail 5-6%). Hill cover x1.25 and a third of the directional
+                        # shading give (103, 92, 76) and 7% dark. The ring is the curved 'Nested
+                        # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
+                        # fading over a longer reach.
+                        hillLight=1.25, ringFade=1, fringeStyle='rings',
+                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
@@ -416,7 +450,7 @@ def biome_config(biome, assets):
         config['material'].update(rockyCoasts=False, surfaceRelief=.45, fractureDepth=.35,
                                   slopeStart=.08, slopeFull=.35, slopeFloor=6.0, slopeDry=8.0,
                                   slopeOnLowBanks=False, elevatedCover=[0, 30, .92], rampMaterial=1.0,
-                                  groundFringe=True, ringAmount=.95, ringSpread=.7, ringVariation=.75,
+                                  groundFringe=True, ringAmount=.7, ringSpread=.35, ringVariation=.5,
                                   fringeSignal=[1, -1, 0, 0], fringeRange=[.08, .28], materialWeathering=1.0,
                                   transitionDetail=.65)
     elif biome == 'moon':
