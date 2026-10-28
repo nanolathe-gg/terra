@@ -124,7 +124,13 @@ WORLD_KNOBS = {
     # 1.07-1.14), so no highlight above level.
     'desert': dict(mesaFlank=1, lightCap=1, paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
                    bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
-                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0),
+                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
+                   # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
+                   # 6 height units thick, level on the height so they ring each butte), long
+                   # joints, and darker faces turned from the sun; retail's buttes carry black
+                   # shadow sides where ours shaded to a soft grey.
+                   rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
+                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceDark=.5),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
@@ -268,7 +274,7 @@ WORLD_VARIANTS = {
         # shaded flanks and long dark cracks, beside Painted Desert's broad
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: grey buttes',
-                      knobs=dict(strataSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
+                      knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
                                  crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3),
                       config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 0, .22], [60, 2, 0, .2], [95, 1, 2, .35]])),
     },
