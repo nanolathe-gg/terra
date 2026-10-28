@@ -53,7 +53,7 @@ the retail crops stay outside git.
 
 `demo/` holds scenes for tools that have no retail crop (the cross-section
 control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
-`-lake` (and `-lake-red`, `-shallow`), `-desert-apron` and `-lip`. They are
+`-terraced-dome`, `-lake` (and `-lake-red`, `-lake-terraced`, `-shallow`), `-desert-apron` and `-lip`. They are
 rendered one at a time with `render.mjs` (`all.sh` only runs `scenes/`), and
 set the new shape options in `options.card` in the units of their sliders
 (`faceCurve` -100..100, shares as percent, widths in px).
