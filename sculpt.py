@@ -96,6 +96,8 @@ SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
+# E7 (Crystal): every knob's default is the earlier output.
+KNOB_DEFAULTS.update(crystalFacet=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -275,7 +277,9 @@ WORLD_KNOBS = {
                     shineCrystal=.4, shineCrystalSharp=100, shineCrystalRough=1, shineCrystalScale=8,
                     shineRock=.3, shineRockSharp=100, shineRockRough=1, shineRockScale=8,
                     shineSlope=.25, shineSlopeSharp=100, shineSlopeRough=1, shineSlopeScale=8,
-                    shineStretch=3, shineWhite=1),
+                    shineStretch=3, shineWhite=1,
+                    # E7: crumpled multi-facet column tops.
+                    crystalFacet=.7),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,
