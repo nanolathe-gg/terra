@@ -184,11 +184,18 @@ WORLD_KNOBS = {
 WORLD_VARIANTS = {
     'green': {
         # Evad River Delta and the Barrier Reef: rounded hills with soft
-        # shading, no terrace contour lines; grey rock only as a sparse dark rim
+        # shading, no regular terrace combs; grey rock only as a sparse dark rim
         # at the foot (repro windows green-1, green-3, census green-07..12).
         # The default (Great Divide) keeps its dense terraces and rock faces.
-        'evad': dict(label='Evad River: smooth slopes',
-                     knobs=dict(banding=0, bandLine=0, faceStreak=0, faceDark=.3, crackSeverity=.3, crackBlocks=.3, reliefAmount=.5, microRock=.7)),
+        # The slopes' relief is broken and irregular, not smooth: a few faint
+        # terrace dashes (banding .35 with the world's bandJag) and dark
+        # branching cracks that reach down onto moderate slopes (crack depth
+        # .45, floor darkness .55, reach .75), as the retail hills' rims show.
+        # Thin dark lines per pixel in green-1 / green-3: retail .0559 / .0449,
+        # smooth variant .0445 / .0425, this .0547 / .0504.
+        'evad': dict(label='Evad River: broken slopes',
+                     knobs=dict(banding=.35, bandLine=.84, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
+                                crackReach=.75, reliefAmount=.5, microRock=.7)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
