@@ -3576,6 +3576,8 @@ const KNOBS = [
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
   ['Pockmarks (Moon)', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
   ['Ice mountains', [['iceSlate','Monotone slate faces from the first slope',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Crystal mountains: straight strokes on the faces',0,1,.05,0],['iceCrest','Crystal mountains: share of the raised ground under snow lumps',0,1,.05,0]]],
+  // G6
+  ['Ice blocks and mesas', [['iceSoft','Rounded light: raised ice lit by its blurred height',0,1,.05,0],['iceSnow','Snow on the flat tops of raised ice',0,1,.05,0],['iceFall','Smooth fibres down the faces',0,1,.05,0],['iceApron','Hatched drifts past the foot',0,1,.05,0]]],
   ['Ice frost band', [['frostGaps','Melt pockets: share of cells at the coast',0,.6,.01,.17],['frostGapReach','Melt pockets: reach inland (share of the band)',.2,1.2,.05,.65],['frostGapSize','Melt pockets: size (px)',3,24,1,11],['frostGapDepth','Melt pockets: depth below the sea',.5,6,.1,3]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)

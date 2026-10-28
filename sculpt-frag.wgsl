@@ -361,6 +361,53 @@ fn iceHatch(pixel: vec2f) -> f32 {
     return stroke * step(0.3, id.x) * step(0.35, rs.z) * step(0.45, fract(run));
 }
 
+// Ice blocks and mesas (card G6). Retail's blocks (ice-3, Polar Range) are soft: crests are
+// rounded and faces shade smoothly with no hard creases, so the light reads the height blurred
+// over ~13 px (six samples a side: three offsets across each difference, so a plane's edge
+// becomes a ramp instead of a line). Returns the blurred height's gradient.
+fn iceSoftGradient(p: vec2f) -> vec2f {
+    const R = 6.5;
+    var d = vec2f(0.0);
+    for (var k = -1; k <= 1; k++) {
+        let o = f32(k) * R * 0.6;
+        d.x += baseHeight(p + vec2f(R, o)) - baseHeight(p + vec2f(-R, o));
+        d.y += baseHeight(p + vec2f(o, R)) - baseHeight(p + vec2f(o, -R));
+    }
+    return d / (6.0 * R);
+}
+
+// Smooth fibres down the faces of raised ice (card G6). Retail's ice-3 faces carry no grain: they
+// are one dark slate crossed by fine strokes running down the slope, 1-2 px wide and 10-25 px long,
+// leaning ~20 degrees (the window's structure tensor on the three faces: stroke directions 109-142
+// degrees from +x with y down). Two scales of value noise stretched along that lean, -1..1.
+fn iceFibre(pixel: vec2f) -> f32 {
+    const ALONG = vec2f(-0.34, 0.94);
+    const ACROSS = vec2f(0.94, 0.34);
+    let fine = shineNoise(vec2f(dot(pixel, ACROSS) / 1.5, dot(pixel, ALONG) / 10.0) + vec2f(3.0, 11.0)).x;
+    let coarse = shineNoise(vec2f(dot(pixel, ACROSS) / 3.4, dot(pixel, ALONG) / 28.0) + vec2f(29.0, 5.0)).y;
+    return clamp(0.8 * fine + 0.6 * coarse, -1.0, 1.0);
+}
+
+// Longer, sparser strokes than the faces' fibres, for the apron: 1 px wide, 20-40 px long, same lean.
+fn iceDrift(pixel: vec2f) -> f32 {
+    const ALONG = vec2f(-0.34, 0.94);
+    const ACROSS = vec2f(0.94, 0.34);
+    return shineNoise(vec2f(dot(pixel, ACROSS) / 1.3, dot(pixel, ALONG) / 15.0) + vec2f(61.0, 17.0)).x;
+}
+
+// How near raised ice is, 0 far .. 1 at its foot, from rings of height samples out to ~44 px (card G6 apron).
+fn iceNearness(p: vec2f) -> f32 {
+    var near = 0.0;
+    for (var k = 0; k < 8; k++) {
+        let dir = vec2f(cos(f32(k) * 0.785398 + 0.2), sin(f32(k) * 0.785398 + 0.2));
+        for (var j = 0; j < 4; j++) {
+            let r = 10.0 + 14.0 * f32(j) + 2.0 * f32(j * j);
+            near = max(near, smoothstep(u.base + 6.0, u.base + 24.0, baseHeight(p + dir * r)) * (1.0 - r / 72.0));
+        }
+    }
+    return near;
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -782,7 +829,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let h = surfaceHeight(p);
     let g = surfaceGradient(p);
     let broad = broadGradient(p);
-    let normal = normalize(vec3f(-g, 1.0));
+    // Card G6: raised ice is lit by its blurred height (the gradient g keeps the relief for everything else).
+    var iceMesa = 0.0;
+    var gSoft = g;
+    if (u.iceSoft > 0.0 || u.iceSnow > 0.0 || u.iceApron > 0.0 || u.iceFall > 0.0) {
+        iceMesa = smoothstep(u.base + 1.5, u.base + 8.0, baseHeight(p));
+        gSoft = iceSoftGradient(p);
+    }
+    var gLit = g;
+    if (u.iceSoft > 0.0) { gLit = mix(g, gSoft, u.iceSoft * iceMesa); }
+    let normal = normalize(vec3f(-gLit, 1.0));
     let n = terrainNoise(p);
     let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let fringeVariation = u.ringVariation / 0.75;
@@ -1152,6 +1208,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Threshold so that roughly the chosen share of face pixels is rock.
         let threshold = mix(1.4, -0.9, share);
         var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
+        // Card G6: the slate faces keep no snow lumps: a convex fold of the relief (a lump's top, a block's hip) would
+        // score as moss here and cut a white dash through the face; the fibres carry the texture instead.
+        if (u.iceFall > 0.0) { rockMask = mix(rockMask, lowGate, u.iceFall * u.iceSlate); }
         // E9: inside painted rock the face is rock; moss stays at its edges and on the ledges below.
         if (u.faceRock > 0.0 && u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * u.faceRock); }
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
@@ -1357,6 +1416,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, snowMaterial(pixel), crest);
         exposed *= 1.0 - crest;
     }
+    // Card G6, snow on the flat tops of raised ice (retail ice-3's white top with a few pits): where the blurred
+    // height is gentle the block is snow, its edge ragged, so the slate begins at the crest's roll-over.
+    if (u.iceSnow > 0.0) {
+        let gentle = 1.0 - smoothstep(0.42, 0.78, length(gSoft) + (n.g - 0.5) * 0.25);
+        let cap = u.iceSnow * iceMesa * gentle;
+        material = mix(material, snowMaterial(pixel), cap);
+        exposed *= 1.0 - cap;
+    }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
         // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
@@ -1368,6 +1435,25 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Raised ground counts whole, tops included, where a crater's floor counts only where it slopes.
     var landform = 1.0;
     if (u.shineGate > 0.0 || u.pockmark > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
+    var iceFace = 0.0;
+    if (u.iceFall > 0.0) {
+        // Card G6: the faces' fibres, in place of the rock art's grain and the glint's dashes.
+        iceFace = clamp(exposed, 0.0, 1.0) * iceMesa;
+        let fibre = iceFibre(pixel);
+        // Dark strokes keep their blue (a plain multiply goes brown in the palette).
+        color *= 1.0 + u.iceFall * iceFace * select(0.2 * fibre, 0.8 * fibre, fibre < 0.0) * vec3f(1.0, 0.85, 0.55);
+    }
+    if (u.iceApron > 0.0 && iceMesa < 0.9) {
+        // Card G6: dark fibres spill past the foot into the snow and thin out with the distance (retail ice-3's
+        // feathered edge): the same strokes as the faces', kept where raised ice is near and the broad noise allows.
+        let near = iceNearness(p);
+        let keep = smoothstep(0.0, 0.35, near * 1.5 - 0.12 - n.r * 0.6);
+        // The strokes waver (a slow warp of where they are read), thin out with the distance, and a faint
+        // fuzz of the same dark lies under them close to the foot.
+        let wander = (terrainNoise(p * 0.22).rg - 0.5) * 16.0 + (terrainNoise(p * 0.9).ba - 0.5) * 5.0;
+        let drift = smoothstep(0.12, 0.5, -iceDrift(pixel + wander)) * (0.35 + 0.65 * smoothstep(0.1, 0.6, near));
+        color *= 1.0 - u.iceApron * (0.5 * keep * drift + 0.16 * smoothstep(0.25, 0.8, near)) * (1.0 - iceMesa) * vec3f(1.0, 0.85, 0.55);
+    }
     if (u.iceCrystal > 0.0) {
         // Straight strokes over the rock faces, darker the more rock shows (card E6; after shadeBlue, which rebuilds the colour).
         color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
@@ -1375,10 +1461,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform);
+        var shine = shineTerm(pixel, p, gLit, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }
+        if (u.iceFall > 0.0) { shine = vec4f(shine.xyz * (1.0 - 0.75 * u.iceFall * iceFace), shine.w); }
         color = color * shine.w + shine.xyz;
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }

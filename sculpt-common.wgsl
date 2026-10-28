@@ -322,6 +322,11 @@ struct Uniforms {
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
     iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
+    // G6 (Ice blocks and mesas, retail ice-3 and Polar Range).
+    iceSoft: f32,         // raised ice is lit by its height blurred over ~13 px, so crests are rounded and faces smooth (0: the full relief lights it, as before)
+    iceSnow: f32,         // the flat tops of raised ice lie under snow (0: none)
+    iceFall: f32,         // smooth fibres down the faces of raised ice, in place of grain (0: none)
+    iceApron: f32,        // dark hatched drifts spilling past the foot of raised ice into the snow (0: none)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

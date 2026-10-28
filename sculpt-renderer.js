@@ -821,6 +821,11 @@ export class TerrainRenderer {
     this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
     this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
+    // G6: Ice blocks and mesas (0: the earlier look exactly).
+    this.f('uIceSoft', variant.has('iceSoft') ? Number(variant.get('iceSoft')) : 0);
+    this.f('uIceSnow', variant.has('iceSnow') ? Number(variant.get('iceSnow')) : 0);
+    this.f('uIceFall', variant.has('iceFall') ? Number(variant.get('iceFall')) : 0);
+    this.f('uIceApron', variant.has('iceApron') ? Number(variant.get('iceApron')) : 0);
     this.fieldsDirty = true;
   }
 
