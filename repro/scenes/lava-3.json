@@ -6,7 +6,7 @@
   ["hill", [[960,20],[1060,40]], {"card": {"diameter": 240, "amount": 120, "roughness": 20}}],
   ["plateau", [[950,950],[1100,900]], {"card": {"diameter": 620, "amount": 101, "roughness": 25, "softness": 70}}],
   ["plateau", [[100,1010],[250,1020]], {"card": {"diameter": 420, "amount": 135, "roughness": 25, "softness": 70}}],
-  ["deep", [[760,60],[500,80],[330,150]], {"card": {"diameter": 240, "roughness": 15, "fingers": 0, "bankPx": 28}}],
-  ["deep", [[300,150],[275,400],[250,560],[130,680],[-20,740]], {"card": {"diameter": 180, "roughness": 15, "fingers": 0, "bankPx": 28}}],
-  ["deep", [[760,190],[1050,230]], {"card": {"diameter": 150, "roughness": 15, "fingers": 0, "bankPx": 28}}]
+  ["deep", [[760,60],[500,80],[330,150]], {"card": {"diameter": 240, "roughness": 15, "fingers": 0, "bankPx": 28, "shoreLayers": 0}}],
+  ["deep", [[300,150],[275,400],[250,560],[130,680],[-20,740]], {"card": {"diameter": 180, "roughness": 15, "fingers": 0, "bankPx": 28, "shoreLayers": 0}}],
+  ["deep", [[760,190],[1050,230]], {"card": {"diameter": 150, "roughness": 15, "fingers": 0, "bankPx": 28, "shoreLayers": 0}}]
  ]}
