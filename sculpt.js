@@ -1,6 +1,7 @@
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {quickMaterialField} from './sculpt-material-weathering.js';
-import {configureMap,resizeMap,drawMapBounds,exportMapField} from './sculpt-map.js';
+import {configureMap,resizeMap,drawMapBounds,exportMapField,mountMapCanvas} from './sculpt-map.js';
+import {createRegionalFields} from './sculpt-fields.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 
@@ -35,6 +36,10 @@ const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
+let mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
+// Integer origins preserve the canonical multiplication order: (cell + origin)
+// times spacing, rather than an accumulated floating-point world offset.
+const gridX=x => (x+originCellX)*spacing, gridY=y => (y+originCellY)*spacing;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
 let history=[], historyIndex=-1, historySerial=0, framePending=false, heightDirty=true, needsDraw=true;
@@ -330,6 +335,7 @@ function updateControls() {
 }
 
 function canExport() {
+  if (regionalFields) return ready && !loading && !stroke && !mapFeatures?.busy && (!$('weather').checked || weatherState==='ready');
   return ready && !loading && !stroke && !mapFeatures?.busy && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
 }
 
@@ -351,7 +357,7 @@ function makeNoise(s) {
   const out={};
   for (const field of Object.keys(NOISE_FIELDS)) {
     const a=out[field]=new Float32Array(grid*grid);
-    for (let z=0;z<grid;z++) for (let col=0;col<grid;col++) a[z*grid+col]=noiseValue(field,s,col*spacing,z*spacing);
+    for (let z=0;z<grid;z++) for (let col=0;col<grid;col++) a[z*grid+col]=noiseValue(field,s,gridX(col),gridY(z));
   }
   return out;
 }
@@ -370,8 +376,21 @@ const isIdentity=m => !m || m.every((v,i) => Math.abs(v-IDENTITY[i])<1e-9);
 // Noise for a framed shape, gathered from the seed's world grid at each
 // cell's authoring position (nearest cell; the fields are smooth), within
 // rect only. Positions off the map are evaluated directly.
-const framedBuffers=new WeakMap();
+let framedBuffers=new WeakMap();
 function framedNoise(node,seed,frame,rect) {
+  if (regionalReplay) {
+    // Quantise inside the canonical world grid exactly as the full replay;
+    // evaluate off-map positions directly, matching the legacy fallback.
+    const inv=invert(frame),out={};
+    for (const field of Object.keys(NOISE_FIELDS)) {
+      const a=out[field]=new Float32Array(grid*grid);
+      for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
+        const wx=gridX(x),wy=gridY(y),lx=inv[0]*wx+inv[2]*wy+inv[4],ly=inv[1]*wx+inv[3]*wy+inv[5],gx=Math.round(lx/spacing),gy=Math.round(ly/spacing);
+        a[y*grid+x]=noiseValue(field,seed,gx>=0 && gy>=0 && gx<worldGrid && gy<worldGrid?gx*spacing:lx,gx>=0 && gy>=0 && gx<worldGrid && gy<worldGrid?gy*spacing:ly);
+      }
+    }
+    return out;
+  }
   const world=noiseFor(seed),inv=invert(frame);
   let out=framedBuffers.get(node);
   if (!out) { out={}; for (const field of Object.keys(NOISE_FIELDS)) out[field]=new Float32Array(grid*grid); framedBuffers.set(node,out); }
@@ -381,7 +400,7 @@ function framedNoise(node,seed,frame,rect) {
   if (w<=0 || h<=0) return out;
   const from=new Int32Array(w*h);
   for (let y=rect.y0,k=0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++,k++) {
-    const wx=x*spacing,wy=y*spacing,gx=Math.round((inv[0]*wx+inv[2]*wy+inv[4])/spacing),gy=Math.round((inv[1]*wx+inv[3]*wy+inv[5])/spacing);
+    const wx=gridX(x),wy=gridY(y),gx=Math.round((inv[0]*wx+inv[2]*wy+inv[4])/spacing),gy=Math.round((inv[1]*wx+inv[3]*wy+inv[5])/spacing);
     from[k]=gx>=0 && gy>=0 && gx<grid && gy<grid?gy*grid+gx:-1;
   }
   for (const field of Object.keys(NOISE_FIELDS)) {
@@ -389,13 +408,13 @@ function framedNoise(node,seed,frame,rect) {
     for (let y=rect.y0,k=0;y<=rect.y1;y++) for (let x=rect.x0,i=y*grid+x;x<=rect.x1;x++,k++,i++) {
       const j=from[k];
       if (j>=0) dst[i]=src[j];
-      else { const wx=x*spacing,wy=y*spacing; dst[i]=noiseValue(field,seed,inv[0]*wx+inv[2]*wy+inv[4],inv[1]*wx+inv[3]*wy+inv[5]); }
+      else { const wx=gridX(x),wy=gridY(y); dst[i]=noiseValue(field,seed,inv[0]*wx+inv[2]*wy+inv[4],inv[1]*wx+inv[3]*wy+inv[5]); }
     }
   }
   return out;
 }
 function sample(field,x,y) {
-  const gx=clamp(x/spacing,0,grid-1),gy=clamp(y/spacing,0,grid-1),ix=Math.floor(gx),iy=Math.floor(gy);
+  const gx=clamp(x/spacing-originCellX,0,grid-1),gy=clamp(y/spacing-originCellY,0,grid-1),ix=Math.floor(gx),iy=Math.floor(gy);
   const jx=Math.min(ix+1,grid-1),jy=Math.min(iy+1,grid-1),fx=gx-ix,fy=gy-iy;
   return (field[iy*grid+ix]*(1-fx)+field[iy*grid+jx]*fx)*(1-fy)+(field[jy*grid+ix]*(1-fx)+field[jy*grid+jx]*fx)*fy;
 }
@@ -521,10 +540,11 @@ function fingerRibs(x,y,tx,ty,period,salt,leanMax=.26) {
 // (authoring) coordinates and cached per shape on that grid, so moving a lake
 // carries its fingers along and re-uses them instead of re-evaluating every
 // kernel each frame.
-const fingerCaches=new WeakMap();
+let fingerCaches=new WeakMap();
 function fingerCache(s) {
   if (s.fingerField) return s.fingerField;
-  const key=`${s.seed}|${s.radius}|${s.rough}|${s.bankWidth}|${s.fingerBlunt}`;
+  if (regionalReplay) return s.fingerField=new Float32Array(grid*grid).fill(NaN);
+  const key=`${s.seed}|${s.radius}|${s.rough}|${s.bankWidth}|${s.fingerBlunt}${regionalReplay?`|${originCellX}|${originCellY}|${grid}`:''}`;
   let c=s.node?fingerCaches.get(s.node):null;
   if (!c || c.key!==key) { c={key,field:new Float32Array(grid*grid).fill(NaN)}; if (s.node) fingerCaches.set(s.node,c); }
   return s.fingerField=c.field;
@@ -536,7 +556,7 @@ function fingerShift(s,i,wx,wy,nx,ny,amount) {
     const lx=inv[0]*wx+inv[2]*wy+inv[4],ly=inv[1]*wx+inv[3]*wy+inv[5],mx=inv[0]*nx+inv[2]*ny,my=inv[1]*nx+inv[3]*ny,ml=Math.hypot(mx,my)||1;
     wx=lx; wy=ly; nx=mx/ml; ny=my/ml;
     const gx=Math.round(wx/spacing),gy=Math.round(wy/spacing);
-    i=gx>=0 && gy>=0 && gx<grid && gy<grid?gy*grid+gx:-1;
+    i=gx>=originCellX && gy>=originCellY && gx<originCellX+grid && gy<originCellY+grid?(gy-originCellY)*grid+gx-originCellX:-1;
   }
   let v=i>=0?field[i]:NaN;
   if (Number.isNaN(v)) {
@@ -848,7 +868,7 @@ function addRimSpurs(n,s) {
     let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
     for (const pc of pieces) for (const q of [pc.a,pc.b]) { ax=Math.min(ax,q.x); ay=Math.min(ay,q.y); bx=Math.max(bx,q.x); by=Math.max(by,q.y); }
     const reach=R*1.5+12*spacing,box=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
-    rect={x0:Math.max(box.x0,Math.floor((ax-reach)/spacing)),y0:Math.max(box.y0,Math.floor((ay-reach)/spacing)),x1:Math.min(box.x1,Math.ceil((bx+reach)/spacing)),y1:Math.min(box.y1,Math.ceil((by+reach)/spacing))};
+    rect={x0:Math.max(box.x0,Math.floor((ax-reach)/spacing-originCellX)),y0:Math.max(box.y0,Math.floor((ay-reach)/spacing-originCellY)),x1:Math.min(box.x1,Math.ceil((bx+reach)/spacing-originCellX)),y1:Math.min(box.y1,Math.ceil((by+reach)/spacing-originCellY))};
   }
   const work=borrowWork();
   try {
@@ -987,8 +1007,8 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
   const northWiden=s.northFace??0;
   const extent=s.fis?s.fis.reach:crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
-  let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
-  let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
+  let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing-originCellX),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing-originCellX),0,grid-1);
+  let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing-originCellY),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing-originCellY),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
   // Draft (while a shape is dragged): every other cell is computed and its
   // change copied to its three neighbours; release evaluates every cell.
@@ -1001,7 +1021,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   };
   const spread=(i,x,y) => { if (x<x1) copyCell(i,i+1); if (y<y1) { copyCell(i,i+grid); if (x<x1) copyCell(i,i+grid+1); } };
   for (let y=y0;y<=y1;y+=step) for (let x=x0;x<=x1;x+=step) {
-    const i=y*grid+x,wx=x*spacing,wy=y*spacing,inv=s.inv;
+    const i=y*grid+x,wx=gridX(x),wy=gridY(y),inv=s.inv;
     // Authoring-frame position for noise evaluated directly from position.
     const lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
     const t=spanLength2?clamp(((wx-p.x)*spanX+(wy-p.y)*spanY)/spanLength2,0,1):0;
@@ -1076,7 +1096,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
         // coast to its tip and cannot leave islets in the lava. A small lake grows shorter
         // fingers (its few fingers would make a star).
         const along=(.67*radius*width*bankScale-len)/len,fx=wx+dx*along,fy=wy+dy*along,gx=Math.round(fx/spacing),gy=Math.round(fy/spacing);
-        r+=band*fingerShift(s,gx>=0 && gy>=0 && gx<grid && gy<grid?gy*grid+gx:-1,gx*spacing,gy*spacing,dx/len,dy/len,s.fingers*clamp(radius*width*bankScale/140,.35,1))/(radius*width*bankScale);
+        r+=band*fingerShift(s,gx>=originCellX && gy>=originCellY && gx<originCellX+grid && gy<originCellY+grid?(gy-originCellY)*grid+gx-originCellX:-1,gx*spacing,gy*spacing,dx/len,dy/len,s.fingers*clamp(radius*width*bankScale/140,.35,1))/(radius*width*bankScale);
       }
       else if (band>0) r+=band*fingerShift(s,i,wx,wy,dx/len,dy/len,s.fingers)/(radius*width*bankScale);
     }
@@ -1285,7 +1305,7 @@ function stampShorePlates(s) {
   for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
     const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
     if (!width || d>=width) continue;
-    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,next=null,d1=Infinity,d2=Infinity;
     for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) {
       const c=cell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
@@ -1332,7 +1352,7 @@ function stampShoreSlabs(s,raw,distance,sea,water,land) {
   for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
     const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
     if (!width || d>=width) continue;
-    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,next=null,d1=Infinity,d2=Infinity;
     for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) {
       const c=cell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
@@ -1386,7 +1406,7 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
     if (!width || d>=width) continue;
     // Every cell of the band carries a trace of protection: the shader's frostWet reads it to keep the band white.
     protection[i]=Math.max(protection[i],.04);
-    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,d1=Infinity;
     for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) { const c=patch(u,v),q=(lx-c.x)**2+(ly-c.y)**2; if (q<d1) { d1=q;best=c; } }
     const support=1-smooth(.1,1,d/width);
@@ -1567,7 +1587,7 @@ function coastFingers(s,sea,box) {
     const gx=soft[y*grid+Math.min(x+1,grid-1)]-soft[y*grid+Math.max(x-1,0)],gy=soft[Math.min(y+1,grid-1)*grid+x]-soft[Math.max(y-1,0)*grid+x],len=Math.hypot(gx,gy);
     if (len<1e-3) continue;
     // The unit normal points inland; the nearest coast point lies back along it.
-    const nx=gx/len,ny=gy/len,wx=x*spacing,wy=y*spacing,f=clamp(thumbs?thumbReach(s,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,s.fingers*clamp(s.radius*bankScale/140,.35,1)):fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
+    const nx=gx/len,ny=gy/len,wx=gridX(x),wy=gridY(y),f=clamp(thumbs?thumbReach(s,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,s.fingers*clamp(s.radius*bankScale/140,.35,1)):fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
     if (sd[i]<0 && -sd[i]<f) {
       const u=-sd[i]/f;
       heights[i]=clamp(sea+low*(.7+.3*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
@@ -1629,7 +1649,7 @@ function coastLayers(s,sea,box) {
     if (!(raw[i]>sea)) continue;
     const d=dist[i],base=s.base[i];
     if (d>=reach+2*W) { if (s.weights[i]>0 && raw[i]<base) heights[i]=base; continue; }
-    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
+    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
     const ledge=clamp(ledge0+irr*.3*valueNoise(lx/33,ly/33,salt^0x2b1),.3,.95);
     let level;
     if (circular) {
@@ -1704,7 +1724,7 @@ function stampColumns(s) {
   };
   const pad=R*1.4;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity; for (const p of path) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
-  const rect={x0:Math.max(c.x0,Math.floor((ax-pad)/spacing)),y0:Math.max(c.y0,Math.floor((ay-pad)/spacing)),x1:Math.min(c.x1,Math.ceil((bx+pad)/spacing)),y1:Math.min(c.y1,Math.ceil((by+pad)/spacing))};
+  const rect={x0:Math.max(c.x0,Math.floor((ax-pad)/spacing-originCellX)),y0:Math.max(c.y0,Math.floor((ay-pad)/spacing-originCellY)),x1:Math.min(c.x1,Math.ceil((bx+pad)/spacing-originCellX)),y1:Math.min(c.y1,Math.ceil((by+pad)/spacing-originCellY))};
   const columns=new Map();
   const column=(i,j) => {
     const key=i*65536+j; let k=columns.get(key);
@@ -1719,7 +1739,7 @@ function stampColumns(s) {
     return k;
   };
   for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) {
-    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
+    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
     const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,d1=Infinity,d2=Infinity;
     for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
@@ -1764,10 +1784,10 @@ function stampBergs(s) {
       planes.push({nx:Math.cos(a),ny:Math.sin(a),d:R*(.55+.35*rnd(i0,120+j)),slope:s.bergFace*(.55+.9*rnd(i0,140+j)),salt:s.seed^(0x9b3+j*1301)});
     }
     const wave=R*(.02+.12*jit);
-    const x0=Math.max(c.x0,Math.floor((k.x-reach)/spacing)),x1=Math.min(c.x1,Math.ceil((k.x+reach)/spacing)),y0=Math.max(c.y0,Math.floor((k.y-reach)/spacing)),y1=Math.min(c.y1,Math.ceil((k.y+reach)/spacing));
+    const x0=Math.max(c.x0,Math.floor((k.x-reach)/spacing-originCellX)),x1=Math.min(c.x1,Math.ceil((k.x+reach)/spacing-originCellX)),y0=Math.max(c.y0,Math.floor((k.y-reach)/spacing-originCellY)),y1=Math.min(c.y1,Math.ceil((k.y+reach)/spacing-originCellY));
     rect.x0=Math.min(rect.x0,x0); rect.y0=Math.min(rect.y0,y0); rect.x1=Math.max(rect.x1,x1); rect.y1=Math.max(rect.y1,y1);
     for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
-      const wx=x*spacing,wy=y*spacing,qx=wx-k.x,qy=wy-k.y;
+      const wx=gridX(x),wy=gridY(y),qx=wx-k.x,qy=wy-k.y;
       let m=(reach-Math.hypot(qx,qy))*s.bergFace;
       if (m<=0) continue;
       for (const p of planes) {
@@ -1804,11 +1824,11 @@ function stampCrystals(s) {
   if (s.crystalForm>=.5) { stampColumns(s); return; }
   const top=clamp(s.crystalTop,0,.95),rect={x0:grid,y0:grid,x1:-1,y1:-1};
   for (const k of crystalList(s)) {
-    const x0=Math.max(c.x0,Math.floor((k.x-k.R)/spacing)),x1=Math.min(c.x1,Math.ceil((k.x+k.R)/spacing));
-    const y0=Math.max(c.y0,Math.floor((k.y-k.R)/spacing)),y1=Math.min(c.y1,Math.ceil((k.y+k.R)/spacing));
+    const x0=Math.max(c.x0,Math.floor((k.x-k.R)/spacing-originCellX)),x1=Math.min(c.x1,Math.ceil((k.x+k.R)/spacing-originCellX));
+    const y0=Math.max(c.y0,Math.floor((k.y-k.R)/spacing-originCellY)),y1=Math.min(c.y1,Math.ceil((k.y+k.R)/spacing-originCellY));
     rect.x0=Math.min(rect.x0,x0); rect.y0=Math.min(rect.y0,y0); rect.x1=Math.max(rect.x1,x1); rect.y1=Math.max(rect.y1,y1);
     for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
-      const qx=x*spacing-k.x,qy=y*spacing-k.y; let m=Infinity;
+      const qx=gridX(x)-k.x,qy=gridY(y)-k.y; let m=Infinity;
       for (const e of k.edges) {
         // This face's plane: zero along its base edge, one at the apex.
         const rise=e.d-(k.lx*e.nx+k.ly*e.ny);
@@ -1899,8 +1919,8 @@ function rampSegment(s,a,b) {
   const field=s.rampField,dx=b.x-a.x,dy=b.y-a.y,length2=dx*dx+dy*dy;
   if (length2<1e-8) return;
   const length=Math.sqrt(length2),radius=s.radius,amp=s.rough*radius*.14;
-  let x0=clamp(Math.floor((Math.min(a.x,b.x)-radius-2*amp)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(a.x,b.x)+radius+2*amp)/spacing),0,grid-1);
-  let y0=clamp(Math.floor((Math.min(a.y,b.y)-radius-2*amp)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(a.y,b.y)+radius+2*amp)/spacing),0,grid-1);
+  let x0=clamp(Math.floor((Math.min(a.x,b.x)-radius-2*amp)/spacing-originCellX),0,grid-1),x1=clamp(Math.ceil((Math.max(a.x,b.x)+radius+2*amp)/spacing-originCellX),0,grid-1);
+  let y0=clamp(Math.floor((Math.min(a.y,b.y)-radius-2*amp)/spacing-originCellY),0,grid-1),y1=clamp(Math.ceil((Math.max(a.y,b.y)+radius+2*amp)/spacing-originCellY),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
   // Draft (while a shape is dragged): every other cell is computed and its
   // change copied to its three neighbours; release evaluates every cell.
@@ -1911,7 +1931,7 @@ function rampSegment(s,a,b) {
   };
   const spread=(i,x,y) => { if (x<x1) copyCell(i,i+1); if (y<y1) { copyCell(i,i+grid); if (x<x1) copyCell(i,i+grid+1); } };
   for (let y=y0;y<=y1;y+=step) for (let x=x0;x<=x1;x+=step) {
-    const i=y*grid+x,wx=x*spacing,wy=y*spacing,t=clamp(((wx-a.x)*dx+(wy-a.y)*dy)/length2,0,1);
+    const i=y*grid+x,wx=gridX(x),wy=gridY(y),t=clamp(((wx-a.x)*dx+(wy-a.y)*dy)/length2,0,1);
     const cx=a.x+dx*t,cy=a.y+dy*t;
     const plainDistance=Math.hypot(wx-cx,wy-cy);
     // The graded centre follows the curve exactly. Only the outer shoulder
@@ -1975,8 +1995,8 @@ function settleRamp(s) {
   s.path=path; gradeRamp(s);
 }
 
-function markViewChanged() { revision++; needsDraw=true; renderedRevision=-1; $('export').disabled=true; }
-function markChanged() { markViewChanged(); heightDirty=true; error(); }
+function markViewChanged(invalidate=true) { revision++; needsDraw=true; renderedRevision=-1; $('export').disabled=true; if (mapCanvas && invalidate) mapCanvas.invalidate(); }
+function markChanged() { markViewChanged(false); heightDirty=true; error(); }
 
 // Shapes are nodes: kind, path, parameters and seed. The map is rebuilt by
 // replaying nodes in order, so relative heights follow the ground beneath
@@ -1984,9 +2004,17 @@ function markChanged() { markViewChanged(); heightDirty=true; error(); }
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const noiseCache=new Map();
-function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
+function noiseFor(s) { if (regionalReplay && !noiseCache.has(s)) noiseCache.clear(); if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
 function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function groundHeight(n,h,protect,wx,wy) {
+  if (h<=config.seaLevel+1) return h;
+  const amp=n.amplitude??8,wave=n.wavelength??160,cover=n.coverage??.5,s=n.seed??1;
+  const v=.6*valueNoise(wx/wave,wy/wave,s^0x51a3)+.3*valueNoise(wx*2.1/wave,wy*2.1/wave,s^0x2b7d)+.1*valueNoise(wx*4.3/wave,wy*4.3/wave,s^0x6c11);
+  const threshold=(.5-cover)*1.2,patch=smooth(threshold-.15,threshold+.15,valueNoise(wx/(wave*3.2),wy/(wave*3.2),s^0x7f4b));
+  const next=h+amp*v*patch*(1-protect)*smooth(config.seaLevel+1,config.seaLevel+8,h);
+  return clamp(Math.max(next,Math.min(h,config.seaLevel+1.5)),MIN_HEIGHT,MAX_HEIGHT);
+}
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1994,18 +2022,12 @@ function applyNode(n) {
     // Broad, low undulation of dry ground, as retail maps have: about half of
     // retail dry land is gently sloped rather than dead level. Protected
     // crests, ramps and passages keep their authored surface.
-    const amp=n.amplitude??8,wave=n.wavelength??160,cover=n.coverage??.5,s=n.seed??1;
     for (const i of clipCells()) {
       const x=i%grid,y=(i-x)/grid,h=heights[i];
-      if (h<=config.seaLevel+1) continue;
-      const wx=x*spacing,wy=y*spacing;
-      const v=.6*valueNoise(wx/wave,wy/wave,s^0x51a3)+.3*valueNoise(wx*2.1/wave,wy*2.1/wave,s^0x2b7d)+.1*valueNoise(wx*4.3/wave,wy*4.3/wave,s^0x6c11);
       // Retail dry land is bimodal: about half dead level, half rolling. A
       // broad mask confines the undulation to patches.
-      const threshold=(.5-cover)*1.2,patch=smooth(threshold-.15,threshold+.15,valueNoise(wx/(wave*3.2),wy/(wave*3.2),s^0x7f4b));
       // Dry ground stays dry: undulation never opens new ponds.
-      const next=h+amp*v*patch*(1-protection[i])*smooth(config.seaLevel+1,config.seaLevel+8,h);
-      heights[i]=clamp(Math.max(next,Math.min(h,config.seaLevel+1.5)),MIN_HEIGHT,MAX_HEIGHT);
+      heights[i]=groundHeight(n,h,protection[i],gridX(x),gridY(y));
     }
     return;
   }
@@ -2064,7 +2086,7 @@ function addCraterlets(n,s) {
     let rect=null;
     if (framed) {
       const reach=small*3+12*spacing,box=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
-      rect={x0:Math.max(box.x0,Math.floor((p.x-reach)/spacing)),y0:Math.max(box.y0,Math.floor((p.y-reach)/spacing)),x1:Math.min(box.x1,Math.ceil((p.x+reach)/spacing)),y1:Math.min(box.y1,Math.ceil((p.y+reach)/spacing))};
+      rect={x0:Math.max(box.x0,Math.floor((p.x-reach)/spacing-originCellX)),y0:Math.max(box.y0,Math.floor((p.y-reach)/spacing-originCellY)),x1:Math.min(box.x1,Math.ceil((p.x+reach)/spacing-originCellX)),y1:Math.min(box.y1,Math.ceil((p.y+reach)/spacing-originCellY))};
       keys[k] ??= {};
     }
     const work=borrowWork();
@@ -2083,7 +2105,10 @@ const FIELD_KEYS=['h','p','r','c','v','x',...MASK_KEYS];
 function copyFields(src,dst,rect) { for (const k of FIELD_KEYS) copyRect(src[k],dst[k],rect); }
 function resetFields() { heights.fill(config.baseHeight); for (const a of [protection,routes,cracks,cover,crystal]) a.fill(0); clearMasks(); }
 function snapshot() { const f=live(); return Object.fromEntries(FIELD_KEYS.map(k => [k,f[k].slice()])); }
-function addNode(n) { prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n); }
+function addNode(n) {
+  if (regionalFields && !regionalReplay) { nodes.push(n); regionalFields.changed(nodeBounds(n)); return; }
+  prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n);
+}
 let lastEvalMs=0;
 // Region-limited replay. clip is the rectangle (grid cells, inclusive) that
 // node application may compute; with no clip, the whole grid.
@@ -2113,7 +2138,7 @@ function nodeBounds(n) {
   // A ridge's crest also swells to 1.4 of its radius and a spur's root flares to about 1.7 times Spur width.
   if (ridgeOn(n.kind,q)) r+=radius;
   if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
-  return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
+  return {x0:clamp(Math.floor((ax-r)/spacing-originCellX),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing-originCellY),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
@@ -2136,7 +2161,7 @@ function copyRect(src,dst,r) { for (let y=r.y0;y<=r.y1;y++) dst.set(src.subarray
 // The growth repeats until nothing else is pulled in.
 function regionClosure(from,inner,margin) {
   const expand=r => ({x0:Math.max(0,r.x0-margin),y0:Math.max(0,r.y0-margin),x1:Math.min(grid-1,r.x1+margin),y1:Math.min(grid-1,r.y1+margin)});
-  const cellOf=q => ({x:Math.floor(q.x/spacing),y:Math.floor(q.y/spacing)});
+  const cellOf=q => ({x:Math.floor(q.x/spacing-originCellX),y:Math.floor(q.y/spacing-originCellY)});
   const inside=(r,c) => c.x>=r.x0 && c.x+1<=r.x1 && c.y>=r.y0 && c.y+1<=r.y1;
   for (let grown=true;grown;) {
     grown=false;
@@ -2179,6 +2204,7 @@ function evaluateRegion(from,rect) {
   prefix.length=nodes.length; heightDirty=true; markChanged();
 }
 function evaluate(from=0,rect=null) {
+  if (regionalFields && !regionalReplay) { prefix=[]; regionalFields.changed(rect); heightDirty=true; markChanged(); return; }
   const evalStart=performance.now();
   // Shore distance depends on neighbouring heights; replay the full suffix
   // when it contains a plate band or a coast pass (joined-coast fingers, shore
@@ -2192,6 +2218,109 @@ function evaluate(from=0,rect=null) {
   prefix.length=nodes.length; heightDirty=true; markChanged();
   lastEvalMs=performance.now()-evalStart;
 }
+
+function makeRegionalFields() {
+  return createRegionalFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,bounds:nodeBounds,replay:replayWindow,baseCell:(x,y) => {
+    let h=Math.fround(config.baseHeight);
+    for (const n of nodes) if (!n.hidden) {
+      if (n.kind==='ground') h=Math.fround(groundHeight(n,h,0,x*spacing,y*spacing));
+      else if (n.kind==='compact' && h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor);
+    }
+    return h;
+  }});
+}
+// All existing brush functions run unchanged apart from their grid origin.
+// No node owns a field snapshot or a world-sized noise array in map mode.
+function replayWindow(rect) {
+  const active=nodes.filter(n => !n.hidden && (!n.points || overlaps(nodeBounds(n),rect)));
+  const saved={grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,workDepth,work:workPool.slice(),noises:Array.from(noiseCache),framedBuffers,fingerCaches};
+  const started=performance.now();
+  try {
+    grid=rect.x1-rect.x0+1; originCellX=rect.x0; originCellY=rect.y0; regionalReplay=true;
+    const n=grid*grid;
+    heights=new Float32Array(n).fill(config.baseHeight); protection=new Float32Array(n); routes=new Float32Array(n); cracks=new Float32Array(n); cover=new Float32Array(n); crystal=new Float32Array(n); maskPlanes=MASK_KEYS.map(() => new Int8Array(n));
+    clip=null; regionPre=null; workDepth=0; workPool.length=0; noiseCache.clear(); framedBuffers=new WeakMap(); fingerCaches=new WeakMap();
+    for (const node of active) applyNode(node);
+    return live();
+  } finally {
+    ({grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,workDepth,framedBuffers,fingerCaches}=saved);
+    workPool.splice(0,workPool.length,...saved.work); noiseCache.clear(); for (const [key,value] of saved.noises) noiseCache.set(key,value);
+    lastEvalMs=performance.now()-started;
+  }
+}
+function currentStrokeOptions() {
+  applySeedControl();
+  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)]))};
+}
+function applyRegionalStroke(kind,points,options={}) {
+  if (!HELP[kind] || kind==='move' || !Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
+  cancelWeather();
+  const params={...currentStrokeOptions(),...options},node={kind,points:points.map(p => ({x:clamp(p.x,0,(config.map?.width??size)-1),y:clamp(p.y,0,(config.map?.height??size)-1)})),params,seed:params.seed??seed};
+  delete params.seed;
+  nodes.push(node); selected=-1; evaluate(nodes.length-1,nodeBounds(node)); checkpoint(); queueWeather(); schedule();
+  return nodes.length-1;
+}
+function currentDrawOptions() {
+  return {clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
+}
+function regionalHeightCell(x,y) {
+  const h=regionalFields.cell(x,y),i=y*worldGrid+x;
+  if (!refined || !refinedBase || !$('weather').checked) return h;
+  return Math.fround(h+(refined[i]-refinedBase[i])*(1-smooth(0,10,Math.abs(h-refinedBase[i])))*(1-regionalFields.cell(x,y,'r')));
+}
+function sampleRegional(x,y) {
+  if (!refined || !refinedBase || !$('weather').checked) return regionalFields.sample(x,y);
+  const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
+  return (regionalHeightCell(ix,iy)*(1-fx)+regionalHeightCell(jx,iy)*fx)*(1-fy)+(regionalHeightCell(ix,jy)*(1-fx)+regionalHeightCell(jx,jy)*fx)*fy;
+}
+function readRegional(request) {
+  const r=regionalFields.read(request);
+  if (!refined || !refinedBase || !$('weather').checked) return r;
+  const fields={...r.fields,h:r.fields.h.slice()},ox=Math.round(r.gridOrigin[0]/spacing),oy=Math.round(r.gridOrigin[1]/spacing),weather={};
+  const crop=(source,channels=1) => {
+    if (!source) return undefined;
+    const out=new source.constructor(r.gridWidth*r.gridHeight*channels);
+    for (let y=0;y<r.gridHeight;y++) { const from=((y+oy)*worldGrid+ox)*channels; out.set(source.subarray(from,from+r.gridWidth*channels),y*r.gridWidth*channels); }
+    return out;
+  };
+  for (let y=0;y<r.gridHeight;y++) for (let x=0;x<r.gridWidth;x++) {
+    const i=y*r.gridWidth+x,j=(y+oy)*worldGrid+x+ox,h=r.fields.h[i];
+    fields.h[i]+=(refined[j]-refinedBase[j])*(1-smooth(0,10,Math.abs(h-refinedBase[j])))*(1-r.fields.r[i]);
+  }
+  for (const key of ['flow','deposit','talus','sand']) weather[key]=crop(regionalWeather?.[key]);
+  const materialField=crop(regionalWeather?.materialField,4),extra=[fields.h,...Object.values(weather),materialField].reduce((sum,a) => sum+(a?.byteLength??0),0);
+  return {...r,fields,weather,materialField,bytes:r.bytes+extra};
+}
+function drawRegionalOverlay(ctx) {
+  const n=nodes[selected]; if (!n?.points) return;
+  ctx.strokeStyle='#f3d36b'; ctx.lineWidth=2; ctx.beginPath();
+  for (const [i,p] of n.points.entries()) { const y=p.y-(Math.max(config.seaLevel,sampleRegional(p.x,p.y))-config.baseHeight)*.5; if (i) ctx.lineTo(p.x,y); else ctx.moveTo(p.x,y); }
+  ctx.stroke();
+  if (tool!=='move') return;
+  const hd=nodeHandles(n); ctx.fillStyle='#f3d36b'; ctx.beginPath(); ctx.arc(hd.rotate.cx,hd.rotate.cy,7,0,Math.PI*2); ctx.fill(); ctx.fillRect(hd.scale.cx-6,hd.scale.cy-6,12,12);
+}
+function setMapBusy(on) {
+  loading=on; $('editor').disabled=on; $('world-editor').disabled=on;
+  for (const id of ['weather','clay','light']) $(id).disabled=on;
+  overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on;
+}
+function regionalStats() {
+  const stats=regionalFields.stats(),arrays=new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(a => ArrayBuffer.isView(a)));
+  const weatherBytes=Array.from(arrays).reduce((sum,a) => sum+a.byteLength,0);
+  return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
+}
+const sculptRegion={
+  read:readRegional,sample:sampleRegional,cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),
+  loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); cancelWeather(); nodes=deserializeNodes(list); prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
+  sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
+  bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
+  subscribe:fn => regionalFields.subscribe(fn),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
+  editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
+  drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
+  setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
+};
+window.sculptRegion=sculptRegion;
 function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),params:n.params?{...n.params}:undefined})); }
 function nodeDistance(n,p) {
   if (!n.points) return Infinity;
@@ -2218,7 +2347,7 @@ function nodePivot(n) {
 }
 // Handle positions on the overlay: round rotates, square scales.
 function nodeHandles(n) {
-  const c=nodePivot(n),lift=(Math.max(config.seaLevel,sample(heights,c.x,c.y))-config.baseHeight)*.5;
+  const c=nodePivot(n),lift=(Math.max(config.seaLevel,regionalFields?sampleRegional(c.x,c.y):sample(heights,c.x,c.y))-config.baseHeight)*.5;
   const r=Math.min(c.reach,size*.45),inside=v => clamp(v,12,size-12);
   return {pivot:c,centre:{cx:c.x,cy:c.y-lift},rotate:{cx:inside(c.x),cy:inside(c.y-lift-r)},scale:{cx:inside(c.x+r*.707),cy:inside(c.y-lift+r*.707)},radius:r};
 }
@@ -2305,7 +2434,9 @@ function moveHistory(delta) {
 // Archipelago's dark hills) keep roughly their final look instead of
 // turning pale until refinement finishes.
 const materialPreview=() => experiment.get('deposits')!=='off' && Number($('material-weathering').value)>0;
+function clearRendererWeather() { if (regionalFields) regionalWeather=null; else renderer?.setWeather(); }
 function quickMaterials() {
+  if (regionalFields) return;
   if (!renderer || !materialPreview()) { renderer?.setMaterialField(); return; }
   renderer.setMaterialField(quickMaterialField({height:heights,grid,size,seed:refinementSeed,baseHeight:config.baseHeight,seaLevel:config.seaLevel,
     depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}}));
@@ -2329,15 +2460,21 @@ function queueWeather() {
   if (!$('weather').checked) {
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;
   }
+  if (regionalFields && worldGrid>1168) {
+    weatherState='unsupported';
+    $('weather-state').textContent='Exact weathering currently needs the complete bounded field (at most 4×4 units). This larger map keeps its authored terrain. Turn Weathering off to export, or use a smaller canvas for weathering.';
+    updateControls(); return;
+  }
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
     if (!weatherWorker) startWeatherWorker();
     const job=++weatherJob;
-    weatherBase=heights.slice();
+    const authored=regionalFields?regionalFields.read({x:0,y:0,width:worldSize-1,height:worldSize-1}).fields:null;
+    weatherBase=authored?authored.h.slice():heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
     const profile=experiment.get('weather')==='broad'?'broad':undefined;
-    weatherWorker.postMessage({job,height:weatherBase,protect:protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
+    weatherWorker.postMessage({job,height:weatherBase,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
       sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
   } catch (err) { failWeather(err.message); }
 }
@@ -2356,6 +2493,12 @@ function startWeatherWorker() {
     if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
     if (data.error) { failWeather(data.error); return; }
     refined=data.height; refinedBase=weatherBase;
+    if (regionalFields) {
+      regionalWeather={flow:data.flow,deposit:data.deposit,talus:data.talus,sand:data.sand,materialField:data.materialField};
+      if (data.done) weatherState='ready';
+      $('weather-state').textContent=data.done?`Weathered edges · ${Math.round(data.milliseconds)} ms`:`Refining exposed slopes · ${Math.round(data.progress*100)}%`;
+      markViewChanged(); updateControls(); schedule(); return;
+    }
     renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
     if (data.materialField) renderer.setMaterialField(data.materialField);
     heightDirty=false;
@@ -2365,7 +2508,7 @@ function startWeatherWorker() {
   };
   worker.onerror=event => { if (worker===weatherWorker) failWeather(event.message || 'worker unavailable'); };
 }
-function schedule(draw=true) { if (draw) needsDraw=true; if (!framePending) { framePending=true; requestAnimationFrame(frame); } }
+function schedule(draw=true) { if (draw) needsDraw=true; if (mapCanvas) { flushEval(); mapCanvas.schedule(); return; } if (!framePending) { framePending=true; requestAnimationFrame(frame); } }
 function drawTiming(stats,elapsed,quality) {
   const ms=Number.isFinite(stats?.milliseconds)?stats.milliseconds:elapsed;
   const gpu=Number.isFinite(stats?.gpuMilliseconds)?` · GPU ${stats.gpuMilliseconds.toFixed(1)} ms (recent)`:'';
@@ -2373,6 +2516,7 @@ function drawTiming(stats,elapsed,quality) {
   $('timing').textContent=`Draw ${ms.toFixed(1)} ms CPU${gpu}${interval} · shapes ${lastEvalMs.toFixed(1)} ms · ${quality}`;
 }
 function frame(timestamp) {
+  if (mapCanvas) { framePending=false; mapCanvas.schedule(); return; }
   framePending=false; if (!renderer) return;
   if (stroke) { if (lastPaintingRAF!==null) { paintingIntervals.push(timestamp-lastPaintingRAF); if (paintingIntervals.length>10) paintingIntervals.shift(); } lastPaintingRAF=timestamp; }
   else lastPaintingRAF=null;
@@ -2449,6 +2593,7 @@ function picked(screen) {
   return {x:clamp(p[0],0,(config.map?.width??size)-1),y:clamp(p[1],0,(config.map?.height??size)-1)};
 }
 overlay.addEventListener('pointerdown',event => {
+  if (regionalFields) return;
   if (!ready || loading || stroke || pan || ![0,1].includes(event.button)) return;
   event.preventDefault(); overlay.focus({preventScroll:true}); cursor=screenPoint(event);
   if (space || event.button===1) pan={x:event.clientX,y:event.clientY,left:$('viewport').scrollLeft,top:$('viewport').scrollTop};
@@ -2478,6 +2623,7 @@ overlay.addEventListener('pointerdown',event => {
   pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule();
 });
 overlay.addEventListener('pointermove',event => {
+  if (regionalFields) return;
   if (!ready || (pointerId!==null && event.pointerId!==pointerId)) return; cursor=screenPoint(event);
   if (pan) { $('viewport').scrollLeft=pan.left+pan.x-event.clientX; $('viewport').scrollTop=pan.top+pan.y-event.clientY; }
   else if (moving) {
@@ -2501,6 +2647,7 @@ overlay.addEventListener('pointermove',event => {
   schedule(Boolean(stroke));
 });
 function endPointer(event) {
+  if (regionalFields) return;
   if (pointerId!==event.pointerId) return;
   if (moving) {
     flushEval();
@@ -2521,6 +2668,7 @@ overlay.addEventListener('pointerup',endPointer); overlay.addEventListener('poin
 overlay.addEventListener('lostpointercapture',event => { if (stroke || pan || moving) endPointer(event); });
 overlay.addEventListener('pointerleave',() => { if (!stroke && !pan) cursor=null; schedule(false); }); overlay.addEventListener('contextmenu',event => event.preventDefault());
 function resize() {
+  if (mapCanvas) { mapCanvas.resize(); updateControls(); return; }
   if (!config || !ready) return; const viewport=$('viewport');
   const scale=fitView?Math.max(.05,Math.min((viewport.clientWidth-28)/size,(viewport.clientHeight-28)/size)):1;
   if (!resizeMap(config.map,size,fitView,viewport,$('stage'),canvas,overlay)) { $('stage').style.width=size*scale+'px'; $('stage').style.height=size*scale+'px'; }
@@ -2532,11 +2680,12 @@ function demoStroke(kind,points,options) {
   // Older reviewed examples keep their authored geometry. New island scenes
   // exercise the biome's default shapes.
   const island=experiment.get('example')==='islands';
-  const probe=startStroke(kind,points[0],{...shapeDefaults(),cracks:(experiment.has('hillCracks')?Number(experiment.get('hillCracks')):1)*defaults.cracks/100,bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options});
+  const params={...(regionalFields?currentStrokeOptions():{}),...shapeDefaults(),cracks:(experiment.has('hillCracks')?Number(experiment.get('hillCracks')):1)*defaults.cracks/100,bankWidth:island?defaults.bankWidth/100:.5,beachFlatness:island?defaults.beachFlatness/100:.5,softness:experiment.has('soft')?Number(experiment.get('soft')):island?defaults.softness/100:.5,...options};
+  const probe=regionalFields?params:startStroke(kind,points[0],params);
   addNode({kind,points:points.map(p => ({...p})),params:strokeParams(probe),seed:probe.seed});
 }
 function demoRamp(points,options) {
-  const probe=startStroke('ramp',points[0],options);
+  const probe=regionalFields?{...currentStrokeOptions(),...options}:startStroke('ramp',points[0],options);
   addNode({kind:'ramp',points:points.map(p => ({...p})),params:strokeParams(probe),seed:probe.seed});
 }
 // Capture tools rebuild a map from strokes: [kind, [[x,y],...], options],
@@ -2545,22 +2694,23 @@ function demoRamp(points,options) {
 // other key is a startStroke option.
 function scriptedScene(list,{ground=true}={}) {
   applySeedControl(); refinementSeed=seed;
-  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
+  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
   nodes=[]; prefix=[]; selected=-1;
   if (ground) addGroundNode();
   list.forEach(([kind,points,options={}],i) => {
     const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
       ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),seed:(seed+i*7919)>>>0};
-    const probe=startStroke(kind,pts[0],{...card,...rest});
+    const probe=regionalFields?{...card,...rest}:startStroke(kind,pts[0],{...card,...rest});
     addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
   });
+  if (regionalFields) regionalFields.changed();
   markChanged(); checkpoint(); updateControls(); schedule(); queueWeather();
   return nodes.length;
 }
 function mixedScene() {
   applySeedControl(); refinementSeed=seed;
-  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
+  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
   nodes=[]; prefix=[]; selected=-1;
   addGroundNode();
   if (experiment.get('example')==='columns') {
@@ -2653,11 +2803,11 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:regionalFields?5:4,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
-    tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),shelves:Number($('shelves').value),shallowMode:$('shallow-mode').value,fractures:Number($('fractures').value),scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'float32-le/base64',heights:encodedHeights(),protection:encodedHeights(protection),routes:encodedHeights(routes)};
+    tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),shelves:Number($('shelves').value),shallowMode:$('shallow-mode').value,fractures:Number($('fractures').value),scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,...(regionalFields?{encoding:'stroke-graph'}:{encoding:'float32-le/base64',heights:encodedHeights(),protection:encodedHeights(protection),routes:encodedHeights(routes)})};
 }
 function persistLater() {
   if (experiment.has('scratch')) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
@@ -2668,6 +2818,7 @@ function persistLater() {
   },450);
 }
 function loadSketch(s) {
+  if (regionalFields) { loadRegionalSketch(s); return; }
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![3,4].includes(s.version) || s.size!==size || s.grid!==grid || s.encoding!=='float32-le/base64' || typeof s.heights!=='string' || s.heights.length>heights.length*6) throw new Error('Load a v3 sculpt sketch with the same canvas and grid size. Painter sketches use a different format.');
   const binary=atob(s.heights); if (binary.length!==heights.length*4) throw new Error('The saved heightfield has the wrong length.');
   const bytes=Uint8Array.from(binary,c => c.charCodeAt(0)),view=new DataView(bytes.buffer),next=new Float32Array(heights.length);
@@ -2684,7 +2835,7 @@ function loadSketch(s) {
     const values=new DataView(Uint8Array.from(raw,c=>c.charCodeAt(0)).buffer);
     for (let i=0;i<next.length;i++) { const v=values.getFloat32(i*4,true); if (!Number.isFinite(v)||v<0||v>1) throw new Error('Invalid ramp surface value.'); nextRoutes[i]=v; }
   }
-  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather();
+  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; clearRendererWeather();
   heights.set(next); protection.set(nextProtect); routes.set(nextRoutes); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; $('seed').value=seed; noise=makeNoise(seed);
   refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
@@ -2724,6 +2875,22 @@ function loadSketch(s) {
   nodes=s.version===4 && Array.isArray(s.nodes)?deserializeNodes(s.nodes):[{kind:'raster',heights:heights.slice(),protection:protection.slice(),routes:routes.slice()}];
   prefix=[]; selected=-1; evaluate(0); renderLayers();
   restoreMapData(s.mapData); markChanged(); updateControls();
+}
+function loadRegionalSketch(s) {
+  if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
+  cancelWeather(); refined=refinedBase=regionalWeather=null; lastWaterStroke=null;
+  seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
+  if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
+  for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(s.toolSettings?.[kind]||{})};
+  showTool(toolSettings[tool]);
+  for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
+  for (const [key,id,lo,hi] of [['bankWidth','bank-width',0,100],['beachFlatness','beach-flatness',0,100],['softness','softness',0,100],['fractures','fractures',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
+  $('shallow-mode').value=s.shallowMode==='area'?'area':'passage';
+  if (typeof s.weather==='boolean') $('weather').checked=s.weather;
+  if (typeof s.clay==='boolean') $('clay').checked=s.clay;
+  if (['original','alternate'].includes(s.light)) $('light').value=s.light;
+  if (['rings','veins'].includes(s.fringeStyle)) $('fringe-style').value=s.fringeStyle;
+  nodes=deserializeNodes(s.nodes); prefix=[]; selected=-1; evaluate(0); restoreMapData(s.mapData); renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -2793,14 +2960,14 @@ $('scree').addEventListener('input',() => { markViewChanged(); updateControls();
 $('water-reapply').addEventListener('click',reapplyWater);
 function applySeedControl() {
   const next=clamp(Math.trunc(Number($('seed').value) || 0),0,4294967295);
-  if (next!==seed) { seed=next; if (config) noise=makeNoise(seed); }
+  if (next!==seed) { seed=next; if (config && (!regionalFields || regionalReplay)) noise=makeNoise(seed); }
   $('seed').value=seed;
 }
 $('seed').addEventListener('change',() => { applySeedControl(); schedule(); persistLater(); });
 for (const id of ['clay','light']) $(id).addEventListener('change',() => { markViewChanged(); schedule(); persistLater(); });
 $('weather').addEventListener('change',() => {
   cancelWeather(); markViewChanged();
-  if (!$('weather').checked) renderer.setWeather();
+  if (!$('weather').checked) clearRendererWeather();
   heightDirty=true; schedule(); queueWeather(); persistLater();
 });
 $('fit').addEventListener('click',() => { fitView=true; resize(); }); $('one').addEventListener('click',() => { fitView=false; resize(); });
@@ -2810,7 +2977,7 @@ $('demo').addEventListener('click',() => {
   experiment.set('example',$('example').value); mixedScene(); checkpoint();
   status('Example loaded · sculpt across the joins.'); schedule(); queueWeather();
 });
-$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); nodes=[]; prefix=[]; selected=-1; addGroundNode(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
+$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); nodes=[]; prefix=[]; selected=-1; addGroundNode(); if (regionalFields) regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
 $('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),'terrain-sculpt-v3.json'); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
@@ -3042,15 +3209,38 @@ function setKnob(key, value) {
   // Transport knobs change where sand is carried, so the worker re-runs.
   if (['sand','sandReach','windStrength','wind','sandPatchy','sandTail'].includes(key)) { cancelWeather(); queueWeather(); }
 }
+async function bootMap() {
+  worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
+  size=worldSize; grid=worldGrid; spacing=(worldSize-1)/(worldGrid-1);
+  // Outside a scoped regional replay, only the graph and empty placeholders
+  // exist. In particular, opening a 40×40 map allocates no world field planes.
+  heights=new Float32Array(0); protection=new Float32Array(0); routes=new Float32Array(0); cracks=new Float32Array(0); cover=new Float32Array(0); crystal=new Float32Array(0); maskPlanes=MASK_KEYS.map(() => new Int8Array(0));
+  seed=Number($('seed').value); refinementSeed=seed; regionalFields=makeRegionalFields();
+  addGroundNode();
+  mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
+  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());
+  buildKnobs(); buildWorldPanel();
+  $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
+  $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100); $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
+  let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
+  if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved map recipe.'); } catch (err) { error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); } }
+  else status('Blank map ready · draw terrain with the existing tools.');
+  ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
+  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
+  const pending=await takePendingSketch(experiment.get('pendingSketch'));
+  if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
+  $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
+  updateControls(); resize(); schedule(); queueWeather();
+}
 async function boot() {
   try {
     const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
     if (experiment.has('mapX') || experiment.has('mapY')) {
-      const response=await fetch('/map-catalog.json'); if (!response.ok) throw new Error('Could not read map defaults from the installed content.');
-      config.exportCatalog=await response.json(); config.defaultSeaLevel=config.exportCatalog.worlds[config.biomeId]?.defaultSeaLevel;
+      const response=await fetch('/map-catalog.json'),data=await response.json(); if (!response.ok) throw new Error(data.error||'Could not read map defaults from the installed content.');
+      config.exportCatalog=data; config.defaultSeaLevel=config.exportCatalog.worlds[config.biomeId]?.defaultSeaLevel;
     }
     configureMap(config,experiment); MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
-    if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?1168:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
+    if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?16384:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
     if (config.variant) LOCAL_KEY+='-v-'+config.variant;
     if (config.map) LOCAL_KEY+=`-map-${config.map.unitsX}x${config.map.unitsY}-sea-${config.seaLevel}`;
@@ -3083,6 +3273,7 @@ async function boot() {
     $('ring-variation').value=Math.round((config.material?.ringVariation??.7)*100);
     // The address may set the three ring sliders (a world's own fringe settings, 0..1).
     for (const [key,id] of [['ringAmount','mineral-ring'],['ringSpread','ring-spread'],['ringVariation','ring-variation']]) if (experiment.has(key)) $(id).value=Math.round(Number(experiment.get(key))*100);
+    if (config.map) { await bootMap(); return; }
     size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); cover=new Float32Array(grid*grid); crystal=new Float32Array(grid*grid); maskPlanes=MASK_KEYS.map(() => new Int8Array(grid*grid)); heights.fill(config.baseHeight);
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
@@ -3118,6 +3309,7 @@ async function boot() {
 // bakeMs and drawMs resolve to milliseconds from submit to GPU completion;
 // bakeGpuMs and drawMs's gpuMs are the pass's own GPU time (timestamp queries).
 function replayDetail() {
+  if (regionalFields) { flushEval(); return regionalFields.replayDetail(); }
   flushEval();
   const keys=['h',...MASK_KEYS],now=live(),before=keys.map(k => now[k].slice()),worst={};
   prefix=[]; evaluate(0);
