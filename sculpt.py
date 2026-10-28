@@ -48,6 +48,9 @@ KNOB_DEFAULTS = dict(
     # only matter once a stroke sets profile 1 (px, units or shares as labelled).
     profile=0, apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
     lip=0, crown=.5, shelfPx=0, shelfDepth=6, shelfSteps=0,
+    # Painted masks (card C5): the Paint brush's first choice, and the landforms'
+    # Paint inside option (channel 0 is off), with its strength.
+    paintChannel=1, maskChannel=0, maskAmount=1,
 )
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
