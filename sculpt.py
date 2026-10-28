@@ -36,7 +36,8 @@ KNOB_DEFAULTS = dict(
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
-    crystalVariation=.5,
+    crystalVariation=.5, crystalTiers=0,
+    shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
@@ -128,7 +129,8 @@ WORLD_KNOBS = {
     # tops stepped ~16 units (measure/crystal_geometry.py).
     'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
-                    crystalForm=1, crystalSize=20, crystalStep=16, crystalVariation=.35),
+                    crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
+                    crystalGrain=1, crystalFace=0, crystalInk=1, crystalTone=1.08),
     # Ice: level snow (flats at exactly 85 and 170), rounded snow mounds whose
     # shaded faces are smooth slate streaks with no crack network, and a
     # pack-ice shelf instead of a beach; its banks into the water are white
@@ -246,7 +248,7 @@ def biome_config(biome, assets):
         # and hills. The section slope class starts at 2 units per 16-px
         # cell (~.125 per px) and the crack-webbed bank runs down to the
         # shelf. Authored profile.
-        config['defaults'].update(example='islands', material='single', fractures='40', scree='0')
+        config['defaults'].update(example='columns', material='single', fractures='40', scree='0')
         # Its level ground is streaked on one diagonal (retail crystal
         # cracked: along-streak correlation of high-passed luma .12/.08 at
         # 6/12 px, 60 degrees). The 32-px tile model loses the streaks

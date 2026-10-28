@@ -78,7 +78,14 @@ const SHAPE_FIELDS=[
   ['shelfPx','sec-shelf-px','Shelf width (px)',['deep','shallow'],0,200,2,1,'A submerged shelf between the waterline and the drop to the bed.'],
   ['shelfDepth','sec-shelf-depth','Shelf depth (units below sea)',['deep','shallow'],0,30,1,1,'How far below the sea the shelf lies (never deeper than the bed).'],
   ['shelfSteps','sec-shelf-steps','Shelf steps',['deep','shallow'],0,6,1,1,'0: one sloping bench; more: layered flat shelves, one below another.'],
+  ['shorePlates','shore-plates','Shore plates',['deep','shallow'],0,1,1,1,'Add a band of broken plates on this stroke only. Off preserves the original water shape.'],
+  ['plateWaterPx','plate-water-px','Plates: water width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline into the water.'],
+  ['plateLandPx','plate-land-px','Plates: land width (px)',['deep','shallow'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
+  ['plateSize','plate-size','Plate size (px)',['deep','shallow'],8,96,2,1,'Typical width of the interlocking polygonal plates.'],
+  ['plateGap','plate-gap','Plate gap (px)',['deep','shallow'],0,160,5,10,'Open gap between adjacent plates.'],
+  ['plateHeight','plate-height','Plate height above sea',['deep','shallow'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound)',['crystal'],0,1,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world).'],
+  ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbours.'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
   ['crystalSize','crystal-size','Crystal width (px)',['crystal'],6,640,2,1,'Crystals: typical base width. Column mound: column top width (retail ~15).'],
   ['crystalStep','crystal-step','Column step',['crystal'],0,64,1,1,'Column mound: how far a column top steps up or down from its neighbours (retail ~16; ~40% flush).'],
@@ -180,7 +187,7 @@ function updateControls() {
   const parametric=Number($('sec-profile').value)>=.5;
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
-  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric); $(id+'-value').textContent=scale===1?$(id).value:$(id).value+'%'; }
+  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   $('section-preview-control').hidden=!SECTION_KINDS.includes(tool) || !parametric;
   if (!$('section-preview-control').hidden) drawSection();
   $('bank-value').textContent=$('bank-width').value+'%';
@@ -323,7 +330,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation'].map(k => [k,options[k]??shapeValue(k)])),...sec,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation'].map(k => [k,options[k]??shapeValue(k)])),...sec,baseline:sample(base,p.x,p.y),weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -763,6 +770,72 @@ function sweep(s,points) {
   }
   s.path=points.slice(); s.last=s.end=points[points.length-1];
 }
+// Shared shore plates: geometry belongs to the water stroke, so Crystal and
+// Red can reuse it with their own ground materials. Heights above sea are
+// explicit; no world-wide coast inference or material-tag channel is needed.
+function stampShorePlates(s) {
+  const water=Math.max(0,s.plateWaterPx),land=Math.max(0,s.plateLandPx),reach=Math.max(water,land);
+  if (!reach) return;
+  const raw=heights.slice(),distance=new Float32Array(raw.length).fill(reach+spacing*2),sea=config.seaLevel;
+  // Seed only coast segments this stroke actually touched. Fractional edge
+  // crossings keep the band in pixels, independent of the height range.
+  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+    const i=y*grid+x;
+    for (const j of [x+1<grid?i+1:-1,y+1<grid?i+grid:-1]) {
+      if (j<0 || (s.weights[i]<=0 && s.weights[j]<=0) || (raw[i]>sea)===(raw[j]>sea)) continue;
+      const d=Math.abs(raw[i]-sea)/Math.max(1e-6,Math.abs(raw[i]-raw[j]))*spacing;
+      distance[i]=Math.min(distance[i],d); distance[j]=Math.min(distance[j],spacing-d);
+    }
+  }
+  // Distance is approximate on the height grid, especially near diagonal
+  // coasts; two linear passes avoid a per-pixel coast search.
+  const diagonal=spacing*Math.SQRT2;
+  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+    const i=y*grid+x; let d=distance[i];
+    if (x) d=Math.min(d,distance[i-1]+spacing);
+    if (y) { d=Math.min(d,distance[i-grid]+spacing); if (x) d=Math.min(d,distance[i-grid-1]+diagonal); if (x+1<grid) d=Math.min(d,distance[i-grid+1]+diagonal); }
+    distance[i]=d;
+  }
+  for (let y=grid-1;y>=0;y--) for (let x=grid-1;x>=0;x--) {
+    const i=y*grid+x; let d=distance[i];
+    if (x+1<grid) d=Math.min(d,distance[i+1]+spacing);
+    if (y+1<grid) { d=Math.min(d,distance[i+grid]+spacing); if (x) d=Math.min(d,distance[i+grid-1]+diagonal); if (x+1<grid) d=Math.min(d,distance[i+grid+1]+diagonal); }
+    distance[i]=d;
+  }
+  const L=Math.max(8,s.plateSize),gap=Math.max(0,s.plateGap)*.5,inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
+  const cells=new Map(),cell=(x,y) => {
+    const key=x+','+y; let c=cells.get(key);
+    if (!c) { c={x:(x+.5+hash(x,y,s.seed^0x481)*.38)*L,y:(y+.5+hash(x,y,s.seed^0x287)*.38)*L,keep:hash(x,y,s.seed^0x721)*.5+.5,ridge:hash(x,y,s.seed^0x51f)>.1}; cells.set(key,c); }
+    return c;
+  };
+  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
+    const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
+    if (!width || d>=width) continue;
+    const wx=x*spacing,wy=y*spacing,lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    let best=null,next=null,d1=Infinity,d2=Infinity;
+    for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) {
+      const c=cell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
+      if (q<d1) { d2=d1;next=best;d1=q;best=c; } else if (q<d2) { d2=q;next=c; }
+    }
+    const edge=(d2-d1)/(2*Math.max(1,Math.hypot(best.x-next.x,best.y-next.y)))*scale+valueNoise(lx/5,ly/5,s.seed^0x317)*1.2;
+    const support=1-smooth(.2,1,d/width),plate=smooth(gap,gap+spacing*.6,edge);
+    if (wet) {
+      // Offshore plate coverage thins; gaps keep the original bed and paint.
+      if (best.keep>support || plate<=0) continue;
+      heights[i]=clamp(raw[i]+(Math.max(raw[i],sea+s.plateHeight)-raw[i])*plate,MIN_HEIGHT,MAX_HEIGHT);
+      protection[i]=Math.max(protection[i],plate); routes[i]=Math.max(routes[i],plate); cover[i]=Math.min(cover[i],-plate);
+    } else if (best.ridge && next.ridge) {
+      // Sparse straight polygon edges make short raised pressure ridges;
+      // untouched land retains its original relief between them.
+      const ridge=Math.max(0,1-Math.abs(edge-gap-2)/2)*support;
+      if (ridge<=0) continue;
+      heights[i]=clamp(raw[i]+ridge*Math.min(3,s.plateHeight),MIN_HEIGHT,MAX_HEIGHT);
+      protection[i]=Math.max(protection[i],ridge); routes[i]=Math.max(routes[i],ridge); cover[i]=Math.min(cover[i],-ridge);
+    }
+  }
+  heightDirty=true;
+}
+
 // Crystals: clusters of faceted crystals. Each is a pyramid over a polygon
 // of n sides whose apex may lean off centre; its surface is the lowest of its
 // face planes, so faces are flat and meet at sharp edges. Flat tops cut it
@@ -774,18 +847,19 @@ function crystalList(s) {
   const path=simplifyPath(s.path,Math.max(1,s.radius*.05)),lengths=[0];
   for (let k=1;k<path.length;k++) lengths.push(lengths[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
   const total=lengths[lengths.length-1],count=Math.max(1,Math.round(s.crystalCount*(1+total/Math.max(8,s.radius*1.2))));
-  const variation=s.crystalVariation,turn=Math.atan2(s.rot[1],s.rot[0]),out=[];
+  const variation=s.crystalVariation,turn=Math.atan2(s.rot[1],s.rot[0]),scale=s.inv?1/Math.hypot(s.inv[0],s.inv[1]):1,crystalSize=s.crystalSize*scale,out=[];
   for (let k=0;k<count;k++) {
     // Along the path by length, then within the brush radius; denser and
-    // taller toward the middle of the cluster.
+    // taller toward the middle of the cluster. Offsets and lean turn with
+    // the frame; width scales with it, as the cluster radius already does.
     const along=rnd(k,1)*total; let j=1; while (j<path.length-1 && lengths[j]<along) j++;
     const a=path[j-1],b=path[j]||a,f=lengths[j]>lengths[j-1]?(along-lengths[j-1])/(lengths[j]-lengths[j-1]):0;
-    const spread=Math.pow(rnd(k,2),.8),angle=rnd(k,3)*Math.PI*2;
+    const spread=Math.pow(rnd(k,2),.8),angle=rnd(k,3)*Math.PI*2+turn;
     const cx=a.x+(b.x-a.x)*f+Math.cos(angle)*spread*s.radius,cy=a.y+(b.y-a.y)*f+Math.sin(angle)*spread*s.radius;
-    const width=s.crystalSize*(1+variation*(rnd(k,4)-.5)*1.2)*(1-.4*spread);
-    const height=s.amount*(1-.45*spread)*(1+variation*(rnd(k,5)-.5))*Math.min(1.3,width/Math.max(4,s.crystalSize));
+    const width=crystalSize*(1+variation*(rnd(k,4)-.5)*1.2)*(1-.4*spread);
+    const height=s.amount*(1-.45*spread)*(1+variation*(rnd(k,5)-.5))*Math.min(1.3,width/(Math.max(4,s.crystalSize)*scale));
     const sides=clamp(Math.round(s.crystalSides+variation*(rnd(k,6)-.5)*2.4),3,12);
-    const R=width/2,lean=s.crystalLean*R*.75*rnd(k,7),leanAngle=rnd(k,8)*Math.PI*2;
+    const R=width/2,lean=s.crystalLean*R*.75*rnd(k,7),leanAngle=rnd(k,8)*Math.PI*2+turn;
     const edges=Array.from({length:sides},(_,e) => {
       const t=turn+rnd(k,9)*Math.PI*2+(e+.5)*Math.PI*2/sides;
       return {nx:Math.cos(t),ny:Math.sin(t),d:R*Math.cos(Math.PI/sides)*(1+s.rough*.35*(rnd(k,20+e)-.5))};
@@ -839,7 +913,10 @@ function stampColumns(s) {
       if (d<d1) { d2=d1; d1=d; best=k; } else if (d<d2) d2=d;
     }
     if (!best || best.m<=1) continue;
-    const top=best.m+best.gx*(wx-best.wx)+best.gy*(wy-best.wy)+best.step;
+    // Crystal repro 1–3: inheriting the mound incline made continuous dark
+    // walls. Preserve the envelope but expose separate column tops.
+    const incline=best.gx*(wx-best.wx)+best.gy*(wy-best.wy);
+    const top=s.crystalTiers>0?best.m+incline*(1-clamp(s.crystalTiers,0,1))+best.step:best.m+best.gx*(wx-best.wx)+best.gy*(wy-best.wy)+best.step;
     const h=Math.max(0,top),i=y*grid+x;
     if (h<=.5) continue;
     heights[i]=clamp(s.base[i]+h,MIN_HEIGHT,MAX_HEIGHT); protection[i]=1;
@@ -1038,7 +1115,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
@@ -1084,6 +1161,7 @@ function replayShape(n,work) {
   }
   if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
   else sweep(s,pts);
+  if (['deep','shallow'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
   if (n.kind==='crater') addCraterlets(n,s);
   applyCracks(s);
 }
@@ -1142,7 +1220,7 @@ function nodeBounds(n) {
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
     shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  const r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0):0);
+  const r=n.kind==='crystal'?radius*(q.crystalForm>=.5?1.35:1)+(q.crystalForm>=.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0):0);
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   return {x0:clamp(Math.floor((ax-r)/spacing),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing),0,grid-1)};
@@ -1177,6 +1255,9 @@ function evaluateRegion(from,rect) {
 }
 function evaluate(from=0,rect=null) {
   const evalStart=performance.now();
+  // Shore distance depends on neighbouring heights; replay the full suffix
+  // when it contains a plate band so changes outside a small edit stay exact.
+  if (rect && nodes.slice(from).some(n => ['deep','shallow'].includes(n.kind) && n.params?.shorePlates>0)) rect=null;
   if (rect && from>0 && prefix[from] && prefix.length>=nodes.length) { evaluateRegion(from,rect); lastEvalMs=performance.now()-evalStart; return; }
   from=Math.max(0,Math.min(from,nodes.length));
   if (from>0 && prefix[from]) { const now=live(); for (const k of FIELD_KEYS) now[k].set(prefix[from][k]); }
@@ -1552,6 +1633,15 @@ function mixedScene() {
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; renderer?.setWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0);
   nodes=[]; prefix=[]; selected=-1;
   addGroundNode();
+  if (experiment.get('example')==='columns') {
+    // Crystal's starting example shows the tool that defines its islands.
+    demoStroke('deep',[{x:70,y:0},{x:45,y:480},{x:95,y:1023}],{radius:180,rough:.4,shelves:.8});
+    demoStroke('deep',[{x:0,y:1040},{x:530,y:990},{x:1050,y:1040}],{radius:160,rough:.4,shelves:.8});
+    demoStroke('crystal',[{x:520,y:300},{x:660,y:370},{x:730,y:500}],{radius:150,amount:115,rough:.6,crystalForm:1});
+    demoStroke('crystal',[{x:330,y:600},{x:300,y:780}],{radius:100,amount:65,rough:.5,crystalForm:1});
+    demoStroke('crystal',[{x:215,y:180},{x:235,y:510},{x:225,y:810}],{radius:85,amount:10,rough:.45,crystalForm:0,crystalSize:30,crystalCount:5,crystalTop:.88,crystalLean:0});
+    return;
+  }
   if (experiment.get('example')==='islands') {
     demoStroke('deep',[{x:50,y:0},{x:100,y:300},{x:35,y:650},{x:150,y:1023}],{radius:150,rough:.6,shelves:.9});
     demoStroke('deep',[{x:0,y:900},{x:450,y:910},{x:1023,y:850}],{radius:165,rough:.55,shelves:.8});
@@ -2009,7 +2099,7 @@ async function boot() {
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
     if (worldId!==config.biomeId) document.querySelector('.topbar h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
-    $('example').value=['joins','coasts','hills','intersections','islands','mesas'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
+    $('example').value=['joins','coasts','hills','intersections','islands','mesas','columns'].includes(experiment.get('example'))?experiment.get('example'):'mixed';
     buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);
