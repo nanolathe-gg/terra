@@ -1340,7 +1340,8 @@ water flow carrying and mixing them downstream with light sand islands, a
 flow direction and strength tool, and rainfall and erosion applied
 selectively. Flow and erosion are not local, so any design must bound the
 simulation to a painted region plus a margin to keep regional replay
-exact. A one-page design comes before any prototype.
+exact. A one-page design comes before any prototype: `FLOW_BAKE.md`. It is
+a cached bake step, which the owner accepts being slower to edit.
 
 ## After the cards
 
