@@ -681,6 +681,12 @@ export class TerrainRenderer {
     this.set('uShine', shine);
     this.f('uShadeBlue', variant.has('shadeBlue') ? Number(variant.get('shadeBlue')) : 0);
     this.f('uFrostWet', variant.has('frostWet') ? Number(variant.get('frostWet')) : 0);
+    // E11: shallow water round 2; every default is the earlier look.
+    this.f('uStepSharp', variant.has('stepSharp') ? Number(variant.get('stepSharp')) : 0);
+    this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
+    this.f('uShelfScale', variant.has('shelfScale') ? Number(variant.get('shelfScale')) : 100);
+    this.f('uBedMottle', variant.has('bedMottle') ? Number(variant.get('bedMottle')) : 0);
+    this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
     this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);

@@ -96,6 +96,12 @@ SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
+# E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
+# shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
+# its depth with broad noise so the band's width and outline vary along the shore; bedFlat
+# lights the lit bed by its own relief only (no slope shading across the shelf); bedMottle is
+# the bed's mid-scale mottle as a share of brightness.
+KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0, bedMottle=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -132,7 +138,13 @@ WORLD_KNOBS = {
                   # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
-                  undulation=0, plainRelief=0),
+                  undulation=0, plainRelief=0,
+                  # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
+                  # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
+                  # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
+                  # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
+                  # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
+                  stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1, bedMottle=.08),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail

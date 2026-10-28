@@ -246,6 +246,12 @@ struct Uniforms {
     // Ice (card E5).
     shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
+    // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
+    stepSharp: f32,       // Green, Red: the shallow-to-deep step is a true threshold, ragged by pixels (0: the earlier smoothed step)
+    shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
+    shelfScale: f32,      // size of that wander, world px
+    bedMottle: f32,       // the lit bed's mid-scale mottle: lit lumps of 4-17 px, as a share of brightness (0: none; Green)
+    bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
