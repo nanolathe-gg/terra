@@ -9,7 +9,7 @@
   ["shallow", [[295,150],[225,260]], {"card": {"diameter": 36, "roughness": 5, "bankWidth": 0, "fingers": 0, "shallowMode": "area"}}],
   ["deep", [[850,470],[1150,470]], {"card": {"diameter": 365, "roughness": 12}}],
   ["deep", [[940,470],[940,1150]], {"card": {"diameter": 365, "roughness": 12}}],
-  ["deep", [[760,420],[760,510]], {"card": {"diameter": 230, "roughness": 15, "fingers": 0}}],
-  ["deep", [[765,720]], {"card": {"diameter": 130, "roughness": 15, "fingers": 0}}],
-  ["deep", [[690,930],[690,1100]], {"card": {"diameter": 160, "roughness": 15, "fingers": 0}}]
+  ["deep", [[760,420],[760,510]], {"card": {"diameter": 230, "roughness": 15}}],
+  ["deep", [[765,720]], {"card": {"diameter": 130, "roughness": 15}}],
+  ["deep", [[690,930],[690,1100]], {"card": {"diameter": 160, "roughness": 15}}]
  ]}
