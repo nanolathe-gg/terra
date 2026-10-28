@@ -161,6 +161,9 @@ fn debrisArrival(p: vec2f, slope: f32) -> vec2f {
 }
 
 fn debrisStones(p: vec2f, arrival: vec2f) -> vec2f {
+    // With Debris 0 a cell is still admitted when its hash is exactly 0, which
+    // scatters isolated rock specks over level ground; cleanStones skips them.
+    if (u.cleanStones > 0.0 && u.debris <= 0.0 && u.scatterOn == 0) { return vec2f(0.0); }
     // Stones on a fine cell grid; presence from arrivals, size from distance.
     let cellSize = max(3.0, u.debrisSize * 0.9);
     let cell = floor(p / cellSize);

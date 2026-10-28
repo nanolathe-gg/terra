@@ -48,6 +48,8 @@ KNOB_DEFAULTS = dict(
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
     # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
     flatBank=0,
+    # No stray rock specks on level ground where Debris is 0 (Archipelago's sand).
+    cleanStones=0,
     # Cross-section (card C1): profile 0 keeps each brush's own curve; the rest
     # only matter once a stroke sets profile 1 (px, units or shares as labelled).
     profile=0, apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
@@ -94,7 +96,7 @@ WORLD_KNOBS = {
     # ours 28-31%): keep half the directional shading, ambient occlusion and
     # cast shadow, and a lighter crack floor.
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, bandLine=.68, flatBank=1,
-                        undulation=0, shadeDepth=.5),
+                        undulation=0, shadeDepth=.5, cleanStones=1),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
