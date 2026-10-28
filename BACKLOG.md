@@ -622,6 +622,18 @@ replays exactly by region, and is off by default.
 - crater rim sectors and gaps;
 - moon-2 and moon-3 use them.
 
+*Stage 2 is done (merged 2026-10-28, a3385d2d7):*
+- a Fissure tool: line mode with forking branches, and a network mode for
+  Red's polygonal platforms;
+- crater Rim height;
+- Spur forks and Bulbous spur tips;
+- lava-3's tall hill is a lobed mound.
+
+Fissures cut the heights, raise the crack field and paint the wet mask.
+Red's network and Desert's cuts read well. Green's are lost on rock, and
+nothing renders thinner than about 4 px. A shader fissure term would
+need a texture slot; the draw is at the 16 limit.
+
 *Still open:*
 - spurs are even rays, where retail's are bulbous lobes with forks;
 - broken rims are softer than retail's;
