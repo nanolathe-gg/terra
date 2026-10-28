@@ -338,8 +338,16 @@ def main():
             path = urlsplit(self.path).path
             content_type = 'text/plain; charset=utf-8'
             if path == '/sculpt-config.json':
-                biome = parse_qs(urlsplit(self.path).query).get('biome', [biomes[0]])[0]
-                body = json.dumps(configs.get(biome, configs[biomes[0]])).encode()
+                # An unknown or unavailable world is an error, not a silent
+                # fallback to the first world: a labelled render must never
+                # be another world's terrain (review A3, 2026-10-27).
+                requested = parse_qs(urlsplit(self.path).query).get('biome')
+                biome = requested[0] if requested else (biomes[0] if biomes else '')
+                config = configs.get(biome)
+                if config is None:
+                    self.send_error(404, f'unknown or unavailable world: {biome}')
+                    return
+                body = json.dumps(config).encode()
                 content_type = 'application/json'
             else:
                 name = path.strip('/')
