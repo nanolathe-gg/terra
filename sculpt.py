@@ -96,6 +96,8 @@ SHINE_MATERIALS = ('Ground', 'Slope', 'Rock', 'Sand', 'Crystal')
 KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
+# E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
+KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -187,7 +189,10 @@ WORLD_KNOBS = {
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
-                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3),
+                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3,
+                   # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
+                   # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8).
+                   baseVary=36, baseBump=3),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts

@@ -185,6 +185,9 @@ const SHAPE_FIELDS=[
   ['styleCracks','style-cracks','Style: cracks',MASK_SHAPES,-100,100,5,100,'Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none).'],
   ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
   ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
+  // E8 (Painted Desert): ragged feet and bumpy aprons.
+  ['baseVary','base-vary','Foot outline raggedness (px)',['plateau','offset'],0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
+  ['baseBump','base-bump','Foot bumps (height units)',['plateau','offset'],0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
 ];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
@@ -438,7 +441,7 @@ function startStroke(kind,p,options={}) {
     shelves:options.shelves ?? (experiment.has('shelves')?Number(experiment.get('shelves')):Number($('shelves').value)/100),shallowMode:options.shallowMode ?? $('shallow-mode').value,path:[p],
     face:[Math.cos(faceAngle),Math.sin(faceAngle)],
     noise:strokeNoise,seed:strokeSeed,craterOffset:[Math.cos(strokeSeed%628/100+turn),Math.sin(strokeSeed%628/100+turn)],rot:[Math.cos(turn),Math.sin(turn)],inv:frame?invert(frame):null,craterlets:options.craterlets??shapeValue('craterlets'),craterEjecta:options.craterEjecta??shapeValue('craterEjecta'),northFace:options.northFace??shapeValue('northFace'),mesaFlank:options.mesaFlank??shapeValue('mesaFlank'),fingers:options.fingers??shapeValue('fingers'),bankPx:options.bankPx??shapeValue('bankPx'),faceVariation:options.faceVariation??shapeValue('faceVariation'),
-    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
+    ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS,'baseVary','baseBump'].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:sample(options.pre??base,p.x,p.y),pre:options.pre,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null};
   made.prof=sectionSetup(made);
@@ -957,6 +960,15 @@ function fissureCell(s,i,wx,wy,lx,ly,cx,cy,t) {
   protection[i]=s.protectBase[i]*(1-smooth(0,.3,g)); routes[i]=s.routeBase[i]*(1-smooth(0,.3,g));
   if (s.masks) paintCell(s.masks,i,smooth(0,.3,g)*f.dark);
 }
+// Card E8: retail's aprons and mesa feet are ragged and lumpy, not smooth lobes.
+// The outline shift (px, outward positive) mixes 55 px and 21 px lobes; the bumps
+// (height units) ride on the apron and the foot of the face (w: the stroke's rise share
+// here) and leave a plateau's face, cap and the plain alone. Both depend only on the
+// cell's own position in the shape's frame, so replay stays exact.
+// A plateau's shift fades in over its outer half (r from .5 to .95), so its rings stay smooth and
+// only the foot strays; the amount is capped at 15% of the radius so a small butte keeps its shape.
+const baseOutline=(s,lx,ly,r,radius) => Math.min(s.baseVary,.15*radius)*(s.kind==='plateau'?smooth(.5,.95,r):1)*(.6*valueNoise(lx/55,ly/55,s.seed^0x2e83)+.4*valueNoise(lx/21,ly/21,s.seed^0x71d5));
+const baseBumps=(s,lx,ly,w) => s.baseBump*smooth(.03,s.kind==='plateau'?.12:.2,w)*(s.kind==='plateau'?1-smooth(.12,.3,w):1)*(.65*valueNoise(lx/30,ly/30,s.seed^0x4c91)+.35*valueNoise(lx/13,ly/13,s.seed^0x1a77));
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const naturalWater=s.kind==='deep' && NATURAL_COAST;
   const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind)) && experiment.get('edges')==='natural';
@@ -986,7 +998,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const bumpy=['hill','mountain','lower'].includes(s.kind);
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
   const northWiden=s.northFace??0;
-  const extent=s.fis?s.fis.reach:crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx;
+  const extent=s.fis?s.fis.reach:crater?radius*1.9*(1+.45*s.rough)+2*amp:radius*(pc?pc.reach:1)*(naturalWater?Math.min(1.9,1+s.rough*1.6):naturalPlateau?Math.min(1.7,1+s.rough*1.3):shoulderedHill?Math.max(1.4,backWidth):1)*bankScale+2*amp+bankPx+(s.baseVary>0?s.baseVary:0);
   let x0=clamp(Math.floor((Math.min(p.x,spanEnd?.x??p.x)-extent)/spacing),0,grid-1),x1=clamp(Math.ceil((Math.max(p.x,spanEnd?.x??p.x)+extent)/spacing),0,grid-1);
   let y0=clamp(Math.floor((Math.min(p.y,spanEnd?.y??p.y)-extent)/spacing),0,grid-1),y1=clamp(Math.ceil((Math.max(p.y,spanEnd?.y??p.y)+extent)/spacing),0,grid-1);
   if (clip) { x0=Math.max(x0,clip.x0); x1=Math.min(x1,clip.x1); y0=Math.max(y0,clip.y0); y1=Math.min(y1,clip.y1); }
@@ -1066,6 +1078,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
     let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
     if (pc) r/=pc.r0+(pc.r1-pc.r0)*t;
+    if (s.baseVary>0 && (s.kind==='plateau' || s.kind==='offset')) r-=baseOutline(s,lx,ly,r,radius)/(radius*width*bankScale);
     if (waterTool && s.fingers>0 && !(s.fingerCoast>=.5) && r>(s.fingerBlunt>=.5?.1:.25) && r<1.6) {
       // Shift the waterline across the coast band (coast near r 0.67). Thumbs
       // reach tens of px, so their band is set in px, not as a share of a small lake.
@@ -1186,6 +1199,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       if (s.kind==='shallow' && s.shallowMode==='passage') value=Math.max(base,value);
     }
     else if (s.kind==='smooth') value=base+(s.smoothTarget[i]-base)*w*clamp(s.amount/100,0,1);
+    if (s.baseBump>0 && (s.kind==='plateau' || s.kind==='offset')) value+=baseBumps(s,lx,ly,w);
     if (s.prof) value+=sectionLift;
     heights[i]=clamp(value,MIN_HEIGHT,MAX_HEIGHT);
     if (s.kind!=='smooth' && value!==base) routes[i]=s.routeBase[i]*(1-influence);
@@ -1986,7 +2000,7 @@ let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=n
 const noiseCache=new Map();
 function noiseFor(s) { if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt','baseVary','baseBump',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks}; }
 function applyNode(n) {
   if (n.hidden) return;
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
