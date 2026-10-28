@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.wgsl', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js')}
+    'relief-bake.wgsl', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js')}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -611,7 +611,9 @@ def main():
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
     args = parser.parse_args()
     from sculpt_export import MapExport
+    from sculpt_document import MapDocument
     map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features')
+    map_document = MapDocument(args.assets_root / 'documents')
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
     assets = {b: args.assets_root / f'assets-{b}' for b in biomes}
     configs = {}
@@ -636,7 +638,7 @@ def main():
         def do_GET(self):
             path = urlsplit(self.path).path
             try:
-                if map_export.get(self, path):
+                if map_document.get(self, self.path) or map_export.get(self, self.path):
                     return
             except (OSError, ValueError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)
@@ -693,7 +695,22 @@ def main():
 
         def do_POST(self):
             try:
-                map_export.post(self, urlsplit(self.path).path)
+                if not map_export.post(self, self.path):
+                    self.send_error(404)
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
+                map_export.reply(self, {'error': str(err)}, 400)
+
+        def do_PUT(self):
+            try:
+                if not map_document.put(self, self.path):
+                    self.send_error(404)
+            except (OSError, ValueError, KeyError, TypeError) as err:
+                map_export.reply(self, {'error': str(err)}, 400)
+
+        def do_DELETE(self):
+            try:
+                if not map_document.delete(self, self.path) and not map_export.delete(self, self.path):
+                    self.send_error(404)
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)
 
@@ -708,6 +725,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        map_export.close()
         server.server_close()
 
 

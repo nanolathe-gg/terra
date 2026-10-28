@@ -263,7 +263,7 @@ export async function mountMapFeatures(api) {
     selectedFeature=-1; selectedStart=Math.min(Math.max(0,selectedStart),starts.length-1); gesture=null; hover=null;
     $('[data-fill-kind]').value=fill.kind; $('[data-fill-region]').value=fill.region; update();
   }
-  function screenPoint(event) { const r=canvas.getBoundingClientRect(); return {x:(event.clientX-r.left)*canvas.width/r.width,z:(event.clientY-r.top)*canvas.height/r.height}; }
+  function screenPoint(event) { if (api.screenPoint) return api.screenPoint(event); const r=canvas.getBoundingClientRect(); return {x:(event.clientX-r.left)*canvas.width/r.width,z:(event.clientY-r.top)*canvas.height/r.height}; }
   function pick(p) { const q=api.pick(p.x,p.z); return q && Number.isFinite(q[0]) && Number.isFinite(q[1]) && q[0]>=0 && q[1]>=0 && q[0]<map.playRight && q[1]<map.playBottom?{x:q[0],z:q[1]}:null; }
   function project(p) { const h=api.sample(p.x,p.z); return {x:p.x,z:p.z-Math.floor(clamp(Number.isFinite(h)?h:0,0,255)/2)+config.baseHeight/2}; }
   function featurePoint(p,d) {
@@ -349,9 +349,9 @@ export async function mountMapFeatures(api) {
   doc.addEventListener('keyup',event => { if (event.code==='Space') space=false; },true);
   doc.defaultView?.addEventListener('blur',() => { space=false; panPointers.clear(); finishGesture(false); });
 
-  function draw(ink) {
+  function draw(ink,view=null) {
     controls.disabled=!enabled(); ink.save(); ink.imageSmoothingEnabled=false;
-    const sorted=placements.map((p,i) => ({p,i,d:definition(p.name)})).sort((a,b) => (a.p.z*CELL+a.d.footprintZ*8)-(b.p.z*CELL+b.d.footprintZ*8) || ordered(a.p,b.p));
+    const sorted=placements.map((p,i) => ({p,i,d:definition(p.name)})).filter(({p,d}) => { if (!view) return true; const at=featurePoint(p,d),reach=Math.max(d.sprite?.width||0,d.sprite?.height||0,d.shadow?.width||0,d.shadow?.height||0,32); return at.x+reach>=view.x && at.x-reach<=view.x+view.width && at.z+reach>=view.y && at.z-reach<=view.y+view.height; }).sort((a,b) => (a.p.z*CELL+a.d.footprintZ*8)-(b.p.z*CELL+b.d.footprintZ*8) || ordered(a.p,b.p));
     for (const {p,d} of sorted) {
       const at=featurePoint(p,d);
       for (const [sprite,translucent] of [[d.shadow,d.shadTrans],[d.sprite,d.animTrans]]) {
@@ -387,7 +387,7 @@ export async function mountMapFeatures(api) {
   try {
     if (config.biomeId==='zhon') throw new Error('Zhon has no retail feature set; feature tools are disabled until the owner chooses one.');
     const response=await fetch('/map-features/'+encodeURIComponent(config.biomeId)+'/catalog.json');
-    if (!response.ok) throw new Error('Feature catalogue unavailable (HTTP '+response.status+'). Prepare this world’s feature assets and reload.');
+    if (!response.ok) { const data=await response.json().catch(()=>({})); throw new Error(data.error||'Feature catalogue unavailable (HTTP '+response.status+'). Build map-features with: go build -o <assets-root>/bin/map-features ./tools/map-editor/features'); }
     catalogue=await response.json();
     if (catalogue.world!==config.biomeId || !Array.isArray(catalogue.features)) throw new Error('The feature catalogue does not match this world.');
     const safeSprite=s => s && typeof s.url==='string' && s.url.startsWith('/map-features/'+encodeURIComponent(config.biomeId)+'/') && !s.url.includes('..') && /\.png$/.test(s.url) && Number.isInteger(s.width) && s.width>0 && Number.isInteger(s.height) && s.height>0 && Number.isFinite(s.xOffset) && Number.isFinite(s.yOffset)?s:null;
@@ -405,5 +405,5 @@ export async function mountMapFeatures(api) {
     catalogueError=error.message; $('[data-catalogue]').textContent=catalogueError; status('Feature placement is unavailable; start positions remain editable.');
   }
   ready=true; refreshCatalogue(); update();
-  return {serialize,load,draw,deactivate,activate,addFeature,removeFeature,addStart,moveStart,removeStart,setFill,fillRegion,get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
+  return {serialize,load,draw,deactivate,activate,stats:()=>({imageBytes:[...images.values()].reduce((total,image)=>total+(image.naturalWidth||image.width)*(image.naturalHeight||image.height)*4,0)}),addFeature,removeFeature,addStart,moveStart,removeStart,setFill,fillRegion,get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
 }
