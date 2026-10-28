@@ -276,12 +276,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let broad = broadGradient(p);
     let normal = normalize(vec3f(-g, 1.0));
     let n = terrainNoise(p);
-    let sediments = select(vec4f(0.0), textureSampleLevel(materialFieldTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0), u.materialReady != 0);
+    let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let fringeVariation = u.ringVariation / 0.75;
     let drift = ((terrainNoise(p * 0.65 + vec2f(133.0, 71.0)).rg - 0.5) * 66.0 + (n.gb - 0.5) * 16.0) * fringeVariation;
-    let brokenSediments = select(sediments, textureSampleLevel(materialFieldTex, linearClamp, ((p + drift) / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0), u.materialReady != 0);
+    let brokenSediments = select(sediments, materialFieldAt(((p + drift) / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let materialWeather = select(0.0, u.materialWeathering, u.materialReady != 0);
-    let weather = textureSampleLevel(weatherTex, linearClamp, p / (u.size - 1.0), 0.0).rg;
+    let weather = weatherAt(p / (u.size - 1.0)).rg;
     let slope = length(broad);
     let route = routeProtection(p);
     let flatLight = u.ambient + 0.95 * u.light.z;

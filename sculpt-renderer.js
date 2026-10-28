@@ -104,13 +104,10 @@ export class TerrainRenderer {
     if (!adapter) throw new Error(NO_WEBGPU + ' No WebGPU adapter is available (is hardware acceleration off?).');
     // The draw reads 16 textures in its fragment stage, WebGPU's guaranteed
     // default per stage, as the WebGL renderer used all 16 texture units. The
-    // painted masks (card C5) are the 17th, so ask for one more; adapters
-    // report far more (48 on Apple GPUs), and only a 16-texture device refuses.
+    // weather and material-field grids share one array texture (gridTexture)
+    // so the painted masks (card C5) fit in that limit.
     const features = adapter.features.has('timestamp-query') ? ['timestamp-query'] : [];
-    const stageTextures = 17;
-    if (adapter.limits.maxSampledTexturesPerShaderStage < stageTextures)
-      throw new Error(NO_WEBGPU + ` This adapter samples only ${adapter.limits.maxSampledTexturesPerShaderStage} textures per shader stage; the editor needs ${stageTextures}.`);
-    const device = this.device = await adapter.requestDevice({requiredFeatures: features, requiredLimits: {maxSampledTexturesPerShaderStage: stageTextures}});
+    const device = this.device = await adapter.requestDevice({requiredFeatures: features});
     device.lost.then(info => { if (info.reason !== 'destroyed') this.reportError(`device lost: ${info.message}`); });
     device.addEventListener('uncapturederror', event => this.reportError(event.error.message));
     this.format = navigator.gpu.getPreferredCanvasFormat();
@@ -152,7 +149,7 @@ export class TerrainRenderer {
     const sampler = (binding, visibility) => ({binding, visibility, sampler: {type: 'filtering'}});
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
       {binding: 0, visibility: both, buffer: {type: 'uniform'}},
-      texture(1, both, 'unfilterable-float'), texture(2, both), texture(3, both), texture(4, both), texture(5, both), texture(6, both),
+      texture(1, both, 'unfilterable-float'), texture(2, both), texture(3, both), texture(4, both, 'float', '2d-array'), texture(6, both),
       sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
@@ -355,13 +352,15 @@ export class TerrainRenderer {
   // amount, painted sand and ground cover), weathering and material fields.
   worldTextures(grid) {
     if (this.worldGrid === grid) return;
-    for (const t of [this.heightTexture, this.routeTexture, this.weatherTexture, this.materialFieldTexture, this.maskTexture]) t?.destroy();
+    for (const t of [this.heightTexture, this.routeTexture, this.gridTexture, this.maskTexture]) t?.destroy();
     const make = (label, format) => this.device.createTexture({label, size: [grid, grid], format,
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     this.heightTexture = make('height', 'r32float');
     this.routeTexture = make('routes', 'rgba8unorm');
-    this.weatherTexture = make('weather', 'rgba8unorm');
-    this.materialFieldTexture = make('material field', 'rgba8unorm');
+    // Layer 0: the weathering worker's flow, deposit, talus and sand; layer 1:
+    // the material field (one texture binding for both, see initialize).
+    this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 2], format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     // Painted masks (card C5), two layers of signed bytes so an unpainted
     // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
     // layer 1 scatter density (r; the rest is spare). Fresh textures are zero.
@@ -465,7 +464,7 @@ export class TerrainRenderer {
       bytes[i * 4 + 3] = Math.min(255, Math.max(0, Math.round((sand?.[i] || 0) * 255)));
     }
     this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.weatherTexture}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
+    this.device.queue.writeTexture({texture: this.gridTexture, origin: [0, 0, 0]}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
   }
 
   setRoutes(routes, crackLines, cover, crystal, masks) {
@@ -513,7 +512,7 @@ export class TerrainRenderer {
     const bytes=new Uint8Array(this.grid*this.grid*4);
     if (field) for(let i=0;i<field.length;i++) bytes[i]=Math.round(Math.max(0,Math.min(1,field[i]))*255);
     this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture:this.materialFieldTexture},bytes,{bytesPerRow:this.grid*4},[this.grid,this.grid]);
+    this.device.queue.writeTexture({texture:this.gridTexture,origin:[0,0,1]},bytes,{bytesPerRow:this.grid*4},[this.grid,this.grid]);
     this.materialReady=Boolean(field);
   }
 
@@ -521,8 +520,9 @@ export class TerrainRenderer {
   commonBindGroup(kind) {
     return this.bindGroups[kind] ??= this.device.createBindGroup({label: kind, layout: this.commonLayout, entries: [
       {binding: 0, resource: {buffer: this.uniformBuffer}},
-      ...[this.heightTexture, this.textures.noise.texture, this.textures[this.bound.uFractures].texture, this.weatherTexture,
-        this.materialFieldTexture, kind === 'bake' ? this.routeTexture : this.fieldsTexture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
+      ...[this.heightTexture, this.textures.noise.texture, this.textures[this.bound.uFractures].texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
+      {binding: 4, resource: this.gridTexture.createView({dimension: '2d-array'})},
+      {binding: 6, resource: (kind === 'bake' ? this.routeTexture : this.fieldsTexture).createView()},
       {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat},
       {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})}]});
   }

@@ -201,8 +201,10 @@ struct Uniforms {
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
 @group(0) @binding(3) var fracturesTex: texture_2d<f32>;
-@group(0) @binding(4) var weatherTex: texture_2d<f32>;
-@group(0) @binding(5) var materialFieldTex: texture_2d<f32>;
+// Grid-resolution inputs in one array texture (a fragment stage may sample 16
+// textures): layer 0 the weathering worker's flow, deposit, talus, sand; layer
+// 1 the material field. Read through weatherAt and materialFieldAt.
+@group(0) @binding(4) var gridTex: texture_2d_array<f32>;
 #ifdef BAKE
 @group(0) @binding(6) var routesTex: texture_2d<f32>;
 #else
@@ -211,7 +213,7 @@ struct Uniforms {
 // a sand.
 @group(0) @binding(6) var fieldsTex: texture_2d<f32>;
 #endif
-// The world fields (height, routes, fields, weather, material field) are
+// The world fields (height, routes, fields, grid inputs) are
 // clamped and linearly filtered; noise and fractures repeat.
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
@@ -219,6 +221,9 @@ struct Uniforms {
 // Layer 0: r rock, g snow or ice, b wet ground, a moss (0..1). Layer 1: r
 // scatter density (-1 none .. +1 densest; 0 leaves the world's own).
 @group(0) @binding(9) var masksTex: texture_2d_array<f32>;
+
+fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 0, 0.0); }
+fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 1, 0.0); }
 
 #ifndef BAKE
 struct VertexOut {
@@ -289,7 +294,7 @@ fn fractureDepth(p: vec2f, h: f32, slope: f32) -> f32 {
 
 fn screeHeight(p: vec2f) -> f32 {
     if (u.scree == 0) { return 0.0; }
-    let support = textureSampleLevel(weatherTex, linearClamp, p / (u.size - 1.0), 0.0).b;
+    let support = weatherAt(p / (u.size - 1.0)).b;
     if (support < 0.005) { return 0.0; }
     // Small authored angular fragments share lighting with the terrain. The
     // worker admits them only in clustered dry cliff-foot deposits.
@@ -306,7 +311,7 @@ fn screeHeight(p: vec2f) -> f32 {
 
 fn materialChipHeight(p: vec2f) -> f32 {
     if (u.materialReady == 0 || u.materialWeathering <= 0.0) { return 0.0; }
-    let deposit = textureSampleLevel(materialFieldTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
+    let deposit = materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid);
     let support = deposit.r * (1.0 - smoothstep(0.15, 0.60, deposit.a)) * u.materialWeathering;
     if (support < 0.03) { return 0.0; }
     let cell = floor(p / 9.0);

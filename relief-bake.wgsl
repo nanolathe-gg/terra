@@ -83,7 +83,7 @@ fn boulders(p: vec2f, slope: f32, h: f32) -> vec2f {
             let centre = (c + 0.2 + 0.6 * r1) * cellSize;
             // Where boulders come from: anywhere on sloped ground, or gathered
             // at cliff feet where the weathering pass found talus support.
-            let talus = textureSampleLevel(weatherTex, linearClamp, centre / (u.size - 1.0), 0.0).b;
+            let talus = weatherAt(centre / (u.size - 1.0)).b;
             let slopeAt = length(broadGradient(centre));
             let scattered = smoothstep(0.15, 0.7, slopeAt) * (1.0 - smoothstep(1.6, 2.6, slopeAt));
             var up = vec2f(0.0);
@@ -472,7 +472,7 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec2f {
 // covers both. Steep faces shed it.
 fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     if (u.sand <= 0.0) { return 0.0; }
-    let field = textureSampleLevel(weatherTex, linearClamp, p / (u.size - 1.0), 0.0).a;
+    let field = weatherAt(p / (u.size - 1.0)).a;
     if (field <= 0.0) { return 0.0; }
     let lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
     let thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
