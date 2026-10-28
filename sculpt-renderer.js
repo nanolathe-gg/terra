@@ -730,6 +730,8 @@ export class TerrainRenderer {
     // E9 (Green rock faces).
     this.f('uFaceRock', variant.has('faceRock') ? Number(variant.get('faceRock')) : 0);
     this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
+    this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
+    this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);
     this.fieldsDirty = true;
   }
 

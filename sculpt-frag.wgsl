@@ -652,6 +652,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.rockMoss < 1.0) { rock.g = mix(min(rock.g, max(rock.r, rock.b)), rock.g, u.rockMoss); }
     }
     rock = based(rock, u.rockTexMean, u.rockBase);
+    // E9: the rock tile's own blotches and cell outlines read as soft cobble over the lit form;
+    // below 1 the tile's contrast around the rock's mean colour is scaled down so the carved relief carries the face.
+    if (u.rockDetail < 1.0) {
+        let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+        rock = rockFlat + (rock - rockFlat) * u.rockDetail;
+    }
     // Deposition softens the exposed face into a connected apron. Flow and
     // deposited soil come from the same weathering that changed the surface.
     var rockScore = slope + (n.g - 0.5) * 0.55 + (n.b - 0.5) * 0.30 - weather.g * 0.55;
@@ -998,7 +1004,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        let shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
+        if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         color = color * shine.w + shine.xyz;
     }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {

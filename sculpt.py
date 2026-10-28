@@ -97,7 +97,7 @@ KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
-KNOB_DEFAULTS.update(faceRock=0, rockMoss=1,
+KNOB_DEFAULTS.update(faceRock=0, rockMoss=1, rockDetail=1, shineOutside=1,
                      gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
                      bedFlow=1, bedBend=0, bedPunch=0,
                      scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
@@ -139,12 +139,19 @@ WORLD_KNOBS = {
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
                   undulation=0, plainRelief=0,
-                  # E9 (Green rock faces): gullies and ribs, beds that run on across them, scratches and angular facets.
-                  faceRock=1, rockMoss=.15,
+                  # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
+                  # light or shade as a whole), layered in long ledges that bend with it, scored by thin scratches
+                  # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
+                  # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
+                  # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
+                  # earlier look: faceRock 0, rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0, bedFlow 1,
+                  # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  faceRock=1, rockMoss=.15, rockDetail=.5,
                   gullyDepth=14, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=2, ribTilt=.35,
                   bedFlow=0, bedBend=2.5, bedPunch=1,
                   scratchDepth=3.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
-                  facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,),
+                  facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,
+                  shineRock=.5, shineRockSharp=14, shineRockRough=.12, shineRockScale=5, shineWhite=1, shineOutside=.3),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
