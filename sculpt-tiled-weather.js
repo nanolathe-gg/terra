@@ -19,7 +19,7 @@ const abortError=() => new DOMException('Weathering request was cancelled.','Abo
 // lattice intervals per core (about 512 world pixels), a 64-interval output
 // overlap, then a further 128-interval solver apron: 641 samples per solve.
 // Neither geometry nor seeds depend on renderer chunks, requests or budgets.
-export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params={},budget=256*1048576,onProgress,onChange,
+export function createTiledWeather({read:readAuthored,readUniform,worldSize,worldGrid,params={},budget=256*1048576,onProgress,onChange,
   forceTiled=false,workerFactory=() => new Worker(new URL('./sculpt-weathering.js',import.meta.url),{type:'module'})}) {
   if (typeof readAuthored!=='function' || !Number.isInteger(worldGrid) || worldGrid<2 || !(worldSize>1)) throw new Error('Invalid tiled weather lattice.');
   if (!tiledWeatherEnabled(worldGrid,forceTiled)) throw new Error('This map uses the existing global weather solver; forceTiled is a comparison diagnostic.');
@@ -29,7 +29,7 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
   // work planes and transferred snapshots. A request also reserves its output.
   const solverWorkBytes=solverGrid*solverGrid*256;
   let settings=structuredClone(params),revision=0,worker=null,active=null,job=0,disposed=false,tail=Promise.resolve();
-  let cacheBytes=0,inflightBytes=0,peakBytes=0,peakWorkBytes=0,hits=0,misses=0,evictions=0,solves=0,uniformSkips=0;
+  let cacheBytes=0,inflightBytes=0,peakBytes=0,peakWorkBytes=0,hits=0,misses=0,evictions=0,solves=0,uniformSkips=0,uniformHints=0;
   let completed=0,lastMilliseconds=0;
   function reserve(bytes) {
     inflightBytes=bytes;
@@ -119,9 +119,9 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
     const before=Object.values(source.fields).reduce((n,a) => n+a.byteLength,0),after=Object.values(fields).reduce((n,a) => n+a.byteLength,0);
     return {...source,fields,maskPlanes:source.maskPlanes?.map(a => byPlane.get(a)),gridWidth:width,gridHeight:height,gridOrigin:[rect.x0*spacing,rect.y0*spacing],rect:worldRect(rect),bytes:(source.bytes??before)-before+after};
   }
-  function uniformResult(request,input,rect) {
-    const h=request.height[0];
-    for (let i=0;i<request.height.length;i++) if (request.height[i]!==h) return null;
+  function uniformResult(request,input,rect,scalar) {
+    const h=scalar??request.height[0];
+    if (scalar===undefined) for (let i=0;i<request.height.length;i++) if (request.height[i]!==h) return null;
     const sea=request.seaLevel??0,relative=Math.fround(h-sea);
     if (!Number.isFinite(relative) || relative< -90 || relative>300) return null;
     let materialField=null;
@@ -148,25 +148,38 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
   async function tile(t,rev,signal,progress,outputBytes=0) {
     current(rev,signal);
     if (cache.has(t.key)) { const found=cache.get(t.key); cache.delete(t.key); cache.set(t.key,found); hits++; return found; }
-    misses++; reserve(outputBytes+solverWorkBytes);
+    misses++;
     const input=tileRect(t.x,t.y,blend+apron),rect=clipped(tileRect(t.x,t.y,blend));
-    const source=authoredRegion(await readAuthored(worldRect(clipped(input)),signal),clipped(input)); current(rev,signal);
-    const width=source.gridWidth,ox=Math.round(source.gridOrigin[0]/spacing),oy=Math.round(source.gridOrigin[1]/spacing);
-    if (!(source.fields?.h instanceof Float32Array) || !width || !source.gridHeight) throw new Error('Tiled weather requires authored regional Float32 heights.');
-    const height=new Float32Array(solverGrid*solverGrid),protect=new Float32Array(height.length);
-    for (let y=0;y<solverGrid;y++) for (let x=0;x<solverGrid;x++) {
-      const sx=clamp(input.x0+x,0,worldGrid-1)-ox,sy=clamp(input.y0+y,0,worldGrid-1)-oy,i=sy*width+sx,j=y*solverGrid+x;
-      height[j]=source.fields.h[i]; protect[j]=source.fields.p?.[i]??0;
-      if (!Number.isFinite(height[j]) || !Number.isFinite(protect[j])) throw new Error('Weathering requires finite authored height and protection.');
+    const request={...settings,grid:solverGrid,size:(solverGrid-1)*spacing+1,seed:tileSeed(t.x,t.y)},started=performance.now();
+    let source=null,width=0,ox=0,oy=0,uniform=null;
+    // A caller may prove this complete clipped input has no shape/ground
+    // variation. Only the exact h/p/r contract below bypasses authored replay;
+    // a missing or broader hint always takes the normal typed-array path.
+    const hint=await readUniform?.(worldRect(clipped(input)),signal); current(rev,signal);
+    if (hint && Number.isFinite(hint.h) && hint.p===0 && hint.r===0) {
+      uniformHints++;
+      reserve(outputBytes+256+(settings.materialWeathering>0?(rect.x1-rect.x0+1)*(rect.y1-rect.y0+1)*16:0));
+      const h=Math.fround(hint.h); uniform=uniformResult(request,input,rect,h);
+      if (!uniform) { reserve(outputBytes+solverWorkBytes); request.height=new Float32Array(solverGrid*solverGrid).fill(h); request.protect=new Float32Array(request.height.length); }
+    } else {
+      reserve(outputBytes+solverWorkBytes);
+      source=authoredRegion(await readAuthored(worldRect(clipped(input)),signal),clipped(input)); current(rev,signal);
+      width=source.gridWidth; ox=Math.round(source.gridOrigin[0]/spacing); oy=Math.round(source.gridOrigin[1]/spacing);
+      const height=request.height=new Float32Array(solverGrid*solverGrid),protect=request.protect=new Float32Array(height.length);
+      // Outside the world, the fixed apron repeats the edge sample.
+      for (let y=0;y<solverGrid;y++) for (let x=0;x<solverGrid;x++) {
+        const sx=clamp(input.x0+x,0,worldGrid-1)-ox,sy=clamp(input.y0+y,0,worldGrid-1)-oy,i=sy*width+sx,j=y*solverGrid+x;
+        height[j]=source.fields.h[i]; protect[j]=source.fields.p?.[i]??0;
+        if (!Number.isFinite(height[j]) || !Number.isFinite(protect[j])) throw new Error('Weathering requires finite authored height and protection.');
+      }
+      uniform=uniformResult(request,input,rect);
     }
-    const request={...settings,height,protect,grid:solverGrid,size:(solverGrid-1)*spacing+1,seed:tileSeed(t.x,t.y)};
-    const started=performance.now(),uniform=uniformResult(request,input,rect);
     let result;
     if (uniform) {
       uniformSkips++;
       result=uniform;
     } else {
-      const base=crop(height,1,input,rect),data=await solve(request,rev,signal,progress); current(rev,signal);
+      const base=crop(request.height,1,input,rect),data=await solve(request,rev,signal,progress); current(rev,signal);
       for (const k of ['height','flow','deposit','talus']) if (!(data[k] instanceof Float32Array) || data[k].length!==solverGrid*solverGrid) throw new Error('Weather worker returned an invalid tile.');
       const delta=crop(data.height,1,input,rect);
       for (let i=0;i<delta.length;i++) delta[i]-=base[i];
@@ -176,7 +189,7 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
     }
     // The existing presentation excludes authored routes from height deltas
     // after weathering. Keep that final mask as well as worker protection.
-    if (source.fields.r) {
+    if (source?.fields.r) {
       const route=new Float32Array((rect.x1-rect.x0+1)*(rect.y1-rect.y0+1)); let nonzero=false;
       for (let y=rect.y0;y<=rect.y1;y++) for (let x=rect.x0;x<=rect.x1;x++) { const v=source.fields.r[(y-oy)*width+x-ox]; route[(y-rect.y0)*(rect.x1-rect.x0+1)+x-rect.x0]=v; if (v!==0) nonzero=true; }
       if (nonzero) result.route=route;
@@ -217,9 +230,9 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
       const withSand=settings.sand>0,withMaterial=settings.materialWeathering>0;
       const outputBytes=n*(24+(withSand?4:0)+(withMaterial?16:0));
       try {
-        // Refuse an accidental whole-world plane before asking authored replay
-        // to allocate it. Full-map export requests bounded regions instead.
-        reserve(outputBytes+solverWorkBytes); reserve(outputBytes);
+        // Bound output before authored replay; a nonuniform tile adds the
+        // worker reservation only when it actually needs that working space.
+        reserve(outputBytes);
         const authored=authoredRegion(await readAuthored(worldRect(region),s),region); current(rev,s);
         const width=region.x1-region.x0+1,height=region.y1-region.y0+1;
         if (authored.gridWidth!==width || authored.gridHeight!==height || Math.round(authored.gridOrigin[0]/spacing)!==region.x0 || Math.round(authored.gridOrigin[1]/spacing)!==region.y0) throw new Error('Authored weather region is not on the canonical world lattice.');
@@ -285,7 +298,7 @@ export function createTiledWeather({read:readAuthored,worldSize,worldGrid,params
   }
   function setBudget(bytes) { if (!Number.isFinite(bytes) || bytes<1048576) throw new Error('Weather JS budget must be at least 1 MB.'); budget=bytes; evict(); }
   function stats() { return {revision,cacheBytes,cpuCacheBytes:cacheBytes,residentBytes:cacheBytes+inflightBytes,inflightBytes,peakBytes,peakWorkBytes,budget,cacheEntries:cache.size,
-    hits,misses,evictions,solves,uniformSkips,completed,lastMilliseconds,coreCells:core,coreWorldPixels:core*spacing,overlapCells:blend,solverApronCells:apron,solverGrid,solverWorkBytes,worldSize,worldGrid,gridSpacing:spacing}; }
+    hits,misses,evictions,solves,uniformSkips,uniformHints,completed,lastMilliseconds,coreCells:core,coreWorldPixels:core*spacing,overlapCells:blend,solverApronCells:apron,solverGrid,solverWorkBytes,worldSize,worldGrid,gridSpacing:spacing}; }
   setBudget(budget);
   return {read,prepare,sampleCached,requiredRect,invalidate,setBudget,stats,dispose() { disposed=true; cancelActive(); cache.clear(); cacheBytes=0; }};
 }
