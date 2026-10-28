@@ -3,15 +3,12 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/nanolathe-gg/nanolathe/formats"
 )
 
 const tileSide = 32
@@ -19,74 +16,6 @@ const tileSide = 32
 type preparedChunk struct {
 	chunk
 	Width, Height int
-}
-
-func terrain(req exportRequest, manifestDir string, palette [256][3]byte) (formats.TNTWrite, *image.Paletted, int, int, error) {
-	w, h := req.UnitsX*32+2, req.UnitsY*32+8
-	pixelW, pixelH := w*16, h*16
-	t := formats.TNTWrite{
-		Width: w, Height: h, SeaLevel: byte(*req.SeaLevel),
-		Heights: make([]byte, w*h), Features: make([]uint16, w*h),
-		TileIndices: make([]uint16, (w/2)*(h/2)),
-	}
-	for i, height := range req.Heights {
-		t.Heights[i], t.Features[i] = byte(height), 0xFFFF
-	}
-	chunks, err := prepareChunks(req.Chunks, manifestDir, pixelW, pixelH)
-	if err != nil {
-		return t, nil, 0, 0, err
-	}
-	colors := make(color.Palette, len(palette))
-	for i, c := range palette {
-		colors[i] = color.RGBA{R: c[0], G: c[1], B: c[2], A: 255}
-	}
-	picture := image.NewPaletted(image.Rect(0, 0, pixelW, pixelH), colors)
-	quantize := newQuantizer(palette)
-	tiles := make(map[[tileSide * tileSide]byte]uint16)
-	exact, nearest := 0, 0
-	// Chunk boundaries are in final screen pixels. The editor has already
-	// applied worldY-height/2; applying height again would shift the art.
-	// Only one decoded chunk is retained, ready for the phase-3 streaming loop.
-	for _, chunk := range chunks {
-		img, err := readChunk(chunk)
-		if err != nil {
-			return t, nil, 0, 0, err
-		}
-		for ty := 0; ty < chunk.Height; ty += tileSide {
-			for tx := 0; tx < chunk.Width; tx += tileSide {
-				var tile [tileSide * tileSide]byte
-				for y := 0; y < tileSide; y++ {
-					for x := 0; x < tileSide; x++ {
-						r, g, b, a := img.At(tx+x, ty+y).RGBA()
-						if a != 0xFFFF {
-							return t, nil, 0, 0, fmt.Errorf("chunk %s has transparency at (%d,%d); expected opaque final art", chunk.Path, tx+x, ty+y)
-						}
-						index, wasExact := quantize.index(byte(r>>8), byte(g>>8), byte(b>>8))
-						if wasExact {
-							exact++
-						} else {
-							nearest++
-						}
-						tile[y*tileSide+x] = index
-					}
-					at := (chunk.Y+ty+y)*picture.Stride + chunk.X + tx
-					copy(picture.Pix[at:at+tileSide], tile[y*tileSide:(y+1)*tileSide])
-				}
-				index, ok := tiles[tile]
-				if !ok {
-					if len(tiles) >= 1<<16 {
-						return t, nil, 0, 0, fmt.Errorf("more than 65536 distinct tiles cannot fit TNT's tile indices")
-					}
-					index = uint16(len(tiles))
-					tiles[tile] = index
-					t.TileGraphics = append(t.TileGraphics, tile[:]...)
-				}
-				t.TileIndices[((chunk.Y+ty)/tileSide)*(w/2)+(chunk.X+tx)/tileSide] = index
-			}
-		}
-	}
-	t.MinimapWidth, t.MinimapHeight, t.Minimap = minimap(t, palette)
-	return t, picture, exact, nearest, nil
 }
 
 func prepareChunks(requests []chunk, manifestDir string, w, h int) ([]preparedChunk, error) {
@@ -149,6 +78,16 @@ func readChunk(chunk preparedChunk) (image.Image, error) {
 		return nil, err
 	}
 	defer f.Close()
+	config, err := png.DecodeConfig(io.LimitReader(f, 64<<20))
+	if err != nil {
+		return nil, fmt.Errorf("chunk %s: %w", chunk.Path, err)
+	}
+	if config.Width != chunk.Width || config.Height != chunk.Height {
+		return nil, fmt.Errorf("chunk %s dimensions differ from its declared %dx%d", chunk.Path, chunk.Width, chunk.Height)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
 	img, err := png.Decode(io.LimitReader(f, 64<<20))
 	if err != nil {
 		return nil, fmt.Errorf("chunk %s: %w", chunk.Path, err)
@@ -200,45 +139,4 @@ func (q *quantizer) index(r, g, b byte) (byte, bool) {
 		q.nearest[key] = best
 	}
 	return best, false
-}
-
-// Follow [fmt tnt] "Minimap" and internal/mapgen/paint.go: fit the play area
-// to a 252px long side and fill the unused short axis with 0x64. Unlike the
-// generator's point sample, average every indexed-art pixel in each block,
-// round each RGB channel to its nearest integer, then use the nearest palette
-// RGB (lowest index on ties). Integer block boundaries partition the whole
-// play area, including the final source row and column; outer strips stay out.
-func minimap(t formats.TNTWrite, palette [256][3]byte) (int, int, []byte) {
-	const side = 252
-	playW, playH := t.Width*16-32, t.Height*16-128
-	usedW, usedH := side, side
-	if playW < playH {
-		usedW = playW * side / playH
-	} else {
-		usedH = playH * side / playW
-	}
-	out := make([]byte, side*side)
-	quantize := newQuantizer(palette)
-	for y := 0; y < side; y++ {
-		for x := 0; x < side; x++ {
-			if x >= usedW || y >= usedH {
-				out[y*side+x] = 0x64
-				continue
-			}
-			x0, x1 := x*playW/usedW, (x+1)*playW/usedW
-			y0, y1 := y*playH/usedH, (y+1)*playH/usedH
-			r, g, b := 0, 0, 0
-			for wy := y0; wy < y1; wy++ {
-				for wx := x0; wx < x1; wx++ {
-					index := int(t.TileIndices[(wy/tileSide)*(t.Width/2)+wx/tileSide])
-					pixel := t.TileGraphics[index*tileSide*tileSide+(wy%tileSide)*tileSide+wx%tileSide]
-					c := palette[pixel]
-					r, g, b = r+int(c[0]), g+int(c[1]), b+int(c[2])
-				}
-			}
-			count := (x1 - x0) * (y1 - y0)
-			out[y*side+x], _ = quantize.index(byte((r+count/2)/count), byte((g+count/2)/count), byte((b+count/2)/count))
-		}
-	}
-	return side, side, out
 }

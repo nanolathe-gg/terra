@@ -2,18 +2,18 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"image/png"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
-	"github.com/nanolathe-gg/nanolathe/formats"
 	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
 	"github.com/nanolathe-gg/nanolathe/vfs"
 )
@@ -52,18 +52,19 @@ type start struct {
 }
 
 type exportResult struct {
-	Name          string    `json:"name"`
-	Archive       string    `json:"archive"`
-	Indexed       string    `json:"indexed"`
-	WidthCells    int       `json:"widthCells"`
-	HeightCells   int       `json:"heightCells"`
-	UniqueTiles   int       `json:"uniqueTiles"`
-	TileSlots     int       `json:"tileSlots"`
-	ExactPixels   int       `json:"exactPixels"`
-	NearestPixels int       `json:"nearestPixels"`
-	FeatureCount  int       `json:"featureCount"`
-	Starts        []start   `json:"starts"`
-	SelfCheck     selfCheck `json:"selfCheck"`
+	Name          string        `json:"name"`
+	Archive       string        `json:"archive"`
+	Indexed       string        `json:"indexed"`
+	WidthCells    int           `json:"widthCells"`
+	HeightCells   int           `json:"heightCells"`
+	UniqueTiles   int           `json:"uniqueTiles"`
+	TileSlots     int           `json:"tileSlots"`
+	ExactPixels   int           `json:"exactPixels"`
+	NearestPixels int           `json:"nearestPixels"`
+	FeatureCount  int           `json:"featureCount"`
+	Starts        []start       `json:"starts"`
+	SelfCheck     selfCheck     `json:"selfCheck"`
+	Metrics       exportMetrics `json:"metrics"`
 }
 
 type selfCheck struct {
@@ -86,8 +87,11 @@ func run() error {
 	input := flag.String("input", "", "local JSON export manifest")
 	out := flag.String("out", "", "output directory for the UFO and indexed PNG")
 	featuresRoot := flag.String("features-root", "", "prepared feature catalogue root, required for placed features")
+	stream := flag.Bool("stream", false, "accept chunk/finish JSON commands on stdin, replying once per command")
+	work := flag.String("work", "", "private temporary directory (default OS temporary directory)")
+	tileBudget := flag.Int("tile-budget-mb", 16, "unique tile bytes retained in RAM before spilling (0..64 MiB)")
 	flag.Parse()
-	if flag.NArg() != 0 || (*catalogOnly && (*input != "" || *out != "")) || (!*catalogOnly && (*input == "" || *out == "")) {
+	if flag.NArg() != 0 || (*catalogOnly && (*input != "" || *out != "" || *stream)) || (!*catalogOnly && (*input == "" || *out == "")) || *tileBudget < 0 || *tileBudget > 64 {
 		return fmt.Errorf("use --catalog, or --input PATH --out DIR; --root may be repeated")
 	}
 	if len(roots) == 0 {
@@ -120,7 +124,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	result, err := exportMap(req, catalog, filepath.Dir(*input), *out, allowed)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if *stream {
+		return runStream(ctx, req, catalog, *out, *work, *tileBudget<<20, allowed)
+	}
+	result, err := exportMap(ctx, req, catalog, filepath.Dir(*input), *out, *work, *tileBudget<<20, allowed)
 	if err != nil {
 		return err
 	}
@@ -134,7 +143,7 @@ func readRequest(name string) (exportRequest, error) {
 		return req, err
 	}
 	defer f.Close()
-	decoder := json.NewDecoder(io.LimitReader(f, 4<<20))
+	decoder := json.NewDecoder(io.LimitReader(f, 16<<20))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		return req, fmt.Errorf("manifest %s: %w", name, err)
@@ -165,8 +174,8 @@ func validateRequest(req exportRequest, catalog catalog) (worldInfo, error) {
 	if world.DisabledReason != "" {
 		return worldInfo{}, fmt.Errorf("world %s cannot export: %s", req.World, world.DisabledReason)
 	}
-	if req.UnitsX < 1 || req.UnitsX > 4 || req.UnitsY < 1 || req.UnitsY > 4 {
-		return worldInfo{}, fmt.Errorf("phase 1 expects 1..4 units on each axis, got %dx%d", req.UnitsX, req.UnitsY)
+	if req.UnitsX < 1 || req.UnitsX > 40 || req.UnitsY < 1 || req.UnitsY > 40 {
+		return worldInfo{}, fmt.Errorf("expected 1..40 units on each axis, got %dx%d", req.UnitsX, req.UnitsY)
 	}
 	if req.SeaLevel == nil || *req.SeaLevel < 0 || *req.SeaLevel > 255 {
 		return worldInfo{}, fmt.Errorf("seaLevel must be an integer byte (0..255)")
@@ -218,108 +227,22 @@ func validateText(field, value string) error {
 	return nil
 }
 
-func exportMap(req exportRequest, catalog catalog, manifestDir, out string, allowed map[string]mapdata.Feature) (*exportResult, error) {
-	world, err := validateRequest(req, catalog)
+func exportMap(ctx context.Context, req exportRequest, catalog catalog, manifestDir, out, work string, tileBudget int, allowed map[string]mapdata.Feature) (*exportResult, error) {
+	s, err := newTerrainStream(ctx, req, catalog, out, work, tileBudget, allowed)
 	if err != nil {
 		return nil, err
 	}
-	starts, err := mapStarts(req)
+	defer s.close()
+	chunks, err := prepareChunks(req.Chunks, manifestDir, s.width*16, s.height*16)
 	if err != nil {
 		return nil, err
 	}
-	names, featureCells, err := encodeFeatures(req, allowed)
-	if err != nil {
-		return nil, err
-	}
-	t, picture, exact, nearest, err := terrain(req, manifestDir, catalog.Palette)
-	if err != nil {
-		return nil, err
-	}
-	if len(req.Features) > 0 {
-		t.FeatureNames, t.Features = names, featureCells
-	}
-	ota, err := encodeOTA(req, world, starts)
-	if err != nil {
-		return nil, err
-	}
-	tnt, err := formats.EncodeTNT(t)
-	if err != nil {
-		return nil, err
-	}
-	otaPath, tntPath := "maps/"+req.Name+".ota", "maps/"+req.Name+".tnt"
-	var archive bytes.Buffer
-	// Stored method 0 is accepted directly; no SQSH decoder is involved
-	// [fmt hpi] "Stored files (compression 0)".
-	if err := vfs.WriteArchive(&archive, []vfs.ArchiveFile{{Path: otaPath, Data: ota}, {Path: tntPath, Data: tnt}}, vfs.ArchiveWriteOptions{Compress: false}); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(out, 0o755); err != nil {
-		return nil, err
-	}
-	archiveName, indexedName := req.Name+".ufo", req.Name+"-indexed.png"
-	entries, err := os.ReadDir(out)
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entries {
-		if strings.EqualFold(entry.Name(), archiveName) || strings.EqualFold(entry.Name(), indexedName) {
-			return nil, fmt.Errorf("export %q already exists in %s; choose a new name", entry.Name(), out)
+	for _, chunk := range chunks {
+		if err := s.add(chunk); err != nil {
+			return nil, err
 		}
 	}
-	archiveTemp, err := stageFile(out, func(w io.Writer) error { _, err := w.Write(archive.Bytes()); return err })
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(archiveTemp)
-	indexedTemp, err := stageFile(out, func(w io.Writer) error {
-		encoder := png.Encoder{CompressionLevel: png.BestSpeed}
-		return encoder.Encode(w, picture)
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(indexedTemp)
-	checked, err := checkArchive(archiveTemp, req, world, starts, t, ota, tnt)
-	if err != nil {
-		return nil, fmt.Errorf("archive self-check: %w", err)
-	}
-	// A hard link publishes the complete file atomically and refuses an
-	// existing destination, including one created since the directory scan.
-	indexedDest := filepath.Join(out, indexedName)
-	if err := os.Link(indexedTemp, indexedDest); err != nil {
-		return nil, err
-	}
-	if err := os.Link(archiveTemp, filepath.Join(out, archiveName)); err != nil {
-		os.Remove(indexedDest) // only the file this call just published
-		return nil, err
-	}
-	return &exportResult{
-		Name: req.Name, Archive: archiveName, Indexed: indexedName,
-		WidthCells: t.Width, HeightCells: t.Height,
-		UniqueTiles: len(t.TileGraphics) / 1024, TileSlots: len(t.TileIndices),
-		ExactPixels: exact, NearestPixels: nearest, FeatureCount: len(req.Features), Starts: starts, SelfCheck: checked,
-	}, nil
-}
-
-func stageFile(out string, write func(io.Writer) error) (string, error) {
-	f, err := os.CreateTemp(out, ".map-export-*")
-	if err != nil {
-		return "", err
-	}
-	name := f.Name()
-	err = write(f)
-	if err == nil {
-		err = f.Chmod(0o644)
-	}
-	if err == nil {
-		err = f.Sync()
-	}
-	err = errors.Join(err, f.Close())
-	if err != nil {
-		os.Remove(name)
-		return "", err
-	}
-	return name, nil
+	return s.finish()
 }
 
 // Resolve even a not-yet-created output through its nearest existing parent,
