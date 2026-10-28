@@ -1,5 +1,7 @@
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {quickMaterialField} from './sculpt-material-weathering.js';
+import {configureMap,resizeMap,drawMapBounds,exportMapField} from './sculpt-map.js';
+import {mountMapExport} from './sculpt-export.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -13,8 +15,8 @@ const HELP = {
   hill:'Paint a rounded ridge along any path. A later stroke adds more height to the existing ground.',
   mountain:'Paint a narrower, peaked ridge. New strokes add to the existing height, without a flat summit.',
   ramp:'Draw between terrain levels. A smooth centre joins the endpoint heights with rounded approaches; shoulder roughness stays outside the route. Longer paths make gentler grades.',
-  deep:NATURAL_COAST?'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The centre stays deep until you paint over it.':'Set the bed to −55. A whole stroke has one depth; holding still does not keep digging.',
-  shallow:'Set the bed to −7. Paint through deep water to make a shallow passage, or through land to make shallows.',
+  deep:NATURAL_COAST?'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The centre stays deep until you paint over it.':'Set the bed 55 below sea level. A whole stroke has one depth; holding still does not keep digging.',
+  shallow:'Set the bed 7 below sea level. Paint through deep water to make a shallow passage, or through land to make shallows.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
   offset:'Paint an area to raise or lower by the chosen height. Its edge is natural and its softness sets cliff or slope; the ground keeps its own relief.',
@@ -27,6 +29,7 @@ const HELP = {
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
+let mapUpdate=() => {};
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
 let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
@@ -276,11 +279,11 @@ function updateControls() {
   $('water-edit').hidden=true;
   $('water-reapply').disabled=!lastWaterStroke || Boolean(stroke) || lastWaterStroke.kind!==tool;
   $('tool-help').textContent=tool==='shallow' && $('shallow-mode').value==='passage'
-    ?'Raise the underwater bed to −7 for a shallow passage. Existing land and shallower banks keep their shape.'
+    ?'Raise the underwater bed to 7 below sea level for a shallow passage. Existing land and shallower banks keep their shape.'
     :HELP[tool];
   $('undo').disabled=!ready || Boolean(stroke) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke) || historyIndex>=history.length-1;
-  $('export').disabled=!canExport();
+  $('export').disabled=!canExport(); mapUpdate();
   $('fit').setAttribute('aria-pressed',String(fitView)); $('one').setAttribute('aria-pressed',String(!fitView));
   } finally { tool=activeTool; }
   if (tool==='move') { $('tool-help').textContent=HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase'].includes(nodes[selected]?.kind); }
@@ -541,7 +544,7 @@ function sectionSetup(s) {
   // with its own phase, so neighbouring risers wander independently.
   const wobC=new Float32Array(10),wobS=new Float32Array(10);
   for (let m=0;m<10;m++) { wobC[m]=Math.cos(2.4*m+1); wobS[m]=Math.sin(2.4*m+1); }
-  return {water,dome,bed:s.kind==='deep'?-55:-7,
+  return {water,dome,bed:config.seaLevel+(s.kind==='deep'?-55:-7),
     apron:s.apronPx,apronHeight:s.apronHeight,face:s.facePx,faceShare:clamp(.38+(s.softness-.5)*.6,.1,.88),curve:s.faceCurve,
     steps:Math.round(clamp(s.terraces,0,8)),flat:Math.min(s.ledge,.95),jitter:s.terraceJitter,lip:s.lip,
     // A dome's face stops short of the crest; the crown is what is left, rising the last 45% of the way.
@@ -1036,7 +1039,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
       // Middle, the shape of this brush's dry part stretched to ~60 px
       // (measure/lava_coasts.py bank). Stretch the dry part (from this
       // cell's waterline out) to bankPx; the waterline stays put.
-      const bed=(s.kind==='deep'?-55:-7)+(naturalWater?42*smooth(-.15,.55,s.noise.shelf[i])*s.shelves:0);
+      const bed=config.seaLevel+(s.kind==='deep'?-55:-7)+(naturalWater?42*smooth(-.15,.55,s.noise.shelf[i])*s.shelves:0);
       const y=1-(s.base[i]-config.seaLevel)/(s.base[i]-bed);
       const rw=.1+.9*(.5-Math.sin(Math.asin(clamp(1-2*y,-1,1))/3));
       if (r>rw) r=rw+(r-rw)*(1-rw)*radius*width*bankScale/bankPx;
@@ -1115,7 +1118,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     else if (s.kind==='hill' || s.kind==='mountain') value=base+s.amount*w*(shoulderedHill?hillLift(s,i):1);
     else if (s.kind==='lower') value=base-s.amount*w;
     else if (s.kind==='deep' || s.kind==='shallow') {
-      let bed=s.kind==='deep'?-55:-7;
+      let bed=config.seaLevel+(s.kind==='deep'?-55:-7);
       if (naturalWater) {
         // Uneven shelves belong to the bed, not a fixed-width blue outline.
         // The deepest centre follows the input; later shallow strokes still
@@ -1124,7 +1127,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
         bed+=42*shelf*s.shelves;
       }
       value=base+(bed-base)*w;
-      if (naturalWater && core) value=Math.min(value,base+(-55-base)*core);
+      if (naturalWater && core) value=Math.min(value,base+(config.seaLevel-55-base)*core);
       // Reshape only the dry part of an ordinary low bank. The waterline,
       // guided deep bed and elevated coastal terrain retain their positions.
       if (s.beachFlatness!==.5 && !s.prof && base>config.seaLevel && base<=config.baseHeight+1 && value>config.seaLevel) {
@@ -1967,6 +1970,7 @@ function frame(timestamp) {
 }
 function drawOverlay() {
   ink.clearRect(0,0,size,size);
+  if (config.map) { const display=previewHeight(); drawMapBounds(ink,config.map,config,(x,y) => sample(display,x,y)); }
   if (cursor && !pan && !space && tool!=='move') {
     ink.strokeStyle='#b8eef3'; ink.fillStyle='#a7e6f00c'; ink.lineWidth=1.5;
     ink.beginPath(); ink.arc(cursor.cx,cursor.cy,stroke?.radius ?? Number($('diameter').value)/2,0,Math.PI*2); ink.fill(); ink.stroke();
@@ -2018,7 +2022,7 @@ function picked(screen) {
     p ??= [wx,sy];
   } else p=renderer.pick(screen.cx,screen.cy);
   if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return null;
-  return {x:clamp(p[0],0,size-1),y:clamp(p[1],0,size-1)};
+  return {x:clamp(p[0],0,(config.map?.width??size)-1),y:clamp(p[1],0,(config.map?.height??size)-1)};
 }
 overlay.addEventListener('pointerdown',event => {
   if (!ready || loading || stroke || pan || ![0,1].includes(event.button)) return;
@@ -2095,7 +2099,7 @@ overlay.addEventListener('pointerleave',() => { if (!stroke && !pan) cursor=null
 function resize() {
   if (!config) return; const viewport=$('viewport');
   const scale=fitView?Math.max(.05,Math.min((viewport.clientWidth-28)/size,(viewport.clientHeight-28)/size)):1;
-  $('stage').style.width=size*scale+'px'; $('stage').style.height=size*scale+'px';
+  if (!resizeMap(config.map,size,fitView,viewport,$('stage'),canvas,overlay)) { $('stage').style.width=size*scale+'px'; $('stage').style.height=size*scale+'px'; }
   if (fitView) { viewport.scrollLeft=viewport.scrollTop=0; } updateControls(); schedule();
 }
 
@@ -2225,7 +2229,7 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:4,nodes:serializeNodes(),map:config.map,biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -2319,7 +2323,8 @@ async function takePendingSketch(token) {
 }
 async function loadSketchFile(s) {
   const biome=typeof s?.biome==='string'?s.biome:'';
-  if (biome && biome!==config.biomeId) {
+  const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
+  if (biome && (biome!==config.biomeId || mapChanged)) {
     let served=false,variant='';
     try {
       const response=await fetch('/sculpt-config.json?biome='+encodeURIComponent(biome));
@@ -2332,7 +2337,7 @@ async function loadSketchFile(s) {
     try { await stashPendingSketch(token,s); }
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return; }
     status(`Opening ${biome} for the saved terrain…`);
-    goToWorld(biome,null,{pendingSketch:token,variant});
+    goToWorld(biome,null,{pendingSketch:token,variant,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
     return;
   }
   loadSketch(s); checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();
@@ -2387,21 +2392,25 @@ $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
   const file=$('file').files[0]; $('file').value=''; if (!file || stroke) return;
   loading=true; $('editor').disabled=true;
-  try { if (file.size>10000000) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
+  try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
+function renderExportView(corners) {
+  if (corners) { renderer.setHeight(exportMapField(config.map,corners,size,grid),grid); heightDirty=false; }
+  if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); heightDirty=false; }
+  const start=performance.now(),stats=renderer.draw({quality:'full',clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
+  drawTiming(stats,performance.now()-start,'full');
+}
 $('export').addEventListener('click',() => {
   if (!canExport()) return;
   try {
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); heightDirty=false; }
-    const start=performance.now(),stats=renderer.draw({quality:'full',clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),rev=revision,job=weatherJob;
-    drawTiming(stats,performance.now()-start,'full');
+    renderExportView(); const rev=revision,job=weatherJob;
     canvas.toBlob(blob => { if (!blob) error('PNG export is unavailable for this renderer.'); else if (revision!==rev || weatherJob!==job || !canExport()) error('The terrain changed during export. Export the finished view again.'); else download(blob,'terrain-sculpt.png'); },'image/png');
   } catch (err) { error(err.message); }
 });
 const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName) || target.isContentEditable);
 window.addEventListener('keydown',event => {
-  if (typing(event.target)) return;
+  if (typing(event.target) || loading) return;
   if (event.code==='Space' && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); space=true; schedule(false); }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
   if ((event.key==='Delete' || event.key==='Backspace') && selected>=0 && !stroke && !moving) { event.preventDefault(); nodeAction('delete'); status('Deleted the selected shape.'); }
@@ -2468,9 +2477,10 @@ function defaultColor(key) {
 }
 function goToWorld(base,id,extra) {
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
+  if (config.map) for (const [key,value] of Object.entries({mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel})) url.searchParams.set(key,value);
   // Staying in the same world keeps its variant.
   if (base===config.biomeId && config.variant && !(extra && 'variant' in extra)) url.searchParams.set('variant',config.variant);
-  for (const [key,value] of Object.entries(extra||{})) if (value) url.searchParams.set(key,value); else url.searchParams.delete(key);
+  for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) url.searchParams.set(key,value); else url.searchParams.delete(key);
   location.href=url.toString();
 }
 function buildWorldPanel() {
@@ -2601,9 +2611,11 @@ function setKnob(key, value) {
 async function boot() {
   try {
     const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
-    if (config.size!==1024 || !Number.isInteger(config.grid) || config.grid<2 || config.grid>1024 || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
+    configureMap(config,experiment);
+    if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?1168:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
     if (config.variant) LOCAL_KEY+='-v-'+config.variant;
+    if (config.map) LOCAL_KEY+=`-map-${config.map.unitsX}x${config.map.unitsY}-sea-${config.seaLevel}`;
     document.querySelector('.topbar h2').textContent=(config.biome||'Green Planet')+' terrain';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.
@@ -2642,6 +2654,7 @@ async function boot() {
     $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
     let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
     if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved terrain.'); } catch (err) { mixedScene(); error('Saved sculpt sketch could not be loaded: '+err.message+' The saved copy is retained until you edit.'); status('Mixed example shown.'); } }
+    else if (config.map) { scriptedScene([]); status('Blank map ready · draw terrain with the existing tools.'); }
     else { mixedScene(); status('Mixed scene ready · paint any continuous shape.'); }
     ready=true; $('editor').disabled=false; $('world-editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed}]; historyIndex=0; renderLayers();
     // A sketch loaded in another world was handed to this page before the
@@ -2654,6 +2667,7 @@ async function boot() {
       } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); }
     }
     $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
+    mountMapExport({config,canvas,ready:canExport,revision:() => revision+':'+weatherJob,samples:() => { const display=previewHeight(); return (x,y) => sample(display,x,y); },render:renderExportView,restore:() => { heightDirty=true; schedule(); },onUpdate:fn => { mapUpdate=fn; },busy:on => { loading=on; $('editor').disabled=on; $('world-editor').disabled=on; overlay.style.pointerEvents=on?'none':''; }});
     updateControls(); resize(); schedule(); queueWeather();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }

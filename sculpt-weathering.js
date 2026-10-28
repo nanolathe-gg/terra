@@ -24,7 +24,8 @@ self.onmessage=event => {
   latestJob=request.job;
   if (request.cancel) { pending=null; return; }
   const {height,grid,size,protect}=request;
-  if (!(height instanceof Float32Array) || !Number.isInteger(grid) || grid<2 || grid>1024 || height.length!==grid*grid || !Number.isFinite(size) || size<=1 || (protect!==undefined && (!(protect instanceof Float32Array) || protect.length!==height.length))) {
+  // Card D phase 1: a 4x4 map plus its projection apron is 1168 samples wide.
+  if (!(height instanceof Float32Array) || !Number.isInteger(grid) || grid<2 || grid>1168 || height.length!==grid*grid || !Number.isFinite(size) || size<=1 || (protect!==undefined && (!(protect instanceof Float32Array) || protect.length!==height.length))) {
     throw new Error('Weathering requires a square Float32Array heightfield and matching optional protection.');
   }
   pending=request;
