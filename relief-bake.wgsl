@@ -583,9 +583,15 @@ fn bake(p: vec2f) -> vec4f {
         lumpAdd = max(painted, 0.0) * u.lumpRelief;
     }
     var plain = 0.0;
-    if ((u.plainRelief > 0.0 || lumpAdd > 0.0) && h > u.sea + 1.0) {
-        plain = (valueNoise(p / 13.0 + 41.0) * 0.6 + valueNoise(p / 29.0 + 7.0) * 0.4) * (u.plainRelief * lumpGain + lumpAdd) * 1.6
+    if (u.plainRelief > 0.0 && h > u.sea + 1.0) {
+        plain = (valueNoise(p / 13.0 + 41.0) * 0.6 + valueNoise(p / 29.0 + 7.0) * 0.4) * (u.plainRelief * lumpGain) * 1.6
               * (1.0 - smoothstep(0.1, 0.4, slope));
+    }
+    // Painted lumps are retail's small lit bumps (8-14 px, in patches), finer than the
+    // world's own broad lumps, so they carry their own scales.
+    if (lumpAdd > 0.0 && h > u.sea + 1.0) {
+        plain += (valueNoise(p / 8.0 + 17.0) * 0.6 + valueNoise(p / 14.0 + 53.0) * 0.4) * lumpAdd * 1.6
+               * (1.0 - smoothstep(0.1, 0.4, slope));
     }
     // The bed under shallow water carries its own faint lumps, lit with the
     // rest (card E1); the relief clamp below keeps it under the water plane.

@@ -60,7 +60,7 @@ KNOB_DEFAULTS = dict(
     # 1 or 2; the world knobs default to the earlier noise water, a ramp from
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
-    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=1.2,
+    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
