@@ -59,10 +59,13 @@ branches and the projection fix below, so re-render before judging.
    | E5 | 8843 | 9643 | `$R/agent-E5/out` | `--worlds ice` |
    | E2 | 8844 | 9644 | `$R/agent-E2/out` | `--worlds crystal` |
    | E3 | 8845 | 9645 | `$R/agent-E3/out` | `--worlds green,red,desert` |
-   | E6 | 8846 | 9646 | `$R/agent-E6/out` | `--worlds moon,ice,lava` |
+   | E6 | 8846 | 9646 | `$R/agent-E6/out` | `--worlds moon,ice` |
    | E7 | 8847 | 9647 | `$R/agent-E7/out` | `--worlds crystal` |
    | E8 | 8848 | 9648 | `$R/agent-E8/out` | `--worlds desert` |
    | F1 | 8849 | 9649 | `$R/agent-F1/out` | `--worlds zhon` |
+   | E9 | 8850 | 9650 | `$R/agent-E9/out` | `--worlds green` |
+   | E10 | 8851 | 9651 | `$R/agent-E10/out` | `--worlds lava` |
+   | E11 | 8852 | 9652 | `$R/agent-E11/out` | `--worlds green,archipelago,red` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -1129,8 +1132,28 @@ Cards run in two waves:
 
 - **Wave 1:** E1, E4 and E5, plus E2 and E3 once the owner agrees their
   approach.
-- **Wave 2:** E6, E7 and E8, after E2 and E3 have merged. Wave 2 needs
-  shine and layered rock to exist.
+- **Wave 2:** E6 to E11, after E2 and E3 have merged. Wave 2 needs
+  shine and layered rock to exist. F1 runs alongside. E10 and E11 carry
+  the owner's feedback on the round 7 report
+  (`https://claude.ai/artifact/2Vq3zgWq7PjyKE9aYdf13J`), quoted in each
+  card.
+
+Wave 2 shares several pieces of code, so each has one owner:
+
+- **E2's shine** (`shineTerm` and its helpers in `sculpt-frag.wgsl`)
+  belongs to E6. Other cards set its knobs. A card that needs more
+  from the model adds a gated term in its own function and records the
+  need in NOTES.md.
+- **E3's rock structure** (`bedRelief`, `jointField`, `jointPresent` and
+  the crack functions in `relief-bake.wgsl`) belongs to E9. E8 uses the
+  existing rock knobs and puts any new Desert shading in its own
+  functions.
+- **Desert's strata colours** (the `u.strata` block in
+  `sculpt-frag.wgsl`) belong to E8.
+- **E1's shallow-water shading** (the lit bed, the edge hardness and
+  Red's two modes) belongs to E11. F1 draws its sediment tint and streaks
+  in its own function, called from the water path.
+- **E4's coast pass, shore layers and fingers** belong to E10.
 
 Cross-world rule: overall, the owner said *"We may want to consider PBR
 materials or something similar - shinier rock faces, very shiny crystals,
@@ -1300,11 +1323,10 @@ lines. Do not tune `crackDark` to fix this.
   lighter. Desert strata continue on the buttes.
 
 **Still open:**
-- **Owner's question:** the rock faces were "too dark", but their mean
-  luma already matched or exceeded retail's. Retail has more contrast
-  (luma sd 27 against our 19-20, with more deep darks and twice our share
-  above 90). E3 lightened the ink, and the owner is asked whether tone or
-  contrast was meant.
+- **Owner's question, answered:** the rock faces were "too dark", but
+  their mean luma already matched or exceeded retail's. Retail has more
+  contrast (luma sd 27 against our 19-20, with more deep darks and twice
+  our share above 90). The owner's answer is card E9.
 - **Rule 8** was exceeded on Green, with about 19 cycles.
 - **Desert (E8):** the buttes are smooth cones with no black shadow side,
   and the strata lines are 3-4 px apart against retail's 10-18.
@@ -1406,7 +1428,7 @@ lines. Do not tune `crackDark` to fix this.
   lack its vertical crease.
 - Ice-3's faces are speckled where retail's are smooth dark slate.
 
-### E6. Moon, Ice mountains and Lava rock shine (wave 2, after E2 and E3)
+### E6. Moon and Ice mountains (wave 2, after E2 and E3)
 
 > **Moon:** Retail hills are rough, pockmarked, and relatively uniform in
 > texture. Ours have smooth tops and cracks on the side, which doesn't
@@ -1423,10 +1445,15 @@ lines. Do not tune `crackDark` to fix this.
 - Ice's mountain style becomes a choice. The default is the common
   monotone, rough, shiny ice; the ice-1 crystal style and today's look
   remain choices.
-- Lava's hills and mountains become shiny rough rock (E4 removed the
-  contour lines).
-- **Server and guard:** port 8846, CDP 9646, guard
-  `--worlds moon,ice,lava`.
+- E6 owns E2's shine model. E2 left Ice open: on near-white ice the
+  additive lobe saturates, so Ice reads rough, not shiny.
+- **Server and guard:** port 8846, CDP 9646, guard `--worlds moon,ice`.
+  Lava's rock shine moved to E10.
+
+Order of work: Moon, then Ice mountains. Then take E5's open items above,
+most visible first: the frost band's fine lines and blue gaps, the berg's
+lit faces and crease, the submerged shelf, then ice-3's speckle. Rule 8
+applies to each, and whatever is left stays open.
 
 ### E7. Crystal (wave 2, after E2)
 
@@ -1444,8 +1471,151 @@ lines. Do not tune `crackDark` to fix this.
 > smooth. We should have both variations in height and major variations in
 > shape at the base.
 
+> **Round 7 report:** painted desert tall buttes are better, but
+> desert-2 is still missing them on the cliff face. Those strata layers
+> exist in the rock itself so even weathered cliffs should show them.
+> Still missing the gray bands that retail has
+
 - The variation at the base is shape: outline and height. Rule 6 applies.
+- **Strata run through the rock.** Every cliff face shows the strata,
+  weathered or not, including desert-2's. Find what hides them there,
+  for example a slope, rock-mask or route cut-off.
+- **The grey band** near the base (desert-1, desert-3). Measure its
+  height range, width and colour on the retail windows.
+- E3 left the buttes as smooth cones with no black shadow side, and
+  strata 3-4 px apart against retail's 10-18.
 - **Server and guard:** port 8848, CDP 9648, guard `--worlds desert`.
+
+### E9. Green rock faces (wave 2, after E2 and E3)
+
+> **Owner, round 7, asked whether "too dark" meant tone or contrast:**
+> I think it feels darker because it didn't have the shiny/specular
+> highlights and coherent 3d rock face look with the sedementary lines and
+> scratch erosion/weathering lines as coherent 3d. It is still too far off
+> retail to be convincing at this point.
+
+The E3 quote above still applies. Green-2 at merge-d2
+(`$R/repro-out/merge-d2/green-2/`), retail on the left and ours on the
+right, rock band at rows 600-880:
+
+- **Form.** Retail's face is a carved surface. Broad gullies and ribs run
+  down it at a slight angle, tens of pixels apart, so whole stripes of the
+  face are lit or shaded. Ours has no form at that scale: it is an even
+  mid-grey.
+- **Detail.** Retail's detail is sharp, angular facets with bright
+  white-grey glints on sun-facing edges. Ours is soft, rounded cells in a
+  regular cobble or brick pattern.
+- **Layers.** Retail's horizontal lines are long and continuous across
+  the ribs, and they bend with the face. Ours are the edges of cells.
+- **Grass.** Ours has green specks all over the rock. Retail's grass
+  stays near the edges of the face.
+
+What to deliver:
+
+- **Coherent 3D form.** Gullies and ribs are relief lit by the sun, with
+  a lit wall and a shaded wall. They have spacing, angle, depth and
+  length controls. Beds run as continuous ledges across the ribs, each
+  with a lit lip and a shadow beneath it.
+- **Weathering scratches.** Long, thin grooves run down the face at a
+  slight angle, as lit relief. They are not ink.
+- **Shine.** Glints on sun-facing facets come from E2's model, through
+  knobs on Green's rock material. Grass stays matte.
+- **Check the grass on the face.** Find out where the green specks come
+  from, and keep grass to the face's edges as retail does.
+- Keep the ability, change the default: today's look stays reachable
+  through the knobs.
+- Judge on all three Green windows (rule 5). Red and Desert also use the
+  rock structure, so they must match exactly.
+- **Server and guard:** port 8850, CDP 9650, guard `--worlds green`.
+
+### E10. Lava shore layers, fingers and rock shine (wave 2)
+
+> **Round 7 report:** lava-1 shore layers are better, but there may not be
+> enough and they need more natural variation like in retail. In lava-2
+> it's not good. It should be like many circles cut out from the edge in
+> layers like retail has.
+>
+> lava fingers are improved but should be flatter and their
+> amount/size/distribution should probably just be configurable per lava
+> area/shoreline with some natural variation with small fingers as the
+> default and the ability to crank it up when desired.
+
+E4's quote above ("Retail mountains/hills are shiny rough rock") also
+applies.
+
+- **Layers.**
+  - Lava-1: more layers, with natural variation in width and outline.
+  - Lava-2: the circular style becomes many circles cut out of the
+    shore's edge, layer after layer. Each step is a scalloped arc, not a
+    contour.
+  - Both are height geometry (rule 6).
+- **Fingers.**
+  - Make them flatter.
+  - Amount, size and distribution become per-stroke options on the lava
+    water tools (all four places, rule 4), with natural variation along
+    the shore.
+  - The default is small fingers, and the options can raise them.
+- **Rock shine.** Lava's hills and mountains become shiny rough rock,
+  using E2's model through knobs.
+  - E2 found that Lava's banks take the ground's colour, so they need a
+    slope gate. Put the gate in your own gated function. E6 owns
+    `shineTerm`.
+- E4's open items also belong here: the north bank's layer lines (retail
+  shows them dark at every facing) and lava-3's tall hill, which is
+  still a cone.
+- **Server and guard:** port 8851, CDP 9651, guard `--worlds lava`.
+
+### E11. Shallow water and Archipelago, round 2 (wave 2)
+
+> **Round 7 report:**
+> - flat ground: good
+> - green-1 shallow water is good, but could use additional variation
+>   from the shoreline to make it feel more natural. The shallow water
+>   texture is too smooth. green-3 still has blurry parts, matches the
+>   shorline too closely (needs variation)
+> - archipalego-1 shallow water needs texture from retail
+> - archipalego hills are better, but there are some weird black/dark
+>   lines around them that aren't present on retail, and retail has more
+>   noticeable circle features in the red fringe (maybe this could be
+>   configurable?)
+> - mars shallow water is much better, however the lake style seemes to
+>   have darker dots in retail than the base texture, and red-3 shallow
+>   water is too little compared to retail and the cracks are too soft
+>   (should be based on land cracking/roughness/slope) and the edge
+>   against the deep water seems shaded when retail's is more of a hard
+>   cut off with natural variation
+
+"Mars" is Red.
+
+- **Green.**
+  - The shallow band's width and outline vary along the shore, rather
+    than following the shoreline at a fixed offset. This applies to
+    green-1 and green-3 especially.
+  - The bed under shallow water carries the ground's texture. It is too
+    smooth today.
+  - Find and remove green-3's blurry parts.
+- **Archipelago.**
+  - Archipelago-1's shallow water gets the texture its retail window
+    shows.
+  - Find where the dark lines around the hills come from and remove
+    them.
+  - The red fringe gets circle features as a control (count, size,
+    contrast). The default matches retail's more noticeable circles. E1
+    left the ring as hairy arcs, not smooth contours that follow the
+    hill.
+- **Red.**
+  - The lake mode gets retail's darker dots.
+  - Cracked mode takes its crack strength from the land: its cracking,
+    roughness and slope. It is too soft today.
+  - The shallow-to-deep edge becomes a hard cut-off with natural
+    variation, not shading.
+  - Red-3 has too little shallow water. If retail's heights show more
+    shallow ground, follow them in the scene, in its own commit (rule
+    6). Otherwise change the tool.
+- **Ownership.** E9 changes Green's rock at the same time. Stay off rock
+  faces and E3's code.
+- **Server and guard:** port 8852, CDP 9652, guard
+  `--worlds green,archipelago,red`.
 
 ### F1. Flow bake, stage 1: current and colour (after E1 merges)
 
@@ -1482,6 +1652,9 @@ stage changes no heights.
   6: the scenes follow the retail flow).
 - **Server and guard:** port 8849, CDP 9649, guard `--worlds zhon`.
   Scenes without a bake must match exactly.
+- Codex's card D phase 3 is adding chunked baking at the same time. Keep
+  the planes ordinary mask layers so that phase 3 can treat them like the
+  others.
 
 ### Zhon: not a card yet
 
