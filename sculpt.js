@@ -269,7 +269,7 @@ const amountRange=kind => isFlowKind(kind)?[5,100]:kind==='crystal'?[5,200]:kind
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:kind==='source'?80:kind==='river'?160:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'passage',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:kind==='source'?80:kind==='river'?160:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -280,7 +280,7 @@ function rememberTool(custom=false) {
 function showTool(state) {
   [$('amount').min,$('amount').max]=amountRange(tool).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
-  $('shallow-mode').value=state.shallowMode==='area'?'area':'passage';
+  $('shallow-mode').value=state.shallowMode==='passage'?'passage':'area';
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
@@ -2486,7 +2486,7 @@ function selectNode(i) {
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
     $('diameter').value=clamp(p.radius*2,40,800); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
-    $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='area'?'area':'passage'; $('cracks').value=Math.round((p.cracks||0)*100);
+    $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='passage'?'passage':'area'; $('cracks').value=Math.round((p.cracks||0)*100);
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
   }
   if (n?.kind==='source' && n.params?.color) flow?.setColour(n.params.color);
@@ -2976,7 +2976,7 @@ function loadSketch(s) {
     if (saved && typeof saved==='object') {
       for (const [key,[,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(saved[key])) restored[key]=clamp(saved[key],lo,hi);
       restored.preset=Object.hasOwn(TOOL_PRESETS,saved.preset)?saved.preset:'custom';
-      restored.shallowMode=saved.shallowMode==='area'?'area':'passage';
+      restored.shallowMode=saved.shallowMode==='passage'?'passage':'area';
     }
     toolSettings[kind]=restored;
   }
