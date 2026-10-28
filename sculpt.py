@@ -213,6 +213,19 @@ WORLD_VARIANTS = {
         # which the colour knobs only reach through the tops (a darker crystal
         # colour darkened the top, not the sides). See NOTES, stage 3.
     },
+    'zhon': {
+        # The river family (card B4): the reproduction windows' sections are
+        # river sections, whose water is brown at the shore and dark olive in
+        # the deeps, not the coast's grey-green and teal. The textures come
+        # from the family's other sections (sculpt_section_biome.river_water);
+        # 'river' names the config block they are prepared into.
+        # The river's colour by depth reaches its deep end by ~40 units, not
+        # the coast's 60 (windows zhon-1..3 at 34-44 / 44-56: R 57 / 40), and
+        # it varies over a short reach, so the depth average is tighter. Mean
+        # RGB error to retail over depth bins, zhon-2: coast water 44.5, river
+        # textures on the coast ramp 50.2, with these two knobs 28.2.
+        'river': dict(label='River sections: brown water', river=True, knobs=dict(deepDepth=38, waterSoft=16)),
+    },
     'desert': {
         # Desert Triad: tall grey buttes with thin reddish bed lines, dark
         # shaded flanks and long dark cracks, beside Painted Desert's broad
@@ -237,6 +250,10 @@ def apply_variant(config, biome, variant):
         return None
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
+    if v.get('river'):
+        # Swap in the world's river water (textures, ramp, mean colours).
+        for key, value in copy.deepcopy(config['river']).items():
+            out[key] = {**out.get(key, {}), **value}
     out['baseColors'] = dict(config.get('colors', {}))
     out['colors'] = {**config.get('colors', {}), **v.get('colors', {})}
     out.update(copy.deepcopy(v.get('config', {})))
@@ -432,6 +449,8 @@ def biome_config(biome, assets):
             config['textures']['palette'] = '/sculpt-assets/palette-pairs-desert.png'
     config['assetBase'] = f'/sculpt-assets/{biome}/'
     config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
+    if 'river' in config:
+        config['river']['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['river']['textures'].items()}
     config['biomes'] = BIOME_NAMES
     return config
 
@@ -496,6 +515,7 @@ def main():
                     biome, _, leaf = path.removeprefix('/sculpt-assets/').partition('/')
                     if biome in configs:
                         allowed = {v.rsplit('/', 1)[-1] for v in configs[biome]['textures'].values()}
+                        allowed.update(v.rsplit('/', 1)[-1] for v in configs[biome].get('river', {}).get('textures', {}).values())
                         allowed.update(('rock-restrained.png', 'rock-structural.png', 'noise-ridged-gaussian.png'))
                         if leaf in allowed:
                             file = assets[biome] / leaf
