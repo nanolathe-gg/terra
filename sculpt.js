@@ -2997,6 +2997,13 @@ const KNOBS = [
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
   // E8 (Painted Desert): the grey band at the foot of the raised ground (strata colour 5); its heights are above the plain.
   ['Desert foot band', [['baseBand','Grey band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
+  // E9 (Green rock faces); every default is the earlier look.
+  ['Rock face', [['faceRock','Painted rock interior without moss (0 moss blobs)',0,1,.05,0],['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
+    ['bedFlow','Beds broken and shifted by joints (0 continuous)',0,1,.05,1],['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],
+  ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullySpacing','Gully spacing (px)',12,120,2,40],['gullyWidth','Gully width (px)',4,40,1,14],['gullyAngle','Gully lean from north-south (deg)',-60,60,1,-20],
+    ['gullyRun','Gully length (px)',30,400,10,160],['gullyGaps','Gully gaps',0,1,.05,.3],['gullyShade','Gully floor shade (occlusion)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
+  ['Rock face: scratches', [['scratchDepth','Scratch depth (height; 0 none)',0,4,.1,0],['scratchSpacing','Scratch spacing (px)',3,40,1,9],['scratchAngle','Scratch lean from north-south (deg)',-60,60,1,-20],['scratchRun','Scratch length (px)',20,300,5,90],['scratchGaps','Scratch gaps',0,1,.05,.4]]],
+  ['Rock face: facets', [['facetTilt','Facet tilt (height per px; 0 none)',0,2,.05,0],['facetSize','Facet height (px)',2,24,.5,6],['facetStretch','Facet width (x height)',.25,4,.05,1.5],['facetStep','Step between facets (height)',0,6,.1,1],['facetSeam','Facet crease darkness',0,2,.05,0],['facetSkew','Facet tilt in y (share of its tilt in x)',0,1,.05,1],['facetCoarse','Coarser second level of facets (share)',0,1.5,.05,0]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colours chosen for it. Built-in worlds

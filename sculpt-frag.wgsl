@@ -715,8 +715,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let weathered = pixelSample(rockWeatheredTex, rockWeatheredSamp, pixel + vec2f(73.0, 17.0), vec2f(256.0)).rgb;
         rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
         rock = mix(rock, weathered, smoothstep(0.40, 0.62, moss));
+        // E9: the weathered and fractured tiles carry green blotches (14% and 5.5% of their pixels)
+        // that read as moss scattered over the face; retail's face holds grass at its edges. Clamp
+        // the green to the larger of red and blue so the tile keeps its structure and loses its moss.
+        if (u.rockMoss < 1.0) { rock.g = mix(min(rock.g, max(rock.r, rock.b)), rock.g, u.rockMoss); }
     }
     rock = based(rock, u.rockTexMean, u.rockBase);
+    // E9: the rock tile's own blotches and cell outlines read as soft cobble over the lit form;
+    // below 1 the tile's contrast around the rock's mean colour is scaled down so the carved relief carries the face.
+    if (u.rockDetail < 1.0) {
+        let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+        rock = rockFlat + (rock - rockFlat) * u.rockDetail;
+    }
     // Deposition softens the exposed face into a connected apron. Flow and
     // deposited soil come from the same weathering that changed the surface.
     var rockScore = slope + (n.g - 0.5) * 0.55 + (n.b - 0.5) * 0.30 - weather.g * 0.55;
@@ -864,7 +874,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                   + (fine.g - 0.5) * u.faceScore.z + (n.r - 0.5) * u.faceScore.w;
         // Threshold so that roughly the chosen share of face pixels is rock.
         let threshold = mix(1.4, -0.9, share);
-        let rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
+        var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, score) * lowGate;
+        // E9: inside painted rock the face is rock; moss stays at its edges and on the ledges below.
+        if (u.faceRock > 0.0 && u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * u.faceRock); }
         let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
@@ -1069,7 +1081,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
         let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
-        let shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        var shine = shineTerm(pixel, p, g, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen);
+        // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
+        if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         color = color * shine.w + shine.xyz;
     }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {

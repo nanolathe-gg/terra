@@ -256,6 +256,34 @@ struct Uniforms {
     baseBandHigh: f32,     // upper edge
     baseBandWander: f32,   // how far the window drifts with position, height units
     baseBandGaps: f32,     // share of the band's length that is missing
+    // E9 (Green rock faces). Every default reproduces the earlier output exactly.
+    faceRock: f32,        // painted rock's interior is rock, with moss kept to its edges (0: moss blobs inside as before; 1: none inside)
+    rockMoss: f32,        // how much of the rock art's own green (fractured and weathered tiles) is kept (1: all, as before; 0: none)
+    shineOutside: f32,    // share of the rock's glints kept outside painted rock (1: everywhere, as the shine model gives them)
+    rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
+    gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
+    gullySpacing: f32,    // distance between gully lines, world px
+    gullyWidth: f32,      // gully width across, world px
+    gullyAngle: f32,      // gully lean from the screen's north-south, degrees
+    gullyRun: f32,        // typical length of an unbroken gully, world px
+    gullyGaps: f32,       // share of each gully's length that is missing
+    gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
+    ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
+    bedFlow: f32,         // how far joints break and shift the beds (1: as before; 0: continuous beds)
+    bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
+    bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
+    scratchDepth: f32,    // weathering scratches: depth, height units (0: none)
+    scratchSpacing: f32,  // distance between scratches, world px
+    scratchAngle: f32,    // scratch lean from the screen's north-south, degrees
+    scratchRun: f32,      // typical length of an unbroken scratch, world px
+    scratchGaps: f32,     // share of each scratch's length that is missing
+    facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
+    facetSize: f32,       // facet height, world px
+    facetStretch: f32,    // facet width as a multiple of its height
+    facetStep: f32,       // step between neighbouring facets, height units
+    facetSeam: f32,       // how dark the creases between facets are (0: lit like the facets)
+    facetSkew: f32,       // facets' tilt in y as a share of their tilt in x (the picture squeezes steep y tilts: 1 as before, lower keeps them readable)
+    facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

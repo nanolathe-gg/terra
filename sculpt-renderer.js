@@ -739,6 +739,11 @@ export class TerrainRenderer {
     this.f('uBaseBandHigh', variant.has('baseBandHigh') ? Number(variant.get('baseBandHigh')) : 6.5);
     this.f('uBaseBandWander', variant.has('baseBandWander') ? Number(variant.get('baseBandWander')) : 1);
     this.f('uBaseBandGaps', variant.has('baseBandGaps') ? Number(variant.get('baseBandGaps')) : 0.45);
+    // E9 (Green rock faces).
+    this.f('uFaceRock', variant.has('faceRock') ? Number(variant.get('faceRock')) : 0);
+    this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
+    this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
+    this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);
     this.fieldsDirty = true;
   }
 
@@ -825,6 +830,30 @@ export class TerrainRenderer {
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
+    // E9 (Green rock faces).
+    set('uGullyDepth', number('gullyDepth', 0));
+    set('uGullySpacing', number('gullySpacing', 40));
+    set('uGullyWidth', number('gullyWidth', 14));
+    set('uGullyAngle', number('gullyAngle', -20));
+    set('uGullyRun', number('gullyRun', 160));
+    set('uGullyGaps', number('gullyGaps', 0.3));
+    set('uGullyShade', number('gullyShade', 0));
+    set('uRibTilt', number('ribTilt', 0));
+    set('uBedFlow', number('bedFlow', 1));
+    set('uBedBend', number('bedBend', 0));
+    set('uBedPunch', number('bedPunch', 0));
+    set('uScratchDepth', number('scratchDepth', 0));
+    set('uScratchSpacing', number('scratchSpacing', 9));
+    set('uScratchAngle', number('scratchAngle', -20));
+    set('uScratchRun', number('scratchRun', 90));
+    set('uScratchGaps', number('scratchGaps', 0.4));
+    set('uFacetTilt', number('facetTilt', 0));
+    set('uFacetSize', number('facetSize', 6));
+    set('uFacetStretch', number('facetStretch', 1.5));
+    set('uFacetStep', number('facetStep', 1));
+    set('uFacetSeam', number('facetSeam', 0));
+    set('uFacetSkew', number('facetSkew', 1));
+    set('uFacetCoarse', number('facetCoarse', 0));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});

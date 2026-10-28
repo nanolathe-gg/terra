@@ -103,6 +103,12 @@ KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
 # drifts, and the share of its length that is missing).
 KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
+# E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
+KNOB_DEFAULTS.update(faceRock=0, rockMoss=1, rockDetail=1, shineOutside=1,
+                     gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
+                     bedFlow=1, bedBend=0, bedPunch=0,
+                     scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
+                     facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -125,7 +131,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
-                  bedLip=1, bedLedge=.55, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
+                  bedLip=1.8, bedLedge=.6, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -139,7 +145,20 @@ WORLD_KNOBS = {
                   # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
-                  undulation=0, plainRelief=0),
+                  undulation=0, plainRelief=0,
+                  # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
+                  # light or shade as a whole), layered in long ledges that bend with it, scored by thin scratches
+                  # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
+                  # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
+                  # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
+                  # earlier look: faceRock 0, rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0, bedFlow 1,
+                  # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  faceRock=1, rockMoss=.15, rockDetail=.5,
+                  gullyDepth=14, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=2, ribTilt=.35,
+                  bedFlow=0, bedBend=2.5, bedPunch=1,
+                  scratchDepth=3.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
+                  facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,
+                  shineRock=.5, shineRockSharp=14, shineRockRough=.12, shineRockScale=5, shineWhite=1, shineOutside=.3),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
