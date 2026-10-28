@@ -486,9 +486,9 @@ export class TerrainRenderer {
     if (masks) this.setMasks(masks);
   }
 
-  // Painted masks (card C5): thirteen signed-byte planes (rock, snow or ice, wet
+  // Painted masks (card C5): fourteen signed-byte planes (rock, snow or ice, wet
   // ground, moss, scatter density, relief, cracks, banding, face rock share;
-  // then, card E1, shore edge, shallow-to-deep edge, water bed and ground lumps),
+  // then, card E1, shore edge, shallow-to-deep edge, water bed, ground lumps and cracked bed),
   // interleaved into maskTexture's layers. Nothing is uploaded while nothing
   // has ever been painted; paintOn, scatterOn, styleOn, waterOn and lumpOn tell
   // the shaders whether to read the texture at all. The water and lump planes
@@ -516,7 +516,7 @@ export class TerrainRenderer {
     this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
     this.i('uScatterOn', painted[4]);
     this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
-    this.i('uWaterOn', painted.slice(9, 12).some(Boolean) ? 1 : 0);
+    this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
   }
 
@@ -704,6 +704,7 @@ export class TerrainRenderer {
     this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
     this.v('uShallowMean', (this.config.water?.shallowMeanRGB || this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
+    this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
     this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
     this.fieldsDirty = true;

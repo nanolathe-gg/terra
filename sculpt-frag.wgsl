@@ -341,7 +341,10 @@ fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) 
 fn litBed(bed: vec3f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
-    let light = clamp(dot(bed, luma) / level, 0.25, 2.0);
+    // Shade stays paler under water than on land (retail's shaded bank beds show
+    // as soft darker blue, never as black rims), so the dark side carries less.
+    let ratio = clamp(dot(bed, luma) / level, 0.25, 2.0);
+    let light = pow(ratio, select(u.bedContrast * 0.6, u.bedContrast, ratio >= 1.0));
     let tint = u.shallowMean * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
@@ -941,7 +944,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var shoreHard = u.crispShore;
         var edgeHard = u.deepEdge;
         var bedLit = u.bedLit;
+        var crackedBed = false;
         if (u.waterOn != 0) {
+            crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5;
             let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).gba;
             if (pick.x > 0.5) { shoreHard = 1.0; } else if (pick.x < -0.5) { shoreHard = 0.0; }
             if (pick.y > 0.5) { edgeHard = 1.0; } else if (pick.y < -0.5) { edgeHard = 0.0; }
@@ -958,7 +963,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // The lit bed: the ground under the water, lit by the same sun and
             // tinted, replaces the shallow art's noise (retail draws its shallows
             // as the lit terrain through a blue tint).
-            if (bedLit > 0.0) { shallow = mix(shallow, litBed(color), bedLit); }
+            // The bed is the level ground under the sun and shade at this pixel: the slope
+            // and rock materials of its banks are not drawn through the water.
+            // A cracked bed keeps its drawn material, cracks and all.
+            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * shading, color, crackedBed)), bedLit); }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.

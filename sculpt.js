@@ -75,10 +75,10 @@ const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terr
 // banding and face rock share, each -127..127 about the world's own value).
 // 'paint' is the brush; the landforms below can also paint inside their own
 // footprint (maskChannel, and styleRelief .. styleFace).
-// Card E1 adds four more: the water choices of a deep or shallow stroke (shore
+// Card E1 adds five more: the water choices of a deep or shallow stroke (shore
 // edge, shallow-to-deep edge, bed; +127 hard / lit bed, -127 faded / noise
-// water) and painted ground lumps (+127 more, -127 fewer).
-const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg'];
+// water), painted ground lumps (+127 more, -127 fewer) and the cracked-bed flag.
+const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk'];
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
 const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
@@ -153,7 +153,7 @@ const SHAPE_FIELDS=[
   // Water looks (card E1): each stroke may keep the world's choice (0) or set its own.
   ['waterShore','water-shore','Shore edge (shore to shallow)',['deep','shallow'],0,2,1,1,'World default keeps the World panel\'s Crisp waterline. Hard: the water starts at the shoreline with ragged stairs, as retail draws it. Faded: the water fades in over a few pixels.',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
   ['waterDeep','water-deep','Shallow-to-deep edge',['deep','shallow'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow colour stops at one depth with ragged stairs (retail Green). Faded: the colour follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
-  ['waterBed','water-bed','Shallow water look',['deep','shallow'],0,2,1,1,'World default keeps the World panel\'s Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture.',[[0,'World default'],[1,'Lit bed'],[2,'Noise water']]],
+  ['waterBed','water-bed','Shallow water look',['deep','shallow'],0,3,1,1,'World default keeps the World panel\'s Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture. Cracked bed: lit bed over cracked rock-like ground, tinted (Red\'s shelf shallows).',[[0,'World default'],[1,'Lit bed'],[2,'Noise water'],[3,'Cracked bed']]],
   ['paintChannel','paint-channel','Paint',['paint'],1,17,1,1,'What the brush paints. Denser scatter supplies its own stones where the World panel\'s Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world\'s own value; Strength is how far. Erase clears every mask and style under the brush.',[...MASK_CHOICES,...LUMP_CHOICES,...STYLE_CHOICES,[7,'Erase all masks and style']]],
   ['maskChannel','mask-channel','Paint inside the shape',MASK_SHAPES,0,6,1,1,'Also paint a mask over the shape\'s own footprint, strongest where the shape is (a rocky mesa, a mossy hill).',[[0,'Off'],...MASK_CHOICES]],
   ['maskAmount','mask-amount','Shape paint strength',MASK_SHAPES,5,100,5,100,'How fully the shape paints its mask.'],
@@ -429,9 +429,9 @@ function startStroke(kind,p,options={}) {
 // (a soft edge fades the old one out as the new one comes in), as the cover
 // brushes replace each other. Wet ground only darkens, so it layers on any of
 // them. Planes: 0 rock 1 snow 2 wet 3 moss 4 scatter 5 relief 6 cracks 7 banding 8 face
-// 9 shore edge 10 shallow-to-deep edge 11 water bed 12 ground lumps.
+// 9 shore edge 10 shallow-to-deep edge 11 water bed 12 ground lumps 13 cracked bed.
 const MASK_WRITES=[null,[[0,127],[1,0],[3,0]],[[1,127],[0,0],[3,0]],[[2,127]],[[3,127],[0,0],[1,0]],[[4,127]],[[4,-127]],
-  [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[11,0],[12,0]],
+  [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[11,0],[12,0],[13,0]],
   [[5,127]],[[5,-127]],[[6,127]],[[6,-127]],[[7,127]],[[7,-127]],[[8,127]],[[8,-127]],[[12,127]],[[12,-127]]];
 function maskSetup(s,work) {
   const shape=MASK_SHAPES.includes(s.kind);
@@ -443,7 +443,13 @@ function maskSetup(s,work) {
   // nothing. They are flags, not amounts: written at full strength wherever the stroke
   // reaches (flat), since a tapered byte would decode as a different choice.
   const flat=writes.map(() => false);
-  if (s.kind==='deep' || s.kind==='shallow') WATER_KEYS.forEach((k,j) => { const c=Math.round(s[k]||0); if (c===1 || c===2) { writes.push([9+j,c===1?127:-127,1]); flat.push(true); } });
+  if (s.kind==='deep' || s.kind==='shallow') WATER_KEYS.forEach((k,j) => {
+    const c=Math.round(s[k]||0);
+    if (c<1 || c>(k==='waterBed'?3:2)) return;
+    writes.push([9+j,c===2?-127:127,1]); flat.push(true);
+    // The bed choices also set or clear the cracked-bed flag (3: cracked rock).
+    if (k==='waterBed') { writes.push([13,c===3?127:0,1]); flat.push(true); }
+  });
   if (!writes.length) return null;
   // Replays borrow the planes from the work pool, as the other base fields.
   const pool=work?(work.masks??=maskPlanes.map(a => new Int8Array(a.length))):null;
@@ -2463,7 +2469,7 @@ const KNOBS = [
     ['crackDark','Floor darkness',0,1,.05,.75],['crackLit','Lit wall',0,1,.05,.35]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandRelief','Bank lines bent by relief',0,1,.05,0],['bandWander','Bank line wander',0,2,.05,0],['bandGaps','Bank line gaps',0,1,.05,0],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Colour strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)

@@ -216,6 +216,7 @@ struct Uniforms {
     lumpRelief: f32,      // height of a fully painted lump field, in the units of plainRelief
     shallowMean: vec3f,   // mean colour of the shallow water art: the lit bed's tint
     bedBright: f32,       // brightness of the tinted bed (1: the tint as it is)
+    bedContrast: f32,     // how much of the bed's light carries through the tint (1: all, 0: flat tint)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -246,7 +247,8 @@ struct Uniforms {
 // the water choices of a deep or shallow stroke (card E1): g shore edge, b
 // shallow-to-deep edge (+1 hard, -1 faded), a bed (+1 lit bed, -1 noise
 // water); 0 leaves the world's own. Layer 3: r painted ground lumps (+1 more,
-// -1 fewer than the world's own).
+// -1 fewer than the world's own), g cracked bed (+1: the bed under this
+// stroke's shallows is cracked rock-like ground).
 @group(0) @binding(9) var masksTex: texture_2d_array<f32>;
 
 // Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,
