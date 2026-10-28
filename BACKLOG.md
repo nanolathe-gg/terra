@@ -838,8 +838,9 @@ compiler-drift test applies. The one planned exception is tile-reuse step
 - `internal/mapgen/resources.go` places deposits and vegetation (see
   `gentleLand`, `placeVegetation`).
 - `nanolathe --map "<name>" --shot out.png --renderer=classic` composes
-  a battle frame headlessly. Add a second game root (`--roots`) that holds
-  only your exported `.ufo`, and **never write into `~/TotalAnnihilation`**.
+  a battle frame headlessly. Add a second game root (repeat `--root`;
+  later roots win) that holds only your exported `.ufo`, and **never
+  write into `~/TotalAnnihilation`**.
 - Formats: [fmt tnt] (`research/formats/tnt.md`: attribute map, anchor
   cells and `0xFFFE` fringe, minimap sizing and its `0x64` fill),
   [fmt ota], [fmt hpi], [fmt pal].
