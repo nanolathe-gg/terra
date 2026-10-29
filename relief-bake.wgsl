@@ -959,7 +959,10 @@ fn bake(p: vec2f) -> vec4f {
         cliffOn = true;
         let own = smoothstep(0.03, 0.12, slope);
         let a = select(cliff.up, -cliff.up, dot(cliff.up, fall) < 0.0);
-        fall = normalize(mix(a, fall, own) + vec2f(1e-5));
+        // With no wide slope either (level ground all round) there is no direction to give: paintFall's noise stays, not
+        // a default north that would comb every returning scatter rib the same way.
+        let have = smoothstep(0.0, 0.02, cliff.gradient);
+        fall = normalize(mix(fall, mix(a, fall, own), have) + vec2f(1e-5));
     }
 
     var acc = vec3f(0.0);
