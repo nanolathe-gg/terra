@@ -171,8 +171,8 @@ WORLD_KNOBS = {
                   # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
-                  rockOrder=1, rockFrom=1.6, bedSpacing=6.5, bedHeight=1, bedDip=0, bedVary=.9,
-                  bedLip=2.2, bedLedge=.6, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
+                  rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedDip=0, bedVary=.9,
+                  bedLip=3, bedLedge=.6, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
