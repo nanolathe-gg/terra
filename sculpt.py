@@ -140,8 +140,8 @@ KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
 KNOB_DEFAULTS.update(lavaMeander=0, lavaSpread=0, lavaCircleVary=0)
 # G5 (Lava), shader knob: the bank crease breaks into dashes of varying darkness (0: unbroken).
 KNOB_DEFAULTS.update(lavaCreaseVary=0, lavaTread=0)
-# G5 (Lava), hill rock: crust strength (0: none), pillow and chip size in px, hanging veins, and the share of the fall-line relief it replaces.
-KNOB_DEFAULTS.update(lavaCrust=0, lavaPillow=34, lavaChip=5.5, lavaVeins=0, lavaCalm=.6)
+# G5 (Lava), hill rock: crust strength (0: none), pillow and chip size in px, hanging veins, the share of the fall-line relief it replaces, and the dusk on shaded rock.
+KNOB_DEFAULTS.update(lavaCrust=0, lavaPillow=34, lavaChip=5.5, lavaVeins=0, lavaCalm=.6, lavaDusk=0)
 # E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
 # a glint read on near-white ice (0: the lobe only adds light).
 KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
@@ -362,8 +362,8 @@ WORLD_KNOBS = {
                  # its circles differ in size and spacing, and its step lines fade and break along their length.
                  lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.3,
                  # G5: hill rock as retail's crust, pillows and chips with creases and hanging veins, the fall-line relief it
-                 # replaces, and treads tilted toward the crown.
-                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaTread=.6,
+                 # replaces, treads tilted toward the crown, and the tall hills' far sides near black.
+                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8, lavaTread=.6,
                  shineSlopeGate=.7, shineWhite=.3, shineStretch=3,
                  shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
                  shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),
