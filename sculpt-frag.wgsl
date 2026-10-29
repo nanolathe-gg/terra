@@ -591,9 +591,20 @@ fn shelfNoise(q: vec2f) -> f32 {
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
 // noise (shelfWander units over shelfScale px), so the band's outline and width
 // vary along the shore instead of following it at a fixed offset.
-fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32, cracked: bool) -> f32 {
+fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
     var at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
     if (cracked && u.crackedStep > 0.0) { at = u.crackedStep; }
+    var depth = depthIn;
+    if (u.shoalRag > 0.0) {
+        // G1: the outline is notched in pixels, not in depth. Retail's step is a ragged line with notches of 2-8 px
+        // and fingers, also across a gentle shelf, where the depth jitter below is the bed's gradient times
+        // nothing. The depth is read where a displaced point sits: 2-px blocks (the stairs) and a 6-px noise
+        // (the notches' own run), each up to shoalRag px.
+        let blk = floor(pixel / 2.0);
+        let stairs = vec2f(shelfHash(blk + 3.7), shelfHash(blk + 19.1)) - 0.5;
+        let notch = vec2f(shelfNoise(p / 6.0 + 3.0), shelfNoise(p / 6.0 + 41.0)) - 0.5;
+        depth = depth + baseHeight(p) - baseHeight(p + (stairs * 0.8 + notch * 1.6) * u.shoalRag);
+    }
     let grad = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
                                   baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
     let block = floor(pixel / 2.0);

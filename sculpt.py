@@ -148,6 +148,9 @@ KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # dither's strength on the lit bed as a share of the water's (1: as before; the dither is white
 # noise that hides the bumps' clumps).
 KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6, shoalDither=1)
+# G1: shoalRag is how far (px) pixel notches move the shallow-to-deep step, independent of the
+# bed's slope (0: the step's earlier jitter, which a gentle shelf scales to nothing).
+KNOB_DEFAULTS.update(shoalRag=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -210,7 +213,9 @@ WORLD_KNOBS = {
                   # mottle's clouds and the palette dither's white noise went; lit bumps of 5 px take
                   # their place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
-                  bedMottle=0, shoalBump=1.8, shoalBumpPx=5, shoalDither=0),
+                  bedMottle=0, shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
+                  # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
+                  shoalRag=5),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
@@ -234,7 +239,11 @@ WORLD_KNOBS = {
                 stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6,
                 crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15,
                 # G1: lit bumps of 8 px replace the mottle's clouds, and no palette dither (see Green).
-                bedMottle=0, shoalBump=2, shoalBumpPx=8, shoalDither=0),
+                bedMottle=0, shoalBump=2, shoalBumpPx=8, shoalDither=0,
+                # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is
+                # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
+                # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
+                shoalRag=9),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
@@ -272,7 +281,9 @@ WORLD_KNOBS = {
                         # G1: the reef bars' dark pits come from lit bumps of 4-5 px with a lighter mottle
                         # and a few dots, and no palette dither (retail's bar luma s.d. after a 3-px blur
                         # 8.4; see Green).
-                        bedMottle=.05, bedDots=.2, bedDotCell=9, shoalBump=3, shoalBumpPx=4.5, shoalDither=0),
+                        bedMottle=.05, bedDots=.2, bedDotCell=9, shoalBump=3, shoalBumpPx=4.5, shoalDither=0,
+                        # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
+                        shoalRag=4),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient

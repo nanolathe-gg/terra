@@ -326,6 +326,7 @@ struct Uniforms {
     shoalBump: f32,       // the shallow bed's lit bumps: slope of the lumps the sun lights (0: none, as before)
     shoalBumpPx: f32,     // size of those lumps, screen px
     shoalDither: f32,     // the palette dither's strength on the lit shallow bed, as a share of the water's own (1: as before)
+    shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
