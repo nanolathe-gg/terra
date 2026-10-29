@@ -198,7 +198,7 @@ WORLD_KNOBS = {
                   gullyDepth=8, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=1.2, ribTilt=.2,
                   bedFlow=0, bedBend=1, bedPunch=1,
                   scratchDepth=2.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
-                  facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,
+                  facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
