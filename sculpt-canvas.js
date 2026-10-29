@@ -21,7 +21,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
   const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
   let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(128,128),cg=coarse.getContext('2d');
   const panel=document.createElement('section'); panel.className='section files';
@@ -77,9 +77,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return {...request,...r,fields:r.fields,material:r.materialField??r.material,gridOrigin:r.gridOrigin,gridSpacing:r.gridSpacing,gridWidth:r.gridWidth,gridHeight:r.gridHeight,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
   }
   function chunkSize() { return canonicalSize; }
-  async function bake(rect,exportArt=false,signal) {
+  async function bake(rect,exportArt=false,signal,stale=null) {
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
-    const fields=await region(request,options,signal),required=renderer.requiredRegion(request,options),estimate=renderer.estimate({...required,gridWidth:fields.gridWidth,gridHeight:fields.gridHeight},rect.width,rect.height,fields.maskPlanes?.length??api.maskKeys.length);
+    const fields=await region(request,options,signal);
+    // H7 2b: the scene changed while this bake waited for its fields; its image would be dropped, so it never reaches the GPU.
+    if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
+    const required=renderer.requiredRegion(request,options),estimate=renderer.estimate({...required,gridWidth:fields.gridWidth,gridHeight:fields.gridHeight},rect.width,rect.height,fields.maskPlanes?.length??api.maskKeys.length);
     checkHeap(fields,estimate.cpuPeakBytes);
     const copyBytes=rect.width*rect.height*8;trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
     renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
@@ -144,6 +147,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     try {
       const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
       drawCoarse();overlays();
+      // H7 2b: while the Time pass is running, a bake would read the unweathered height and be redone when the weather lands.
+      // The pass is submitted first (it starts with the edit) and chunks wait for it, for at most 8 s so a failed pass cannot hide the map.
+      const weatherPending=api.canExport&&!api.canExport()&&!gesture&&!features?.busy;
+      if(weatherPending){heldSince??=performance.now();}else heldSince=null;
+      const holding=weatherPending&&performance.now()-heldSince<8000;
+      if(holding)setTimeout(schedule,100);
       if(!overview&&!busy){
         const size=chunkSize(),v=state(),jobs=[],token=epoch,viewToken=viewEpoch;
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
@@ -153,7 +162,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         for(const rect of jobs){
           if(token!==epoch||viewToken!==viewEpoch||busy)break;
           const key=rect.x+','+rect.y+','+size;let e=cache.get(key);
-          if(!e){e=await bake(rect);if(token!==epoch){e.bitmap.close?.();break;}cache.set(key,e);cacheBytes+=e.bytes;}
+          if(!e&&holding)continue;
+          if(!e){e=await bake(rect,false,undefined,()=>token!==epoch||false);if(token!==epoch){e.bitmap.close?.();break;}cache.set(key,e);cacheBytes+=e.bytes;}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{});checkHeap(input);e.heightPatch=keepHeight(input);}}
           if(token!==epoch||cache.get(key)!==e)break;
           if(viewToken!==viewEpoch){rerun=true;break;}
