@@ -849,6 +849,14 @@ export class TerrainRenderer {
     this.f('uIceFall', variant.has('iceFall') ? Number(variant.get('iceFall')) : 0);
     this.f('uIceApron', variant.has('iceApron') ? Number(variant.get('iceApron')) : 0);
     this.f('uIceFrost', variant.has('iceFrost') ? Number(variant.get('iceFrost')) : 0);
+    // G1: shallow water round 3; every default is the earlier look.
+    this.f('uShoalBump', variant.has('shoalBump') ? Number(variant.get('shoalBump')) : 0);
+    this.f('uShoalBumpPx', variant.has('shoalBumpPx') ? Number(variant.get('shoalBumpPx')) : 6);
+    this.f('uShoalDither', variant.has('shoalDither') ? Number(variant.get('shoalDither')) : 1);
+    this.f('uShoalRag', variant.has('shoalRag') ? Number(variant.get('shoalRag')) : 0);
+    this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
+    this.f('uShoalGrain', variant.has('shoalGrain') ? Number(variant.get('shoalGrain')) : 0);
+    this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
     this.fieldsDirty = true;
   }
 

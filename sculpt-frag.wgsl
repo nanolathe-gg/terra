@@ -721,9 +721,20 @@ fn shelfNoise(q: vec2f) -> f32 {
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
 // noise (shelfWander units over shelfScale px), so the band's outline and width
 // vary along the shore instead of following it at a fixed offset.
-fn sharpDeepStep(p: vec2f, pixel: vec2f, depth: f32, cracked: bool) -> f32 {
+fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
     var at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
     if (cracked && u.crackedStep > 0.0) { at = u.crackedStep; }
+    var depth = depthIn;
+    if (u.shoalRag > 0.0) {
+        // G1: the outline is notched in pixels, not in depth. Retail's step is a ragged line with notches of 2-8 px
+        // and fingers, also across a gentle shelf, where the depth jitter below is the bed's gradient times
+        // nothing. The depth is read where a displaced point sits: 2-px blocks (the stairs) and a 6-px noise
+        // (the notches' own run), each up to shoalRag px.
+        let blk = floor(pixel / 2.0);
+        let stairs = vec2f(shelfHash(blk + 3.7), shelfHash(blk + 19.1)) - 0.5;
+        let notch = vec2f(shelfNoise(p / 6.0 + 3.0), shelfNoise(p / 6.0 + 41.0)) - 0.5;
+        depth = depth + baseHeight(p) - baseHeight(p + (stairs * 0.8 + notch * 1.6) * u.shoalRag);
+    }
     let grad = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
                                   baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
     let block = floor(pixel / 2.0);
@@ -862,6 +873,24 @@ fn bedDotField(pixel: vec2f) -> f32 {
     let radius = 1.5 + 1.0 * shelfHash(c + 47.3);
     let present = step(0.3, shelfHash(c + 11.9));
     return present * (1.0 - smoothstep(radius - 0.6, radius + 0.4, length(pixel - centre)));
+}
+
+// G1: the shallow bed's lit bumps. Retail's shallows read as lit, bumpy ground under a tint: lumps
+// with a bright side toward the sun and a shaded side away from it, not noise. The bumps are a
+// height field of three octaves (about 5, 9 and 17 px at shoalBumpPx 6, weighted so each octave
+// gives about the same slope), lit like the ground by the same sun, and returned as the light
+// they change against level ground (1 on a flat). Positions are the world position only.
+fn shoalHeight(p: vec2f) -> f32 {
+    let z = max(u.shoalBumpPx, 2.0) / 6.0;
+    return shelfNoise(p / (5.0 * z) + 11.0) * 0.5 + shelfNoise(p / (9.0 * z) + 47.0) * 0.8 + shelfNoise(p / (17.0 * z) + 83.0) * 1.4;
+}
+fn shoalBumpLight(p: vec2f) -> f32 {
+    const e = 1.0;
+    let slope = u.shoalBump * 0.5 / e * vec2f(shoalHeight(p + vec2f(e, 0.0)) - shoalHeight(p - vec2f(e, 0.0)),
+                                              shoalHeight(p + vec2f(0.0, e)) - shoalHeight(p - vec2f(0.0, e)));
+    let normal = normalize(vec3f(-slope, 1.0));
+    let flatLight = u.ambient + 0.95 * u.light.z;
+    return min((u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight, u.lightCap);
 }
 
 // Shallow water as the bed under it (card E1): the ground colour already lit at
@@ -1703,6 +1732,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     if (u.flowOn != 0 && h > u.sea - 1.0) { color = flowBank(color, p); }
+    var shoalWeight = 0.0;   // G1: how much of this pixel is lit shallow bed, for the palette dither below
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
         // Sediment mottling varies apparent water colour without changing the
@@ -1727,13 +1757,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The plane is bilinear, so a half threshold keeps a stroke's footprint
         // to within a pixel of where it was painted.
         var shoreHard = u.crispShore;
+        var shoreOwn = true;   // G1: the stroke leaves the shore edge to the world's own
         var edgeHard = u.deepEdge;
         var bedLit = u.bedLit;
         var crackedBed = false;
         if (u.waterOn != 0) {
             crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5;
             let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).gba;
-            if (pick.x > 0.5) { shoreHard = 1.0; } else if (pick.x < -0.5) { shoreHard = 0.0; }
+            if (pick.x > 0.5) { shoreHard = 1.0; shoreOwn = false; } else if (pick.x < -0.5) { shoreHard = 0.0; shoreOwn = false; }
             if (pick.y > 0.5) { edgeHard = 1.0; } else if (pick.y < -0.5) { edgeHard = 0.0; }
             if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
         }
@@ -1762,6 +1793,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
             }
             if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
+            // The bumps' light moves red and green more than blue, so a shaded lump goes toward deep blue
+            // and a lit one toward pale blue, where a plain multiply lands between the palette's blues (teal).
+            // Only hard-step water takes them, as the mottle: Archipelago's lakes and channels stay smooth, as retail's.
+            if (u.shoalBump > 0.0 && bedLit > 0.0 && edgeHard > 0.0) { shallow *= 1.0 + (shoalBumpLight(p) - 1.0) * vec3f(1.0, 1.0, 0.4) * bedLit; }
+            // G1: retail's lilac lake keeps salmon and pink pixels of the ground under it; the tint alone replaces them.
+            if (u.shoalGrain > 0.0 && bedLit > 0.0) { shallow += u.shoalGrain * (levelGround - groundBased(u.groundTexMean)) * bedShade * bedLit; }
             if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
             if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed && edgeHard > 0.0) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);
@@ -1778,12 +1815,30 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // far from shore; there is no fixed-width coastal blue collar.
         if (u.flowOn != 0) { water = flowWater(water, p, deep); }
         var submerged = smoothstep(-0.2, 2.8, depth);
+        shoalWeight = (1.0 - deep) * submerged * bedLit * select(0.0, 1.0, edgeHard > 0.0);
         if (shoreHard > 0.0) {
             // Retail waterlines are hard edges with small stair-step notches,
             // not soft fades: threshold depth against pixel-block jitter.
             let block = floor(pixel / 2.0);
             let jitter = fract(sin(dot(block, vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
-            let crisp = step(0.6 + jitter * 1.4, depth);
+            var crisp = step(0.6 + jitter * 1.4, depth);
+            if (u.shoalStairs > 0.0) {
+                // G1: retail's waterline steps in runs of 1-3 px on any bank. The earlier jitter is in depth, so
+                // a steep bank is cut straight and a gentle one in 6-px notches; here the depth is read where a
+                // point displaced by smooth noise of 3 and 7 px sits, up to shoalStairs px (smooth, so the cut
+                // leaves runs and no isolated pixels, which per-pixel hashes did).
+                let off = ((vec2f(shelfNoise(p / 3.0 + 5.3), shelfNoise(p / 3.0 + 37.9)) - 0.5) * 1.0 + (vec2f(shelfNoise(p / 7.0 + 9.1), shelfNoise(p / 7.0 + 77.3)) - 0.5) * 1.6) * u.shoalStairs;
+                crisp = step(0.6, depth + baseHeight(p) - baseHeight(p + off));
+            }
+            if (u.shoalShoreSoft > 0.0 && shoreOwn) {
+                // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
+                // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
+                // banks) and each pixel is cut against its own hash.
+                let gradS = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
+                                               baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
+                let cover = clamp((depth - 0.6) / (max(gradS, 0.15) * u.shoalShoreSoft) + 0.5, 0.0, 1.0);
+                crisp = step(shelfHash(floor(pixel) + 71.0), cover);
+            }
             submerged = mix(submerged, crisp, shoreHard);
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
@@ -1828,7 +1883,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let fc = floor(fragCoord);
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
-        let ditherStrength = select(u.dither * u.landDither, u.dither, h < u.sea + 1.0);
+        let ditherStrength = select(u.dither * u.landDither, u.dither * mix(1.0, u.shoalDither, shoalWeight), h < u.sea + 1.0);
         // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
         // local checkerboards, which read as one colour; a noise threshold
         // clumped them into speckles.
