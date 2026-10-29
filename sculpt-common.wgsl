@@ -322,6 +322,14 @@ struct Uniforms {
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
     iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
+    // G2 (rock faces follow the slope). Every default is the earlier look.
+    cliffFollow: f32,     // beds follow the contours and joints, gullies, scratches and facets the fall line of the ground round them (0: fixed screen directions, as before)
+    cliffReach: f32,      // radius of the height smoothing that gives the local fall line, world px
+    cliffWide: f32,       // radius of the larger smoothing that gives it where the ground under the rock is level, world px
+    cliffFlat: f32,       // slope (height per px) at the wide scale under which the beds and joints fade into plain broken rock
+    cliffRise: f32,       // height of a bed's riser, height units, when beds are spaced in px (0: the bed's own height, as before)
+    cliffBed: f32,        // how far the beds follow the smoothed ground (cliffReach) instead of the grid's own bumps (0: the grid's heights; 1: the smoothed ones)
+    cliffDomain: f32,     // size of the patches that each keep their own lattice of joints, gullies and facets, world px
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

@@ -933,6 +933,14 @@ export class TerrainRenderer {
     set('uFacetSeam', number('facetSeam', 0));
     set('uFacetSkew', number('facetSkew', 1));
     set('uFacetCoarse', number('facetCoarse', 0));
+    // G2 (rock faces follow the slope).
+    set('uCliffFollow', number('cliffFollow', 0));
+    set('uCliffReach', number('cliffReach', 20));
+    set('uCliffWide', number('cliffWide', 56));
+    set('uCliffFlat', number('cliffFlat', .04));
+    set('uCliffRise', number('cliffRise', 0));
+    set('uCliffBed', number('cliffBed', .5));
+    set('uCliffDomain', number('cliffDomain', 90));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});

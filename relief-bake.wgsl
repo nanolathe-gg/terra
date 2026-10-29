@@ -450,13 +450,14 @@ fn jointField(p: vec2f) -> vec2f {
 // at its foot (bedLip). Returns the height offset and the lip's rock cover
 // (0..1): a lip is a convex ridge, which the face material would take for
 // moss on a lump top.
-fn bedRelief(p: vec2f, h: f32, shift: f32) -> vec2f {
+fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let tilt = u.bedDip * dot(p, dip);
     // How fast the bed coordinate changes along the ground: beds are that many
     // px apart per unit of spacing in px mode.
-    let G = max(length(broadGradient(p) + u.bedDip * dip), 0.15);
+    // G2: cliffFollow passes the smoothed slope instead (gOver >= 0), so beds keep their px spacing without the grid's noise.
+    let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
     let S = max(u.bedSpacing, 2.0) * pow(G, 1.0 - u.bedHeight);
     let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
     let L = (h + tilt + wander) / S + shift;
@@ -471,7 +472,8 @@ fn bedRelief(p: vec2f, h: f32, shift: f32) -> vec2f {
     let bedPx = thick * S / G;
     let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
     let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
-    var off = step_ * thick * S * u.bedLedge;
+    // G2: cliffRise gives the riser a height of its own; spaced in px the bed's height unit follows the slope and fine beds on a gentle face would carry no relief (0: the bed's own height).
+    var off = step_ * thick * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;
     // The lip on the riser's top edge and the notch at its foot.
     let dTop = (1.0 - f) * bedPx;
     let dFoot = (f - (1.0 - riser)) * bedPx;
@@ -482,7 +484,7 @@ fn bedRelief(p: vec2f, h: f32, shift: f32) -> vec2f {
     let punch = mix(1.0, 0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y, u.bedPunch);
     off *= punch;
     off += punch * u.bedLip * (lip - 0.8 * notch);
-    return vec2f(off, lip);
+    return vec3f(off, lip, k);
 }
 
 // Rock face form (card E9). Retail's big green faces are carved: broad gullies
@@ -604,6 +606,77 @@ fn facetField(p: vec2f) -> vec2f {
     var f = facetLevel(p, F, u.facetStretch, u.facetTilt, u.facetStep, 0.0);
     if (u.facetCoarse > 0.0) { f.x += facetLevel(p + vec2f(31.0, 17.0), F * 2.4, u.facetStretch, u.facetTilt * u.facetCoarse, u.facetStep * u.facetCoarse, 133.0).x; }
     return f;
+}
+
+// Rock structure that follows the ground (card G2). Retail's strata lie along the contours of the
+// hill they are cut in and its joints run down the fall line, so on a face turned east the beds
+// are vertical on the screen and the joints run across it. The fixed screen directions above
+// (bedDip, jointAngle, gullyAngle, scratchAngle) are the earlier look; with cliffFollow 1 the
+// ground gives the directions instead, from heights smoothed at two scales, so the direction
+// does not shiver with the grid's own roughness. Where the smoothed slope is small even at the
+// wide scale (painted rock on level ground) there is no fall line to follow, and the structure
+// fades away (cliffFlat) into the plain broken rock the scatter makes.
+struct CliffFrame { up: vec2f, grade: f32, local: f32, wideMean: f32, midMean: f32, gradient: f32 }
+
+// The slope of the ground averaged on a ring of radius r (the first moment of eight taps, exact
+// for a plane), and the ring's mean height. Only baseHeight is read, so the chunk path has it.
+fn cliffRing(p: vec2f, r: f32) -> vec3f {
+    var g = vec2f(0.0);
+    var m = 0.0;
+    for (var i = 0; i < 8; i++) {
+        let a = f32(i) * 0.78539816;
+        let d = vec2f(cos(a), sin(a));
+        let hh = baseHeight(p + d * r);
+        g += d * hh;
+        m += hh;
+    }
+    return vec3f(g * (0.25 / r), m * 0.125);
+}
+fn cliffFrame(p: vec2f) -> CliffFrame {
+    let mid = cliffRing(p, max(u.cliffReach, 4.0));
+    let wide = cliffRing(p, max(u.cliffWide, u.cliffReach * 1.5));
+    // The local fall line decides where the ground slopes; the wide one takes over where it does not.
+    let local = smoothstep(0.02, 0.10, length(mid.xy));
+    let v = mix(wide.xy, mid.xy, local);
+    let s = length(v);
+    var fr: CliffFrame;
+    fr.up = select(vec2f(0.0, -1.0), v / max(s, 1e-6), s > 1e-4);
+    fr.gradient = s;
+    fr.local = local;
+    fr.wideMean = wide.z;
+    fr.midMean = mid.z;
+    fr.grade = select(1.0, smoothstep(u.cliffFlat, 2.5 * u.cliffFlat, s), u.cliffFlat > 0.0);
+    return fr;
+}
+// World position p in the frame's own coordinates: x along the contour, y down the fall line,
+// measured from the seed of the patch p lies in (a jittered lattice cut by a warp, so the patch
+// borders are ragged). The orientation is the ground's at the patch's seed, one for the whole
+// patch: it must not vary inside it, because a coordinate x = dot(p - seed, direction(p)) shears
+// with every degree the direction turns over its distance from the seed, and the grid's own
+// roughness turns it tens of degrees over a few px. So each patch has straight, parallel joints
+// along its seed's fall line, and neighbours differ by how far the ground turned between seeds,
+// as a real face is broken into blocks. The seed's hash offsets the pattern so patches differ.
+fn cliffLocal(p: vec2f) -> vec2f {
+    let D = max(u.cliffDomain, 24.0);
+    let pw = p + 0.2 * D * vec2f(valueNoise(p / (D * 1.1) + 7.7), valueNoise(p / (D * 1.1) + 17.3));
+    let q = pw / D;
+    let g = floor(q);
+    var best = 1e9;
+    var seed = g;
+    var id = g;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let c = g + vec2f(f32(i), f32(j));
+            let pt = c + 0.2 + 0.6 * cellHash(c + 3.3);
+            let d = pt - q;
+            let dd = dot(d, d);
+            if (dd < best) { best = dd; seed = pt; id = c; }
+        }
+    }
+    let rel = (q - seed) * D;
+    let up = cliffFrame(seed * D).up;
+    let contour = vec2f(-up.y, up.x);
+    return vec2f(dot(rel, contour), dot(rel, -up)) + (cellHash(id + 9.9) - 0.5) * 600.0;
 }
 
 // Beach: dry ground within reach of the water, as the world's coast
@@ -872,6 +945,18 @@ fn bake(p: vec2f) -> vec4f {
              * smoothstep(-12.0, 10.0, h) * (1.0 - route);
     var fall = vec2f(0.0, 1.0);
     if (slope > 1e-5) { fall = g / slope; } else { fall = paintFall; }
+    // G2: the ground round the rock gives its direction. Where the ground is level under painted rock
+    // there is no fall line of its own, so the wide one (heights smoothed over cliffWide px) stands in,
+    // not the noise paintFall draws; the local one takes over from slope .03 to .12.
+    var cliff = CliffFrame(vec2f(0.0, -1.0), 1.0, 1.0, h, h, 1.0);
+    var cliffOn = false;
+    if (u.cliffFollow > 0.0 && u.rockOrder > 0.0 && u.cracksOn != 0 && h > u.sea + 1.0 && (paintRock > 0.0 || slope > u.rockFrom)) {
+        cliff = cliffFrame(p);
+        cliffOn = true;
+        let own = smoothstep(0.03, 0.12, slope);
+        let a = select(cliff.up, -cliff.up, dot(cliff.up, fall) < 0.0);
+        fall = normalize(mix(a, fall, own) + vec2f(1e-5));
+    }
 
     var acc = vec3f(0.0);
     var amplitude = 1.0;
@@ -989,6 +1074,9 @@ fn bake(p: vec2f) -> vec4f {
         // Beds and joints are for faces: steep ground (full from slope
         // rockFrom + 0.5) and painted rock, which counts as a face whatever the slope.
         steep = max(smoothstep(u.rockFrom, u.rockFrom + 0.5, slope), paintRock);
+        // G2: where the ground is level all round there is nothing to run beds or joints along:
+        // the structure gives way to the scatter (plain broken rock) as the wide slope falls.
+        if (cliffOn) { order *= mix(1.0, cliff.grade, u.cliffFollow); }
         height *= 1.0 - 0.85 * order * steep;
         crackAt.w *= 1.0 - 0.85 * order * steep;
         crackAt.x *= 1.0 - 0.5 * order * steep;
@@ -996,22 +1084,35 @@ fn bake(p: vec2f) -> vec4f {
     }
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
     if (order > 0.0) {
-        var joint = jointField(p);
+        // G2: the frame's own coordinates when the ground gives the directions (x along the contour, y
+        // down the fall line, from the patch's seed); the fixed screen ones otherwise.
+        var pf = p;
+        var bedG = -1.0;
+        var bedH = h;
+        if (cliffOn) {
+            pf = cliffLocal(p);
+            // Beds are the contours of the ground; of the heights smoothed wide where it is level, so painted rock
+            // on a plain takes the rings of the hill beside it.
+            bedH = mix(cliff.wideMean, mix(h, cliff.midMean, u.cliffBed), cliff.local);
+            // The px spacing keeps the grid's own slope where it is steep and cliffBed is 0 (as before), the smoothed one otherwise.
+            bedG = mix(cliff.gradient, slope, cliff.local * (1.0 - u.cliffBed));
+        }
+        var joint = jointField(pf);
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
         // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
         // The form fades out over the face's foot, so no gully reaches the water plane.
         var carved = vec2f(0.0);
-        if (u.gullyDepth > 0.0 || u.ribTilt > 0.0) { carved = gullyField(p) * smoothstep(u.base + 2.0, u.base + 16.0, h); }
+        if (u.gullyDepth > 0.0 || u.ribTilt > 0.0) { carved = gullyField(pf) * smoothstep(u.base + 2.0, u.base + 16.0, h); }
         joint.y *= u.bedFlow;
-        let bed = bedRelief(p, h + carved.x * u.bedBend, joint.y);
+        let bed = bedRelief(p, bedH + carved.x * u.bedBend, joint.y, bedG);
         height += order * steep * (bed.x + joint.x);
         // The form eases in over the painted edge (a smoothstep of the cover, not the cover itself), so the rim stays smooth.
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
-        if (u.scratchDepth > 0.0) { height += gate * scratchField(p); }
+        if (u.scratchDepth > 0.0) { height += gate * scratchField(pf); }
         if (u.facetTilt > 0.0) {
-            let facet = facetField(p);
+            let facet = facetField(pf);
             height += gate * facet.x;
             facetSeam = gate * facet.y;
         }

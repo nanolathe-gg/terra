@@ -145,6 +145,11 @@ KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
+# G2 (rock faces follow the slope): 0 keeps the fixed screen directions of every world; 1 runs beds along the
+# contours of the ground and joints, gullies, scratches and facets down its fall line. The reaches are the
+# height smoothing radii (px) of the local and of the wide fall line, cliffFlat the wide slope under which
+# the structure fades into plain broken rock, cliffDomain the patch size of the joint lattice.
+KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffDomain=90)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -166,8 +171,8 @@ WORLD_KNOBS = {
                   # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
-                  rockOrder=1, rockFrom=1.6, bedSpacing=28, bedHeight=1, bedDip=2, bedDipDir=270, bedVary=.9,
-                  bedLip=1.8, bedLedge=.6, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
+                  rockOrder=1, rockFrom=1.6, bedSpacing=6.5, bedHeight=1, bedDip=0, bedVary=.9,
+                  bedLip=2.2, bedLedge=.6, jointAngle=-20, jointSpacing=48, jointDepth=4.5, jointRun=200, jointGaps=.35,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -191,7 +196,7 @@ WORLD_KNOBS = {
                   # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
                   faceRock=1, rockMoss=.15, rockDetail=.5,
                   gullyDepth=14, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=2, ribTilt=.35,
-                  bedFlow=0, bedBend=2.5, bedPunch=1,
+                  bedFlow=0, bedBend=1, bedPunch=1,
                   scratchDepth=3.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
                   facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,
                   shineRock=.5, shineRockSharp=14, shineRockRough=.12, shineRockScale=5, shineWhite=1, shineOutside=.3,
@@ -200,7 +205,14 @@ WORLD_KNOBS = {
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
                   # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
-                  stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1, bedMottle=.08),
+                  stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1, bedMottle=.08,
+                  # G2: the owner's round 8 note on the rock face: beds and joints follow the hillside they are cut in, not the
+                  # screen. Beds are the contours of the ground (smoothed over 40 px, 30% of the way from the grid's own
+                  # heights), 6.5 height units apart (bedSpacing, was 28 against a tilt of 2 that made rows level on the screen:
+                  # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies, scratches and
+                  # facets run down the fall line. bedDip is 0 now, and bedBend 1 (was 2.5) because a bed is a quarter as
+                  # thick, so the ribs would fold it fourfold.
+                  cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=16),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
@@ -209,6 +221,9 @@ WORLD_KNOBS = {
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
                 jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160, jointGaps=.4,
+                # G2: joints run down the fall line of the ground they are cut in (jointAngle is the lean from it), and painted
+                # rock on level ground fades into plain broken rock. Red has no beds.
+                cliffFollow=1, cliffReach=40,
                 # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
                 # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
                 # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
@@ -276,6 +291,9 @@ WORLD_KNOBS = {
                    # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
                    jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3,
+                   # G2: joints run down the fall line (its beds are height contours already, kept on the grid's own heights
+                   # so the lit ledges stay with the strata colours: cliffBed 0).
+                   cliffFollow=1, cliffReach=40, cliffBed=0,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8).
                    baseVary=36, baseBump=3.5, baseBand=1),
