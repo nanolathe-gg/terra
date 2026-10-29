@@ -99,3 +99,10 @@ old ice-1 scene with `plateMaterial: 0` and its own plate sizes). The berg form 
 Crystals brush (`crystalForm: 2`, with `bergFace`, `bergJitter`, `bergBreak`, `bergRough`,
 `bergTilt`, `bergTiltDir`, `bergFlat` and `crystalAlign`) builds ice-2's bergs and
 ice-3's box; `variant=bergs` gives the bergs their blue ice.
+
+Ice blocks, frost lines and facets (card G6): the Ice world's raised ground is lit by its blurred height and
+snow-capped, its faces carry smooth fibres down the slope and its foot a hatched apron (`iceSoft`, `iceSnow`,
+`iceFall`, `iceApron`; ice-3 is the window; the variants `snow`, `crystal` and `bergs` set them to 0). The frost
+band carries fine blue hairlines (`iceFrost`). Hills and mountains take an optional **Angular facets** share
+(`iceFacets`, 0 off, with `iceFacetSize` px): part of the mountain is tiled into tilted planes fitted to its own
+surface, partly buried, in its own material. `demo/ice-facets.json` is the ice-1 mountain with facets 70, size 44.

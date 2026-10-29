@@ -150,6 +150,12 @@ KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 # E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
+# G6, Ice blocks and mesas (retail ice-3, Polar Range): rounded light, snow on the flat tops, fibres down the faces, a hatched apron (0: none of them).
+KNOB_DEFAULTS.update(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0)
+# G6, Ice frost band: fine hairlines in the band (0: none).
+KNOB_DEFAULTS.update(iceFrost=0)
+# G6, Ice: angular facets on hills and mountains (share of the mountain broken into facets; facet width in px). Off by default everywhere.
+KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # G3 (Archipelago rings): the fringe's lines as offset copies of the hill's outline (ringShift px, 0: the earlier concentric
@@ -474,13 +480,20 @@ WORLD_KNOBS = {
                 # that glints, no cracks, little lumpy relief, the shade kept blue and a lower ambient so
                 # the light and shade read strongly. Earlier look (snow and slate interleaved, cracks):
                 # the Ice variant 'snow'; retail's other type (ice-1) is the variant 'crystal'.
-                iceSlate=1, mineralDetail=.55, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
+                iceSlate=1, mineralDetail=.3, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
                 lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2,
                 shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5,
                 # Card E6, frost band against retail ice-1 (x330-430, 32-132 px inland): luma s.d. 52
                 # against 42 and blue gaps in .22 of the pixels against .05, so finer needles in more
                 # patches and small melt pockets, half again as many.
-                frostNeedles=.8, frostGaps=.3, frostGapReach=.7, frostGapSize=7),
+                frostNeedles=.8, frostGaps=.3, frostGapReach=.7, frostGapSize=7,
+                # Card G6: retail's blocks (ice-3, Polar Range) are soft, snow-capped slate: the light reads the
+                # height blurred over ~13 px so crests are rounded and there are no hard creases, the flat top is
+                # snow, the faces are smooth slate crossed by fine fibres down the slope (rock art contrast .3,
+                # no glint dashes), and dark hatched drifts spill past the foot into the snow.
+                iceSoft=.85, iceSnow=1, iceFall=1, iceApron=1,
+                # Card G6: the frost band's fine lines (retail: crisp dark-blue hairlines 3-5 px apart in parallel runs).
+                iceFrost=.7),
 }
 
 
@@ -520,21 +533,24 @@ WORLD_VARIANTS = {
                       colors=dict(crystal='#8ea6ee', ground='#9db5fa', slope='#a5bef9', rock='#9ab2f4'),
                       # No slope cover, face rock or exposed rock: their dark slate and granite
                       # read as teal specks on a bright berg, where retail's faces are one
-                      # rough blue-white grain (ground pattern contrast 2 gives it).
+                      # rough blue-white grain (ground pattern contrast 2 gave it; card G6 lowered it to 1.3 and the
+                      # relief to .35 / .4: the owner found ice-2 too rough, and its 3x3 high-pass was 17.5 against retail's 11.7, now 13).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0,
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3, microRock=0,
+                                 # Card G6: the world's soft slate block look is not the berg's.
+                                 iceSoft=0, iceSnow=0, iceFall=0, iceApron=0,
                                  # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
-                                 iceSlate=0, mineralDetail=1, reliefAmount=.5, reliefScale=28, reliefLumps=.7, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                 iceSlate=0, mineralDetail=1, reliefAmount=.35, reliefScale=28, reliefLumps=.4, shineWhite=.35, shineStretch=1, shineHeadroom=0,
                                  shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Crystal mountains (card E6, retail ice-1): slate ruled with straight dark strokes in
         # domains, snow-white lumps standing on the raised ground, soft relief, no glint.
         'crystal': dict(label='Crystal mountains: straight strokes',
-                        knobs=dict(iceCrystal=1, iceCrest=.3, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
+                        knobs=dict(iceCrystal=1, iceCrest=.3, iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, mineralDetail=.55, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
         # Snow and slate (the mountains before card E6): white snow cover and dark slate interleaved,
         # carved cracks, no sheen.
         'snow': dict(label='Snow and slate: cracked mountains',
-                     knobs=dict(iceSlate=0, mineralDetail=1, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
+                     knobs=dict(iceSlate=0, mineralDetail=1, iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
                                 lightCap=1.13, ambient=.42, shineWhite=.35, shineStretch=1, shineHeadroom=0,
                                 shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white

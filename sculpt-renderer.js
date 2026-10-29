@@ -843,6 +843,12 @@ export class TerrainRenderer {
     this.f('uRingPatch', variant.has('ringPatch') ? Number(variant.get('ringPatch')) : 0);
     this.f('uRingPatchSize', variant.has('ringPatchSize') ? Number(variant.get('ringPatchSize')) : 120);
     this.f('uRingTone', variant.has('ringTone') ? Number(variant.get('ringTone')) : 0);
+    // G6: Ice blocks and mesas (0: the earlier look exactly).
+    this.f('uIceSoft', variant.has('iceSoft') ? Number(variant.get('iceSoft')) : 0);
+    this.f('uIceSnow', variant.has('iceSnow') ? Number(variant.get('iceSnow')) : 0);
+    this.f('uIceFall', variant.has('iceFall') ? Number(variant.get('iceFall')) : 0);
+    this.f('uIceApron', variant.has('iceApron') ? Number(variant.get('iceApron')) : 0);
+    this.f('uIceFrost', variant.has('iceFrost') ? Number(variant.get('iceFrost')) : 0);
     this.fieldsDirty = true;
   }
 
