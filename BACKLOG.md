@@ -2690,11 +2690,18 @@ never a run-time input and never go in git.
   `$R/assets-green/`. A Python preparation made them from retail art; its
   sources are gone, and every server runs `--prepared`.
   - Retail-derived: `grass.png`, `rock.png`, `slope-grass.png`,
-    `slope-rock.png` (`hillRock`), `rock-weathered.png`, `rock-fractured.png`,
-    `ground-tiles.png` (exact palette tiles cut from retail's plain), and the
-    water images.
-  - Probably ours (generated): `noise*.png` and `fractures.png`. Confirm
-    this in the inventory.
+    `slope-rock.png` (`hillRock`), `rock-weathered.png`, `rock-fractured.png`
+    and the water images.
+  - Ours (generated): `noise*.png`, `fractures.png` and `ground-tiles.png`.
+    - `ground-tiles.png` holds 16 procedural 32×32 tiles that `ground_tiles.py`
+      sampled from retail's neighbour statistics of palette indices, in an
+      18-entry vocabulary, copying no retail pixel.
+    - `groundTile()` scatters them one per 32-px cell by hash, so the plain
+      reuses tiles as retail does.
+    - Commit the tiles as numbers (palette indices); do not replace them.
+      (Corrected on 2026-10-29: this card first called them cut from
+      retail, and round 1 replaced them with per-pixel noise, which made
+      every exported tile unique.)
   - `palette-pairs.png` is built from the TA palette.
   - `config.json`'s `material` block holds measured numbers, such as
     `rockMeanRGB` and `hillRockMeanRGB`.
