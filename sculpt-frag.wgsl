@@ -453,7 +453,7 @@ fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: 
     let seam = 1.0 - smoothstep(0.3, 1.2, c.edge);
     let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * c.lean;
     let w = u.crystalShallow * submerged * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
-    return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * 0.55 * seam);
+    return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * u.crystalShallowInk * seam);
 }
 
 // A crater's skin is the crystal field's exact value .74 (sculpt.js CRATER_SKIN). A column mound's seam ramps cross that value

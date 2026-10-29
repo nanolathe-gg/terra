@@ -105,7 +105,7 @@ KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFa
 KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
-KNOB_DEFAULTS.update(crystalShoreScale=1, crystalShoreSeam=.5, crystalSeamEnd=.74)
+KNOB_DEFAULTS.update(crystalShoreScale=1, crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
 # E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
 KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
@@ -402,7 +402,7 @@ WORLD_KNOBS = {
                     craterFacets=1,
                     # E7: shallow water carries a mosaic of small crystal cells; the shore slabs
                     # shrink from 20 to 14 px (retail's band is a fine mesh, plates 12-80 px).
-                    crystalShallow=1, crystalShallowPx=10,
+                    crystalShallow=1, crystalShallowPx=8,
                     # G7: craters read as holes under a thin wandering web (retail crystal-1: smooth lit and
                     # shaded walls, cells 12-20 px, hairline to 2 px lines, many left out): small facets with a
                     # 1-unit step, one skin mark, the web drawn by the shader, and the sun's light and shade
@@ -412,7 +412,9 @@ WORLD_KNOBS = {
                     crystalCraterTone=.12, crystalCraterLight=1.6,
                     # G7: finer shore slabs and thinner seams (retail's crystal-3 band: cells 8-14 px, hairline
                     # seams; the scenes ask for 14 and 24 px plates, which the scale draws at 70%).
-                    crystalShoreScale=.7, crystalShoreSeam=.56, crystalSeamEnd=.68),
+                    crystalShoreScale=.7, crystalShoreSeam=.56, crystalSeamEnd=.68,
+                    # G7: the shallow mosaic's cells 8 px (were 10) under fainter seams (.45, were .55).
+                    crystalShallowInk=.45),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,
