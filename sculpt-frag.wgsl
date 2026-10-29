@@ -394,6 +394,28 @@ fn moonRibs(pixel: vec2f) -> vec2f {
     return ga + gb;
 }
 
+// G8 (Moon): the folds of lit slopes. Retail's gentle and moderate slopes, and the top of a dome, are
+// crossed by thin, slightly dark lines, 1 px wide, that follow the form: bundles of three to six, four to
+// six px apart, wandering a few px from side to side and breaking off, nested round a hill like contours
+// and nothing like a straight scratch. They are contours of the sculpted height (so they follow the form
+// by construction), warped by two scales of noise so they wander, in two bundles of different spacing so
+// they are not a regular set, present in patches about 40 px across, and no wider than a pixel whatever
+// the slope (the distance to the line is taken in px from the slope). Returns 0..1.
+fn moonFolds(p: vec2f, base: f32, slope: f32, spacing: f32) -> f32 {
+    let wander = 0.8 * wrinkleNoise(p / 26.0 + 13.0) + 0.5 * wrinkleNoise(p / 7.0 + 71.0) + 0.1 * wrinkleNoise(p / 3.0 + 5.0);
+    var line = 0.0;
+    for (var bundle = 0; bundle < 2; bundle++) {
+        let gap = select(spacing, spacing * 1.9, bundle == 1);
+        let t = base / gap + wander * select(1.0, 0.6, bundle == 1) + select(0.0, 0.37, bundle == 1);
+        let nearest = 0.5 - abs(fract(t) - 0.5);
+        let px = nearest / (slope / gap + 0.04);
+        line = max(line, (1.0 - smoothstep(0.35, 1.0, px)) * select(1.0, 0.7, bundle == 1));
+    }
+    // Lines break off: a second, finer patch noise opens gaps along them.
+    let present = smoothstep(-0.6, -0.1, wrinkleNoise(p / 40.0 + 301.0)) * smoothstep(-0.7, -0.2, wrinkleNoise(p / 9.0 + 211.0));
+    return line * present * smoothstep(0.025, 0.09, slope) * (1.0 - smoothstep(0.35, 0.6, slope));
+}
+
 // Ice crystal mountains (card E6). Retail's second ice mountain (ice-1) is slate
 // ruled with straight dark strokes, 1-2 px wide and 8-40 px long, spaced 3-6 px, in
 // domains ~36 px across that each keep one of three directions (two steep, one
@@ -1452,6 +1474,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, shaded));
         color *= 1.0 - pits * landform * mix(0.5, 0.92, shaded);
     }
+    if (u.moonFolds > 0.0 && h > u.sea + 1.0) {
+        // G8 (Moon): thin dark folds across the lit and moderate slopes.
+        color *= 1.0 - 0.34 * u.moonFolds * moonFolds(p, baseHeight(p), slope, u.moonFoldSpacing);
+    }
     if (u.moonRibs > 0.0 && h > u.sea + 1.0) {
         // G8 (Moon): the shaded flank's strokes, on steep ground of every facing, more where turned from the sun.
         let turnedRib = 1.0 - clamp(shading, 0.0, 1.0);
@@ -1471,7 +1497,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let turned = 1.0 - clamp(shading, 0.0, 1.0);
         let steep = smoothstep(0.08, 0.40, slope);
         let clump = 0.6 + 0.8 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
-        let keep = min(u.moonCups * mix(0.12, 1.0, smoothstep(0.1, 0.55, turned)) * steep * clump * landform, 1.0);
+        let keep = min(u.moonCups * mix(0.04, 1.0, smoothstep(0.1, 0.55, turned)) * steep * clump * landform, 1.0);
         if (keep > 0.0) {
             let cups = moonCups(pixel, u.moonCupSize, keep, u.moonCupDepth);
             let seen = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));

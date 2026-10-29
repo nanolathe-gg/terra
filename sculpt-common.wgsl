@@ -325,6 +325,8 @@ struct Uniforms {
     moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)
     moonRibDepth: f32,    // stroke steepness: the gradient the strokes add (1: about 0.8 at their steepest)
     moonRibDark: f32,     // how much darker the strokes' mean is on faces turned from the sun (0: the face's own shade)
+    moonFolds: f32,       // thin dark lines that follow the form across lit and moderate slopes (0: none)
+    moonFoldSpacing: f32, // height units between the folds' first set of contours
     // E6 (Ice mountains).
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
