@@ -404,6 +404,18 @@ struct Uniforms {
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
     blockChip: f32,       // px an edge wanders, chipping the block outline (hard beds 0.4 of it)
     blockGrit: f32,       // per-pixel height grit on blocks, height units
+    weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
+    // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
+    terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet
+    terraceCalm: f32,     // 0..1: terrace lines faded on gentle slopes (the small dashes retail does not have)
+    wetSwath: f32,        // darkness of the soft swaths water leaves on grass along its flow
+    outcrop: f32,         // grey rock shown where wear has bared steep grass
+    // (the fall-line cracks in outcrops, moss by wetness and the grey specks are fixed at retail's rates, ROCK_CRACK and SPECKS in engine-bake and the wetness term in engine-frag: H5 found their controls under 5% of any class)
+    // H5 item 3b, beyond retail (0: off for Green).
+    rillDepth: f32,       // height units a rill is cut, along the flow
+    rillSpacing: f32,     // px between rills
+    stoneDensity: f32,    // stones and boulders where talus lies
+    stoneSize: f32,       // px: the largest stone (larger below hard beds)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
@@ -555,11 +567,35 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
 
 #ifdef CHUNK
 fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 0, 0.0); }
+fn timeMap2(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.0); } return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 2, 0.0); }
+fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0.5, 0.0, 0.0); } return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 3, 0.0); }
 fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 1, 0.0); }
 #else
 fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 0, 0.0); }
+fn timeMap2(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.0); } return textureSampleLevel(gridTex, linearClamp, uv, 2, 0.0); }
+fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0.5, 0.0, 0.0); } return textureSampleLevel(gridTex, linearClamp, uv, 3, 0.0); }
 fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 1, 0.0); }
 #endif
+
+// H5 override plane 17's deposits multiplier (planes 14-17: erosion, deposits, vegetation, exposure) at p: scales sand, stones and talus. 1 where nothing overrides.
+fn depositsAt(p: vec2f) -> f32 {
+    if (u.overrideOn == 0) { return 1.0; }
+    return max(0.0, 1.0 + textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).w);
+}
+// H5: the Time pass's maps at world point p. layer 2: wear, wetness, hardness, slope; layer 3: fall line (-1..1), channel, ridge.
+struct TimeMaps { wear: f32, wet: f32, hard: f32, slope: f32, fall: vec2f, channel: f32, ridge: f32, flow: f32, talus: f32 }
+fn timeMapsAt(p: vec2f) -> TimeMaps {
+    let uv = p / (u.size - 1.0);
+    let a = timeMap2(uv); let b = timeMap3(uv); let w = weatherAt(uv);
+    return TimeMaps(a.x, a.y, a.z, a.w, b.xy * 2.0 - 1.0, b.z, b.w, w.r, w.b);
+}
+// Where wear has bared steep grass: clumps of 10-20 px on slopes, by how much rock the water took. Bake and draw share it,
+// so the cracks lie where the grey shows.
+fn outcropAt(p: vec2f, slope: f32, wear: f32, hard: f32) -> f32 {
+    if (u.outcrop <= 0.0) { return 0.0; }
+    let clumps = smoothstep(0.22, 0.5, valueNoise(p / 17.0 + 7.0) * 0.5 + 0.5 + 0.15 * valueNoise(p / 5.0 + 3.0));
+    return u.outcrop * smoothstep(0.02, 0.22, wear) * smoothstep(0.30, 0.55, slope) * (1.0 - smoothstep(0.9, 1.4, slope)) * smoothstep(0.35, 0.7, hard) * clumps;
+}
 
 #ifndef BAKE
 struct VertexOut {

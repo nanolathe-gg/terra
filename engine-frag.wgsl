@@ -322,6 +322,8 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     }
     exposed *= 1.0 - route * (1.0 - smoothstep(r5.x, r5.y, slope));
     exposed = 1.0 - clamp((1.0 - clamp(exposed * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
+    // H5: the vegetation override also scales how much rock shows: +1 lets grass and moss take 40% of it back, -1 bares 40% more.
+    exposed = clamp(exposed * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);
     out.exposed = exposed;
     out.lowBank = lowBank;
     // The face: lump-scale rock and moss on a slope; rock on steep flanks and in hollows, moss on tops.
@@ -353,6 +355,7 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     // Inside painted rock the face is rock; moss stays at its edges and on the ledges below.
     if (u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * r9.z); }
     rockMask = 1.0 - clamp((1.0 - clamp(rockMask * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
+    rockMask = clamp(rockMask * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);   // H5: the same 40% as the exposed rock above
     out.face = face;
     out.rockMask = rockMask;
     out.top = top;
@@ -1375,6 +1378,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // H3 item 4: one placement function (greenPlace); its thresholds are rows of materials/green.json.
     let place = greenPlace(p, h, g, broad, slope, n, weather, route, painted);
     var exposed = place.exposed;
+    // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
+    let timeMaps = timeMapsAt(p);
+    exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
     let sandBar = 0.0;
     let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
@@ -1421,7 +1427,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
         let ledge = smoothstep(0.1, 0.7, place.top);
         let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
-        let want = u.rockMoss * place.vegetation * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+        let wetMoss = (0.25 + 1.6 * timeMaps.wet);   // H5 3a: moss grows where water runs
+        let want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
         let fleck = step(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
         material = mix(material, saturate(slopeBased * vec3f(1.0, 1.25, 0.95)), fleck);
     }
@@ -1544,6 +1551,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.reliefMode != 1) { cleft = smoothstep(0.15, 1.20, fractureDepth(p, h, slope)); }
     material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
+    // H5 3a: wet swaths. Water darkens grass along its flow: soft streaks 15-40 px across and 70 px along the fall line, where the
+    // wetness map is high and the ground slopes (the retail slopes' diagonal dark swaths, 20-40 px wide).
+    if (u.wetSwath > 0.0 && u.weatherMaps > 0.5) {
+        let flen = length(timeMaps.fall);
+        if (flen > 0.05) {
+            let fl = timeMaps.fall / flen;
+            let q = vec2f(dot(p, vec2f(-fl.y, fl.x)) / 22.0, dot(p, fl) / 90.0);
+            // Broad gentle bands of tone, lighter as well as darker (the mean stays), by the wetness map.
+            let tone = valueNoise(q + 13.0) * 0.8 + 0.2 * valueNoise(q * 2.7 + 5.0);
+            material *= clamp(1.0 + u.wetSwath * timeMaps.wet * tone * smoothstep(0.06, 0.25, slope) * (1.0 - exposed) * place.vegetation, 0.4, 1.6);
+        }
+    }
     // Retail Archipelago sand runs level to a crisp waterline (hundred
     // isles): its low bank shows no light, shade or wet band. With flatBank
     // the dry ground below the plain is lit as level and stays dry-coloured.

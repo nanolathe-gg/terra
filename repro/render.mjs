@@ -11,6 +11,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450));
 const extraQuery = opt('--query', '');
+const timeOn = args.includes('--time') && args.splice(args.indexOf('--time'), 1).length > 0;
 const clayOn = args.includes('--clay') && args.splice(args.indexOf('--clay'), 1).length > 0;
 const erosionOn = args.includes('--erosion') && args.splice(args.indexOf('--erosion'), 1).length > 0;
 const [sceneFile, out] = args;
@@ -64,9 +65,20 @@ try {
   writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: await ev('sculptDebug.grid'), sea: await ev('sculptDebug.sea'), heights: await ev('sculptDebug.heights()')}));
   // H2: the erosion pass's input, output and column offsets, when it ran (--erosion).
   if (erosionOn) {
-    const e = await ev(`(() => { const e = window.lastErosion; return e && {grid: e.grid, size: e.size, authored: Array.from(e.authored), height: Array.from(e.height), debris: Array.from(e.debris), offset: Array.from(e.offset)}; })()`);
+    const e = await ev(`(() => { const e = window.lastErosion; return e && {grid: e.grid, size: e.size, authored: Array.from(e.authored), height: Array.from(e.height), debris: Array.from(e.debris), offset: Array.from(e.offset), protect: e.protect ? Array.from(e.protect) : null, seaLevel: e.seaLevel}; })()`);
     if (e) writeFileSync(`${out}/ours-erosion.json`, JSON.stringify(e));
+    // H5: the Time pass's packed maps (layer 0, 2, 3 of gridTexture), as raw rgba8, grid x grid each.
+    const m = await ev(`(() => { const m = window.lastErosion?.maps; return m && m.map(a => btoa(String.fromCharCode(...a.subarray(0, 65536))) + '|' + Array.from({length: Math.ceil(a.length / 65536) - 1}, (_, k) => btoa(String.fromCharCode(...a.subarray(65536 * (k + 1), 65536 * (k + 2))))).join('|')); })()`);
+    if (m) m.forEach((text, k) => writeFileSync(`${out}/ours-map${k}.bin`, Buffer.concat(text.split('|').map(t => Buffer.from(t, 'base64')))));
   }
-  console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
+  // H5: --time prints the median of 7 draws and 7 bakes (sculptDebug.drawMs / bakeMs, submit to GPU completion).
+  let timing;
+  if (timeOn) {
+    const median = a => a.sort((x, y) => x - y)[a.length >> 1];
+    const draws = [], bakes = [];
+    for (let i = 0; i < 7; i++) { draws.push(await ev('sculptDebug.drawMs()')); bakes.push(await ev('sculptDebug.bakeMs()')); }
+    timing = {draw: median(draws), bake: median(bakes)};
+  }
+  console.log(JSON.stringify({timing, nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
   ws.close();
 } finally { chrome.kill(); }

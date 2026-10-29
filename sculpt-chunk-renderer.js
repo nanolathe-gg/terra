@@ -169,7 +169,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST;
     this.heightTexture=this.texture('chunk height',gw,gh,1,'r32float',4,read);
     this.routeTexture=this.texture('chunk routes',gw,gh,1,'rgba8unorm',4,read);
-    this.gridTexture=this.texture('chunk weather and material',gw,gh,2,'rgba8unorm',4,read);
+    this.gridTexture=this.texture('chunk weather and material',gw,gh,4,'rgba8unorm',4,read);   // H5: layers 2 and 3 hold Green's Time maps
     if(this.maskLayers>this.device.limits.maxTextureArrayLayers)throw new Error('nanolathe: mask planes exceed the device texture array limit');
     this.maskTexture=this.texture('chunk masks',gw,gh,this.maskLayers,'rgba8snorm',4,read);
     this.fieldsTexture=this.texture('chunk fields',fw,fh,1,'rgba16float',8,T.STORAGE_BINDING|T.TEXTURE_BINDING);
@@ -214,7 +214,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       throw new Error('nanolathe: regional fields do not cover the shader apron; call requiredRegion first');
     this.f('uChunkGridOrigin',[ox,oy]);
     for(const plane of planes)if(plane&&plane.length!==n)throw new Error('nanolathe: invalid regional mask plane dimensions');
-    const pixels=gw*gh,height=new Float32Array(pixels),routes=new Uint8Array(pixels*4),grid=new Uint8Array(pixels*8),masks=new Int8Array(pixels*this.maskLayers*4);
+    const pixels=gw*gh,height=new Float32Array(pixels),routes=new Uint8Array(pixels*4),grid=new Uint8Array(pixels*16),masks=new Int8Array(pixels*this.maskLayers*4);
     const painted=new Array(planes.length).fill(0),toByte=v=>Math.round(clamp(v??0,0,1)*255);
     this.uploadBytes=height.byteLength+routes.byteLength+grid.byteLength+masks.byteLength;
     this.cpuWorkingBytes=this.uploadBytes;this.cpuUploadBytes=Math.max(this.cpuUploadBytes,this.uploadBytes);this.recordMemory();
@@ -224,13 +224,15 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       height[dst]=(request.exportArt?clamp(fields.h[src],0,255):fields.h[src])-this.config.seaLevel;
       routes[dst*4]=toByte(fields.r?.[src]);routes[dst*4+1]=toByte(fields.c?.[src]);routes[dst*4+2]=Math.round((clamp(fields.v?.[src]??0,-1,1)*.5+.5)*255);routes[dst*4+3]=toByte(fields.x?.[src]);
       for(let k=0;k<planes.length;k++){const v=planes[k]?.[src]??0;masks[(k>>2)*pixels*4+dst*4+(k&3)]=v;painted[k]||=v!==0?1:0;}
-      for(let k=0;k<4;k++){grid[dst*4+k]=toByte(Array.isArray(weather)?weather[k]?.[src]:weather?.[['flow','deposit','talus','sand'][k]]?.[src]);grid[pixels*4+dst*4+k]=toByte(material?.[src*4+k]);}
+      for(let k=0;k<4;k++){grid[dst*4+k]=toByte(Array.isArray(weather)?weather[k]?.[src]:weather?.[['flow','deposit','talus','sand'][k]]?.[src]);grid[pixels*4+dst*4+k]=toByte(material?.[src*4+k]);
+        // H5: the Time pass's maps, when the weather carries them (Green's engine): layer 2 wear, wet, hard, slope; layer 3 fall x, y, channel, ridge.
+        grid[pixels*8+dst*4+k]=toByte(weather?.[['wear','wet','hard','slope'][k]]?.[src]);grid[pixels*12+dst*4+k]=toByte(weather?.[['fx','fy','channel','ridge'][k]]?.[src]);}
     }
     const q=this.device.queue;q.writeTexture({texture:this.heightTexture},height,{bytesPerRow:gw*4},[gw,gh]);q.writeTexture({texture:this.routeTexture},routes,{bytesPerRow:gw*4},[gw,gh]);
-    q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,2]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,this.maskLayers]);
+    q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,4]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,this.maskLayers]);
     const flags={paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,12).some(Boolean)||painted[13],lumpOn:painted[12],flowOn:painted.slice(20,25).some(Boolean),...request.maskFlags};
     for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
-    this.materialReady=Boolean(material);this.cpuWorkingBytes=0;
+    this.materialReady=Boolean(material);this.weatherMaps=Boolean(weather?.wear);this.cpuWorkingBytes=0;
   }
   // A reusable canvas is returned. Copy it before the next renderChunk; the
   // caller must count its retained bitmap/canvas bytes separately from stats.

@@ -2809,7 +2809,13 @@ function readRegional(request) {
     const i=y*r.gridWidth+x,j=(y+oy)*worldGrid+x+ox,h=r.fields.h[i];
     fields.h[i]+=(refined[j]-refinedBase[j])*(1-smooth(0,10,Math.abs(h-refinedBase[j])))*(1-r.fields.r[i]);
   }
-  for (const key of ['flow','deposit','talus','sand']) weather[key]=crop(regionalWeather?.[key]);
+  ['flow','deposit','talus','sand','wear','wet','hard','slope','fx','fy','channel','ridge'].forEach((key,k) => {
+    const packed=regionalWeather?.['p'+(k>>2)];
+    if (!packed) { weather[key]=crop(regionalWeather?.[key]); return; }
+    const out=new Float32Array(r.gridWidth*r.gridHeight);
+    for (let y=0;y<r.gridHeight;y++) { const from=((y+oy)*worldGrid+ox)*4+(k&3); for (let x=0;x<r.gridWidth;x++) out[y*r.gridWidth+x]=packed[from+x*4]/255; }
+    weather[key]=out;
+  });
   const materialField=crop(regionalWeather?.materialField,4),extra=[fields.h,...Object.values(weather),materialField].reduce((sum,a) => sum+(a?.byteLength??0),0);
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
@@ -3002,15 +3008,17 @@ function previewHeight() {
 // painted/flow planes while the next tile's brush scratch is live.
 function globalWeatherInput() {
   const n=worldGrid;sculptRegion.checkMemory?.(n*n*8);
-  const h=new Float32Array(n*n),p=new Float32Array(n*n),side=256;
+  const h=new Float32Array(n*n),p=new Float32Array(n*n),e=new Float32Array(n*n).fill(1),side=256;let any=false;   // e: H3's erosion override plane as a rate (1 + v / 127)
   for(let y=0;y<n;y+=side)for(let x=0;x<n;x+=side){
     const width=Math.min(side,n-x),height=Math.min(side,n-y),part=regionalFields.readCells({x0:x,y0:y,x1:x+width-1,y1:y+height-1});
     for(let row=0;row<height;row++){
       h.set(part.fields.h.subarray(row*width,(row+1)*width),(y+row)*n+x);
       p.set(part.fields.p.subarray(row*width,(row+1)*width),(y+row)*n+x);
+      const ov=part.fields.ovErosion;
+      if (ov) for (let k=0;k<width;k++) { const v=ov[row*width+k]; if (v) { any=true; e[(y+row)*n+x+k]=1+v/127; } }
     }
   }
-  return {h,p};
+  return {h,p,e:any?e:null};
 }
 function queueWeather() {
   flushEval();
@@ -3022,21 +3030,42 @@ function queueWeather() {
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
-    if (!weatherWorker) startWeatherWorker();
+    if (!weatherWorker && !(renderer.engine && (!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
     const job=++weatherJob;
     const authored=regionalFields?globalWeatherInput():null;
     weatherBase=authored?authored.h:heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
     const profile=experiment.get('weather')==='broad'?'broad':undefined;
     // H2: erosion 1 (Green) runs the GPU pass first and hands its height to the worker, which skips the droplets.
-    const gpu=!regionalFields && renderer.variantNumber?.('erosion',0)>0;
+    // H5: Green's engine also runs the GPU pass over a whole map canvas up to 1168 samples a side (larger maps keep the tiled worker, H5b).
+    const gpu=(!regionalFields || (renderer.engine && grid<=1168)) && renderer.variantNumber?.('erosion',0)>0;
     gpuErosionMs=null;
     let eroded=null;
     const post=() => weatherWorker.postMessage({job,height:weatherBase,...eroded,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
       sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
     if (!gpu) { post(); return; }
-    renderer.erode({height:weatherBase,protect:protection,rate:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40)})
-      .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,grid,size}; eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
+    // H5: Green's engine (engine 1) takes the height and the data maps from the GPU pass alone; no worker runs (engine-weather.wgsl).
+    const own=renderer.engine;
+    const erodeRequest={height:weatherBase,protect:authored?.p??protection,rate:authored?authored.e:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
+      ...(own?{maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)}:{})};
+    window.erodeAgain=() => renderer.erode(erodeRequest).then(r => ({ms:r.milliseconds,parts:r.parts}));   // dev hook: time the pass alone
+    renderer.erode(erodeRequest)
+      .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,protect:protection,seaLevel:config.seaLevel,maps:result.maps,grid,size};
+        if (own && regionalFields) {
+          // A map canvas: the chunk renderer reads the maps as the worker's arrays (flow, deposit, talus, sand and the Time pass's eight).
+          refined=result.height; refinedBase=weatherBase;
+          // The maps stay packed (three rgba8 arrays, 4 bytes a sample); the chunk crop unpacks only the samples a chunk needs.
+          regionalWeather={p0:result.maps[0],p1:result.maps[1],p2:result.maps[2]};
+          weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
+          markViewChanged(); updateControls(); schedule(); return;
+        }
+        if (own) {
+          refined=result.height; refinedBase=weatherBase;
+          renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);
+          heightDirty=false; weatherState='ready'; renderedRevision=-1; updateControls();
+          $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); return;
+        }
+        eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
       .catch(err => { if (job===weatherJob) failWeather(err.message); });
   } catch (err) { failWeather(err.message); }
 }
@@ -3964,6 +3993,8 @@ async function boot() {
     size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); cover=new Float32Array(grid*grid); crystal=new Float32Array(grid*grid); maskPlanes=MASK_KEYS.map(() => new Int8Array(grid*grid)); heights.fill(config.baseHeight);
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
+    // H5: Green's engine has no apron (the Time pass's debris is in the height), so the Scree slider reads nothing there.
+    if (renderer.engine) $('scree').closest('.control').hidden=true;
     renderer.onerror=message => error(message);
     renderer.setColors(worldColors());
     buildKnobs(); buildWorldPanel();
@@ -4030,7 +4061,7 @@ function checkRegionalFields() {
     regionalFields?.clear();({regionalFields,worldSize,worldGrid}=saved);
   }
 }
-window.sculptDebug = {regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
+window.sculptDebug = {corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),

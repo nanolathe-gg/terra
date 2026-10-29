@@ -431,8 +431,9 @@ export class TerrainRenderer {
     this.heightTexture = make('height', 'r32float');
     this.routeTexture = make('routes', 'rgba8unorm');
     // Layer 0: the weathering worker's flow, deposit, talus and sand; layer 1:
-    // the material field (one texture binding for both, see initialize).
-    this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 2], format: 'rgba8unorm',
+    // the material field (one texture binding for both, see initialize). H5: layers 2 and 3 hold
+    // the Time pass's maps (wear, wetness, hardness, slope; fall line, channel, ridge), Green's engine only.
+    this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 4], format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     // Painted masks (card C5), signed bytes so an unpainted
     // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
@@ -542,7 +543,7 @@ export class TerrainRenderer {
   }
 
   setWeather(flow, deposit, talus, sand) {
-    this.fieldsDirty = true;
+    this.fieldsDirty = true; this.weatherMaps = false;
     const bytes = new Uint8Array(this.grid * this.grid * 4);
     if (flow && deposit) for (let i = 0; i < flow.length; i++) {
       bytes[i * 4] = Math.min(255, Math.max(0, Math.round(flow[i] * 255)));
@@ -552,6 +553,13 @@ export class TerrainRenderer {
     }
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.gridTexture, origin: [0, 0, 0]}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
+  }
+
+  // H5: the Time pass's maps, as packed by engine-weather.wgsl: [layer 0, layer 2, layer 3], rgba8 at the grid's resolution.
+  setWeatherMaps(maps) {
+    this.fieldsDirty = true; this.weatherMaps = true;
+    this.worldTextures(this.grid);
+    [0, 2, 3].forEach((layer, k) => this.device.queue.writeTexture({texture: this.gridTexture, origin: [0, 0, layer]}, maps[k], {bytesPerRow: this.grid * 4}, [this.grid, this.grid]));
   }
 
   setRoutes(routes, crackLines, cover, crystal, masks) {
@@ -998,12 +1006,16 @@ export class TerrainRenderer {
 
   variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
 
+  // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
+  preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
+
   // H2: the GPU erosion pass (sculpt-erosion.js, erosion.wgsl), built on first use.
   async erode(request) {
     if (!this.erosion) {
-      const source = await (await fetch('/erosion.wgsl')).text();
+      // H5: Green's engine steps over the active tiles only (engine-erosion.wgsl); engine 0 keeps erosion.wgsl whole.
+      const source = await (await fetch(this.engine ? '/engine-erosion.wgsl' : '/erosion.wgsl')).text();
       const {GpuErosion} = await import('./sculpt-erosion.js');
-      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])));
+      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])), Boolean(this.engine));
     }
     return this.erosion.run(request);
   }
@@ -1028,6 +1040,11 @@ export class TerrainRenderer {
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const set = (name, value) => this.set(name, Number(value));
     set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
+    if (this.engine) {
+      set('uWeatherMaps', this.weatherMaps ? 1 : 0);
+      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8], ['stoneDensity', 0], ['stoneSize', 5]])
+        set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
+    }
     set('uReliefScale', number('reliefScale', 28));
     set('uReliefAmount', number('reliefAmount', 0.5));
     set('uReliefBranch', number('reliefBranch', 2.0));

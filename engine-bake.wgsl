@@ -803,9 +803,18 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     if (u.flatBank > 0.0 && h < u.base - 0.5) { return vec3f(0.0); }
     // Bands fade out over slopes bandFade * 0.35 / 0.75 to bandFade (default
     // 0.35-0.75; Green fades sooner, as retail's banded slopes are gentle).
-    let gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(u.bandFade * (0.35 / 0.75), u.bandFade, slope));
+    var gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(u.bandFade * (0.35 / 0.75), u.bandFade, slope));
+    // H5 3a: retail's gentle slopes carry few of the small dashes the risers make there.
+    gate *= 1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope));
     if (gate <= 0.0) { return vec3f(0.0); }
     let S = u.bandSpacing;
+    // H5 3a: the lines of retail's terraced grass follow no contour for long: their phase wanders over 17 px and 6 px, further
+    // where water has run (the wetness map), so a line bends, ends against its neighbour and re-forms.
+    var wander = 0.0;
+    if (u.terraceBreak > 0.0 && u.weatherMaps > 0.5) {
+        let wetT = timeMapsAt(p).wet;
+        wander = u.terraceBreak * (0.6 + 0.4 * wetT) * S * (valueNoise(p / 17.0 + 61.0) * 1.1 + valueNoise(p / 6.0 + 77.0) * 0.5);
+    }
     // Jag: retail's terraced slopes (Great Divide) show short dashes stacked
     // like scales rather than long smooth lines: each small cell (~8 px,
     // jittered) shifts its band phase, so a line breaks and steps at the
@@ -815,7 +824,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
         let q = p / 8.0 + 0.6 * vec2f(valueNoise(p / 9.0 + 5.0), valueNoise(p / 9.0 + 17.0));
         jag = (cellHash(floor(q) + 13.0).x - 0.5) * S * 0.6 * u.bandJag;
     }
-    let uu = (h + jag + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
+    let uu = (h + jag + wander + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
                 + valueNoise(p / 3.3 + 19.0) * S * 0.06 * min(1.0, 0.3 / max(slope, 0.05))) / S;   // GLSL: u
     let v = fract(uu);
     let w = clamp(u.bandSoftness, 0.05, 1.0);
@@ -900,7 +909,7 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f3
 // covers both. Steep faces shed it.
 fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     if (u.sand <= 0.0) { return 0.0; }
-    let field = weatherAt(p / (u.size - 1.0)).a;
+    let field = weatherAt(p / (u.size - 1.0)).a * depositsAt(p);
     if (field <= 0.0) { return 0.0; }
     let lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
     let thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
@@ -986,6 +995,90 @@ fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
 #else
     textureStore(fieldsOut, id.xy, bake(vec2f(id.xy)));
 #endif
+}
+
+
+// H5 constants (retail's rates, measured in NOTES): the cracks' darkness and the grey specks' density. Specks and cracks ride on `outcrop`, so
+// engine 0 style off-states stay off.
+const ROCK_CRACK = 2.5;
+const SPECKS = 1.2;
+
+// H5: stones from the Time pass's maps. 3a's grey specks (1-2 px, on the foot slopes round the rock, in clumps) and 3b's stones
+// and boulders (where talus lies, larger below hard beds, a few px across). Returns (height, rock cover) like boulders().
+fn weatherStones(p: vec2f) -> vec2f {
+    if (u.weatherMaps < 0.5 || (u.outcrop <= 0.0 && u.stoneDensity <= 0.0)) { return vec2f(0.0); }
+    let cellSize = max(3.0, u.stoneSize * 0.9);
+    let cell = floor(p / cellSize);
+    var best = 0.0;
+    var cover = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let c = cell + vec2f(f32(i), f32(j));
+            let r1 = cellHash(c + 17.3);
+            let r2 = cellHash(c + 83.9);
+            let centre = (c + 0.15 + 0.7 * r1) * cellSize;
+            let m = timeMapsAt(centre);
+            let clump = smoothstep(0.25, 0.75, valueNoise(centre / 23.0 + 29.0) * 0.5 + 0.5);
+            let speck = depositsAt(centre) * SPECKS * smoothstep(0.05, 0.16, m.slope) * (1.0 - smoothstep(0.5, 0.8, m.slope)) * (0.15 + 0.85 * clump);
+            let stones = depositsAt(centre) * u.stoneDensity * max(smoothstep(0.02, 0.3, m.talus), 0.5 * smoothstep(0.25, 0.8, weatherAt(centre / (u.size - 1.0)).g)) * (0.4 + 0.6 * clump);
+            if (r2.x >= clamp(speck + stones, 0.0, 0.95)) { continue; }
+            if (baseHeight(centre) < u.sea + 1.0 || routeProtection(centre) > 0.05) { continue; }
+            // A speck is 1-2 px; a stone follows stoneSize, a few times larger below hard beds, many small and few large.
+            let big = step(r2.x + 1e-6, stones);
+            let radius = mix(0.9 + 1.0 * r2.y, u.stoneSize * (0.2 + 0.8 * r2.y * r2.y * r2.y) * (0.7 + 0.7 * m.hard), big);
+            var q = p - centre;
+            let a = r1.y * 6.2831;
+            q = mat2x2f(cos(a), -sin(a), sin(a), cos(a)) * q;
+            let edge = max(max(abs(q.x), abs(q.y) * 1.15), abs(q.x * 0.7 - q.y * 0.7)) / max(radius, 0.5);
+            let lift = max(0.0, 1.0 - edge);
+            // Rounded like boulders(): steep sides and a partly buried foot, so the sun lights the top and the far side lies in shadow.
+            let buried = 0.2 + 0.2 * r1.x;
+            let height = max(0.0, sqrt(lift) - buried) / (1.0 - buried) * radius * 0.85;
+            if (height > best) { best = height; cover = smoothstep(0.0, 0.25, lift); }
+        }
+    }
+    return vec2f(best, cover);
+}
+
+// H5 3b: rills cut along the flow. Lines parallel to the fall line, one per u.rillSpacing px across, each present for stretches
+// of about 80 px, 1-3 px wide by the flow, only where the channel map says water runs hard over falling ground.
+// Returns (height cut, darkness of the floor).
+fn rillAt(p: vec2f, slope: f32) -> vec2f {
+    if (u.rillDepth <= 0.0 || u.weatherMaps < 0.5) { return vec2f(0.0); }
+    let m = timeMapsAt(p);
+    // The fall line is the base height's own gradient at p, smooth at 1 px; the map's (2-px grid) only says where water runs.
+    let g = broadGradient(p);
+    let len = length(g);
+    if (len < 0.02) { return vec2f(0.0); }
+    let f = g / len;
+    let perp = vec2f(-f.y, f.x);
+    let spacing = max(u.rillSpacing, 3.0);
+    let across = dot(p, perp) / spacing + 0.6 * valueNoise(vec2f(dot(p, f) / 60.0, dot(p, perp) / 40.0) + 7.0);
+    let id = floor(across);
+    let at = fract(across) - 0.5;
+    let hsh = cellHash(vec2f(id, 3.1));
+    let present = smoothstep(-0.25, 0.25, valueNoise(vec2f(id * 3.7, dot(p, f) / 80.0)));
+    let w = (0.05 + 0.14 * m.flow) * (0.7 + 0.6 * hsh.x);
+    let trough = 1.0 - smoothstep(0.0, w, abs(at - (hsh.y - 0.5) * 0.3));
+    let gate = smoothstep(0.05, 0.3, m.channel) * smoothstep(0.18, 0.40, slope) * (1.0 - smoothstep(1.2, 1.8, slope)) * present;
+    return vec2f(-u.rillDepth * trough * gate, trough * gate);
+}
+
+// H5 3a: the 1-2 px cracks down the fall line in grey outcrops, 20-60 px long: the zero lines of a noise stretched along the fall
+// line, in stretches that begin and end. Returns their darkness.
+fn outcropCracks(p: vec2f, slope: f32) -> f32 {
+    if (u.weatherMaps < 0.5 || u.outcrop <= 0.0) { return 0.0; }
+    let m = timeMapsAt(p);
+    let zone = outcropAt(p, slope, m.wear, m.hard);
+    if (zone <= 0.0) { return 0.0; }
+    let len = length(m.fall);
+    if (len < 0.05) { return 0.0; }
+    let f = m.fall / len;
+    let perp = vec2f(-f.y, f.x);
+    let q = vec2f(dot(p, perp) / 6.0, dot(p, f) / 38.0) + 0.6 * vec2f(valueNoise(p / 21.0 + 41.0), valueNoise(p / 21.0 + 43.0));
+    let line = 1.0 - smoothstep(0.03, 0.15, abs(valueNoise(q)));
+    let present = smoothstep(-0.3, 0.25, valueNoise(p / 29.0 + 67.0));
+    return ROCK_CRACK * line * present * smoothstep(0.1, 0.5, zone);
 }
 
 // GLSL main(): the fields at world pixel p.
@@ -1276,6 +1369,12 @@ fn bake(p: vec2f) -> vec4f {
         }
         structureRock = order * steep * bed.y * step(0.01, u.bedLip);
     }
+    // H5 3b: rills along the flow.
+    let rill = rillAt(p, slope);
+    height += rill.x * (1.0 - buried);
+    // H5: the fall-line cracks of the outcrops are notches in the height (a lit wall and a dark floor), not only a tint.
+    let notch = outcropCracks(p, slope);
+    height -= 0.9 * notch / ROCK_CRACK;
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast. Nor lifts the bed above it.
     if (h > u.sea) { height = max(height, u.sea + 0.5 - h); }
@@ -1283,6 +1382,8 @@ fn bake(p: vec2f) -> vec4f {
     var rock = boulders(p, slope, h);
     let scree = debrisStones(p, vec2f(0.0));
     if (scree.x > rock.x) { rock = scree; }
+    let flecks = weatherStones(p);
+    if (flecks.x > rock.x) { rock = flecks; }
     height += rock.x;
     rock.y *= 1.0 - buried;
     rock.y = max(rock.y, structureRock);
@@ -1293,6 +1394,7 @@ fn bake(p: vec2f) -> vec4f {
     // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
     lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
     lineDark = max(lineDark, crustDark);
+    lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
     lineDark = max(lineDark, facetSeam * u.facetSeam * (1.0 - buried));
     lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));
