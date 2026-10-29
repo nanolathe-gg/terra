@@ -8,5 +8,10 @@ export function materialRows(table) {
     for (const c of m.ramp) rows.push([c[0], c[1], c[2], 0]);
     for (const c of m.tint) rows.push([c[0], c[1], c[2], 0]);
   }
+  const q = table.placement, r = q.rock, s = q.soil, f = q.face;
+  rows.push([r.slope, r.formSlope, r.convexity, r.convexityRange], [r.noiseG, r.noiseR, r.weather, r.tap], [r.start, r.full, 0, 0],
+    [s.slopeGate, s.heightGate, s.fadeFrom, s.fadeTo], [q.lowBank.from, q.lowBank.to, 0, 0], [q.route.from, q.route.to, 0, 0],
+    [f.slopeFrom, f.slopeTo, f.edgeNoise, 0], [f.shareFrom, f.shareTo, 0, 0], [f.roughness, f.lumpTop, f.fineNoise, f.broadNoise],
+    [f.gully, f.order, f.paintedRock, 0]);
   return rows;
 }

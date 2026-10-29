@@ -1129,5 +1129,48 @@
    "tintMix": 0.512,
    "tintScale": 1.0
   }
+ },
+ "placement": {
+  "note": "Thresholds greenPlace (material-model.wgsl order: sculpt-frag.wgsl) reads. Each was Green's value of a knob or constant before H3 (measured by earlier cards: rockSlope 1.145 +- feather .43/2, E3/E9 face rows); nothing here is read from an image.",
+  "rock": {
+   "slope": 0.55,
+   "formSlope": 0.45,
+   "convexity": 0.28,
+   "convexityRange": 5,
+   "noiseG": 0.8,
+   "noiseR": 0.7,
+   "weather": 0.55,
+   "tap": 10,
+   "start": 0.93,
+   "full": 1.36
+  },
+  "soil": {
+   "slopeGate": 0.2,
+   "heightGate": 18,
+   "fadeFrom": 18,
+   "fadeTo": 28
+  },
+  "lowBank": {
+   "from": 12,
+   "to": 36
+  },
+  "route": {
+   "from": 0.45,
+   "to": 0.9
+  },
+  "face": {
+   "slopeFrom": 0.35,
+   "slopeTo": 0.9,
+   "edgeNoise": 0.8,
+   "shareFrom": 0.2,
+   "shareTo": 1.0,
+   "roughness": 0.2,
+   "lumpTop": 2.0,
+   "fineNoise": 0.5,
+   "broadNoise": 0.3,
+   "gully": 0.5,
+   "order": 1,
+   "paintedRock": 1
+  }
  }
 }

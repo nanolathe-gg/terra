@@ -266,6 +266,97 @@ fn weatheredSource(pixel: vec2f) -> vec3f { return pixelSample(rockWeatheredTex,
 fn fracturedSource(pixel: vec2f) -> vec3f { return pixelSample(rockFracturedTex, rockFracturedSamp, pixel, vec2f(256.0)).rgb; }
 #endif
 
+#ifdef MATERIAL_MODEL
+// H3 item 4. Where rock shows, and how much of a face is rock: the one function that decides Green's
+// land placement. Its numbers are rows of materials/green.json after the five materials (MM_PLACE):
+//   row 0  x: slope weight, y: form-slope weight, z: convexity weight, w: convexity range
+//   row 1  x: noise weight (n.g), y: noise weight (n.r), z: weather weight, w: tap spacing, px
+//   row 2  x,y: rock score start and full (the score is slope-like, about 1 on a steep face)
+//   row 3  x: soil slope gate, y: soil height gate, z,w: soil height fade
+//   row 4  x,y: low-bank source heights above the plain (rock needs land this high up-slope)
+//   row 5  x,y: slope at which a smooth route stops holding rock off (start, full)
+//   row 6  x,y: face slope start and full, z: face edge noise
+//   row 7  x,y: rock share at the face start and at its steepest
+//   row 8  face score: x: surface roughness, y: lump top, z: fine noise, w: broad noise
+//   row 9  x: gully rock, y: structured-rock order, z: painted-rock face
+const MM_PLACE = 175u;
+fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
+struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32 }
+fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32, painted: vec4f) -> Place {
+    var out: Place;
+    let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
+    let r6 = pr(6u); let r7 = pr(7u); let r8 = pr(8u); let r9 = pr(9u);
+    // Rock: the broad slope, the form's slope and convexity at the tap spacing, noise, and the weathering's wear.
+    let d = r1.w;
+    let west = surfaceHeight(p - vec2f(d, 0.0));
+    let east = surfaceHeight(p + vec2f(d, 0.0));
+    let north = surfaceHeight(p - vec2f(0.0, d));
+    let south = surfaceHeight(p + vec2f(0.0, d));
+    let formSlope = length(vec2f(east - west, south - north) / (2.0 * d));
+    let convexity = clamp((h - 0.25 * (west + east + north + south)) / r0.w, -1.0, 1.0);
+    let score = r0.x * slope + r0.y * formSlope + convexity * r0.z + (n.g - 0.5) * r1.x - weather.g * r1.z + (n.r - 0.5) * r1.y;
+    var exposed = smoothstep(r2.x, r2.y, score);
+    // Soil: nearby gentle ground above keeps grass on the ledges and pockets of a steep face.
+    if (h > r3.y && slope > r3.x && exposed > 0.01) {
+        let reach = mix(7.0, 70.0, smoothstep(0.30, 0.70, n.g));
+        var soil = uphillSoil(p, broad / slope, baseHeight(p), reach);
+        let ledge = (1.0 - smoothstep(0.55, 1.20, length(g))) * smoothstep(0.08, 0.40, weather.g);
+        var pockets = smoothstep(0.55, 0.72, n.g * 0.55 + n.r * 0.45 + weather.g * 0.20);
+        pockets *= 1.0 - smoothstep(1.55, 2.80, slope);
+        soil = max(soil, max(ledge, pockets * 0.65));
+        exposed *= 1.0 - smoothstep(0.12, 0.55, soil) * smoothstep(r3.z, r3.w, h);
+    }
+    // A low bank shows rock where it is steep and sits low; only land high up-slope lets a bank show rock to the water.
+    let bank = 1.0 - smoothstep(1.0, 8.0, abs(h - u.sea - 3.0 + (n.g - 0.5) * 4.0));
+    exposed = max(exposed, bank * smoothstep(0.3, 0.8, slope) * (0.4 + 0.6 * n.b) * u.bankRock);
+    var lowBank = 1.0;
+    if (h < u.base + 1.0) {
+        let uphill = broad / max(0.001, slope);
+        var source = max(baseHeight(p), baseHeight(p + uphill * 16.0));
+        source = max(source, baseHeight(p + uphill * 36.0));
+        source = max(source, baseHeight(p + uphill * 64.0));
+        lowBank = smoothstep(u.base + r4.x, u.base + r4.y, source);
+        exposed *= lowBank;
+    }
+    exposed *= 1.0 - route * (1.0 - smoothstep(r5.x, r5.y, slope));
+    out.exposed = exposed;
+    out.lowBank = lowBank;
+    // The face: lump-scale rock and moss on a slope; rock on steep flanks and in hollows, moss on tops.
+    let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0))
+                       + surfaceHeight(p - vec2f(0.0, 3.0)) + surfaceHeight(p + vec2f(0.0, 3.0)));
+    let top = clamp((h - around) / 1.5, -1.0, 1.0);
+    let edgeNoise = terrainNoise(p * 1.5 + vec2f(53.0, 11.0));
+    let faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * r6.z);
+    var face = smoothstep(r6.x, r6.y, faceSlope) * (1.0 - route);
+    var share = mix(r7.x, r7.y, smoothstep(r6.y, r6.y * 1.8, slope));
+    var lowGate = lowBank;
+    if (u.styleOn != 0) {
+        let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));
+        share = select(share * (1.0 + f), mix(share, 1.0, f), f > 0.0);
+    }
+    if (u.paintOn != 0) {
+        face = max(face, painted.x);
+        share = mix(share, 0.92, painted.x);
+        lowGate = max(lowBank, painted.x);
+    }
+    let fine = terrainNoise(p * 3.0 + vec2f(19.0, 7.0));
+    let wide = 0.25 * (surfaceHeight(p - vec2f(7.0, 0.0)) + surfaceHeight(p + vec2f(7.0, 0.0))
+                     + surfaceHeight(p - vec2f(0.0, 7.0)) + surfaceHeight(p + vec2f(0.0, 7.0)));
+    let gully = smoothstep(0.3, 2.0, wide - h);
+    let topTerm = r8.y * top * (1.0 - r9.y * painted.x);
+    let faceScore = r8.x * length(g) / max(slope, 0.25) - topTerm + r9.x * gully + (fine.g - 0.5) * r8.z + (n.r - 0.5) * r8.w;
+    let threshold = mix(1.4, -0.9, share);
+    var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, faceScore) * lowGate;
+    // Inside painted rock the face is rock; moss stays at its edges and on the ledges below.
+    if (u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * r9.z); }
+    out.face = face;
+    out.rockMask = rockMask;
+    out.top = top;
+    out.faceSlope = faceSlope;
+    return out;
+}
+#endif
+
 // Moon slope marks, measured on the retail Lunar sections and the cc21
 // crater (measure/slope_marks.py): crisp dark specks and short dashes on
 // slopes from ~0.15, about 2 px wide and 3-7 px long, their long axis a
@@ -1399,6 +1490,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
         rock = rockFlat + (rock - rockFlat) * u.rockDetail;
     }
+#ifdef MATERIAL_MODEL
+    // H3 item 4: one placement function (greenPlace); its thresholds are rows of materials/green.json.
+    let place = greenPlace(p, h, g, broad, slope, n, weather, route, painted);
+    var exposed = place.exposed;
+    let lowBank = place.lowBank;
+    let sandBar = 0.0;
+#else
     // Deposition softens the exposed face into a connected apron. Flow and
     // deposited soil come from the same weathering that changed the surface.
     var rockScore = slope + (n.g - 0.5) * 0.55 + (n.b - 0.5) * 0.30 - weather.g * 0.55;
@@ -1468,6 +1566,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // are sand all over, no rock). The automatic beach does not.
     let sandBar = u.sandCrown * smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0));
     exposed *= 1.0 - sandBar;
+#endif
     let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
@@ -1509,6 +1608,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // TA-style faces: moss and rock interleave at lump scale. The broad
         // slope sets how much of the face is rock; the detailed surface
         // decides where: rock on steep flanks and in hollows, moss on tops.
+#ifdef MATERIAL_MODEL
+        let top = place.top;
+        let faceSlope = place.faceSlope;
+        let face = place.face;
+        var rockMask = place.rockMask;
+#else
         let micro = length(g);
         let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0))
                            + surfaceHeight(p - vec2f(0.0, 3.0)) + surfaceHeight(p + vec2f(0.0, 3.0)));
@@ -1558,6 +1663,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.iceFall > 0.0) { rockMask = mix(rockMask, lowGate, u.iceFall * u.iceSlate); }
         // E9: inside painted rock the face is rock; moss stays at its edges and on the ledges below.
         if (u.faceRock > 0.0 && u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * u.faceRock); }
+#endif
         let moss = mix(based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase), groundBased(groundSource(pixel)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
