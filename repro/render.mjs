@@ -12,6 +12,7 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450));
 const extraQuery = opt('--query', '');
 const clayOn = args.includes('--clay') && args.splice(args.indexOf('--clay'), 1).length > 0;
+const erosionOn = args.includes('--erosion') && args.splice(args.indexOf('--erosion'), 1).length > 0;
 const [sceneFile, out] = args;
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
@@ -61,6 +62,11 @@ try {
   const png = await ev(`document.getElementById('terrain').toDataURL('image/png')`);
   writeFileSync(`${out}/ours.png`, Buffer.from(png.split(',')[1], 'base64'));
   writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: await ev('sculptDebug.grid'), sea: await ev('sculptDebug.sea'), heights: await ev('sculptDebug.heights()')}));
-  console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
+  // H2: the erosion pass's input, output and column offsets, when it ran (--erosion).
+  if (erosionOn) {
+    const e = await ev(`(() => { const e = window.lastErosion; return e && {grid: e.grid, size: e.size, authored: Array.from(e.authored), height: Array.from(e.height), debris: Array.from(e.debris), offset: Array.from(e.offset)}; })()`);
+    if (e) writeFileSync(`${out}/ours-erosion.json`, JSON.stringify(e));
+  }
+  console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
   ws.close();
 } finally { chrome.kill(); }

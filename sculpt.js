@@ -46,7 +46,7 @@ let regionalPrefixSample=null,regionalNoiseMeta=new WeakMap(),regionalConnects=n
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
 const gridX=x => (x+originCellX)*spacing, gridY=y => (y+originCellY)*spacing;
-let weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
+let gpuErosionMs=null, weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
 let history=[], historyIndex=-1, historySerial=0, framePending=false, heightDirty=true, needsDraw=true;
 let revision=0, renderedRevision=-1, fitView=true, autosaveTimer, ready=false;
@@ -3012,8 +3012,16 @@ function queueWeather() {
     weatherBase=authored?authored.h:heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
     const profile=experiment.get('weather')==='broad'?'broad':undefined;
-    weatherWorker.postMessage({job,height:weatherBase,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
+    // H2: erosion 1 (Green) runs the GPU pass first and hands its height to the worker, which skips the droplets.
+    const gpu=!regionalFields && renderer.variantNumber?.('erosion',0)>0;
+    gpuErosionMs=null;
+    let eroded=null;
+    const post=() => weatherWorker.postMessage({job,height:weatherBase,...eroded,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
       sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
+    if (!gpu) { post(); return; }
+    renderer.erode({height:weatherBase,protect:protection,grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40)})
+      .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,grid,size}; eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
+      .catch(err => { if (job===weatherJob) failWeather(err.message); });
   } catch (err) { failWeather(err.message); }
 }
 function failWeather(message) {
@@ -3041,7 +3049,7 @@ function startWeatherWorker() {
     if (data.materialField) renderer.setMaterialField(data.materialField);
     heightDirty=false;
     if (data.done) { weatherState='ready'; renderedRevision=-1; updateControls(); }
-    $('weather-state').textContent=data.done?`Weathered edges · ${Math.round(data.milliseconds)} ms`:data.progress>=.93?'Settling surface materials…':`Refining exposed slopes · ${Math.round(data.progress*100)}%`;
+    $('weather-state').textContent=data.done?`Weathered edges · ${gpuErosionMs===null?'':`GPU erosion ${Math.round(gpuErosionMs)} ms + rest `}${Math.round(data.milliseconds)} ms`:data.progress>=.93?'Settling surface materials…':`Refining exposed slopes · ${Math.round(data.progress*100)}%`;
     schedule();
   };
   worker.onerror=event => { if (worker===weatherWorker) failWeather(event.message || 'worker unavailable'); };

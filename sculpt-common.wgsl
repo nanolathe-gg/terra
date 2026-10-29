@@ -429,15 +429,16 @@ fn valueNoise(q: vec2f) -> f32 {
 // rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both
 // call it with the surface height of the grid they hold, so a ledge erosion leaves
 // stands where the bake draws one: it depends only on (p, z), not on the smoothed
-// ground cliffFollow gives the hash beds. The tilt (bedDip) and the broad wander are the
+// ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip) and the broad wander are the
 // hash beds' own, at the same scale (the bed spacing).
-fn columnCoord(p: vec2f, z: f32) -> f32 {
+fn columnOffset(p: vec2f) -> f32 {
     let a = radians(u.bedDipDir);
     let tilt = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
     let S = max(u.bedSpacing, 2.0);
     let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
-    return z + tilt + wander;
+    return tilt + wander;
 }
+fn columnCoord(p: vec2f, z: f32) -> f32 { return z + columnOffset(p); }
 
 struct ColumnBed { index: f32, hardness: f32, through: f32, thick: f32 }
 

@@ -143,6 +143,7 @@ export class TerrainRenderer {
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
+    this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
     this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
@@ -885,6 +886,18 @@ export class TerrainRenderer {
     this.f('uShoalGrain', variant.has('shoalGrain') ? Number(variant.get('shoalGrain')) : 0);
     this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
     this.fieldsDirty = true;
+  }
+
+  variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
+
+  // H2: the GPU erosion pass (sculpt-erosion.js, erosion.wgsl), built on first use.
+  async erode(request) {
+    if (!this.erosion) {
+      const source = await (await fetch('/erosion.wgsl')).text();
+      const {GpuErosion} = await import('./sculpt-erosion.js');
+      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])));
+    }
+    return this.erosion.run(request);
   }
 
   // H2 rock column (0: the hash beds, as before). columnBeds is "thickness:hardness:slot,..." (up to eight, height
