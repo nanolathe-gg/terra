@@ -1531,7 +1531,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // not soft fades: threshold depth against pixel-block jitter.
             let block = floor(pixel / 2.0);
             let jitter = fract(sin(dot(block, vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
-            let crisp = step(0.6 + jitter * 1.4, depth);
+            var crisp = step(0.6 + jitter * 1.4, depth);
+            if (u.shoalStairs > 0.0) {
+                // G1: retail's waterline steps in runs of 1-3 px on any bank. The earlier jitter is in depth, so
+                // a steep bank is cut straight and a gentle one in 6-px notches; here the depth is read where a
+                // point displaced by smooth noise of 3 and 7 px sits, up to shoalStairs px (smooth, so the cut
+                // leaves runs and no isolated pixels, which per-pixel hashes did).
+                let off = ((vec2f(shelfNoise(p / 3.0 + 5.3), shelfNoise(p / 3.0 + 37.9)) - 0.5) * 1.0 + (vec2f(shelfNoise(p / 7.0 + 9.1), shelfNoise(p / 7.0 + 77.3)) - 0.5) * 1.6) * u.shoalStairs;
+                crisp = step(0.6, depth + baseHeight(p) - baseHeight(p + off));
+            }
             submerged = mix(submerged, crisp, shoreHard);
         }
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
