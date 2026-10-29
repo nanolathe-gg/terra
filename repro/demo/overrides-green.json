@@ -1,0 +1,86 @@
+{
+ "biome": "green",
+ "ground": true,
+ "query": "columnBeds=8:.95:0,14:.15:1,10:.9:0,12:.2:1,6:.8:0,16:.25:1&scree=100&sand=1.7&sandReach=1&sandDust=1&sandPatchy=0&sandGrass=0&windStrength=0",
+ "strokes": [
+  [
+   "plateau",
+   [
+    [
+     270,
+     520
+    ],
+    [
+     270,
+     520
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 300,
+     "amount": 100,
+     "roughness": 0,
+     "cracks": 1,
+     "profile": 1,
+     "apronPx": 0,
+     "apronHeight": 0,
+     "facePx": 45,
+     "faceCurve": 0,
+     "terraces": 0,
+     "lip": 0
+    }
+   }
+  ],
+  [
+   "plateau",
+   [
+    [
+     750,
+     520
+    ],
+    [
+     750,
+     520
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 300,
+     "amount": 100,
+     "roughness": 0,
+     "cracks": 1,
+     "profile": 1,
+     "apronPx": 0,
+     "apronHeight": 0,
+     "facePx": 45,
+     "faceCurve": 0,
+     "terraces": 0,
+     "lip": 0,
+     "styleDeposits": -100
+    }
+   }
+  ],
+  [
+   "paint",
+   [
+    [
+     750,
+     520
+    ],
+    [
+     750,
+     520
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 560,
+     "amount": 100,
+     "softness": 40,
+     "roughness": 20,
+     "paintChannel": 21
+    }
+   }
+  ]
+ ]
+}

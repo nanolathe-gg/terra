@@ -246,6 +246,8 @@ export class TerrainRenderer {
       if (key === 'mineralRings' && !this.config.textures.mineralRings) continue;
       if (key === 'mineralRing' && !this.config.textures.mineralRing) { this.bound[name] = 'grass'; continue; }
       if (key === 'slopeGrass' && !slopeMaterial) { this.bound[name] = 'grass'; continue; }
+      // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
+      if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured.slopeGrass.meanRGB.map(v => v / 255); continue; }
       if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
       if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
       let url = this.config.textures[key];
@@ -286,7 +288,7 @@ export class TerrainRenderer {
     }
     // Two optional transition stages share one array texture. Keeping both
     // layers resident makes the weathering-strength control continuous.
-    const fringeURL=this.config.textures.slopeFringe||this.config.textures.slopeGrass||this.config.textures.grass;
+    const fringeURL=this.config.textures.slopeFringe||(this.materialModel?null:this.config.textures.slopeGrass)||this.config.textures.grass;
     const loadFringe=async url=>{
       const response=await fetch(url);
       if(!response.ok) throw new Error('Cannot load transition material');
@@ -590,6 +592,7 @@ export class TerrainRenderer {
     this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
     this.i('uScatterOn', painted[4] || 0);
     this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
+    this.i('uOverrideOn', painted.slice(14, 18).some(Boolean) ? 1 : 0);   // H3: planes 14-17 (erosion, deposits, vegetation, exposure)
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
     this.i('uFlowOn', painted.slice(20, 25).some(Boolean) ? 1 : 0);
@@ -857,7 +860,6 @@ export class TerrainRenderer {
     // Card G4 (Painted Desert); 0 is every world as it was.
     this.f('uDesertCapFlat', variant.has('desertCapFlat') ? Number(variant.get('desertCapFlat')) : 0);
     // E9 (Green rock faces).
-    this.f('uFaceRock', variant.has('faceRock') ? Number(variant.get('faceRock')) : 0);
     this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
     this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
     this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);

@@ -282,13 +282,26 @@ fn fracturedSource(pixel: vec2f) -> vec3f { return pixelSample(rockFracturedTex,
 //   row 7  x,y: rock share at the face start and at its steepest
 //   row 8  face score: x: surface roughness, y: lump top, z: fine noise, w: broad noise
 //   row 9  x: gully rock, y: structured-rock order, z: painted-rock face
+// Override planes (planes 14-17 of the masks; a signed value v multiplies its control by 1 + v, and 0 changes nothing):
+// exposure scales where rock shows, vegetation scales the grass and moss that is left, deposits scale sand and scree
+// (read outside, through Place.deposits); the erosion plane is read on the CPU side by the GPU pass.
 const MM_PLACE = 156u;
 fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
-struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32 }
+struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32, deposits: f32 }
 fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32, painted: vec4f) -> Place {
     var out: Place;
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
     let r6 = pr(6u); let r7 = pr(7u); let r8 = pr(8u); let r9 = pr(9u);
+    var exposure = 0.0;
+    var vegetation = 0.0;
+    out.deposits = 1.0;
+    if (u.overrideOn != 0) {
+        let uv = maskUv(p);
+        let planes = textureSampleLevel(masksTex, linearClamp, uv, 4, 0.0);
+        vegetation = planes.r;
+        exposure = planes.g;
+        out.deposits = 1.0 + textureSampleLevel(masksTex, linearClamp, uv, 3, 0.0).w;
+    }
     // Rock: the broad slope, the form's slope and convexity at the tap spacing, noise, and the weathering's wear.
     let d = r1.w;
     let west = surfaceHeight(p - vec2f(d, 0.0));
@@ -322,6 +335,7 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
         exposed *= lowBank;
     }
     exposed *= 1.0 - route * (1.0 - smoothstep(r5.x, r5.y, slope));
+    exposed = 1.0 - clamp((1.0 - clamp(exposed * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
     out.exposed = exposed;
     out.lowBank = lowBank;
     // The face: lump-scale rock and moss on a slope; rock on steep flanks and in hollows, moss on tops.
@@ -352,6 +366,7 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, faceScore) * lowGate;
     // Inside painted rock the face is rock; moss stays at its edges and on the ledges below.
     if (u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * r9.z); }
+    rockMask = 1.0 - clamp((1.0 - clamp(rockMask * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
     out.face = face;
     out.rockMask = rockMask;
     out.top = top;
@@ -1664,8 +1679,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Card G6: the slate faces keep no snow lumps: a convex fold of the relief (a lump's top, a block's hip) would
         // score as moss here and cut a white dash through the face; the fibres carry the texture instead.
         if (u.iceFall > 0.0) { rockMask = mix(rockMask, lowGate, u.iceFall * u.iceSlate); }
-        // E9: inside painted rock the face is rock; moss stays at its edges and on the ledges below.
-        if (u.faceRock > 0.0 && u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * u.faceRock); }
 #endif
         let moss = mix(based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase), groundBased(groundSource(pixel)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
@@ -1762,7 +1775,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.reliefMode == 1) {
         // Procedural sand: a colour with two scales of grain, so it needs no
         // sampled art. Coverage comes from the bake.
+#ifdef MATERIAL_MODEL
+        let sand = bakedFields(p).a * place.deposits;
+#else
         let sand = bakedFields(p).a;
+#endif
         if (sand > 0.0) {
             // Weathered rock: the rock's own average colour, lightened and
             // dulled by weathering, with fragments of the rock texture as
@@ -1812,7 +1829,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // 1 (Green's dark terrace steps); up to -1 this is unchanged.
         material *= 1.0 - min(u.crackDark * max(-coverOrCrack, 0.0), 1.0);
     }
+#ifdef MATERIAL_MODEL
+    var chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route) * place.deposits);
+#else
     var chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route));
+#endif
     chip = max(chip, smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65);
     material = mix(material, rock, chip * (1.0 - exposed));
     var cleft = 0.0;
