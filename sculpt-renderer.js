@@ -660,6 +660,20 @@ export class TerrainRenderer {
       {binding: 18, resource: this.textures[this.bound.uPalette].view}]});
   }
 
+  // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
+  async readGenerated(layer, level = 0) {
+    const size = GENERATED_SIZE >> level, row = Math.ceil(size * 4 / 256) * 256;
+    const buffer = this.device.createBuffer({size: row * size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyTextureToBuffer({texture: this.generated.texture, mipLevel: level, origin: [0, 0, layer]}, {buffer, bytesPerRow: row}, [size, size, 1]);
+    this.device.queue.submit([encoder.finish()]);
+    await buffer.mapAsync(GPUMapMode.READ);
+    const mapped = new Uint8Array(buffer.getMappedRange()), out = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) out.set(mapped.subarray(y * row, y * row + size * 4), y * size * 4);
+    buffer.destroy();
+    return {size, data: Array.from(out)};
+  }
+
   // H4 item 2: the land materials of materials/green.json made on the GPU, once at startup and again when the table changes.
   // One layer per material, GENERATED_SIZE px square, MIP levels halving down to 8 px; level L is made with a footprint of 2^L
   // (engine-materials.wgsl). Returns the milliseconds from submit to the GPU finishing.  All four materials are always made.
@@ -674,7 +688,7 @@ export class TerrainRenderer {
     }
     if (!this.generated) {
       const texture = device.createTexture({label: 'generated materials', size: [size, size, layers], format: 'rgba8unorm', mipLevelCount: levels,
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING});
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
       this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
     }
     const rows = Float32Array.from(materialRows(this.materialData).flat());

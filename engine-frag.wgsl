@@ -271,7 +271,7 @@ fn fracturedSource(pixel: vec2f) -> vec3f { return genColor(3, pixel); }
 // (read outside, through Place.deposits); the erosion plane is read on the CPU side by the GPU pass.
 const MM_PLACE = 156u;
 fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
-struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32, deposits: f32 }
+struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32, deposits: f32, vegetation: f32 }
 fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32, painted: vec4f) -> Place {
     var out: Place;
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
@@ -279,10 +279,12 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     var exposure = 0.0;
     var vegetation = 0.0;
     out.deposits = 1.0;
+    out.vegetation = 1.0;
     if (u.overrideOn != 0) {
         let uv = maskUv(p);
         let planes = textureSampleLevel(masksTex, linearClamp, uv, 4, 0.0);
         vegetation = planes.r;
+        out.vegetation = 1.0 + planes.r;
         exposure = planes.g;
         out.deposits = 1.0 + textureSampleLevel(masksTex, linearClamp, uv, 3, 0.0).w;
     }
@@ -1360,7 +1362,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // E9: the weathered and fractured tiles carry green blotches (14% and 5.5% of their pixels)
         // that read as moss scattered over the face; retail's face holds grass at its edges. Clamp
         // the green to the larger of red and blue so the tile keeps its structure and loses its moss.
-        if (u.rockMoss < 1.0) { rock.g = mix(min(rock.g, max(rock.r, rock.b)), rock.g, u.rockMoss); }
+        // H4 round 2: clamped to 85% (the .15 of Green's old rockMoss); the moss on rock is the rockMoss rule below, which places it by form.
+        rock.g = mix(min(rock.g, max(rock.r, rock.b)), rock.g, 0.15);
     }
     rock = based(rock, u.rockTexMean, u.rockBase);
     // E9: the rock tile's own blotches and cell outlines read as soft cobble over the lit form;
@@ -1408,6 +1411,19 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // where the face material has not taken over.
         let hollow = smoothstep(0.25, 0.9, -top) * smoothstep(u.faceSlope.x * 0.4, u.faceSlope.x, faceSlope);
         material *= 1.0 - u.crevice * hollow * (1.0 - route);
+    }
+    // H4 round 2, rockMoss: moss and grass flecks on exposed rock, a dash of 2 px to small clumps. Retail's face carries them in its
+    // crevices and on the tops of its ledges and blocks (green share of the face 12%, ours 2%). The chance of a fleck grows with the
+    // crevice (H1's cavity depth) and the lump top, is clumped by a 5-px noise, and is drawn from a per-pixel hash against it, so a
+    // fleck is whole pixels. The colour is the slope grass of the table, brightened toward the plain's grass. The vegetation
+    // override plane (1 + v) scales it, as it scales H3's other grass and moss.
+    if (u.rockMoss > 0.0 && exposed > 0.02) {
+        let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
+        let ledge = smoothstep(0.1, 0.7, place.top);
+        let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
+        let want = u.rockMoss * place.vegetation * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+        let fleck = step(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
+        material = mix(material, saturate(slopeBased * vec3f(1.0, 1.25, 0.95)), fleck);
     }
     if (u.rockCrown > 0.0) {
         // Some worlds' raised ground is bare rock to its crown (Zhon's
