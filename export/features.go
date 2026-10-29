@@ -9,9 +9,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nanolathe-gg/nanolathe/internal/content"
-	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
 	"github.com/nanolathe-gg/nanolathe/vfs"
+	"github.com/nanolathe-gg/terraform/internal/featuredef"
+	"github.com/nanolathe-gg/terraform/mapdata"
 )
 
 // Track omission separately from JSON null without changing the reusable
@@ -85,18 +85,18 @@ func readExportFeatures(fs vfs.FSOps, root string, req exportRequest, catalog ca
 	}
 	allowed := make(map[string]mapdata.Feature, len(prepared.Features))
 	for _, f := range prepared.Features {
-		key := content.CanonicalKey(f.Name)
+		key := featuredef.Key(f.Name)
 		if _, exists := allowed[key]; exists {
 			return nil, fmt.Errorf("prepared catalogue repeats feature %q", f.Name)
 		}
 		allowed[key] = f
 	}
-	defs, err := content.CompileFeatures(fs)
+	defs, err := featuredef.Read(fs)
 	if err != nil {
 		return nil, err
 	}
 	for _, placed := range req.Features {
-		key := content.CanonicalKey(placed.Name)
+		key := featuredef.Key(placed.Name)
 		f, ok := allowed[key]
 		if !ok {
 			return nil, fmt.Errorf("feature %q is not in world's %s prepared catalogue", placed.Name, req.World)
@@ -179,7 +179,7 @@ func encodeFeatures(req exportRequest, allowed map[string]mapdata.Feature) ([]st
 	}
 	keys := []string{}
 	for _, placed := range req.Features {
-		key := content.CanonicalKey(placed.Name)
+		key := featuredef.Key(placed.Name)
 		f, ok := allowed[key]
 		if !ok {
 			return nil, nil, fmt.Errorf("feature %q has no validated world definition", placed.Name)
@@ -207,7 +207,7 @@ func encodeFeatures(req exportRequest, allowed map[string]mapdata.Feature) ([]st
 		records[key] = uint16(i)
 	}
 	for _, placed := range req.Features {
-		key := content.CanonicalKey(placed.Name)
+		key := featuredef.Key(placed.Name)
 		f := allowed[key]
 		for z := placed.Z; z < placed.Z+f.FootprintZ; z++ {
 			for x := placed.X; x < placed.X+f.FootprintX; x++ {

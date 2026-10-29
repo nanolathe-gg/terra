@@ -14,8 +14,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
 	"github.com/nanolathe-gg/nanolathe/vfs"
+	"github.com/nanolathe-gg/terraform/mapdata"
 )
 
 type rootsFlag []string

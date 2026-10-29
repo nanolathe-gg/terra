@@ -387,7 +387,7 @@ export async function mountMapFeatures(api) {
   try {
     if (config.biomeId==='zhon') throw new Error('Zhon has no retail feature set; feature tools are disabled until the owner chooses one.');
     const response=await fetch('/map-features/'+encodeURIComponent(config.biomeId)+'/catalog.json');
-    if (!response.ok) { const data=await response.json().catch(()=>({})); throw new Error(data.error||'Feature catalogue unavailable (HTTP '+response.status+'). Build map-features with: go build -o <assets-root>/bin/map-features ./tools/map-editor/features'); }
+    if (!response.ok) { const data=await response.json().catch(()=>({})); throw new Error(data.error||'Feature catalogue unavailable (HTTP '+response.status+'). Build map-features with: go build -o <assets-root>/bin/map-features ./features'); }
     catalogue=await response.json();
     if (catalogue.world!==config.biomeId || !Array.isArray(catalogue.features)) throw new Error('The feature catalogue does not match this world.');
     const safeSprite=s => s && typeof s.url==='string' && s.url.startsWith('/map-features/'+encodeURIComponent(config.biomeId)+'/') && !s.url.includes('..') && /\.png$/.test(s.url) && Number.isInteger(s.width) && s.width>0 && Number.isInteger(s.height) && s.height>0 && Number.isFinite(s.xOffset) && Number.isFinite(s.yOffset)?s:null;

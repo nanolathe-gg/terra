@@ -1,24 +1,36 @@
-# Terrain editor prototype
+# Terraform
 
-Card D phase 3 adds maps up to 40×40 units with a scrolling viewport,
-bounded regional replay, live gestures, overlapping weather tiles and streamed
-export. The 1024px study keeps its existing rendering path. Phase 3 review
-measurements and the remaining GPU rounding difference are recorded in
-`/private/tmp/nanolathe-map-editor/agent-D/NOTES.md`. Phase 3b integrates
-wave 2 through `04f1b786e`, including stored flow bakes. Phase 4 has not started.
+A browser (WebGPU) terrain and map editor for Total Annihilation, an
+experimental prototype. It exports `.ufo` map archives. It began as
+Nanolathe's `tools/map-editor`, and its history came with it.
 
-Card D phases 1 and 2 add playable terrain, features, starts and OTA settings.
-Limits and later phases are in [BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
+You need:
+- Go 1.27.1 or later;
+- Python 3 with `pip install -r requirements.txt`;
+- Node, for the `repro/` scripts;
+- Chrome with WebGPU;
+- a Total Annihilation install at `~/TotalAnnihilation`. It is only read.
 
-From this worktree, build the helpers and run the private server:
+The Go helpers use Nanolathe's public `formats` and `vfs` packages, pinned
+in `go.mod`, and read feature definitions with `internal/featuredef`.
+Files derived from retail content live under the assets root and are never
+committed. Build the helpers and run the server:
 
 ```sh
-mkdir -p /private/tmp/nanolathe-map-editor/agent-D/bin
-go build -o /private/tmp/nanolathe-map-editor/agent-D/map-export ./tools/map-editor/export
-go build -o /private/tmp/nanolathe-map-editor/agent-D/bin/map-features ./tools/map-editor/features
-/private/tmp/nanolathe-neural-terrain-venv/bin/python tools/map-editor/sculpt.py \
-  --port 8840 --assets-root /private/tmp/nanolathe-map-editor/agent-D
+R=/private/tmp/nanolathe-map-editor
+mkdir -p $R/bin
+go build -o $R/map-export ./export
+go build -o $R/bin/map-features ./features
+python3 sculpt.py --port 8801 --assets-root $R
 ```
+
+The server takes a minute or two to start. Card D phase 3 adds maps up to
+40×40 units with a scrolling viewport, bounded regional replay, live
+gestures, overlapping weather tiles and streamed export. The 1024px study
+keeps its existing rendering path. Phase 3b integrates wave 2, including
+stored flow bakes. Phase 4 has not started. Phases 1 and 2 add playable
+terrain, features, starts and OTA settings. Limits and later phases are in
+[BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
 
 The prepared `assets-*` folders must already be copied under that assets root,
 as the backlog specifies. Helpers read `~/TotalAnnihilation` without writing
@@ -28,7 +40,7 @@ Restart the server after Python edits or changing installed content. Each
 world's derived catalogue is refreshed once per server run from its configured
 content roots, even when private files already exist.
 
-Open <http://127.0.0.1:8840/sculpt>. **Playable map** creates a blank map
+Open <http://127.0.0.1:8801/sculpt>. **Playable map** creates a blank map
 canvas. Choose 1–40 units on each axis and a sea level, initially the
 upper median TNT sea level of its retail world. Each unit is 512 playable
 pixels. A 4×4 map contains 130×136 cells, including the outer strips, and
@@ -38,8 +50,8 @@ the height-dependent edge strips. Fit, 1×, 0.5× and the minimap navigator use 
 The authored-field regression check uses an isolated headless Chrome:
 
 ```sh
-cd tools/map-editor
-node repro/regional.mjs repro/scenes/lava-1.json --server http://127.0.0.1:8840 --port 9640
+cd terraform
+node repro/regional.mjs repro/scenes/lava-1.json --server http://127.0.0.1:8801 --port 9640
 ```
 
 It waits for the scene and any flow bake, then compares every authored field

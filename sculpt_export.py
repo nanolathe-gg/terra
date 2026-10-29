@@ -56,9 +56,9 @@ class MapExport:
     def require_tool(self, tool):
         package = 'features' if tool == self.feature_tool else 'export'
         if not Path(tool).is_file():
-            raise ValueError(f'Missing map-{package} helper: {tool}. Build it with: go build -o {shlex.quote(tool)} ./tools/map-editor/{package}')
+            raise ValueError(f'Missing map-{package} helper: {tool}. Build it with: go build -o {shlex.quote(tool)} ./{package}')
         if not os.access(tool, os.X_OK):
-            raise ValueError(f'Map-{package} helper is not executable: {tool}. Build it with: go build -o {shlex.quote(tool)} ./tools/map-editor/{package}')
+            raise ValueError(f'Map-{package} helper is not executable: {tool}. Build it with: go build -o {shlex.quote(tool)} ./{package}')
 
     def arguments(self, tool, *args):
         self.require_tool(tool)

@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	"github.com/nanolathe-gg/nanolathe/formats"
-	"github.com/nanolathe-gg/nanolathe/internal/content"
-	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
 	"github.com/nanolathe-gg/nanolathe/vfs"
+	"github.com/nanolathe-gg/terraform/internal/featuredef"
+	"github.com/nanolathe-gg/terraform/mapdata"
 )
 
 type rootsFlag []string
@@ -85,7 +85,7 @@ func run() error {
 	if err := fs.MountGameDirectories(roots); err != nil {
 		return err
 	}
-	defs, err := content.CompileFeatures(fs)
+	defs, err := featuredef.Read(fs)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func sourceUses(fs *vfs.FS, info sourceWorld) (map[string]int, map[string]string
 			return nil, nil, fmt.Errorf("read source %s: %w", name, err)
 		}
 		for _, rec := range tnt.FeatureTable {
-			k := content.CanonicalKey(rec.Name)
+			k := featuredef.Key(rec.Name)
 			if spelled[k] == "" {
 				spelled[k] = strings.TrimSpace(rec.Name)
 			}
@@ -146,13 +146,13 @@ func sourceUses(fs *vfs.FS, info sourceWorld) (map[string]int, map[string]string
 			if i%w >= w-2 || i/w >= h-8 || a.Feature == 0xFFFC || a.Metal > 0 || int(a.Feature) >= len(tnt.FeatureTable) {
 				continue
 			}
-			uses[content.CanonicalKey(tnt.FeatureTable[a.Feature].Name)]++
+			uses[featuredef.Key(tnt.FeatureTable[a.Feature].Name)]++
 		}
 	}
 	return uses, spelled, nil
 }
 
-func buildCatalog(fs vfs.FSOps, world, planet string, uses map[string]int, spelled map[string]string, defs map[string]*content.FeatureDef, palette [256][3]byte, out string) (mapdata.FeatureCatalog, error) {
+func buildCatalog(fs vfs.FSOps, world, planet string, uses map[string]int, spelled map[string]string, defs map[string]*featuredef.Def, palette [256][3]byte, out string) (mapdata.FeatureCatalog, error) {
 	result := mapdata.FeatureCatalog{World: world, Planet: planet, Features: []mapdata.Feature{}}
 	keys := make([]string, 0, len(uses))
 	for key := range uses {
@@ -225,7 +225,7 @@ func buildCatalog(fs vfs.FSOps, world, planet string, uses map[string]int, spell
 
 // Follow cmd/nanolathe/mapgen_world.go mapgenFeatures, retaining every drawn
 // member rather than its generator-only limit of eight per vegetation kind.
-func featureKind(d *content.FeatureDef) string {
+func featureKind(d *featuredef.Def) string {
 	switch {
 	case d.Indestructible && d.Metal > 0 && d.FootprintX >= 2 && d.FootprintZ >= 2 && !d.Blocking:
 		return "deposit"

@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/nanolathe-gg/nanolathe/formats"
-	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
+	"github.com/nanolathe-gg/terraform/mapdata"
 )
 
 // Follow [fmt gaf] "Composed frames": every leaf uses the same anchor and

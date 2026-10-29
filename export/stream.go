@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nanolathe-gg/nanolathe/tools/map-editor/mapdata"
+	"github.com/nanolathe-gg/terraform/mapdata"
 )
 
 const maxChunkSide = 4096
