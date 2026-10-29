@@ -1012,9 +1012,10 @@ export class TerrainRenderer {
   // H2: the GPU erosion pass (sculpt-erosion.js, erosion.wgsl), built on first use.
   async erode(request) {
     if (!this.erosion) {
-      const source = await (await fetch('/erosion.wgsl')).text();
+      // H5: Green's engine steps over the active tiles only (engine-erosion.wgsl); engine 0 keeps erosion.wgsl whole.
+      const source = await (await fetch(this.engine ? '/engine-erosion.wgsl' : '/erosion.wgsl')).text();
       const {GpuErosion} = await import('./sculpt-erosion.js');
-      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])));
+      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])), Boolean(this.engine));
     }
     return this.erosion.run(request);
   }
