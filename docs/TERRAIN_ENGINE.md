@@ -54,6 +54,14 @@ feature.
     shader for the new green planet work, then we can more directly
     compare."*
 
+11. **Scale and impact.** *"remember the scale of Nanolathe/TA because
+    that is our target. We aren't 10,000 feet up in a jet where details
+    are washed out. I want to see pixelated grit, boulders, rocks, gravel,
+    sand, gouges, scratches, etc. The controls and sliders we keep on the
+    simplified GPU simulation to control the base geology, rock types,
+    weathering, etc needs to be impactful and not just change a couple
+    pixels at the base of a hill that nobody would notice."*
+
 ## The Green slice
 
 Green gets its own engine: new shaders and GPU passes for every stage,
@@ -66,6 +74,10 @@ can be compared on the same scenes against retail.
      rock blocks from the column.
    - Green's water comes across unchanged.
 2. **H5, weather on the GPU everywhere.**
+   - Erosion must show at TA's scale: rills and gullies, debris fans,
+     scree and boulders at the feet of cliffs, and sand where water drops
+     it. Its controls (age, rain, hardness contrast, repose) must change
+     the picture visibly at 1×.
    - The apron and sand move into the GPU pass.
    - The pass runs on map canvases: coarse over the whole map, then fine
      tiles, with stored planes (H2b).
@@ -328,6 +340,28 @@ until it is accepted.
   it runs at, and shows it working at a quarter of final resolution and at
   final. A pass that works at only one resolution blocks progressive
   rendering.
+- **Detail at TA's scale** (decision 11). The target is close up: one
+  art pixel is the unit. Each stage's output must show at 1× in the
+  places retail shows it:
+  - rock: chipped block edges, gouges and scratches;
+  - loose ground: gravel and grit at a pixel or two, stones and boulders
+    a few pixels across;
+  - deposits: sand and scree where water and gravity leave them.
+
+  Judge at 1× and 2× against retail. Statistics that match while the
+  picture looks smooth or washed out is a failure.
+- **Every kept control must matter.** For each control a card adds or keeps
+  on the slice:
+  - render green-1..3 at its minimum and at its maximum;
+  - report the share of its target class's pixels (plain, grass slope,
+    rock face, or its own deposit area) that change by more than 8 luma
+    levels;
+  - add a 1× crop pair.
+
+  A main control under 5% of its class across its range is a finding: make
+  it stronger, or remove it. H2's erosion moved 1.8% of green-2's samples
+  by more than a height unit, and H3's deposits override on a landform
+  moved 0.55% of the pixels around it. That is what this rule is for.
 - **Overrides from the start.** Every agent rate and placement rule is
   multiplied by its override field, which is 1 wherever nothing overrides
   it. The controls that set it per feature can come with the UI pass.
