@@ -1331,6 +1331,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     var grass = groundBased(groundSource(pixel));
+#ifdef MATERIAL_MODEL
+    let grass0 = grass;
+#endif
+#ifdef MATERIAL_MODEL
+    // The model's slope grass costs noise taps, so the slope and face blocks share one read.
+    // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
+    var slopeBased = vec3f(0.0);
+    if (slope > u.slopeProfile.x || u.paintOn != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
+#endif
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
     var transitionGround = grass;
@@ -1344,7 +1353,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.slopeMaterial != 0) {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
+#ifdef MATERIAL_MODEL
+        var slopeGrass = slopeBased;
+#else
         var slopeGrass = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase);
+#endif
         var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope)
                        * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
         if (u.mineralMargins != 0) {
@@ -1680,7 +1693,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // score as moss here and cut a white dash through the face; the fibres carry the texture instead.
         if (u.iceFall > 0.0) { rockMask = mix(rockMask, lowGate, u.iceFall * u.iceSlate); }
 #endif
+#ifdef MATERIAL_MODEL
+        let moss = mix(slopeBased, grass0, u.mossFromGround);
+#else
         let moss = mix(based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase), groundBased(groundSource(pixel)), u.mossFromGround);
+#endif
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
         faceCover = face * u.microRock * (1.0 - rockMask);

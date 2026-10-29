@@ -103,10 +103,14 @@ fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
     }
     // A coarse draw averages the grain it cannot show: a five-point Gauss-Hermite rule over the lost
     // variance keeps the mean colour (the ramp at the median alone would not) and the image's broad histogram.
-    let s = sqrt(lost);
-    var rgb = mmRamp(base, mmU(base, z)) * 0.533333
+    // A full-resolution draw loses nothing (lost is 0), so one ramp read serves; only a coarse draw takes the rule.
+    var rgb = mmRamp(base, mmU(base, z));
+    if (lost > 1e-6) {
+        let s = sqrt(lost);
+        rgb = rgb * 0.533333
             + (mmRamp(base, mmU(base, z - s * 1.355626)) + mmRamp(base, mmU(base, z + s * 1.355626))) * 0.222076
             + (mmRamp(base, mmU(base, z - s * 2.856970)) + mmRamp(base, mmU(base, z + s * 2.856970))) * 0.011257;
+    }
     let at = clamp(mmU(base, z) * 16.0 - 0.5, 0.0, 15.0);
     let i0 = u32(floor(at));
     let dir = mix(matRow(base + 19u + i0).rgb, matRow(base + 19u + min(i0 + 1u, 15u)).rgb, fract(at));
