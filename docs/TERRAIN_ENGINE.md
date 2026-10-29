@@ -353,14 +353,19 @@ until it is accepted.
   picture looks smooth or washed out is a failure.
 - **Every kept control must matter.** For each control a card adds or keeps
   on the slice:
-  - render green-1..3 at its minimum and at its maximum;
-  - report the share of its target class's pixels (plain, grass slope,
-    rock face, or its own deposit area) that change by more than 8 luma
-    levels;
-  - add a 1× crop pair.
+  - render green-1..3 at the lowest and the highest value an artist would
+    set: not "off", because switching anything on passes;
+  - run `measure/impact.py`: the share of its target class (plain, grass
+    slope, rock face, or its own area) whose 16-px blocks change in mean
+    luma, luma s.d. or colour, beside a noise floor. Per-pixel differences
+    are not the measure: a small height change moves the same texture a
+    pixel over, which changes most pixels while the picture looks the same
+    (H5);
+  - add its 1× crop sheet;
+  - measure on the build being shipped, with its defaults.
 
-  A main control under 5% of its class across its range is a finding: make
-  it stronger, or remove it. H2's erosion moved 1.8% of green-2's samples
+  A main control under 5% of its class across its range, or not clearly
+  above the floor, is a finding: make it stronger, or remove it. H2's erosion moved 1.8% of green-2's samples
   by more than a height unit, and H3's deposits override on a landform
   moved 0.55% of the pixels around it. That is what this rule is for.
 - **Overrides from the start.** Every agent rate and placement rule is
