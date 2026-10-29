@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.wgsl', 'erosion.wgsl', 'sculpt-erosion.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
+    'relief-bake.wgsl', 'erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -77,7 +77,7 @@ KNOB_DEFAULTS = dict(
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
     # Local style (card C5 stage 2): change about the world's own value, 0 none.
-    styleRelief=0, styleCracks=0, styleBanding=0, styleFace=0,
+    styleRelief=0, styleCracks=0, styleBanding=0, styleFace=0, styleErosion=0, styleDeposits=0, styleVegetation=0, styleExposure=0,
     # Crater rim height as a share of its depth (card C4); .34 is the rim every crater had.
     rimHeight=.34,
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
@@ -114,7 +114,7 @@ KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander
 # G4 (Painted Desert): level ground in the pale cap zone kept as one sheet of the cool bed (strength).
 KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
-KNOB_DEFAULTS.update(faceRock=0, rockMoss=1, rockDetail=1, shineOutside=1,
+KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1,
                      gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
                      bedFlow=1, bedBend=0, bedPunch=0,
                      scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
@@ -209,6 +209,9 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # eight, repeating upward) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). erosion 1 runs the GPU shallow-water pass in place of the droplet worker for the 1024-px study:
 # erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
+# H3 (Green): materialModel 1 draws the land materials from materials/green.json through material-model.wgsl,
+# with no prepared image (0: the images, as before).
+KNOB_DEFAULTS.update(materialModel=0)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
@@ -216,7 +219,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(banding=.8, bandLine=.84, crackDark=.4,
+    'green': dict(materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -231,7 +234,7 @@ WORLD_KNOBS = {
                   # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
-                  rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedDip=0, bedVary=.9,
+                  rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
                   bedLip=2, bedLedge=.4, jointAngle=-20, jointSpacing=34, jointDepth=3, jointRun=200, jointGaps=.35,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
@@ -239,7 +242,7 @@ WORLD_KNOBS = {
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
                   # grid upsampled), so the step sits at 40 and nothing fades.
-                  bedLit=1, bedTint=1, bedContrast=.45, bedBright=1, bedRelief=1, deepEdge=1, deepEdgeDepth=40,
+                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=1, deepEdge=1, deepEdgeDepth=40,
                   # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
                   # lumps only in patches, which the Paint brush's Ground lumps makes. On
                   # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
@@ -252,12 +255,12 @@ WORLD_KNOBS = {
                   # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
                   # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
                   # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
-                  # earlier look: faceRock 0, rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0, bedFlow 1,
+                  # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0, bedFlow 1,
                   # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
-                  faceRock=1, rockMoss=.15, rockDetail=.5,
-                  gullyDepth=8, gullySpacing=36, gullyWidth=14, gullyAngle=-20, gullyRun=90, gullyGaps=.4, gullyShade=1.2, ribTilt=.2,
+                  rockMoss=.15, rockDetail=.5,
+                  gullyDepth=8, gullySpacing=36, gullyRun=90, gullyGaps=.4, gullyShade=1.2, ribTilt=.2,
                   bedFlow=0, bedBend=1, bedPunch=1,
-                  scratchDepth=2.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
+                  scratchDepth=2.5, scratchRun=140, scratchGaps=.3,
                   facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
@@ -270,7 +273,7 @@ WORLD_KNOBS = {
                   # mottle's clouds and the palette dither's white noise went; lit bumps of 5 px take
                   # their place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
-                  bedMottle=0, shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
+                  shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
                   shoalRag=5,
                   # G1: the hard waterline steps in 1-3 px runs (retail's), up to 2 px off the depth contour.
@@ -291,10 +294,9 @@ WORLD_KNOBS = {
                   closeShadow=.8, cavity=.6,
                   # H2 (rock column): eight beds repeating every 47 height units (a hash bed averaged 5): thin hard beds that stand
                   # as ledges between thicker soft ones, so the hard ones read as lines and the soft ones as the space between.
-                  column=1, columnContrast=1,
-                  columnBeds='4:.9:0,7:.2:1,3:.7:0,8:.15:1,5:1:0,7:.3:1,4:.6:0,9:.2:1',
+                  column=1, columnBeds='4:.9:0,7:.2:1,3:.7:0,8:.15:1,5:1:0,7:.3:1,4:.6:0,9:.2:1',
                   # H2 (erosion): the GPU shallow-water pass replaces the droplet worker's loop on the study.
-                  erosion=1, erosionAge=200, erosionRain=1, talusAngle=40),
+                  erosion=1, ),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail

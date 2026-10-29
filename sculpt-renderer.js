@@ -3,9 +3,21 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
+import {materialRows} from './sculpt-material-model.js';
+
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
 const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
+
+// The plain's tiles as a 512 x 32 picture: tile t at x = 32 t, entry letters looked up in the colour list (H3).
+async function groundTileBitmap({entries, tiles}) {
+  const data = new ImageData(512, 32);
+  tiles.forEach((tile, t) => { for (let i = 0; i < 1024; i++) {
+    const c = entries[tile.charCodeAt(i) - 97], at = ((i >> 5) * 512 + t * 32 + (i & 31)) * 4;
+    data.data.set([c[0], c[1], c[2], 255], at);
+  } });
+  return createImageBitmap(data, {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+}
 
 // Average colour of an image (0..1 RGB), from a 64x64 reduction.
 function meanColor(bitmap) {
@@ -138,13 +150,18 @@ export class TerrainRenderer {
     this.context.configure({device, format: this.format, alphaMode: 'opaque',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
 
-    const [vert, frag, common, bake] = await Promise.all(['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl'].map(async name => {
+    // H3: Green's land materials from numbers (materialModel 1, the world's default, or ?materialModel=1|0 on the page).
+    const modelQuery = new URLSearchParams(location.search).get('materialModel');
+    this.materialModel = Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
+    this.materialData = null;
+    const [vert, frag, common, bake, modelSource, modelTable] = await Promise.all(['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])].map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
+    if (this.materialModel) defines.add('MATERIAL_MODEL');
     this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -162,7 +179,7 @@ export class TerrainRenderer {
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile('sculpt-frag.wgsl', preprocess(frag, common, defines)),
+      compile('sculpt-frag.wgsl', preprocess(this.materialModel ? frag + '\n' + modelSource : frag, common, defines)),
       compile('relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
@@ -208,6 +225,7 @@ export class TerrainRenderer {
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
+    if (this.materialModel) { this.materialData = JSON.parse(modelTable); this.set('uMaterialTable', materialRows(this.materialData)); }
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -228,6 +246,8 @@ export class TerrainRenderer {
       if (key === 'mineralRings' && !this.config.textures.mineralRings) continue;
       if (key === 'mineralRing' && !this.config.textures.mineralRing) { this.bound[name] = 'grass'; continue; }
       if (key === 'slopeGrass' && !slopeMaterial) { this.bound[name] = 'grass'; continue; }
+      // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
+      if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured.slopeGrass.meanRGB.map(v => v / 255); continue; }
       if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
       if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
       let url = this.config.textures[key];
@@ -244,9 +264,14 @@ export class TerrainRenderer {
         const ground = this.groundSource();
         url = variant.get('ground') !== 'texture' && ground.groundTiles ? ground.groundTiles : ground.grass;
       }
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Cannot load ${key} material`);
-      const bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+      // H3: with the material model the plain's 16 tiles are built from materials/green.json's `ground` data, not read from a file.
+      let bitmap;
+      if (key === 'grass' && this.materialData?.ground) bitmap = await groundTileBitmap(this.materialData.ground);
+      else {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Cannot load ${key} material`);
+        bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+      }
       // Mean colour of each base material, so a world can move it to a new
       // base colour while keeping the texture's grain.
       const meanOf = {grass: 'ground', slopeGrass: 'slope', rock: 'rock'}[key];
@@ -263,7 +288,7 @@ export class TerrainRenderer {
     }
     // Two optional transition stages share one array texture. Keeping both
     // layers resident makes the weathering-strength control continuous.
-    const fringeURL=this.config.textures.slopeFringe||this.config.textures.slopeGrass||this.config.textures.grass;
+    const fringeURL=this.config.textures.slopeFringe||(this.materialModel?null:this.config.textures.slopeGrass)||this.config.textures.grass;
     const loadFringe=async url=>{
       const response=await fetch(url);
       if(!response.ok) throw new Error('Cannot load transition material');
@@ -567,6 +592,7 @@ export class TerrainRenderer {
     this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
     this.i('uScatterOn', painted[4] || 0);
     this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
+    this.i('uOverrideOn', painted.slice(14, 18).some(Boolean) ? 1 : 0);   // H3: planes 14-17 (erosion, deposits, vegetation, exposure)
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
     this.i('uFlowOn', painted.slice(20, 25).some(Boolean) ? 1 : 0);
@@ -716,6 +742,7 @@ export class TerrainRenderer {
   applyKnobs() {
     const variant = this.variant;
     this.i('uReliefMode', variant.get('detail') === 'lab' ? 0 : 1);
+    this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
     this.set('uRockShare', (variant.get('rockShare') || '0.2,1.0').split(',').map(Number));
@@ -833,7 +860,6 @@ export class TerrainRenderer {
     // Card G4 (Painted Desert); 0 is every world as it was.
     this.f('uDesertCapFlat', variant.has('desertCapFlat') ? Number(variant.get('desertCapFlat')) : 0);
     // E9 (Green rock faces).
-    this.f('uFaceRock', variant.has('faceRock') ? Number(variant.get('faceRock')) : 0);
     this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
     this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
     this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);

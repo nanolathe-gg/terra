@@ -31,7 +31,7 @@ const SHORE_BUDGET = 0.35;
 
 // Same rules as the worker: slope measured in height per world px, mobility from the slope
 // and the protection, the bounds around the authored height.
-function fixedField({height, protect, grid, size, seaLevel}) {
+function fixedField({height, protect, rate, grid, size, seaLevel}) {
   const n = grid * grid, spacing = (size - 1) / (grid - 1), gradient = new Float32Array(n), out = new Float32Array(n * 4);
   for (let y = 0; y < grid; y++) for (let x = 0; x < grid; x++) {
     const lx = Math.max(0, x - 1), rx = Math.min(grid - 1, x + 1), ty = Math.max(0, y - 1), by = Math.min(grid - 1, y + 1);
@@ -53,7 +53,8 @@ function fixedField({height, protect, grid, size, seaLevel}) {
     const budget = SHORE_BUDGET + (BUDGET - SHORE_BUDGET) * smooth(seaLevel + 2, seaLevel + 20, h);
     out[i * 4] = Math.max(MIN, Math.min(h, seaLevel + 1), h - (4 + 8 * steep) * budget * weight);
     out[i * 4 + 1] = Math.min(MAX, h + (2.5 + 2.5 * steep) * budget * weight);
-    out[i * 4 + 2] = weight;
+    // H3 override plane 14: the erosion rate there, times 1 + v (no erosion at -1).
+    out[i * 4 + 2] = weight * (rate ? Math.max(0, rate[i]) : 1);
   }
   return out;
 }

@@ -196,6 +196,7 @@ struct Uniforms {
     // Painted masks (card C5).
     paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
     scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
+    overrideOn: i32,      // 1 once any cell carries an H3 override (planes 14-17: erosion, deposits, vegetation, rock exposure)
     styleOn: i32,         // 1 once any cell carries a painted local style (relief, cracks, banding, face rock share)
     // Lava bank lines (card B3): how the contour lines break up (all 0: the plain contours).
     bandRelief: f32,      // share of the relief height that bends the lines, so they fold round ribs and lumps
@@ -268,7 +269,6 @@ struct Uniforms {
     // G4 (Painted Desert)
     desertCapFlat: f32,    // how far level ground in a cap zone (share over .9) stays the cool bed (0: the beds as before)
     // E9 (Green rock faces). Every default reproduces the earlier output exactly.
-    faceRock: f32,        // painted rock's interior is rock, with moss kept to its edges (0: moss blobs inside as before; 1: none inside)
     rockMoss: f32,        // how much of the rock art's own green (fractured and weathered tiles) is kept (1: all, as before; 0: none)
     shineOutside: f32,    // share of the rock's glints kept outside painted rock (1: everywhere, as the shine model gives them)
     rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
@@ -393,6 +393,8 @@ struct Uniforms {
     columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
     columnCount: f32,     // beds in the column, 1..8, that repeat upward
     columnBeds: array<vec4f, 8>,   // per bed: x thickness (height units), y hardness 0..1, z material slot (H3, unused here)
+    materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
+    materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
