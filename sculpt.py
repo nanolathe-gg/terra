@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.wgsl', 'erosion.wgsl', 'sculpt-erosion.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
+    'relief-bake.wgsl', 'erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -209,6 +209,9 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # eight, repeating upward) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). erosion 1 runs the GPU shallow-water pass in place of the droplet worker for the 1024-px study:
 # erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
+# H3 (Green): materialModel 1 draws the land materials from materials/green.json through material-model.wgsl,
+# with no prepared image (0: the images, as before).
+KNOB_DEFAULTS.update(materialModel=0)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).

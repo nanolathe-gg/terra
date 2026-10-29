@@ -393,6 +393,8 @@ struct Uniforms {
     columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
     columnCount: f32,     // beds in the column, 1..8, that repeat upward
     columnBeds: array<vec4f, 8>,   // per bed: x thickness (height units), y hardness 0..1, z material slot (H3, unused here)
+    materialTable: array<vec4f, 175>,   // Green (H3 materialModel): five materials of 35 rows, from materials/green.json (material-model.wgsl)
+    materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

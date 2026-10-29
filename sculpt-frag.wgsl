@@ -245,6 +245,27 @@ fn groundTile(pixel: vec2f) -> vec3f {
     return textureLoad(grassTex, vec2i(tile * 32 + local.x, local.y), 0).rgb;
 }
 
+// Green's land materials come from images, or (materialModel, Card H3) from the numbers in
+// materials/green.json through material-model.wgsl. Every draw that wants one of them asks here.
+#ifdef MATERIAL_MODEL
+fn matRow(i: u32) -> vec4f { return u.materialTable[i]; }
+// Quarter-resolution trial: a coarse draw shows one sample per foot pixels.
+fn modelPixel(pixel: vec2f) -> vec2f { return select(pixel, (floor(pixel / u.materialFoot) + 0.5) * u.materialFoot, u.materialFoot > 1.0); }
+fn groundSource(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
+fn grassImage(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
+fn slopeGrassSource(pixel: vec2f) -> vec3f { return mmColor(1u, modelPixel(pixel), u.materialFoot); }
+fn rockSource(pixel: vec2f, size: vec2f) -> vec3f { return mmColor(2u, modelPixel(pixel), u.materialFoot); }
+fn weatheredSource(pixel: vec2f) -> vec3f { return mmColor(3u, modelPixel(pixel + vec2f(73.0, 17.0)), u.materialFoot); }
+fn fracturedSource(pixel: vec2f) -> vec3f { return mmColor(4u, modelPixel(pixel), u.materialFoot); }
+#else
+fn groundSource(pixel: vec2f) -> vec3f { return select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1); }
+fn grassImage(pixel: vec2f) -> vec3f { return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb; }
+fn slopeGrassSource(pixel: vec2f) -> vec3f { return pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb; }
+fn rockSource(pixel: vec2f, size: vec2f) -> vec3f { return pixelSample(rockTex, rockSamp, pixel, size).rgb; }
+fn weatheredSource(pixel: vec2f) -> vec3f { return pixelSample(rockWeatheredTex, rockWeatheredSamp, pixel + vec2f(73.0, 17.0), vec2f(256.0)).rgb; }
+fn fracturedSource(pixel: vec2f) -> vec3f { return pixelSample(rockFracturedTex, rockFracturedSamp, pixel, vec2f(256.0)).rgb; }
+#endif
+
 // Moon slope marks, measured on the retail Lunar sections and the cc21
 // crater (measure/slope_marks.py): crisp dark specks and short dashes on
 // slopes from ~0.15, about 2 px wide and 3-7 px long, their long axis a
@@ -586,7 +607,7 @@ fn paintCoverage(p: vec2f, slope: f32, hollow: f32) -> vec4f {
 // still reads as snow with its own tint. Lift 0 would be the bare material.
 fn snowMaterial(pixel: vec2f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
-    var snow = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
+    var snow = groundBased(groundSource(pixel));
     var mean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
     let beachMean = select(u.beachTexMean, u.beachBase.rgb, u.beachBase.a > 0.5);
     if (u.beach != 0 && dot(beachMean, luma) > dot(mean, luma)) {
@@ -601,8 +622,8 @@ fn snowMaterial(pixel: vec2f) -> vec3f {
 // patch reads as clumpy moss rather than ground.
 fn mossMaterial(pixel: vec2f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
-    let cover = based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase);
-    let ground = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
+    let cover = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase);
+    let ground = groundBased(groundSource(pixel));
     let mean = mix(select(u.slopeTexMean, u.slopeBase.rgb, u.slopeBase.a > 0.5), select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5), u.mossFromGround);
     let face = mix(cover, ground, u.mossFromGround);
     let grain = dot(face, luma) / max(dot(mean, luma), 0.02);
@@ -1200,7 +1221,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Retail's small hills keep nearly the plain's tone on their far sides; the dark masses are the tall hills', so it grows with height.
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
-    var grass = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
+    var grass = groundBased(groundSource(pixel));
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
     var transitionGround = grass;
@@ -1214,7 +1235,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.slopeMaterial != 0) {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
-        var slopeGrass = based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase);
+        var slopeGrass = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase);
         var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope)
                        * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
         if (u.mineralMargins != 0) {
@@ -1355,15 +1376,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Small mineral interiors supply pixel structure; the whole crown/face/
     // foot comes from this surface. Some native microshading remains baked.
     let rockSize = vec2f(textureDimensions(rockTex, 0));
-    var rock = pixelSample(rockTex, rockSamp, pixel, rockSize).rgb;
+    var rock = rockSource(pixel, rockSize);
     rock = saturate(u.rockMean + (rock - u.rockMean) * u.mineralDetail);
     if (u.rockLayers != 0 && h > 18.0) {
         // Broad material regions vary actual native mineral structure. No
         // repeated whole cliff, colour-only variants or fresh pixel noise.
         let formation = terrainNoise(p * 0.35 + vec2f(43.0, 87.0)).r;
         let moss = terrainNoise(p * 0.70 + vec2f(173.0, 91.0)).g + weather.g * 0.30;
-        let fractured = pixelSample(rockFracturedTex, rockFracturedSamp, pixel, vec2f(256.0)).rgb;
-        let weathered = pixelSample(rockWeatheredTex, rockWeatheredSamp, pixel + vec2f(73.0, 17.0), vec2f(256.0)).rgb;
+        let fractured = fracturedSource(pixel);
+        let weathered = weatheredSource(pixel);
         rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
         rock = mix(rock, weathered, smoothstep(0.40, 0.62, moss));
         // E9: the weathered and fractured tiles carry green blotches (14% and 5.5% of their pixels)
@@ -1537,7 +1558,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.iceFall > 0.0) { rockMask = mix(rockMask, lowGate, u.iceFall * u.iceSlate); }
         // E9: inside painted rock the face is rock; moss stays at its edges and on the ledges below.
         if (u.faceRock > 0.0 && u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * u.faceRock); }
-        let moss = mix(based(pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb, u.slopeTexMean, u.slopeBase), groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1)), u.mossFromGround);
+        let moss = mix(based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase), groundBased(groundSource(pixel)), u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
         faceCover = face * u.microRock * (1.0 - rockMask);
@@ -1554,7 +1575,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // A light, crisp grass rim where rough ground meets the level plain.
         let rim = smoothstep(u.faceSlope.x * 0.35, u.faceSlope.x * 0.6, faceSlope)
                 * (1.0 - smoothstep(u.faceSlope.x * 0.7, u.faceSlope.x * 1.05, faceSlope));
-        let brightGrass = saturate(based(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, u.groundTexMean, u.groundBase) * vec3f(1.15, 1.35, 1.05));
+        let brightGrass = saturate(based(grassImage(pixel), u.groundTexMean, u.groundBase) * vec3f(1.15, 1.35, 1.05));
         material = mix(material, brightGrass, rim * u.footRim * (1.0 - route));
         exposed = max(exposed * (1.0 - face), rockMask * face);
         // Thin dark crevices in the relief's hollows, also across mid slopes
@@ -1637,12 +1658,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // Weathered rock: the rock's own average colour, lightened and
             // dulled by weathering, with fragments of the rock texture as
             // grains. A biome's sand therefore follows its own rock.
+#ifdef MATERIAL_MODEL
+            let rockLevel = u.rockTexMean;
+#else
             let rockLevel = textureSampleLevel(rockTex, rockSamp, vec2f(0.5), 12.0).rgb;
+#endif
             let rockAverage = select(rockLevel, u.rockBase.rgb, u.rockBase.a > 0.5);
             var weathered = mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25);
             weathered = mix(weathered, vec3f(1.0), u.sandLight * 0.55);
             if (u.sandBase.a > 0.5) { weathered = u.sandBase.rgb; }
+#ifdef MATERIAL_MODEL
+            var fragment = mmColor(2u, modelPixel(scatter), u.materialFoot);
+#else
             var fragment = textureSampleGrad(rockTex, rockSamp, scatter / rockSize, scatterDx / rockSize, scatterDy / rockSize).rgb;
+#endif
             fragment = mix(fragment, vec3f(1.0), u.sandLight * 0.45);
             if (u.sandBase.a > 0.5) { fragment = saturate(fragment - rockLevel + u.sandBase.rgb); }
             let sandMaterial = mix(weathered, fragment, u.sandGrain);

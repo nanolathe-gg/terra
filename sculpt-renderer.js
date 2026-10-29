@@ -3,6 +3,8 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
+import {materialRows} from './sculpt-material-model.js';
+
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
 const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
@@ -138,13 +140,17 @@ export class TerrainRenderer {
     this.context.configure({device, format: this.format, alphaMode: 'opaque',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
 
-    const [vert, frag, common, bake] = await Promise.all(['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl'].map(async name => {
+    // H3: Green's land materials from numbers (materialModel 1, the world's default, or ?materialModel=1|0 on the page).
+    const modelQuery = new URLSearchParams(location.search).get('materialModel');
+    this.materialModel = Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
+    const [vert, frag, common, bake, modelSource, modelTable] = await Promise.all(['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])].map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
+    if (this.materialModel) defines.add('MATERIAL_MODEL');
     this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -162,7 +168,7 @@ export class TerrainRenderer {
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile('sculpt-frag.wgsl', preprocess(frag, common, defines)),
+      compile('sculpt-frag.wgsl', preprocess(this.materialModel ? frag + '\n' + modelSource : frag, common, defines)),
       compile('relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
@@ -208,6 +214,7 @@ export class TerrainRenderer {
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
+    if (this.materialModel) this.set('uMaterialTable', materialRows(JSON.parse(modelTable)));
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -716,6 +723,7 @@ export class TerrainRenderer {
   applyKnobs() {
     const variant = this.variant;
     this.i('uReliefMode', variant.get('detail') === 'lab' ? 0 : 1);
+    this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
     this.set('uRockShare', (variant.get('rockShare') || '0.2,1.0').split(',').map(Number));
