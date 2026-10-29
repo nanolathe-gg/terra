@@ -500,6 +500,60 @@ fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
     return vec3f(off, lip, k);
 }
 
+// H4 item 4: rock blocks. A bed of the column (index, hardness and thickness from columnAt, as columnBedRelief reads it) is cut by
+// joints into blocks; each block is a plane with a small tilt and a small step against its neighbours, so it lights as one flat
+// piece. Soft beds break into small blocks with steeper tilts, hard beds into larger, cleaner ones (a share of the tilt, step and
+// chipping). Joints sit at their own offsets in each bed, so rows are bonded, not stacked. The crevice is continuous along every
+// bed boundary and joint (no gaps), 1-2 px wide with a wandering edge, and is carved as well as darkened, so it shades with the sun.
+// pf: the face's own coordinates (x along the contour, y down the fall line), as the beds and joints use them.
+// Returns (height offset, crevice 0..1, bed hardness).
+fn blockField(p: vec2f, pf: vec2f, h: f32, gOver: f32) -> vec3f {
+    let a = radians(u.bedDipDir);
+    let G = max(select(length(broadGradient(p) + u.bedDip * vec2f(cos(a), sin(a))), gOver, gOver >= 0.0), 0.15);
+    let bed = columnAt(columnCoord(p, h));
+    let rowPx = bed.thick / G;
+    // A bed is tens of px tall on a gentle face, so it is cut into courses of about blockRow px (soft beds thinner, hard ones thicker).
+    // The count is whole, so a course never straddles the bed boundary; the course boundary is a crevice too, a shallower one.
+    let courses = max(1.0, round(rowPx / (u.blockRow * mix(0.7, 1.5, bed.hardness))));
+    let courseT = min(floor(bed.through * courses), courses - 1.0);
+    let courseF = bed.through * courses - courseT;
+    let coursePx = rowPx / courses;
+    let down = (courseF - 0.5) * coursePx;
+    let dBed = min(bed.through, 1.0 - bed.through) * rowPx;
+    let dCourse = min(courseF, 1.0 - courseF) * coursePx;
+    let id = bed.index * 31.0 + courseT;
+    let hk = cellHash(vec2f(id, 83.0));
+    let W = max(u.blockWidth * mix(0.55, 1.6, bed.hardness) * (0.75 + 0.5 * hk.x), 3.0);
+    let chip = (valueNoise(p / 1.7 + 29.0) + 0.5 * valueNoise(p / 0.9 + 3.0)) * u.blockChip * mix(1.0, 0.4, bed.hardness);
+    let x = pf.x + hk.y * W * 7.0;
+    let c = floor(x / W);
+    var left = -1e9;
+    var leftCell = c - 1.0;
+    var right = 1e9;
+    for (var i = -1; i <= 2; i++) {
+        let ci = c + f32(i);
+        let pos = (ci + 0.15 + 0.7 * cellHash(vec2f(ci, id * 1.37 + 61.0)).x) * W;
+        if (pos <= x && pos > left) { left = pos; leftCell = ci; }
+        if (pos > x && pos < right) { right = pos; }
+    }
+    let hc = cellHash(vec2f(leftCell, id * 2.11 + 17.0));
+    let hs = cellHash(vec2f(leftCell + 7.0, id * 0.73 + 29.0));
+    let tilt = (hc - 0.5) * 2.0 * u.blockTilt * mix(1.3, 0.45, bed.hardness) * vec2f(1.0, 0.3);
+    let local = vec2f(x - 0.5 * (left + right), down);
+    var height = dot(tilt, local) + (hs.x - 0.5) * u.blockStep * mix(1.0, 0.4, bed.hardness);
+    let dJoint = min(x - left, right - x) + chip;
+    // The bed boundary is a continuous crevice, a course boundary nearly as long; a joint is shallower and, in a soft bed, missing in
+    // some places (a hard bed's are all there).
+    let jointHere = mix(step(0.3, hs.y), 1.0, bed.hardness);
+    let bedCrevice = 1.0 - smoothstep(0.0, 1.4, dBed + chip * 0.7);
+    let courseCrevice = (1.0 - smoothstep(0.0, 1.1, dCourse + chip * 0.7)) * 0.75;
+    let jointCrevice = (1.0 - smoothstep(0.0, 1.0, dJoint)) * jointHere * 0.55;
+    let crevice = max(max(bedCrevice, courseCrevice), jointCrevice);
+    height -= (bedCrevice + 0.6 * courseCrevice + 0.5 * jointCrevice) * u.blockSeam * 0.8;
+    height += (cellHash(floor(p)).x - 0.5) * 2.0 * u.blockGrit;
+    return vec3f(height, crevice, bed.hardness);
+}
+
 // Rock face form (card E9). Retail's big green faces are carved: broad gullies
 // and ribs run down the face at a slight lean, tens of px apart, so whole
 // stripes read lit or shaded; the beds run on across them; long thin scratches
@@ -1150,6 +1204,7 @@ fn bake(p: vec2f) -> vec4f {
     var structureRock = 0.0;
     var gullyFloor = 0.0;
     var facetSeam = 0.0;
+    var blockCrevice = 0.0;
     var order = 0.0;
     var steep = 0.0;
     if (u.rockOrder > 0.0 && u.cracksOn != 0 && h > u.sea + 1.0) {
@@ -1213,6 +1268,11 @@ fn bake(p: vec2f) -> vec4f {
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
         if (u.scratchDepth > 0.0) { height += gate * scratchField(pf); }
+        if (u.blocks > 0.0) {
+            let block = blockField(p, pf, bedH + carved.x * u.bedBend, bedG);
+            height += gate * block.x;
+            blockCrevice = gate * block.y;
+        }
         if (u.facetTilt > 0.0) {
             let facet = facetField(pf);
             height += gate * facet.x;
@@ -1239,6 +1299,7 @@ fn bake(p: vec2f) -> vec4f {
     lineDark = max(lineDark, crustDark);
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
     lineDark = max(lineDark, facetSeam * u.facetSeam * (1.0 - buried));
+    lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));
     if (u.sandBanding > 0.0) {
         // Sand bars (sandCrown) are smooth rippled sand, not streaked dune slopes.
         let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand * (1.0 - u.sandCrown), smoothstep(0.3, 0.8, sand)), route * 0.6));

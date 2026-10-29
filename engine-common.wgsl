@@ -395,6 +395,15 @@ struct Uniforms {
     columnBeds: array<vec4f, 8>,   // per bed: x thickness (height units), y hardness 0..1, z material slot (H3, unused here)
     materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
+    // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
+    blocks: f32,          // 1: blocks on faces (in place of the facets when facetTilt is 0); 0: none
+    blockRow: f32,        // px of a course: a bed is cut into courses about this tall (soft beds 0.7 of it, hard ones 1.5)
+    blockWidth: f32,      // mean joint spacing along a bed of middling hardness, px (soft beds 0.55 of it, hard ones 1.6)
+    blockTilt: f32,       // largest tilt of a block's plane, height per px (soft beds 1.3 of it, hard ones 0.45)
+    blockStep: f32,       // largest step of a block against the next, height units (hard beds 0.4 of it)
+    blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
+    blockChip: f32,       // px an edge wanders, chipping the block outline (hard beds 0.4 of it)
+    blockGrit: f32,       // per-pixel height grit on blocks, height units
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

@@ -214,7 +214,16 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 KNOB_DEFAULTS.update(materialModel=0)
 # H4 (Green): engine 1 draws and bakes with engine-frag/engine-bake/engine-common, Green's own copies (0: the shared shaders, as merge-h3).
 KNOB_DEFAULTS.update(engine=0)
+# H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
+KNOB_DEFAULTS.update(blocks=0, blockRow=4.5, blockWidth=9, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
+# H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
+# Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
+# scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
+ENGINE_KNOBS = {
+    'green': dict(blocks=1, blockRow=4.5, blockWidth=10, blockTilt=.8, blockStep=.8, blockSeam=1, blockChip=1.6, blockGrit=.25,
+                  facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2),
+}
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -781,6 +790,7 @@ def world_knobs(biome, config):
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
+    config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)
     return config
 

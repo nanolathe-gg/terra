@@ -203,10 +203,10 @@ export class TerrainRenderer {
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(3, both), texture(4, both, 'float', '2d-array'), texture(6, both),
       sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
-    // The engine draw (H4) binds only what Green reads: the plain's tiles, the rock images (until item 3), the water images, the palette and
-    // the generated materials (binding 19, read with textureLoad). Binding numbers are the shared draw's, with 2-7 left out.
+    // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
+    // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: this.engine ? [
-      texture(0, F), sampler(1, F), texture(8, F), sampler(9, F), texture(10, F), sampler(11, F), texture(12, F), sampler(13, F),
+      texture(0, F), sampler(1, F),
       texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F), texture(19, F, 'float', '2d-array')] : [
       texture(0, F), sampler(1, F), texture(2, F), sampler(3, F), texture(4, F, 'float', '2d-array'), sampler(5, F),
       texture(6, F), sampler(7, F), texture(8, F), sampler(9, F), texture(10, F), sampler(11, F), texture(12, F), sampler(13, F),
@@ -246,6 +246,8 @@ export class TerrainRenderer {
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
     this.setRoutes(new Float32Array(this.grid * this.grid));
     const variant = new URLSearchParams(location.search);
+    // H4: the engine's own knob values go in first, over the world's, under the page's query.
+    if (this.engine) for (const [key, value] of Object.entries(this.config.engineDefaults || {})) if (!variant.has(key)) variant.set(key, value);
     for (const [key, value] of Object.entries(this.config.defaults || {}))
       if (!variant.has(key)) variant.set(key, value);
     this.variant = variant;
@@ -263,6 +265,8 @@ export class TerrainRenderer {
       if (key === 'slopeGrass' && !slopeMaterial) { this.bound[name] = 'grass'; continue; }
       // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
       if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured.slopeGrass.meanRGB.map(v => v / 255); continue; }
+      // H4: the engine makes the rocks from numbers too (item 3), so no rock image is fetched; its mean colour is the table's.
+      if (this.engine && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured.rock.meanRGB.map(v => v / 255); continue; }
       if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
       if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
       let url = this.config.textures[key];
@@ -643,9 +647,8 @@ export class TerrainRenderer {
   // whatever its GLSL sampler pointed at (the ground) when there is none.
   materialBindGroup(fringe) {
     if (this.engine) return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
-      ...[this.textures.grass, this.textures[this.bound.uRock], this.textures[this.bound.uRockWeathered], this.textures[this.bound.uRockFractured],
-        this.textures[this.bound.uWater], this.textures[this.bound.uWaterShallow]].flatMap((t, i) => [
-        {binding: [0, 8, 10, 12, 14, 16][i], resource: t.view}, {binding: [1, 9, 11, 13, 15, 17][i], resource: t.sampler}]),
+      ...[this.textures.grass, this.textures[this.bound.uWater], this.textures[this.bound.uWaterShallow]].flatMap((t, i) => [
+        {binding: [0, 14, 16][i], resource: t.view}, {binding: [1, 15, 17][i], resource: t.sampler}]),
       {binding: 18, resource: this.textures[this.bound.uPalette].view}, {binding: 19, resource: this.generated.view}]});
     const ring = fringe || this.textures[this.bound.uMineralRing];
     const key = 'materials:' + (fringe ? Object.keys(this.fringeTextures).find(k => this.fringeTextures[k] === fringe) : '');
@@ -1123,6 +1126,12 @@ export class TerrainRenderer {
     set('uCliffStagger', number('cliffStagger', 0));
     set('uCliffFine', number('cliffFine', 0));
     set('uCliffDomain', number('cliffDomain', 90));
+    // H4 item 4 (engine 1 only: the shared bake has no block uniforms).
+    if (this.engine) {
+      set('uBlocks', number('blocks', 0)); set('uBlockRow', number('blockRow', 4.5)); set('uBlockWidth', number('blockWidth', 9)); set('uBlockTilt', number('blockTilt', .5));
+      set('uBlockStep', number('blockStep', .8)); set('uBlockSeam', number('blockSeam', .5)); set('uBlockChip', number('blockChip', 1.2));
+      set('uBlockGrit', number('blockGrit', .25));
+    }
     this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});

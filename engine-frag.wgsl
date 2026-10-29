@@ -7,12 +7,6 @@
 // ground, as the GLSL sampler pointed at the ground's unit).
 @group(1) @binding(0) var grassTex: texture_2d<f32>;
 @group(1) @binding(1) var grassSamp: sampler;
-@group(1) @binding(8) var rockTex: texture_2d<f32>;
-@group(1) @binding(9) var rockSamp: sampler;
-@group(1) @binding(10) var rockWeatheredTex: texture_2d<f32>;
-@group(1) @binding(11) var rockWeatheredSamp: sampler;
-@group(1) @binding(12) var rockFracturedTex: texture_2d<f32>;
-@group(1) @binding(13) var rockFracturedSamp: sampler;
 @group(1) @binding(14) var waterTex: texture_2d<f32>;
 @group(1) @binding(15) var waterSamp: sampler;
 @group(1) @binding(16) var waterShallowTex: texture_2d<f32>;
@@ -256,9 +250,9 @@ fn grassImage(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
 // Lab histogram of the rock face is worse with it (.057/.076/.083 against .049/.067/.079 by class).
-fn rockSource(pixel: vec2f, size: vec2f) -> vec3f { return pixelSample(rockTex, rockSamp, pixel, size).rgb; }
-fn weatheredSource(pixel: vec2f) -> vec3f { return pixelSample(rockWeatheredTex, rockWeatheredSamp, pixel + vec2f(73.0, 17.0), vec2f(256.0)).rgb; }
-fn fracturedSource(pixel: vec2f) -> vec3f { return pixelSample(rockFracturedTex, rockFracturedSamp, pixel, vec2f(256.0)).rgb; }
+fn rockSource(pixel: vec2f) -> vec3f { return genColor(1, pixel); }
+fn weatheredSource(pixel: vec2f) -> vec3f { return genColor(2, pixel + vec2f(73.0, 17.0)); }
+fn fracturedSource(pixel: vec2f) -> vec3f { return genColor(3, pixel); }
 
 // H3 item 4. Where rock shows, and how much of a face is rock: the one function that decides Green's
 // land placement. Its numbers are rows of materials/green.json after the five materials (MM_PLACE):
@@ -1352,8 +1346,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     // Small mineral interiors supply pixel structure; the whole crown/face/
     // foot comes from this surface. Some native microshading remains baked.
-    let rockSize = vec2f(textureDimensions(rockTex, 0));
-    var rock = rockSource(pixel, rockSize);
+    var rock = rockSource(pixel);
     rock = saturate(u.rockMean + (rock - u.rockMean) * u.mineralDetail);
     if (u.rockLayers != 0 && h > 18.0) {
         // Broad material regions vary actual native mineral structure. No
