@@ -90,6 +90,7 @@ branches and the projection fix below, so re-render before judging.
    | H2 | 8862 | 9662 | `$R/agent-H2/out` | `--worlds green` |
    | H3 | 8863 | 9663 | `$R/agent-H3/out` | `--worlds green` |
    | H4 | 8864 | 9664 | `$R/agent-H4/out` | `--worlds green` |
+   | H5 | 8865 | 9665 | `$R/agent-H5/out` | `--worlds green` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -3142,8 +3143,218 @@ notes in `$R/agent-H4/NOTES.md`, whose round 2 section supersedes round
   | Uniforms read by frag and bake | 341 | 325 |
   | Knobs, total / set by Green | 420 / 76 | 420 / 84 |
 
-H5 (weather on the GPU everywhere), H6 (shape on the GPU) and H7
-(progressive rendering), which complete the Green slice, are outlined in
+### H5. Green's weather on the GPU, at TA's scale (Green)
+
+> **Owner, 2026-10-29:** "remember the scale of Nanolathe/TA because that is
+> our target. We aren't 10,000 feet up in a jet where details are washed
+> out. I want to see pixelated grit, boulders, rocks, gravel, sand, gouges,
+> scratches, etc. The controls and sliders we keep on the simplified GPU
+> simulation to control the base geology, rock types, weathering, etc needs
+> to be impactful and not just change a couple pixels at the base of a hill
+> that nobody would notice."
+
+Read [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) first: the decisions
+(4 and 11 above all), "Time", "Surface", and "Rules for the cards". Then
+read H2's and H4's Done and Still open lists above, and `$R/agent-H4/NOTES.md`.
+
+**What is there today.**
+- **The study (1024 px, grid 512, 2 px a sample).** With `erosion` 1 (Green):
+  - `renderer.erode()` runs `erosion.wgsl`: pipe water and thermal slides,
+    200 iterations, 250-320 ms. It runs inside an envelope around the
+    authored height, 3× the worker's budget and .35 near the sea
+    (`sculpt-erosion.js`).
+  - It then hands the height to the CPU worker `sculpt-weathering.js`. The
+    worker skips its droplets but still makes the apron (talus), sand
+    (`sculpt-sand.js`) and the flow and deposit fields.
+  - These reach the draw as `gridTexture` layer 0 (flow, deposit, talus,
+    sand; rgba8, `setWeather`).
+- **Map canvases.** Maps up to 1168 samples a side (a 4×4 map) run the
+  global CPU worker with its droplets; the GPU pass is study-only
+  (`!regionalFields`). Larger maps run `sculpt-tiled-weather.js` (256-sample
+  cores, 64 blend, 128 apron). TNT corners and export read the weathered
+  height.
+- **Engine 1's bake** (`engine-bake.wgsl`) already places stones from
+  fields: `boulders()` and `debrisStones()`. H4's `rockMoss` places moss by
+  cavity.
+- **It barely shows.** H2's erosion moved 1.8% of green-2's samples by
+  more than a height unit, and Green's windows barely moved (EXPERIMENTS
+  133). The four Time knobs (`erosionAge` 200, `erosionRain` 1,
+  `columnContrast` 1, `talusAngle` 40) have never had their impact
+  measured.
+
+**Scope.**
+- Green's engine (`engine` 1) only, on the study and on maps up to 1168
+  samples, where one whole-map pass covers the map.
+- **`engine` 0 must keep drawing Green as `merge-h4` does.** Put engine 1's
+  pass changes in engine-only files or behind uniforms that only engine 1
+  sets. `erosion.wgsl` is shared today.
+- **Not in this card:**
+  - maps over 1168 samples, tiles with aprons, stored planes and regional
+    exactness of the agents (H5b);
+  - shape (H6);
+  - progressive levels (H7);
+  - blocks on hill rock (an open owner question from H4);
+  - every other world.
+
+**Two resolutions** (the card rule). Say both in NOTES.md.
+- **The Time pass** runs at the existing grid, 2 px a sample. It writes
+  data maps. H2 showed this grid cannot resolve detail of a pixel or two.
+- **The marks** are made at 1 px in the engine bake, from the data maps,
+  as lit height. Rills, grit, stones and sand grain are all below the grid,
+  so they come from the bake, steered by the maps.
+- **Fallback:** a 1-px refinement pass, only if the bake cannot make
+  convincing rills. Measure its cost before building it.
+
+**Deliver.**
+
+1. **Measure retail first.** This is a stop point.
+   - **What to measure.** On green-1..3, measure the weather marks at 1×:
+     - drainage streaks, rills and gullies on grass slopes: where they sit
+       (slope class, below crests, above faces), and their width, spacing,
+       length, darkness and direction against the fall line;
+     - debris below faces: stone sizes in px, and how far below the face
+       it reaches;
+     - bare and sandy patches: where they are, and their share;
+     - moss on rock: clump sizes and darkness, against H4's flecks.
+   - **Tools.** Start from `measure/slope_texture.py`, `slope_marks.py`,
+     `crack_lines.py` and `slope_stats.py`. If they don't measure something,
+     add a dev tool under `measure/`.
+   - **Engine 1 today.** Take the same numbers on `merge-h4`. Also measure
+     the four Time knobs' impact with `measure/impact.py` (usage in its
+     docstring). Expect it near 0.
+   - **One sheet:** retail crops of each kind of mark at 1× and 2×, beside
+     ours.
+   - **When to stop.** If the marks are not where this card assumes (for
+     example, retail's slope marks are texture that follows no drainage),
+     stop and report before building anything. Otherwise record the
+     numbers and go on.
+2. **The Time pass writes data maps** (GPU, engine 1).
+   - **Outputs:** the height, flow (amount and direction), wear (depth
+     removed), deposit, talus and wetness. They reach the bake as a texture
+     at the pass's resolution; say which format.
+   - **Replace the worker.** The apron and sand move into the pass, or
+     into placement rules over its maps. Under engine 1 the CPU worker no
+     longer runs for Green: no droplets, apron, sand or flow field.
+   - Sand may be a placement rule over deposit, flow and slope rather than
+     a port of the slab model, if it reads at 1×.
+   - **The envelope.** Loosen it under engine 1 enough for erosion to
+     show. These stay exact:
+     - protected samples (crests, ramp centres and water beds): report the
+       largest difference from the authored height over them, which must
+       be 0;
+     - nothing below the sea changes.
+
+     TNT corners follow the eroded height, as designed. Report the largest
+     change per sample, and where it is.
+3. **Marks at 1 px in the engine bake**, all as lit height:
+   - **Rills and gullies** are carved along the flow direction where flow
+     and slope are high. They are 1-3 px wide by flow, continuous
+     downslope, with the spacing item 1 measured.
+   - **Debris:** stones and boulders where talus lies, a few px across,
+     with grit between them. They are larger below hard beds (the
+     column's hardness). Fans spread below the mouths of gullies.
+   - **Sand:** fine grain and light ripples where deposit lies.
+   - **Moss on rock, by wetness.** Under engine 1, `rockMoss` becomes the
+     amount placed by wetness, in darker clumps, as retail's are (H4 Still
+     open).
+   - Reuse `boulders()` and `debrisStones()` where they fit, and replace
+     them under engine 1 where they don't.
+   - **Check:** Clay at four suns. The marks must shade with the sun.
+4. **Controls that matter.**
+   - **The controls:** age (`erosionAge`), rain (`erosionRain`), hardness
+     contrast (`columnContrast`), repose (`talusAngle`) and `rockMoss`,
+     plus any control you add.
+   - **Measure each** with `measure/impact.py <name> <lo-root> <hi-root>
+     --sheet <png>`, between its minimum and maximum, on green-1..3.
+     - Report the share of its own class: grass slope for age and rain,
+       rock face for contrast, the cliff-foot debris area for repose.
+     - Add a class to `impact.py` for an area it lacks, such as debris
+       from the talus map.
+     - Do this as soon as item 3's marks exist, not only at the end.
+   - **Under 5% is a finding:** strengthen the control or remove it.
+   - **Overrides:**
+     - `ovErosion` scales the pass;
+     - `ovDeposits` scales deposit, sand and talus;
+     - `ovVegetation` scales the moss.
+
+     Re-run `repro/demo/overrides-green.json`, and show each override's
+     effect inside its painted region at 1× (≥5% there).
+5. **Map canvases up to 1168 samples.**
+   - Green maps run the same GPU pass over the whole map. The CPU worker
+     doesn't run for Green under engine 1. Maps over 1168 samples keep the
+     tiled worker until H5b; say that in NOTES.md.
+   - **Check:**
+     - `$R/agent-H5/mapcheck.mjs`: export, TNT corners from the eroded
+       height, unique tiles, console;
+     - seams at 2× with rock in view;
+     - replay mismatch 0;
+     - the same scene rendered twice gives the same pixels.
+6. **Compare.**
+   - **Triptych:** retail | `merge-h4` | after, at 1× and 2×, with crops of
+     each kind of mark.
+   - **Numbers:**
+     - windows and classes (`repro/stats.py`, `measure/material_classes.py`,
+       `material_lab.py`);
+     - item 1's mark numbers;
+     - the face (`$R/agent-H1/face.py`, `$R/agent-H2/runs.py`).
+   - **The bar:** at least as close as `merge-h4` on all three windows, and
+     closer on grass slopes, where the marks belong.
+   - **Times,** alternating, a median of 7: the pass on the study and on a
+     4×4 map, the draw, and the bake.
+
+**Judge** by eye first, at 1× and 2× against retail, as decision 11 asks.
+Then judge by the numbers, the impact table, the guard (`compare.py ...
+--worlds green` against `merge-h4`; `engine=0` reproduces `merge-h4`'s Green
+exactly) and the map check.
+
+**Done when** NOTES.md has:
+- item 1's retail and engine numbers, with the sheet;
+- both resolutions;
+- the data maps and the envelope;
+- the marks, with four-sun Clay;
+- the impact table and its sheets;
+- the override check;
+- the map check;
+- the comparison and the times;
+- the guard.
+
+**Order and budget.**
+- Item 1, then 2, then 3 with 4's measurements as soon as marks exist,
+  then 5 and 6. Each item is its own commit.
+- **At most three render-look-change cycles per item** (ground rule 8). H4
+  went to about 14 knob-only renders; don't. When an item doesn't
+  converge, record what you learned and move on.
+- If the budget runs short, stop after any item, with NOTES.md saying what
+  remains.
+
+**Server and guard:**
+- port 8865, CDP 9665;
+- worktree `../terraform-wt-H5`;
+- assets `$R/agent-H5`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h4`;
+- guard `--worlds green`.
+
+### H5b. Weather on large map canvases — outline
+
+- **Coverage.** For maps over 1168 samples: a coarse pass over the whole
+  map for drainage, then fine tiles with aprons, so drainage reaches
+  across tiles.
+- **The flow-bake node pattern:** region, hash, Bake button, stale badge
+  and the idle option.
+- **Stored planes,** so that regional replay copies them, and export reads
+  them and never simulates. They need about seven:
+  - the height change, at better than 8 bits (two planes);
+  - flow amount and direction (two);
+  - wear, deposit or talus, and wetness.
+
+  Planes 14-17 are overrides and 20-24 are flow, so 18, 19 and 25-27 are
+  free. Grow the mask from 7 RGBA layers to 9; the design doc names this
+  as a bounded change, and its memory cost per chunk on 40×40 maps must be
+  reported.
+- **Regional exactness** at the final level, by `repro/regional.mjs`.
+
+H6 (shape on the GPU) and H7 (progressive rendering), which complete the
+Green slice, are outlined in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
 card from H3 on follows. Each is written here in full when the card before
 it lands.

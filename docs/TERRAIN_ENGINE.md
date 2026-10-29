@@ -79,9 +79,10 @@ can be compared on the same scenes against retail.
      it. Its controls (age, rain, hardness contrast, repose) must change
      the picture visibly at 1×.
    - The apron and sand move into the GPU pass.
-   - The pass runs on map canvases: coarse over the whole map, then fine
-     tiles, with stored planes (H2b).
    - Green never runs the CPU worker.
+   - H5 covers the study and maps up to 1168 samples, where one whole-map
+     pass covers the map. **H5b** takes larger maps: coarse over the whole
+     map, then fine tiles, with stored planes (H2b).
 3. **H6, shape on the GPU.** Green's brushes (hill, mountain, plateau,
    deep, shallow, erase, paint and the ground node) are evaluated by
    compute passes, beside the JS engine.
@@ -377,7 +378,8 @@ Each is written in full when the one before it lands.
 | H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Merged fef3abb |
 | H3 | One material model on the GPU (Green), with override fields | Merged 1c7f10d |
 | H4 | The Green engine: its own shaders, startup material textures, rocks from numbers, rock blocks (absorbs H3b) | Merged 494bcf1 |
-| H5 | Green's weather on the GPU everywhere, map canvases included (absorbs H2b) | Outlined |
+| H5 | Green's weather on the GPU at TA's scale: data maps, marks at 1 px, controls that matter (study and maps up to 1168 samples) | Written |
+| H5b | Weather on large map canvases: coarse and fine tiles, stored planes, regional exactness (absorbs H2b) | Outlined |
 | H6 | Green's shape on the GPU | Outlined |
 | H7 | Progressive rendering on the Green slice | Outlined |
 | Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
