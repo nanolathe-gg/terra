@@ -15,6 +15,9 @@ classed by the height of the ground it shows:
   cap    56 and above on gentle ground (slope under 0.35 units per px)
   flat40 the 40% of pixels with the least local change in luma (the card's measure)
 
+The orange beds are also printed on their own (R-B over 40 and G/R .62-.85 on the 5x5 mean, 1 to 56 above the plain),
+and the mean colour by height bin (-99..1, 1..4, 4..8, 8..12, 12..17, 17..24, 24..35, 35..48, 48..56, 56 and up).
+
 For each class and each picture: mean RGB, the hue of the mean colour in
 degrees (HSV), R/G, the standard deviation of luma, the share of pixels that
 are orange (R-B over 40, hue under 45) and that are grey (R-B under 14, luma
@@ -109,6 +112,13 @@ def main(d):
             if m.sum() > 2000:
                 mu = img[m].mean(0)
                 print(f"  {name:6s} height {lo:3d}..{hi:3d}  n {int(m.sum()):7d}  rgb {mu.round(0).tolist()}  hue {hue(mu):5.1f}  R/G {mu[0] / mu[1]:.3f}  luma {float(mu @ LUMA):5.1f}")
+        # The orange beds on their own (card G4): 5x5-averaged R-B over 40 and G/R .62-.85, 1 to 56 above the plain.
+        sm = np.stack([uniform_filter(img[..., c], 5) for c in range(3)], -1)
+        gr = sm[..., 1] / np.maximum(sm[..., 0], 1)
+        om = (sm[..., 0] - sm[..., 2] > 40) & (gr > .62) & (gr < .85) & (hs >= 1) & (hs < 56)
+        if om.sum() > 500:
+            mu = img[om].mean(0)
+            print(f"  {name:6s} orange  n {int(om.sum()):7d}  rgb {mu.round(0).tolist()}  hue {hue(mu):5.1f}  R/G {mu[0] / mu[1]:.3f}  G/B {mu[1] / mu[2]:.3f}")
         for cls, mask in classes(img, hs).items():
             s = stats(img, mask)
             if s:
