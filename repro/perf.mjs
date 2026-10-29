@@ -19,7 +19,7 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8867'), port = Number(opt('--port', 9667));
 const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out', 'perf-out'), label = opt('--label', '');
-const noExport = flag('--no-export');
+const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
 const [mode] = args;
 if (!['map4', 'map8', 'study'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|study> --scene <scene.json> --out <dir>'); process.exit(1); }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
@@ -254,6 +254,7 @@ try {
     result.load = {finalReady: readyAt === null ? null : readyAt - t0, weatherReady: ready ? ready.t - t0 : null, weatherText: ws_.at(-1)?.text, erodeParts: await ev('window.lastErosionParts||null'), split: await splitStages()};
   }
 
+  if (only === 'load') throw new Error('stopped after load (--only)');
   console.error('phase drag'); flush();
   // ------------------------------------------------------------ drag: a stroke with real mouse events
   const box = await ev(`(() => { const r = document.getElementById(${isMap ? "'overlay'" : "'terrain'"}) ?.getBoundingClientRect() ?? document.querySelector('canvas').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
@@ -270,6 +271,7 @@ try {
   result.drag = {durationMs: dragEnd - dragT0, movesDelivered: moves, rafMs: {n: frames.length, p50: q(frames, .5), p95: q(frames, .95), max: Math.max(...frames, 0)}, chunkPaintsPerSecond: dragDraws.filter(d => d.chunk).length / ((dragEnd - dragT0) / 1000),
     erodeDuringDrag: (await ev('__perf.ev')).filter(e => e.type === 'erode-start').length, split: await splitStages()};
 
+  if (only === 'drag') throw new Error('stopped after drag (--only)');
   console.error('phase release'); flush();
   // ------------------------------------------------------------ release
   await reset();
@@ -288,6 +290,7 @@ try {
     result.release = {finalReady: readyAt === null ? null : readyAt - relT0, weatherReady: ready ? ready.t - relT0 : null, erodeParts: await ev('window.lastErosionParts||null'), split: await splitStages()};
   }
 
+  if (only === 'release') throw new Error('stopped after release (--only)');
   console.error('phase scroll'); flush();
   // ------------------------------------------------------------ scroll (maps)
   if (isMap) {
@@ -305,6 +308,7 @@ try {
       timeToFinalAfterStop: a.finalInView, bakes: a.bakeCount, chunkPaints: draws.filter(d => d.chunk).length, split: await splitStages()};
   }
 
+  if (only === 'scroll') throw new Error('stopped after scroll (--only)');
   console.error('phase export'); flush();
   longWait = false;
   // ------------------------------------------------------------ export

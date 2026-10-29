@@ -201,22 +201,34 @@ export function createRegionalFields({worldSize,worldGrid,baseHeight,keys,maskKe
   function cell(ix,iy,key='h') {
     ix=clamp(Math.round(ix),0,worldGrid-1); iy=clamp(Math.round(iy),0,worldGrid-1);
     if (baseCell && !nodes().some(n => {
-      const rect=n.kind==='flowbake'?n.result?.rect:n.points?.length?bounds(n):null;
+      const rect=n.kind==='flowbake'?n.result?.rect:n.points?.length?memoBounds(n):null;
       return !n.hidden && rect && overlaps(rect,{x0:ix,y0:iy,x1:ix,y1:iy});
     })) return key==='h'?baseCell(ix,iy):0;
     const tx=Math.floor(ix/chunkCells)*chunkCells,ty=Math.floor(iy/chunkCells)*chunkCells,r=prefixTile(list().length,tx,ty,{points:new Map()});
     return r.fields[key][(iy-ty)*r.gridWidth+ix-tx];
   }
+  // H7: a node's reach is a pure function of the node, so one revision computes it once (the overview and the map outline
+  // ask for thousands of cells), and a sampled point is a pure function of the revision, so each is computed once per revision.
+  let boundsMemo=new WeakMap(),sampleMemo=new Map();
+  function memoBounds(n) { let b=boundsMemo.get(n); if (!b) boundsMemo.set(n,b=bounds(n)); return b; }
   function sample(x,y,key='h') {
+    const id=Number.isInteger(x)&&Number.isInteger(y)&&key==='h'?y*1048576+x:key+':'+x+':'+y,hit=sampleMemo.get(id);   // integer map points: a number key, no string built
+    if (hit!==undefined) return hit;
+    const v=sampleAt(x,y,key);
+    if (sampleMemo.size>200000) sampleMemo.clear();
+    sampleMemo.set(id,v); return v;
+  }
+  function sampleAt(x,y,key) {
     const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
     return (cell(ix,iy,key)*(1-fx)+cell(jx,iy,key)*fx)*(1-fy)+(cell(ix,jy,key)*(1-fx)+cell(jx,jy,key)*fx)*fy;
   }
   function clear() {
+    boundsMemo=new WeakMap(); sampleMemo.clear();
     cache.clear(); cacheBytes=0;
     for (const n of compiled||[]) { const meta=stageMeta.get(n); meta.reduced=false; delete meta.globalBounds; }
   }
   function changed(rect=null,keepPrefix=0) {
-    revision++; compiled=null;
+    revision++; compiled=null; boundsMemo=new WeakMap(); sampleMemo.clear();
     // Appending or previewing the last shape keeps earlier prefix tiles valid;
     // an edit discards its suffix. This also bounds repeated gesture work.
     for (const [key,r] of cache) if (Number(key.split(':')[0])>keepPrefix) { cache.delete(key); cacheBytes-=r.bytes; }
