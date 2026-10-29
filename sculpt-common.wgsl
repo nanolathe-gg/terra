@@ -329,6 +329,15 @@ struct Uniforms {
     // E6 (Moon).
     pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
     pockSize: f32,        // pit spacing across the retail glint axis, px
+    // G8 (Moon): the surface read from retail pictures.
+    moonCups: f32,        // lit pits, 2-3 px wide and 4-6 px tall, many on shaded steep faces and few on lit ground (0: none; the pockmark dots are separate)
+    moonCupSize: f32,     // pit spacing across the glint axis, px (the cell is 1.5 times that along it)
+    moonCupDepth: f32,    // pit depth in height units: how steep its walls shade
+    moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)
+    moonRibDepth: f32,    // stroke steepness: the gradient the strokes add (1: about 0.8 at their steepest)
+    moonRibDark: f32,     // how much darker the strokes' mean is on faces turned from the sun (0: the face's own shade)
+    moonFolds: f32,       // thin dark lines that follow the form across lit and moderate slopes (0: none)
+    moonFoldSpacing: f32, // height units between the folds' first set of contours
     // E6 (Ice mountains).
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)

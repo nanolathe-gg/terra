@@ -148,6 +148,14 @@ KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
 KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 # E6, Moon: pits on raised ground and slopes (0: none; the earlier look is wrinkles .8, worms .4, cracks .35 with no pits).
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
+# G8, Moon: lit cups (0: none; the pockmark dots above are separate). Size is the spacing across the glint axis in px, depth the wall steepness.
+KNOB_DEFAULTS.update(moonCups=0, moonCupSize=5.5, moonCupDepth=1.4)
+# G8, Moon: stringy light and dark strokes down steep faces (0: none), their steepness and the darkening of faces turned from the sun.
+KNOB_DEFAULTS.update(moonRibs=0, moonRibDepth=1, moonRibDark=0)
+# G8, Moon: thin dark folds that follow the form across lit and moderate slopes (0: none), and the height between their contours.
+KNOB_DEFAULTS.update(moonFolds=0, moonFoldSpacing=.9)
+# G8, Moon: how far a hill's whole outline strays in lobes, as a share of its radius (a shape option; 0: the smooth outline).
+KNOB_DEFAULTS.update(moonLobes=0)
 # E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # G6, Ice blocks and mesas (retail ice-3, Polar Range): rounded light, snow on the flat tops, fibres down the faces, a hatched apron (0: none of them).
@@ -394,15 +402,31 @@ WORLD_KNOBS = {
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=0, undulation=4, plainRelief=.6, banding=.3, crackDark=.6, bandLine=.63,
+                 worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6, bandLine=.63,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
                  # connected wrinkles and pits, so the joined wrinkles replace them.
                  slopeMarks=0, wrinkles=0,
+                 # G8: the band lines (banding .3 before) drew the straight hair-like scratches the owner
+                 # sees on our slopes, before and after E6 (diagnostic: banding 0 alone removes them; shine
+                 # grain, cracks, worms, ejecta and the slope art leave them in). The variants 'pitted' and
+                 # 'cracked' restore them.
+                 # G8: pits are lit cups (moonCups) from the visual study, not E6's dots (pockmark, now the
+                 # Moon variant 'pitted'): small, on shaded steep faces, few on lit ground, none on tops.
+                 moonCups=1, moonCupSize=6.5,
+                 # G8: steep faces turned from the sun are near black and stringy (strokes 1-2 px wide, 5-12 px
+                 # long, leaning with the glint axis): relief the sun shades, with a little less light overall.
+                 moonRibs=1, moonRibDepth=.9, moonRibDark=.15,
+                 # G8: lit slopes carry thin dark folds that follow the form (contours of the sculpted
+                 # height, warped); .55 of the amount that read as a contour map.
+                 moonFolds=.55,
+                 # G8: retail's hills and walls fold: lumpy, lobed outlines (a shape option; the scenes' own
+                 # strokes carry none, so this is the world's default for hills and mountains).
+                 moonLobes=.5,
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
-                 pockmark=1, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
+                 pockmark=0, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
                  shineGround=0, shineGroundSharp=12, shineGroundRough=.12, shineGroundScale=3,
                  shineSlope=.06, shineSlopeSharp=30, shineSlopeRough=.12, shineSlopeScale=3,
                  shineRock=.06, shineRockSharp=30, shineRockRough=.12, shineRockScale=3),
@@ -626,10 +650,13 @@ WORLD_VARIANTS = {
         # colour darkened the top, not the sides). See NOTES, stage 3.
     },
     'moon': {
+        # Pitted (card E6): one pitted surface from crest to foot, dots 4 x 6 px at one density over all raised
+        # ground, a trace of sheen, no cracks. The default's lit cups (G8) replace it.
+        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, moonRibs=0, moonFolds=0, moonLobes=0, banding=.3)),
         # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
         # carved cracks, no pits and no sheen.
         'cracked': dict(label='Cracked slopes: smooth tops',
-                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, shineGate=0, shineWhite=.35, shineStretch=1,
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, moonRibs=0, moonFolds=0, moonLobes=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
                                    shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
                                    shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
                                    shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
