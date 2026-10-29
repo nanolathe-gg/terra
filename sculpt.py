@@ -147,6 +147,8 @@ KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 KNOB_DEFAULTS.update(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0)
 # G6, Ice frost band: fine hairlines in the band (0: none).
 KNOB_DEFAULTS.update(iceFrost=0)
+# G6, Ice: angular facets on hills and mountains (share of the mountain broken into facets; facet width in px). Off by default everywhere.
+KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and

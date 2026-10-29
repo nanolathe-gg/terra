@@ -220,8 +220,13 @@ const SHAPE_FIELDS=[
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
   ['hillLobes','hill-lobes','Lobes (stacked round terraces)',['hill','mountain'],0,16,1,1,'Build the hill from this many round lobes, one stacked on another, each a flat tread and a short riser, as retail Lava\'s tall hills are, in place of a smooth cone. 0: the plain hill.'],
   ['hillSteps','hill-steps','Lobe steps (terraces up the hill)',['hill','mountain'],2,24,1,1,'How many equal steps the hill\'s height is cut into where the lobes stack.'],
+  // G6 (Ice): angular facets that belong to the mountain.
+  ['iceFacets','ice-facets','Angular facets',['hill','mountain'],0,100,5,100,'Ice: breaks part of the mountain into angular facets: tilted planes fitted to the mountain\'s own surface, a little steeper, stepped a few units off their neighbours and partly buried where the ground rises past them. They share the mountain\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth mountain.'],
+  ['iceFacetSize','ice-facet-size','Facet size (px)',['hill','mountain'],16,96,2,1,'Ice facets: the typical width of one facet.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
+// G6 (Ice): the mountain facets' options, wired beside E7's (the card the stroke builds and strokeParams).
+const G6_KEYS=['iceFacets','iceFacetSize'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
@@ -321,7 +326,7 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',hillSteps:'hillLobes',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',hillSteps:'hillLobes',iceFacetSize:'iceFacets',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -511,8 +516,8 @@ function startStroke(kind,p,options={}) {
     ...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,'crystalTiers','crystalForm','crystalStep','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation','crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat','paintChannel','maskChannel','maskAmount',...STYLE_KEYS,...WATER_KEYS,'baseVary','baseBump'].map(k => [k,options[k]??shapeValue(k)])),...sec,...ridge,...Object.fromEntries(FISSURE_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge:ridgeOn(kind,ridge),piece:null,baseline:prefixSample?prefixSample(p.x,p.y):sample(options.pre??base,p.x,p.y),pre:options.pre,prefixSample,weights:work?work.weights.fill(0):new Float32Array(heights.length),
     distances:shouldered?(work?work.distances:new Float32Array(heights.length)).fill(Infinity):null,start:p,last:p,end:p,
     smoothTarget:kind==='smooth'?blurred(base,clamp(Math.round(radius/(spacing*7)),1,24)):null,
-    // E7
-    ...Object.fromEntries(E7_KEYS.map(k => [k,options[k]??shapeValue(k)]))};
+    // E7, G6
+    ...Object.fromEntries([...E7_KEYS,...G6_KEYS].map(k => [k,options[k]??shapeValue(k)]))};
   made.prof=sectionSetup(made);
   made.masks=maskSetup(made,work);
   made.rim=rimSetup(made);
@@ -2254,8 +2259,8 @@ const noiseCache=new Map();
 function noiseFor(s) { if (regionalReplay && !noiseCache.has(s)) noiseCache.clear(); if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
 const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',river:'River (current)',source:'Sediment source',flowbake:'Flow bake'};
 function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','fingerBlunt',...COAST_KEYS,/* E8 */'baseVary','baseBump'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
-  // E7
-  ...Object.fromEntries(E7_KEYS.map(k => [k,s[k]]))}; }
+  // E7, G6
+  ...Object.fromEntries([...E7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
 function groundHeight(n,h,protect,wx,wy) {
   if (h<=config.seaLevel+1) return h;
   const amp=n.amplitude??8,wave=n.wavelength??160,cover=n.coverage??.5,s=n.seed??1;
@@ -2302,7 +2307,7 @@ function replayShape(n,work) {
     if (path.length>=3) {
       const sx=path[1].x-path[0].x,sy=path[1].y-path[0].y;
       s.faceSide=(-sy*s.face[0]+sx*s.face[1])<0?-1:1; s.path=path; s.last=s.end=path[path.length-1];
-      settleHill(s); if (s.hillLobes>=.5) stampHillLobes(s); applyCracks(s); return;
+      settleHill(s); if (s.hillLobes>=.5) stampHillLobes(s); if (s.iceFacets>0) facetMountain(s); applyCracks(s); return;
     }
   }
   if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
@@ -2311,6 +2316,7 @@ function replayShape(n,work) {
   if (hasCoastPass(n.kind,s)) stampCoastShore(s);
   if (regionalCoastCandidate) return;
   if ((n.kind==='hill' || n.kind==='mountain') && s.hillLobes>=.5) stampHillLobes(s);
+  if ((n.kind==='hill' || n.kind==='mountain') && s.iceFacets>0) facetMountain(s);
   if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
   if (n.kind==='crater' && !n.regionalChild) facetCrater(s);
   if (n.kind==='crater' && !n.regionalBody && !n.regionalChild) addCraterlets(n,s);
@@ -2362,6 +2368,46 @@ function facetCrater(s) {
     heights[i]=clamp(s.base[i]>config.seaLevel+1?Math.max(value,config.seaLevel+1.5):value,MIN_HEIGHT,MAX_HEIGHT);
     // Facets are crystal cells, as a column mound's are: the bake keeps them clean and the shader draws their tops and inks their edges.
     if (Math.abs(relief)>=2) { protection[i]=1; crystal[i]=d2-d1<Math.max(1.2,spacing*.6)?.5:best.shade; }
+  }
+  heightDirty=true;
+}
+// Ice facets (G6): the owner likes the idea of geometric shapes on the mountains, but not a cube or two pasted on.
+// These belong to the mountain: after it is built, its cells are tiled with Voronoi facets (cells of Facet size,
+// in the stroke's frame) and a share of the facets, set by Angular facets, becomes a plane fitted to the
+// mountain's own surface at the facet's centre (its height and slope read over a few cells so the mountain's lumps
+// do not set it), a little steeper than the surface and stepped a few units off the neighbours. A plane below the
+// ground the mountain stands on leaves the ground (the facet is buried there); one above it stands out of the
+// slope. The foot blends back to the smooth mountain over the first few units, and the shapes carry no crystal
+// mark, so the bake, the slate and the sun treat them as the mountain's own faces.
+function facetMountain(s) {
+  const amount=clamp(s.iceFacets,0,1); if (!(amount>0) || !(s.amount>=8)) return;
+  const L=clamp(s.iceFacetSize,16,96),share=.2+.5*amount,inv=s.inv,f=inv?invert(inv):null,snap=heights.slice();
+  const rnd=(i,j,a) => { let x=Math.imul(i*73856093^j*19349663^((s.seed>>>0)+a*83492791),2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
+  // Seed planes read the mountain's own cells and the stroke's starting ground elsewhere, never the live field (as facetCrater does).
+  const at=(gx,gy) => { const k=clamp(gy,0,grid-1)*grid+clamp(gx,0,grid-1); return s.weights[k]>0?snap[k]:s.base[k]; };
+  const seeds=new Map(),seed=(i,j) => {
+    const key=i*65536+j; let k=seeds.get(key);
+    if (!k) {
+      const lx=(i+.5+(rnd(i,j,1)-.5)*1.0)*L,ly=(j+.5+(rnd(i,j,2)-.5)*1.0)*L,wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly;
+      const gx=Math.round(wx/spacing)-originCellX,gy=Math.round(wy/spacing)-originCellY,e=3;
+      // Each facet tilts on its own (up to .35 units a px either way) so neighbours catch the sun differently.
+      k={lx,ly,wx,wy,on:rnd(i,j,4)<share,h:at(gx,gy),dx:(at(gx+e,gy)-at(gx-e,gy))/(2*e*spacing)+(rnd(i,j,6)-.5)*.7,dy:(at(gx,gy+e)-at(gx,gy-e))/(2*e*spacing)+(rnd(i,j,7)-.5)*.7,steep:1.1+.3*rnd(i,j,5),step:(rnd(i,j,3)-.2)*10};
+      seeds.set(key,k);
+    }
+    return k;
+  };
+  for (const i of clipCells()) {
+    if (!(s.weights[i]>0)) continue;
+    const relief=snap[i]-s.base[i]; if (relief<2) continue;
+    const x=i%grid,y=(i-x)/grid,wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
+    const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
+    let best=null,d1=Infinity;
+    for (let j=cj-1;j<=cj+1;j++) for (let u=ci-1;u<=ci+1;u++) { const k=seed(u,j),d=Math.hypot(lx-k.lx,ly-k.ly); if (d<d1) { d1=d; best=k; } }
+    if (!best.on) continue;
+    // The plane through the seed's surface point, steeper about that point by its own factor.
+    const plane=best.h+(best.dx*(wx-best.wx)+best.dy*(wy-best.wy))*best.steep+best.step*smooth(0,10,relief);
+    const value=Math.max(plane,s.base[i]),fade=smooth(2,10,relief);
+    heights[i]=clamp(snap[i]+(value-snap[i])*fade,MIN_HEIGHT,MAX_HEIGHT);
   }
   heightDirty=true;
 }
@@ -2562,6 +2608,8 @@ function regionalReadApron(n) {
     cells+=Math.max(0,2*B+1+Math.ceil(1.12*Rc/spacing)+2-(Math.ceil(coastLayerReach(q)/spacing)+2));
   }
   if(BASE_KINDS.includes(n.kind))cells+=Math.ceil(Math.max(0,q.baseVary||0)/spacing);
+  // G6: a facet plane is fitted at its centre, up to half a facet away and three cells either side of it, in the stroke's frame.
+  if((n.kind==='hill'||n.kind==='mountain')&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
   if(n.kind==='crater'&&q.craterFacets>0){const f=n.frame??IDENTITY,L=clamp(q.radius*.36,14,36);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+3;}
   if (['deep','shallow','offset'].includes(n.kind) && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
   return cells;
