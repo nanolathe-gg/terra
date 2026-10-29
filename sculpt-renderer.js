@@ -741,6 +741,9 @@ export class TerrainRenderer {
     this.f('uShineSlopeGate', variant.has('shineSlopeGate') ? Number(variant.get('shineSlopeGate')) : 0);
     // G5 (Lava): dashes in the bank crease.
     this.f('uLavaCreaseVary', variant.has('lavaCreaseVary') ? Number(variant.get('lavaCreaseVary')) : 0);
+    // H1 (Green): close shadow and cavity occlusion (0: off).
+    this.f('uCloseShadow', variant.has('closeShadow') ? Number(variant.get('closeShadow')) : 0);
+    this.f('uCavity', variant.has('cavity') ? Number(variant.get('cavity')) : 0);
     // G5 (Lava): hill rock.
     for (const [name, fallback] of [['lavaCrust', 0], ['lavaPillow', 34], ['lavaChip', 5.5], ['lavaVeins', 0], ['lavaCalm', 0.6], ['lavaDusk', 0]]) {
       this.f('u' + name[0].toUpperCase() + name.slice(1), variant.has(name) ? Number(variant.get(name)) : fallback);
