@@ -2597,6 +2597,59 @@ card.
 
 **Server and guard:** port 8862, CDP 9662, guard `--worlds green`.
 
+**Done (merged as fef3abb; EXPERIMENTS rows 132-134; notes in
+`$R/agent-H2/NOTES.md`).** Items 1-3; item 4 was not started.
+- **Rock column** (`column`, `columnContrast`, `columnBeds`). `columnAt`,
+  `columnCoord` and `columnOffset` are in `sculpt-common.wgsl`; the bake and
+  the erosion pass share them.
+  - Green's column is eight beds repeating every 47 height units, thin hard
+    beds between thicker soft ones:
+    `4:.9,7:.2,3:.7,8:.15,5:1,7:.3,4:.6,9:.2`.
+  - The bed coordinate is the surface height at the pixel, plus tilt and
+    wander. So with `column` 1, G2's smoothed ground (`cliffBed`) is ignored:
+    the pass cannot reproduce that smoothing, and two coordinates would
+    drift apart.
+- **GPU erosion** (`erosion`, `erosionAge` 200, `erosionRain` 1, `talusAngle`
+  40) is in `erosion.wgsl` and `sculpt-erosion.js`:
+  - virtual-pipe water with sediment, then thermal slides with two reposes;
+  - wear and repose follow the bed's hardness;
+  - 200 fixed iterations, ping-pong buffers, no atomics; two runs with a
+    restart between them match exactly.
+
+  It runs on the study only (`!regionalFields`). The worker then runs with
+  its droplet loop skipped: apron, sand and the material field are as
+  before.
+- **Budget.** The pass may move the ground 3 times as far as the worker's
+  largest budget, falling to .35 within 20 units of the sea. That is a
+  departure: at the worker's budget, a 100-high mesa's foot saturated.
+- **Demo mesa** (`repro/demo/mesa-beds.json`): continuous bench lines wrap
+  the face and shade with the sun. 2 of 5 hard beds stand (slope at least
+  1.25 times their soft neighbours) and 2 of 5 soft beds retreat.
+- **Green barely changes.** green-2's face numbers are within noise of H1
+  (mean, s.d., share under 30, p90 gradient: 44.1, 26.0, .252, 17.4; H1
+  44.7, 26.4, .247, 17.6). Dark runs are .032 / .354 (H1 .028 / .340,
+  retail .071 / .248). By eye, at 1× and 2×, the windows look the same.
+- **Cost.** The pass takes 250-320 ms against the droplet worker's 673 ms on
+  green-2 (427 ms with the rest of the worker). Draw and bake times are
+  unchanged.
+- **Merge checks.**
+  - All 27 scenes match the agent's final renders exactly, and only Green
+    moved against `merge-h1`.
+  - A 4×4 Green map canvas renders and exports with no seams or console
+    errors. 3% of its art moved, all on the rock face, from the column.
+
+**Still open:**
+- **The 2-px grid cannot resolve the beds.** A 6-10 unit bed on a face of
+  slope 2.5 spans 1-2 samples, so grid erosion makes benches on big forms
+  but not on Green's faces. The face's look has to come from the rock
+  material's relief: item 4's crisp blocks move to H3.
+- Map canvases keep the droplet worker (H5).
+- The worker still runs the apron, sand and the material field on the CPU
+  (H3 and H5).
+- Not run on the GPU path: the worker's slope-detail seeding before the
+  droplets.
+- There are no panel sliders for the new knobs.
+
 ### H2b. Erosion on map canvases — outline
 
 This now belongs to H5 (progressive rendering) in

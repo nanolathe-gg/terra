@@ -294,7 +294,7 @@ Each is written in full when the one before it lands.
 | Card | What it does | Status |
 | --- | --- | --- |
 | H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
-| H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Running |
+| H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Merged fef3abb |
 | H3 | One material model on the GPU (Green), with override fields | Outlined |
 | H4 | Shape on the GPU: strokes evaluated by compute passes | Outlined |
 | H5 | Progressive rendering, and erosion on map canvases (was H2b) | Outlined |
@@ -302,21 +302,40 @@ Each is written in full when the one before it lands.
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
 **H3, one material model (Green):**
+- **Owner, 2026-10-29:** *"work with the existing images. I'm not exactly
+  sure what it's doing, but we should codify the retail information in some
+  way that no longer requires it when running to keep things simple and
+  allow for easy cloud development."*
+- **So:** at run time the editor reads only our code and committed numbers.
+  - The prepared images under `assets-*` are where the numbers are
+    measured from. A measuring script stays a dev tool.
+  - The material textures are made on the GPU from the numbers.
+  - The owner's provenance rule from the map generator (2026-10-24):
+    tables measured from retail art are fine to keep; retail pixels and
+    maps are never a run-time input, and never go in git.
+  - The map generator's lesson from that work: brightness plus noise never
+    matched retail's palette art, but neighbour models of palette indices,
+    measured per material, did. Such a model runs in raster order, so on
+    the GPU it needs another form, or a different model.
 - **A material** is:
-  - its colour, from an exemplar texture already prepared under
-    `assets-*` and a ramp;
+  - its colour, from measured numbers: a ramp and its grain;
   - its relief generator;
   - its shine.
 - **One placement function** picks and blends the materials. It reads the
   data maps (slope, height above the plain and the sea, curvature, aspect,
   flow, wear, deposit, talus) and the paint.
-- **It replaces** Green's branches in `sculpt-frag.wgsl`, its relief
-  generators in `relief-bake.wgsl`, and its Python material preparation.
+- **It replaces:**
+  - Green's branches in `sculpt-frag.wgsl`;
+  - its relief generators in `relief-bake.wgsl`;
+  - its Python material preparation;
+  - the material field the worker still computes on the CPU.
+- **Rock relief** takes over H2's item 4, crisp blocks. H2 showed that the
+  2-px erosion grid cannot resolve Green's beds, so the face's look comes
+  from the rock's relief generator, reading the column.
 - **Override fields:** one per main control. H2's erosion reads its own.
-- **Precondition, to settle before dispatch.** macOS's `/tmp` cleaner
-  deleted the retail sources that Python material preparation reads
-  (2026-10-29). Either H3 works only from the prepared PNGs under
-  `assets-*`, or the sources are regenerated first.
+- **Where a material can't yet be made from numbers** (for example the
+  plain's exact retail tiles), say which, measure the gap, and keep it
+  reading its prepared image until it can.
 
 **H4, shape on the GPU:**
 - Compute passes evaluate the strokes, beside the JS engine and behind a
