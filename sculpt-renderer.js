@@ -9,6 +9,16 @@ import {materialRows} from './sculpt-material-model.js';
 const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
+// The plain's tiles as a 512 x 32 picture: tile t at x = 32 t, entry letters looked up in the colour list (H3).
+async function groundTileBitmap({entries, tiles}) {
+  const data = new ImageData(512, 32);
+  tiles.forEach((tile, t) => { for (let i = 0; i < 1024; i++) {
+    const c = entries[tile.charCodeAt(i) - 97], at = ((i >> 5) * 512 + t * 32 + (i & 31)) * 4;
+    data.data.set([c[0], c[1], c[2], 255], at);
+  } });
+  return createImageBitmap(data, {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+}
+
 // Average colour of an image (0..1 RGB), from a 64x64 reduction.
 function meanColor(bitmap) {
   const canvas = new OffscreenCanvas(64, 64), g = canvas.getContext('2d');
@@ -143,6 +153,7 @@ export class TerrainRenderer {
     // H3: Green's land materials from numbers (materialModel 1, the world's default, or ?materialModel=1|0 on the page).
     const modelQuery = new URLSearchParams(location.search).get('materialModel');
     this.materialModel = Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
+    this.materialData = null;
     const [vert, frag, common, bake, modelSource, modelTable] = await Promise.all(['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])].map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
@@ -214,7 +225,7 @@ export class TerrainRenderer {
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
-    if (this.materialModel) this.set('uMaterialTable', materialRows(JSON.parse(modelTable)));
+    if (this.materialModel) { this.materialData = JSON.parse(modelTable); this.set('uMaterialTable', materialRows(this.materialData)); }
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -251,9 +262,14 @@ export class TerrainRenderer {
         const ground = this.groundSource();
         url = variant.get('ground') !== 'texture' && ground.groundTiles ? ground.groundTiles : ground.grass;
       }
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Cannot load ${key} material`);
-      const bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+      // H3: with the material model the plain's 16 tiles are built from materials/green.json's `ground` data, not read from a file.
+      let bitmap;
+      if (key === 'grass' && this.materialData?.ground) bitmap = await groundTileBitmap(this.materialData.ground);
+      else {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Cannot load ${key} material`);
+        bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+      }
       // Mean colour of each base material, so a world can move it to a new
       // base colour while keeping the texture's grain.
       const meanOf = {grass: 'ground', slopeGrass: 'slope', rock: 'rock'}[key];

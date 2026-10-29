@@ -251,20 +251,15 @@ fn groundTile(pixel: vec2f) -> vec3f {
 fn matRow(i: u32) -> vec4f { return u.materialTable[i]; }
 // Quarter-resolution trial: a coarse draw shows one sample per foot pixels.
 fn modelPixel(pixel: vec2f) -> vec2f { return select(pixel, (floor(pixel / u.materialFoot) + 0.5) * u.materialFoot, u.materialFoot > 1.0); }
-// The plain is a small vocabulary of 32-px tiles on the export's grid, one chosen per cell by hash, as retail's is
-// (the TNT tile cap needs the reuse): tile t is the model's grain over a 32-px square at its own offset (cells to 8 px; the
-// plain has no broader grain), so there are groundTiles distinct 32 x 32 pictures and no more.
-fn groundSource(pixel: vec2f) -> vec3f {
-    let q = modelPixel(pixel);
-    let cell = vec2i(floor(q / 32.0));
-    let tile = min(i32(groundHash(vec3i(cell, 7)) * f32(u.groundTiles)), 15);
-    return mmColor(0u, glslMod(floor(q), 32.0) + vec2f(f32(tile) * 64.0 + 0.5, 0.5), u.materialFoot);
-}
+// The plain keeps its 16 tiles, now built at startup from materials/green.json's `ground` data (sculpt-renderer.js), not an image file.
+fn groundSource(pixel: vec2f) -> vec3f { return groundTile(pixel); }
 fn grassImage(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
-fn slopeGrassSource(pixel: vec2f) -> vec3f { return mmColor(1u, modelPixel(pixel), u.materialFoot); }
-fn rockSource(pixel: vec2f, size: vec2f) -> vec3f { return mmColor(2u, modelPixel(pixel), u.materialFoot); }
-fn weatheredSource(pixel: vec2f) -> vec3f { return mmColor(3u, modelPixel(pixel + vec2f(73.0, 17.0)), u.materialFoot); }
-fn fracturedSource(pixel: vec2f) -> vec3f { return mmColor(4u, modelPixel(pixel), u.materialFoot); }
+fn slopeGrassSource(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
+// The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
+// Lab histogram of the rock face is worse with it (.057/.076/.083 against .049/.067/.079 by class).
+fn rockSource(pixel: vec2f, size: vec2f) -> vec3f { return pixelSample(rockTex, rockSamp, pixel, size).rgb; }
+fn weatheredSource(pixel: vec2f) -> vec3f { return pixelSample(rockWeatheredTex, rockWeatheredSamp, pixel + vec2f(73.0, 17.0), vec2f(256.0)).rgb; }
+fn fracturedSource(pixel: vec2f) -> vec3f { return pixelSample(rockFracturedTex, rockFracturedSamp, pixel, vec2f(256.0)).rgb; }
 #else
 fn groundSource(pixel: vec2f) -> vec3f { return select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1); }
 fn grassImage(pixel: vec2f) -> vec3f { return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb; }
@@ -287,7 +282,7 @@ fn fracturedSource(pixel: vec2f) -> vec3f { return pixelSample(rockFracturedTex,
 //   row 7  x,y: rock share at the face start and at its steepest
 //   row 8  face score: x: surface roughness, y: lump top, z: fine noise, w: broad noise
 //   row 9  x: gully rock, y: structured-rock order, z: painted-rock face
-const MM_PLACE = 175u;
+const MM_PLACE = 156u;
 fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
 struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32 }
 fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32, painted: vec4f) -> Place {

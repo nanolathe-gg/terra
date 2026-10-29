@@ -19,7 +19,7 @@ from scipy import ndimage as ndi
 HERE = Path(__file__).resolve().parent
 SIGMAS = [0.0] + [0.7 * 2 ** k for k in range(7)]
 LUMA = np.array([.299, .587, .114])
-ORDER = ['ground', 'slopeGrass', 'rock', 'weathered', 'fractured']
+ORDER = ['slopeGrass', 'rock', 'weathered', 'fractured']
 
 
 def lattice_variance(cell_x, cell_y):
@@ -42,6 +42,42 @@ def bands(L):
     m = 24
     blurred = [L if s == 0 else ndi.gaussian_filter(L, s, mode='mirror') for s in SIGMAS]
     return np.array([(blurred[k] - blurred[k + 1])[m:-m, m:-m].std() for k in range(7)]), blurred[-1][m:-m, m:-m].std()
+
+
+def u32(x):
+    return np.asarray(x, np.uint64) & np.uint64(0xFFFFFFFF)
+
+
+def hash2(ix, iy, salt):
+    # mmHash of material-model.wgsl, in 32-bit arithmetic
+    n = u32(u32(ix) * np.uint64(374761393) + u32(iy) * np.uint64(668265263) + np.uint64(salt) * np.uint64(2246822519))
+    n = u32(u32(n ^ (n >> np.uint64(13))) * np.uint64(1274126177))
+    n = u32(u32(n ^ (n >> np.uint64(16))) * np.uint64(2246822519))
+    return (n ^ (n >> np.uint64(15))).astype(np.float64) / 4294967295.0
+
+
+def z_quantiles(m, size=1024):
+    """The model's z over a size x size field (mirror of mmColor's noise sum at foot 1), at MM_P."""
+    mid = ORDER.index(next(k for k, v in TABLE_MODEL.items() if v is m))
+    salt = mid * 16 + 1
+    y, x = np.mgrid[0:size, 0:size].astype(np.float64) + .5
+    a = m['amps']
+    z = a[0] * (hash2(np.floor(x).astype(np.int64), np.floor(y).astype(np.int64), salt) * 2 - 1)
+    for k in range(1, 7):
+        cell = 2.0 ** k
+        qx, qy = x / (cell * m['stretch']), y / cell
+        cx, cy = np.floor(qx), np.floor(qy)
+        fx, fy = qx - cx, qy - cy
+        wx, wy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+        cx, cy = cx.astype(np.int64), cy.astype(np.int64)
+        h = lambda dx, dy: hash2(cx + dx, cy + dy, salt + k)
+        v = (h(0, 0) * (1 - wx) + h(1, 0) * wx) * (1 - wy) + (h(0, 1) * (1 - wx) + h(1, 1) * wx) * wy
+        z = z + a[k] * (v * 2 - 1)
+    return np.quantile(z, P)
+
+
+P = [0.001, 0.01, 0.05, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 0.95, 0.99, 0.999]
+TABLE_MODEL = {}
 
 
 def run(table, work, rounds, cdp, foot=1):
@@ -79,6 +115,9 @@ def main():
         lag = m['tintLag'] if m['tintLag'] is not None else 0.0
         model[name] = {'amps': a.tolist(), 'stretch': 1.0, 'tintMix': float(np.clip(2.0 * lag, 0, .8)), 'tintScale': 1.0}
     table['model'] = model
+    TABLE_MODEL.update(model)
+    for n in ORDER:
+        model[n]['zq'] = [round(float(v), 4) for v in z_quantiles(model[n])]
     for r in range(rounds):
         sw = run(table, work, r, cdp)
         worst = 0
@@ -90,11 +129,16 @@ def main():
             a = np.array(model[name]['amps']) * ratio
             a = a / np.sqrt((a * a * var).sum())
             model[name]['amps'] = [round(float(v), 4) for v in a]
+            model[name]['zq'] = [round(float(v), 4) for v in z_quantiles(model[name])]
             worst = max(worst, float(np.abs(b / target - 1).max()))
             if r == rounds - 1 or r == 0:
                 print(f'round {r} {name:10s} bands {np.round(b, 2).tolist()} target {target.tolist()} sd {L.std():.1f}/{table["measured"][name]["lumaSd"]}')
         print(f'round {r}: worst band error {worst:.2f}')
         table['model'] = model
+    # z is a sum of bounded noise, not a normal variable: store its 13 quantiles so the shader maps it to an exact rank.
+    for n in ORDER:
+        model[n]['zq'] = [round(float(v), 4) for v in z_quantiles(model[n])]
+    table['model'] = model
     path.write_text(json.dumps(table, indent=1) + '\n')
 
 

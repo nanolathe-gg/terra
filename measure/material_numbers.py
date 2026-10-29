@@ -17,6 +17,7 @@ Per material (the five Green draws):
             difference of Gaussians at sigma 0.7 * 2^(k-1) and 0.7 * 2^k;
             band 6 stops at sigma 22.4 (grain up to about 32 px). What the
             blur at 22.4 leaves is the broad level (`broad`), not grain.
+  lumaQ     luma at the 1, 5, 25, 50, 75, 95 and 99th percentiles (the model's `tail` is fitted to them).
   sd5       luma s.d. of the 5 x 5 box mean (the "s.d. after a 5-px blur").
   stretch   rms x gradient over rms y gradient of luma blurred at sigma 1;
             above 1 the grain runs along x.
@@ -29,7 +30,6 @@ Per material (the five Green draws):
             along it, `tintLag`, is its pixel correlation at 1 px).
   chroma    s.d. of each colour channel left once the ramp alone is taken
             away, and `chromaLeft` what is left after the tint too.
-  palette   (the plain only) its entries and shares in luma order, at most 16.
   colours   distinct colours in the image, and the share of the commonest.
 Tiled images wrap, as the draw's repeat sampling does; the ground strip is
 sixteen separate 32 x 32 tiles and does not.
@@ -106,22 +106,12 @@ def measure(a, mode):
     box = ndi.uniform_filter(L, 5, mode='wrap' if mode == 'wrap' else 'mirror')
     gy, gx = np.gradient(blur(L, 1.0, mode))
     colours, counts = np.unique(flat, axis=0, return_counts=True)
-    palette = None
-    if mode == 'strip' and len(colours) <= 24:
-        # The plain is a small palette-entry mosaic: keep its entries and shares (luma order), merging the rarest
-        # into the entry nearest in luma until 16 remain, so the draw can name exact entries and snap to themselves.
-        ent = sorted(([*c, n / counts.sum()] for c, n in zip(colours, counts)), key=lambda e: np.dot(e[:3], LUMA))
-        while len(ent) > 16:
-            i = min(range(len(ent)), key=lambda k: ent[k][3])
-            j = i - 1 if i == len(ent) - 1 or (i > 0 and abs(np.dot(ent[i][:3], LUMA) - np.dot(ent[i - 1][:3], LUMA)) < abs(np.dot(ent[i][:3], LUMA) - np.dot(ent[i + 1][:3], LUMA))) else i + 1
-            ent[j][3] += ent[i][3]
-            del ent[i]
-        palette = [[int(e[0]), int(e[1]), int(e[2]), round(float(e[3]), 4)] for e in ent]
     return {
         'size': [a.shape[1] // (16 if mode == 'strip' else 1), a.shape[0]],
         'meanRGB': [round(float(v), 2) for v in flat.mean(0)],
         'lumaMean': round(float(L.mean()), 2), 'lumaSd': round(float(L.std()), 2),
         'sd5': round(float(box.std()), 2),
+        'lumaQ': [round(float(v), 1) for v in np.percentile(L, [1, 5, 25, 50, 75, 95, 99])],
         'broad': round(float(blurred[-1].std()), 2),
         'bands': [round(b, 3) for b in bands],
         'stretch': round(float(np.sqrt((gx ** 2).mean() / (gy ** 2).mean())), 3),
@@ -132,7 +122,6 @@ def measure(a, mode):
         'tint': [[round(float(v), 1) for v in row] for row in tint],
         'colours': int(len(colours)), 'topShare': round(float(counts.max() / counts.sum()), 3),
         'ramp': [[round(float(v), 1) for v in row] for row in ramp],
-        **({'palette': palette} if palette else {}),
     }
 
 
@@ -147,6 +136,13 @@ def main():
         table[name] = {'image': image, 'draw': note, **measure(load(assets / image, mode), mode)}
     old = json.loads(out.read_text()) if out.exists() else {}
     old['measured'] = table
+    # The plain is not modelled: its 16 tiles (generated, in ours, by ground_tiles.py from an index model of retail's flat ground)
+    # are kept as data: the colour entries in luma order and each tile as 1,024 entry letters (a = first entry), rows top first.
+    strip = np.asarray(Image.open(assets / 'ground-tiles.png').convert('RGB'))[:32]
+    entries = sorted({tuple(c) for c in strip.reshape(-1, 3)}, key=lambda c: float(np.dot(c, LUMA)))
+    index = {c: i for i, c in enumerate(entries)}
+    old['ground'] = {'entries': [list(map(int, c)) for c in entries],
+                     'tiles': [''.join(chr(97 + index[tuple(strip[y, 32 * t + x])]) for y in range(32) for x in range(32)) for t in range(16)]}
     out.write_text(json.dumps(old, indent=1) + '\n')
     for name, row in table.items():
         print(f"{name:11s} mean {row['lumaMean']:6.1f} sd {row['lumaSd']:5.1f} sd5 {row['sd5']:5.2f} stretch {row['stretch']:.2f} "

@@ -19,7 +19,7 @@ from scipy import ndimage as ndi
 HERE = Path(__file__).resolve().parent
 LUMA = np.array([.299, .587, .114])
 SIGMAS = [0.0] + [0.7 * 2 ** k for k in range(7)]
-IMAGES = {'ground': 'ground-tiles.png', 'slopeGrass': 'slope-grass.png', 'rock': 'slope-rock.png',
+IMAGES = {'slopeGrass': 'slope-grass.png', 'rock': 'slope-rock.png',
           'weathered': 'rock-weathered.png', 'fractured': 'rock-fractured.png'}
 N = 256
 

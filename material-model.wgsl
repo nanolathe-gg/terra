@@ -1,11 +1,12 @@
-// Card H3: a land material made from numbers, with no image (Green).
+// Card H3: a land material made from numbers, with no image (Green's slope grass; the rocks' rows wait for H3b).
 //
 // A material is MM_ROWS vec4f rows, read through the host's matRow(i):
 //   row 0   band amplitudes for cells of 1, 2, 4 and 8 px (z units)
 //   row 1   amplitudes for cells of 16, 32 and 64 px; w: stretch (grain runs along x when above 1)
-//   row 2   x: tint spatial mix (0: per pixel, 1: cells of 2 px); y: tint scale; z: 1 for a palette mosaic (the plain)
-//   rows 3-18   the ramp: RGB (0..255) at 16 luma quantiles, darkest first; for a palette mosaic, 16 entries in luma order with their share in w
+//   row 2   x: tint spatial mix (0: per pixel, 1: cells of 2 px); y: tint scale
+//   rows 3-18   the ramp: RGB (0..255) at 16 luma quantiles, darkest first
 //   rows 19-34  the tint: at each quantile, the direction the colours leave the ramp, times its s.d.
+//   rows 35-38  zq: the noise sum's 13 quantiles (see mmU)
 // materials/green.json holds the numbers and how each was measured.
 //
 // The colour at a pixel: z is a sum of band-limited noise (a hash per pixel,
@@ -19,7 +20,7 @@
 // footprint fade out, so a coarse draw keeps the mean and the broad pattern
 // and loses only the grain it cannot show. The marginal is not renormalised:
 // a coarser draw has less contrast, as a blurred image has.
-const MM_ROWS = 35u;
+const MM_ROWS = 39u;
 
 fn mmHash(c: vec2i, salt: u32) -> f32 {
     var n = bitcast<u32>(c.x) * 374761393u + bitcast<u32>(c.y) * 668265263u + salt * 2246822519u;
@@ -41,6 +42,22 @@ fn mmLattice(pixel: vec2f, cell: vec2f, salt: u32) -> f32 {
 }
 // The normal distribution function, by its tanh form (error under .002).
 fn mmPhi(z: f32) -> f32 { return 0.5 + 0.5 * tanh(0.7978846 * z * (1.0 + 0.044715 * z * z)); }
+
+// z is a sum of bounded noise, so it is not a normal variable. Its measured quantiles (the material's `zq`, rows 35-38,
+// z at the probabilities below) turn it into a rank u with exactly the image's histogram: linear between knots.
+const MM_P = array<f32, 13>(0.001, 0.01, 0.05, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 0.95, 0.99, 0.999);
+fn mmU(base: u32, z: f32) -> f32 {
+    var lo = matRow(base + 35u).x;
+    var plo = MM_P[0];
+    if (z <= lo) { return plo; }
+    for (var k = 1u; k < 13u; k++) {
+        let hi = matRow(base + 35u + k / 4u)[k % 4u];
+        if (z <= hi) { return mix(plo, MM_P[k], (z - lo) / max(hi - lo, 1e-6)); }
+        lo = hi;
+        plo = MM_P[k];
+    }
+    return plo;
+}
 
 fn mmAmp(r0: vec4f, r1: vec4f, k: u32) -> f32 {
     switch (k) {
@@ -65,16 +82,6 @@ fn mmRamp(base: u32, u: f32) -> vec3f {
     return mix(matRow(base + 3u + i0).rgb, matRow(base + 3u + min(i0 + 1u, 15u)).rgb, fract(at));
 }
 
-fn mmPick(base: u32, u: f32) -> vec3f {
-    var cum = 0.0;
-    for (var i = 0u; i < 16u; i++) {
-        let e = matRow(base + 3u + i);
-        cum += e.w;
-        if (u <= cum) { return e.rgb; }
-    }
-    return matRow(base + 18u).rgb;
-}
-
 fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
     let base = id * MM_ROWS;
     let r0 = matRow(base);
@@ -97,17 +104,10 @@ fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
     // A coarse draw averages the grain it cannot show: a five-point Gauss-Hermite rule over the lost
     // variance keeps the mean colour (the ramp at the median alone would not) and the image's broad histogram.
     let s = sqrt(lost);
-    // A palette mosaic (the plain) names one entry by its share, so the draw holds exact palette colours; a coarse
-    // draw averages the entries over the lost grain as the ramp does.
-    if (r2.z > 0.5) {
-        return (mmPick(base, mmPhi(z)) * 0.533333
-              + (mmPick(base, mmPhi(z - s * 1.355626)) + mmPick(base, mmPhi(z + s * 1.355626))) * 0.222076
-              + (mmPick(base, mmPhi(z - s * 2.856970)) + mmPick(base, mmPhi(z + s * 2.856970))) * 0.011257) / 255.0;
-    }
-    var rgb = mmRamp(base, mmPhi(z)) * 0.533333
-            + (mmRamp(base, mmPhi(z - s * 1.355626)) + mmRamp(base, mmPhi(z + s * 1.355626))) * 0.222076
-            + (mmRamp(base, mmPhi(z - s * 2.856970)) + mmRamp(base, mmPhi(z + s * 2.856970))) * 0.011257;
-    let at = clamp(mmPhi(z) * 16.0 - 0.5, 0.0, 15.0);
+    var rgb = mmRamp(base, mmU(base, z)) * 0.533333
+            + (mmRamp(base, mmU(base, z - s * 1.355626)) + mmRamp(base, mmU(base, z + s * 1.355626))) * 0.222076
+            + (mmRamp(base, mmU(base, z - s * 2.856970)) + mmRamp(base, mmU(base, z + s * 2.856970))) * 0.011257;
+    let at = clamp(mmU(base, z) * 16.0 - 0.5, 0.0, 15.0);
     let i0 = u32(floor(at));
     let dir = mix(matRow(base + 19u + i0).rgb, matRow(base + 19u + min(i0 + 1u, 15u)).rgb, fract(at));
     // The tint noise: three hashes make a near-normal value per pixel, mixed toward cells of 2 px.
