@@ -216,6 +216,8 @@ KNOB_DEFAULTS.update(materialModel=0)
 KNOB_DEFAULTS.update(engine=0)
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
 KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
+# H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
+KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
@@ -226,7 +228,7 @@ KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0,
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
-                  rockMoss=.4,
+                  rockMoss=.4, hillBlocks=.5,
                   terraceBreak=1.4, terraceCalm=0, wetSwath=.35, outcrop=0),
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and

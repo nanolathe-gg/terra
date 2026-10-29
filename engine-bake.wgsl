@@ -502,6 +502,11 @@ fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
     return vec3f(off, lip, k);
 }
 
+// H4b: a hill's pieces against a face's: width and length (down the fall line) as shares of blockWidth and blockRow.
+const HILL_WIDTH = 0.6;
+const HILL_LENGTH = 2.2;
+const HILL_RELIEF = 1.8;   // a hill's piece heights against a face's (the hills' pieces are small, so their planes need more to light)
+const HILL_SEAM = 0.7;   // crevice half-width on a hill, px (a face's is 1.2): retail's hill cracks are 1-2 px
 // H4 item 4 (round 2): rock blocks. The face is cut into irregular pieces: a jittered cell grid, blockWidth by blockRow px, turned by a
 // slowly varying angle (up to about 40 degrees either way, so neighbouring regions are not aligned) and with its cells' own sizes
 // varying; each piece is a plane with a small tilt and a step against its neighbours, so it lights as one flat piece. The beds of the
@@ -512,14 +517,15 @@ fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
 // follow no contour.
 // pf: the face's own coordinates (x along the contour, y down the fall line), as the beds and joints use them.
 // Returns (height offset, crevice 0..1, bed hardness).
-fn blockField(p: vec2f, pf: vec2f, h: f32) -> vec3f {
+fn blockField(p: vec2f, pf: vec2f, h: f32, hill: f32) -> vec4f {
     let bed = columnAt(columnCoord(p, h));
     let hard = bed.hardness;
-    let turn = (valueNoise(p / 70.0 + 5.0) + 0.5 * valueNoise(p / 23.0 + 17.0)) * 0.55;
+    // H4b: a hill's pieces are narrower and longer down the fall line than a face's, and the grid turns less, so most edges run down the slope.
+    let turn = (valueNoise(p / 70.0 + 5.0) + 0.5 * valueNoise(p / 23.0 + 17.0)) * mix(0.55, 0.2, hill);
     let c = cos(turn);
     let s = sin(turn);
     let r = vec2f(c * pf.x + s * pf.y, -s * pf.x + c * pf.y);
-    let size = vec2f(u.blockWidth, u.blockRow) * mix(0.7, 1.5, hard);
+    let size = vec2f(u.blockWidth, u.blockRow) * mix(vec2f(1.0), vec2f(HILL_WIDTH, HILL_LENGTH), hill) * mix(0.7, 1.5, hard);
     let chip = (valueNoise(p / 1.7 + 29.0) + 0.5 * valueNoise(p / 0.9 + 3.0)) * u.blockChip * mix(1.0, 0.4, hard);
     let q = r / size;
     let g = floor(q);
@@ -544,10 +550,11 @@ fn blockField(p: vec2f, pf: vec2f, h: f32) -> vec3f {
     // Half the gap between the nearest and second-nearest points: about the distance to the edge, in px.
     let edge = 0.5 * (sqrt(second) - sqrt(best)) + chip;
     let here = mix(step(0.25, hs.y), 1.0, hard);
-    let crevice = (1.0 - smoothstep(0.0, 1.2, edge)) * here;
+    let crevice = (1.0 - smoothstep(0.0, mix(1.2, HILL_SEAM, hill), edge)) * here;
     height -= crevice * u.blockSeam * 0.8;
     height += (cellHash(floor(p)).x - 0.5) * 2.0 * u.blockGrit;
-    return vec3f(height, crevice, hard);
+    // .w: this piece's own draw, for the hills (which pieces are bare rock).
+    return vec4f(height, crevice, hard, hs.x);
 }
 
 // Rock face form (card E9). Retail's big green faces are carved: broad gullies
@@ -1358,7 +1365,7 @@ fn bake(p: vec2f) -> vec4f {
         gullyFloor = gate * carved.y;
         if (u.scratchDepth > 0.0) { height += gate * scratchField(pf); }
         if (u.blocks > 0.0) {
-            let block = blockField(p, pf, bedH + carved.x * u.bedBend);
+            let block = blockField(p, pf, bedH + carved.x * u.bedBend, 0.0);
             height += gate * block.x;
             blockCrevice = gate * block.y;
         }
@@ -1368,6 +1375,18 @@ fn bake(p: vec2f) -> vec4f {
             facetSeam = gate * facet.y;
         }
         structureRock = order * steep * bed.y * step(0.01, u.bedLip);
+    }
+    // H4b: the hills' rock (slope from .35, full at .65; the rock class of measure/material_classes.py starts at .5) off the structured face takes small
+    // pieces, in patches, with the pieces' edges mostly down the fall line.
+    if (u.hillBlocks > 0.0 && u.blocks > 0.0 && h > u.sea + 1.0) {
+        let patches = smoothstep(-0.2, 0.3, valueNoise(p / 26.0 + 53.0));
+        let hill = u.hillBlocks * smoothstep(0.35, 0.65, slope) * patches * (1.0 - order * steep) * (1.0 - route) * (1.0 - buried);
+        if (hill > 0.0) {
+            let across = vec2f(-fall.y, fall.x);
+            let block = blockField(p, vec2f(dot(p, across), dot(p, fall)), h, 1.0);
+            height += hill * HILL_RELIEF * block.x;
+            blockCrevice = max(blockCrevice, hill * block.y);
+        }
     }
     // H5 3b: rills along the flow.
     let rill = rillAt(p, slope);
