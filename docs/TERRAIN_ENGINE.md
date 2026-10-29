@@ -376,7 +376,7 @@ Each is written in full when the one before it lands.
 | H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
 | H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Merged fef3abb |
 | H3 | One material model on the GPU (Green), with override fields | Merged 1c7f10d |
-| H4 | The Green engine: its own shaders, startup material textures, rocks from numbers, rock blocks (absorbs H3b) | Written |
+| H4 | The Green engine: its own shaders, startup material textures, rocks from numbers, rock blocks (absorbs H3b) | Merged 494bcf1 |
 | H5 | Green's weather on the GPU everywhere, map canvases included (absorbs H2b) | Outlined |
 | H6 | Green's shape on the GPU | Outlined |
 | H7 | Progressive rendering on the Green slice | Outlined |

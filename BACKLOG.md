@@ -3066,6 +3066,82 @@ Still open lists above, and H3's inventory of Green's draw
 
 **Server and guard:** port 8864, CDP 9664, guard `--worlds green`.
 
+**Done (merged as 494bcf1 after two rounds; EXPERIMENTS rows 138-140;
+notes in `$R/agent-H4/NOTES.md`, whose round 2 section supersedes round
+1).**
+- **Green's own shaders.** `engine` (Green 1) draws and bakes with
+  `engine-frag`, `engine-bake` and `engine-common`.
+  - Before any change they drew bit-identically to the shared set on all 27
+    scenes.
+  - `engine` 0 still reproduces merge-h3's Green exactly.
+- **Startup materials.** `engine-materials.wgsl` makes slope grass, rock,
+  weathered and fractured from `materials/green.json`:
+  - 512 px, periodic;
+  - seven mip levels, each made from the model at its footprint;
+  - 7.8-10 ms at startup, and 2.3-3.7 ms to regenerate.
+
+  No land image remains for Green. The plain keeps its 16 tiles from data,
+  and water keeps its images. Against the images they replace, means are
+  within .3 luma and s.d. is 2-4% low.
+- **Draw cost.** The green-2 draw went from 26.5-28.2 ms to 19.0-19.8 ms
+  (target 22.8). The bake costs .2 ms more.
+- **Rock pieces.** `blockField` cuts the face into irregular pieces:
+  - the grid is jittered and turns slowly, and its cells are sized by bed
+    hardness;
+  - each piece is a tilted, stepped plane, with chipped and carved crevices
+    and per-pixel grit.
+
+  Round 1 cut courses from the bed coordinate, and they read as rows of
+  arcs; round 2 removed them. In Clay, the pieces shade with a moving sun.
+- **Moss on rock.** `rockMoss` places flecks and small clumps of slope
+  grass on exposed rock, by cavity and lump top. Measuring showed that
+  green-2's face hue gap was cover: retail's non-green rock pixels are the
+  same grey as ours.
+- **Green-2's face** (engine 0 → engine 1; retail):
+
+  | Measure | engine 0 | engine 1 | Retail |
+  | --- | --- | --- | --- |
+  | Mean / s.d. | 44.1 / 26.0 | 46.1 / 26.8 | 45.8 / 27.2 |
+  | Class hue / sat | 60 / .115 | 85 / .254 | 80 / .286 |
+  | Rock-face Lab | .068 | .047 | |
+- **The controls matter on the structured face.** Each block knob and
+  `rockMoss` moves 31-63% of green-2's face between its minimum and
+  maximum (`out/impact2-sheet.png`, 1× crop pairs).
+- **Merge checks:**
+  - Only Green moved against merge-h3 (mean |diff| 1.02 / 4.82 / 0.73).
+  - All 27 scenes equal the agent's final renders.
+  - Replay mismatch is 0, and the console is clean, on all 27.
+  - The 4×4 export has 1,067 unique tiles of 4,420, no nearest pixels and
+    a clean console.
+  - The map path draws the engine: 35-40% of canvas pixels move between
+    `engine` 0 and 1.
+  - Seam shots with rock in view show no seam.
+
+**Still open:**
+- **Long horizontal dark runs.** h≥10 is .024 against retail's .071
+  (engine 0: .033). Taller steps with close shadow did not lengthen them.
+- **Green-1 and green-3.** Rock-face Lab is .003 and .002 worse than engine
+  0, and grass slope .001-.002 worse. It comes from the generated rock's
+  own arrangement, and is within the .006 noise that earlier cards used.
+- **The moss reads as confetti.** Its flecks are brighter and more evenly
+  spread than retail's darker clumps in crevices. Placing it by the water
+  pass's wetness (H5) is the natural next step.
+- **Shaded pieces** are darker and mushier than retail's.
+- **Blocks only on big faces.** Green-1 and green-3's rock is small hills
+  outside the face gate, where every block knob moves under 1%. Owner
+  question: should blocks reach hill rock, with their own gate?
+- **`rockMoss` has two meanings:** the moss amount under engine 1 (Green
+  .4), and the old green clamp under engine 0 (Green .15).
+- **Size, for comparison only.** Nothing is deleted until the slice is
+  accepted (decision 10). The engine copies still carry other worlds' dead
+  branches.
+
+  | Measure | Shared | Engine |
+  | --- | --- | --- |
+  | Shader lines, frag / bake / common | 2,246 / 1,260 / 715, plus 123 for the material model | 1,933 / 1,317 / 724, plus 127 for the materials pass |
+  | Uniforms read by frag and bake | 341 | 325 |
+  | Knobs, total / set by Green | 420 / 76 | 420 / 84 |
+
 H5 (weather on the GPU everywhere), H6 (shape on the GPU) and H7
 (progressive rendering), which complete the Green slice, are outlined in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
