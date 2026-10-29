@@ -491,14 +491,15 @@ WORLD_VARIANTS = {
                       colors=dict(crystal='#8ea6ee', ground='#9db5fa', slope='#a5bef9', rock='#9ab2f4'),
                       # No slope cover, face rock or exposed rock: their dark slate and granite
                       # read as teal specks on a bright berg, where retail's faces are one
-                      # rough blue-white grain (ground pattern contrast 2 gives it).
+                      # rough blue-white grain (ground pattern contrast 2 gave it; card G6 lowered it to 1.3 and the
+                      # relief to .35 / .4: the owner found ice-2 too rough, and its 3x3 high-pass was 17.5 against retail's 11.7, now 13).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=2, microRock=0,
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3, microRock=0,
                                  # Card G6: the world's soft slate block look is not the berg's.
                                  iceSoft=0, iceSnow=0, iceFall=0, iceApron=0,
                                  # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
-                                 iceSlate=0, mineralDetail=1, reliefAmount=.5, reliefScale=28, reliefLumps=.7, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                 iceSlate=0, mineralDetail=1, reliefAmount=.35, reliefScale=28, reliefLumps=.4, shineWhite=.35, shineStretch=1, shineHeadroom=0,
                                  shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Crystal mountains (card E6, retail ice-1): slate ruled with straight dark strokes in
         # domains, snow-white lumps standing on the raised ground, soft relief, no glint.
