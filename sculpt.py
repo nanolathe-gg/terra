@@ -255,9 +255,10 @@ WORLD_KNOBS = {
                 # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
                 # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
                 shoalRag=9,
-                # G1: retail's lilac lake keeps pink and salmon pixels of the ground under it; half of the tile's
-                # colour grain shows through the tint (.9 reads as glitter).
-                shoalGrain=.5),
+                # G1: retail's lilac lake keeps pink and salmon pixels of the ground under it; .3 of the tile's
+                # colour grain shows through the tint (.9 reads as glitter; .5 raised the pixel-scale energy
+                # past the lake's before value, .25 kept it).
+                shoalGrain=.3),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
