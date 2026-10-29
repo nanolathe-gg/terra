@@ -793,8 +793,9 @@ fn lavaCells(q: vec2f, salt: f32) -> Cells {
 }
 fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     // Raised ground only: hills and their flanks, not the banks between the sea and the plain.
-    let gate = u.lavaCrust * smoothstep(u.base + 0.8, u.base + 4.0, h);
-    // The fall-line relief gives way on the hill and on its foot's slope, not on the banks below the plain.
+    // Lava's plain undulates up to ~4 units over the base, so the crust starts above that (open ground keeps its own lumps).
+    let gate = u.lavaCrust * smoothstep(u.base + 2.5, u.base + 6.5, h);
+    // The fall-line relief gives way on the hill and on its foot's slope; the banks well below the plain keep theirs.
     let calm = u.lavaCalm * max(smoothstep(u.base + 0.2, u.base + 2.5, h), smoothstep(u.base - 0.6, u.base - 0.1, h) * smoothstep(0.06, 0.22, slope));
     if (gate <= 0.0) { return vec3f(0.0, 0.0, calm); }
     let across = vec2f(fall.y, -fall.x);

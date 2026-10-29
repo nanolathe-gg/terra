@@ -109,7 +109,7 @@ const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace'];
 const COAST_KEYS=['fingerCoast','shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
   // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
   'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle','hillLobes','hillSteps',
-  // G5 (Lava): the layers' two-dimensional wander and extra width spread.
+  // G5 (Lava): the layers' two-dimensional wander and extra width spread; the circles' variety; the lobes' tread tilt (the hill-lobe option rides this list, as E10's).
   'lavaMeander','lavaSpread','lavaCircleVary','lavaTread'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
