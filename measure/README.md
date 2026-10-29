@@ -36,4 +36,4 @@ Painted Desert (a repro/all.sh output directory: retail.png, heights.npy, crop.j
 
 | Script | Measures |
 | --- | --- |
-| `desert_hue.py` | Colour (mean RGB, hue, R/G, luma s.d., orange and grey shares) by the height of the ground each pixel shows, in classes plain, apron, bands, cap and the flattest 40
+| `desert_hue.py` | Colour (mean RGB, hue, R/G, luma s.d., orange and grey shares) by the height of the ground each pixel shows, in classes plain, apron, bands, cap and the flattest 40% of pixels, retail beside ours (card G4) |
