@@ -827,6 +827,10 @@ export class TerrainRenderer {
     this.f('uRingScatter', variant.has('ringScatter') ? Number(variant.get('ringScatter')) : 0.5);
     this.f('uRingWobble', variant.has('ringWobble') ? Number(variant.get('ringWobble')) : 3);
     this.f('uRingLobe', variant.has('ringLobe') ? Number(variant.get('ringLobe')) : 22);
+    this.f('uRingTaper', variant.has('ringTaper') ? Number(variant.get('ringTaper')) : 0);
+    this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);
+    this.f('uRingPatch', variant.has('ringPatch') ? Number(variant.get('ringPatch')) : 0);
+    this.f('uRingPatchSize', variant.has('ringPatchSize') ? Number(variant.get('ringPatchSize')) : 120);
     this.fieldsDirty = true;
   }
 

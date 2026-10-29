@@ -149,6 +149,9 @@ KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGap
 # lines; ringCount copies), drifting towards ringShiftDir degrees clockwise from east with ringScatter of a half turn of
 # wander, and ringWobble px of waver in each outline (lobes ringLobe px across).
 KNOB_DEFAULTS.update(ringShift=0, ringShiftDir=315, ringScatter=.5, ringWobble=3, ringLobe=22)
+# G3: the stack fades into the sand: ringTaper (outer lines fainter), ringFill (pale tint, stepping lighter
+# outward), ringPatch over ringPatchSize px (the reach varies along the outline). 0: as the concentric look.
+KNOB_DEFAULTS.update(ringTaper=0, ringFill=0, ringPatch=0, ringPatchSize=120)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -265,8 +268,12 @@ WORLD_KNOBS = {
                         # (round 8: retail's step outward in several copies, each offset from the last). The
                         # reach is a wider outer level than the concentric lines' (ringSize .3). The earlier
                         # look is ringShift 0 with ringContrast .55, ringCount 12 and ringSize .3.
-                        ringShift=9, ringShiftDir=315, ringScatter=.6, ringWobble=6, ringLobe=22,
-                        ringContrast=.95, ringCount=14, ringSize=1.3),
+                        ringShift=11, ringShiftDir=315, ringScatter=.5, ringWobble=8, ringLobe=20,
+                        ringContrast=.95, ringCount=16, ringSize=.7,
+                        # G3 fade: outer lines fainter, a pale lime skirt stepping lighter outward, and a
+                        # reach that varies along the outline (retail's halo is wide on some sides of a hill
+                        # and a few px on others).
+                        ringTaper=.5, ringFill=.55, ringPatch=.8, ringPatchSize=160),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient

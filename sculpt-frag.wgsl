@@ -675,9 +675,17 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     let inner = sqrt(-log(0.45));
     let far = sqrt(-log(outer));
     let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
+    // Each copy tints what it covers (ringFill: the tint where every copy overlaps, so the skirt steps
+    // lighter outward) and the reach of the stack varies along the outline (ringPatch).
+    let fillStep = 1.0 - pow(1.0 - clamp(u.ringFill, 0.0, 0.95), 1.0 / f32(count));
+    let fillTone = vec3f(0.70, 0.70, 0.50);
+    let span = (shelfNoise(p / max(u.ringPatchSize, 20.0) + 53.0) * 0.65 + shelfNoise(p / (0.37 * max(u.ringPatchSize, 20.0)) + 11.0) * 0.35);
+    let reach = mix(2.0, smoothstep(0.3, 0.7, span) * 1.05, u.ringPatch);
     var rgb = base;
     for (var n = 0; n < count; n++) {
         let j = f32(count - 1 - n);
+        let t = j / max(f32(count - 1), 1.0);
+        let vis = 1.0 - smoothstep(reach - 0.12, reach + 0.12, t);
         let level = mix(inner, far, (j + 0.5) / f32(count));
         let wander = (shelfNoise(p / 170.0 + j * 7.3) - 0.5) * 2.0;
         let angle = radians(u.ringShiftDir) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * u.ringScatter * 3.14159;
@@ -690,9 +698,11 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let here = ringReachMeasure(at);
         let slope = length(vec2f(ringReachMeasure(at + vec2f(e, 0.0)) - here, ringReachMeasure(at + vec2f(0.0, e)) - here)) / e;
         let d = (here - level) / max(slope, 0.012) + waver;
-        let line = 1.0 - smoothstep(0.5, 0.95, abs(d));
+        let line = 1.0 - smoothstep(0.4, 0.85, abs(d));
         let gap = 0.75 + 0.25 * smoothstep(0.15, 0.5, shelfNoise(p / 11.0 + 91.0 + j * 5.1));
-        rgb = mix(rgb, tone, line * gap * zone * u.ringContrast);
+        let inside = 1.0 - smoothstep(-0.7, 0.7, d);
+        rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
+        rgb = mix(rgb, tone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
     }
     return rgb;
 }
