@@ -33,7 +33,9 @@ branches and the projection fix below, so re-render before judging.
    mkdir -p $R/agent-<card> && cp -R $R/assets-* $R/agent-<card>/
    cd ../terraform-wt-<card>
    /private/tmp/nanolathe-neural-terrain-venv/bin/python sculpt.py \
-     --port <server> --assets-root $R/agent-<card> > $R/agent-<card>/server.log 2>&1 &
+     --port <server> --assets-root $R/agent-<card> \
+     --export-tool $R/map-export --feature-tool $R/bin/map-features \
+     > $R/agent-<card>/server.log 2>&1 &
    ```
 
    Restart your server after editing `sculpt.py` or any `sculpt_*.py`.
@@ -2325,6 +2327,8 @@ reproduces the old output, set only in Green's `WORLD_KNOBS`.
    - It must hold at 1× and 2× zoom, and in chunked full-size maps. The
      chunk renderer's bake reach must cover the march (see G2's reach
      note).
+   - Close shadow and cavity run only when `u.full != 0`. The drag preview
+     keeps today's taps.
 3. **Cavity occlusion** (`cavity`).
    - Compare the surface height with the mean of a ring 1-3 px out.
    - Darken crevices and the floors of cracks: fully on the ambient term,
@@ -2351,8 +2355,16 @@ reproduces the old output, set only in Green's `WORLD_KNOBS`.
 
 **Judge**:
 - on green-1..3 (rule 5), palette on;
-- crevice share under luma 30 on green-2's rock band, measured the way
-  `$R/agent-E9/NOTES.md` and G2 did;
+- green-2's face, rows 600-880 of `ours.png` and `retail.png` (the band
+  that EXPERIMENTS rows 98 and 118 measured):
+  - mean luma;
+  - luma s.d.;
+  - share under luma 30;
+  - 90th-percentile gradient.
+
+  Retail is 45.8, 27.2, .245 and 17.6. Row 118 has today's values. Write
+  the script under `$R/agent-H1/`, and record its mask in NOTES.md so that
+  H2 can repeat it;
 - the four-sun Clay sheets;
 - guard `--worlds green`.
 
