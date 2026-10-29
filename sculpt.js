@@ -3008,15 +3008,17 @@ function previewHeight() {
 // painted/flow planes while the next tile's brush scratch is live.
 function globalWeatherInput() {
   const n=worldGrid;sculptRegion.checkMemory?.(n*n*8);
-  const h=new Float32Array(n*n),p=new Float32Array(n*n),side=256;
+  const h=new Float32Array(n*n),p=new Float32Array(n*n),e=new Float32Array(n*n).fill(1),side=256;let any=false;   // e: H3's erosion override plane as a rate (1 + v / 127)
   for(let y=0;y<n;y+=side)for(let x=0;x<n;x+=side){
     const width=Math.min(side,n-x),height=Math.min(side,n-y),part=regionalFields.readCells({x0:x,y0:y,x1:x+width-1,y1:y+height-1});
     for(let row=0;row<height;row++){
       h.set(part.fields.h.subarray(row*width,(row+1)*width),(y+row)*n+x);
       p.set(part.fields.p.subarray(row*width,(row+1)*width),(y+row)*n+x);
+      const ov=part.fields.ovErosion;
+      if (ov) for (let k=0;k<width;k++) { const v=ov[row*width+k]; if (v) { any=true; e[(y+row)*n+x+k]=1+v/127; } }
     }
   }
-  return {h,p};
+  return {h,p,e:any?e:null};
 }
 function queueWeather() {
   flushEval();
@@ -3044,7 +3046,7 @@ function queueWeather() {
     if (!gpu) { post(); return; }
     // H5: Green's engine (engine 1) takes the height and the data maps from the GPU pass alone; no worker runs (engine-weather.wgsl).
     const own=renderer.engine;
-    const erodeRequest={height:weatherBase,protect:authored?.p??protection,rate:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
+    const erodeRequest={height:weatherBase,protect:authored?.p??protection,rate:authored?authored.e:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
       ...(own?{maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)}:{})};
     window.erodeAgain=() => renderer.erode(erodeRequest).then(r => ({ms:r.milliseconds,parts:r.parts}));   // dev hook: time the pass alone
     renderer.erode(erodeRequest)
@@ -3991,6 +3993,8 @@ async function boot() {
     size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); cover=new Float32Array(grid*grid); crystal=new Float32Array(grid*grid); maskPlanes=MASK_KEYS.map(() => new Int8Array(grid*grid)); heights.fill(config.baseHeight);
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
+    // H5: Green's engine has no apron (the Time pass's debris is in the height), so the Scree slider reads nothing there.
+    if (renderer.engine) $('scree').closest('.control').hidden=true;
     renderer.onerror=message => error(message);
     renderer.setColors(worldColors());
     buildKnobs(); buildWorldPanel();

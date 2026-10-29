@@ -322,6 +322,8 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     }
     exposed *= 1.0 - route * (1.0 - smoothstep(r5.x, r5.y, slope));
     exposed = 1.0 - clamp((1.0 - clamp(exposed * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
+    // H5: the vegetation override also scales how much rock shows: +1 lets grass and moss take 40% of it back, -1 bares 40% more.
+    exposed = clamp(exposed * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);
     out.exposed = exposed;
     out.lowBank = lowBank;
     // The face: lump-scale rock and moss on a slope; rock on steep flanks and in hollows, moss on tops.
@@ -353,6 +355,7 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     // Inside painted rock the face is rock; moss stays at its edges and on the ledges below.
     if (u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * r9.z); }
     rockMask = 1.0 - clamp((1.0 - clamp(rockMask * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
+    rockMask = clamp(rockMask * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);   // H5: the same 40% as the exposed rock above
     out.face = face;
     out.rockMask = rockMask;
     out.top = top;

@@ -1031,8 +1031,10 @@ fn weatherStones(p: vec2f) -> vec2f {
             q = mat2x2f(cos(a), -sin(a), sin(a), cos(a)) * q;
             let edge = max(max(abs(q.x), abs(q.y) * 1.15), abs(q.x * 0.7 - q.y * 0.7)) / max(radius, 0.5);
             let lift = max(0.0, 1.0 - edge);
-            let height = lift * radius * 0.7;
-            if (height > best) { best = height; cover = smoothstep(0.0, 0.3, lift); }
+            // Rounded like boulders(): steep sides and a partly buried foot, so the sun lights the top and the far side lies in shadow.
+            let buried = 0.2 + 0.2 * r1.x;
+            let height = max(0.0, sqrt(lift) - buried) / (1.0 - buried) * radius * 0.85;
+            if (height > best) { best = height; cover = smoothstep(0.0, 0.25, lift); }
         }
     }
     return vec2f(best, cover);
@@ -1044,9 +1046,11 @@ fn weatherStones(p: vec2f) -> vec2f {
 fn rillAt(p: vec2f, slope: f32) -> vec2f {
     if (u.rillDepth <= 0.0 || u.weatherMaps < 0.5) { return vec2f(0.0); }
     let m = timeMapsAt(p);
-    let len = length(m.fall);
-    if (len < 0.05) { return vec2f(0.0); }
-    let f = m.fall / len;
+    // The fall line is the base height's own gradient at p, smooth at 1 px; the map's (2-px grid) only says where water runs.
+    let g = broadGradient(p);
+    let len = length(g);
+    if (len < 0.02) { return vec2f(0.0); }
+    let f = g / len;
     let perp = vec2f(-f.y, f.x);
     let spacing = max(u.rillSpacing, 3.0);
     let across = dot(p, perp) / spacing + 0.6 * valueNoise(vec2f(dot(p, f) / 60.0, dot(p, perp) / 40.0) + 7.0);
