@@ -40,6 +40,45 @@ feature.
    - So do the knob audit and replacing `sculpt.py`'s server.
    - The UI pass comes last.
 
+## Decisions (owner, 2026-10-29, after H3)
+
+7. **One vertical slice first.** *"for the purpose of proving this out we
+   should do one vertical slice: green planet entirely on the GPU with the
+   new mechanism."*
+8. **Startup textures.** The material textures are generated at startup on
+   the GPU, so the draw costs no more than sampling an image.
+9. **Per-shape overrides stay as they are.** The owner has ideas that may
+   change them later.
+10. **Simplification waits.** *"Don't worry about simplification of the
+    shader or knobs for now - if this is a problem then just use a new
+    shader for the new green planet work, then we can more directly
+    compare."*
+
+## The Green slice
+
+Green gets its own engine: new shaders and GPU passes for every stage,
+beside the shared code. A knob, `engine`, chooses old or new, so the two
+can be compared on the same scenes against retail.
+
+1. **H4, the engine shaders.**
+   - A new draw and bake for Green: material textures made at startup on
+     the GPU from `materials/green.json`, the rocks from numbers too, and
+     rock blocks from the column.
+   - Green's water comes across unchanged.
+2. **H5, weather on the GPU everywhere.**
+   - The apron and sand move into the GPU pass.
+   - The pass runs on map canvases: coarse over the whole map, then fine
+     tiles, with stored planes (H2b).
+   - Green never runs the CPU worker.
+3. **H6, shape on the GPU.** Green's brushes (hill, mountain, plateau,
+   deep, shallow, erase, paint and the ground node) are evaluated by
+   compute passes, beside the JS engine.
+4. **H7, progressive rendering on the slice.** Measure where the time
+   goes first. Then build the levels: overview, quarter and final.
+
+When the slice is accepted, it becomes the pattern for the other worlds,
+and the retire rule applies.
+
 ## Why change
 
 Each look so far was a card of code, matched to retail by measurement:
@@ -265,7 +304,10 @@ palette.
 
 ## Rules for the cards
 
-These hold for every H card from H3 on.
+These hold for every H card from H3 on. For the Green slice (H4-H7) the
+owner set simplification aside (decision 10). The slice keeps the shared
+code untouched and reports its own size for comparison; deletion waits
+until it is accepted.
 
 - **Retire what you replace.** A card that moves Green onto the model is
   not done until it has deleted what the model replaced: branches,
@@ -300,9 +342,10 @@ Each is written in full when the one before it lands.
 | H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
 | H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Merged fef3abb |
 | H3 | One material model on the GPU (Green), with override fields | Merged 1c7f10d |
-| H3b | Rock blocks from the column (Green) | Outlined |
-| H4 | Shape on the GPU: strokes evaluated by compute passes | Outlined |
-| H5 | Progressive rendering, and erosion on map canvases (was H2b) | Outlined |
+| H4 | The Green engine: its own shaders, startup material textures, rocks from numbers, rock blocks (absorbs H3b) | Written |
+| H5 | Green's weather on the GPU everywhere, map canvases included (absorbs H2b) | Outlined |
+| H6 | Green's shape on the GPU | Outlined |
+| H7 | Progressive rendering on the Green slice | Outlined |
 | Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
@@ -342,7 +385,7 @@ Each is written in full when the one before it lands.
   plain's exact retail tiles), say which, measure the gap, and keep it
   reading its prepared image until it can.
 
-**H4, shape on the GPU:**
+**H6, shape on the GPU** (was H4):
 - Compute passes evaluate the strokes, beside the JS engine and behind a
   switch.
 - It goes brush by brush, starting with the kinds Green's windows use:
@@ -355,18 +398,16 @@ Each is written in full when the one before it lands.
   the whole map, on one machine. Otherwise the guarantee is dropped
   deliberately, and recorded as dropped.
 
-**H5, progressive rendering:**
+**H7, progressive rendering** (was H5):
 - **Measure first,** on a 4×4 map: where the time goes between shape
   replay, weather, the bake and the draw. Card D measured a scroll p95 of
   about 117 ms and about 2 s of refinement after release. If weather
-  dominates, H4 and H5 may swap.
+  dominates, H5 comes first anyway.
 - **Then:**
   - the three levels (overview, quarter, final);
   - coarse passes over the whole map;
   - visible tiles first;
-  - the fast path while dragging;
-  - H2b's erosion on map canvases: coarse and fine tiles, the bake node,
-    and stored planes.
+  - the fast path while dragging.
 
 ## Constraints
 

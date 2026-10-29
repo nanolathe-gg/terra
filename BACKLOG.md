@@ -89,6 +89,7 @@ branches and the projection fix below, so re-render before judging.
    | H1 | 8861 | 9661 | `$R/agent-H1/out` | `--worlds green` |
    | H2 | 8862 | 9662 | `$R/agent-H2/out` | `--worlds green` |
    | H3 | 8863 | 9663 | `$R/agent-H3/out` | `--worlds green` |
+   | H4 | 8864 | 9664 | `$R/agent-H4/out` | `--worlds green` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -2653,7 +2654,7 @@ card.
 
 ### H2b. Erosion on map canvases — outline
 
-This now belongs to H5 (progressive rendering) in
+This now belongs to H5 (Green's weather on the GPU everywhere) in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards).
 
 - A coarse pass over the whole map, then fine tiles with aprons, so that
@@ -2900,7 +2901,7 @@ notes in `$R/agent-H3/NOTES.md`, whose ROUND 2 section supersedes round
 
 ### H3b. Rock blocks (Green) — outline
 
-Written when H3 lands.
+This now belongs to H4 (item 4).
 
 - **What it adds.** Rock relief from the column: joints cut each bed into
   blocks, each block is a plane with a small tilt, and the crevices stay
@@ -2913,7 +2914,160 @@ Written when H3 lands.
   them (the card rules).
 
 
-H4 (shape on the GPU) and H5 (progressive rendering) are outlined in
+### H4. The Green engine: the new mechanism in its own shaders (Green)
+
+> **Owner, 2026-10-29:** "for the purpose of proving this out we should do
+> one vertical slice: green planet entirely on the GPU with the new
+> mechanism. For the slowdown, generate the texture at startup on the GPU.
+> ... For the per-shape overrides, leave it as-is. ... Don't worry about
+> simplification of the shader or knobs for now - if this is a problem then
+> just use a new shader for the new green planet work, then we can more
+> directly compare."
+
+Read [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) first: the decisions,
+"The Green slice", and "Rules for the cards". Then read H1-H3's Done and
+Still open lists above, and H3's inventory of Green's draw
+(`$R/agent-H3/NOTES.md`, item 1 and the ROUND 2 section).
+
+**What is there today.**
+- **One shared draw for every world.** Green draws with the shared
+  `sculpt-frag.wgsl`, `relief-bake.wgsl` and `sculpt-common.wgsl`.
+  - H3's model sits inside them under the `MATERIAL_MODEL` define, which
+    `materialModel` 1 turns on.
+  - `initialize()` in `sculpt-renderer.js` compiles the three. The chunk
+    renderer reuses the same class with `CHUNK`.
+- **Green's land materials:**
+  - the plain draws its 16 tiles from table data;
+  - slope grass is drawn per pixel by `mmColor` from numbers, which costs
+    +5.3 ms on green-2 (22.8 → 28.1 ms);
+  - rock, weathered and fractured rock still read their images. The model
+    has their numbers, but the generated rocks speckle where the art has
+    facets.
+- **Already in place:**
+  - the column (H2) and Green's bed relief;
+  - H1's light: close shadow and cavity;
+  - `greenPlace` with its table rows, and the override planes 14-17 (H3);
+  - Green's water, tuned in E1, E11 and G1.
+
+**Scope.**
+- A new shader pair for Green only, drawing everything Green draws today:
+  land, rock, water and coast.
+- The shared shaders stay exactly as they are, so `engine` 0 draws Green
+  as `merge-h3` does, and old and new can be compared.
+- Not in this card:
+  - weather on the CPU (H5);
+  - shape replay (H6);
+  - progressive levels (H7);
+  - the per-shape overrides' reach (the owner leaves it as it is);
+  - every other world.
+
+**Deliver.**
+
+1. **The engine shaders** (`engine`: 0 the shared shaders, Green 1).
+   - New files `engine-frag.wgsl` and `engine-bake.wgsl`. Give them their
+     own common file only if the shared `sculpt-common.wgsl` gets in the
+     way, and say why.
+   - The renderer compiles them in place of the shared pair when `engine`
+     is 1, in both the study and chunked maps.
+   - Start by bringing over only the code Green takes, using H3's
+     inventory. A branch whose knob Green leaves at its default and that
+     the knob turns off is not copied.
+   - **Milestone:** `engine` 1 draws green-1..3 as `engine` 0 does, before
+     anything else changes. Bit-identical is the aim. If the compiler
+     reorders float arithmetic (see ground rule 3), require mean |diff|
+     under .1 and nothing visible at 2×, and record the numbers.
+   - Commit at the milestone.
+2. **Material textures made at startup on the GPU.**
+   - A compute pass makes each material's texture from its numbers in
+     `materials/green.json`, once at startup and again when the table
+     changes. The draw then samples it like an image.
+   - The textures tile seamlessly: make every noise octave periodic over
+     the texture size.
+   - **Mip levels** are made band by band, so a coarse draw reads the
+     right level: the footprint rule, for progressive rendering later.
+   - Fixed seeds; the same table gives the same bits.
+   - **Target:** the engine's draw on green-2 at or below the old shared
+     draw (22.8 ms), against 28.1 ms with `mmColor` per pixel. Report the
+     startup generation time.
+3. **Rocks from numbers.** Rock, weathered and fractured rock draw from
+   generated textures too. Their facets come from relief (item 4), not
+   from the texture. No image reads remain for Green's land; water keeps
+   its images (item 5).
+4. **Rock blocks** (H3b, folded in), in `engine-bake.wgsl`:
+   - joints cut each bed into blocks;
+   - each block is a plane with a small tilt;
+   - the crevices stay continuous along the bed boundaries and the joints;
+   - hard beds, by the column, make larger and cleaner blocks;
+   - it may replace the facets on Green's face if that is closer.
+
+   **Measure** with `$R/agent-H1/face.py` and `$R/agent-H2/runs.py`:
+
+   | | mean | s.d. | share under 30 | p90 gradient | dark runs, horizontal ≥10 / vertical ≥6 |
+   | --- | --- | --- | --- | --- | --- |
+   | retail | 45.8 | 27.2 | .245 | 17.6 | .071 / .248 |
+   | now | 44.1 | 26.0 | .252 | 17.4 | .033 / .350 |
+
+   The dark runs should move toward retail. The rest must not get worse
+   beyond noise.
+5. **Water as it is.**
+   - Green's water and coast come across with the milestone, unchanged
+     in effect.
+   - **Check:** in green-1 and green-3, water pixels with `engine` 1 equal
+     `engine` 0, except where item 3 or item 4 changed the land beside
+     them.
+   - Moving water onto numbers is a later card.
+6. **Compare.**
+   - **Triptych:** green-1..3 as retail | `engine` 0 | `engine` 1, palette
+     on, at 1× and 2×.
+   - **Numbers:** `repro/stats.py` for the windows, and the surface
+     classes (`measure/material_classes.py`, `material_lab.py`): luma s.d.,
+     5-px s.d. and Lab distance for the plain, grass slope and rock face.
+     The engine must be at least as close to retail as `engine` 0 on all
+     three windows (rule 5), and closer on the face.
+   - **Size,** for comparison only (the owner has set simplification
+     aside for the slice): the engine shaders' lines against the shared
+     ones, the uniforms the engine reads, and the knobs Green's engine
+     reads.
+7. **Map canvases.** Green maps draw with the engine. Run
+   `$R/agent-H4/mapcheck.mjs` (usage in its first line), and look at the
+   export at 2× across chunk crossings. Required:
+   - no seams;
+   - no console errors;
+   - an export that succeeds, with unique tiles near 1,067 (H3's number).
+
+**Judge**:
+- the milestone (item 1);
+- the triptych and the numbers (item 6);
+- the face and dark runs (item 4);
+- the four-sun Clay sheets (`render.mjs --clay --query
+  sun=<azimuth>,<elevation>`): blocks and ledges must shade with the sun;
+- draw time (item 2);
+- the guard: `compare.py ... --worlds green` against `before`, and
+  `engine=0` must reproduce `before`'s Green exactly.
+
+**Done when** NOTES.md has:
+- the milestone numbers;
+- the startup pass: what it makes, its time, and the mip levels;
+- the rock and block results against retail;
+- the water check;
+- the triptychs and the numbers, `engine` 0 against 1 against retail;
+- the size comparison;
+- the map check;
+- draw and bake times, with `engine` 0 and 1 alternating, a median of 7
+  each.
+
+**Order and budget.**
+- Items 1 and 2 first: the milestone, then the startup textures. Each is
+  its own commit.
+- Then 3 and 4 together, since rocks lose their facets until the blocks
+  exist. Then 5-7.
+- If the budget runs short, stop after any item with NOTES.md saying what
+  remains.
+
+**Server and guard:** port 8864, CDP 9664, guard `--worlds green`.
+
+H5 (weather on the GPU everywhere), H6 (shape on the GPU) and H7
+(progressive rendering), which complete the Green slice, are outlined in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
 card from H3 on follows. Each is written here in full when the card before
 it lands.
