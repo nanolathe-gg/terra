@@ -3022,7 +3022,7 @@ function queueWeather() {
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
-    if (!weatherWorker) startWeatherWorker();
+    if (!weatherWorker && !(renderer.engine && !regionalFields && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
     const job=++weatherJob;
     const authored=regionalFields?globalWeatherInput():null;
     weatherBase=authored?authored.h:heights.slice();
@@ -3035,8 +3035,18 @@ function queueWeather() {
     const post=() => weatherWorker.postMessage({job,height:weatherBase,...eroded,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
       sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
     if (!gpu) { post(); return; }
-    renderer.erode({height:weatherBase,protect:protection,rate:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40)})
-      .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,grid,size}; eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
+    // H5: Green's engine (engine 1) takes the height and the data maps from the GPU pass alone; no worker runs (engine-weather.wgsl).
+    const own=renderer.engine;
+    renderer.erode({height:weatherBase,protect:protection,rate:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
+      ...(own?{maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',6)}:{})})
+      .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,protect:protection,seaLevel:config.seaLevel,grid,size};
+        if (own) {
+          refined=result.height; refinedBase=weatherBase;
+          renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);
+          heightDirty=false; weatherState='ready'; renderedRevision=-1; updateControls();
+          $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); return;
+        }
+        eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
       .catch(err => { if (job===weatherJob) failWeather(err.message); });
   } catch (err) { failWeather(err.message); }
 }

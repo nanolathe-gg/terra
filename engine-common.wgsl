@@ -404,6 +404,7 @@ struct Uniforms {
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
     blockChip: f32,       // px an edge wanders, chipping the block outline (hard beds 0.4 of it)
     blockGrit: f32,       // per-pixel height grit on blocks, height units
+    weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

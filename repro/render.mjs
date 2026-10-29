@@ -64,7 +64,7 @@ try {
   writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: await ev('sculptDebug.grid'), sea: await ev('sculptDebug.sea'), heights: await ev('sculptDebug.heights()')}));
   // H2: the erosion pass's input, output and column offsets, when it ran (--erosion).
   if (erosionOn) {
-    const e = await ev(`(() => { const e = window.lastErosion; return e && {grid: e.grid, size: e.size, authored: Array.from(e.authored), height: Array.from(e.height), debris: Array.from(e.debris), offset: Array.from(e.offset)}; })()`);
+    const e = await ev(`(() => { const e = window.lastErosion; return e && {grid: e.grid, size: e.size, authored: Array.from(e.authored), height: Array.from(e.height), debris: Array.from(e.debris), offset: Array.from(e.offset), protect: e.protect ? Array.from(e.protect) : null, seaLevel: e.seaLevel}; })()`);
     if (e) writeFileSync(`${out}/ours-erosion.json`, JSON.stringify(e));
   }
   console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
