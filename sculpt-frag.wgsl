@@ -1449,7 +1449,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.iceSnow > 0.0) {
         let gentle = 1.0 - smoothstep(0.42, 0.78, length(gSoft) + (n.g - 0.5) * 0.25);
         let cap = u.iceSnow * iceMesa * gentle;
-        material = mix(material, snowMaterial(pixel), cap);
+        // A little under the plain's snow: lit at the block's strong light a full-white top clips and loses its pits (retail's top ~(225,232,255)).
+        material = mix(material, snowMaterial(pixel) * 0.9, cap);
         exposed *= 1.0 - cap;
     }
     var color = material * mix(shading, 1.0, flatBank);
