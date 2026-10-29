@@ -328,6 +328,7 @@ struct Uniforms {
     shoalDither: f32,     // the palette dither's strength on the lit shallow bed, as a share of the water's own (1: as before)
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
     shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
+    shoalGrain: f32,      // Red: the ground tile's own colour grain shows through the tint, this share of it (0: the tint replaces it, as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.

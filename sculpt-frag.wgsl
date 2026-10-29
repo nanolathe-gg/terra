@@ -1510,6 +1510,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // and a lit one toward pale blue, where a plain multiply lands between the palette's blues (teal).
             // Only hard-step water takes them, as the mottle: Archipelago's lakes and channels stay smooth, as retail's.
             if (u.shoalBump > 0.0 && bedLit > 0.0 && edgeHard > 0.0) { shallow *= 1.0 + (shoalBumpLight(p) - 1.0) * vec3f(1.0, 1.0, 0.4) * bedLit; }
+            // G1: retail's lilac lake keeps salmon and pink pixels of the ground under it; the tint alone replaces them.
+            if (u.shoalGrain > 0.0 && bedLit > 0.0) { shallow += u.shoalGrain * (levelGround - groundBased(u.groundTexMean)) * bedShade * bedLit; }
             if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
             if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed && edgeHard > 0.0) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);

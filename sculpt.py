@@ -157,6 +157,9 @@ KNOB_DEFAULTS.update(shoalStairs=0)
 # G1: shoalShoreSoft is the width (px) of the dithered blend at the waterline the world draws (a
 # stroke's own Hard or Faded choice is not touched; 0: a clean hard line).
 KNOB_DEFAULTS.update(shoalShoreSoft=0)
+# G1: shoalGrain lets this share of the ground tile's colour grain (its deviation from the tile's
+# mean, lit as the bed) through the tint (0: the tint replaces it, the earlier bed).
+KNOB_DEFAULTS.update(shoalGrain=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -251,7 +254,10 @@ WORLD_KNOBS = {
                 # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is
                 # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
                 # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
-                shoalRag=9),
+                shoalRag=9,
+                # G1: retail's lilac lake keeps pink and salmon pixels of the ground under it; half of the tile's
+                # colour grain shows through the tint (.9 reads as glitter).
+                shoalGrain=.5),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
