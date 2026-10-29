@@ -17,11 +17,6 @@
 
 const TAU = 6.28318530718;
 
-fn cellHash(c: vec2f) -> vec2f {
-    let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
-    return fract(sin(q) * 43758.5453);
-}
-
 // Returns (value, d/dx, d/dy) in the octave's own coordinates.
 fn gullies(q: vec2f, dir: vec2f) -> vec3f {
     let cell = floor(q);
@@ -44,17 +39,6 @@ fn gullies(q: vec2f, dir: vec2f) -> vec3f {
         }
     }
     return sum / weight;
-}
-
-fn valueNoise(q: vec2f) -> f32 {
-    let c = floor(q);
-    let f = fract(q);
-    let fade = f * f * (3.0 - 2.0 * f);   // GLSL: u
-    let a = cellHash(c).x;
-    let b = cellHash(c + vec2f(1.0, 0.0)).x;
-    let d = cellHash(c + vec2f(0.0, 1.0)).x;
-    let e = cellHash(c + vec2f(1.0, 1.0)).x;
-    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
 }
 
 // Painted scatter (card C5), f in -1..1 at p (0 unpainted). Unpainted the
@@ -452,7 +436,34 @@ fn jointFieldAt(p: vec2f, off: f32) -> vec2f {
 // at its foot (bedLip). Returns the height offset and the lip's rock cover
 // (0..1): a lip is a convex ridge, which the face material would take for
 // moss on a lump top.
+// H2 (column 1): the same bed shape read from the rock column. A bed's thickness is
+// its own, its hardness scales how tall its ledge stands (columnContrast), and the
+// bed coordinate is columnCoord at the surface height, the one erosion reads.
+// Returns the same (offset, lip cover, bed index) as bedRelief.
+fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
+    let a = radians(u.bedDipDir);
+    let dip = vec2f(cos(a), sin(a));
+    let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
+    let S = max(u.bedSpacing, 2.0);
+    let bed = columnAt(columnCoord(p, h));
+    let f = bed.through;
+    let bedPx = bed.thick / G;
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
+    var off = step_ * (bed.thick / S) * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;
+    let dTop = (1.0 - f) * bedPx;
+    let dFoot = (f - (1.0 - riser)) * bedPx;
+    let lip = exp(-dTop * dTop / 5.0);
+    let notch = exp(-(dFoot + 1.0) * (dFoot + 1.0) / 6.0);
+    // Hard beds (hardness 1) stand 1.7 times a hash bed's mean ledge, soft ones (0) 0.3 times: the hash's own range.
+    let punch = mix(1.0, 0.3 + 1.4 * bed.hardness, u.columnContrast);
+    off *= punch;
+    off += punch * u.bedLip * (lip - 0.8 * notch);
+    return vec3f(off, lip, bed.index);
+}
+
 fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
+    if (u.column > 0.0) { return columnBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let tilt = u.bedDip * dot(p, dip);
@@ -1176,6 +1187,8 @@ fn bake(p: vec2f) -> vec4f {
             // The px spacing keeps the grid's own slope where it is steep and cliffBed is 0 (as before), the smoothed one otherwise.
             bedG = mix(cliff.gradient, slope, cliff.local * (1.0 - u.cliffBed));
         }
+        // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
+        if (u.column > 0.0) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
         // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
         // The form fades out over the face's foot, so no gully reaches the water plane.

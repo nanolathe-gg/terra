@@ -887,6 +887,19 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
   }
 
+  // H2 rock column (0: the hash beds, as before). columnBeds is "thickness:hardness:slot,..." (up to eight, height
+  // units, 0..1, H3's material slot); erosion reads the same uniforms, so the bake and the pass share one column.
+  setColumn() {
+    const v = this.variant;
+    const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
+    const beds = String(v.get('columnBeds') || '5:.5:0').split(',').slice(0, 8).map(s => s.split(':').map(Number))
+      .filter(b => b[0] > 0).map(b => [b[0], Math.min(1, Math.max(0, b[1] || 0)), b[2] || 0, 0]);
+    this.set('uColumn', number('column', 0));
+    this.set('uColumnContrast', number('columnContrast', 1));
+    this.set('uColumnCount', Math.max(1, beds.length));
+    this.set('uColumnBeds', beds.length ? beds : [[5, .5, 0, 0]]);
+  }
+
   // Encodes the bake into the given encoder, or submits it on its own.
   bakeFields(quality = 'full', encoder = null, timer = null) {
     const preview = quality !== 'full';
@@ -1006,6 +1019,7 @@ export class TerrainRenderer {
     set('uCliffStagger', number('cliffStagger', 0));
     set('uCliffFine', number('cliffFine', 0));
     set('uCliffDomain', number('cliffDomain', 90));
+    this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});

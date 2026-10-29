@@ -205,6 +205,11 @@ KNOB_DEFAULTS.update(ringTone=0)
 KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffFine=0, cliffDomain=90)
 # H1 (lit relief): shade the ground behind a 1-6 px ledge, and darken crevices and crack floors (0: off).
 KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
+# H2 (rock column): column 1 reads each bed's thickness and hardness from columnBeds ("thickness:hardness:slot", up to
+# eight, repeating upward) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
+# with erosion 1, wear). erosion 1 runs the GPU shallow-water pass in place of the droplet worker for the 1024-px study:
+# erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
+KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -283,7 +288,11 @@ WORLD_KNOBS = {
                   # beds are lower than G2's (cliffRise 16 -> 8, bedLedge .6 -> .4, bedLip 3 -> 2): taller ledges now shade
                   # the whole face. green-2 face (x 20-880, y 650-870) mean luma / s.d. / share under 30 / p90 gradient:
                   # retail 45.8 / 27.2 / .245 / 17.6, G2 46.9 / 23.3 / .143 / 14.8, here 44.7 / 26.4 / .247 / 17.6.
-                  closeShadow=.8, cavity=.6),
+                  closeShadow=.8, cavity=.6,
+                  # H2 (rock column): eight beds repeating every 47 height units (a hash bed averaged 5): thin hard beds that stand
+                  # as ledges between thicker soft ones, so the hard ones read as lines and the soft ones as the space between.
+                  column=1, columnContrast=1,
+                  columnBeds='4:.9:0,7:.2:1,3:.7:0,8:.15:1,5:1:0,7:.3:1,4:.6:0,9:.2:1'),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
