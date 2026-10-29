@@ -29,6 +29,7 @@ Per material (the five Green draws):
             along it, `tintLag`, is its pixel correlation at 1 px).
   chroma    s.d. of each colour channel left once the ramp alone is taken
             away, and `chromaLeft` what is left after the tint too.
+  palette   (the plain only) its entries and shares in luma order, at most 16.
   colours   distinct colours in the image, and the share of the commonest.
 Tiled images wrap, as the draw's repeat sampling does; the ground strip is
 sixteen separate 32 x 32 tiles and does not.
@@ -105,6 +106,17 @@ def measure(a, mode):
     box = ndi.uniform_filter(L, 5, mode='wrap' if mode == 'wrap' else 'mirror')
     gy, gx = np.gradient(blur(L, 1.0, mode))
     colours, counts = np.unique(flat, axis=0, return_counts=True)
+    palette = None
+    if mode == 'strip' and len(colours) <= 24:
+        # The plain is a small palette-entry mosaic: keep its entries and shares (luma order), merging the rarest
+        # into the entry nearest in luma until 16 remain, so the draw can name exact entries and snap to themselves.
+        ent = sorted(([*c, n / counts.sum()] for c, n in zip(colours, counts)), key=lambda e: np.dot(e[:3], LUMA))
+        while len(ent) > 16:
+            i = min(range(len(ent)), key=lambda k: ent[k][3])
+            j = i - 1 if i == len(ent) - 1 or (i > 0 and abs(np.dot(ent[i][:3], LUMA) - np.dot(ent[i - 1][:3], LUMA)) < abs(np.dot(ent[i][:3], LUMA) - np.dot(ent[i + 1][:3], LUMA))) else i + 1
+            ent[j][3] += ent[i][3]
+            del ent[i]
+        palette = [[int(e[0]), int(e[1]), int(e[2]), round(float(e[3]), 4)] for e in ent]
     return {
         'size': [a.shape[1] // (16 if mode == 'strip' else 1), a.shape[0]],
         'meanRGB': [round(float(v), 2) for v in flat.mean(0)],
@@ -120,6 +132,7 @@ def measure(a, mode):
         'tint': [[round(float(v), 1) for v in row] for row in tint],
         'colours': int(len(colours)), 'topShare': round(float(counts.max() / counts.sum()), 3),
         'ramp': [[round(float(v), 1) for v in row] for row in ramp],
+        **({'palette': palette} if palette else {}),
     }
 
 

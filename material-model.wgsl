@@ -3,8 +3,8 @@
 // A material is MM_ROWS vec4f rows, read through the host's matRow(i):
 //   row 0   band amplitudes for cells of 1, 2, 4 and 8 px (z units)
 //   row 1   amplitudes for cells of 16, 32 and 64 px; w: stretch (grain runs along x when above 1)
-//   row 2   x: tint spatial mix (0: per pixel, 1: cells of 2 px); y: tint scale
-//   rows 3-18   the ramp: RGB (0..255) at 16 luma quantiles, darkest first
+//   row 2   x: tint spatial mix (0: per pixel, 1: cells of 2 px); y: tint scale; z: 1 for a palette mosaic (the plain)
+//   rows 3-18   the ramp: RGB (0..255) at 16 luma quantiles, darkest first; for a palette mosaic, 16 entries in luma order with their share in w
 //   rows 19-34  the tint: at each quantile, the direction the colours leave the ramp, times its s.d.
 // materials/green.json holds the numbers and how each was measured.
 //
@@ -65,6 +65,16 @@ fn mmRamp(base: u32, u: f32) -> vec3f {
     return mix(matRow(base + 3u + i0).rgb, matRow(base + 3u + min(i0 + 1u, 15u)).rgb, fract(at));
 }
 
+fn mmPick(base: u32, u: f32) -> vec3f {
+    var cum = 0.0;
+    for (var i = 0u; i < 16u; i++) {
+        let e = matRow(base + 3u + i);
+        cum += e.w;
+        if (u <= cum) { return e.rgb; }
+    }
+    return matRow(base + 18u).rgb;
+}
+
 fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
     let base = id * MM_ROWS;
     let r0 = matRow(base);
@@ -87,6 +97,13 @@ fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
     // A coarse draw averages the grain it cannot show: a five-point Gauss-Hermite rule over the lost
     // variance keeps the mean colour (the ramp at the median alone would not) and the image's broad histogram.
     let s = sqrt(lost);
+    // A palette mosaic (the plain) names one entry by its share, so the draw holds exact palette colours; a coarse
+    // draw averages the entries over the lost grain as the ramp does.
+    if (r2.z > 0.5) {
+        return (mmPick(base, mmPhi(z)) * 0.533333
+              + (mmPick(base, mmPhi(z - s * 1.355626)) + mmPick(base, mmPhi(z + s * 1.355626))) * 0.222076
+              + (mmPick(base, mmPhi(z - s * 2.856970)) + mmPick(base, mmPhi(z + s * 2.856970))) * 0.011257) / 255.0;
+    }
     var rgb = mmRamp(base, mmPhi(z)) * 0.533333
             + (mmRamp(base, mmPhi(z - s * 1.355626)) + mmRamp(base, mmPhi(z + s * 1.355626))) * 0.222076
             + (mmRamp(base, mmPhi(z - s * 2.856970)) + mmRamp(base, mmPhi(z + s * 2.856970))) * 0.011257;

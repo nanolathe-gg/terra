@@ -251,7 +251,15 @@ fn groundTile(pixel: vec2f) -> vec3f {
 fn matRow(i: u32) -> vec4f { return u.materialTable[i]; }
 // Quarter-resolution trial: a coarse draw shows one sample per foot pixels.
 fn modelPixel(pixel: vec2f) -> vec2f { return select(pixel, (floor(pixel / u.materialFoot) + 0.5) * u.materialFoot, u.materialFoot > 1.0); }
-fn groundSource(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
+// The plain is a small vocabulary of 32-px tiles on the export's grid, one chosen per cell by hash, as retail's is
+// (the TNT tile cap needs the reuse): tile t is the model's grain over a 32-px square at its own offset (cells to 8 px; the
+// plain has no broader grain), so there are groundTiles distinct 32 x 32 pictures and no more.
+fn groundSource(pixel: vec2f) -> vec3f {
+    let q = modelPixel(pixel);
+    let cell = vec2i(floor(q / 32.0));
+    let tile = min(i32(groundHash(vec3i(cell, 7)) * f32(u.groundTiles)), 15);
+    return mmColor(0u, glslMod(floor(q), 32.0) + vec2f(f32(tile) * 64.0 + 0.5, 0.5), u.materialFoot);
+}
 fn grassImage(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return mmColor(1u, modelPixel(pixel), u.materialFoot); }
 fn rockSource(pixel: vec2f, size: vec2f) -> vec3f { return mmColor(2u, modelPixel(pixel), u.materialFoot); }
