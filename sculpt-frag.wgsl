@@ -698,11 +698,13 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let here = ringReachMeasure(at);
         let slope = length(vec2f(ringReachMeasure(at + vec2f(e, 0.0)) - here, ringReachMeasure(at + vec2f(0.0, e)) - here)) / e;
         let d = (here - level) / max(slope, 0.012) + waver;
-        let line = 1.0 - smoothstep(0.4, 0.85, abs(d));
+        let line = 1.0 - smoothstep(0.3, 0.75, abs(d));
         let gap = 0.75 + 0.25 * smoothstep(0.15, 0.5, shelfNoise(p / 11.0 + 91.0 + j * 5.1));
         let inside = 1.0 - smoothstep(-0.7, 0.7, d);
         rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
-        rgb = mix(rgb, tone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
+        // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
+        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
+        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
     }
     return rgb;
 }

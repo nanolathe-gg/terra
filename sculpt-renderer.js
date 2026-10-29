@@ -831,6 +831,7 @@ export class TerrainRenderer {
     this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);
     this.f('uRingPatch', variant.has('ringPatch') ? Number(variant.get('ringPatch')) : 0);
     this.f('uRingPatchSize', variant.has('ringPatchSize') ? Number(variant.get('ringPatchSize')) : 120);
+    this.f('uRingTone', variant.has('ringTone') ? Number(variant.get('ringTone')) : 0);
     this.fieldsDirty = true;
   }
 

@@ -332,6 +332,7 @@ struct Uniforms {
     ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)
     ringPatch: f32,       // how far the stack's reach varies along the outline, from a few copies to all of them (0: every copy everywhere)
     ringPatchSize: f32,   // px over which that reach varies
+    ringTone: f32,        // the copies' lines take retail's rose, darker on the inner copies and paler on the outer (0: the earlier crimson)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
