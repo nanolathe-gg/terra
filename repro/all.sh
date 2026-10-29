@@ -7,7 +7,7 @@
 set -e
 out=$1; server=${2:-http://127.0.0.1:8801}; port=${3:-9450}
 crops=${REPRO_CROPS:-/private/tmp/nanolathe-map-editor/repro}
-py=${PYTHON:-/private/tmp/nanolathe-neural-terrain-venv/bin/python}
+py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
 for scene in "$here"/scenes/*.json; do

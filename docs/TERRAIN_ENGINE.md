@@ -138,8 +138,8 @@ material's relief.
 **Readers:**
 - Normals, cast shadow, occlusion, shine and the art projection all read
   this surface.
-- TNT heights read only the authored height at 16-px corners. That export
-  contract does not change.
+- TNT heights read the height after the agents, at 16-px corners, as they
+  read today's weathered height. Material relief never reaches them.
 
 **Shadow** has two ranges:
 - **close**, 1-6 px, so a ledge shades the ground beneath it;
@@ -243,7 +243,8 @@ The cards are in [BACKLOG.md](../BACKLOG.md#cards-h-the-terrain-engine).
 | Card | What it does | Status |
 | --- | --- | --- |
 | H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
-| H2 | The rock column, plus GPU water and gravity agents (Green) | Outlined |
+| H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Written |
+| H2b | Erosion on map canvases: coarse and fine tiles, the bake node, stored planes | Outlined |
 | H3 | Material table and placement rules (Green) | Not yet written |
 | H4 | Panels, presets, painted overrides, data map views | Not yet written |
 

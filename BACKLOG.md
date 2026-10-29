@@ -32,7 +32,7 @@ branches and the projection fix below, so re-render before judging.
    R=/private/tmp/nanolathe-map-editor
    mkdir -p $R/agent-<card> && cp -R $R/assets-* $R/agent-<card>/
    cd ../terraform-wt-<card>
-   /private/tmp/nanolathe-neural-terrain-venv/bin/python sculpt.py \
+   /Users/daniel/src/terraform/.venv/bin/python sculpt.py \
      --port <server> --assets-root $R/agent-<card> \
      --export-tool $R/map-export --feature-tool $R/bin/map-features \
      > $R/agent-<card>/server.log 2>&1 &
@@ -41,7 +41,10 @@ branches and the projection fix below, so re-render before judging.
    Restart your server after editing `sculpt.py` or any `sculpt_*.py`.
    Ports 8766-8812 belong to other sessions, and 8801 is the owner's: never
    use them and never stop a process you did not start. The system
-   `python3` has no numpy; use the venv above.
+   `python3` has no numpy; use the venv above. It lives in the main
+   checkout (`python3.13 -m venv .venv`, then `.venv/bin/pip install -r
+   requirements.txt`), not under `/private/tmp`: macOS deletes files there
+   that have not changed for three days.
 
    | Card | Server | Browser (CDP) | Out dir | Guard |
    | --- | --- | --- | --- | --- |
@@ -95,7 +98,7 @@ branches and the projection fix below, so re-render before judging.
    world must match its baseline exactly:
 
    ```
-   PY=/private/tmp/nanolathe-neural-terrain-venv/bin/python
+   PY=/Users/daniel/src/terraform/.venv/bin/python
    REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/before http://127.0.0.1:<server> <cdp>
    # ...change something...
    REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/after-<n> http://127.0.0.1:<server> <cdp>
@@ -2422,33 +2425,189 @@ reproduces the old output, set only in Green's `WORLD_KNOBS`.
 - `crackDark` could be lowered now that cavity darkens the same floors as
   geometry.
 
-### H2. Rock column, plus water and gravity on the GPU (Green) — outline
+### H2. Rock column, plus erosion on the GPU (Green)
 
-The full card is written after H1 is reviewed.
+**What is there today.**
 
-- **Rock column.**
-  - Green's beds become data: thickness, material and hardness, with dip
-    and direction from today's bed knobs.
-  - It is a WGSL function shared by the relief bake and the agents.
-  - `bedRelief` reads its hardness from the column, instead of hashing it.
-- **Water agent.**
-  - A WebGPU compute pass: hydraulic erosion with sediment transport.
-  - Erodibility comes from the column's hardness at the current surface.
-- **Gravity agent.**
-  - Thermal weathering down to each material's angle of repose.
-  - It writes talus.
-- **Shape of the bake.**
-  - A coarse pass over the whole map, then fine tiles with aprons.
-  - It follows the flow-bake node pattern: region, hash, Bake button and
-    stale badge.
-  - It stores these planes: height change, flow, wear, deposit, talus.
-- **Judge.**
-  - A demo mesa of alternating hard and soft beds must form benches and
-    talus with no strokes drawing them.
-  - Then green-1..3 against retail.
-- **Settle in H1's review:**
-  - whether the GPU agent replaces the droplet worker or runs beside it;
-  - the mask plane budget (14-19 and 25+ are free).
+- **Weathering.** The Weathering box is on by default, so every repro
+  render includes it. `queueWeather` in `sculpt.js` sends the height to
+  `sculpt-weathering.js`, a CPU droplet worker, on the study's 512-sample
+  grid (2 px a sample). It returns:
+  - the weathered height (`refined`), which the art and the export's TNT
+    corner heights read;
+  - flow, deposit, talus and sand, which `setWeather` puts in layer 0 of
+    the grid texture. `weatherAt` reads them: the bake's boulder-foot rule
+    and the fragment shader's deposits;
+  - the material field (layer 1).
+- **The worker keeps the design intent:**
+  - it never changes a sample whose protection is above 0: ramp grades,
+    plateau interiors and buildable crests (see "Design intent survives
+    weathering" in `sculpt.js`);
+  - it leaves submerged samples alone;
+  - it keeps each sample between its own lower and upper bounds, and
+    between sea −90 and sea +300.
+- **Beds.** `bedRelief` in `relief-bake.wgsl` draws them.
+  - Green spaces them by height (`bedHeight` 1, `bedSpacing` 5).
+  - Since G2 they follow the ground's smoothed contours (`cliffFollow` 1,
+    `cliffBed` .3), so the bed coordinate comes from a smoothed height.
+  - Each bed's hardness is a hash: `bedPunch` scales its riser by
+    `0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y`.
+  - Erosion knows nothing of the beds.
+- **Shaders.** `preprocess` in `sculpt-renderer.js` pastes
+  `sculpt-common.wgsl` at `/*COMMON*/` and keeps `#ifdef` blocks by define;
+  the bake compiles with `BAKE`. A new compute shader can share the common
+  code the same way.
+
+**Scope.**
+- The 1024-px study only, which is the path every repro scene takes, and
+  Green only.
+- Map canvases, including maps over 1168 samples with tiled weather, keep
+  the droplet worker. They are H2b.
+- The two questions left for H1's review:
+  - The GPU pass runs beside the droplet worker, chosen by a knob. The
+    worker stays the default for every other world and for map canvases.
+  - H2 needs no new mask planes: its outputs go where the worker's go.
+    H2b's stored planes are what take planes 14-19 and 25+.
+
+**Deliver.** Gate everything (rule 4). Do items 1-3 first. If they use up
+the card, stop there with NOTES.md; items 4 and 5 can follow as their own
+card.
+
+1. **Rock column** (`column`; 0 keeps today's hash).
+   - **Data:** up to eight beds that repeat upward. Each has a thickness in
+     height units, a hardness from 0 to 1, and a material slot for H3
+     (unused here). Pass them as a uniform array appended to
+     `struct Uniforms`, from a Green preset in `sculpt.py`.
+   - **`columnAt(p, z)`** in `sculpt-common.wgsl` returns the bed index, its
+     hardness, and how far through the bed z lies. The bed coordinate is
+     the height plus the existing tilt (`bedDip`, `bedDipDir`) and wander.
+     So it depends only on (x, y, z), and erosion that lowers the ground
+     exposes the bed beneath.
+   - **`bedRelief`** reads hardness and thickness from `columnAt` in place of
+     the hash. With `column` 0 it must be bit-identical.
+   - **One coordinate.** The bake and the erosion pass must read the same
+     bed coordinate. If erosion reads the raw surface while the bake reads
+     G2's smoothed one, the ledges erosion leaves and the ledges the bake
+     draws drift apart. Choose one and say why in NOTES.md.
+   - Eroded flat beds may follow the hill by themselves. If they do, try
+     Green with less `cliffBed` or `cliffFollow`, and keep it only if it is
+     closer on all three windows.
+2. **GPU erosion** (`erosion`: 0 the droplet worker, 1 the GPU pass).
+   - **Files.** A host module `sculpt-erosion.js` and a compute shader
+     `erosion.wgsl`, run on the renderer's device, with the common code
+     pasted under an `EROSION` define. Add both to `sculpt.py`'s list of
+     served files.
+   - **Model.** Grid-based, with no particles: the virtual-pipe shallow-water
+     model of Mei, Decaudin and Hu (2007, cited in the worker's header) for
+     water, outflow, velocity, sediment capacity, erosion, deposition and
+     transport. Then thermal weathering down to an angle of repose.
+   - **Hardness.** Erodibility comes from `columnAt` at the current
+     surface: soft beds wear fast and hard beds stand. Hard rock keeps a
+     steep repose and loose debris a shallow one.
+   - **Deterministic.** A fixed number of iterations (`erosionAge`),
+     ping-pong buffers, no atomics, and one writer per cell per dispatch.
+     The same input gives the same bits on this machine.
+   - **The worker's contract.** Honour `protect`, leave submerged samples
+     alone, and keep the worker's bounds. Read the worker first, then list
+     each of its rules in NOTES.md and whether the pass keeps it.
+   - **The worker's outputs.**
+     - The height goes to `refined`, so the art and the TNT corners read
+       it as today.
+     - Flow, deposit and talus are 0-1 with the worker's meaning, so every
+       `weatherAt` reader still works.
+     - Sand and the material field still appear.
+
+     The simplest route is probably to run the GPU pass, then hand its
+     height to the worker with the droplet loop skipped, so the material
+     field, sand and the apron run as today. Say what you did.
+   - **Rain** falls evenly on dry ground. A rain mask is FLOW_BAKE's open
+     item, not this card's.
+   - **At most four knobs** a user would see: `erosionAge`, `erosionRain`,
+     `columnContrast` (how much harder the hard beds are) and `talusAngle`.
+     Everything else is a constant, with a comment saying why.
+   - The weather label shows the pass and its time, as the worker's does.
+3. **Demo mesa** (`repro/demo/mesa-beds.json`, Green).
+   - A mesa about 120 height units high, with steep sides on painted rock,
+     over a column of alternating hard and soft beds. No stroke draws a
+     bench. If the plateau stroke protects its own sides, use a stroke
+     that does not.
+   - With erosion on:
+     - the hard beds stand as cliffs;
+     - the soft beds retreat to slopes;
+     - talus gathers at the cliffs' feet.
+   - **Evidence:**
+     - Clay renders at the TA sun and at azimuth +90;
+     - a height profile across one side, before and after erosion, marked
+       with the hard beds' heights. The benches should sit on the hard
+       beds. Count them **[measured]**.
+   - `all.sh` only runs `scenes/`, so render the demo with `render.mjs`.
+4. **Crisp blocks** (after items 1-3).
+   - Retail's face is crisp blocks outlined by continuous crevices; ours is
+     soft blobs (H1's open item).
+   - Joints cut each bed into blocks. Give each block its own plane with a
+     small tilt, and keep the crevices continuous along the bed boundaries
+     and the joints. Through the column, hard beds make larger and cleaner
+     blocks.
+   - The blocks may replace Green's facets (`facetTilt`) on the face, if
+     that is closer.
+   - **Measure** with `$R/agent-H2/runs.py` on green-2's face (x 20-880,
+     y 650-870): the share of dark pixels (luma under 30) in horizontal runs
+     of 10 px or more, and in vertical runs of 6 px or more. Retail's
+     crevices run along the beds; ours run down the face:
+
+     | | horizontal, 10 px or more | vertical, 6 px or more |
+     | --- | --- | --- |
+     | retail | .071 | .248 |
+     | H1 | .028 | .340 |
+5. **Green's preset.** With items 1-4 on, set Green's knobs. Judge
+   green-1..3 against retail (rule 5) and against `before`. H1's face
+   numbers (`$R/agent-H1/face.py`: mean, s.d., share under 30, p90
+   gradient) must not get worse beyond noise. Retail is 45.8, 27.2, .245
+   and 17.6; H1 is 44.7, 26.4, .247 and 17.6.
+6. **Cost and determinism.**
+   - Time the GPU pass on the 512 grid against the worker (its label prints
+     milliseconds). Time the relief bake and the full draw on green-2,
+     before and after.
+   - Render green-1..3 twice, restarting the server between runs.
+     `compare.py <run-a> <run-b> --worlds none` must exit 0.
+
+**Judge**:
+- the demo mesa (item 3);
+- green-1..3 with the palette on;
+- H1's four-sun Clay sheets (`render.mjs --clay --query
+  sun=<azimuth>,<elevation>`): every ledge must shade with the sun;
+- the face numbers and the dark runs;
+- guard `--worlds green`.
+
+**Done when** NOTES.md has:
+- the column preset, and why;
+- the erosion model, its knobs and defaults, and which worker rules it
+  keeps;
+- the mesa evidence;
+- the face numbers and dark runs, before and after;
+- the cost and the determinism check;
+- the review sheets;
+- what H2b will need.
+
+**Server and guard:** port 8862, CDP 9662, guard `--worlds green`.
+
+### H2b. Erosion on map canvases — outline
+
+Written when H2 lands.
+
+- A coarse pass over the whole map, then fine tiles with aprons, so that
+  drainage reaches across tiles.
+- It follows the flow-bake node pattern: region, hash, Bake button, stale
+  badge and the idle option.
+- **Stored planes**, which take planes 14-19 and 25+:
+  - the height change, at better than Int8 precision;
+  - flow, wear, deposit and talus.
+
+  Regional replay copies them. Export reads them and never simulates.
+- It answers FLOW_BAKE's open question: a general control for flow and
+  erosion on land, such as a rain mask and a direction.
+- Whether the GPU pass replaces the worker for a world is settled when that
+  world is ported.
 
 H3 (the material table and placement rules) and H4 (panels, presets,
 painted overrides and data map views) are written when H2 lands.
