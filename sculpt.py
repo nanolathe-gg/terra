@@ -291,11 +291,12 @@ WORLD_KNOBS = {
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
                         bandFoot=8, ringContrast=.55, ringCount=12, ringSize=.3,
-                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottleScale=1.2,
-                        # G1: the reef bars' dark pits come from lit bumps of 4-5 px with a lighter mottle
-                        # and a few dots, and no palette dither (retail's bar luma s.d. after a 3-px blur
-                        # 8.4; see Green).
-                        bedMottle=.05, bedDots=.2, bedDotCell=9, shoalBump=3, shoalBumpPx=4.5, shoalDither=0,
+                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottleScale=1.6,
+                        # G1: the reef bars are soft blotches (retail: 8-16 px energy 1.8 against 1.3 at 4-8 px;
+                        # 4.5-px bumps at 3 read as chunky cobbles): a mottle of 1.6 and faint lit bumps of
+                        # 9 px, a few dots, and no palette dither (3-px-blurred luma s.d. retail 7.6, before
+                        # 4.7, now 5.8; see Green).
+                        bedMottle=.09, bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
                         shoalRag=4,
                         # G1 (round 8: "the default should still have a small blur on the edge"): the world's own
