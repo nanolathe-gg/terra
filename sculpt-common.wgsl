@@ -329,6 +329,8 @@ struct Uniforms {
     cliffFlat: f32,       // slope (height per px) at the wide scale under which the beds and joints fade into plain broken rock
     cliffRise: f32,       // height of a bed's riser, height units, when beds are spaced in px (0: the bed's own height, as before)
     cliffBed: f32,        // how far the beds follow the smoothed ground (cliffReach) instead of the grid's own bumps (0: the grid's heights; 1: the smoothed ones)
+    cliffStagger: f32,    // each bed's joints sit at their own offset, up to this share of the joint spacing either way (0: one lattice for every bed, as before)
+    cliffFine: f32,       // a third, finer level of facets at this share of the fine level's tilt and step, 0.45 of its size (0: none)
     cliffDomain: f32,     // size of the patches that each keep their own lattice of joints, gullies and facets, world px
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.

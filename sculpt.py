@@ -149,7 +149,7 @@ KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGap
 # contours of the ground and joints, gullies, scratches and facets down its fall line. The reaches are the
 # height smoothing radii (px) of the local and of the wide fall line, cliffFlat the wide slope under which
 # the structure fades into plain broken rock, cliffDomain the patch size of the joint lattice.
-KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffDomain=90)
+KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffFine=0, cliffDomain=90)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {

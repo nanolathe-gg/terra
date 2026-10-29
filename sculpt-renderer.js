@@ -940,6 +940,8 @@ export class TerrainRenderer {
     set('uCliffFlat', number('cliffFlat', .04));
     set('uCliffRise', number('cliffRise', 0));
     set('uCliffBed', number('cliffBed', .5));
+    set('uCliffStagger', number('cliffStagger', 0));
+    set('uCliffFine', number('cliffFine', 0));
     set('uCliffDomain', number('cliffDomain', 90));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});

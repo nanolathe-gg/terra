@@ -407,13 +407,15 @@ fn jointPresent(cell: f32, y: f32) -> f32 {
     let run = max(u.jointRun, 20.0);
     return smoothstep(mix(-1.1, 0.15, u.jointGaps), mix(-0.7, 0.55, u.jointGaps), valueNoise(vec2f(y / run, cell * 3.7) + 11.0));
 }
-fn jointField(p: vec2f) -> vec2f {
+fn jointField(p: vec2f) -> vec2f { return jointFieldAt(p, 0.0); }
+// G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
+fn jointFieldAt(p: vec2f, off: f32) -> vec2f {
     let a = radians(u.jointAngle);
     let along = vec2f(sin(a), cos(a));
     let across = vec2f(cos(a), -sin(a));
     let J = max(u.jointSpacing, 6.0);
     let y = dot(p, along);
-    let x = dot(p, across) + J * 0.35 * valueNoise(p / (J * 4.0) + 4.4) + J * 0.05 * valueNoise(p / (J * 0.7) + 9.1);
+    let x = dot(p, across) + J * 0.35 * valueNoise(p / (J * 4.0) + 4.4) + J * 0.05 * valueNoise(p / (J * 0.7) + 9.1) + off;
     let c = floor(x / J);
     var best = 1e9;
     var cell = c;
@@ -605,6 +607,8 @@ fn facetField(p: vec2f) -> vec2f {
     let F = max(u.facetSize, 2.0);
     var f = facetLevel(p, F, u.facetStretch, u.facetTilt, u.facetStep, 0.0);
     if (u.facetCoarse > 0.0) { f.x += facetLevel(p + vec2f(31.0, 17.0), F * 2.4, u.facetStretch, u.facetTilt * u.facetCoarse, u.facetStep * u.facetCoarse, 133.0).x; }
+    // G2: a third level at 0.45 of the fine one's size, for the small bumps that retail's pieces carry.
+    if (u.cliffFine > 0.0) { f.x += facetLevel(p + vec2f(11.0, 47.0), F * 0.45, u.facetStretch, u.facetTilt * u.cliffFine, u.facetStep * u.cliffFine, 211.0).x; }
     return f;
 }
 
@@ -1097,14 +1101,24 @@ fn bake(p: vec2f) -> vec4f {
             // The px spacing keeps the grid's own slope where it is steep and cliffBed is 0 (as before), the smoothed one otherwise.
             bedG = mix(cliff.gradient, slope, cliff.local * (1.0 - u.cliffBed));
         }
-        var joint = jointField(pf);
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
         // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
         // The form fades out over the face's foot, so no gully reaches the water plane.
         var carved = vec2f(0.0);
         if (u.gullyDepth > 0.0 || u.ribTilt > 0.0) { carved = gullyField(pf) * smoothstep(u.base + 2.0, u.base + 16.0, h); }
-        joint.y *= u.bedFlow;
-        let bed = bedRelief(p, bedH + carved.x * u.bedBend, joint.y, bedG);
+        var joint = vec2f(0.0);
+        var bed = vec3f(0.0);
+        if (cliffOn && u.cliffStagger > 0.0) {
+            // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
+            // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
+            // (the beds come first, as the offset is keyed on the bed's index; bedFlow 0 anyway lets joints leave them alone).
+            bed = bedRelief(p, bedH + carved.x * u.bedBend, 0.0, bedG);
+            joint = jointFieldAt(pf, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5));
+        } else {
+            joint = jointField(pf);
+            joint.y *= u.bedFlow;
+            bed = bedRelief(p, bedH + carved.x * u.bedBend, joint.y, bedG);
+        }
         height += order * steep * (bed.x + joint.x);
         // The form eases in over the painted edge (a smoothstep of the cover, not the cover itself), so the rim stays smooth.
         let gate = smoothstep(0.15, 0.85, order * steep);
