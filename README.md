@@ -31,6 +31,8 @@ keeps its existing rendering path. Phase 3b integrates wave 2, including
 stored flow bakes. Phase 4 has not started. Phases 1 and 2 add playable
 terrain, features, starts and OTA settings. Limits and later phases are in
 [BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
+Where the terrain engine is going (ground, weathering, surface and light) is
+in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md).
 
 The prepared `assets-*` folders must already be copied under that assets root,
 as the backlog specifies. Helpers read `~/TotalAnnihilation` without writing

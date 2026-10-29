@@ -2,10 +2,11 @@
 
 This is the work list for agents other than the Claude session that owns
 the editor (Codex, OpenCode models). Read the ground rules, then do only
-the card you were given. The editor is an experimental prototype: the
-repository's Go gates (`tools/check`, `tools/check-retail`), the clean-room
-research rules and the test policy in `AGENTS.md` do not apply under
-`tools/map-editor/`. Do not run the Go gates.
+the card you were given. The editor is an experimental prototype with no
+tests and no Go gates. It lives in its own repository,
+`github.com/nanolathe-gg/terraform` (checkout `~/src/terraform`); cards
+before H ran in Nanolathe's `tools/map-editor/`, which is why their notes
+name those paths.
 
 The visual review behind the cards is Codex's of 2026-10-27:
 `/Users/daniel/.codex/visualizations/2026/10/27/01a17fc7-8a8a-72c1-9e20-57d656f2087d/terrain-editor-review/`
@@ -15,12 +16,12 @@ branches and the projection fix below, so re-render before judging.
 
 ## Ground rules (every card)
 
-1. **Worktree.** Branch from `terrain-editor`, never from `main`, and never
-   edit another worktree:
+1. **Worktree.** Branch from terraform's `main`, and never edit another
+   worktree:
 
    ```
-   cd /Users/daniel/src/nanolathe
-   git worktree add ../nanolathe-wt-<card> -b <card> terrain-editor
+   cd /Users/daniel/src/terraform
+   git worktree add ../terraform-wt-<card> -b <card> main
    ```
 
 2. **Your own server, browser port and assets** (table below). Copy the
@@ -30,8 +31,8 @@ branches and the projection fix below, so re-render before judging.
    ```
    R=/private/tmp/nanolathe-map-editor
    mkdir -p $R/agent-<card> && cp -R $R/assets-* $R/agent-<card>/
-   cd ../nanolathe-wt-<card>
-   /private/tmp/nanolathe-neural-terrain-venv/bin/python tools/map-editor/sculpt.py \
+   cd ../terraform-wt-<card>
+   /private/tmp/nanolathe-neural-terrain-venv/bin/python sculpt.py \
      --port <server> --assets-root $R/agent-<card> > $R/agent-<card>/server.log 2>&1 &
    ```
 
@@ -74,6 +75,8 @@ branches and the projection fix below, so re-render before judging.
    | G6 | 8858 | 9658 | `$R/agent-G6/out` | `--worlds ice` |
    | G7 | 8859 | 9659 | `$R/agent-G7/out` | `--worlds crystal` |
    | G8 | 8860 | 9660 | `$R/agent-G8/out` | `--worlds moon` |
+   | H1 | 8861 | 9661 | `$R/agent-H1/out` | `--worlds green` |
+   | H2 | 8862 | 9662 | `$R/agent-H2/out` | `--worlds green` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -90,7 +93,6 @@ branches and the projection fix below, so re-render before judging.
    world must match its baseline exactly:
 
    ```
-   cd tools/map-editor
    PY=/private/tmp/nanolathe-neural-terrain-venv/bin/python
    REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/before http://127.0.0.1:<server> <cdp>
    # ...change something...
@@ -152,7 +154,7 @@ branches and the projection fix below, so re-render before judging.
 7. **Never** commit retail-derived files (pictures, heights, crops, renders):
    they stay under `/private/tmp/nanolathe-map-editor/`. Never run
    `rm -rf`; write to fresh directories instead. Add no dependencies and no
-   test harnesses. Do not touch `main`.
+   test harnesses. Do not commit to `main`; the owner merges.
 
 8. **Iteration cap.** At most three render-look-change cycles per item.
    If an item has not converged by then, record what you learned and move
@@ -172,7 +174,7 @@ branches and the projection fix below, so re-render before judging.
     - what you tried that did not work, and what is still open.
 
     Stop there: the owner reviews and merges. Do not merge into
-    `terrain-editor` yourself.
+    `main` yourself.
 
 ## Card A: editor correctness (no visual judgement)
 
@@ -2267,6 +2269,132 @@ surface becomes the default.
   crisp near-black band.
 - Folds are more regular than retail's tangled bundles.
 - Retail's walls are several parallel narrow ridges: a ridge-bundle brush.
+
+## Cards H: the terrain engine
+
+From the owner's direction of 2026-10-28. Read
+[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) first: it explains the five
+stages these cards build toward, and why drift is allowed. Green goes first.
+Keep the other worlds in mind, and gate everything to Green (rule 4).
+
+> **Owner, 2026-10-28:** I want to see Gaea level realistic geology and
+> weathering/decay if possible. Btw one important thing I didn't mention is
+> that the rock geology should probably have 3d relief so the lighting is
+> accurate.
+
+**Drift rule for H cards.** A Green window may move away from its
+`before` render, as long as it moves toward retail. The other worlds must
+still match exactly (`compare.py ... --worlds green` exits 0).
+
+### H1. Lit relief: close shadows, cavity occlusion, review sun (Green)
+
+**What is there today.** In baked-relief mode (the default),
+`surfaceHeight` in `sculpt-common.wgsl` is the authored height plus
+`bakedFields(p).r * u.detail` plus debris. The projection, normals and
+occlusion all read it. The beds already step: `bedRelief` in
+`relief-bake.wgsl` has a riser, a lip and a notch, and gives each bed its
+own hardness (`bedPunch`). What the lighting misses:
+
+- **Cast shadow.** `visibility()` in `sculpt-frag.wgsl` samples at
+  d = i²·1.4 + 2, that is 3.4, 7.6, 14.6 … px. Nothing closer than 3 px is
+  sampled, so a 1-3 px ledge never shades the ground beneath it.
+- **Occlusion.** `occlusion()` samples at 8-36 px. There is no term at the
+  scale of a crevice.
+- **Gradients.** Some looks may light a gradient that is not part of
+  `surfaceHeight` (frag-side additions to `g`).
+
+G2's open items are this card's targets:
+- crevice share under luma 30 on green-2's face is .143, against retail's
+  .245;
+- the horizontal lines are weaker than retail's;
+- ledges any taller than they are now shade the whole face.
+
+**Deliver.** Gate each item with a `KNOB_DEFAULTS` knob whose default
+reproduces the old output, set only in Green's `WORLD_KNOBS`.
+
+1. **Audit.** For Green, list every lighting reader and the height or
+   gradient it reads: diffuse normal, `visibility`, `occlusion`, shine and
+   glints, the projection. Put the table in NOTES.md. Anything that lights
+   a gradient missing from `surfaceHeight` either moves into the bake, so
+   that it becomes surface, or is listed with the reason it can't.
+2. **Close shadow** (`closeShadow`).
+   - A short march toward the sun over `surfaceHeight`, at 1-6 px (for
+     example 1, 1.5, 2, 3, 4 and 6).
+   - Soft: the penumbra comes from how far the blocker clears the ray.
+   - Combined with the far taps.
+   - It must hold at 1× and 2× zoom, and in chunked full-size maps. The
+     chunk renderer's bake reach must cover the march (see G2's reach
+     note).
+3. **Cavity occlusion** (`cavity`).
+   - Compare the surface height with the mean of a ring 1-3 px out.
+   - Darken crevices and the floors of cracks: fully on the ambient term,
+     and less on the direct term.
+   - Keep it separate from the broad `occlusion()`.
+4. **Beds under the new light.**
+   - With items 2 and 3 on, retune `bedLedge`, `bedPunch`, `cliffRise` and
+     `bedLip`, so that hard beds cast a short shadow and a line the eye can
+     follow (E3, E9).
+   - Do not rewrite `bedRelief`. If the shape itself has to change, say why
+     in NOTES.md.
+5. **Review sun.**
+   - A URL parameter `sun=<azimuth>,<elevation>` in degrees overrides the
+     light for review only. Export and server saves never use it.
+   - `repro/render.mjs` may take an optional extra query string.
+   - Render green-1..3 in Clay at the TA sun and at three others: azimuth
+     +90°, azimuth +180°, and elevation 15°.
+   - Ledges, cracks and facets must shade with the sun. A dark line that
+     stays dark all the way round is ink, and is a finding.
+6. **Cost.**
+   - Measure the draw time at full quality (the timing label) and the
+     relief bake time, before and after, on green-2 and on a 4×4 map.
+   - Aim for at most +25%. Report the numbers either way.
+
+**Judge**:
+- on green-1..3 (rule 5), palette on;
+- crevice share under luma 30 on green-2's rock band, measured the way
+  `$R/agent-E9/NOTES.md` and G2 did;
+- the four-sun Clay sheets;
+- guard `--worlds green`.
+
+**Done when** NOTES.md has:
+- the audit table;
+- the four-sun sheets;
+- crevice share before and after;
+- the cost numbers;
+- the review sheets.
+
+**Server and guard:** port 8861, CDP 9661, guard `--worlds green`.
+
+### H2. Rock column, plus water and gravity on the GPU (Green) — outline
+
+The full card is written after H1 is reviewed.
+
+- **Rock column.**
+  - Green's beds become data: thickness, material and hardness, with dip
+    and direction from today's bed knobs.
+  - It is a WGSL function shared by the relief bake and the agents.
+  - `bedRelief` reads its hardness from the column, instead of hashing it.
+- **Water agent.**
+  - A WebGPU compute pass: hydraulic erosion with sediment transport.
+  - Erodibility comes from the column's hardness at the current surface.
+- **Gravity agent.**
+  - Thermal weathering down to each material's angle of repose.
+  - It writes talus.
+- **Shape of the bake.**
+  - A coarse pass over the whole map, then fine tiles with aprons.
+  - It follows the flow-bake node pattern: region, hash, Bake button and
+    stale badge.
+  - It stores these planes: height change, flow, wear, deposit, talus.
+- **Judge.**
+  - A demo mesa of alternating hard and soft beds must form benches and
+    talus with no strokes drawing them.
+  - Then green-1..3 against retail.
+- **Settle in H1's review:**
+  - whether the GPU agent replaces the droplet worker or runs beside it;
+  - the mask plane budget (14-19 and 25+ are free).
+
+H3 (the material table and placement rules) and H4 (panels, presets,
+painted overrides and data map views) are written when H2 lands.
 
 ## After the cards
 
