@@ -1384,11 +1384,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // soft 92% darkening of the column edge.
         let ink = mix((1.0 - smoothstep(0.58, 0.74, crystalMask)) * 0.92, 1.0 - step(0.66, crystalMask), u.crystalInk) * (1.0 - skinEdge);
         faces = mix(faces, vec3f(0.0), ink);
-        // G7: a crater's skin is the field's value .74 (a column's marks are .8 and over, its seams .5); the thin web crosses it.
+        // G7: a crater's skin is the field's value .74 (a column's marks are .8 and over, its seams .5). Its wall takes the sun's light and shade
+        // harder, as retail's lit east wall and dark west wall do, and the thin web crosses it.
         var craterBand = 0.0;
-        if (u.crystalCraterWeb > 0.0) { craterBand = craterSkin(p, crystalMask); }
+        if (u.crystalCraterWeb > 0.0 || u.crystalCraterLight != 1.0) { craterBand = craterSkin(p, crystalMask); }
         if (craterBand > 0.0) {
+            // The push is a factor on the faces, which the light multiplies later (shading itself is left as it was).
             let s = max(shading, 0.05);
+            let pushed = select(max(1.0 - (1.0 - s) * u.crystalCraterLight, 0.3), min(1.0 + (s - 1.0) * u.crystalCraterLight, u.lightCap + 0.1), s > 1.0);
+            faces *= mix(1.0, pushed / s, craterBand);
             if (u.crystalCraterWeb > 0.0) {
                 let web = craterWeb(p);
                 faces *= mix(1.0, web.y, craterBand);

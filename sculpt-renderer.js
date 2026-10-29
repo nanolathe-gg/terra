@@ -741,6 +741,7 @@ export class TerrainRenderer {
     this.f('uCrystalCraterWobble', variant.has('crystalCraterWobble') ? Number(variant.get('crystalCraterWobble')) : 0);
     this.f('uCrystalCraterGap', variant.has('crystalCraterGap') ? Number(variant.get('crystalCraterGap')) : 0);
     this.f('uCrystalCraterTone', variant.has('crystalCraterTone') ? Number(variant.get('crystalCraterTone')) : 0);
+    this.f('uCrystalCraterLight', variant.has('crystalCraterLight') ? Number(variant.get('crystalCraterLight')) : 1);
     // E11: shallow water round 2; every default is the earlier look.
     this.f('uStepSharp', variant.has('stepSharp') ? Number(variant.get('stepSharp')) : 0);
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
