@@ -3625,6 +3625,32 @@ built the map canvas this card reschedules.
    - **Run it on** a 4×4 Green map (mapcheck's scene) and an 8×8 Green
      map, which takes the CPU worker. Run the study as well.
    - **Report the baseline** and stop.
+   > **After item 1** (`repro/perf.mjs`, 8318d74): the map canvas is bound
+   > by the main thread, not the GPU.
+   > - **The sampler.** The JS field sampler costs 0.21 ms a call.
+   >   `drawCoarse` (the 128² overview) and `drawMapBounds` (the edge
+   >   outline, redrawn in every `overlays()`) make 54k calls on a 4×4 load:
+   >   11.7 s, including one 6.65 s block.
+   > - **H5's "6.4 s queue wait"** was that block.
+   > - **The GPU** is idle about 99% of the time. Each chunk bake is about
+   >   290 ms, of which 233 ms is the CPU packing loop in `upload`.
+   > - **Every drag frame redraws the overview:** p95 3.1 s on 4×4 and
+   >   7.7 s on 8×8.
+   > - **The study already meets every target.**
+   >
+   > **So item 2 becomes main-thread time first:**
+   > - sample the overview and the edge outline once per revision, and
+   >   update them only over dirty rectangles;
+   > - slice whatever sampling remains so no frame blocks;
+   > - then the order fix;
+   > - then an exact-output speedup of the `upload` packing loop.
+   >
+   > Each is measured on its own. `sculpt-map.js` (`drawMapBounds`) and
+   > `sculpt-fields.js` join the card's files, as long as every sampled
+   > value is unchanged. Quarter levels (item 3) pay off mainly by cutting
+   > the upload loop. The 4.3 s scene replay before the Time pass is shape
+   > replay: it belongs to H6, not this card.
+
 2. **Order the work.**
    - The Time pass is submitted before any chunk bake that reads its
      height.
