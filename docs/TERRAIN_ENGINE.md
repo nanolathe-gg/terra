@@ -299,7 +299,7 @@ Each is written in full when the one before it lands.
 | --- | --- | --- |
 | H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
 | H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Merged fef3abb |
-| H3 | One material model on the GPU (Green), with override fields | Written |
+| H3 | One material model on the GPU (Green), with override fields | Merged 1c7f10d |
 | H3b | Rock blocks from the column (Green) | Outlined |
 | H4 | Shape on the GPU: strokes evaluated by compute passes | Outlined |
 | H5 | Progressive rendering, and erosion on map canvases (was H2b) | Outlined |

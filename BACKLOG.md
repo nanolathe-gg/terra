@@ -2845,6 +2845,59 @@ never a run-time input and never go in git.
 
 **Server and guard:** port 8863, CDP 9663, guard `--worlds green`.
 
+**Done (merged as 1c7f10d after two rounds; EXPERIMENTS rows 135-137;
+notes in `$R/agent-H3/NOTES.md`, whose ROUND 2 section supersedes round
+1).**
+- **Numbers.** `measure/material_numbers.py` and `materials/green.json`
+  hold, per material, a 16-quantile ramp, a tint axis and octave-band
+  amplitudes. `mmColor` (`material-model.wgsl`) draws a material from them
+  with no image.
+  - Only slope grass uses it: it matched its image by eye and in numbers.
+  - The rocks matched in numbers but speckle where the art has facets, so
+    rock, weathered and fractured stay on their images until H3b.
+- **The plain** keeps its 16 procedural tiles, now stored as data in the
+  table and built at startup. Unique tiles on the 4×4 export are back to
+  1,067. (Round 1's per-pixel noise made all 4,420 unique.)
+- **Placement.** `greenPlace` reads rows of the table, and is
+  pixel-identical to the inline chain it replaces for Green.
+- **Overrides.** Planes 14-17 are erosion, deposits, vegetation and rock
+  exposure, applied as 1 + v. They are set by Paint channels 18-25 and by
+  four Style sliders on landforms. H2's erosion pass reads plane 14.
+- **Retired:**
+  - `faceRock`;
+  - 11 Green knobs equal to their defaults;
+  - the slope-grass image and the plain's PNG;
+  - Green's CPU material field, which its draw never read.
+- **Merge checks:**
+  - Only Green moved against `merge-h2`, and Lab histogram distance equals
+    it.
+  - The face numbers are within noise.
+  - All 27 windows equal the agent's final renders.
+  - The 4×4 map export shows no seams at three chunk crossings and no
+    console errors.
+  - Old saves rebuild their masks from strokes, so the renamed planes load
+    unchanged.
+
+**Still open:**
+- **It did not simplify.** The table below compares the 467c744 baseline
+  with this merge. The inline chain is other worlds' code until they port,
+  and the rocks keep their images until H3b.
+
+  | Measure | Baseline | Now |
+  | --- | --- | --- |
+  | Shader lines, frag / bake / common | 2,070 / 1,247 / 648 | 2,246 / 1,260 / 715, plus 123 in `material-model.wgsl` |
+  | Uniforms | 350 | 356 |
+  | Knobs, total / Green | 400 / 79 | 411 / 75 |
+  | Python lines | 3,044 | 3,044 |
+- **Draw cost:** +5.3 ms on green-2 (22.8 → 28.1 ms) for slope grass alone.
+  Making each material's texture from its numbers once, at startup on the
+  GPU, would remove it.
+- **A landform's override reaches only its own footprint.** Deposits lie
+  around a mesa's foot, so the Style slider alone barely changes them
+  (0.55% of the half); the demo needs a Paint stroke as well. Features need
+  a reach around their footprint.
+- Rock structure from numbers: H3b.
+
 ### H3b. Rock blocks (Green) — outline
 
 Written when H3 lands.
