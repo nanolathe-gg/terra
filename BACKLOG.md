@@ -1912,6 +1912,16 @@ Prefixes keep two branches from choosing the same name (wave 2 merged two
 `shineGate`s and two `rockDetail`s). Shared lists still grow in one block
 per card, headed by a comment naming it (`// G4`).
 
+**Merged.** All eight cards are on `terrain-editor` (last merge
+4445941c5). Renders of the merged tree are in `$R/repro-out/merge-g5`.
+On the merged tree:
+
+- `repro/regional.mjs` reports no mismatch on all 53 scenes and demos.
+- The large-map export check (lava-1 and green-2 on 4x4 maps) gives the
+  same `.tnt` bytes and the same indexed image at 128 and 512 MiB of GPU
+  budget. It ran with `heapMB=1536` because of G5's heap overflow (see
+  G5's "Still open").
+
 ### G1. Shallow water, round 3
 
 > **Green:** Shallow water: overall better, however the texture is wrong.
@@ -1944,6 +1954,25 @@ per card, headed by a comment naming it (`// G4`).
   `deepEdge=1` should give; find out why.
 - **Server and guard:** port 8853, CDP 9653, guard
   `--worlds green,archipelago,red`.
+
+**Done (merged 2b7371c21; EXPERIMENTS rows 122-123).**
+- The shallow bed carries lit bumps (`shoalBump`, `shoalBumpPx`) with the
+  palette dither off on it (`shoalDither` 0). green-1's clump sizes are now
+  near retail's.
+- Edges: `shoalRag` notches the shallow-to-deep step whatever the bed's
+  slope; `shoalStairs` gives Green's hard waterline 1-3 px runs;
+  `shoalShoreSoft` blurs Archipelago's world waterline by 4 px.
+- `shoalGrain` lets Red's pink grain show through the lake tint.
+
+**Still open:**
+- Green's bumps are a little larger than retail's, and retail's sparse
+  dark flecks are missing.
+- Archipelago's depth profile: retail fades over about 25 px; ours keeps a
+  mid-blue plateau to 55 px (scene shelf depths and the depth ramp).
+- Archipelago's brown wet-sand rim, which retail lacks.
+- red-2's larger pink patches; red-3's crack polygons are 28 px against
+  retail's 15-20.
+- `shoalShoreSoft` overrides `shoalStairs` when both are set.
 
 ### G2. Rock faces: finer pieces, strata that follow the slope
 
@@ -1979,6 +2008,27 @@ per card, headed by a comment naming it (`// G4`).
   Orientation may move Red and Desert. Show every moved window in the
   review sheets.
 
+**Done (merged ac993d8a9; EXPERIMENTS rows 116-118).**
+- `cliffFollow` (Green, Red, Desert): beds are contours of the smoothed
+  ground; joints, gullies, scratches and facets run down its fall line, per
+  90-px patch. Level painted rock takes the fall line of the slope around
+  it, or fades to plain broken rock. `repro/demo/cliff-orient.json` shows
+  four walls and two level patches.
+- Green up close: less shine, beds 5 units apart, joints 34 px and offset
+  from bed to bed (`cliffStagger`), smaller pieces (`cliffFine`).
+- The chunk renderer's bake reach covers the frame's rings and patch seeds
+  (about 190 px with Green's values).
+
+**Still open:**
+- The chunk reach is derived, not rendered in chunks.
+- Contrast: retail's crevices are denser and darker (share under luma 30
+  .245 against .143).
+- Horizontal lines are weaker than retail's; ledges taller than this shade
+  the whole face.
+- Hard seams every 90 px could read on a hill painted all round.
+- On green-2 the beds arch with the hill's outline where retail's rows are
+  nearly level.
+
 ### G3. Archipelago rings
 
 > Red rings: a bit better, maybe too saturated or dark, and they should
@@ -1990,6 +2040,19 @@ per card, headed by a comment naming it (`// G4`).
   copies, each offset from the last (not concentric), each lighter and
   less saturated, until they are sand.
 - **Server and guard:** port 8855, CDP 9655, guard `--worlds archipelago`.
+
+**Done (merged 2504468a4; EXPERIMENTS row 121).**
+- The fringe is a stack of offset, scalloped copies of the hill outline in
+  retail's rose, paler outward, over a pale skirt that steps lighter into
+  the sand, with a reach that varies along the outline.
+- `ringShift 0` with the old ring values reproduces the earlier look bit
+  for bit. The chunk renderer's direct reach covers the copies' offset.
+
+**Still open:**
+- Retail's net is denser and darker near the hill.
+- Retail's halo has one wide side per hill, on the gentle ramp.
+- Retail's skirt is the hill's own olive carried outward; ours is a lime
+  tint over sand.
 
 ### G4. Painted Desert colour and grey bands
 
@@ -2020,6 +2083,20 @@ per card, headed by a comment naming it (`// G4`).
   `baseVary` and the strata colour on the cap.
 - **Server and guard:** port 8856, CDP 9656, guard `--worlds desert`.
 
+**Done (merged 486ae20f2; EXPERIMENTS rows 113-115).**
+- The orange beds are redder: hue 26.0/23.8/25.4 to 23.2/21.8/22.4 against
+  retail's 21.9/21.4/21.8. The plain itself already matched.
+- Pale caps are one sheet (`desertCapFlat`): desert-3's blotchy top is
+  gone.
+- `measure/desert_hue.py` classes the colour by the height it shows.
+
+**Still open:**
+- desert-1's repeated grey band: retail's second band sits on a ledge
+  under the cap that our plateau profile lacks. It is form.
+- Retail's one ragged orange patch per cap.
+- desert-2's plain (hue 28.1 against 30.0), the Triad's pebbles and rubble
+  halos, cap grain (luma s.d. 16-23 against 32-35).
+
 ### G5. Lava layers and hill rock
 
 > Way better fingers and shore layers. The layers should still allow a
@@ -2037,6 +2114,23 @@ per card, headed by a comment naming it (`// G4`).
   NOTES.md: the bumps, the cut-outs, the hanging drip-like shapes and
   where the shine sits. Then build it in the shaders.
 - **Server and guard:** port 8857, CDP 9657, guard `--worlds lava`.
+
+**Done (merged 4445941c5; EXPERIMENTS rows 127-128).**
+- Layers wander, pinch and vary (`lavaMeander`, `lavaSpread`,
+  `lavaCircleVary`); the step crease breaks into dashes
+  (`lavaCreaseVary`). The coast pass's reach, `circleSites` and
+  `regionalReadApron` follow.
+- Hill rock is a crust (`lavaCrust` in `relief-bake.wgsl`): pillows,
+  chips, cut-outs and veins, stronger with height; `lavaDusk` darkens
+  tall hills' far sides; `lavaTread` tilts lobe treads.
+
+**Still open:**
+- Retail's lobe crowns are bright olive with chips and thin dark
+  crescents; ours are mid-brown. A convexity-gated glint is the lever.
+- The veins are faint beside retail's dendritic roots on lava-1.
+- lava-2's circles keep near-black outlines.
+- The wider coast reach makes lava-1 on a 4x4 map need about 669 MB of
+  field working memory, over the default 665 MB page budget.
 
 ### G6. Ice: shelf lines, ice-2, ice-3 and geometric shapes
 
@@ -2076,6 +2170,22 @@ per card, headed by a comment naming it (`// G4`).
     what makes it metallic.
 - **Server and guard:** port 8858, CDP 9658, guard `--worlds ice`.
 
+**Done (merged 6dcdb441b; EXPERIMENTS rows 124-125).**
+- ice-3: rounded light, snow on flat tops, smooth fibres down the faces
+  and a hatched apron (`iceSoft`, `iceSnow`, `iceFall`, `iceApron`).
+- Frost shelf hairlines (`iceFrost`), found through a small trace the
+  frost stamp writes into the routes plane.
+- ice-2 less rough, partly through its scene's berg form (own commit).
+- Angular facets (`iceFacets`, `iceFacetSize`) on hills and mountains,
+  off by default; `repro/demo/ice-facets.json`.
+
+**Still open:**
+- ice-3 is still a straight-edged frustum; retail's has rounded corners, a
+  larger top and a fuzzy north rim. Its lit face is grey-teal against
+  retail's light blue, and the apron is narrower.
+- Frost lines are straight runs; retail's curve, with Y seams.
+- Facets look tile-like at large sizes.
+
 ### G7. Crystal craters and small shore crystals
 
 > Amazing
@@ -2093,6 +2203,20 @@ per card, headed by a comment naming it (`// G4`).
 - The owner called the rest amazing. The mound tops and every other
   window stay as they are.
 - **Server and guard:** port 8859, CDP 9659, guard `--worlds crystal`.
+
+**Done (merged f465ee4d8; EXPERIMENTS rows 119-120).**
+- Craters are lit holes under a thin wandering web: small low facets, one
+  skin mark, the web drawn by the shader, stronger light and shade on the
+  walls.
+- Finer shore slabs and shallow cells.
+
+**Still open:**
+- Retail's crater web is denser and wavier, and its craters have no
+  raised rim.
+- crystal-1's third crater: the west wall is too dark.
+- crystal-2's land slabs are tall dark prisms.
+- The shore and shallow knobs are world-wide, so crystal-1's pond changed
+  too (closer to retail's hairline cracks).
 
 ### G8. Moon, redone from a visual study
 
@@ -2128,6 +2252,21 @@ E6's `pockmark` and the variant `cracked` stay as choices. The new
 surface becomes the default.
 
 - **Server and guard:** port 8860, CDP 9660, guard `--worlds moon`.
+
+**Done (merged 04d8516da; EXPERIMENTS row 126).**
+- The hair-like scratches were Moon's band lines: `banding` 0.
+- Lit cups on shaded steep faces (`moonCups`), stringy flanks
+  (`moonRibs`), wandering folds (`moonFolds`), lobed outlines (the
+  `moonLobes` shape option, with its read reach).
+- Pepper on lit ground is now near retail's. E6's dots are the variant
+  `pitted`; `cracked` stays.
+
+**Still open:**
+- moon-2's crinkled dome tops.
+- Retail's walls are a wide mid-grey gradient with mottle; ours are a
+  crisp near-black band.
+- Folds are more regular than retail's tangled bundles.
+- Retail's walls are several parallel narrow ridges: a ridge-bundle brush.
 
 ## After the cards
 
