@@ -219,14 +219,26 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.uploadBytes=height.byteLength+routes.byteLength+grid.byteLength+masks.byteLength;
     this.cpuWorkingBytes=this.uploadBytes;this.cpuUploadBytes=Math.max(this.cpuUploadBytes,this.uploadBytes);this.recordMemory();
     const weather=request.weather??fields.weather,material=request.material??fields.material;
-    for(let y=0;y<gh;y++)for(let x=0;x<gw;x++) {
-      const src=Math.min(y,h-1)*w+Math.min(x,w-1),dst=y*gw+x;
-      height[dst]=(request.exportArt?clamp(fields.h[src],0,255):fields.h[src])-this.config.seaLevel;
-      routes[dst*4]=toByte(fields.r?.[src]);routes[dst*4+1]=toByte(fields.c?.[src]);routes[dst*4+2]=Math.round((clamp(fields.v?.[src]??0,-1,1)*.5+.5)*255);routes[dst*4+3]=toByte(fields.x?.[src]);
-      for(let k=0;k<planes.length;k++){const v=planes[k]?.[src]??0;masks[(k>>2)*pixels*4+dst*4+(k&3)]=v;painted[k]||=v!==0?1:0;}
-      for(let k=0;k<4;k++){grid[dst*4+k]=toByte(Array.isArray(weather)?weather[k]?.[src]:weather?.[['flow','deposit','talus','sand'][k]]?.[src]);grid[pixels*4+dst*4+k]=toByte(material?.[src*4+k]);
-        // H5: the Time pass's maps, when the weather carries them (Green's engine): layer 2 wear, wet, hard, slope; layer 3 fall x, y, channel, ridge.
-        grid[pixels*8+dst*4+k]=toByte(weather?.[['wear','wet','hard','slope'][k]]?.[src]);grid[pixels*12+dst*4+k]=toByte(weather?.[['fx','fy','channel','ridge'][k]]?.[src]);}
+    // H7 2c: the same bytes as the per-pixel form this replaces (which built three arrays per pixel and followed optional chains),
+    // with every plane looked up once. A plane the request does not carry stays at the zero the buffers start with, which is
+    // what toByte(undefined) and a missing mask value give.
+    const names=['flow','deposit','talus','sand'],wearNames=['wear','wet','hard','slope'],fallNames=['fx','fy','channel','ridge'];
+    const plane=(names2,k)=>Array.isArray(weather)?weather[k]:weather?.[names2[k]];
+    const wp=[0,1,2,3].map(k=>plane(names,k)),wearP=[0,1,2,3].map(k=>weather?.[wearNames[k]]),fallP=[0,1,2,3].map(k=>weather?.[fallNames[k]]);
+    const fr=fields.r,fc=fields.c,fv=fields.v,fx=fields.x,fh=fields.h,exportArt=request.exportArt,sea=this.config.seaLevel;
+    const gridPlanes=[]; // [plane, byte offset of the layer, channel]
+    for(let k=0;k<4;k++){if(wp[k])gridPlanes.push([wp[k],0,k]);if(wearP[k])gridPlanes.push([wearP[k],pixels*8,k]);if(fallP[k])gridPlanes.push([fallP[k],pixels*12,k]);}
+    const lastRow=h-1,lastCol=w-1;
+    for(let y=0;y<gh;y++) {
+      const row=Math.min(y,lastRow)*w;
+      for(let x=0;x<gw;x++) {
+        const src=row+Math.min(x,lastCol),dst=y*gw+x,d4=dst*4;
+        height[dst]=(exportArt?clamp(fh[src],0,255):fh[src])-sea;
+        routes[d4]=toByte(fr?.[src]);routes[d4+1]=toByte(fc?.[src]);routes[d4+2]=Math.round((clamp(fv?.[src]??0,-1,1)*.5+.5)*255);routes[d4+3]=toByte(fx?.[src]);
+        for(let k=0;k<planes.length;k++){const pk=planes[k];if(!pk)continue;const v=pk[src]??0;masks[(k>>2)*pixels*4+d4+(k&3)]=v;if(v!==0)painted[k]=1;}
+        if(material)for(let k=0;k<4;k++)grid[pixels*4+d4+k]=toByte(material[src*4+k]);
+        for(let j=0;j<gridPlanes.length;j++){const g=gridPlanes[j];grid[g[1]+d4+g[2]]=toByte(g[0][src]);}
+      }
     }
     const q=this.device.queue;q.writeTexture({texture:this.heightTexture},height,{bytesPerRow:gw*4},[gw,gh]);q.writeTexture({texture:this.routeTexture},routes,{bytesPerRow:gw*4},[gw,gh]);
     q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,4]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,this.maskLayers]);
