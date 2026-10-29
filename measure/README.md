@@ -31,3 +31,9 @@ Lava (retail maps exported by `tools/neural-terrain/export -planet Lava`):
 | `lava_strokes.mjs` | Draws brush strokes on a blank page headlessly and saves the render and heights |
 | `lava_sheets.py` | Labelled retail-over-ours crop sheets |
 
+
+Painted Desert (a repro/all.sh output directory: retail.png, heights.npy, crop.json, ours.png, ours-heights.json):
+
+| Script | Measures |
+| --- | --- |
+| `desert_hue.py` | Colour (mean RGB, hue, R/G, luma s.d., orange and grey shares) by the height of the ground each pixel shows, in classes plain, apron, bands, cap and the flattest 40
