@@ -219,7 +219,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(banding=.8, bandLine=.84, crackDark=.4,
+    'green': dict(materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
