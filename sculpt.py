@@ -203,6 +203,8 @@ KNOB_DEFAULTS.update(ringTone=0)
 # height smoothing radii (px) of the local and of the wide fall line, cliffFlat the wide slope under which
 # the structure fades into plain broken rock, cliffDomain the patch size of the joint lattice.
 KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffFine=0, cliffDomain=90)
+# H1 (lit relief): shade the ground behind a 1-6 px ledge, and darken crevices and crack floors (0: off).
+KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -225,7 +227,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedDip=0, bedVary=.9,
-                  bedLip=3, bedLedge=.6, jointAngle=-20, jointSpacing=34, jointDepth=3, jointRun=200, jointGaps=.35,
+                  bedLip=2, bedLedge=.4, jointAngle=-20, jointSpacing=34, jointDepth=3, jointRun=200, jointGaps=.35,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -274,9 +276,14 @@ WORLD_KNOBS = {
                   # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies, scratches and
                   # facets run down the fall line. bedDip is 0 now, and bedBend 1 (was 2.5) because a bed is a quarter as
                   # thick, so the ribs would fold it fourfold.
-                  cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=16,
+                  cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=8,
                   # G2: the vertical bands break up: each bed's joints at their own offset (up to .35 of a spacing).
-                  cliffStagger=.35),
+                  cliffStagger=.35,
+                  # H1 (lit relief): ledges shade the ground 1-6 px behind them and crevices lose ambient light, so the
+                  # beds are lower than G2's (cliffRise 16 -> 8, bedLedge .6 -> .4, bedLip 3 -> 2): taller ledges now shade
+                  # the whole face. green-2 face (x 20-880, y 650-870) mean luma / s.d. / share under 30 / p90 gradient:
+                  # retail 45.8 / 27.2 / .245 / 17.6, G2 46.9 / 23.3 / .143 / 14.8, here 44.7 / 26.4 / .247 / 17.6.
+                  closeShadow=.8, cavity=.6),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail

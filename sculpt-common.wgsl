@@ -385,6 +385,9 @@ struct Uniforms {
     cliffStagger: f32,    // each bed's joints sit at their own offset, up to this share of the joint spacing either way (0: one lattice for every bed, as before)
     cliffFine: f32,       // a third, finer level of facets at this share of the fine level's tilt and step, 0.45 of its size (0: none)
     cliffDomain: f32,     // size of the patches that each keep their own lattice of joints, gullies and facets, world px
+    // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
+    closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
+    cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

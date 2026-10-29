@@ -76,7 +76,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // Only height/mask/weather support extends the bake's field input apron.
   reaches(quality='full',heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),full=quality==='full';
-    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,36,19,11,3,1.4);
+    // H1: the close shadow march (6 px) and the cavity ring (3 px) plus the gradient's 1.4 sit inside the far taps' reach.
+    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,n('cavity',0)>0?3+1.4:0);
     const boulder=n('boulderSize',9)*1.6*1.8+14+5;
     const debris=Math.max(3,n('debrisSize',6)*.9)*1.85+n('debrisReach',48)+18;
     const beach=Math.max(this.config.textures.beach?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
@@ -246,7 +247,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const dimensions=this.allocate(region,w,h,request.width,request.height);this.upload(request,region,dimensions,planes);
       this.activeRegion=region;
       if(options.sedimentColors!==undefined)this.setSediment(options.sedimentColors);
-      const result=super.draw({...options,quality:options.quality??'full'});
+      const result=super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)});
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
       this.outputCanvas.getContext('2d').drawImage(this.canvas,0,0);

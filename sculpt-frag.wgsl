@@ -121,6 +121,37 @@ fn occlusion(p: vec2f, h: f32) -> f32 {
     return 1.0 - result * select(0.09, 0.045, u.full != 0);
 }
 
+// H1 close shadow: a ledge 1-6 px toward the sun shades the ground behind it. The far taps in visibility() start
+// 3.4 px out, so a 1-3 px ledge never reached them. The edge is soft by how far the blocker clears the ray (the
+// penumbra widens with the distance the shadow has travelled). Returns the share of the direct light that stays.
+fn closeVisibility(p: vec2f, h: f32) -> f32 {
+    let toward = normalize(u.light.xy);
+    let elevation = u.light.z / length(u.light.xy);
+    var taps = array<f32, 6>(1.0, 1.5, 2.0, 3.0, 4.0, 6.0);
+    var shadow = 0.0;
+    for (var i = 0; i < 6; i++) {
+        let d = taps[i];
+        let q = p + toward * d;
+        if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
+        let clear = surfaceHeight(q) - h - d * elevation;
+        let soft = 0.25 + 0.2 * d;
+        shadow = max(shadow, smoothstep(-soft, soft, clear));
+    }
+    return 1.0 - u.closeShadow * shadow;
+}
+
+// H1 cavity: how far the surface lies below the mean of eight taps on a ring 1-3 px out (1.5, 3 and 2 px alternate),
+// 0..1. A plane or a ridge gives 0; a crack floor or the foot of a riser gives most.
+fn cavityDepth(p: vec2f, h: f32) -> f32 {
+    var around = 0.0;
+    for (var i = 0; i < 8; i++) {
+        let angle = f32(i) * 0.785398 + 0.3;
+        let d = 1.0 + f32(i % 3);
+        around += surfaceHeight(p + vec2f(cos(angle), sin(angle)) * d);
+    }
+    return clamp((around * 0.125 - h - 0.15) / 1.2, 0.0, 1.0);
+}
+
 // Two-entry mixes: retail art shows colours the palette lacks as pixel
 // mixes of two entries (Painted Desert's tans are 50/50 pairs). The lookup's
 // rows 32-63 and 64-95 hold the colour's best pair (palette_pairs.py); the
@@ -1137,6 +1168,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     lighting = min(lighting, u.lightCap);
     let ao = occlusion(p, h);
     let shadow = visibility(p, max(h, u.sea));
+    // H1: ledge shadow and crevices at the scale of a pixel, from the same surface. Full draws only (a drag keeps today's taps).
+    var closeVis = 1.0;
+    var cav = 0.0;
+    if (u.full != 0) {
+        if (u.closeShadow > 0.0) { closeVis = closeVisibility(p, max(h, u.sea)); }
+        if (u.cavity > 0.0) { cav = u.cavity * cavityDepth(p, h); }
+    }
     var shading = lighting * ao * shadow;
     if (u.separateLight != 0) {
         // Cast shadows attenuate the direct sun. The ambient term already
@@ -1149,9 +1187,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Retail Green casts no shadows onto level ground: gate cast shadow
         // and occlusion by slope, with knobs for other looks.
         let onSlope = smoothstep(0.08, 0.35, slope);
-        let castShadow = mix(1.0, shadow, mix(u.flatShadow, 1.0, onSlope));
+        let castShadow = mix(1.0, shadow, mix(u.flatShadow, 1.0, onSlope)) * closeVis;
         let occluded = mix(1.0, ao, mix(u.flatOcclusion, 1.0, onSlope));
-        shading = min((u.ambient + fill + 0.95 * direct * castShadow) / flatLight, u.lightCap) * occluded;
+        shading = min((u.ambient * (1.0 - cav) + fill + 0.95 * direct * castShadow * (1.0 - 0.45 * cav)) / flatLight, u.lightCap) * occluded;
     }
     // Retail Lava faces stay close to the ground's tone whichever way they
     // look (luma regressed on the height gradient: ~8 per unit slope east to
@@ -1782,7 +1820,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     if (u.shineOn != 0) {
         // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
-        let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank);
+        let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank) * closeVis;
         var shine = shineTerm(pixel, p, gLit, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }

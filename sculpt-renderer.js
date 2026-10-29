@@ -635,7 +635,7 @@ export class TerrainRenderer {
     };
   }
 
-  draw({quality = 'preview', clay = false, light = 'original', fractures = 0, scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, fringeStyle = 'veins', materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65} = {}) {
+  draw({quality = 'preview', clay = false, light = 'original', fractures = 0, scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, fringeStyle = 'veins', materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
     const full = quality === 'full';
     this.i('uFull', full);
@@ -664,7 +664,16 @@ export class TerrainRenderer {
     // sunTilt scales the light's north-south component (1: as before; Moon 0,
     // lit from due west as every retail Lunar map measures).
     const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
-    const sun = [light === 'alternate' ? 0.72 : -0.72, (front ? 0.38 : -0.38) * tilt, 0.82];
+    let sun = [light === 'alternate' ? 0.72 : -0.72, (front ? 0.38 : -0.38) * tilt, 0.82];
+    // Review sun (card H1): the page's ?sun=<azimuth>,<elevation> turns the light, for looking at the relief from other
+    // suns (ink keeps its shade, geometry does not). Azimuth is degrees added to the world's own sun direction on the
+    // screen plane (0: unchanged), elevation degrees above the horizon (empty: the world's own). Exports never take it (exact).
+    const review = exact ? null : /^\s*(-?[\d.]*)\s*,\s*(-?[\d.]*)\s*$/.exec(this.variant.get('sun') || '');
+    if (review) {
+      const turn = Math.atan2(sun[1], sun[0]) + (Number(review[1]) || 0) * Math.PI / 180;
+      const rise = review[2] === '' ? Math.atan2(sun[2], Math.hypot(sun[0], sun[1])) : Number(review[2]) * Math.PI / 180;
+      sun = [Math.cos(turn) * Math.cos(rise), Math.sin(turn) * Math.cos(rise), Math.sin(rise)];
+    }
     const length = Math.hypot(...sun);
     this.v('uLight', sun.map(v => v / length));
     // Lit crack walls are baked for this light.
@@ -732,6 +741,9 @@ export class TerrainRenderer {
     this.f('uShineSlopeGate', variant.has('shineSlopeGate') ? Number(variant.get('shineSlopeGate')) : 0);
     // G5 (Lava): dashes in the bank crease.
     this.f('uLavaCreaseVary', variant.has('lavaCreaseVary') ? Number(variant.get('lavaCreaseVary')) : 0);
+    // H1 (Green): close shadow and cavity occlusion (0: off).
+    this.f('uCloseShadow', variant.has('closeShadow') ? Number(variant.get('closeShadow')) : 0);
+    this.f('uCavity', variant.has('cavity') ? Number(variant.get('cavity')) : 0);
     // G5 (Lava): hill rock.
     for (const [name, fallback] of [['lavaCrust', 0], ['lavaPillow', 34], ['lavaChip', 5.5], ['lavaVeins', 0], ['lavaCalm', 0.6], ['lavaDusk', 0]]) {
       this.f('u' + name[0].toUpperCase() + name.slice(1), variant.has(name) ? Number(variant.get(name)) : fallback);
