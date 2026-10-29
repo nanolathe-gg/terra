@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
-    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
+    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
     'relief-bake.wgsl', 'erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
@@ -212,6 +212,8 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # H3 (Green): materialModel 1 draws the land materials from materials/green.json through material-model.wgsl,
 # with no prepared image (0: the images, as before).
 KNOB_DEFAULTS.update(materialModel=0)
+# H4 (Green): engine 1 draws and bakes with engine-frag/engine-bake/engine-common, Green's own copies (0: the shared shaders, as merge-h3).
+KNOB_DEFAULTS.update(engine=0)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
@@ -219,7 +221,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
+    'green': dict(engine=1, materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.

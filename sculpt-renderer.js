@@ -151,17 +151,23 @@ export class TerrainRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
 
     // H3: Green's land materials from numbers (materialModel 1, the world's default, or ?materialModel=1|0 on the page).
-    const modelQuery = new URLSearchParams(location.search).get('materialModel');
-    this.materialModel = Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
+    const query = new URLSearchParams(location.search);
+    // H4: engine 1 draws with engine-frag / engine-bake / engine-common (Green's own shaders); 0 is the shared set, as merge-h3 draws.
+    this.engine = Number(query.get('engine') ?? this.config.defaults?.engine ?? 0) === 1;
+    const modelQuery = query.get('materialModel');
+    this.materialModel = this.engine || Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
     this.materialData = null;
-    const [vert, frag, common, bake, modelSource, modelTable] = await Promise.all(['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])].map(async name => {
+    const names = this.engine ? ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'materials/green.json']
+      : ['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])];
+    const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
+    const modelSource = this.engine ? null : extra[0], modelTable = this.engine ? extra[0] : extra[1];
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
-    if (this.materialModel) defines.add('MATERIAL_MODEL');
+    if (this.materialModel && !this.engine) defines.add('MATERIAL_MODEL');
     this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -179,8 +185,8 @@ export class TerrainRenderer {
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile('sculpt-frag.wgsl', preprocess(this.materialModel ? frag + '\n' + modelSource : frag, common, defines)),
-      compile('relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
+      compile(this.engine ? 'engine-frag.wgsl' : 'sculpt-frag.wgsl', preprocess(modelSource ? frag + '\n' + modelSource : frag, common, defines)),
+      compile(this.engine ? 'engine-bake.wgsl' : 'relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
     // bake (binding 6 is the fields for the draw, the routes for the bake).
