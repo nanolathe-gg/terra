@@ -199,7 +199,7 @@ WORLD_KNOBS = {
                   bedFlow=0, bedBend=1, bedPunch=1,
                   scratchDepth=3.5, scratchSpacing=9, scratchAngle=-20, scratchRun=140, scratchGaps=.3,
                   facetTilt=.7, facetSize=4.5, facetStretch=2.2, facetStep=1, facetSeam=1.2, facetSkew=.25, facetCoarse=.5,
-                  shineRock=.5, shineRockSharp=14, shineRockRough=.12, shineRockScale=5, shineWhite=1, shineOutside=.3,
+                  shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
