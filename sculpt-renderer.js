@@ -730,6 +730,12 @@ export class TerrainRenderer {
     // E10 (Lava): crease at the foot of each bank step; shine only from this slope up (0: off).
     this.f('uLayerCrease', variant.has('layerCrease') ? Number(variant.get('layerCrease')) : 0);
     this.f('uShineSlopeGate', variant.has('shineSlopeGate') ? Number(variant.get('shineSlopeGate')) : 0);
+    // G5 (Lava): dashes in the bank crease.
+    this.f('uLavaCreaseVary', variant.has('lavaCreaseVary') ? Number(variant.get('lavaCreaseVary')) : 0);
+    // G5 (Lava): hill rock.
+    for (const [name, fallback] of [['lavaCrust', 0], ['lavaPillow', 34], ['lavaChip', 5.5], ['lavaVeins', 0], ['lavaCalm', 0.6], ['lavaDusk', 0]]) {
+      this.f('u' + name[0].toUpperCase() + name.slice(1), variant.has(name) ? Number(variant.get(name)) : fallback);
+    }
     this.f('uShadeBlue', variant.has('shadeBlue') ? Number(variant.get('shadeBlue')) : 0);
     this.f('uFrostWet', variant.has('frostWet') ? Number(variant.get('frostWet')) : 0);
     // E7 (Crystal): shallow water's crystal mosaic.

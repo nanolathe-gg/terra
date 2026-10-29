@@ -846,6 +846,71 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
 }
 
+// G5 (Lava): the hill rock. Retail's Lava hills are crust: a pile of rounded pillows 25-60 px across, each tilted, with a
+// dark crease where it meets the next and a dark wedge where three meet; every pillow's surface is chipped into 4-8 px
+// facets, olive toward the sun and brown away from it, split by hairline cracks; and thin dark veins hang down the fall
+// line and fork. This builds that as height (lit by the sun like any relief) and as the dark of its creases, from the
+// world position only. Returns (height added, darkness as a crack code, how much of the fall-line relief to replace).
+struct Cells { d1: f32, d2: f32, d3: f32, id: vec2f, off: vec2f }
+fn lavaCells(q: vec2f, salt: f32) -> Cells {
+    let c0 = floor(q);
+    var r = Cells(8.0, 8.0, 8.0, vec2f(0.0), vec2f(0.0));
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let c = c0 + vec2f(f32(i), f32(j));
+            let hs = cellHash(c + salt);
+            let pt = c + 0.12 + 0.76 * hs;
+            let d = distance(q, pt);
+            if (d < r.d1) { r.d3 = r.d2; r.d2 = r.d1; r.d1 = d; r.id = cellHash(c + salt + 31.7); r.off = q - pt; }
+            else if (d < r.d2) { r.d3 = r.d2; r.d2 = d; }
+            else if (d < r.d3) { r.d3 = d; }
+        }
+    }
+    return r;
+}
+fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
+    // Raised ground only: hills and their flanks, not the banks between the sea and the plain.
+    // Lava's plain undulates up to ~4 units over the base, so the crust starts above that (open ground keeps its own lumps).
+    let gate = u.lavaCrust * smoothstep(u.base + 2.5, u.base + 6.5, h);
+    // The fall-line relief gives way on the hill and on its foot's slope; the banks well below the plain keep theirs.
+    let calm = u.lavaCalm * max(smoothstep(u.base + 0.2, u.base + 2.5, h), smoothstep(u.base - 0.6, u.base - 0.1, h) * smoothstep(0.06, 0.22, slope));
+    if (gate <= 0.0) { return vec3f(0.0, 0.0, calm); }
+    let across = vec2f(fall.y, -fall.x);
+    // Pillows, a little longer along the contour, their borders wandering.
+    let warp = vec2f(valueNoise(p / 31.0 + 3.0), valueNoise(p / 31.0 + 17.0)) * 0.22 * u.lavaPillow;
+    let pp = p + warp;
+    let qp = vec2f(dot(pp, across) / (u.lavaPillow * 1.35), dot(pp, fall) / u.lavaPillow);
+    let pil = lavaCells(qp, 5.0);
+    let t = clamp(pil.d1 / max(pil.d2, 1e-3), 0.0, 1.0);
+    // A rounded dome that falls steeply at its border, each pillow standing a little higher or lower than the next.
+    let dome = 1.0 - pow(t, 2.4);
+    // Retail's small hills are nearly smooth (lava-1) or carry broad arcs (lava-2); the heaped pillows are the tall ones' (lava-3), so
+    // the pillows and their creases grow with the height above the plain.
+    let tall = smoothstep(u.base + 18.0, u.base + 70.0, h);
+    var height = u.lavaPillow * mix(0.035, 0.11, tall) * (dome + 0.7 * (pil.id.x - 0.5));
+    // Crease on every border, deepest toward the shade; the wedge where three pillows meet is a cut-out.
+    let border = smoothstep(0.80, 0.97, t);
+    let triple = 1.0 - smoothstep(0.0, 0.16, (pil.d3 - pil.d1));
+    height -= u.lavaPillow * mix(0.03, 0.08, tall) * triple;
+    var dark = mix(0.2, 1.5, tall) * border + mix(0.6, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
+    // Chips: flat facets tilted at random, hairline cracks on some of their borders.
+    let qc = p / u.lavaChip;
+    let chip = lavaCells(qc, 11.0);
+    let tilt = (chip.id - 0.5) * 2.0;
+    height += dot(tilt, chip.off) * u.lavaChip * mix(0.07, 0.12, tall);
+    let seam = 1.0 - smoothstep(0.0, 0.16, chip.d2 - chip.d1);
+    dark = max(dark, mix(0.25, 0.9, tall) * seam * step(0.55, chip.id.x));
+    // Veins hang down the fall line: zero lines of a noise stretched along it, in stretches that begin and end.
+    if (u.lavaVeins > 0.0) {
+        let qv = vec2f(dot(p, across) / 7.0, dot(p, fall) / 40.0) + 0.5 * vec2f(valueNoise(p / 23.0 + 5.0), valueNoise(p / 23.0 + 9.0));
+        let line = 1.0 - smoothstep(0.03, 0.17, abs(valueNoise(qv)));
+        let present = smoothstep(-0.55, 0.0, valueNoise(p / 29.0 + 61.0));
+        // Retail's veins are black on an untouched surface: the crack code is scaled by the world's crack darkness (.35 on Lava), so 2.9 is full.
+        dark = max(dark, 2.9 * u.lavaVeins * line * present * smoothstep(0.02, 0.10, slope));
+    }
+    return vec3f(height * gate, dark * gate, calm);
+}
+
 // The world-resolution fields texture: one compute invocation per texel.
 @group(1) @binding(0) var fieldsOut: texture_storage_2d<rgba16float, write>;
 
@@ -1090,6 +1155,13 @@ fn bake(p: vec2f) -> vec4f {
         crackAt.y *= 1.0 - 0.5 * order * steep;
     }
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
+    // G5 (Lava): the crust replaces most of the fall-line relief on hills and adds its own, with the dark of its creases.
+    var crustDark = 0.0;
+    if (u.lavaCrust > 0.0) {
+        let crust = lavaCrust(p, h, slope, fall);
+        height = height * (1.0 - crust.z) + crust.x;
+        crustDark = crust.y;
+    }
     if (order > 0.0) {
         // G2: the frame's own coordinates when the ground gives the directions (x along the contour, y
         // down the fall line, from the patch's seed); the fixed screen ones otherwise.
@@ -1151,6 +1223,7 @@ fn bake(p: vec2f) -> vec4f {
     var lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
     // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
     lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
+    lineDark = max(lineDark, crustDark);
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
     lineDark = max(lineDark, facetSeam * u.facetSeam * (1.0 - buried));
     if (u.sandBanding > 0.0) {

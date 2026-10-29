@@ -108,7 +108,9 @@ const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace'];
 // Coast options (card E4): joined-coast fingers and shore layers, applied by stampCoastShore once the stroke is swept.
 const COAST_KEYS=['fingerCoast','shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
   // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
-  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle','hillLobes','hillSteps'];
+  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle','hillLobes','hillSteps',
+  // G5 (Lava): the layers' two-dimensional wander and extra width spread; the circles' variety; the lobes' tread tilt (the hill-lobe option rides this list, as E10's).
+  'lavaMeander','lavaSpread','lavaCircleVary','lavaTread'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -232,6 +234,11 @@ const SHAPE_FIELDS=[
   ['iceFacetSize','ice-facet-size','Facet size (px)',['hill','mountain'],16,96,2,1,'Ice facets: the typical width of one facet.'],
   // G8 (Moon): lumpy, folded outlines.
   ['moonLobes','moon-lobes','Outline lobes (share of radius)',['hill','mountain'],0,60,2,100,'How far the hill\'s whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline.'],
+  // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
+  ['lavaMeander','lava-meander','Layer meander (layers of wander)',['deep','shallow'],0,300,5,100,'Contour layers: how far the layer lines wander across the bank in two dimensions, in layer widths. Past about 1 they pinch together, split and close into swirls, as retail lava-1\'s do. 0 keeps the layers that only follow the shore.'],
+  ['lavaTread','lava-tread','Lobe treads tilt (share of a step)',['hill','mountain'],0,100,5,100,'Stacked lobes: each flat tread rises toward the hill\'s crown by this share of a fifth of a step, so it is a tilted dome lit on the sunward side and dark on the far side, as retail Lava\'s lobes are. 0: flat treads.'],
+  ['lavaCircleVary','lava-circle-vary','Circle variety (circular layers)',['deep','shallow'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
+  ['lavaSpread','lava-spread','Layer width spread',['deep','shallow'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
 const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreScale','crystalShoreSeam'];
@@ -336,7 +343,7 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',hillSteps:'hillLobes',iceFacetSize:'iceFacets',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',hillSteps:'hillLobes',iceFacetSize:'iceFacets',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers',lavaTread:'hillLobes'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -1754,7 +1761,11 @@ const LAYER_FOOT=6,LAYER_WALL=5;
 const coastLayerReach=s => {
   const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),style=Math.round(s.layerStyle);
   if (style===2) return 1.6*n*W+2*W;
-  if (style===1) return n*W+2.8*Math.max(8,s.layerCircle)+2*W;
+  if (style===1) { const cv=clamp(s.lavaCircleVary||0,0,1); return n*W*(1+.45*cv)+2.8*Math.max(8,s.layerCircle)*(1+.07*cv)+2*W; }
+  // G5: the meander moves a layer line by up to its amplitude in layer widths, and the spread widens the widest layer;
+  // both reach farther inland than the shore-following layers do (zero for both: the earlier reach exactly).
+  const meander=clamp(s.lavaMeander||0,0,3),spread=clamp(s.lavaSpread||0,0,2);
+  if (meander>0 || spread>0) { const wide=Math.max(1+.6*clamp(s.layerVary,0,1),Math.exp(.5*(clamp(s.layerVary,0,1)+spread))); return (n+1+meander)*W*wide+2*W; }
   return n*W*(1+.6*clamp(s.layerVary,0,1))+2*W;
 };
 // Circular layers (retail lava-2): round bites cut out of the bank, layer after layer. A bite is a disc
@@ -1763,26 +1774,28 @@ const coastLayerReach=s => {
 // waterline if that is nearer, so each riser is an arc round its bite, concentric with the bite's other
 // risers, meeting a neighbour's arcs at a cusp (the overlap of two discs).
 function circleSites(s,raw,dist,sea,box,Rc) {
-  const inv=s.inv,f=inv?invert(inv):null,salt=s.seed,C=Rc*1.3,out=[];
+  const inv=s.inv,f=inv?invert(inv):null,salt=s.seed,C=Rc*1.3,out=[],cv=clamp(s.lavaCircleVary||0,0,1);
   const corner=(x,y) => { const wx=gridX(x),wy=gridY(y); return inv?[inv[0]*wx+inv[2]*wy+inv[4],inv[1]*wx+inv[3]*wy+inv[5]]:[wx,wy]; };
   const cs=[corner(box.x0,box.y0),corner(box.x1,box.y0),corner(box.x0,box.y1),corner(box.x1,box.y1)];
   const i0=Math.floor(Math.min(...cs.map(c => c[0]))/C)-1,i1=Math.ceil(Math.max(...cs.map(c => c[0]))/C)+1;
   const j0=Math.floor(Math.min(...cs.map(c => c[1]))/C)-1,j1=Math.ceil(Math.max(...cs.map(c => c[1]))/C)+1;
   for (let j=j0;j<=j1;j++) for (let i=i0;i<=i1;i++) {
-    if (hash(i,j,salt^0x91d)<-.55) continue;
+    if (hash(i,j,salt^0x91d)<-.55+.45*cv) continue;
     const lx=(i+.5+.4*hash(i,j,salt^0x13b))*C,ly=(j+.5+.4*hash(i,j,salt^0x5c9))*C;
     const wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly,gx=Math.round(wx/spacing)-originCellX,gy=Math.round(wy/spacing)-originCellY;
     if (gx<box.x0 || gx>box.x1 || gy<box.y0 || gy>box.y1) continue;
-    const k=gy*grid+gx,sd=raw[k]>sea?dist[k]:-dist[k],r=Rc*(.4+(hash(i,j,salt^0x77f)*.5+.5)**1.3);
+    // G5: with variety a few circles are large among many small ones (radius .3 + 1.2 u^2, up to 1.5 Rc), and each spaces its rings
+    // by its own factor (.55-1.45 of the layer width); variety 0 is the earlier circle exactly.
+    const u0=hash(i,j,salt^0x77f)*.5+.5,k=gy*grid+gx,sd=raw[k]>sea?dist[k]:-dist[k],r=Rc*((.4+u0**1.3)*(1-cv)+(.3+1.2*u0*u0)*cv),sc=1-cv+cv*(.55+.9*(hash(i,j,salt^0x2c1)*.5+.5));
     // Only bites that straddle the waterline: centred a little way into the lava or up to .8 radius inland.
     if (sd<-.5*r || sd>.8*r) continue;
-    out.push({x:wx,y:wy,r});
+    out.push({x:wx,y:wy,r,sc});
   }
   return out;
 }
 function coastLayers(s,sea,box) {
   const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),style=Math.round(s.layerStyle),mounded=style===2,scalloped=style===1,vary=clamp(s.layerVary,0,1);
-  const raw=heights.slice(),dist=coastField(s,raw,sea,box),inv=s.inv,salt=s.seed;
+  const raw=heights.slice(),dist=coastField(s,raw,sea,box),inv=s.inv,salt=s.seed,meander=clamp(s.lavaMeander||0,0,3),spread=clamp(s.lavaSpread||0,0,2);
   // Mounds (the first circular style): a low flat shelf carrying round stepped mounds (retail lava-2's overlapping
   // pancakes: 3-5 rings 5-8 px apart, 20-35 px across, a unit or two a ring). One mound per
   // jittered lattice cell in the shape's frame; where mounds overlap the higher ring wins.
@@ -1813,7 +1826,7 @@ function coastLayers(s,sea,box) {
   }
   const sites=scalloped?circleSites(s,raw,dist,sea,box,Math.max(8,s.layerCircle)):null;
   // Sites by bucket, each covering a bite's whole influence (its radius plus the layers beyond it).
-  const bucketBox=s.coastWholeBox??box,bucketCells=scalloped?Math.ceil((1.4*Math.max(8,s.layerCircle)+n*W)/spacing):1,bw=Math.floor((bucketBox.x1-bucketBox.x0)/bucketCells)+1,bh=Math.floor((bucketBox.y1-bucketBox.y0)/bucketCells)+1;
+  const bucketBox=s.coastWholeBox??box,bucketCells=scalloped?Math.ceil((1.4*Math.max(8,s.layerCircle)+clamp(s.lavaCircleVary||0,0,1)*.1*Math.max(8,s.layerCircle)+n*W*(1+.45*clamp(s.lavaCircleVary||0,0,1)))/spacing):1,bw=Math.floor((bucketBox.x1-bucketBox.x0)/bucketCells)+1,bh=Math.floor((bucketBox.y1-bucketBox.y0)/bucketCells)+1;
   const buckets=scalloped?(regionalReplay?new Map():Array.from({length:bw*bh},() => [])):null;
   const bucket=(i,create=false)=>{if(!regionalReplay)return buckets[i];if(create&&!buckets.has(i))buckets.set(i,[]);return buckets.get(i)??[];};
   if (scalloped) for (const c of sites) {const i=Math.floor((c.y/spacing-bucketBox.y0)/bucketCells)*bw+Math.floor((c.x/spacing-bucketBox.x0)/bucketCells);if(i>=0&&i<bw*bh)bucket(i,true)?.push(c);}
@@ -1838,13 +1851,16 @@ function coastLayers(s,sea,box) {
       let dd=d;
       if (scalloped) {
         const bx=Math.floor((x+originCellX-bucketBox.x0)/bucketCells),by=Math.floor((y+originCellY-bucketBox.y0)/bucketCells);
-        for (let ty=Math.max(0,by-1);ty<=Math.min(bh-1,by+1);ty++) for (let tx=Math.max(0,bx-1);tx<=Math.min(bw-1,bx+1);tx++) for (const c of bucket(ty*bw+tx)) dd=Math.min(dd,Math.hypot(wx-c.x,wy-c.y)-c.r);
+        for (let ty=Math.max(0,by-1);ty<=Math.min(bh-1,by+1);ty++) for (let tx=Math.max(0,bx-1);tx<=Math.min(bw-1,bx+1);tx++) for (const c of bucket(ty*bw+tx)) dd=Math.min(dd,(Math.hypot(wx-c.x,wy-c.y)-c.r)/c.sc);
         dd=Math.max(0,dd);
       }
       const wob=irr*(scalloped?.4:1)*(.55*valueNoise(lx/42,ly/42,salt^0x7a1)+.25*valueNoise(lx/14,ly/14,salt^0x3c5)+.12*valueNoise(lx/6,ly/6,salt^0x5e3));
       // Width varies along the shore: layers are W px wide times a factor between about .6 and 1.65.
-      const Wl=vary>0?W*Math.exp(.5*vary*valueNoise(lx/75,ly/75,salt^0x91f)):W;
-      const q=Math.max(0,dd/Wl+wob+(vary>0?vary*(.4*valueNoise(lx/17,ly/17,salt^0x6d3)+.2*valueNoise(lx/8,ly/8,salt^0x4e1)):0));
+      // G5 (Lava): extra width spread, and a two-dimensional meander in layers: a noise of 3.6, 1.6 and .7 layer widths added to the
+      // layer coordinate itself, so lines pinch together, part and (past about one layer of wander) close into swirls.
+      const Wl=vary>0||spread>0?W*Math.exp((.5*vary+.5*spread)*valueNoise(lx/75,ly/75,salt^0x91f)):W;
+      const meanderQ=meander>0 && !scalloped?meander*(.55*valueNoise(lx/(3.6*W),ly/(3.6*W),salt^0x1d7)+.35*valueNoise(lx/(1.6*W),ly/(1.6*W),salt^0x4c3)+.2*valueNoise(lx/(.7*W),ly/(.7*W),salt^0x2f9)):0;
+      const q=Math.max(0,dd/Wl+wob+meanderQ+(vary>0?vary*(.4*valueNoise(lx/17,ly/17,salt^0x6d3)+.2*valueNoise(lx/8,ly/8,salt^0x4e1)):0));
       if (q>=n+(vary>0?1:0)) { if (raw[i]<base) heights[i]=base; continue; }
       if (vary>0) {
         // Riser k climbs between k + ledge and k + 1 (in layers), moved by its own offset.
@@ -1873,7 +1889,7 @@ function stampHillLobes(s) {
   if (lobes<1 || s.amount<4 || !s.path?.length) return;
   const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},salt=s.seed,R=s.radius;
   // The step is the stroke's own height over the number of steps (never the clip's peak, so a region replay cuts the same terraces).
-  const step=s.amount/Math.max(2,Math.round(s.hillSteps)),path=s.path,sites=[];
+  const step=s.amount/Math.max(2,Math.round(s.hillSteps)),path=s.path,sites=[],tread=clamp(s.lavaTread||0,0,1);
   const h=(k,a) => hash(k,a,salt^0x7e3)*.5+.5;
   for (let k=0;k<lobes;k++) {
     const along=h(k,1)*(path.length-1),j=Math.min(path.length-2,Math.floor(along)),f=along-j;
@@ -1886,7 +1902,8 @@ function stampHillLobes(s) {
     const wx=gridX(x),wy=gridY(y);
     let L=0;
     for (const o of sites) { const d=Math.hypot(wx-o.x,wy-o.y); if (d<o.r) L=Math.max(L,o.up*smooth(o.r,.45*o.r,d)); }
-    const phase=e/step+L,k=Math.floor(phase),cut=step*(k+smooth(.55,1,phase-k));
+    // G5: a tilted tread rises a fifth of a step toward the crown (lavaTread 1) before the riser; 0 is the flat tread.
+    const phase=e/step+L,k=Math.floor(phase),fr=phase-k,cut=step*(k+.2*tread*smooth(0,.55,fr)+(1-.2*tread)*smooth(.55,1,fr));
     // The lower flank keeps the hill's own slope; the stack of lobes forms only on the upper part.
     heights[i]=clamp(s.base[i]+e+(cut-e)*smooth(.2*s.amount,.45*s.amount,e),MIN_HEIGHT,MAX_HEIGHT);
   }
@@ -2625,7 +2642,7 @@ function regionalReadApron(n) {
     if (Math.round(q.shoreLayers)>=1) cells+=Math.ceil(coastLayerReach(q)/spacing)+2;
   }
   if(Math.round(q.layerStyle)===1&&Math.round(q.shoreLayers)>=1&&['deep','shallow'].includes(n.kind)){
-    const Rc=Math.max(8,q.layerCircle),N=Math.max(1,Math.round(q.shoreLayers)),W=Math.max(4,q.layerPx),B=Math.ceil((1.4*Rc+N*W)/spacing);
+    const Rc=Math.max(8,q.layerCircle),N=Math.max(1,Math.round(q.shoreLayers)),W=Math.max(4,q.layerPx),cv=clamp(q.lavaCircleVary||0,0,1),B=Math.ceil((1.4*Rc+cv*.1*Rc+N*W*(1+.45*cv))/spacing);
     cells+=Math.max(0,2*B+1+Math.ceil(1.12*Rc/spacing)+2-(Math.ceil(coastLayerReach(q)/spacing)+2));
   }
   if(BASE_KINDS.includes(n.kind))cells+=Math.ceil(Math.max(0,q.baseVary||0)/spacing);
@@ -3652,7 +3669,8 @@ const KNOBS = [
   // F1: drawn only where a flow bake exists.
   ['Current and sediment', [['flowTint','Sediment tint strength',0,1,.05,1],['flowShallow','Tint kept in the shallows',0,1,.05,.85],['flowStreak','Streak contrast',0,1,.05,.5],['flowStreakLen','Streak length (px)',8,160,4,140],['flowBank','Bank tint strength',0,1.5,.05,.9]]],
   // E10 (Lava)
-  ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
+  ['Lava hill rock', [['lavaCrust','Crust: pillows, chips and creases on hills',0,1,.05,0],['lavaPillow','Pillow size (px)',16,80,1,34],['lavaChip','Chip size (px)',3,12,.5,5.5],['lavaVeins','Veins hanging down the slope',0,1,.05,0],['lavaCalm','Fall-line relief replaced by the crust',0,1,.05,.6],['lavaDusk','Dusk on rock turned from the sun',0,2,.05,0]]],
+  ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['lavaCreaseVary','Crease breaks into dashes of varying darkness',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
   // E6
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
   ['Pockmarks (Moon)', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],

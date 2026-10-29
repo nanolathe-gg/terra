@@ -769,7 +769,9 @@ fn layerCreaseTerm(p: vec2f) -> f32 {
     if (bank <= 0.0) { return 0.0; }
     const r = 2.5;
     let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
-    return bank * smoothstep(0.1, 0.5, around - h);
+    // G5: retail's step lines fade and break along their length; a noise of ~14 px takes whole stretches out and weakens others.
+    let dash = 1.0 - u.lavaCreaseVary * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
+    return bank * smoothstep(0.1, 0.5, around - h) * dash;
 }
 // E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
 // weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
@@ -1156,6 +1158,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // west against our 20; measured on four maps), so its world keeps only
     // part of the directional shading.
     if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); }
+    // G5 (Lava): rock turned from the sun, or in a cast shadow, goes darker than the diffuse term alone gives (retail's far sides are near black).
+    // Retail's small hills keep nearly the plain's tone on their far sides; the dark masses are the tall hills', so it grows with height.
+    // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
+    if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     var grass = groundBased(select(pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb, groundTile(pixel), u.groundMode == 1));
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
