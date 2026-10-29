@@ -39,8 +39,10 @@ class ExportJob:
 
 
 class MapExport:
-    def __init__(self, root, tool, game_roots, feature_tool):
+    def __init__(self, root, tool, game_roots, feature_tool, prepared=False):
         self.root = Path(root)
+        # Prepared: use the saved catalogues; the content roots hold no retail maps.
+        self.prepared = prepared
         self.tool = str(tool)
         self.feature_tool = str(feature_tool)
         self.game_roots = [str(p) for p in game_roots]
@@ -75,7 +77,7 @@ class MapExport:
 
     def catalog(self):
         if self.catalogue is None:
-            self.catalogue = self.run('--catalog')
+            self.catalogue = json.loads((self.root / 'map-catalog.json').read_text()) if self.prepared else self.run('--catalog')
         return self.catalogue
 
     def features(self, world):
@@ -83,6 +85,10 @@ class MapExport:
         if world not in data['worlds'] or data['worlds'][world].get('disabledReason'):
             raise ValueError('This world has no established retail feature set')
         target = self.root / 'features' / world / 'catalog.json'
+        if self.prepared:
+            if not target.is_file():
+                raise ValueError(f'No prepared feature catalogue for {world}: {target}')
+            return target.parent
         if world not in self.feature_worlds:
             self.root.mkdir(parents=True, exist_ok=True)
             source = self.root / 'map-catalog.json'
@@ -171,7 +177,7 @@ class MapExport:
             manifest.write_text(serialized)
             # TMPDIR can select private diagnostic storage. Production uses
             # the OS temporary directory rather than the editor's asset tree.
-            args = self.arguments(self.tool, '--stream', '--input', str(manifest), '--out', str(self.root / 'exports'), '--work', str(directory), '--features-root', str(self.root / 'features'))
+            args = self.arguments(self.tool, '--stream', '--input', str(manifest), '--out', str(self.root / 'exports'), '--work', str(directory), '--features-root', str(self.root / 'features'), *(['--catalog-file', str(self.root / 'map-catalog.json')] if self.prepared else []))
             budget = os.environ.get('NANOLATHE_EXPORT_TILE_BUDGET_MB')
             if budget is not None:
                 args += ['--tile-budget-mb', budget]

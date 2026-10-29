@@ -753,9 +753,14 @@ def lighten_red_shallows(config, assets):
     config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
 
 
-def biome_config(biome, assets):
+def biome_config(biome, assets, prepared=False):
     """Prepare one biome's materials in its own asset folder and return its
-    page configuration, with texture URLs under /sculpt-assets/<biome>/."""
+    page configuration, with texture URLs under /sculpt-assets/<biome>/.
+    The result is saved as config.json; prepared loads that instead, for an
+    assets bundle without the retail sources (BUNDLE.md)."""
+    saved = assets / 'config.json'
+    if prepared:
+        return json.loads(saved.read_text())
     from sculpt_fractures import make_fracture_field
     if biome in ('moon', 'zhon', 'lava', 'crystal', 'ice'):
         # Measured from a decoded section catalog (sculpt_section_biome.py).
@@ -932,6 +937,7 @@ def biome_config(biome, assets):
     if 'river' in config:
         config['river']['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['river']['textures'].items()}
     config['biomes'] = BIOME_NAMES
+    saved.write_text(json.dumps(config))
     return config
 
 
@@ -945,10 +951,11 @@ def main():
     parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export)')
     parser.add_argument('--feature-tool', type=Path, help='Card D feature catalogue binary (default <assets-root>/bin/map-features)')
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
+    parser.add_argument('--prepared', action='store_true', help='load each world from its saved config.json and the saved map-catalog.json and feature catalogues, without the retail sources (BUNDLE.md)')
     args = parser.parse_args()
     from sculpt_export import MapExport
     from sculpt_document import MapDocument
-    map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features')
+    map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
     map_document = MapDocument(args.assets_root / 'documents')
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
     assets = {b: args.assets_root / f'assets-{b}' for b in biomes}
@@ -957,7 +964,7 @@ def main():
         # A world whose source data is missing (e.g. a section catalog) is
         # skipped with a message rather than stopping the server.
         try:
-            configs[b] = biome_config(b, assets[b])
+            configs[b] = biome_config(b, assets[b], args.prepared)
         except (FileNotFoundError, OSError, ValueError) as err:
             print(f'skipping world {b}: {err}', flush=True)
     biomes = [b for b in biomes if b in configs]

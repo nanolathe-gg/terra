@@ -84,6 +84,7 @@ func run() error {
 	var roots rootsFlag
 	flag.Var(&roots, "root", "game content root, repeatable; later roots win (default ~/TotalAnnihilation)")
 	catalogOnly := flag.Bool("catalog", false, "print installed worlds, palette and map names as JSON")
+	catalogFile := flag.String("catalog-file", "", "read the worlds, palette and map names from a saved --catalog JSON instead of the content roots' maps")
 	input := flag.String("input", "", "local JSON export manifest")
 	out := flag.String("out", "", "output directory for the UFO and indexed PNG")
 	featuresRoot := flag.String("features-root", "", "prepared feature catalogue root, required for placed features")
@@ -106,9 +107,18 @@ func run() error {
 	if err := fs.MountGameDirectories(roots); err != nil {
 		return err
 	}
-	catalog, err := readCatalog(fs)
-	if err != nil {
-		return err
+	// A saved catalogue lets a content root without the retail maps export
+	// with the same climate and sea-level medians.
+	var catalog catalog
+	if *catalogFile != "" {
+		if err := mapdata.ReadJSON(*catalogFile, &catalog); err != nil {
+			return err
+		}
+	} else {
+		var err error
+		if catalog, err = readCatalog(fs); err != nil {
+			return err
+		}
 	}
 	if *catalogOnly {
 		return json.NewEncoder(os.Stdout).Encode(catalog)
