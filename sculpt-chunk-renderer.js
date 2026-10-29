@@ -246,7 +246,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const dimensions=this.allocate(region,w,h,request.width,request.height);this.upload(request,region,dimensions,planes);
       this.activeRegion=region;
       if(options.sedimentColors!==undefined)this.setSediment(options.sedimentColors);
-      const result=super.draw({...options,quality:options.quality??'full'});
+      const result=super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)});
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
       this.outputCanvas.getContext('2d').drawImage(this.canvas,0,0);
