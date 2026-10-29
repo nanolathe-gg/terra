@@ -256,6 +256,7 @@ struct Uniforms {
     crystalCraterGap: f32,     // share of the web's lines left out
     crystalCraterTone: f32,    // cell-to-cell brightness variation (0: one tone)
     crystalCraterLight: f32,   // how much stronger the crater wall's light and shade run than the sun gives (1: as the sun gives)
+    crystalSeamEnd: f32,       // the field value where a seam's ink has faded out (0.74 as before; lower draws thinner seams)
     // E8 (Painted Desert)
     strataZoneSpace: array<vec4f, 6>,   // x: bed thickness of each zone of strataZones, height units (0: the world's strataSpacing)
     baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off

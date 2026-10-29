@@ -409,7 +409,7 @@ fn mossMaterial(pixel: vec2f) -> vec3f {
 // paler than the water round it, slab by slab (the field's 0.8-1.0 brightness
 // mark), and the 0.5 edge marks are thin dark seams.
 fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
-    let seam = 1.0 - smoothstep(0.58, 0.74, mask);
+    let seam = 1.0 - smoothstep(0.58, u.crystalSeamEnd, mask);
     let fill = smoothstep(0.66, 0.8, mask);
     let jitter = clamp((mask - 0.9) * 10.0, -1.0, 1.0);
     let slab = color * (1.0 + u.crystalSeam * fill * (0.32 + 0.14 * jitter)) * (1.0 - u.crystalSeam * 0.7 * seam);

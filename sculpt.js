@@ -224,9 +224,12 @@ const SHAPE_FIELDS=[
   ['crystalCraterPx','crystal-crater-px','Facet width (px, crystal craters)',['crater'],0,48,2,1,'Crater facets: the width of each polygonal facet. 0 sizes them by the crater\'s radius (about a third of it, 14-36 px); retail\'s crater walls break into cells of 12-20 px.'],
   ['crystalCraterStep','crystal-crater-step','Facet step (units, crystal craters)',['crater'],0,60,5,10,'Crater facets: how far each facet may stand above or below the crater\'s own surface, in height units either way (shown in tenths: 3 is the earlier ragged crater). Retail\'s crater walls are smooth planes broken by a thin web, so a small step keeps the sun\'s light running smoothly across the wall.'],
   ['crystalCraterSkin','crystal-crater-skin','Web in the shader (crystal craters)',['crater'],0,100,100,100,'Crater facets: 100 marks the whole crater as one crystal skin (no seams in the crystal field) and leaves the thin web between the facets to the shader (World knobs crystalCraterWeb and its relatives), drawn at pixel size so its lines run thin and wander; 0 inks each facet\'s seam in the field as before.'],
+  // G7 (Crystal): finer shore slabs.
+  ['crystalShoreScale','crystal-shore-scale','Rock slab size (share of Plate size, crystal shores)',['deep','shallow','offset'],10,100,5,100,'Rock slabs (Plate material 1): scales Plate size down, so a preset or an old stroke asks for large plates and the shore draws finer ones (never under 8 px). 100 keeps Plate size as given.'],
+  ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['deep','shallow','offset'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
-const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin'];
+const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreScale','crystalShoreSeam'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
@@ -1414,7 +1417,7 @@ function stampShorePlates(s) {
 // band's width, so two shores join only where their bands meet; nothing here is
 // ever raised above the sea.
 function stampShoreSlabs(s,raw,distance,sea,water,land) {
-  const L=Math.max(8,s.plateSize),seam=Math.max(spacing*.5,Math.max(0,s.plateGap)*.5),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
+  const L=Math.max(8,s.plateSize*clamp(s.crystalShoreScale,.1,1)),seam=Math.max(spacing*.5,Math.max(0,s.plateGap)*.5),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
   const cells=new Map(),cell=(x,y) => {
     const key=x+','+y; let c=cells.get(key);
     if (!c) { c={x:(x+.5+hash(x,y,s.seed^0x481)*.4)*L,y:(y+.5+hash(x,y,s.seed^0x287)*.4)*L,keep:hash(x,y,s.seed^0x721)*.5+.5,shade:.8+.2*(hash(x,y,s.seed^0x3b9)*.5+.5),lift:hash(x,y,s.seed^0x6d3)*.5+.5}; cells.set(key,c); }
@@ -1431,7 +1434,7 @@ function stampShoreSlabs(s,raw,distance,sea,water,land) {
     }
     if (best.keep>1-smooth(.2,1,d/width)) continue;
     const edge=(d2-d1)/(2*Math.max(1,Math.hypot(best.x-next.x,best.y-next.y)))*scale+valueNoise(lx/6,ly/6,s.seed^0x317)*.5,seamed=edge<seam;
-    crystal[i]=seamed?.5:best.shade; protection[i]=1;
+    crystal[i]=seamed?s.crystalShoreSeam:best.shade; protection[i]=1;
     if (wet) heights[i]=clamp(Math.max(raw[i],sea-3.2+best.lift),MIN_HEIGHT,MAX_HEIGHT);
     else if (!seamed) heights[i]=clamp(raw[i]+best.lift*s.plateHeight,MIN_HEIGHT,MAX_HEIGHT);
   }

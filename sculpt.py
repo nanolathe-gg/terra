@@ -104,6 +104,8 @@ KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFa
 # G7 (Crystal): craters with smaller, softer facets (0: the earlier output).
 KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
+# G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
+KNOB_DEFAULTS.update(crystalShoreScale=1, crystalShoreSeam=.5, crystalSeamEnd=.74)
 # E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
 KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
@@ -407,7 +409,10 @@ WORLD_KNOBS = {
                     # pushed 1.6 times harder on the wall.
                     crystalCraterPx=16, crystalCraterStep=1, crystalCraterSkin=1,
                     crystalCraterWeb=1, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
-                    crystalCraterTone=.12, crystalCraterLight=1.6),
+                    crystalCraterTone=.12, crystalCraterLight=1.6,
+                    # G7: finer shore slabs and thinner seams (retail's crystal-3 band: cells 8-14 px, hairline
+                    # seams; the scenes ask for 14 and 24 px plates, which the scale draws at 70%).
+                    crystalShoreScale=.7, crystalShoreSeam=.56, crystalSeamEnd=.68),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,
