@@ -3246,39 +3246,94 @@ read H2's and H4's Done and Still open lists above, and `$R/agent-H4/NOTES.md`.
 
      TNT corners follow the eroded height, as designed. Report the largest
      change per sample, and where it is.
-3. **Marks at 1 px in the engine bake**, all as lit height:
-   - **Rills and gullies** are carved along the flow direction where flow
-     and slope are high. They are 1-3 px wide by flow, continuous
-     downslope, with the spacing item 1 measured.
+3. **Marks at 1 px in the engine bake**, all as lit height.
+
+   > **Owner, 2026-10-29, after item 1:** "Both". Match retail Green by
+   > default, and also build rills, boulders and sand as controls left off
+   > for Green.
+
+   **What item 1 found** (b7eecdd, `measure/weather_marks.py`,
+   `$R/agent-H5/NOTES.md`):
+   - Retail Green's close-up detail is not drainage.
+   - **Grass slopes:** the dark lines follow no fall line. Their angles to
+     it are spread evenly. Green-2's slope has fine 1-px terrace lines 3-4
+     px apart, and soft dark diagonal swaths 20-40 px wide.
+   - **Rock:** the only fall-line marks are 1-2 px cracks, 20-60 px long,
+     in grey outcrops.
+   - **Hills:** grey rock shows through at the rims (green-1).
+   - **Faces** meet the grass at a soft mossy edge.
+   - **Missing in all three windows:** rills, aprons, fans, boulders and
+     sand.
+
+   **3a. Green's retail marks, on by default.** These are driven by the
+   data maps, so the Time controls move them:
+   - **Terrace lines on grass slopes,** less contour-aligned and broken.
+     Green-2's lines are 68% across the fall line today; retail's are 38%.
+     Green-1's 0.15-0.4 shaded bin has 19.7 small specks per 1000 px today,
+     against retail's 8.6.
+   - **Grey outcrops** exposed by wear at hill rims and on steep grass, with
+     1-2 px cracks down the fall line, 20-60 px long.
+   - **Dark wet swaths** along the flow on grass, 20-40 px wide and soft.
+   - **Moss on rock by wetness,** in clumps (`rockMoss`).
+   - **The face's foot** stays a soft mossy edge. Grey specks outside the
+     rock should come at retail's rate: 1.4-2.0 per 1000 px on green-2, most
+     12-30 px from the rock.
+
+   **Measure** with `weather_marks.py`, `slope_marks.py` and the class
+   numbers. The bar: closer to retail than `merge-h4` on these numbers, on
+   all three windows.
+
+   **3b. Beyond retail, off for Green.** Each is a control at 0 in Green's
+   engine values, so Green's default picture doesn't change:
+   - **Rills and gullies** along the flow: 1-3 px wide and continuous
+     downslope.
    - **Debris:** stones and boulders where talus lies, a few px across,
-     with grit between them. They are larger below hard beds (the
-     column's hardness). Fans spread below the mouths of gullies.
+     with grit between them. They are larger below hard beds, and fans
+     spread below the mouths of gullies.
    - **Sand:** fine grain and light ripples where deposit lies.
-   - **Moss on rock, by wetness.** Under engine 1, `rockMoss` becomes the
-     amount placed by wetness, in darker clumps, as retail's are (H4 Still
-     open).
-   - Reuse `boulders()` and `debrisStones()` where they fit, and replace
-     them under engine 1 where they don't.
-   - **Check:** Clay at four suns. The marks must shade with the sun.
-4. **Controls that matter.**
-   - **The controls:** age (`erosionAge`), rain (`erosionRain`), hardness
-     contrast (`columnContrast`), repose (`talusAngle`) and `rockMoss`,
-     plus any control you add.
-   - **Measure each** with `measure/impact.py <name> <lo-root> <hi-root>
-     --sheet <png>`, between its minimum and maximum, on green-1..3.
-     - Report the share of its own class: grass slope for age and rain,
-       rock face for contrast, the cliff-foot debris area for repose.
-     - Add a class to `impact.py` for an area it lacks, such as debris
-       from the talus map.
-     - Do this as soon as item 3's marks exist, not only at the end.
-   - **Under 5% is a finding:** strengthen the control or remove it.
+
+   Show each turned up on the demo mesa (`repro/demo/mesa-beds.json`) and on
+   green-2, at 1× and 2×. Judge by eye, since retail Green has none to
+   compare against. Reuse `boulders()` and `debrisStones()` where they fit.
+
+   **Check:** Clay at four suns for both 3a and 3b. The marks must shade
+   with the sun.
+4. **Controls that matter.** Use `measure/impact.py` (216e59d), which
+   judges 16-px blocks and prints a noise floor. The per-pixel measure
+   counted texture that only moved a pixel or two over.
+   - **Today on `merge-h4`,** as the share of class blocks changed on
+     green-1/2/3:
+
+     | Control | Class | Green-1 | Green-2 | Green-3 | Verdict |
+     | --- | --- | --- | --- | --- | --- |
+     | `erosionAge` | grass slope | 6% | 19% | 8% | modest |
+     | `erosionRain` | grass slope | 0.7% | 1.6% | 1.9% | at the floor |
+     | `columnContrast` | rock face | 9% | 33% | 4% | |
+     | `talusAngle` | grass slope | 1.2% | 0.3% | 0.1% | at the floor |
+     | `rockMoss` | rock face | — | 97% | — | |
+     | `blocks` | rock face | — | 59% | — | |
+     | `blockGrit` | rock face | 0% | 0% | 0% | subtle at 2× |
+     | `blockStep` | rock face | about 0 | about 0 | about 0 | subtle at 2× |
+   - **The four Time controls** (age, rain, hardness contrast, repose)
+     must each reach 5% of their class, clearly above the floor, on
+     Green's windows, through 3a's marks. Rain should drive the swaths
+     and the wetness, and age the exposure. Repose may move to 3b's debris;
+     if so, measure it on the demo with debris on, and say so.
+   - **3b's controls** are measured on green-2 and on the demo between 0
+     and their maximum.
+   - **H4's `blockGrit` and `blockStep`:** strengthen them, or leave them
+     at their defaults and take them out of Green's engine values.
+   - Add a class to `impact.py` for an area it lacks, such as debris from
+     the talus map, or a hill rim.
+   - Measure as soon as the marks exist, not only at the end. **Under 5%
+     is a finding.**
    - **Overrides:**
      - `ovErosion` scales the pass;
      - `ovDeposits` scales deposit, sand and talus;
      - `ovVegetation` scales the moss.
 
      Re-run `repro/demo/overrides-green.json`, and show each override's
-     effect inside its painted region at 1× (≥5% there).
+     effect inside its painted region at 1×.
 5. **Map canvases up to 1168 samples.**
    - Green maps run the same GPU pass over the whole map. The CPU worker
      doesn't run for Green under engine 1. Maps over 1168 samples keep the
