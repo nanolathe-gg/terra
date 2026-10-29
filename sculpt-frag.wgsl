@@ -1470,13 +1470,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The plane is bilinear, so a half threshold keeps a stroke's footprint
         // to within a pixel of where it was painted.
         var shoreHard = u.crispShore;
+        var shoreOwn = true;   // G1: the stroke leaves the shore edge to the world's own
         var edgeHard = u.deepEdge;
         var bedLit = u.bedLit;
         var crackedBed = false;
         if (u.waterOn != 0) {
             crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5;
             let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).gba;
-            if (pick.x > 0.5) { shoreHard = 1.0; } else if (pick.x < -0.5) { shoreHard = 0.0; }
+            if (pick.x > 0.5) { shoreHard = 1.0; shoreOwn = false; } else if (pick.x < -0.5) { shoreHard = 0.0; shoreOwn = false; }
             if (pick.y > 0.5) { edgeHard = 1.0; } else if (pick.y < -0.5) { edgeHard = 0.0; }
             if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
         }
@@ -1539,6 +1540,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // leaves runs and no isolated pixels, which per-pixel hashes did).
                 let off = ((vec2f(shelfNoise(p / 3.0 + 5.3), shelfNoise(p / 3.0 + 37.9)) - 0.5) * 1.0 + (vec2f(shelfNoise(p / 7.0 + 9.1), shelfNoise(p / 7.0 + 77.3)) - 0.5) * 1.6) * u.shoalStairs;
                 crisp = step(0.6, depth + baseHeight(p) - baseHeight(p + off));
+            }
+            if (u.shoalShoreSoft > 0.0 && shoreOwn) {
+                // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
+                // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
+                // banks) and each pixel is cut against its own hash.
+                let gradS = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
+                                               baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
+                let cover = clamp((depth - 0.6) / (max(gradS, 0.15) * u.shoalShoreSoft) + 0.5, 0.0, 1.0);
+                crisp = step(shelfHash(floor(pixel) + 71.0), cover);
             }
             submerged = mix(submerged, crisp, shoreHard);
         }

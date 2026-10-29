@@ -827,6 +827,7 @@ export class TerrainRenderer {
     this.f('uShoalDither', variant.has('shoalDither') ? Number(variant.get('shoalDither')) : 1);
     this.f('uShoalRag', variant.has('shoalRag') ? Number(variant.get('shoalRag')) : 0);
     this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
+    this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
     this.fieldsDirty = true;
   }
 

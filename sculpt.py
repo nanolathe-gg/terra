@@ -154,6 +154,9 @@ KNOB_DEFAULTS.update(shoalRag=0)
 # G1: shoalStairs is how far (px) runs of 1-3 px move a hard waterline, whatever the bank's slope
 # (0: the earlier jitter, whose notch grows with how gently the bank shelves).
 KNOB_DEFAULTS.update(shoalStairs=0)
+# G1: shoalShoreSoft is the width (px) of the dithered blend at the waterline the world draws (a
+# stroke's own Hard or Faded choice is not touched; 0: a clean hard line).
+KNOB_DEFAULTS.update(shoalShoreSoft=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -288,7 +291,11 @@ WORLD_KNOBS = {
                         # 8.4; see Green).
                         bedMottle=.05, bedDots=.2, bedDotCell=9, shoalBump=3, shoalBumpPx=4.5, shoalDither=0,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
-                        shoalRag=4),
+                        shoalRag=4,
+                        # G1 (round 8: "the default should still have a small blur on the edge"): the world's own
+                        # waterline is a 4-px dithered blend of sand and water pixels (retail's is 2-4 px
+                        # of scattered sand in the water's edge); a stroke's Hard and Faded still draw their own.
+                        shoalShoreSoft=4),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
