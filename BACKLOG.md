@@ -91,6 +91,8 @@ branches and the projection fix below, so re-render before judging.
    | H3 | 8863 | 9663 | `$R/agent-H3/out` | `--worlds green` |
    | H4 | 8864 | 9664 | `$R/agent-H4/out` | `--worlds green` |
    | H5 | 8865 | 9665 | `$R/agent-H5/out` | `--worlds green` |
+   | H4b | 8866 | 9666 | `$R/agent-H4b/out` | `--worlds green` |
+   | H7 | 8867 | 9667 | `$R/agent-H7/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -3483,11 +3485,196 @@ supersede round 1).**
   reported.
 - **Regional exactness** at the final level, by `repro/regional.mjs`.
 
-H6 (shape on the GPU) and H7 (progressive rendering), which complete the
-Green slice, are outlined in
+### H4b. Rock blocks on hill rock (Green)
+
+> **Owner, 2026-10-29,** asked whether H4's blocks should reach hill rock:
+> "yes probably".
+
+Read H4's and H5's Done and Still open lists above, and
+`$R/agent-H4/NOTES.md` and `$R/agent-H5/NOTES.md`.
+
+**What is there today.**
+- **Blocks on big faces only.** `blockField` (`engine-bake.wgsl`) runs only
+  inside Green's structured-face gate: painted rock, or slope over
+  `rockFrom` 1.6. In these windows that is green-2's face.
+- **Green-1 and green-3's rock is small hills,** outside that gate. Every
+  block knob moves under 1% of their rock face. Retail's hills show grey
+  rock with 1-2 px cracks down the fall line, at their rims (H5 item 1,
+  `$R/agent-H5/item1/g1-hillfoot-2x.png`).
+- **The `outcrop` control is related.** H5 built it: exposed rock gated
+  by the hardness map, with cracks notched into the height. It ships at 0,
+  because it cost green-1 .009 rock-face Lab. Hill blocks are the same
+  kind of change on the same windows.
+
+**Deliver.**
+1. **A gate for hill rock,** separate from the face gate: rock-face slope
+   (the rock class, .5 and up) outside the structured face. Don't change
+   `rockFrom`: it moves beds and joints elsewhere too.
+2. **Blocks there,** sized for hills: smaller and more broken than on the
+   big face. One control, `hillBlocks` (0-1), sets the amount.
+3. **Judge it with `outcrop`.** Look at the two together on green-1's and
+   green-3's hill crops at 2× against retail. Ship the combination that is
+   closest. If neither helps, ship both at 0 and report the crops.
+
+**Judge:**
+- **By eye** at 1× and 2× against retail, and in Clay at four suns.
+- **Rock-face Lab** (`measure/material_lab.py`): at least as close as
+  `merge-h5` on all three windows (.061 / .046 / .084). Green-2 must be
+  unchanged within noise.
+- **Impact** (`measure/impact.py`): `hillBlocks` and the block knobs
+  should now move 5% or more of green-1's and green-3's rock face.
+- **The guard:** `compare.py ... --worlds green` against `merge-h5`.
+  `engine=0` Green is unchanged.
+- **The map:** `mapcheck.mjs` export, unique tiles and console.
+
+**Done when** NOTES.md has the crops, the Lab and impact numbers, the
+guard and the map check. If hill blocks move green-1 or green-3 away from
+retail beyond noise, `hillBlocks` ships at 0. Rule 5 governs, not the
+owner's lean.
+
+**Files:** `engine-bake.wgsl` and `engine-common.wgsl`; `sculpt.py`
+(`KNOB_DEFAULTS` and Green's `ENGINE_KNOBS`); and in `sculpt-renderer.js`,
+only the lines that set H4's block uniforms.
+
+**Budget:** three render-look-change cycles in all.
+
+**Server and guard:**
+- port 8866, CDP 9666;
+- worktree `../terraform-wt-H4b`;
+- assets `$R/agent-H4b`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h5`;
+- guard `--worlds green`.
+
+### H7. Progressive rendering on the Green slice
+
+> **Owner, 2026-10-29:** "Now that we're on the GPU let's do H7
+> progressive rendering." Fast progressive rendering is one of the three
+> things the owner wants most (decision 4).
+
+Read [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) "Progressive
+rendering" and "Rules for the cards", and H5's Done and Still open lists
+above. Then read Card D phase 3's Done list (search "Phase 3"), which
+built the map canvas this card reschedules.
+
+**What is there today.**
+- **The map canvas** (`sculpt-canvas.js`):
+  - a 128×128 coarse overview;
+  - full-resolution chunk images baked on demand for the visible chunks
+    and one margin, held in an LRU (`sculpt-chunk-renderer.js`).
+- **`quality: 'preview'`** exists in the renderer. It is a cheaper draw at
+  the same resolution (a 192 mesh, fewer shadow taps), not a
+  lower-resolution level.
+- **Weather.** Green's Time pass (H5) runs on the GPU over the whole map
+  up to 1168 samples: 0.36-0.42 s on a 4×4 map. Larger maps keep the
+  tiled CPU worker (H5b).
+- **The queue.** On a freshly loaded 4×4 map, the first Time pass waits
+  behind about 6.4 s of chunk bakes queued before it, so weather is ready
+  about 6.8 s after load. The bakes made before the weather are redone.
+- **Old numbers:** Card D measured a scroll p95 of about 117 ms and about
+  2 s of refinement after a stroke's release. That was before H4 and H5
+  changed the draw and the weather.
+
+**Scope.**
+- The map canvas and the 1024-px study, for Green's engine.
+- Scheduling, levels and what runs when. **No change to any final
+  pixel:** the shaders and `sculpt.py` are not this card's files.
+- Other worlds take the same scheduling, and their final pictures must
+  not change either.
+
+**Deliver.**
+
+1. **Measure first.** This is a stop point: hand back the numbers before
+   building levels.
+   - **A dev tool,** `repro/perf.mjs`. It loads a scene on a map canvas
+     headless and scripts these, writing JSON:
+     - the load: time to the first picture, to weather ready, and to every
+       visible chunk at final;
+     - a stroke drag: frame times;
+     - the release: time to final in view;
+     - a scroll: frame times, and time to final after it stops;
+     - an export: its time.
+   - **Split the time** between shape replay (JS), field upload, the Time
+     pass (GPU), chunk bakes, the draw, readbacks and GPU queue wait.
+     Use the renderer's timestamp queries.
+   - **Run it on** a 4×4 Green map (mapcheck's scene) and an 8×8 Green
+     map, which takes the CPU worker. Run the study as well.
+   - **Report the baseline** and stop.
+2. **Order the work.**
+   - The Time pass is submitted before any chunk bake that reads its
+     height.
+   - A queued bake is dropped when the scene changes under it (the
+     canvas's epoch), so stale work never runs.
+   - This fixes H5's 6.8 s, and it is probably the biggest single win.
+     Measure it on its own.
+3. **Levels.** These are overview (the existing 128²), quarter and final.
+   - **Quarter** means a chunk baked at a quarter of its resolution and
+     drawn scaled, not the `preview` draw. Every stage is defined in world
+     units, and the materials have H4's footprint mips for this.
+   - **State the resolution rule for each stage** at quarter (the card
+     rule): the Time pass, the bake and the material level.
+   - **Show one chunk at quarter and final, side by side.** It must be
+     recognisably the same picture.
+   - **Order of refinement:** visible chunks first, then the margin, then
+     the rest when idle.
+   - **A debug overlay** marks each chunk's level.
+   - **Memory:** report what the quarter images cost against the budgets.
+4. **While dragging and after release:**
+   - **While dragging:**
+     - shape updates live;
+     - the Time pass keeps its last result under the stale badge;
+     - only the dirty chunks redraw, at quarter or with the fast draw.
+   - **On release:** the Time pass runs, then the visible chunks refine
+     to final, then the rest.
+   - **The study** takes the same order where it applies.
+5. **Targets,** set against item 1's baseline, not as absolutes:
+   - time to final in view, after load and after release: at most half
+     the baseline;
+   - drag frame p95: under 33 ms, or under the baseline if that is already
+     lower;
+   - scroll: something is always on screen. Report the p95, and the time
+     to final after scrolling stops.
+
+**Exactness** (a done-when, not a nice-to-have). The final level must be
+unchanged:
+- `compare.py ... --worlds none` against the baseline renders: all 27
+  study scenes exact;
+- the 4×4 export: TNT bytes and the indexed PNG's hash identical to the
+  same export on the baseline;
+- `repro/regional.mjs` on the scenes it covers: 0 mismatches.
+
+The quarter and overview levels may differ; export waits for final.
+
+**Done when** NOTES.md has:
+- item 1's baseline;
+- the order fix measured on its own;
+- the levels with their resolution rules and the side-by-side;
+- the targets met, or by how much they were missed;
+- memory;
+- the exactness checks.
+
+**Files:** `sculpt-canvas.js`, `sculpt-chunk-renderer.js`, the scheduling
+in `sculpt-renderer.js`, the submission order in `sculpt-erosion.js`,
+`sculpt-map-weather.js`, the study's scheduling in `sculpt.js`, and the
+new `repro/perf.mjs`. Not any `.wgsl` file, and not `sculpt.py`.
+
+**Budget:**
+- Item 1 is a stop point.
+- After it, items 2-4 are each their own commit.
+- If the budget runs short, stop after item 2 with NOTES.md saying what
+  remains. Item 2 alone is worth landing.
+
+**Server and guard:**
+- port 8867, CDP 9667;
+- worktree `../terraform-wt-H7`;
+- assets `$R/agent-H7`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h4b` (H4b's merge; until then,
+  `merge-h5`);
+- guard `--worlds none`.
+
+H6 (shape on the GPU) is outlined in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
-card from H3 on follows. Each is written here in full when the card before
-it lands.
+card from H3 on follows. It is written here in full when the owner asks
+for it.
 
 ## After the cards
 
