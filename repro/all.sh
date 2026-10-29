@@ -2,11 +2,12 @@
 # Render every scenes/<world>.json against one server and tile the pairs.
 #   repro/all.sh <out-dir> [server] [cdp-port]
 # Retail crops are read from $REPRO_CROPS/<world> (retail_crop.py output;
-# default /private/tmp/nanolathe-map-editor/repro). Writes <out-dir>/<world>/
+# default /private/tmp/nanolathe-map-editor/repro-r7, the crops every merge
+# since round 7 is judged on). Writes <out-dir>/<world>/
 # pair.png and layout.png, and <out-dir>/sheet.png with every world.
 set -e
 out=$1; server=${2:-http://127.0.0.1:8801}; port=${3:-9450}
-crops=${REPRO_CROPS:-/private/tmp/nanolathe-map-editor/repro}
+crops=${REPRO_CROPS:-/private/tmp/nanolathe-map-editor/repro-r7}
 py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
