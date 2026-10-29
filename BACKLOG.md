@@ -2599,7 +2599,8 @@ card.
 
 ### H2b. Erosion on map canvases — outline
 
-Written when H2 lands.
+This now belongs to H5 (progressive rendering) in
+[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards).
 
 - A coarse pass over the whole map, then fine tiles with aprons, so that
   drainage reaches across tiles.
@@ -2615,8 +2616,11 @@ Written when H2 lands.
 - Whether the GPU pass replaces the worker for a world is settled when that
   world is ported.
 
-H3 (the material table and placement rules) and H4 (panels, presets,
-painted overrides and data map views) are written when H2 lands.
+H3 (one material model), H4 (shape on the GPU) and H5 (progressive
+rendering) are outlined in
+[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
+card from H3 on follows. Each is written here in full when the card before
+it lands.
 
 ## After the cards
 

@@ -1,6 +1,6 @@
 # Terrain engine: ground, time, surface and light (design)
 
-Agreed with the owner on 2026-10-28. It refines
+Agreed with the owner on 2026-10-28, and updated on 2026-10-29. It refines
 [PLAN_TERRAIN_EDITOR](PLAN_TERRAIN_EDITOR.md) §5 (the parameter model) and
 §6 (the target pipeline). Those sections remain the target. This page says
 what changes now, and in what order.
@@ -17,6 +17,24 @@ what changes now, and in what order.
 3. **Order.** Card H1 (lit relief) first, then H2 (rock column and erosion).
    Green goes first. The engine must also make ice shelves, crystal mounds
    and shores, not only rock geology, so keep the other worlds in mind.
+
+## Decisions (owner, 2026-10-29)
+
+After a day of designing with the editor, the owner found too many knobs,
+many of which do little, and no way to override a world-wide setting for one
+feature.
+
+4. **Priority.** *"I think what I want most is everything on the GPU, a
+   simplified/unified geology/surface/erosion/texture model that can still
+   mimic retail terrain features, and fast progressive rendering. Those are
+   by far the most important to simplify and get right."*
+5. **Per-feature overrides.** A feature can override the world's settings
+   around it. The owner's example: keep erosion's sand deposits around one
+   feature, and lessen them around a second.
+6. **Later:**
+   - Go and `gogpu/wgpu` wait.
+   - So do the knob audit and replacing `sculpt.py`'s server.
+   - The UI pass comes last.
 
 ## Why change
 
@@ -213,6 +231,10 @@ palette.
 - **Paint to override.** Any main control can be painted locally: older
   here, wetter here, granite here. This generalises PLAN §5.1's shape
   override and FLOW_BAKE's rain mask.
+- **Features override too.** A feature can carry the same overrides, which
+  apply around it with a soft edge. For example, sand deposits can be kept
+  around one hill and lessened around another. Painting and features write
+  the same override fields.
 - **Data map views.** Any data map can be overlaid. Hovering names the
   material that won and the rule that placed it. `diagnosticView` grows
   into this.
@@ -221,9 +243,10 @@ palette.
 
 ## Migration
 
-- **Build beside the per-world code.** Port one world at a time. Retire a
-  world's old branches only when its preset is at least as close to retail
-  on all three windows: by eye, and by `repro/stats.py`.
+- **Build beside the per-world code.** Port one world at a time.
+- **Delete its old branches in the same card,** once its preset is at
+  least as close to retail on all three windows: by eye, and by
+  `repro/stats.py`.
 - **Unported worlds** must keep matching their renders exactly under the
   `compare.py` guard, as now.
 - **Order of worlds:**
@@ -236,17 +259,90 @@ palette.
   25+ are free. The data maps need more. Growing the layer count is a
   bounded change, but it costs memory per chunk on 40×40 maps.
 
+## Rules for the cards
+
+These hold for every H card from H3 on.
+
+- **Retire what you replace.** A card that moves Green onto the model is
+  not done until it has deleted what the model replaced: branches,
+  uniforms, knobs and Python steps. The three-window check must pass after
+  the deletion. Gating new work behind a knob and keeping the old path is
+  how the editor reached 400 knobs.
+- **Report how much simpler it got.** Put it in the Done list, beside the
+  retail numbers, against this baseline (terraform 467c744):
+
+  | Measure | Today |
+  | --- | --- |
+  | Shader lines (frag, bake, common) | 2,070, 1,247 and 648 |
+  | Uniforms | 350 |
+  | Knobs (set by Green) | 400 (79) |
+  | CPU workers: weathering, sand and flow (JS lines) | 1,359 |
+  | Python material preparation (lines) | 3,044 |
+- **State the resolution.** Each pass says what sample spacing and tile size
+  it runs at, and shows it working at a quarter of final resolution and at
+  final. A pass that works at only one resolution blocks progressive
+  rendering.
+- **Overrides from the start.** Every agent rate and placement rule is
+  multiplied by its override field, which is 1 wherever nothing overrides
+  it. The controls that set it per feature can come with the UI pass.
+
 ## Cards
 
 The cards are in [BACKLOG.md](../BACKLOG.md#cards-h-the-terrain-engine).
+Each is written in full when the one before it lands.
 
 | Card | What it does | Status |
 | --- | --- | --- |
 | H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
-| H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Written |
-| H2b | Erosion on map canvases: coarse and fine tiles, the bake node, stored planes | Outlined |
-| H3 | Material table and placement rules (Green) | Not yet written |
-| H4 | Panels, presets, painted overrides, data map views | Not yet written |
+| H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Running |
+| H3 | One material model on the GPU (Green), with override fields | Outlined |
+| H4 | Shape on the GPU: strokes evaluated by compute passes | Outlined |
+| H5 | Progressive rendering, and erosion on map canvases (was H2b) | Outlined |
+| Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
+| Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
+
+**H3, one material model (Green):**
+- **A material** is:
+  - its colour, from an exemplar texture already prepared under
+    `assets-*` and a ramp;
+  - its relief generator;
+  - its shine.
+- **One placement function** picks and blends the materials. It reads the
+  data maps (slope, height above the plain and the sea, curvature, aspect,
+  flow, wear, deposit, talus) and the paint.
+- **It replaces** Green's branches in `sculpt-frag.wgsl`, its relief
+  generators in `relief-bake.wgsl`, and its Python material preparation.
+- **Override fields:** one per main control. H2's erosion reads its own.
+- **Precondition, to settle before dispatch.** macOS's `/tmp` cleaner
+  deleted the retail sources that Python material preparation reads
+  (2026-10-29). Either H3 works only from the prepared PNGs under
+  `assets-*`, or the sources are regenerated first.
+
+**H4, shape on the GPU:**
+- Compute passes evaluate the strokes, beside the JS engine and behind a
+  switch.
+- It goes brush by brush, starting with the kinds Green's windows use:
+  hill, mountain, deep, erase, paint and the ground node. The JS engine
+  stays the reference for the rest.
+- **The guard.** Changing the arithmetic moves every render it touches.
+  The switch is on only for the scenes being ported, so the other windows
+  still match exactly.
+- **Regional exactness** needs its own GPU check: a window replayed against
+  the whole map, on one machine. Otherwise the guarantee is dropped
+  deliberately, and recorded as dropped.
+
+**H5, progressive rendering:**
+- **Measure first,** on a 4×4 map: where the time goes between shape
+  replay, weather, the bake and the draw. Card D measured a scroll p95 of
+  about 117 ms and about 2 s of refinement after release. If weather
+  dominates, H4 and H5 may swap.
+- **Then:**
+  - the three levels (overview, quarter, final);
+  - coarse passes over the whole map;
+  - visible tiles first;
+  - the fast path while dragging;
+  - H2b's erosion on map canvases: coarse and fine tiles, the bake node,
+    and stored planes.
 
 ## Constraints
 
