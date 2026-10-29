@@ -295,7 +295,8 @@ Each is written in full when the one before it lands.
 | --- | --- | --- |
 | H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
 | H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Merged fef3abb |
-| H3 | One material model on the GPU (Green), with override fields | Outlined |
+| H3 | One material model on the GPU (Green), with override fields | Written |
+| H3b | Rock blocks from the column (Green) | Outlined |
 | H4 | Shape on the GPU: strokes evaluated by compute passes | Outlined |
 | H5 | Progressive rendering, and erosion on map canvases (was H2b) | Outlined |
 | Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
@@ -329,9 +330,9 @@ Each is written in full when the one before it lands.
   - its relief generators in `relief-bake.wgsl`;
   - its Python material preparation;
   - the material field the worker still computes on the CPU.
-- **Rock relief** takes over H2's item 4, crisp blocks. H2 showed that the
-  2-px erosion grid cannot resolve Green's beds, so the face's look comes
-  from the rock's relief generator, reading the column.
+- **Rock relief:** H2's item 4, crisp blocks, becomes H3b. H2 showed that
+  the 2-px erosion grid cannot resolve Green's beds, so the face's look
+  comes from the rock's relief generator, reading the column.
 - **Override fields:** one per main control. H2's erosion reads its own.
 - **Where a material can't yet be made from numbers** (for example the
   plain's exact retail tiles), say which, measure the gap, and keep it

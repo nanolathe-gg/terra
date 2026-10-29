@@ -88,6 +88,7 @@ branches and the projection fix below, so re-render before judging.
    | G8 | 8860 | 9660 | `$R/agent-G8/out` | `--worlds moon` |
    | H1 | 8861 | 9661 | `$R/agent-H1/out` | `--worlds green` |
    | H2 | 8862 | 9662 | `$R/agent-H2/out` | `--worlds green` |
+   | H3 | 8863 | 9663 | `$R/agent-H3/out` | `--worlds green` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -2669,8 +2670,190 @@ This now belongs to H5 (progressive rendering) in
 - Whether the GPU pass replaces the worker for a world is settled when that
   world is ported.
 
-H3 (one material model), H4 (shape on the GPU) and H5 (progressive
-rendering) are outlined in
+### H3. One material model, from numbers, on the GPU (Green)
+
+> **Owner, 2026-10-29:** "what I want most is everything on the GPU, a
+> simplified/unified geology/surface/erosion/texture model that can still
+> mimic retail terrain features, and fast progressive rendering." On this
+> card: "work with the existing images. I'm not exactly sure what it's
+> doing, but we should codify the retail information in some way that no
+> longer requires it when running to keep things simple and allow for easy
+> cloud development."
+
+Read [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) first, including
+"Rules for the cards", which this card follows. Note the provenance rule:
+tables measured from retail art are fine to keep, but retail pixels are
+never a run-time input and never go in git.
+
+**What is there today.**
+- **Prepared images.** Green's look comes from images under
+  `$R/assets-green/`. A Python preparation made them from retail art; its
+  sources are gone, and every server runs `--prepared`.
+  - Retail-derived: `grass.png`, `rock.png`, `slope-grass.png`,
+    `slope-rock.png` (`hillRock`), `rock-weathered.png`, `rock-fractured.png`,
+    `ground-tiles.png` (exact palette tiles cut from retail's plain), and the
+    water images.
+  - Probably ours (generated): `noise*.png` and `fractures.png`. Confirm
+    this in the inventory.
+  - `palette-pairs.png` is built from the TA palette.
+  - `config.json`'s `material` block holds measured numbers, such as
+    `rockMeanRGB` and `hillRockMeanRGB`.
+- **The draw.** `fragmentMain` in `sculpt-frag.wgsl` (lines 1118-2070)
+  samples those images and chooses between them through a long chain of
+  knob-gated decisions: slope classes, `rockFrom`, coverage, transitions,
+  paint, deposits, moss, `faceRock`, and more. Green sets 79 knobs.
+- **The CPU material field.** `sculpt-material-weathering.js` computes it in
+  the weathering worker (grid-texture layer 1). The draw reads it through
+  `materialFieldAt`.
+- **Landforms already carry paint.** A plateau, offset, hill, mountain,
+  crater, deep or shallow stroke can have "Paint inside" and "Style"
+  options, which `applyShapeMask` in `sculpt.js` writes over the shape's
+  footprint, weighted by its influence. These are `MASK_CHOICES` and
+  `STYLE_CHOICES`, in mask planes 0-13. Planes 14-19 are free.
+
+**Scope.**
+- Green's land materials: plain grass, slope grass, rock, slope rock,
+  weathered and fractured rock, and any loose material (soil, sand, scree)
+  its draw uses.
+- Water, shore and the water bed stay as they are; they are a later card.
+- The rock face's crisp blocks are H3b, after this card.
+- Every other world must match `before` exactly.
+
+**Deliver.**
+
+1. **Inventory (no code).** For Green, with its knobs, write in NOTES.md:
+   - every material the draw can show, which image or function makes its
+     colour, and the conditions that place it (with line references);
+   - every knob Green sets that those paths read;
+   - which images are retail pixels and which are ours.
+
+   This table is the contract for items 3 and 6.
+2. **Numbers.** Write `measure/material_numbers.py`, a dev tool that is
+   never run by the server. It reads each prepared image and writes the
+   material's numbers to a committed table, `materials/green.json`:
+   - a colour ramp: RGB at, for example, 12 luma quantiles;
+   - the grain: luma amplitude in octave bands from 1 to 32 px, and any
+     direction or stretch;
+   - anything else a material needs to be recognised, such as dark flecks
+     or two-tone mixes, and why.
+
+   Keep the table small, so it reads as data. It replaces the images at
+   run time.
+3. **The material function** (`materialModel`; 0 keeps today's images).
+   - One WGSL function makes a material's colour at a pixel from its
+     numbers: band-limited noise with the measured band amplitudes, mapped
+     through the measured luma distribution to the ramp. It reads no
+     image.
+   - **Footprint.** It takes the pixel size and leaves out bands finer than
+     it, so a quarter-resolution draw keeps the same mean and broad pattern
+     (rule: state the resolution).
+   - **Swatches first.** For each material, a sheet of the prepared image
+     next to the generated one, at 1× and 2×, with the palette on, and its
+     numbers (mean, s.d., the s.d. after a 5-px blur, band amplitudes,
+     hue) side by side. Reach the numbers before you judge the windows.
+   - The map generator found that brightness plus noise never matched
+     retail's palette art, but neighbour models of palette indices did
+     (memory of proto/mapgen-features). If the swatches cannot get close,
+     try a GPU-friendly neighbour model (for example checkerboard updates
+     conditioned on four neighbours) before giving up. Record what you
+     tried.
+4. **One placement function.**
+   - It returns material weights from the data maps: slope, height above
+     the plain and the sea, curvature, the column's hardness at the
+     surface, flow, deposit and talus (H2), and the paint and style planes.
+   - Its rules are rows in `materials/green.json`, such as thresholds and
+     blend widths, not code branches.
+   - It replaces the chain of decisions in item 1's inventory, and the CPU
+     material field, if the deposit and talus maps can do its job.
+   - Blends compare the materials' own heights where they have relief, so
+     grass lies between stones rather than fading over them.
+5. **Override fields.**
+   - Planes 14-17 become overrides:
+     - 14, erosion;
+     - 15, deposits (loose material and sand);
+     - 16, vegetation (grass and moss);
+     - 17, rock exposure.
+   - A plane's signed value v multiplies its control by 1 + v, so an
+     untouched plane (0) changes nothing.
+   - Rename their `MASK_KEYS` entries (`free14`...). Saved sketches and
+     documents hold zero planes there, so old saves load unchanged; check
+     one.
+   - The placement function multiplies by them. H2's erosion pass
+     multiplies its rate by the erosion plane, read from the same planes on
+     the CPU side.
+   - Add them to the Paint brush and to the landforms' Style options
+     (`STYLE_CHOICES`), "more" and "less" for each, so `applyShapeMask`
+     writes them over a feature's footprint.
+   - Demonstrate the owner's case on a demo scene
+     (`repro/demo/overrides-green.json`): two hills, sand or loose deposits
+     kept around one and lessened around the other.
+6. **Retire.** Once Green's three windows are at least as close with
+   `materialModel` 1 (rule 5), delete what the model replaced:
+   - the knob-gated paths that only Green took;
+   - Green's knobs that now do nothing (remove each from WORLD_KNOBS, and
+     from KNOB_DEFAULTS if no world reads it);
+   - Green's image reads;
+   - Green's part of the Python material preparation, keeping anything
+     another world still uses (list what stays and for whom).
+
+   The three-window check and the guard must pass after the deletion. If a
+   material cannot yet be made from numbers (the plain's exact tiles may
+   be one), keep its image, and measure and record the gap.
+7. **Map canvases.** The draw is shared, so the model also runs in chunked
+   maps. Check a 4×4 Green map with `$R/agent-H3/mapcheck.mjs` (usage at
+   its top): no seams, no console errors, and the export succeeds.
+
+**Judge**:
+- **The swatches** (item 3).
+- **green-1..3 against retail,** palette on, at 1× and 2×.
+- **Surface classes.** Use `repro/stats.py` for the windows (luma, Lab
+  histogram distance, edge density, against Green's retail family), plus
+  your own numbers per surface class: flat plain, grass slope and rock face.
+  For each: mean luma, s.d., s.d. after a 5-px blur, and hue.
+- **The face,** with `$R/agent-H1/face.py` and `$R/agent-H2/runs.py`. They
+  must not get worse beyond noise. After H2, mean, s.d., share under 30,
+  p90 gradient and dark runs are 44.1, 26.0, .252, 17.4 and .032 / .354;
+  retail is 45.8, 27.2, .245, 17.6 and .071 / .248.
+- **The override demo** (item 5).
+- **The guard,** `--worlds green`.
+
+**Done when** NOTES.md has:
+- the inventory;
+- `materials/green.json` and how each number was measured;
+- the swatch sheets;
+- the window and class numbers, before and after;
+- the override demo;
+- what was deleted and what stays (and why);
+- the simplicity table from "Rules for the cards", before and after:
+  shader lines, uniforms, knobs (Green's), JS worker lines, Python
+  material lines;
+- the map check;
+- the cost: draw and bake time on green-2.
+
+**Order and budget.**
+- Do items 1-4 first, committing per idea. If they use up the card, stop
+  with NOTES.md; 5-7 can follow as their own card.
+- Never merge a model that is gated but not retired: say in NOTES.md what
+  item 6 still has to delete.
+
+**Server and guard:** port 8863, CDP 9663, guard `--worlds green`.
+
+### H3b. Rock blocks (Green) — outline
+
+Written when H3 lands.
+
+- **What it adds.** Rock relief from the column: joints cut each bed into
+  blocks, each block is a plane with a small tilt, and the crevices stay
+  continuous along the bed boundaries and the joints. Hard beds make larger
+  and cleaner blocks.
+- **Why it isn't erosion.** H2 showed the 2-px erosion grid cannot resolve
+  Green's beds, so this look has to come from relief.
+- **Measured by** `runs.py` (dark runs; see H2) and `face.py`.
+- **Replaces** Green's facets and the bed relief it supersedes, and deletes
+  them (the card rules).
+
+
+H4 (shape on the GPU) and H5 (progressive rendering) are outlined in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
 card from H3 on follows. Each is written here in full when the card before
 it lands.
