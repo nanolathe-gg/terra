@@ -19,7 +19,7 @@ struct MP {
     wetReach: f32,    // samples: the radius over which flow wets the ground beside it
     talusFull: f32,   // debris depth (height units) that counts as full talus
     wearFull: f32,    // rock lowered by this much (height units) counts as full wear
-    pad: f32,
+    flowK: f32,       // flow units at which the saturating flow map reaches one half
 }
 
 @group(1) @binding(0) var<uniform> mp: MP;
@@ -33,7 +33,7 @@ struct MP {
 
 fn at(x: i32, y: i32) -> u32 { let n = i32(mp.grid); return u32(clamp(y, 0, n - 1) * n + clamp(x, 0, n - 1)); }
 fn ground(i: u32) -> f32 { let s = state[i]; return s.x + s.y; }
-fn flowAt(i: u32) -> f32 { let f = totals[i].x * mp.flowScale; return f / (f + 4.0); }
+fn flowAt(i: u32) -> f32 { let f = totals[i].x * mp.flowScale; return f / (f + mp.flowK); }
 
 @compute @workgroup_size(8, 8)
 fn mapsMain(@builtin(global_invocation_id) id: vec3u) {
@@ -70,7 +70,7 @@ fn mapsMain(@builtin(global_invocation_id) id: vec3u) {
             wsum += w;
         }
     }
-    wet = clamp(2.2 * wet / wsum + 0.6 * smoothstep(0.0, 0.004, c.z), 0.0, 1.0);
+    wet = clamp(2.0 * wet / wsum, 0.0, 1.0);
     let wear = smoothstep(0.0, mp.wearFull, max(0.0, authored[i] - c.x));
     var hardness = 0.0;
     if (u.column > 0.0) { hardness = columnAt(c.x + f.w).hardness; }

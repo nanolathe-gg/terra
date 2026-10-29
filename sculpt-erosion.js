@@ -139,7 +139,7 @@ export class GpuErosion {
       const mp = await this.mapsPipeline();
       authoredBuffer = make('erosion authored', n * 4); device.queue.writeBuffer(authoredBuffer, 0, request.height);
       mapParams = make('erosion map params', 32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
-      device.queue.writeBuffer(mapParams, 0, new Float32Array([grid, spacing, .36 / (age * rain), request.sand ?? 0, request.wetReach ?? 3, request.talusFull ?? 2.5, request.wearFull ?? 6, 0]));
+      device.queue.writeBuffer(mapParams, 0, new Float32Array([grid, spacing, .36 / (age * rain), request.sand ?? 0, request.wetReach ?? 3, request.talusFull ?? 2.5, request.wearFull ?? 6, request.flowK ?? 4]));
       mapBuffers = [0, 1, 2].map(k => make('erosion map ' + k, n * 4, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC));
       const mapGroup = device.createBindGroup({layout: mp.layout, entries: [mapParams, s1, acc, fixedBuffer, authoredBuffer, ...mapBuffers].map((b, binding) => ({binding, resource: {buffer: b}}))});
       const second = encoder.beginComputePass({label: 'erosion maps'});

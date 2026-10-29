@@ -1039,7 +1039,11 @@ export class TerrainRenderer {
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const set = (name, value) => this.set(name, Number(value));
     set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
-    if (this.engine) set('uWeatherMaps', this.weatherMaps ? 1 : 0);
+    if (this.engine) {
+      set('uWeatherMaps', this.weatherMaps ? 1 : 0);
+      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['outcrop', 0], ['rockCrack', 0], ['mossWet', 0], ['speckDensity', 0], ['rillDepth', 0], ['rillSpacing', 8], ['stoneDensity', 0], ['stoneSize', 5]])
+        set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
+    }
     set('uReliefScale', number('reliefScale', 28));
     set('uReliefAmount', number('reliefAmount', 0.5));
     set('uReliefBranch', number('reliefBranch', 2.0));

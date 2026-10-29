@@ -1375,6 +1375,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // H3 item 4: one placement function (greenPlace); its thresholds are rows of materials/green.json.
     let place = greenPlace(p, h, g, broad, slope, n, weather, route, painted);
     var exposed = place.exposed;
+    // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
+    let timeMaps = timeMapsAt(p);
+    exposed = max(exposed, outcropAt(p, slope, timeMaps.wear) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
     let sandBar = 0.0;
     let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
@@ -1421,7 +1424,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
         let ledge = smoothstep(0.1, 0.7, place.top);
         let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
-        let want = u.rockMoss * place.vegetation * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+        let wetMoss = mix(1.0, 0.25 + 1.6 * timeMaps.wet, u.mossWet);   // H5 3a: moss grows where water runs
+        let want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
         let fleck = step(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
         material = mix(material, saturate(slopeBased * vec3f(1.0, 1.25, 0.95)), fleck);
     }
@@ -1544,6 +1548,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.reliefMode != 1) { cleft = smoothstep(0.15, 1.20, fractureDepth(p, h, slope)); }
     material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
+    // H5 3a: wet swaths. Water darkens grass along its flow: soft streaks 15-40 px across and 70 px along the fall line, where the
+    // wetness map is high and the ground slopes (the retail slopes' diagonal dark swaths, 20-40 px wide).
+    if (u.wetSwath > 0.0 && u.weatherMaps > 0.5) {
+        let flen = length(timeMaps.fall);
+        if (flen > 0.05) {
+            let fl = timeMaps.fall / flen;
+            let q = vec2f(dot(p, vec2f(-fl.y, fl.x)) / 16.0, dot(p, fl) / 70.0);
+            let streak = smoothstep(0.30, 0.72, valueNoise(q + 13.0) * 0.5 + 0.5 + 0.18 * valueNoise(q * 3.0 + 5.0));
+            material *= 1.0 - u.wetSwath * timeMaps.wet * streak * smoothstep(0.06, 0.25, slope) * (1.0 - exposed) * place.vegetation;
+        }
+    }
     // Retail Archipelago sand runs level to a crisp waterline (hundred
     // isles): its low bank shows no light, shade or wet band. With flatBank
     // the dry ground below the plain is lit as level and stays dry-coloured.

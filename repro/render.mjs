@@ -66,6 +66,9 @@ try {
   if (erosionOn) {
     const e = await ev(`(() => { const e = window.lastErosion; return e && {grid: e.grid, size: e.size, authored: Array.from(e.authored), height: Array.from(e.height), debris: Array.from(e.debris), offset: Array.from(e.offset), protect: e.protect ? Array.from(e.protect) : null, seaLevel: e.seaLevel}; })()`);
     if (e) writeFileSync(`${out}/ours-erosion.json`, JSON.stringify(e));
+    // H5: the Time pass's packed maps (layer 0, 2, 3 of gridTexture), as raw rgba8, grid x grid each.
+    const m = await ev(`(() => { const m = window.lastErosion?.maps; return m && m.map(a => btoa(String.fromCharCode(...a.subarray(0, 65536))) + '|' + Array.from({length: Math.ceil(a.length / 65536) - 1}, (_, k) => btoa(String.fromCharCode(...a.subarray(65536 * (k + 1), 65536 * (k + 2))))).join('|')); })()`);
+    if (m) m.forEach((text, k) => writeFileSync(`${out}/ours-map${k}.bin`, Buffer.concat(text.split('|').map(t => Buffer.from(t, 'base64')))));
   }
   console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
   ws.close();
