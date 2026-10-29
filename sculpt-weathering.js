@@ -232,6 +232,12 @@ async function weather(request) {
     }
     await publish(1,true);
   }
+  if (request.eroded) {
+    // H2: the GPU pass (sculpt-erosion.js) did the hydraulic and thermal work within the bounds above; its height, flow
+    // and deposit stand in for the droplets and the talus passes, and the apron, sand and material field run as always.
+    height.set(request.eroded.map(h => h-outputSea)); flow.set(request.erodedFlow); deposited.set(request.erodedDeposit);
+    await finish(); return;
+  }
   if (!activeCount || !intensity) { await finish(); return; }
   if (!await publish(.06)) return;
 

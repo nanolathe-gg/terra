@@ -388,6 +388,11 @@ struct Uniforms {
     // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
+    // H2 (rock column, Green). Every default is the earlier look.
+    column: f32,          // 0: each bed's thickness and strength come from a hash; 1: from the rock column below (columnAt)
+    columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
+    columnCount: f32,     // beds in the column, 1..8, that repeat upward
+    columnBeds: array<vec4f, 8>,   // per bed: x thickness (height units), y hardness 0..1, z material slot (H3, unused here)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
@@ -403,6 +408,65 @@ struct Uniforms {
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
+
+fn cellHash(c: vec2f) -> vec2f {
+    let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
+    return fract(sin(q) * 43758.5453);
+}
+
+fn valueNoise(q: vec2f) -> f32 {
+    let c = floor(q);
+    let f = fract(q);
+    let fade = f * f * (3.0 - 2.0 * f);   // GLSL: u
+    let a = cellHash(c).x;
+    let b = cellHash(c + vec2f(1.0, 0.0)).x;
+    let d = cellHash(c + vec2f(0.0, 1.0)).x;
+    let e = cellHash(c + vec2f(1.0, 1.0)).x;
+    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+
+// H2 rock column: the bed coordinate, in height units, at world point p for a
+// rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both
+// call it with the surface height of the grid they hold, so a ledge erosion leaves
+// stands where the bake draws one: it depends only on (p, z), not on the smoothed
+// ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip) and the broad wander are the
+// hash beds' own, at the same scale (the bed spacing).
+fn columnOffset(p: vec2f) -> f32 {
+    let a = radians(u.bedDipDir);
+    let tilt = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
+    let S = max(u.bedSpacing, 2.0);
+    let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
+    return tilt + wander;
+}
+fn columnCoord(p: vec2f, z: f32) -> f32 { return z + columnOffset(p); }
+
+struct ColumnBed { index: f32, hardness: f32, through: f32, thick: f32 }
+
+// The bed at coordinate c: its running index (unique along the whole column, so
+// hashes keyed on it differ from cycle to cycle), hardness 0..1, how far through the bed
+// c lies (0 at its foot, 1 at its top) and its thickness. The column repeats upward.
+fn columnAt(c: f32) -> ColumnBed {
+    let n = max(i32(u.columnCount), 1);
+    var period = 0.0;
+    for (var i = 0; i < n; i++) { period += u.columnBeds[i].x; }
+    let cycle = floor(c / period);
+    let r = c - cycle * period;
+    var bed: ColumnBed;
+    var lo = 0.0;
+    for (var i = 0; i < n; i++) {
+        let t = u.columnBeds[i].x;
+        if (r < lo + t || i == n - 1) {
+            bed.index = cycle * f32(n) + f32(i);
+            bed.hardness = u.columnBeds[i].y;
+            bed.through = clamp((r - lo) / t, 0.0, 1.0);
+            bed.thick = t;
+            return bed;
+        }
+        lo += t;
+    }
+    return bed;
+}
+#ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
 @group(0) @binding(3) var fracturesTex: texture_2d<f32>;
@@ -646,3 +710,4 @@ fn surfaceGradient(p: vec2f) -> vec2f {
     return vec2f(surfaceHeight(p + vec2f(e, 0.0)) - surfaceHeight(p - vec2f(e, 0.0)),
                  surfaceHeight(p + vec2f(0.0, e)) - surfaceHeight(p - vec2f(0.0, e))) / (2.0 * e);
 }
+#endif

@@ -143,6 +143,7 @@ export class TerrainRenderer {
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
+    this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
     this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
@@ -887,6 +888,31 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
   }
 
+  variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
+
+  // H2: the GPU erosion pass (sculpt-erosion.js, erosion.wgsl), built on first use.
+  async erode(request) {
+    if (!this.erosion) {
+      const source = await (await fetch('/erosion.wgsl')).text();
+      const {GpuErosion} = await import('./sculpt-erosion.js');
+      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])));
+    }
+    return this.erosion.run(request);
+  }
+
+  // H2 rock column (0: the hash beds, as before). columnBeds is "thickness:hardness:slot,..." (up to eight, height
+  // units, 0..1, H3's material slot); erosion reads the same uniforms, so the bake and the pass share one column.
+  setColumn() {
+    const v = this.variant;
+    const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
+    const beds = String(v.get('columnBeds') || '5:.5:0').split(',').slice(0, 8).map(s => s.split(':').map(Number))
+      .filter(b => b[0] > 0).map(b => [b[0], Math.min(1, Math.max(0, b[1] || 0)), b[2] || 0, 0]);
+    this.set('uColumn', number('column', 0));
+    this.set('uColumnContrast', number('columnContrast', 1));
+    this.set('uColumnCount', Math.max(1, beds.length));
+    this.set('uColumnBeds', beds.length ? beds : [[5, .5, 0, 0]]);
+  }
+
   // Encodes the bake into the given encoder, or submits it on its own.
   bakeFields(quality = 'full', encoder = null, timer = null) {
     const preview = quality !== 'full';
@@ -1006,6 +1032,7 @@ export class TerrainRenderer {
     set('uCliffStagger', number('cliffStagger', 0));
     set('uCliffFine', number('cliffFine', 0));
     set('uCliffDomain', number('cliffDomain', 90));
+    this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});
