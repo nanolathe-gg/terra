@@ -1153,9 +1153,10 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
     // independently and vary its width. Repeated dabs do not add fresh noise.
     const width=naturalWater?clamp(1+s.rough*1.6*s.noise.coastWidth[i],.45,1.9):naturalPlateau?clamp(1+s.rough*1.3*s.noise.coastWidth[i],.55,1.7):1;
     let r=Math.sqrt(dx*dx+dy*dy)/(radius*width*bankScale);
+    let lobe=0;
     if (pc) r/=pc.r0+(pc.r1-pc.r0)*t;
     if (s.baseVary>0 && BASE_KINDS.includes(s.kind)) r-=baseOutline(s,lx,ly,r,radius)/(radius*width*bankScale);
-    if (s.moonLobes>0 && ['hill','mountain'].includes(s.kind)) r-=moonOutline(s,lx,ly,r,radius)/(width*bankScale);
+    if (s.moonLobes>0 && ['hill','mountain'].includes(s.kind)) { lobe=moonOutline(s,lx,ly,r,radius)/(width*bankScale); r-=lobe; }
     if (waterTool && s.fingers>0 && !(s.fingerCoast>=.5) && r>(s.fingerBlunt>=.5?.1:.25) && r<1.6) {
       // Shift the waterline across the coast band (coast near r 0.67). Thumbs
       // reach tens of px, so their band is set in px, not as a share of a small lake.
@@ -1219,7 +1220,8 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
           const length=Math.hypot(fx,fy);
           if (length>1e-5) { fx/=length; fy/=length; } else { fx=face[0]; fy=face[1]; }
         }
-        const localRadius=radius*(1+s.rough*.75*s.noise.shelf[i]);
+        // G8 (Moon): a swept hill's profile never reads r, so the outline lobes scale its radius here instead (0 elsewhere).
+        const localRadius=radius*(1+s.rough*.75*s.noise.shelf[i]+lobe);
         const u=(dx*fx+dy*fy)/localRadius;
         const v=(-dx*fy+dy*fx)/localRadius;
         const cross=u-s.rough*.18*s.noise.detail[i];
