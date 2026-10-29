@@ -2377,6 +2377,51 @@ reproduces the old output, set only in Green's `WORLD_KNOBS`.
 
 **Server and guard:** port 8861, CDP 9661, guard `--worlds green`.
 
+**Done (merged 988af93; EXPERIMENTS rows 129-131).**
+- **Close shadow** (`closeShadow`, Green .8): six taps 1-6 px toward the sun
+  over `surfaceHeight`, soft by how far the blocker clears the ray. It also
+  masks the glints.
+- **Cavity** (`cavity`, Green .6): the surface against the mean of a 1-3 px
+  ring. Ambient loses all of it, direct light .45 of it.
+- Both run in full draws only. They sit inside the far taps' chunk reach.
+- **Green's beds are lower:** `cliffRise` 16 → 8, `bedLedge` .6 → .4, `bedLip`
+  3 → 2. Taller ledges now shade the whole face.
+- **Review sun:** `?sun=<azimuth>,<elevation>`. The azimuth is added to the
+  world's own sun. Exports and saves ignore it. `repro/render.mjs` gains
+  `--query` and `--clay`.
+- **green-2's face**, measured on x 20-880, y 650-870, which reproduces the
+  retail numbers; `$R/agent-H1/face.py` also prints the wider rows 600-880.
+  Mean, s.d., share under 30, p90 gradient:
+
+  | | mean | s.d. | share under 30 | p90 gradient |
+  | --- | --- | --- | --- | --- |
+  | retail | 45.8 | 27.2 | .245 | 17.6 |
+  | G2 | 46.9 | 23.3 | .143 | 14.8 |
+  | now | 44.7 | 26.4 | .247 | 17.6 |
+- **Draw time** on green-2 rose from 18.0 to 22.0 ms (+22%). The other 24
+  windows are bit-identical.
+- **The audit:** the normal, the projection, every shadow and every
+  occlusion term read `surfaceHeight`. The slope gates read the authored
+  slope on purpose. The shine grain is a screen-pixel tilt. `crackDark` and
+  `faceDark` are still ink on the material.
+
+**Still open:**
+- **The cavity term reads as ink.** It draws a dark dashed line along the
+  beds that stays dark under every sun. That is ambient occlusion by
+  design, but it reads as a drawn line.
+- **Up close, retail's face is crisper.** It is crisp blocks outlined by
+  continuous crevices; ours is softer blobs. That is the relief's shape,
+  not its lighting: H2.
+- Retail's long horizontal ledge lines are still missing, and the beds
+  still arch with the hill (G2).
+- The hill above green-2's face gets denser dark rows than retail's smooth
+  diagonal ridges.
+- There are no panel sliders for the new knobs.
+- The 4×4 cost is unresolved: chunk bake times were bimodal with the knobs
+  on and off. Seams were checked in one corner only.
+- `crackDark` could be lowered now that cavity darkens the same floors as
+  geometry.
+
 ### H2. Rock column, plus water and gravity on the GPU (Green) — outline
 
 The full card is written after H1 is reviewed.

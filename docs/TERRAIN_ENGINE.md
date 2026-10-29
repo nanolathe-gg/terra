@@ -242,7 +242,7 @@ The cards are in [BACKLOG.md](../BACKLOG.md#cards-h-the-terrain-engine).
 
 | Card | What it does | Status |
 | --- | --- | --- |
-| H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Ready |
+| H1 | Lit relief: close shadows, cavity occlusion, stepped beds, review sun (Green) | Merged 988af93 |
 | H2 | The rock column, plus GPU water and gravity agents (Green) | Outlined |
 | H3 | Material table and placement rules (Green) | Not yet written |
 | H4 | Panels, presets, painted overrides, data map views | Not yet written |
