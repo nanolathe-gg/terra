@@ -383,7 +383,7 @@ Each is written in full when the one before it lands.
 | H2 | The rock column, plus GPU erosion on the 1024-px study (Green) | Merged fef3abb |
 | H3 | One material model on the GPU (Green), with override fields | Merged 1c7f10d |
 | H4 | The Green engine: its own shaders, startup material textures, rocks from numbers, rock blocks (absorbs H3b) | Merged 494bcf1 |
-| H5 | Green's weather on the GPU at TA's scale: data maps, marks at 1 px, controls that matter (study and maps up to 1168 samples) | Written |
+| H5 | Green's weather on the GPU at TA's scale: data maps, marks at 1 px, controls that matter (study and maps up to 1168 samples) | Merged ca0c310 |
 | H5b | Weather on large map canvases: coarse and fine tiles, stored planes, regional exactness (absorbs H2b) | Outlined |
 | H6 | Green's shape on the GPU | Outlined |
 | H7 | Progressive rendering on the Green slice | Outlined |

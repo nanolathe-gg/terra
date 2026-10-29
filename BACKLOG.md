@@ -3389,6 +3389,81 @@ exactly) and the map check.
 - baseline `$R/repro-out/merge-h4`;
 - guard `--worlds green`.
 
+**Done (merged as ca0c310 after a stop and two rounds; EXPERIMENTS rows
+141-144; notes in `$R/agent-H5/NOTES.md`, whose round 2 sections
+supersede round 1).**
+- **Retail measured first** (`measure/weather_marks.py`). Retail Green's
+  close-up detail is not drainage:
+  - grass-slope lines follow no fall line;
+  - the only fall-line marks are cracks in grey outcrops;
+  - no window has rills, aprons, fans, boulders or sand.
+
+  The owner chose both: retail's marks by default, and rills, stones and
+  sand as controls left off for Green.
+- **The Time pass on the GPU** (engine 1):
+  - `engine-erosion.wgsl` steps only the active 8×8 tiles.
+  - `engine-weather.wgsl` packs the data maps into `gridTexture` layers 0,
+    2 and 3: flow, deposit, talus and sand; wear, wetness, hardness and
+    slope; fall line, channel and ridge.
+  - It runs at 2 px a sample; the marks are made at 1 px in the bake.
+  - Green never runs the CPU worker on the study or on maps up to 1168
+    samples.
+  - Protected and below-sea samples don't move.
+- **Speed.** On a 4×4 map the pass takes 356-415 ms, against the worker's
+  1,243 ms. On the study it takes 139-279 ms, against 250-320 ms before.
+- **Green's marks:**
+  - broken terrace lines (`terraceBreak` 1.4): on green-2, the share of
+    lines across the fall line went from 68% to 41% (retail 38%);
+  - broad tonal swaths along the flow that keep the mean (`wetSwath`
+    .35);
+  - outcrops gated by hardness, with cracks notched into the height
+    (`outcrop`, 0 for Green: it cost green-1 .009).
+- **Beyond retail, off for Green:** `rillDepth`, `stoneDensity` and `sand`.
+  The stones are rounded and part-buried, with a lit top and a shadow
+  side.
+- **Controls that matter** (`measure/impact.py`, 16-px blocks, on the
+  shipped build, over sensible ranges):
+  - `erosionAge`, `erosionRain`, `wetSwath`, `sand`: 4-34% of grass slope;
+  - `columnContrast`: 11 / 22 / 5% of rock face;
+  - `rillDepth`, `stoneDensity`: 17-27% on green-1 and green-3;
+  - `ovErosion` scales the pass on map canvases too;
+  - `ovVegetation` scales moss and exposed rock.
+- **Against `merge-h4`** (class Lab):
+  - Grass slope: .073 → .068, .032 → .033 and .094 → .086.
+  - Rock face: .058 → .061, .047 → .046 and .082 → .084.
+- **Merge checks:**
+  - Only Green moved against `merge-h4` (mean |diff| 1.83 / 8.43 / 1.47;
+    green-2's change is the terrace breakup).
+  - All 27 scenes equal the agent's final renders.
+  - Replay mismatch is 0, with a clean console, on all 27.
+  - `engine=0` Green equals `merge-h3` exactly.
+  - The 4×4 export has 1,067 unique tiles, no nearest pixels and a clean
+    console.
+
+**Still open:**
+- **Green-2's slope is darker.** Its luma mean is 52.6, against `merge-h4`'s
+  55.2 and retail's 56.4, from the terrace breakup.
+- **The first pass waits on a loaded 4×4 map.** It waits behind about
+  6.4 s of GPU work the page queued first (chunk bakes), so weather is
+  ready about 6.8 s after load. The worker had no such queue. Run the
+  pass before the chunk bakes; bakes made before the weather are redone
+  anyway (H7).
+- **`talusAngle`** is at the noise floor on Green's default picture. It
+  moves only the debris, which is off for Green (8-13% of rock face with
+  3b on).
+- **`columnContrast`** moves 4.7% of green-3's rock face, just under 5%.
+- **The rills** are still broken at 3×, so they stay off.
+- **`ovDeposits`** "more" moves 0.8% of its region, because the demo's
+  plateau carries little deposit.
+- **The draw** costs 23.2 ms on green-2 (H4: 19.0-19.8), +3.5 ms for the map
+  reads. That is still under `engine` 0's 29-31 ms.
+- **The protected-sample check** is vacuous on green-1..3, which have no
+  route or plateau. It holds on the mesa demo (20,182 samples).
+- **Not yet deleted:** the CPU worker and its 1,359 lines still serve
+  `engine` 0 and other worlds; deletion waits for the slice to be
+  accepted.
+- **Maps over 1168 samples:** H5b.
+
 ### H5b. Weather on large map canvases — outline
 
 - **Coverage.** For maps over 1168 samples: a coarse pass over the whole
