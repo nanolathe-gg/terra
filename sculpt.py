@@ -227,7 +227,7 @@ ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
                   rockMoss=.4,
-                  terraceBreak=1.8, terraceCalm=0, wetSwath=.1, outcrop=.1),
+                  terraceBreak=1.4, terraceCalm=0, wetSwath=.15, outcrop=0),
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).

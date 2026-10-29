@@ -1065,7 +1065,7 @@ fn rillAt(p: vec2f, slope: f32) -> vec2f {
 fn outcropCracks(p: vec2f, slope: f32) -> f32 {
     if (u.weatherMaps < 0.5 || u.outcrop <= 0.0) { return 0.0; }
     let m = timeMapsAt(p);
-    let zone = outcropAt(p, slope, m.wear);
+    let zone = outcropAt(p, slope, m.wear, m.hard);
     if (zone <= 0.0) { return 0.0; }
     let len = length(m.fall);
     if (len < 0.05) { return 0.0; }
@@ -1368,6 +1368,9 @@ fn bake(p: vec2f) -> vec4f {
     // H5 3b: rills along the flow.
     let rill = rillAt(p, slope);
     height += rill.x * (1.0 - buried);
+    // H5: the fall-line cracks of the outcrops are notches in the height (a lit wall and a dark floor), not only a tint.
+    let notch = outcropCracks(p, slope);
+    height -= 0.9 * notch / ROCK_CRACK;
     // Relief never carries dry ground below the water plane: it would cut
     // blob-shaped notches into the coast. Nor lifts the bed above it.
     if (h > u.sea) { height = max(height, u.sea + 0.5 - h); }
@@ -1387,7 +1390,7 @@ fn bake(p: vec2f) -> vec4f {
     // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
     lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
     lineDark = max(lineDark, crustDark);
-    lineDark = max(lineDark, max(outcropCracks(p, slope), rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
+    lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
     lineDark = max(lineDark, facetSeam * u.facetSeam * (1.0 - buried));
     lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));

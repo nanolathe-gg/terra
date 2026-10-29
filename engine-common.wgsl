@@ -591,10 +591,10 @@ fn timeMapsAt(p: vec2f) -> TimeMaps {
 }
 // Where wear has bared steep grass: clumps of 10-20 px on slopes, by how much rock the water took. Bake and draw share it,
 // so the cracks lie where the grey shows.
-fn outcropAt(p: vec2f, slope: f32, wear: f32) -> f32 {
+fn outcropAt(p: vec2f, slope: f32, wear: f32, hard: f32) -> f32 {
     if (u.outcrop <= 0.0) { return 0.0; }
     let clumps = smoothstep(0.22, 0.5, valueNoise(p / 17.0 + 7.0) * 0.5 + 0.5 + 0.15 * valueNoise(p / 5.0 + 3.0));
-    return u.outcrop * smoothstep(0.02, 0.22, wear) * smoothstep(0.30, 0.55, slope) * clumps;
+    return u.outcrop * smoothstep(0.02, 0.22, wear) * smoothstep(0.30, 0.55, slope) * (1.0 - smoothstep(0.9, 1.4, slope)) * smoothstep(0.35, 0.7, hard) * clumps;
 }
 
 #ifndef BAKE

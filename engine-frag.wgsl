@@ -1377,7 +1377,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var exposed = place.exposed;
     // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
     let timeMaps = timeMapsAt(p);
-    exposed = max(exposed, outcropAt(p, slope, timeMaps.wear) * (1.0 - route) * place.deposits);
+    exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
     let sandBar = 0.0;
     let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
@@ -1554,9 +1554,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let flen = length(timeMaps.fall);
         if (flen > 0.05) {
             let fl = timeMaps.fall / flen;
-            let q = vec2f(dot(p, vec2f(-fl.y, fl.x)) / 16.0, dot(p, fl) / 70.0);
-            let streak = smoothstep(0.30, 0.72, valueNoise(q + 13.0) * 0.5 + 0.5 + 0.18 * valueNoise(q * 3.0 + 5.0));
-            material *= 1.0 - min(0.85, u.wetSwath * timeMaps.wet * streak * smoothstep(0.06, 0.25, slope) * (1.0 - exposed) * place.vegetation);
+            let q = vec2f(dot(p, vec2f(-fl.y, fl.x)) / 22.0, dot(p, fl) / 90.0);
+            // Broad gentle bands of tone, lighter as well as darker (the mean stays), by the wetness map.
+            let tone = valueNoise(q + 13.0) * 0.8 + 0.2 * valueNoise(q * 2.7 + 5.0);
+            material *= clamp(1.0 + u.wetSwath * timeMaps.wet * tone * smoothstep(0.06, 0.25, slope) * (1.0 - exposed) * place.vegetation, 0.4, 1.6);
         }
     }
     // Retail Archipelago sand runs level to a crisp waterline (hundred
