@@ -327,6 +327,7 @@ struct Uniforms {
     iceSnow: f32,         // the flat tops of raised ice lie under snow (0: none)
     iceFall: f32,         // smooth fibres down the faces of raised ice, in place of grain (0: none)
     iceApron: f32,        // dark hatched drifts spilling past the foot of raised ice into the snow (0: none)
+    iceFrost: f32,        // Ice frost band: fine dark-blue hairlines in parallel runs, thinning inland (0: none)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

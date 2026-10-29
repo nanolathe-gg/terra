@@ -408,6 +408,34 @@ fn iceNearness(p: vec2f) -> f32 {
     return near;
 }
 
+// Fine hairlines of the Ice frost band (card G6). Retail's band (ice-1, Ice Scream) is white ice crossed by
+// crisp dark-blue lines about 1 px wide, in parallel runs 3-5 px apart that keep one of the three crystal
+// directions over a domain ~44 px across, the runs 8-34 px long with gaps; some domains are bare.
+// `keep` is the share of domains that carry lines (1 at the coast, less inland). Returns 0..1, 1 on a line.
+fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
+    let cell = 44.0;
+    let c = vec2i(floor(pixel / cell));
+    var best = 1e9;
+    var id = vec4f(0.0);
+    var home = c;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let k = c + vec2i(i, j);
+            let r = markHash(k + vec2i(83, 29));
+            let d = length(pixel - (vec2f(k) + 0.15 + 0.7 * r.xy) * cell);
+            if (d < best) { best = d; id = r; home = k; }
+        }
+    }
+    let angle = select(select(0.5, 1.92, id.z < 0.8), 1.26, id.z < 0.4) + (id.w - 0.5) * 0.2;
+    let along = vec2f(cos(angle), sin(angle));
+    let across = vec2f(-along.y, along.x);
+    let s = dot(pixel, across) / mix(3.2, 5.2, fract(id.w * 11.3));
+    let line = 1.0 - smoothstep(0.22, 0.4, abs(fract(s) - 0.5) * 2.0);
+    let rs = markHash(vec2i(i32(floor(s)), home.x * 5 + home.y * 11) + vec2i(7, 211));
+    let run = dot(pixel, along) / mix(10.0, 44.0, rs.x) + rs.y * 9.0;
+    return line * mix(0.45, 1.0, rs.w) * step(id.x, keep) * step(0.25, rs.z) * step(0.35, fract(run));
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -1453,6 +1481,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let wander = (terrainNoise(p * 0.22).rg - 0.5) * 16.0 + (terrainNoise(p * 0.9).ba - 0.5) * 5.0;
         let drift = smoothstep(0.12, 0.5, -iceDrift(pixel + wander)) * (0.35 + 0.65 * smoothstep(0.1, 0.6, near));
         color *= 1.0 - u.iceApron * (0.5 * keep * drift + 0.16 * smoothstep(0.25, 0.8, near)) * (1.0 - iceMesa) * vec3f(1.0, 0.85, 0.55);
+    }
+    if (u.iceFrost > 0.0 && h > u.sea + 1.0 && route > 0.003) {
+        // The band's trace in the route channel (1/255 inland .. 5/255 at the coast); the coast's own bank, the needles and
+        // pockets carry more, and that is the band's seaward part (1 there). A drawn ramp in an Ice world counts as band too.
+        let near = clamp((route - 0.0039) / 0.0157, 0.0, 1.0);
+        let lines = iceFrostLines(pixel, 0.06 + 0.94 * near * near);
+        color *= 1.0 - u.iceFrost * lines * mix(0.5, 1.0, near) * vec3f(0.95, 0.8, 0.3);
     }
     if (u.iceCrystal > 0.0) {
         // Straight strokes over the rock faces, darker the more rock shows (card E6; after shadeBlue, which rebuilds the colour).

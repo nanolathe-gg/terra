@@ -826,6 +826,7 @@ export class TerrainRenderer {
     this.f('uIceSnow', variant.has('iceSnow') ? Number(variant.get('iceSnow')) : 0);
     this.f('uIceFall', variant.has('iceFall') ? Number(variant.get('iceFall')) : 0);
     this.f('uIceApron', variant.has('iceApron') ? Number(variant.get('iceApron')) : 0);
+    this.f('uIceFrost', variant.has('iceFrost') ? Number(variant.get('iceFrost')) : 0);
     this.fieldsDirty = true;
   }
 

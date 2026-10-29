@@ -145,6 +145,8 @@ KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # G6, Ice blocks and mesas (retail ice-3, Polar Range): rounded light, snow on the flat tops, fibres down the faces, a hatched apron (0: none of them).
 KNOB_DEFAULTS.update(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0)
+# G6, Ice frost band: fine hairlines in the band (0: none).
+KNOB_DEFAULTS.update(iceFrost=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -447,7 +449,9 @@ WORLD_KNOBS = {
                 # height blurred over ~13 px so crests are rounded and there are no hard creases, the flat top is
                 # snow, the faces are smooth slate crossed by fine fibres down the slope (rock art contrast .3,
                 # no glint dashes), and dark hatched drifts spill past the foot into the snow.
-                iceSoft=.85, iceSnow=1, iceFall=1, iceApron=1),
+                iceSoft=.85, iceSnow=1, iceFall=1, iceApron=1,
+                # Card G6: the frost band's fine lines (retail: crisp dark-blue hairlines 3-5 px apart in parallel runs).
+                iceFrost=.7),
 }
 
 

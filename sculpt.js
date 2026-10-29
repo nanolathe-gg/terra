@@ -1472,6 +1472,9 @@ function stampShoreFrost(s,raw,distance,sea,water,land) {
     if (!width || d>=width) continue;
     // Every cell of the band carries a trace of protection: the shader's frostWet reads it to keep the band white.
     protection[i]=Math.max(protection[i],.04);
+    // Card G6: the shader's route channel (routes, not protection) carries a trace for the band's cells too, 1/255 inland to
+    // 5/255 at the coast (all under frostWet's ramp, which starts at .02): the fine frost lines read it to find the band and thin out inland.
+    routes[i]=Math.max(routes[i],(1+4*(1-d/width))/255);
     const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
     let best=null,d1=Infinity;
     for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) { const c=patch(u,v),q=(lx-c.x)**2+(ly-c.y)**2; if (q<d1) { d1=q;best=c; } }
@@ -3578,6 +3581,7 @@ const KNOBS = [
   ['Ice mountains', [['iceSlate','Monotone slate faces from the first slope',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Crystal mountains: straight strokes on the faces',0,1,.05,0],['iceCrest','Crystal mountains: share of the raised ground under snow lumps',0,1,.05,0]]],
   // G6
   ['Ice blocks and mesas', [['iceSoft','Rounded light: raised ice lit by its blurred height',0,1,.05,0],['iceSnow','Snow on the flat tops of raised ice',0,1,.05,0],['iceFall','Smooth fibres down the faces',0,1,.05,0],['iceApron','Hatched drifts past the foot',0,1,.05,0]]],
+  ['Ice frost lines', [['iceFrost','Fine hairlines in the frost band',0,1,.05,0]]],
   ['Ice frost band', [['frostGaps','Melt pockets: share of cells at the coast',0,.6,.01,.17],['frostGapReach','Melt pockets: reach inland (share of the band)',.2,1.2,.05,.65],['frostGapSize','Melt pockets: size (px)',3,24,1,11],['frostGapDepth','Melt pockets: depth below the sea',.5,6,.1,3]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
