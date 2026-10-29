@@ -3558,6 +3558,8 @@ const KNOBS = [
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
   // E8 (Painted Desert): the grey band at the foot of the raised ground (strata colour 5); its heights are above the plain.
   ['Desert foot band', [['baseBand','Grey band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
+  // G4 (Painted Desert): the pale cap kept as one sheet.
+  ['Desert caps', [['desertCapFlat','Level cap kept cool (0 beds as before)',0,1,.05,0]]],
   // E9 (Green rock faces); every default is the earlier look.
   ['Rock face', [['faceRock','Painted rock interior without moss (0 moss blobs)',0,1,.05,0],['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
     ['bedFlow','Beds broken and shifted by joints (0 continuous)',0,1,.05,1],['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],

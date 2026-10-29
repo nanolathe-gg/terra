@@ -256,6 +256,8 @@ struct Uniforms {
     baseBandHigh: f32,     // upper edge
     baseBandWander: f32,   // how far the window drifts with position, height units
     baseBandGaps: f32,     // share of the band's length that is missing
+    // G4 (Painted Desert)
+    desertCapFlat: f32,    // how far level ground in a cap zone (share over .9) stays the cool bed (0: the beds as before)
     // E9 (Green rock faces). Every default reproduces the earlier output exactly.
     faceRock: f32,        // painted rock's interior is rock, with moss kept to its edges (0: moss blobs inside as before; 1: none inside)
     rockMoss: f32,        // how much of the rock art's own green (fractured and weathered tiles) is kept (1: all, as before; 0: none)

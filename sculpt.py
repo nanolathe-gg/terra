@@ -106,6 +106,8 @@ KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
 # drifts, and the share of its length that is missing).
 KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
+# G4 (Painted Desert): level ground in the pale cap zone kept as one sheet of the cool bed (strength).
+KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(faceRock=0, rockMoss=1, rockDetail=1, shineOutside=1,
                      gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
@@ -278,7 +280,9 @@ WORLD_KNOBS = {
                    jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8).
-                   baseVary=36, baseBump=3.5, baseBand=1),
+                   baseVary=36, baseBump=3.5, baseBand=1,
+                   # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
+                   desertCapFlat=1),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
