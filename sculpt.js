@@ -110,7 +110,7 @@ const COAST_KEYS=['fingerCoast','shoreLayers','layerPx','layerRiser','layerLedge
   // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
   'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle','hillLobes','hillSteps',
   // G5 (Lava): the layers' two-dimensional wander and extra width spread.
-  'lavaMeander','lavaSpread','lavaCircleVary'];
+  'lavaMeander','lavaSpread','lavaCircleVary','lavaTread'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -224,6 +224,7 @@ const SHAPE_FIELDS=[
   ['hillSteps','hill-steps','Lobe steps (terraces up the hill)',['hill','mountain'],2,24,1,1,'How many equal steps the hill\'s height is cut into where the lobes stack.'],
   // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
   ['lavaMeander','lava-meander','Layer meander (layers of wander)',['deep','shallow'],0,300,5,100,'Contour layers: how far the layer lines wander across the bank in two dimensions, in layer widths. Past about 1 they pinch together, split and close into swirls, as retail lava-1\'s do. 0 keeps the layers that only follow the shore.'],
+  ['lavaTread','lava-tread','Lobe treads tilt (share of a step)',['hill','mountain'],0,100,5,100,'Stacked lobes: each flat tread rises toward the hill\'s crown by this share of a fifth of a step, so it is a tilted dome lit on the sunward side and dark on the far side, as retail Lava\'s lobes are. 0: flat treads.'],
   ['lavaCircleVary','lava-circle-vary','Circle variety (circular layers)',['deep','shallow'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
   ['lavaSpread','lava-spread','Layer width spread',['deep','shallow'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
@@ -327,7 +328,7 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers',hillSteps:'hillLobes',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers',hillSteps:'hillLobes',lavaTread:'hillLobes',fingerAmount:'fingerCoast',fingerSize:'fingerCoast',fingerSpread:'fingerCoast',fingerHeight:'fingerCoast',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -1865,7 +1866,7 @@ function stampHillLobes(s) {
   if (lobes<1 || s.amount<4 || !s.path?.length) return;
   const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},salt=s.seed,R=s.radius;
   // The step is the stroke's own height over the number of steps (never the clip's peak, so a region replay cuts the same terraces).
-  const step=s.amount/Math.max(2,Math.round(s.hillSteps)),path=s.path,sites=[];
+  const step=s.amount/Math.max(2,Math.round(s.hillSteps)),path=s.path,sites=[],tread=clamp(s.lavaTread||0,0,1);
   const h=(k,a) => hash(k,a,salt^0x7e3)*.5+.5;
   for (let k=0;k<lobes;k++) {
     const along=h(k,1)*(path.length-1),j=Math.min(path.length-2,Math.floor(along)),f=along-j;
@@ -1878,7 +1879,8 @@ function stampHillLobes(s) {
     const wx=gridX(x),wy=gridY(y);
     let L=0;
     for (const o of sites) { const d=Math.hypot(wx-o.x,wy-o.y); if (d<o.r) L=Math.max(L,o.up*smooth(o.r,.45*o.r,d)); }
-    const phase=e/step+L,k=Math.floor(phase),cut=step*(k+smooth(.55,1,phase-k));
+    // G5: a tilted tread rises a fifth of a step toward the crown (lavaTread 1) before the riser; 0 is the flat tread.
+    const phase=e/step+L,k=Math.floor(phase),fr=phase-k,cut=step*(k+.2*tread*smooth(0,.55,fr)+(1-.2*tread)*smooth(.55,1,fr));
     // The lower flank keeps the hill's own slope; the stack of lobes forms only on the upper part.
     heights[i]=clamp(s.base[i]+e+(cut-e)*smooth(.2*s.amount,.45*s.amount,e),MIN_HEIGHT,MAX_HEIGHT);
   }
@@ -3586,6 +3588,7 @@ const KNOBS = [
   // F1: drawn only where a flow bake exists.
   ['Current and sediment', [['flowTint','Sediment tint strength',0,1,.05,1],['flowShallow','Tint kept in the shallows',0,1,.05,.85],['flowStreak','Streak contrast',0,1,.05,.5],['flowStreakLen','Streak length (px)',8,160,4,140],['flowBank','Bank tint strength',0,1.5,.05,.9]]],
   // E10 (Lava)
+  ['Lava hill rock', [['lavaCrust','Crust: pillows, chips and creases on hills',0,1,.05,0],['lavaPillow','Pillow size (px)',16,80,1,34],['lavaChip','Chip size (px)',3,12,.5,5.5],['lavaVeins','Veins hanging down the slope',0,1,.05,0],['lavaCalm','Fall-line relief replaced by the crust',0,1,.05,.6]]],
   ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['lavaCreaseVary','Crease breaks into dashes of varying darkness',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
   // E6
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
