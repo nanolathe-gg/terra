@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
-    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
+    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
     'relief-bake.wgsl', 'erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
@@ -212,14 +212,26 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # H3 (Green): materialModel 1 draws the land materials from materials/green.json through material-model.wgsl,
 # with no prepared image (0: the images, as before).
 KNOB_DEFAULTS.update(materialModel=0)
+# H4 (Green): engine 1 draws and bakes with engine-frag/engine-bake/engine-common, Green's own copies (0: the shared shaders, as merge-h3).
+KNOB_DEFAULTS.update(engine=0)
+# H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
+KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
+# H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
+# Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
+# scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
+ENGINE_KNOBS = {
+    'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
+                  facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
+                  rockMoss=.4),
+}
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
+    'green': dict(engine=1, materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -779,6 +791,7 @@ def world_knobs(biome, config):
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
+    config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)
     return config
 
