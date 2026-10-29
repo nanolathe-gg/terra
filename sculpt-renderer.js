@@ -97,6 +97,9 @@ const MIP_SHADER = `
         + textureLoad(src, min(s + vec2i(0, 1), last), 0) + textureLoad(src, min(s + vec2i(1, 1), last), 0)) * 0.25;
 }`;
 
+// H4: the generated materials' level-0 size and level count (512 down to 8 px).
+const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
+
 export class TerrainRenderer {
   static async create(canvas, config) {
     const self = new TerrainRenderer(canvas, config);
@@ -157,7 +160,7 @@ export class TerrainRenderer {
     const modelQuery = query.get('materialModel');
     this.materialModel = this.engine || Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
     this.materialData = null;
-    const names = this.engine ? ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'materials/green.json']
+    const names = this.engine ? ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'materials/green.json', 'engine-materials.wgsl']
       : ['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
@@ -165,6 +168,7 @@ export class TerrainRenderer {
       return r.text();
     }));
     const modelSource = this.engine ? null : extra[0], modelTable = this.engine ? extra[0] : extra[1];
+    this.materialsSource = this.engine ? extra[1] : null;
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
     if (this.materialModel && !this.engine) defines.add('MATERIAL_MODEL');
@@ -199,7 +203,11 @@ export class TerrainRenderer {
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(3, both), texture(4, both, 'float', '2d-array'), texture(6, both),
       sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
-    this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
+    // The engine draw (H4) binds only what Green reads: the plain's tiles, the rock images (until item 3), the water images, the palette and
+    // the generated materials (binding 19, read with textureLoad). Binding numbers are the shared draw's, with 2-7 left out.
+    this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: this.engine ? [
+      texture(0, F), sampler(1, F), texture(8, F), sampler(9, F), texture(10, F), sampler(11, F), texture(12, F), sampler(13, F),
+      texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F), texture(19, F, 'float', '2d-array')] : [
       texture(0, F), sampler(1, F), texture(2, F), sampler(3, F), texture(4, F, 'float', '2d-array'), sampler(5, F),
       texture(6, F), sampler(7, F), texture(8, F), sampler(9, F), texture(10, F), sampler(11, F), texture(12, F), sampler(13, F),
       texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F)]});
@@ -232,6 +240,7 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     if (this.materialModel) { this.materialData = JSON.parse(modelTable); this.set('uMaterialTable', materialRows(this.materialData)); }
+    if (this.engine) await this.makeMaterials();
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -294,6 +303,9 @@ export class TerrainRenderer {
     }
     // Two optional transition stages share one array texture. Keeping both
     // layers resident makes the weathering-strength control continuous.
+    // H4: the engine draw has no fringe, ring or slope-grass images (Green has no mineral margins or beach).
+    this.transitionBody=false;
+    if(!this.engine){
     const fringeURL=this.config.textures.slopeFringe||(this.materialModel?null:this.config.textures.slopeGrass)||this.config.textures.grass;
     const loadFringe=async url=>{
       const response=await fetch(url);
@@ -316,11 +328,12 @@ export class TerrainRenderer {
     for(const bitmap of [body,beach]) if(bitmap.width!==fringe.width||bitmap.height!==fringe.height) throw new Error('Transition material sizes must match');
     this.textures.slopeFringe=this.materialTexture('slopeFringe',[fringe,body,beach],{minFilter:this.transitionBody?'linear':'nearest',magFilter:'nearest',mipmaps:this.transitionBody});
     this.bound.uSlopeFringe='slopeFringe';
+    if(body!==fringe)body.close();fringe.close();
+    }
     this.i('uBeach',Boolean(this.config.textures.beach));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
-    if(body!==fringe)body.close();fringe.close();
     this.f('uGrid', this.grid);
     this.f('uSize', this.size);
     this.f('uBase', this.config.baseHeight - this.config.seaLevel);
@@ -629,6 +642,11 @@ export class TerrainRenderer {
   // Group 1. The mineral-ring binding takes the chosen fringe texture, or
   // whatever its GLSL sampler pointed at (the ground) when there is none.
   materialBindGroup(fringe) {
+    if (this.engine) return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
+      ...[this.textures.grass, this.textures[this.bound.uRock], this.textures[this.bound.uRockWeathered], this.textures[this.bound.uRockFractured],
+        this.textures[this.bound.uWater], this.textures[this.bound.uWaterShallow]].flatMap((t, i) => [
+        {binding: [0, 8, 10, 12, 14, 16][i], resource: t.view}, {binding: [1, 9, 11, 13, 15, 17][i], resource: t.sampler}]),
+      {binding: 18, resource: this.textures[this.bound.uPalette].view}, {binding: 19, resource: this.generated.view}]});
     const ring = fringe || this.textures[this.bound.uMineralRing];
     const key = 'materials:' + (fringe ? Object.keys(this.fringeTextures).find(k => this.fringeTextures[k] === fringe) : '');
     return this.bindGroups[key] ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
@@ -639,6 +657,47 @@ export class TerrainRenderer {
       {binding: 18, resource: this.textures[this.bound.uPalette].view}]});
   }
 
+  // H4 item 2: the land materials of materials/green.json made on the GPU, once at startup and again when the table changes.
+  // One layer per material, GENERATED_SIZE px square, MIP levels halving down to 8 px; level L is made with a footprint of 2^L
+  // (engine-materials.wgsl). Returns the milliseconds from submit to the GPU finishing.  All four materials are always made.
+  async makeMaterials() {
+    const device = this.device, size = GENERATED_SIZE, levels = GENERATED_LEVELS, layers = this.materialData.order.length;
+    const start = performance.now();
+    if (!this.materialPipeline) {
+      const module = device.createShaderModule({label: 'engine-materials.wgsl', code: this.materialsSource});
+      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+      if (errors.length) throw new Error('nanolathe: engine-materials.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+      this.materialPipeline = await device.createComputePipelineAsync({label: 'materials', layout: 'auto', compute: {module, entryPoint: 'makeMaterial'}});
+    }
+    if (!this.generated) {
+      const texture = device.createTexture({label: 'generated materials', size: [size, size, layers], format: 'rgba8unorm', mipLevelCount: levels,
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING});
+      this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
+    }
+    const rows = Float32Array.from(materialRows(this.materialData).flat());
+    const table = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(table, 0, rows);
+    const encoder = device.createCommandEncoder({label: 'materials'});
+    const params = [];
+    for (let level = 0; level < levels; level++) {
+      const buffer = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+      device.queue.writeBuffer(buffer, 0, new Float32Array([size, 2 ** level, 0, 0]));
+      params.push(buffer);
+      const pass = encoder.beginComputePass({label: 'materials level ' + level});
+      pass.setPipeline(this.materialPipeline);
+      pass.setBindGroup(0, device.createBindGroup({layout: this.materialPipeline.getBindGroupLayout(0), entries: [
+        {binding: 0, resource: {buffer: table}},
+        {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level, mipLevelCount: 1})},
+        {binding: 2, resource: {buffer: buffer}}]}));
+      const n = Math.ceil(size / 2 ** level / 8);
+      pass.dispatchWorkgroups(n, n, layers);
+      pass.end();
+    }
+    device.queue.submit([encoder.finish()]);
+    await device.queue.onSubmittedWorkDone();
+    table.destroy(); params.forEach(b => b.destroy());
+    return this.startupMs = performance.now() - start;
+  }
   // GPU time of one pass from timestamp queries, read back without
   // stalling; at most three in flight, as the WebGL timer queries were.
   timer() {

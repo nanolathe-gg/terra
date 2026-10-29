@@ -7,12 +7,6 @@
 // ground, as the GLSL sampler pointed at the ground's unit).
 @group(1) @binding(0) var grassTex: texture_2d<f32>;
 @group(1) @binding(1) var grassSamp: sampler;
-@group(1) @binding(2) var slopeGrassTex: texture_2d<f32>;
-@group(1) @binding(3) var slopeGrassSamp: sampler;
-@group(1) @binding(4) var slopeFringeTex: texture_2d_array<f32>;
-@group(1) @binding(5) var slopeFringeSamp: sampler;
-@group(1) @binding(6) var mineralRingTex: texture_2d<f32>;
-@group(1) @binding(7) var mineralRingSamp: sampler;
 @group(1) @binding(8) var rockTex: texture_2d<f32>;
 @group(1) @binding(9) var rockSamp: sampler;
 @group(1) @binding(10) var rockWeatheredTex: texture_2d<f32>;
@@ -24,6 +18,8 @@
 @group(1) @binding(16) var waterShallowTex: texture_2d<f32>;
 @group(1) @binding(17) var waterShallowSamp: sampler;
 @group(1) @binding(18) var paletteTex: texture_2d<f32>;
+// H4: the land materials of materials/green.json, made at startup (engine-materials.wgsl): a layer per material, a mip level per footprint.
+@group(1) @binding(19) var generatedTex: texture_2d_array<f32>;
 
 // Material textures are read at one texel per pixel step: GLSL's
 // texture(t, pixel / D) had implicit derivatives of exactly 1 / D per
@@ -248,12 +244,16 @@ fn groundTile(pixel: vec2f) -> vec3f {
 // Green's land materials come from images, or (materialModel, Card H3) from the numbers in
 // materials/green.json through material-model.wgsl. Every draw that wants one of them asks here.
 fn matRow(i: u32) -> vec4f { return u.materialTable[i]; }
-// Quarter-resolution trial: a coarse draw shows one sample per foot pixels.
-fn modelPixel(pixel: vec2f) -> vec2f { return select(pixel, (floor(pixel / u.materialFoot) + 0.5) * u.materialFoot, u.materialFoot > 1.0); }
+// A generated material at a drawn pixel: the level is the footprint (materialFoot, 1 at final resolution), the texel wraps with a mask.
+fn genColor(layer: i32, pixel: vec2f) -> vec3f {
+    let level = clamp(i32(log2(max(u.materialFoot, 1.0)) + 0.5), 0, 6);
+    let mask = vec2i((512 >> u32(level)) - 1);
+    return textureLoad(generatedTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, layer, level).rgb;
+}
 // The plain keeps its 16 tiles, now built at startup from materials/green.json's `ground` data (sculpt-renderer.js), not an image file.
 fn groundSource(pixel: vec2f) -> vec3f { return groundTile(pixel); }
-fn grassImage(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
-fn slopeGrassSource(pixel: vec2f) -> vec3f { return mmColor(0u, modelPixel(pixel), u.materialFoot); }
+fn grassImage(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
+fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
 // Lab histogram of the rock face is worse with it (.057/.076/.083 against .049/.067/.079 by class).
 fn rockSource(pixel: vec2f, size: vec2f) -> vec3f { return pixelSample(rockTex, rockSamp, pixel, size).rgb; }
@@ -707,11 +707,6 @@ fn snowMaterial(pixel: vec2f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     var snow = groundBased(groundSource(pixel));
     var mean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
-    let beachMean = select(u.beachTexMean, u.beachBase.rgb, u.beachBase.a > 0.5);
-    if (u.beach != 0 && dot(beachMean, luma) > dot(mean, luma)) {
-        snow = based(pixelSampleLayer(slopeFringeTex, slopeFringeSamp, pixel, vec2f(textureDimensions(slopeFringeTex, 0)), 2).rgb, u.beachTexMean, u.beachBase);
-        mean = beachMean;
-    }
     return saturate(mix(mix(snow, mean, 0.50), vec3f(1.0), 0.55));
 }
 // Moss: the world's slope cover (leaning toward its ground by Moss from
@@ -852,7 +847,6 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
              slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32) -> vec4f {
     var sand = 0.0;
     if (u.reliefMode == 1) { sand = smoothstep(0.35, 0.95, bakedFields(p).a); }
-    if (u.beach != 0) { sand = max(sand, smoothstep(0.25, 0.75, beachField(p))); }
     // Crystal tops only: the risers between columns stay dark and take the
     // surrounding material's lobe (the world's own note: faces are dark at every facing).
     let crystal = smoothstep(0.05, 0.3, crystalMask) * (1.0 - smoothstep(1.2, 2.5, length(g)));
@@ -1327,12 +1321,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (slope > u.slopeProfile.x || u.paintOn != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
-    var transitionGround = grass;
-    var transitionFace = grass;
-    var transitionLow = grass;
-    var transitionPower = 1.0;
-    var transitionCore = 0.0;
-    var sharedTransition = false;
     var slopeShare = 0.0;
     var faceCover = 0.0;   // share of the face that is moss, not rock (the shine's slope cover)
     if (u.slopeMaterial != 0) {
@@ -1341,120 +1329,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var slopeGrass = slopeBased;
         var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope)
                        * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
-        if (u.mineralMargins != 0) {
-            var cover = mineralMargin(p, slope, n);
-            // Some biome hills keep their mineral material across the crown.
-            // Elevation also gives their foot a broad transition into sand.
-            var elevated = smoothstep(u.base + u.elevatedCover.x, u.base + u.elevatedCover.y,
-                                      h + (n.g - 0.5) * 5.0);
-            if (u.groundFringe != 0) { elevated *= smoothstep(u.base + 0.25, u.base + 2.0, baseHeight(p)); }
-            cover = mix(cover, max(min(cover, 0.28), elevated), u.elevatedCover.z);
-            if (u.groundFringe == 0) { cover = mix(cover, weatheredCover(cover, sediments, n), materialWeather); }
-            // Softer native mineral fragments carry the fringe before the
-            // deeper connected cracks take over on the face. This avoids dark
-            // cliff fragments appearing as separate boulders on level ground.
-            let fringe = pixelSampleLayer(slopeFringeTex, slopeFringeSamp, pixel, vec2f(512.0), 0).rgb;
-            slopeGrass = mix(fringe, slopeGrass, smoothstep(0.42, 0.88, cover));
-            // Native fissures reach farther than their brighter mineral fill.
-            // Fade through that structure instead of blurring two full images.
-            let stone = dot(slopeGrass, vec3f(0.299, 0.587, 0.114));
-            let edge = (0.26 - stone) * 0.9 + (n.b - 0.5) * 0.12;
-            slopeCover = smoothstep(0.04, 0.96, cover + edge * 4.0 * cover * (1.0 - cover))
-                       * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
-            if (u.groundFringe != 0) {
-                // This fringe already contains native ground plus thin vein
-                // tails. Preserve its pixels before the darker face arrives;
-                // fading both layers together turns the edge into a gray blur.
-                let face = pixelSample(slopeGrassTex, slopeGrassSamp, pixel, vec2f(512.0)).rgb;
-                let detail = (0.35 - dot(face, vec3f(0.299, 0.587, 0.114))) * 0.12;
-                slopeGrass = mix(fringe, face, smoothstep(0.20, 0.78, cover + detail));
-                if (u.ringAmount > 0.0) {
-                    // A connected native vein material occupies its own
-                    // irregular zone before the brown core. World-space
-                    // variation crosses smooth ramps without changing grade.
-                    let zone = cover + ((n.r - 0.5) * 0.38 + (n.g - 0.5) * 0.22) * u.ringVariation
-                                     * smoothstep(0.0, 0.12, cover);
-                    let spread = mix(0.60, 1.80, u.ringSpread);
-                    let ring = pixelSample(mineralRingTex, mineralRingSamp, pixel, vec2f(512.0)).rgb;
-                    let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-                    let tail = smoothstep(0.005, 0.19, max(0.0, zone));
-                    // Veins survive farther than their sandy fill. This keeps
-                    // native fine texture while breaking the outer border into
-                    // fading branches, rather than a uniform coloured collar.
-                    let ringMask = smoothstep(0.06, 0.42, zone * spread + vein * 0.15)
-                                 * tail * mix(0.30, 1.0, max(vein, smoothstep(0.16, 0.40, zone)));
-                    var margin = mix(grass, fringe, tail * mix(0.25, 1.0, vein));
-                    margin = mix(margin, ring, ringMask * u.ringAmount);
-                    slopeGrass = mix(margin, face, smoothstep(0.22, 0.96, zone + detail));
-                }
-                slopeCover = smoothstep(0.01, 0.28, cover)
-                           * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
-                if (materialWeather > 0.0 && u.transitionBody != 0) {
-                    // The worker's spatially softened source measures a join
-                    // across world pixels. All three materials use that same
-                    // coordinate; independent height thresholds draw outlines.
-                    var source = sediments.b;
-                    let variation = ((n.r - 0.5) * 0.08 + (n.g - 0.5) * 0.04) * fringeVariation;
-                    source = clamp(source + variation * 4.0 * source * (1.0 - source), 0.0, 1.0);
-                    let ring = pixelSample(mineralRingTex, mineralRingSamp, pixel, vec2f(512.0)).rgb;
-                    let body = pixelSampleLayer(slopeFringeTex, slopeFringeSamp, pixel, vec2f(512.0), 1).rgb;
-                    let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-                    let arrivals = max(source * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-                    var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-                    fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
-                    let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-                    let ringWeight = fine * mix(fill, 1.0, vein) * u.ringAmount;
-                    transitionGround = mix(grass, ring, ringWeight);
-                    var warm = smoothstep(0.02, 0.54, source);
-                    let warmGrain = 0.52 - dot(body, vec3f(0.299, 0.587, 0.114));
-                    warm = clamp(warm + warmGrain * 0.5 * 4.0 * warm * (1.0 - warm), 0.0, 1.0);
-                    transitionGround = mix(transitionGround, body, warm);
-                    if (u.ringShift > 0.0) { transitionGround = fringeCopies(transitionGround, p, sediments.b); }
-                    else {
-                        let contours = fringeContours(p, sediments.b);
-                        transitionGround = mix(transitionGround, contours.rgb, contours.a);
-                    }
-                    if (u.transitionDetail > 0.0) {
-                        let groundLow = textureSampleLevel(grassTex, grassSamp, pixel / 512.0, 3.0).rgb;
-                        let ringLow = textureSampleLevel(mineralRingTex, mineralRingSamp, pixel / 512.0, 3.0).rgb;
-                        let bodyLow = textureSampleLevel(slopeFringeTex, slopeFringeSamp, pixel / 512.0, 1, 3.0).rgb;
-                        transitionLow = mix(mix(groundLow, ringLow, ringWeight), bodyLow, warm);
-                        transitionPower = ((1.0 - ringWeight) * (1.0 - ringWeight) + ringWeight * ringWeight)
-                                        * (1.0 - warm) * (1.0 - warm) + warm * warm;
-                    }
-                    transitionFace = face;
-                    transitionCore = smoothstep(0.23, 0.88, source);
-                    let faceGrain = 0.35 - dot(face, vec3f(0.299, 0.587, 0.114));
-                    transitionCore = clamp(transitionCore + faceGrain * 0.35 * 4.0 * transitionCore * (1.0 - transitionCore), 0.0, 1.0);
-                    sharedTransition = true;
-                } else if (materialWeather > 0.0) {
-                    let interruption = max(0.0, sediments.a - brokenSediments.a)
-                                     * (1.0 - smoothstep(0.40, 0.90, cover));
-                    let crust = max(0.0, cover - interruption * 1.35);
-                    var zone = weatheredCover(crust, sediments, n);
-                    zone = max(zone, brokenSediments.a * 0.36 * (1.0 - smoothstep(0.05, 0.35, sediments.a)));
-                    let ring = pixelSample(mineralRingTex, mineralRingSamp, pixel, vec2f(512.0)).rgb;
-                    let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-                    let arrivals = max(sediments.b * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-                    var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-                    fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
-                    let veil = smoothstep(0.06, 0.78, zone);
-                    var margin = mix(grass, fringe, veil * 0.55);
-                    let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-                    margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
-                    if (u.ringShift > 0.0) { margin = fringeCopies(margin, p, sediments.b); }
-                    else {
-                        let contours = fringeContours(p, sediments.b);
-                        margin = mix(margin, contours.rgb, contours.a);
-                    }
-                    let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12)
-                             * smoothstep(0.02, 0.35, sediments.a);
-                    margin = mix(margin, face, core);
-                    slopeGrass = mix(mix(grass, slopeGrass, slopeCover), margin, materialWeather);
-                    slopeCover = 1.0;
-                }
-            }
-        }
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
         if (u.slopeOnLowBanks == 0 && h < u.base - 0.25) {
@@ -1509,41 +1383,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let sandBar = 0.0;
     let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
     var material = mix(grass, rock, exposed);
-    if (u.beach != 0 && h > u.sea - 1.0) {
-        // Beach sand: within reach of the water (baked), or failing that a
-        // low band above the waterline. Its inland edge is ragged and breaks
-        // into grains, and steep banks stay bare.
-        let sandBeach = based(pixelSampleLayer(slopeFringeTex, slopeFringeSamp, pixel, vec2f(textureDimensions(slopeFringeTex, 0)), 2).rgb, u.beachTexMean, u.beachBase);
-        let speck = terrainNoise(p * 6.0 + vec2f(61.0, 3.0)).b;
-        var beach = smoothstep(0.25, 0.75, beachField(p) + (speck - 0.5) * 0.5);
-        let top = u.beachHeight * u.beachWidth * (0.65 + 0.7 * terrainNoise(p * 0.45 + vec2f(29.0, 5.0)).g);
-        // The low band only within the water's reach: inland hollows of a
-        // low world are not beaches.
-        beach = max(beach, (1.0 - smoothstep(top * 0.6, top, h - u.sea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)) * smoothstep(0.0, 0.15, beachField(p)));
-        // A sandy slope keeps its own streaked material over the beach sand.
-        if (u.slopeSand != 0) { beach *= 1.0 - slopeShare; }
-        material = mix(material, sandBeach, beach * (1.0 - exposed * 0.7));
-    }
-    if (sharedTransition) {
-        // Exposed rock belongs inside the face family, before its one join to
-        // warm mineral and sand. It cannot repaint a second hard perimeter.
-        let face = mix(transitionFace, rock, exposed);
-        var refined = mix(transitionGround, face, transitionCore);
-        if (u.transitionDetail > 0.0) {
-            let faceLow = textureSampleLevel(slopeGrassTex, slopeGrassSamp, pixel / 512.0, 3.0).rgb;
-            var rockLow = textureSampleLevel(rockTex, rockSamp, pixel / rockSize, 3.0).rgb;
-            rockLow = saturate(u.rockMean + (rockLow - u.rockMean) * u.mineralDetail);
-            let low = mix(transitionLow, mix(faceLow, rockLow, exposed), transitionCore);
-            let facePower = (1.0 - exposed) * (1.0 - exposed) + exposed * exposed;
-            let power = transitionPower * (1.0 - transitionCore) * (1.0 - transitionCore)
-                      + facePower * transitionCore * transitionCore;
-            // Mixing independent native grains reduces their variance. Recover
-            // only the local detail; the accepted broad colour join stays put.
-            let gain = mix(1.0, min(1.65, inverseSqrt(max(0.1, power))), u.transitionDetail);
-            refined = low + (refined - low) * gain;
-        }
-        material = mix(material, refined, materialWeather);
-    }
     if (u.reliefMode == 1 && u.microRock > 0.0) {
         // TA-style faces: moss and rock interleave at lump scale. The broad
         // slope sets how much of the face is rock; the detailed surface
@@ -1657,7 +1496,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             var weathered = mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25);
             weathered = mix(weathered, vec3f(1.0), u.sandLight * 0.55);
             if (u.sandBase.a > 0.5) { weathered = u.sandBase.rgb; }
-            var fragment = mmColor(2u, modelPixel(scatter), u.materialFoot);
+            var fragment = genColor(2, scatter);
             fragment = mix(fragment, vec3f(1.0), u.sandLight * 0.45);
             if (u.sandBase.a > 0.5) { fragment = saturate(fragment - rockLevel + u.sandBase.rgb); }
             let sandMaterial = mix(weathered, fragment, u.sandGrain);
@@ -2082,128 +1921,4 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 6) { color = material; }
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     return vec4f(color, 1.0);
-}
-
-// Card H3: a land material made from numbers, with no image (Green's slope grass; the rocks' rows wait for H3b).
-//
-// A material is MM_ROWS vec4f rows, read through the host's matRow(i):
-//   row 0   band amplitudes for cells of 1, 2, 4 and 8 px (z units)
-//   row 1   amplitudes for cells of 16, 32 and 64 px; w: stretch (grain runs along x when above 1)
-//   row 2   x: tint spatial mix (0: per pixel, 1: cells of 2 px); y: tint scale
-//   rows 3-18   the ramp: RGB (0..255) at 16 luma quantiles, darkest first
-//   rows 19-34  the tint: at each quantile, the direction the colours leave the ramp, times its s.d.
-//   rows 35-38  zq: the noise sum's 13 quantiles (see mmU)
-// materials/green.json holds the numbers and how each was measured.
-//
-// The colour at a pixel: z is a sum of band-limited noise (a hash per pixel,
-// then smooth value noise at cells of 2, 4 ... 64 px) with the measured
-// amplitudes, so it has the image's spectrum. The normal distribution turns z
-// into a rank u, the ramp turns u into a colour with the image's histogram,
-// and the tint adds the colour spread that luma does not explain.
-//
-// Footprint: foot is the size of one drawn pixel in material pixels (1 at
-// final resolution, 4 at a quarter). Bands whose cells are smaller than the
-// footprint fade out, so a coarse draw keeps the mean and the broad pattern
-// and loses only the grain it cannot show. The marginal is not renormalised:
-// a coarser draw has less contrast, as a blurred image has.
-const MM_ROWS = 39u;
-
-fn mmHash(c: vec2i, salt: u32) -> f32 {
-    var n = bitcast<u32>(c.x) * 374761393u + bitcast<u32>(c.y) * 668265263u + salt * 2246822519u;
-    n = (n ^ (n >> 13u)) * 1274126177u;
-    n = (n ^ (n >> 16u)) * 2246822519u;
-    return f32(n ^ (n >> 15u)) / 4294967295.0;
-}
-// Smooth value noise on a lattice of `cell` pixels, in -1..1.
-fn mmLattice(pixel: vec2f, cell: vec2f, salt: u32) -> f32 {
-    let q = pixel / cell;
-    let c = vec2i(floor(q));
-    let f = fract(q);
-    let w = f * f * (3.0 - 2.0 * f);
-    let a = mmHash(c, salt);
-    let b = mmHash(c + vec2i(1, 0), salt);
-    let d = mmHash(c + vec2i(0, 1), salt);
-    let e = mmHash(c + vec2i(1, 1), salt);
-    return mix(mix(a, b, w.x), mix(d, e, w.x), w.y) * 2.0 - 1.0;
-}
-// The normal distribution function, by its tanh form (error under .002).
-fn mmPhi(z: f32) -> f32 { return 0.5 + 0.5 * tanh(0.7978846 * z * (1.0 + 0.044715 * z * z)); }
-
-// z is a sum of bounded noise, so it is not a normal variable. Its measured quantiles (the material's `zq`, rows 35-38,
-// z at the probabilities below) turn it into a rank u with exactly the image's histogram: linear between knots.
-const MM_P = array<f32, 13>(0.001, 0.01, 0.05, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 0.95, 0.99, 0.999);
-fn mmU(base: u32, z: f32) -> f32 {
-    var lo = matRow(base + 35u).x;
-    var plo = MM_P[0];
-    if (z <= lo) { return plo; }
-    for (var k = 1u; k < 13u; k++) {
-        let hi = matRow(base + 35u + k / 4u)[k % 4u];
-        if (z <= hi) { return mix(plo, MM_P[k], (z - lo) / max(hi - lo, 1e-6)); }
-        lo = hi;
-        plo = MM_P[k];
-    }
-    return plo;
-}
-
-fn mmAmp(r0: vec4f, r1: vec4f, k: u32) -> f32 {
-    switch (k) {
-        case 0u: { return r0.x; }
-        case 1u: { return r0.y; }
-        case 2u: { return r0.z; }
-        case 3u: { return r0.w; }
-        case 4u: { return r1.x; }
-        case 5u: { return r1.y; }
-        default: { return r1.z; }
-    }
-}
-
-// Variance of the bands, in z units squared per unit amplitude: a hash in -1..1 is 1/3; a smoothstep lattice of
-// those is (1/3) * .7429 ^ 2 (the mean squared weight of a cell's corners, in x and in y).
-const MM_V0 = 0.33333;
-const MM_VL = 0.18395;
-
-fn mmRamp(base: u32, u: f32) -> vec3f {
-    let at = clamp(u * 16.0 - 0.5, 0.0, 15.0);
-    let i0 = u32(floor(at));
-    return mix(matRow(base + 3u + i0).rgb, matRow(base + 3u + min(i0 + 1u, 15u)).rgb, fract(at));
-}
-
-fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
-    let base = id * MM_ROWS;
-    let r0 = matRow(base);
-    let r1 = matRow(base + 1u);
-    let r2 = matRow(base + 2u);
-    let stretch = max(r1.w, 0.1);
-    let salt = id * 16u + 1u;
-    let ip = vec2i(floor(pixel));
-    // Band 0 (cells of 1 px) is the hash itself: no lattice to fade, it goes when a pixel covers more than one.
-    let w0 = clamp(2.0 / foot - 1.0, 0.0, 1.0);
-    var z = r0.x * (mmHash(ip, salt) * 2.0 - 1.0) * w0;
-    var lost = r0.x * r0.x * MM_V0 * (1.0 - w0 * w0);
-    for (var k = 1u; k < 7u; k++) {
-        let cell = f32(1u << k);
-        let w = clamp((cell / foot - 0.5) * 2.0, 0.0, 1.0);
-        let a = mmAmp(r0, r1, k);
-        z += a * w * mmLattice(pixel, vec2f(cell * stretch, cell), salt + k);
-        lost += a * a * MM_VL * (1.0 - w * w);
-    }
-    // A coarse draw averages the grain it cannot show: a five-point Gauss-Hermite rule over the lost
-    // variance keeps the mean colour (the ramp at the median alone would not) and the image's broad histogram.
-    // A full-resolution draw loses nothing (lost is 0), so one ramp read serves; only a coarse draw takes the rule.
-    var rgb = mmRamp(base, mmU(base, z));
-    if (lost > 1e-6) {
-        let s = sqrt(lost);
-        rgb = rgb * 0.533333
-            + (mmRamp(base, mmU(base, z - s * 1.355626)) + mmRamp(base, mmU(base, z + s * 1.355626))) * 0.222076
-            + (mmRamp(base, mmU(base, z - s * 2.856970)) + mmRamp(base, mmU(base, z + s * 2.856970))) * 0.011257;
-    }
-    let at = clamp(mmU(base, z) * 16.0 - 0.5, 0.0, 15.0);
-    let i0 = u32(floor(at));
-    let dir = mix(matRow(base + 19u + i0).rgb, matRow(base + 19u + min(i0 + 1u, 15u)).rgb, fract(at));
-    // The tint noise: three hashes make a near-normal value per pixel, mixed toward cells of 2 px.
-    let white = (mmHash(ip, salt + 8u) + mmHash(ip, salt + 9u) + mmHash(ip, salt + 10u) - 1.5) * 2.0;
-    let soft = (mmLattice(pixel, vec2f(2.0), salt + 11u) + mmLattice(pixel, vec2f(2.0), salt + 12u) + mmLattice(pixel, vec2f(2.0), salt + 13u)) * 1.85;
-    let fade = mix(w0, clamp((2.0 / foot - 0.5) * 2.0, 0.0, 1.0), r2.x);
-    rgb += dir * mix(white, soft, r2.x) * r2.y * fade;
-    return clamp(rgb, vec3f(0.0), vec3f(255.0)) / 255.0;
 }
