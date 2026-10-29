@@ -3545,6 +3545,32 @@ only the lines that set H4's block uniforms.
 - baseline `$R/repro-out/merge-h5`;
 - guard `--worlds green`.
 
+**Done (merged as cb57320; EXPERIMENTS row 145; notes in
+`$R/agent-H4b/NOTES.md`).**
+- **The gate.** `hillBlocks` (Green .5) cuts hill rock outside the
+  structured face (rock-class slope .35-.65, in patches) into narrow
+  pieces, long down the fall line, with .7-px crevices. `rockFrom` is
+  unchanged.
+- **Rock-face Lab:** .061 / .046 / .084 → .053 / .046 / .084. At 1, green-3
+  got worse (.090), so .5 ships. `outcrop` stays 0: with the blocks it cost
+  grass-slope Lab on green-1 and green-3.
+- **Merge checks:**
+  - only Green moved against `merge-h5`;
+  - all 27 scenes equal the agent's final renders;
+  - `hillBlocks` 0 equals `merge-h5`;
+  - `engine=0` Green is unchanged;
+  - the 4×4 export is clean.
+
+**Still open:**
+- **Faint by eye.** Our hill rock is mostly under grass. Retail's grey
+  outcrops with crisp black cracks need the draw's rock exposure
+  (`place.exposed` in `engine-frag.wgsl`) and a height notch for the
+  cracks. Both are outside this card's files.
+- **Impact is borderline.** `hillBlocks` 0 → .5 moves 6.6 / 4.9% of
+  green-1's and green-3's rock face; green-3 is under its floor. On the
+  hills, `blockRow`, `blockWidth`, `blockStep`, `blockChip` and
+  `blockGrit` move under 5%.
+
 ### H7. Progressive rendering on the Green slice
 
 > **Owner, 2026-10-29:** "Now that we're on the GPU let's do H7
