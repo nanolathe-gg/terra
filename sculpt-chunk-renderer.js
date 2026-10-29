@@ -80,8 +80,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const boulder=n('boulderSize',9)*1.6*1.8+14+5;
     const debris=Math.max(3,n('debrisSize',6)*.9)*1.85+n('debrisReach',48)+18;
     const beach=Math.max(this.config.textures.beach?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
-    // G2: the rock frame reads heights on rings of cliffReach and cliffWide px round the pixel (cliffFollow only).
-    const cliff=n('cliffFollow',0)>0?Math.max(n('cliffWide',56),n('cliffReach',20)*1.5,4)+1:0;
+    // G2: the rock frame reads heights on rings of cliffReach and cliffWide px, and the joints take the frame at their
+    // patch's seed, up to 1.41 patches (cliffDomain) from the pixel (the nearest seed of a jittered lattice is within 1.13
+    // cells, and the warp moves the pixel by up to .28): cliffFollow only.
+    const cliff=n('cliffFollow',0)>0?1.45*Math.max(n('cliffDomain',90),24)+Math.max(n('cliffWide',56),n('cliffReach',20)*1.5,4)+2:0;
     const bake=Math.max(19,boulder,debris,beach,cliff);
     const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75));
     // A projection apron includes appearance displacement too. These are
