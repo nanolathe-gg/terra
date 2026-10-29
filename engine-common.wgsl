@@ -416,6 +416,8 @@ struct Uniforms {
     rillSpacing: f32,     // px between rills
     stoneDensity: f32,    // stones and boulders where talus lies
     stoneSize: f32,       // px: the largest stone (larger below hard beds)
+    // H4b (Green): rock blocks on the hills' rock, outside the structured face (0: none).
+    hillBlocks: f32,      // 0..1: how much of the hill rock (slope .5 and over, off the structured face) is cut into small pieces
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
