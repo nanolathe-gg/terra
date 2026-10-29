@@ -360,7 +360,7 @@ WORLD_KNOBS = {
                  layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
                  # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),
                  # its circles differ in size and spacing, and its step lines fade and break along their length.
-                 lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.3,
+                 lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.2,
                  # G5: hill rock as retail's crust, pillows and chips with creases and hanging veins, the fall-line relief it
                  # replaces, treads tilted toward the crown, and the tall hills' far sides near black.
                  lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8, lavaTread=.6,
