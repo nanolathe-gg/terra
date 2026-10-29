@@ -30,13 +30,19 @@ branches and the projection fix below, so re-render before judging.
 
    ```
    R=/private/tmp/nanolathe-map-editor
-   mkdir -p $R/agent-<card> && cp -R $R/assets-* $R/agent-<card>/
+   mkdir -p $R/agent-<card> && cp -R $R/assets-* $R/features $R/map-catalog.json $R/agent-<card>/
    cd ../terraform-wt-<card>
    /Users/daniel/src/terraform/.venv/bin/python sculpt.py \
-     --port <server> --assets-root $R/agent-<card> \
+     --port <server> --assets-root $R/agent-<card> --prepared \
      --export-tool $R/map-export --feature-tool $R/bin/map-features \
      > $R/agent-<card>/server.log 2>&1 &
    ```
+
+   `--prepared` is required since 2026-10-29: macOS removed the retail
+   sources that full preparation reads from `/private/tmp`. The server
+   loads each world's saved `config.json` and takes the knobs from
+   `sculpt.py`. A change to material preparation (the `sculpt_*.py`
+   material builders) cannot be tried; report it if a card needs one.
 
    Restart your server after editing `sculpt.py` or any `sculpt_*.py`.
    Ports 8766-8812 belong to other sessions, and 8801 is the owner's: never

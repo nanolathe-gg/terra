@@ -25,7 +25,8 @@ python3 sculpt.py --port 8801 --assets-root $R --game-root $R/content --prepared
 REPRO_CROPS=$R/repro PYTHON=python3 sh repro/all.sh $R/repro-out/base http://127.0.0.1:8801 9450
 ```
 
-Prepared mode cannot rebuild materials: Python changes to material
+Knob defaults still come from `sculpt.py`, so a knob change works in
+prepared mode. Prepared mode cannot rebuild materials: Python changes to material
 preparation need the retail sources. Renders under a different GPU or a
 software WebGPU adapter may differ slightly from the Mac reference renders,
 so render a fresh baseline before comparing.

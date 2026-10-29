@@ -760,6 +760,16 @@ def lighten_red_shallows(config, assets):
     config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
 
 
+def world_knobs(biome, config):
+    """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
+    then its WORLD_KNOBS entry."""
+    knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
+             'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
+    config['defaults'].update({k: str(v) for k, v in knobs.items()})
+    config['knobs'] = sorted(knobs)
+    return config
+
+
 def biome_config(biome, assets, prepared=False):
     """Prepare one biome's materials in its own asset folder and return its
     page configuration, with texture URLs under /sculpt-assets/<biome>/.
@@ -767,7 +777,9 @@ def biome_config(biome, assets, prepared=False):
     assets bundle without the retail sources (BUNDLE.md)."""
     saved = assets / 'config.json'
     if prepared:
-        return json.loads(saved.read_text())
+        # Knobs come from this checkout, not the saved file, so a card can
+        # add or retune one without the retail sources.
+        return world_knobs(biome, json.loads(saved.read_text()))
     from sculpt_fractures import make_fracture_field
     if biome in ('moon', 'zhon', 'lava', 'crystal', 'ice'):
         # Measured from a decoded section catalog (sculpt_section_biome.py).
@@ -891,10 +903,7 @@ def biome_config(biome, assets, prepared=False):
         # Ice blocks: snow tops (216,231,253).
         config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.1, slopeFull=.3,
                                   slopeFloor=-4.0, slopeDry=4.0, crystalRGB=[205, 220, 245])
-    knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
-             'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
-    config['defaults'].update({k: str(v) for k, v in knobs.items()})
-    config['knobs'] = sorted(knobs)
+    world_knobs(biome, config)
     if biome == 'zhon':
         # Zhon's domes are blue-grey (retail sections: mean (43,57,81), median
         # luminance 52); its rock art renders neutral grey, so the world
