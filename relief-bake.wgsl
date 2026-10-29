@@ -814,20 +814,21 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     let border = smoothstep(0.80, 0.97, t);
     let triple = 1.0 - smoothstep(0.0, 0.16, (pil.d3 - pil.d1));
     height -= u.lavaPillow * mix(0.03, 0.08, tall) * triple;
-    var dark = mix(0.45, 1.5, tall) * border + mix(1.2, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
+    var dark = mix(0.2, 1.5, tall) * border + mix(0.6, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
     // Chips: flat facets tilted at random, hairline cracks on some of their borders.
     let qc = p / u.lavaChip;
     let chip = lavaCells(qc, 11.0);
     let tilt = (chip.id - 0.5) * 2.0;
     height += dot(tilt, chip.off) * u.lavaChip * mix(0.07, 0.12, tall);
     let seam = 1.0 - smoothstep(0.0, 0.16, chip.d2 - chip.d1);
-    dark = max(dark, mix(0.5, 0.9, tall) * seam * step(0.55, chip.id.x));
+    dark = max(dark, mix(0.25, 0.9, tall) * seam * step(0.55, chip.id.x));
     // Veins hang down the fall line: zero lines of a noise stretched along it, in stretches that begin and end.
     if (u.lavaVeins > 0.0) {
         let qv = vec2f(dot(p, across) / 7.0, dot(p, fall) / 40.0) + 0.5 * vec2f(valueNoise(p / 23.0 + 5.0), valueNoise(p / 23.0 + 9.0));
-        let line = 1.0 - smoothstep(0.05, 0.26, abs(valueNoise(qv)));
-        let present = smoothstep(-0.1, 0.4, valueNoise(p / 29.0 + 61.0));
-        dark = max(dark, 2.4 * u.lavaVeins * line * present * smoothstep(0.10, 0.30, slope));
+        let line = 1.0 - smoothstep(0.03, 0.17, abs(valueNoise(qv)));
+        let present = smoothstep(-0.55, 0.0, valueNoise(p / 29.0 + 61.0));
+        // Retail's veins are black on an untouched surface: the crack code is scaled by the world's crack darkness (.35 on Lava), so 2.9 is full.
+        dark = max(dark, 2.9 * u.lavaVeins * line * present * smoothstep(0.02, 0.10, slope));
     }
     return vec3f(height * gate, dark * gate, calm);
 }
