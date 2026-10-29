@@ -82,6 +82,18 @@ fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
 }
 
+// Card G4 (Painted Desert): retail's pale caps are one sheet of the cool bed. The cap pixels (height 56 and up on slopes
+// under .35 per px) are 9.6-12% orange in retail and 22% in ours, hue 64-77 against 42: the beds' fine warp and the
+// spread of a zone's split (up to 48% orange within one bed) push a flat top across a bed edge in blotches. In a zone
+// that is nearly all cool bed (share over .9), level ground is held to the cool bed. Returns how far to hold it.
+// (Retail keeps one ragged orange patch of 40-150 px per cap. A threshold on noise drew smooth stains or thin veins, so
+// ours draws none.)
+fn capHold(slope: f32, share: f32) -> f32 {
+    let cap = smoothstep(0.88, 0.94, share);
+    let level = 1.0 - smoothstep(0.05, 0.22, slope);
+    return u.desertCapFlat * cap * level;
+}
+
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
@@ -1340,7 +1352,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let f = fract(t);
         let split = clamp(1.0 - share * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
         let edge = clamp(1.5 * max(slope, 0.05) / S, 0.01, 0.2);
-        let isB = smoothstep(split - edge, split + edge, f) * (1.0 - smoothstep(1.0 - edge, 1.0, f));
+        var isB = smoothstep(split - edge, split + edge, f) * (1.0 - smoothstep(1.0 - edge, 1.0, f));
+        if (u.desertCapFlat > 0.0) { isB = mix(isB, 1.0, capHold(slope, share)); }
         // Painted rock (card C5) in a world with beds takes the colour its
         // highest ground is painted with (its top zone's main bed: Painted
         // Desert's grey buttes), not the alternating beds or the brown rock art.

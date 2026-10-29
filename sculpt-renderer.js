@@ -811,6 +811,8 @@ export class TerrainRenderer {
     this.f('uBaseBandHigh', variant.has('baseBandHigh') ? Number(variant.get('baseBandHigh')) : 6.5);
     this.f('uBaseBandWander', variant.has('baseBandWander') ? Number(variant.get('baseBandWander')) : 1);
     this.f('uBaseBandGaps', variant.has('baseBandGaps') ? Number(variant.get('baseBandGaps')) : 0.45);
+    // Card G4 (Painted Desert); 0 is every world as it was.
+    this.f('uDesertCapFlat', variant.has('desertCapFlat') ? Number(variant.get('desertCapFlat')) : 0);
     // E9 (Green rock faces).
     this.f('uFaceRock', variant.has('faceRock') ? Number(variant.get('faceRock')) : 0);
     this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
