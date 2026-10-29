@@ -909,7 +909,7 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f3
 // covers both. Steep faces shed it.
 fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     if (u.sand <= 0.0) { return 0.0; }
-    let field = weatherAt(p / (u.size - 1.0)).a;
+    let field = weatherAt(p / (u.size - 1.0)).a * depositsAt(p);
     if (field <= 0.0) { return 0.0; }
     let lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
     let thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
@@ -998,10 +998,15 @@ fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
 }
 
 
+// H5 constants (retail's rates, measured in NOTES): the cracks' darkness and the grey specks' density. Specks and cracks ride on `outcrop`, so
+// engine 0 style off-states stay off.
+const ROCK_CRACK = 2.5;
+const SPECKS = 1.2;
+
 // H5: stones from the Time pass's maps. 3a's grey specks (1-2 px, on the foot slopes round the rock, in clumps) and 3b's stones
 // and boulders (where talus lies, larger below hard beds, a few px across). Returns (height, rock cover) like boulders().
 fn weatherStones(p: vec2f) -> vec2f {
-    if (u.weatherMaps < 0.5 || (u.speckDensity <= 0.0 && u.stoneDensity <= 0.0)) { return vec2f(0.0); }
+    if (u.weatherMaps < 0.5 || (u.outcrop <= 0.0 && u.stoneDensity <= 0.0)) { return vec2f(0.0); }
     let cellSize = max(3.0, u.stoneSize * 0.9);
     let cell = floor(p / cellSize);
     var best = 0.0;
@@ -1014,8 +1019,8 @@ fn weatherStones(p: vec2f) -> vec2f {
             let centre = (c + 0.15 + 0.7 * r1) * cellSize;
             let m = timeMapsAt(centre);
             let clump = smoothstep(0.25, 0.75, valueNoise(centre / 23.0 + 29.0) * 0.5 + 0.5);
-            let speck = u.speckDensity * smoothstep(0.05, 0.16, m.slope) * (1.0 - smoothstep(0.5, 0.8, m.slope)) * (0.15 + 0.85 * clump);
-            let stones = u.stoneDensity * smoothstep(0.02, 0.3, m.talus) * (0.4 + 0.6 * clump);
+            let speck = depositsAt(centre) * SPECKS * smoothstep(0.05, 0.16, m.slope) * (1.0 - smoothstep(0.5, 0.8, m.slope)) * (0.15 + 0.85 * clump);
+            let stones = depositsAt(centre) * u.stoneDensity * max(smoothstep(0.02, 0.3, m.talus), 0.5 * smoothstep(0.25, 0.8, weatherAt(centre / (u.size - 1.0)).g)) * (0.4 + 0.6 * clump);
             if (r2.x >= clamp(speck + stones, 0.0, 0.95)) { continue; }
             if (baseHeight(centre) < u.sea + 1.0 || routeProtection(centre) > 0.05) { continue; }
             // A speck is 1-2 px; a stone follows stoneSize, a few times larger below hard beds, many small and few large.
@@ -1051,14 +1056,14 @@ fn rillAt(p: vec2f, slope: f32) -> vec2f {
     let present = smoothstep(-0.25, 0.25, valueNoise(vec2f(id * 3.7, dot(p, f) / 80.0)));
     let w = (0.05 + 0.14 * m.flow) * (0.7 + 0.6 * hsh.x);
     let trough = 1.0 - smoothstep(0.0, w, abs(at - (hsh.y - 0.5) * 0.3));
-    let gate = smoothstep(0.1, 0.45, m.channel) * smoothstep(0.08, 0.22, slope) * (1.0 - smoothstep(1.2, 1.8, slope)) * present;
+    let gate = smoothstep(0.05, 0.3, m.channel) * smoothstep(0.18, 0.40, slope) * (1.0 - smoothstep(1.2, 1.8, slope)) * present;
     return vec2f(-u.rillDepth * trough * gate, trough * gate);
 }
 
 // H5 3a: the 1-2 px cracks down the fall line in grey outcrops, 20-60 px long: the zero lines of a noise stretched along the fall
 // line, in stretches that begin and end. Returns their darkness.
 fn outcropCracks(p: vec2f, slope: f32) -> f32 {
-    if (u.rockCrack <= 0.0 || u.weatherMaps < 0.5 || u.outcrop <= 0.0) { return 0.0; }
+    if (u.weatherMaps < 0.5 || u.outcrop <= 0.0) { return 0.0; }
     let m = timeMapsAt(p);
     let zone = outcropAt(p, slope, m.wear);
     if (zone <= 0.0) { return 0.0; }
@@ -1069,7 +1074,7 @@ fn outcropCracks(p: vec2f, slope: f32) -> f32 {
     let q = vec2f(dot(p, perp) / 6.0, dot(p, f) / 38.0) + 0.6 * vec2f(valueNoise(p / 21.0 + 41.0), valueNoise(p / 21.0 + 43.0));
     let line = 1.0 - smoothstep(0.03, 0.15, abs(valueNoise(q)));
     let present = smoothstep(-0.3, 0.25, valueNoise(p / 29.0 + 67.0));
-    return u.rockCrack * line * present * smoothstep(0.1, 0.5, zone);
+    return ROCK_CRACK * line * present * smoothstep(0.1, 0.5, zone);
 }
 
 // GLSL main(): the fields at world pixel p.

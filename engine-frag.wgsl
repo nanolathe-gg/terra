@@ -1424,7 +1424,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
         let ledge = smoothstep(0.1, 0.7, place.top);
         let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
-        let wetMoss = mix(1.0, 0.25 + 1.6 * timeMaps.wet, u.mossWet);   // H5 3a: moss grows where water runs
+        let wetMoss = (0.25 + 1.6 * timeMaps.wet);   // H5 3a: moss grows where water runs
         let want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
         let fleck = step(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
         material = mix(material, saturate(slopeBased * vec3f(1.0, 1.25, 0.95)), fleck);
@@ -1556,7 +1556,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let fl = timeMaps.fall / flen;
             let q = vec2f(dot(p, vec2f(-fl.y, fl.x)) / 16.0, dot(p, fl) / 70.0);
             let streak = smoothstep(0.30, 0.72, valueNoise(q + 13.0) * 0.5 + 0.5 + 0.18 * valueNoise(q * 3.0 + 5.0));
-            material *= 1.0 - u.wetSwath * timeMaps.wet * streak * smoothstep(0.06, 0.25, slope) * (1.0 - exposed) * place.vegetation;
+            material *= 1.0 - min(0.85, u.wetSwath * timeMaps.wet * streak * smoothstep(0.06, 0.25, slope) * (1.0 - exposed) * place.vegetation);
         }
     }
     // Retail Archipelago sand runs level to a crisp waterline (hundred

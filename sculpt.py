@@ -216,9 +216,9 @@ KNOB_DEFAULTS.update(materialModel=0)
 KNOB_DEFAULTS.update(engine=0)
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
 KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
-# H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop, rockCrack, mossWet, speckDensity);
+# H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
-KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rockCrack=0, mossWet=0, speckDensity=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
+KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
 # Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
@@ -227,7 +227,7 @@ ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
                   rockMoss=.4,
-                  terraceBreak=1.8, terraceCalm=.6, wetSwath=.6, outcrop=.3, rockCrack=2.5, mossWet=1, speckDensity=1.2),
+                  terraceBreak=1.8, terraceCalm=0, wetSwath=.1, outcrop=.1),
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).

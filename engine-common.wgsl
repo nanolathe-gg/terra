@@ -410,9 +410,7 @@ struct Uniforms {
     terraceCalm: f32,     // 0..1: terrace lines faded on gentle slopes (the small dashes retail does not have)
     wetSwath: f32,        // darkness of the soft swaths water leaves on grass along its flow
     outcrop: f32,         // grey rock shown where wear has bared steep grass
-    rockCrack: f32,       // darkness of the 1-2 px cracks down the fall line in outcrops
-    mossWet: f32,         // 0..1: how much wetness decides where moss grows on rock
-    speckDensity: f32,    // grey specks of 1-2 px on the foot slopes round the rock
+    // (the fall-line cracks in outcrops, moss by wetness and the grey specks are fixed at retail's rates, ROCK_CRACK and SPECKS in engine-bake and the wetness term in engine-frag: H5 found their controls under 5% of any class)
     // H5 item 3b, beyond retail (0: off for Green).
     rillDepth: f32,       // height units a rill is cut, along the flow
     rillSpacing: f32,     // px between rills
@@ -579,6 +577,11 @@ fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0
 fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 1, 0.0); }
 #endif
 
+// H5 override plane 17's deposits multiplier (planes 14-17: erosion, deposits, vegetation, exposure) at p: scales sand, stones and talus. 1 where nothing overrides.
+fn depositsAt(p: vec2f) -> f32 {
+    if (u.overrideOn == 0) { return 1.0; }
+    return max(0.0, 1.0 + textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).w);
+}
 // H5: the Time pass's maps at world point p. layer 2: wear, wetness, hardness, slope; layer 3: fall line (-1..1), channel, ridge.
 struct TimeMaps { wear: f32, wet: f32, hard: f32, slope: f32, fall: vec2f, channel: f32, ridge: f32, flow: f32, talus: f32 }
 fn timeMapsAt(p: vec2f) -> TimeMaps {

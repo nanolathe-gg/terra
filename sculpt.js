@@ -2809,7 +2809,7 @@ function readRegional(request) {
     const i=y*r.gridWidth+x,j=(y+oy)*worldGrid+x+ox,h=r.fields.h[i];
     fields.h[i]+=(refined[j]-refinedBase[j])*(1-smooth(0,10,Math.abs(h-refinedBase[j])))*(1-r.fields.r[i]);
   }
-  for (const key of ['flow','deposit','talus','sand']) weather[key]=crop(regionalWeather?.[key]);
+  for (const key of ['flow','deposit','talus','sand','wear','wet','hard','slope','fx','fy','channel','ridge']) weather[key]=crop(regionalWeather?.[key]);
   const materialField=crop(regionalWeather?.materialField,4),extra=[fields.h,...Object.values(weather),materialField].reduce((sum,a) => sum+(a?.byteLength??0),0);
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
@@ -3022,14 +3022,15 @@ function queueWeather() {
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
-    if (!weatherWorker && !(renderer.engine && !regionalFields && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
+    if (!weatherWorker && !(renderer.engine && (!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
     const job=++weatherJob;
     const authored=regionalFields?globalWeatherInput():null;
     weatherBase=authored?authored.h:heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
     const profile=experiment.get('weather')==='broad'?'broad':undefined;
     // H2: erosion 1 (Green) runs the GPU pass first and hands its height to the worker, which skips the droplets.
-    const gpu=!regionalFields && renderer.variantNumber?.('erosion',0)>0;
+    // H5: Green's engine also runs the GPU pass over a whole map canvas up to 1168 samples a side (larger maps keep the tiled worker, H5b).
+    const gpu=(!regionalFields || (renderer.engine && grid<=1168)) && renderer.variantNumber?.('erosion',0)>0;
     gpuErosionMs=null;
     let eroded=null;
     const post=() => weatherWorker.postMessage({job,height:weatherBase,...eroded,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
@@ -3037,9 +3038,18 @@ function queueWeather() {
     if (!gpu) { post(); return; }
     // H5: Green's engine (engine 1) takes the height and the data maps from the GPU pass alone; no worker runs (engine-weather.wgsl).
     const own=renderer.engine;
-    renderer.erode({height:weatherBase,protect:protection,rate:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
+    renderer.erode({height:weatherBase,protect:authored?.p??protection,rate:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
       ...(own?{maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)}:{})})
       .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,protect:protection,seaLevel:config.seaLevel,maps:result.maps,grid,size};
+        if (own && regionalFields) {
+          // A map canvas: the chunk renderer reads the maps as the worker's arrays (flow, deposit, talus, sand and the Time pass's eight).
+          refined=result.height; refinedBase=weatherBase;
+          const names=['flow','deposit','talus','sand','wear','wet','hard','slope','fx','fy','channel','ridge'],n=grid*grid;
+          regionalWeather={};
+          names.forEach((key,k) => { const bytes=result.maps[k>>2],out=new Float32Array(n); for (let i=0;i<n;i++) out[i]=bytes[i*4+(k&3)]/255; regionalWeather[key]=out; });
+          weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
+          markViewChanged(); updateControls(); schedule(); return;
+        }
         if (own) {
           refined=result.height; refinedBase=weatherBase;
           renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);

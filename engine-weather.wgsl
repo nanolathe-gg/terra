@@ -77,7 +77,7 @@ fn mapsMain(@builtin(global_invocation_id) id: vec3u) {
     // Sand: a placement rule over deposit and slope (it settles where water dropped what it carried, on ground that is not steep).
     let sand = mp.sand * smoothstep(0.12, 0.55, deposit) * (1.0 - smoothstep(0.10, 0.35, slope)) * (1.0 - smoothstep(0.55, 0.9, flow));
     // Channel: where the flow runs hard over ground that falls (a rill's own floor); ridge: flow below its neighbours (the interfluve).
-    let channel = smoothstep(0.35, 0.8, flow) * smoothstep(0.05, 0.25, slope);
+    let channel = smoothstep(0.03, 0.22, flow) * smoothstep(0.05, 0.25, slope);
     let ridge = clamp(1.0 - flow / max(wet, 0.05), 0.0, 1.0);
     layer0[i] = pack4x8unorm(vec4f(flow, deposit, talus, sand));
     layer2[i] = pack4x8unorm(vec4f(wear, wet, hardness, smoothstep(0.0, 1.5, slope)));
