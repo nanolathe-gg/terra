@@ -677,6 +677,81 @@ fn fringeContours(p: vec2f, field: f32) -> vec4f {
     return vec4f(tone, line * dash * zone * u.ringContrast);
 }
 
+// G3: the red fringe as stacked, offset copies of the hill's outline. Retail steps out from the
+// hill in many thin crimson outlines, each a copy of the foot moved a few px from the last, so
+// they cross and scallop instead of nesting (the owner's "offset faded copies"). Copy j is the
+// same softened outline the concentric lines read, at its own level and at its own offset (a
+// hashed direction around ringShiftDir, wandering slowly across the map, a length up to
+// ringShift), with scalloped lobes in its edge. The field is a Gaussian blur of the hill, whose
+// tail falls as exp(-d^2): the square root of its negative logarithm is therefore about
+// proportional to the distance from the hill, so levels at equal steps of that measure are
+// equally spaced in px, where equal steps of the logarithm would crowd into the far tail. Its edge
+// is a line one px wide, whose distance in px comes from the measure's gradient at the pixel
+// (copies sit within a few px, where it barely changes). Outer copies are drawn first so inner
+// lines lie over them. base: the ground so far.
+fn ringHash(k: f32) -> f32 { return fract(sin(k * 12.9898 + 78.233) * 43758.5453); }
+// How far a copy's outline bulges at p, -0.4..0.6 of ringWobble: round lobes about jittered centres (one per
+// ringLobe px cell, new for each copy) that meet in inward cusps, as a union of discs outlines. A noise waver
+// would only ripple the line; retail's copies read as overlapping scales.
+fn ringScallop(p: vec2f, seed: f32) -> f32 {
+    let q = p / max(u.ringLobe, 4.0);
+    let c = floor(q);
+    var nearest = 4.0;
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            let cell = c + vec2f(f32(dx), f32(dy)) + vec2f(seed * 17.0, seed * 5.0);
+            let at = c + vec2f(f32(dx), f32(dy)) + vec2f(shelfHash(cell), shelfHash(cell + vec2f(57.3, 31.1)));
+            nearest = min(nearest, distance(q, at));
+        }
+    }
+    let x = clamp(nearest / 0.7, 0.0, 1.0);
+    return sqrt(1.0 - x * x) - 0.4;
+}
+fn ringReachMeasure(q: vec2f) -> f32 { return sqrt(max(-fringeField(q), 0.01)); }
+fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
+    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return base; }
+    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
+    if (field < outer * 0.3 || field > 0.65) { return base; }
+    let zone = smoothstep(outer * 0.3, outer * 1.5, field) * (1.0 - smoothstep(0.45, 0.7, field));
+    if (zone <= 0.0) { return base; }
+    let count = i32(clamp(u.ringCount, 1.0, 24.0));
+    let inner = sqrt(-log(0.45));
+    let far = sqrt(-log(outer));
+    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
+    // Each copy tints what it covers (ringFill: the tint where every copy overlaps, so the skirt steps
+    // lighter outward) and the reach of the stack varies along the outline (ringPatch).
+    let fillStep = 1.0 - pow(1.0 - clamp(u.ringFill, 0.0, 0.95), 1.0 / f32(count));
+    let fillTone = vec3f(0.70, 0.70, 0.50);
+    let span = (shelfNoise(p / max(u.ringPatchSize, 20.0) + 53.0) * 0.65 + shelfNoise(p / (0.37 * max(u.ringPatchSize, 20.0)) + 11.0) * 0.35);
+    let reach = mix(2.0, smoothstep(0.3, 0.7, span) * 1.05, u.ringPatch);
+    var rgb = base;
+    for (var n = 0; n < count; n++) {
+        let j = f32(count - 1 - n);
+        let t = j / max(f32(count - 1), 1.0);
+        let vis = 1.0 - smoothstep(reach - 0.12, reach + 0.12, t);
+        let level = mix(inner, far, (j + 0.5) / f32(count));
+        let wander = (shelfNoise(p / 170.0 + j * 7.3) - 0.5) * 2.0;
+        let angle = radians(u.ringShiftDir) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * u.ringScatter * 3.14159;
+        let shift = u.ringShift * (0.45 + 0.55 * ringHash(j + 41.0));
+        let at = p - shift * vec2f(cos(angle), sin(angle));
+        let waver = ringScallop(p, j) * u.ringWobble;
+        // The copy's own gradient: the field's tail is not uniform, and a line drawn from the pixel's
+        // gradient fattens into blobs where the copy lies on a flatter stretch.
+        const e = 3.0;
+        let here = ringReachMeasure(at);
+        let slope = length(vec2f(ringReachMeasure(at + vec2f(e, 0.0)) - here, ringReachMeasure(at + vec2f(0.0, e)) - here)) / e;
+        let d = (here - level) / max(slope, 0.012) + waver;
+        let line = 1.0 - smoothstep(0.3, 0.75, abs(d));
+        let gap = 0.75 + 0.25 * smoothstep(0.15, 0.5, shelfNoise(p / 11.0 + 91.0 + j * 5.1));
+        let inside = 1.0 - smoothstep(-0.7, 0.7, d);
+        rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
+        // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
+        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
+        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
+    }
+    return rgb;
+}
+
 // E11: the lit bed's mid-scale mottle. Retail's shallows are lit ground whose lumps of 4-17 px
 // read as crisp patches, not clouds (luma s.d. after a 5-px blur 5.6-7.5 against ours 2.8-3.9
 // with the fine grain alone), so the noise is cut at a threshold roughened by a pixel hash.
@@ -954,8 +1029,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     let warmGrain = 0.52 - dot(body, vec3f(0.299, 0.587, 0.114));
                     warm = clamp(warm + warmGrain * 0.5 * 4.0 * warm * (1.0 - warm), 0.0, 1.0);
                     transitionGround = mix(transitionGround, body, warm);
-                    let contours = fringeContours(p, sediments.b);
-                    transitionGround = mix(transitionGround, contours.rgb, contours.a);
+                    if (u.ringShift > 0.0) { transitionGround = fringeCopies(transitionGround, p, sediments.b); }
+                    else {
+                        let contours = fringeContours(p, sediments.b);
+                        transitionGround = mix(transitionGround, contours.rgb, contours.a);
+                    }
                     if (u.transitionDetail > 0.0) {
                         let groundLow = textureSampleLevel(grassTex, grassSamp, pixel / 512.0, 3.0).rgb;
                         let ringLow = textureSampleLevel(mineralRingTex, mineralRingSamp, pixel / 512.0, 3.0).rgb;
@@ -984,8 +1062,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     var margin = mix(grass, fringe, veil * 0.55);
                     let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
                     margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
-                    let contours = fringeContours(p, sediments.b);
-                    margin = mix(margin, contours.rgb, contours.a);
+                    if (u.ringShift > 0.0) { margin = fringeCopies(margin, p, sediments.b); }
+                    else {
+                        let contours = fringeContours(p, sediments.b);
+                        margin = mix(margin, contours.rgb, contours.a);
+                    }
                     let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12)
                              * smoothstep(0.02, 0.35, sediments.a);
                     margin = mix(margin, face, core);

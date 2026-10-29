@@ -331,6 +331,17 @@ struct Uniforms {
     iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
     iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
+    // G3 (Archipelago rings): the fringe as stacked, offset copies of the hill's outline. Every default is the earlier look.
+    ringShift: f32,       // px each copy sits from the hill's own outline (0: the earlier concentric lines; ringCount copies otherwise)
+    ringShiftDir: f32,    // degrees the copies drift towards on average, clockwise from east in the world (90: south)
+    ringScatter: f32,     // how far each copy's direction wanders from that mean, as a share of a half turn
+    ringWobble: f32,      // px of waver in each copy's outline: lobes with inward cusps, the scalloped look (0: smooth)
+    ringLobe: f32,        // px across one lobe
+    ringTaper: f32,       // the outermost copy's line is this much fainter than the innermost's (0: all alike)
+    ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)
+    ringPatch: f32,       // how far the stack's reach varies along the outline, from a few copies to all of them (0: every copy everywhere)
+    ringPatchSize: f32,   // px over which that reach varies
+    ringTone: f32,        // the copies' lines take retail's rose, darker on the inner copies and paler on the outer (0: the earlier crimson)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

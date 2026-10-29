@@ -81,7 +81,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const debris=Math.max(3,n('debrisSize',6)*.9)*1.85+n('debrisReach',48)+18;
     const beach=Math.max(this.config.textures.beach?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
     const bake=Math.max(19,boulder,debris,beach);
-    const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75));
+    // G3: the fringe's copies read the material field up to ringShift px from the pixel, and a few px more for each copy's gradient.
+    const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75),n('ringShift',0)>0?Math.abs(n('ringShift',0))+4:0);
     // A projection apron includes appearance displacement too. These are
     // bounds from the actual terms: cosine/value noise <=1, the crack search
     // visits at most +/-4 cells (point delta <4.9 cells per axis), and signed

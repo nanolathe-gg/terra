@@ -830,6 +830,17 @@ export class TerrainRenderer {
     this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
     this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
+    // G3: the fringe's offset copies (ringShift 0: the earlier concentric lines).
+    this.f('uRingShift', variant.has('ringShift') ? Number(variant.get('ringShift')) : 0);
+    this.f('uRingShiftDir', variant.has('ringShiftDir') ? Number(variant.get('ringShiftDir')) : 315);
+    this.f('uRingScatter', variant.has('ringScatter') ? Number(variant.get('ringScatter')) : 0.5);
+    this.f('uRingWobble', variant.has('ringWobble') ? Number(variant.get('ringWobble')) : 3);
+    this.f('uRingLobe', variant.has('ringLobe') ? Number(variant.get('ringLobe')) : 22);
+    this.f('uRingTaper', variant.has('ringTaper') ? Number(variant.get('ringTaper')) : 0);
+    this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);
+    this.f('uRingPatch', variant.has('ringPatch') ? Number(variant.get('ringPatch')) : 0);
+    this.f('uRingPatchSize', variant.has('ringPatchSize') ? Number(variant.get('ringPatchSize')) : 120);
+    this.f('uRingTone', variant.has('ringTone') ? Number(variant.get('ringTone')) : 0);
     this.fieldsDirty = true;
   }
 

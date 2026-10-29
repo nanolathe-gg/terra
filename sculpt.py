@@ -150,6 +150,15 @@ KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
+# G3 (Archipelago rings): the fringe's lines as offset copies of the hill's outline (ringShift px, 0: the earlier concentric
+# lines; ringCount copies), drifting towards ringShiftDir degrees clockwise from east with ringScatter of a half turn of
+# wander, and ringWobble px of waver in each outline (lobes ringLobe px across).
+KNOB_DEFAULTS.update(ringShift=0, ringShiftDir=315, ringScatter=.5, ringWobble=3, ringLobe=22)
+# G3: the stack fades into the sand: ringTaper (outer lines fainter), ringFill (pale tint, stepping lighter
+# outward), ringPatch over ringPatchSize px (the reach varies along the outline). 0: as the concentric look.
+KNOB_DEFAULTS.update(ringTaper=0, ringFill=0, ringPatch=0, ringPatchSize=120)
+# G3: ringTone 1 draws the copies' lines in retail's rose, paler outward (0: the earlier crimson).
+KNOB_DEFAULTS.update(ringTone=0)
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
 WORLD_KNOBS = {
@@ -260,8 +269,18 @@ WORLD_KNOBS = {
                         # contour pass draws from the mineral field's falloff (so they follow the
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
-                        bandFoot=8, ringContrast=.55, ringCount=12, ringSize=.3,
-                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottle=.09, bedMottleScale=1.2),
+                        bandFoot=8,
+                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottle=.09, bedMottleScale=1.2,
+                        # G3: the fringe as stacked offset copies of the hill's outline, not concentric lines
+                        # (round 8: retail's step outward in several copies, each offset from the last). The
+                        # reach is a wider outer level than the concentric lines' (ringSize .3). The earlier
+                        # look is ringShift 0 with ringContrast .55, ringCount 12 and ringSize .3.
+                        ringShift=13, ringShiftDir=315, ringScatter=.5, ringWobble=9, ringLobe=20,
+                        ringContrast=.95, ringCount=22, ringSize=.6,
+                        # G3 fade: outer lines fainter, a pale lime skirt stepping lighter outward, and a
+                        # reach that varies along the outline (retail's halo is wide on some sides of a hill
+                        # and a few px on others). ringTone 1: retail's rose lines, paler outward.
+                        ringTaper=.35, ringFill=.45, ringPatch=.8, ringPatchSize=160, ringTone=1),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
