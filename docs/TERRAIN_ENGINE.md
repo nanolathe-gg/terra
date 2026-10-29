@@ -32,6 +32,10 @@ feature.
    around it. The owner's example: keep erosion's sand deposits around one
    feature, and lessen them around a second.
 6. **Later:**
+   - Artists define new base textures for a world procedurally: a world's
+     base tiles made from parameters they set, not only from measured
+     retail statistics. *"for now let's focus on what we have and getting
+     everything on the GPU and simplified."*
    - Go and `gogpu/wgpu` wait.
    - So do the knob audit and replacing `sculpt.py`'s server.
    - The UI pass comes last.
