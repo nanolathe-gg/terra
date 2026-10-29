@@ -1,0 +1,11 @@
+{"biome": "green", "source": {"note": "G2 demo, no retail window: a plateau with painted rock on its north, east, south and west walls, one patch on level ground at its south foot and one far from it"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["plateau", [[512,512]], {"card": {"diameter": 380, "amount": 90, "roughness": 14, "softness": 30}}],
+  ["paint", [[450,335],[580,335]], {"card": {"diameter": 120, "amount": 100, "softness": 85, "roughness": 60, "paintChannel": 1}}],
+  ["paint", [[690,450],[690,580]], {"card": {"diameter": 120, "amount": 100, "softness": 85, "roughness": 60, "paintChannel": 1}}],
+  ["paint", [[450,690],[580,690]], {"card": {"diameter": 120, "amount": 100, "softness": 85, "roughness": 60, "paintChannel": 1}}],
+  ["paint", [[335,450],[335,580]], {"card": {"diameter": 120, "amount": 100, "softness": 85, "roughness": 60, "paintChannel": 1}}],
+  ["paint", [[450,820],[580,820]], {"card": {"diameter": 120, "amount": 100, "softness": 85, "roughness": 60, "paintChannel": 1}}],
+  ["paint", [[100,100],[190,100]], {"card": {"diameter": 120, "amount": 100, "softness": 85, "roughness": 60, "paintChannel": 1}}]
+ ]}
