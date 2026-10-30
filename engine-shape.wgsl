@@ -614,3 +614,83 @@ fn stampRamp(@builtin(global_invocation_id) g: vec3u) {
   F[PP * cells + i] = max(F[PP * cells + i], sm(0.55, 0.92, w));
   F[PR * cells + i] = max(F[PR * cells + i], sm(0.30, 0.92, w));
 }
+
+// H6c crater: dab()'s crater branch. A cell takes the capsule with the most influence (1 - rr / 1.9); its bowl, rim, lumps and ejecta are position-based noise of the
+// crater's own seed. The level it digs from, PT[preIdx], is the prefix height at the crater's centre (a satellite reads it after the main crater and the earlier satellites).
+@compute @workgroup_size(8, 8)
+fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let n = u.grid; let cells = pcells(); let i = lidx(x, y);
+  let nDet = nzCell(2u, x, y, i, cells);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+  let nDet = Nz[2u * cells + i];
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let radius = u.radius; let rough = u.rough; let soft = u.softness; let amount = u.amount; let seed = u.seed;
+  let base = F[PH * cells + i];
+  let baseline = PT[u.preIdx];
+  let sc = max(radius * 0.55, 8.0);
+  let n0 = vnoise(lx / (radius * 0.95), ly / (radius * 0.95), seed ^ 0x4a7u);
+  let n1 = vnoise(lx / sc, ly / sc, seed ^ 0x1c3u);
+  let n2 = vnoise(lx / (sc * 0.6), ly / (sc * 0.6), seed ^ 0x2d9u);
+  let lobe = 1.0 + rough * (0.38 * n0 + 0.22 * n1 + 0.1 * n2);
+  var best = 0.0; var bestValue = base; var visited = false;
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u];
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let px = s0.x; let py = s0.y; let sx = s0.z - px; let sy = s0.w - py; let span2 = sx * sx + sy * sy;
+    var t = 0.0;
+    if (span2 > 0.0) { t = clamp(((wx - px) * sx + (wy - py) * sy) / span2, 0.0, 1.0); }
+    let cx = px + sx * t; let cy = py + sy * t;
+    let dx = wx - cx - u.cOffX * radius * 0.32 * rough; let dy = wy - cy - u.cOffY * radius * 0.32 * rough;
+    let rr = sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / (radius * lobe);
+    let rb = sqrt(dx * dx + dy * dy) / (radius * lobe);
+    if (rr >= 1.9) { continue; }
+    let influence = 1.0 - rr / 1.9;
+    if (influence <= best) { continue; }
+    best = influence; visited = true;
+    let floorEdge = 0.25 + 0.45 * (1.0 - soft);
+    let rimNoise = vnoise(lx / (sc * 0.8), ly / (sc * 0.8), seed ^ 0x3e1u);
+    let rimHeight = amount * u.rimH * clamp(1.1 * (rimNoise * 0.5 + 0.5) + 0.5 * n0 * rough - 0.15 * rough, 0.0, 1.5);
+    let rimWidth = (0.16 + 0.2 * soft) * (1.0 + 0.35 * n2);
+    var bowl = 0.0;
+    if (rb < 1.0) { bowl = 1.0 - sm(floorEdge, 1.0, rb); }
+    let apronReach = 1.0 - sm(1.15 + 0.35 * n1, 1.85, rr);
+    var rim = 0.0;
+    if (rr < 1.0) { let q = (rr - 1.0) / rimWidth; rim = exp(-(q * q)); }
+    else { let q = (rr - 1.0) / (rimWidth * 2.4); rim = exp(-(q * q)) * apronReach; }
+    var lumpGate = 0.0;
+    if (rr < 1.3) { lumpGate = 1.0; }
+    let lumps = rough * (6.0 * n2 + 3.0 * n1 + 2.0 * nDet) * lumpGate;
+    var ejecta = 0.0;
+    if (u.ejecta > 0.0 && rr > 0.8) {
+      let e1 = vnoise(lx / (sc * 0.32), ly / (sc * 0.32), seed ^ 0x6e7u);
+      let e2 = vnoise(lx / (sc * 0.14), ly / (sc * 0.14), seed ^ 0x1b5u);
+      let reach = 1.25 + 0.45 * (n0 * 0.5 + 0.5);
+      ejecta = u.ejecta * amount * 0.16 * sm(-0.05, 0.45, e1 * 0.7 + e2 * 0.3) * (1.0 - sm(1.0, reach + 0.25, rr)) * sm(0.8, 1.0, rr) * (0.6 + 0.4 * e2);
+    }
+    let floorH = max(baseline - amount, min(baseline, u.sea + 4.0));
+    let tgt = baseline + rimHeight * rim - (baseline - floorH) * bowl + lumps * (0.4 + 0.6 * bowl);
+    let blend = sm(0.0, 0.15, 1.0 - rr);
+    var value = base + rimHeight * rim + lumps * 0.3 * apronReach;
+    if (rr < 1.0) {
+      var extra = 0.0;
+      if (rr >= 0.85) { extra = (rimHeight * rim + lumps * 0.4) * (1.0 - blend); }
+      value = base + (tgt - base) * blend + extra;
+    }
+    value = value + ejecta;
+    bestValue = clamp(select(value, max(value, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
+  }
+  if (!visited) { return; }
+  F[PH * cells + i] = bestValue;
+  let sw = sm(0.0, 0.3, best);
+  F[PP * cells + i] = F[PP * cells + i] * (1.0 - sw);
+  F[PR * cells + i] = F[PR * cells + i] * (1.0 - sw);
+  if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, best * 1.6) * u.crackAmt); }
+}
