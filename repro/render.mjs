@@ -12,8 +12,9 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450));
 const extraQuery = opt('--query', '');
-const MAPX = 4, MAPY = 4, OX = 528, OY = 528, WINDOW = 1024;
+const MAPX = 4, MAPY = 4, WINDOW = 1024;
 const clayOn = args.includes('--clay') && args.splice(args.indexOf('--clay'), 1).length > 0;
+const OX = Number(opt('--offset', 528)), OY = OX, seaArg = opt('--sea', '');
 const [sceneFile, out] = args;
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
@@ -30,7 +31,7 @@ if (sceneConfig.biomeId !== scene.biome) {
   console.error(`render.mjs: ${sceneFile}: asked for world ${scene.biome}, the server returned ${sceneConfig.biomeId}`);
   process.exit(1);
 }
-const url = `${server}/sculpt?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
+const url = `${server}/sculpt?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
   `--remote-debugging-port=${port}`, `--user-data-dir=${out}/.profile-${port}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
