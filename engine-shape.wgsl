@@ -259,14 +259,41 @@ fn shapeMasks(i: u32, f: f32) {
   }
 }
 // H9 ridge piece: the height multiplier at t along a piece (h0 -> h1), then the jagged crest (ridgeRise in sculpt.js).
-fn ridgeRise(h0: f32, h1: f32, jag: f32, t: f32, lx: f32, ly: f32) -> f32 {
+fn craterLobe(R: f32, rough: f32, seed: u32, lx: f32, ly: f32) -> f32 {
+  let sc = max(R * 0.55, 8.0);
+  return 1.0 + rough * (0.38 * vnoise(lx / (R * 0.95), ly / (R * 0.95), seed ^ 0x4a7u) + 0.22 * vnoise(lx / sc, ly / sc, seed ^ 0x1c3u) + 0.1 * vnoise(lx / (sc * 0.6), ly / (sc * 0.6), seed ^ 0x2d9u));
+}
+fn ridgeRise(h0: f32, h1: f32, jag: f32, t: f32, lx: f32, ly: f32, wx: f32, wy: f32) -> f32 {
   var h = h0 + (h1 - h0) * t;
+  // A crater's spurs fade out toward the bowl: none start inside the rim (u.hole: the crater's centre, radius, roughness and seed).
+  if (u.hole != 0u) { let rr = sqrt((wx - u.hx) * (wx - u.hx) + (wy - u.hy) * (wy - u.hy)) / (u.hR * craterLobe(u.hR, u.hRough, u.hSeed, lx, ly)); h = h * sm(0.92, 1.2, rr); }
   if (jag > 0.0) {
     let R = u.radius;
     let n = 0.6 * vnoise(lx / (R * 0.28), ly / (R * 0.28), u.seed ^ 0x6b1u) + 0.4 * vnoise(lx / (R * 0.11), ly / (R * 0.11), u.seed ^ 0x1d7u);
     h = h * (1.0 - jag * 0.6 * (0.5 - 0.5 * n));
   }
   return h;
+}
+// H9 crater rim sectors and gaps (rimSetup/rimFactors in sculpt.js): the sectors' [angle, height, width, angle relative to the first] and the gaps' angles
+// are in MW after the node's mask writes; returns (height factor, width factor) at the angle `ang` round the ring.
+fn rimFactors(ang: f32) -> vec2f {
+  let tau = 6.283185307179586; let n = u.nSect; let base = u.mwBase + u.nwrites;
+  var h = 1.0; var w = 1.0;
+  if (n > 1u) {
+    let a0 = MW[base].x;
+    let d = ((ang - a0) % tau + tau) % tau;
+    var i = 0u; while (i < n - 1u && MW[base + i + 1u].w <= d) { i = i + 1u; }
+    let j = (i + 1u) % n;
+    var nextRel = tau; if (i < n - 1u) { nextRel = MW[base + i + 1u].w; }
+    let span = nextRel - MW[base + i].w; let t = sm(0.0, 1.0, (d - MW[base + i].w) / max(span, 1e-6));
+    h = MW[base + i].y + (MW[base + j].y - MW[base + i].y) * t; w = MW[base + i].z + (MW[base + j].z - MW[base + i].z) * t;
+  }
+  for (var g = 0u; g < u.nGap; g++) {
+    let ga = MW[base + n + g].x;
+    let dist = abs((((ang - ga + 3.141592653589793) % tau) + tau) % tau - 3.141592653589793);
+    h = h * (0.08 + 0.92 * sm(0.5 * u.gapHw, u.gapHw, dist));
+  }
+  return vec2f(h, w);
 }
 fn nzF(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
 #ifdef PAGES
@@ -388,7 +415,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       w = crossSection(r, radius * width * u.bankScale, F[PH * cells + i], nCW, nShelf, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells));
       lift = sLift;
     }
-    if (u.ridge != 0u) { w = w * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly); }
+    if (u.ridge != 0u) { w = w * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
     if (kind == 4u || (kind == 5u && !shouldered)) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
     let influence = max(w, core);
     if (!shouldered && influence <= best) { continue; }
@@ -816,14 +843,16 @@ fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
     best = influence; visited = true;
     let floorEdge = 0.25 + 0.45 * (1.0 - soft);
     let rimNoise = vnoise(lx / (sc * 0.8), ly / (sc * 0.8), seed ^ 0x3e1u);
-    let rimHeight = amount * u.rimH * clamp(1.1 * (rimNoise * 0.5 + 0.5) + 0.5 * n0 * rough - 0.15 * rough, 0.0, 1.5);
-    let rimWidth = (0.16 + 0.2 * soft) * (1.0 + 0.35 * n2);
+    var rimHeight = amount * u.rimH * clamp(1.1 * (rimNoise * 0.5 + 0.5) + 0.5 * n0 * rough - 0.15 * rough, 0.0, 1.5);
+    let rimWidth0 = (0.16 + 0.2 * soft) * (1.0 + 0.35 * n2);
+    var rimWidth = rimWidth0; var outerK = 2.4;
+    if (u.nSect > 1u || u.nGap > 0u) { let rf = rimFactors(atan2(wy - cy, wx - cx) - atan2(u.rotY, u.rotX)); rimHeight = rimHeight * rf.x; rimWidth = rimWidth * rf.y; outerK = 1.4; }
     var bowl = 0.0;
     if (rb < 1.0) { bowl = 1.0 - sm(floorEdge, 1.0, rb); }
     let apronReach = 1.0 - sm(1.15 + 0.35 * n1, 1.85, rr);
     var rim = 0.0;
     if (rr < 1.0) { let q = (rr - 1.0) / rimWidth; rim = exp(-(q * q)); }
-    else { let q = (rr - 1.0) / (rimWidth * 2.4); rim = exp(-(q * q)) * apronReach; }
+    else { let q = (rr - 1.0) / (rimWidth0 * outerK); rim = exp(-(q * q)) * apronReach; }
     var lumpGate = 0.0;
     if (rr < 1.3) { lumpGate = 1.0; }
     let lumps = rough * (6.0 * n2 + 3.0 * n1 + 2.0 * nDet) * lumpGate;
