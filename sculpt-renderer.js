@@ -99,6 +99,9 @@ const MIP_SHADER = `
 
 // H4: the generated materials' level-0 size and level count (512 down to 8 px).
 const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
+// H8 bridge: the generated array's layers for a world without a materials table (engine-bridge.wgsl): slope grass, rock, weathered, fractured,
+// fringe, transition body, beach, mineral ring. Removed by the Materials card with the images.
+const BRIDGE_LAYERS = 8, BRIDGE_LAYER = {slopeGrass: 0, rock: 1, rockWeathered: 2, rockFractured: 3, fringe: 4, transitionBody: 5, beach: 6, mineralRing: 7};
 
 export class TerrainRenderer {
   static async create(canvas, config) {
@@ -158,17 +161,20 @@ export class TerrainRenderer {
     // H4: engine 1 draws with engine-frag / engine-bake / engine-common (Green's own shaders); 0 is the shared set, as merge-h3 draws.
     this.engine = Number(query.get('engine') ?? this.config.defaults?.engine ?? 0) === 1;
     const modelQuery = query.get('materialModel');
-    this.materialModel = this.engine || Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
+    // H8: a world whose materials are numbers names its table in the config (config.materialTable); the others bridge their prepared images.
+    const tableUrl = this.config.materialTable;
+    this.materialModel = this.engine ? Boolean(tableUrl) : Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
+    this.bridge = this.engine && !tableUrl;
     this.materialData = null;
-    const names = this.engine ? ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'materials/green.json', 'engine-materials.wgsl']
+    const names = this.engine ? ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', ...(tableUrl ? [tableUrl.replace(/^\//, '')] : [])]
       : ['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelSource = this.engine ? null : extra[0], modelTable = this.engine ? extra[0] : extra[1];
-    this.materialsSource = this.engine ? extra[1] : null;
+    const modelSource = this.engine ? null : extra[0], modelTable = this.engine ? extra[2] : extra[1];
+    this.materialsSource = this.engine ? extra[0] : null;
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
     if (this.materialModel && !this.engine) defines.add('MATERIAL_MODEL');
@@ -189,7 +195,7 @@ export class TerrainRenderer {
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile(this.engine ? 'engine-frag.wgsl' : 'sculpt-frag.wgsl', preprocess(modelSource ? frag + '\n' + modelSource : frag, common, defines)),
+      compile(this.engine ? 'engine-frag.wgsl' : 'sculpt-frag.wgsl', preprocess(this.engine ? frag + '\n' + extra[1] : modelSource ? frag + '\n' + modelSource : frag, common, defines)),
       compile(this.engine ? 'engine-bake.wgsl' : 'relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
@@ -239,8 +245,8 @@ export class TerrainRenderer {
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
-    if (this.materialModel) { this.materialData = JSON.parse(modelTable); this.set('uMaterialTable', materialRows(this.materialData)); }
-    if (this.engine) await this.makeMaterials();
+    if (modelTable) { this.materialData = JSON.parse(modelTable); this.set('uMaterialTable', materialRows(this.materialData)); }
+    if (this.engine) { if (this.materialData) await this.makeMaterials(); else this.makeBridgeTexture(); }
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -266,7 +272,7 @@ export class TerrainRenderer {
       // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
       if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured.slopeGrass.meanRGB.map(v => v / 255); continue; }
       // H4: the engine makes the rocks from numbers too (item 3), so no rock image is fetched; its mean colour is the table's.
-      if (this.engine && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured.rock.meanRGB.map(v => v / 255); continue; }
+      if (this.materialData && this.engine && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured.rock.meanRGB.map(v => v / 255); continue; }
       if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
       if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
       let url = this.config.textures[key];
@@ -295,6 +301,7 @@ export class TerrainRenderer {
       // base colour while keeping the texture's grain.
       const meanOf = {grass: 'ground', slopeGrass: 'slope', rock: 'rock'}[key];
       if (meanOf) this.means[meanOf] = meanColor(bitmap);
+      if (this.bridge) this.bridgeCopy(key, bitmap);
       const numeric = key === 'noise' || key === 'fractures';
       const detailLevels = this.config.textures.transitionBody && ['grass','slopeGrass','rock','mineralRing','mineralRings'].includes(key);
       const loaded = this.materialTexture(key, [bitmap], {
@@ -309,7 +316,7 @@ export class TerrainRenderer {
     // layers resident makes the weathering-strength control continuous.
     // H4: the engine draw has no fringe, ring or slope-grass images (Green has no mineral margins or beach).
     this.transitionBody=false;
-    if(!this.engine){
+    if(!this.engine || this.bridge){
     const fringeURL=this.config.textures.slopeFringe||(this.materialModel?null:this.config.textures.slopeGrass)||this.config.textures.grass;
     const loadFringe=async url=>{
       const response=await fetch(url);
@@ -330,11 +337,13 @@ export class TerrainRenderer {
       source.close(); beach=tile;
     }
     for(const bitmap of [body,beach]) if(bitmap.width!==fringe.width||bitmap.height!==fringe.height) throw new Error('Transition material sizes must match');
+    if(this.bridge){ this.bridgeCopy('fringe',fringe); this.bridgeCopy('transitionBody',body); this.bridgeCopy('beach',beach); }
     this.textures.slopeFringe=this.materialTexture('slopeFringe',[fringe,body,beach],{minFilter:this.transitionBody?'linear':'nearest',magFilter:'nearest',mipmaps:this.transitionBody});
     this.bound.uSlopeFringe='slopeFringe';
     if(body!==fringe)body.close();fringe.close();
     }
     this.i('uBeach',Boolean(this.config.textures.beach));
+    if(this.engine)this.i('uBridged',this.bridge);
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
@@ -350,6 +359,7 @@ export class TerrainRenderer {
     this.i('uMineralMargins', variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope');
     this.i('uRockLayers', rockLayers);
     this.applyKnobs();
+    if (this.bridge) { this.generateMipmaps(this.generated.texture, BRIDGE_LAYERS, GENERATED_LEVELS); this.set('uMaterialTable', this.placementRows(variant)); }
     this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -666,6 +676,38 @@ export class TerrainRenderer {
         this.textures[this.bound.uWater], this.textures[this.bound.uWaterShallow]].flatMap((t, i) => [
         {binding: i * 2, resource: t.view}, {binding: i * 2 + 1, resource: t.sampler}]),
       {binding: 18, resource: this.textures[this.bound.uPalette].view}]});
+  }
+
+  // H8 bridge: the generated array for a world with no materials table. Its layers hold the world's own prepared images (bridgeCopy),
+  // 256 px images tiled 2 x 2 so a level-0 lookup reads what the shared draw's repeating sampler read; the mips are box filters of the images.
+  makeBridgeTexture() {
+    const texture = this.device.createTexture({label: 'bridged materials', size: [GENERATED_SIZE, GENERATED_SIZE, BRIDGE_LAYERS], format: 'rgba8unorm', mipLevelCount: GENERATED_LEVELS,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT});
+    this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
+  }
+  bridgeCopy(key, bitmap) {
+    const layers = key === 'rock' && this.variant.get('material') !== 'varied' ? [1, 2, 3] : [BRIDGE_LAYER[key]];   // without rock layers the weathered and fractured slots are the rock
+    if (layers[0] === undefined) return;
+    const {width, height} = bitmap;
+    if (GENERATED_SIZE % width || GENERATED_SIZE % height) throw new Error(`nanolathe: bridged material ${key} is ${width} x ${height}; it must divide ${GENERATED_SIZE}`);
+    for (const layer of layers) for (let y = 0; y < GENERATED_SIZE; y += height) for (let x = 0; x < GENERATED_SIZE; x += width)
+      this.device.queue.copyExternalImageToTexture({source: bitmap}, {texture: this.generated.texture, origin: [x, y, layer], premultipliedAlpha: false}, [width, height]);
+  }
+  // H8 bridge: the placement rows of a world with no table (the ten rows after the four materials; engine-frag.wgsl landPlace reads them),
+  // from the knobs the shared draw's placement read. Green's rows are materials/green.json; this builds the same rows for the shared draw's formulas.
+  placementRows(variant) {
+    const material = this.config.material || {}, num = (k, d) => variant.has(k) ? Number(variant.get(k)) : d, list = (k, d) => (variant.get(k) || d).split(',').map(Number);
+    const mode = variant.get('coverage'), soil = variant.get('transition') === 'soil', mineral = variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope';
+    const threshold = material.rockSlope ?? 1.145, feather = material.rockFeather ?? 0.43;
+    let r0 = [1, 0, 0, 5], r1 = [0.55, 0, 0.55, 10], third = 0.30;   // the plain slope score: slope, noise, wear, and a third noise term
+    if (mode === 'form') { r0 = [0.55, 0.45, 0.28, 5]; r1 = [soil ? 0.80 : 0.25, soil ? 0.70 : 0, 0.55, 10]; third = 0; }
+    if (mode === 'ledge') { r0 = [0.15, 0.85, 0.15, 3]; r1 = [0.15, 0, 0.55, 4]; third = 0; }
+    const face = list('faceSlope', '0.35,0.9'), share = list('rockShare', '0.2,1.0'), score = list('faceScore', '0.2,2.0,0.5,0.3');
+    const rows = Array.from({length: 166}, () => [0, 0, 0, 0]);
+    rows.splice(156, 10, r0, r1, [threshold - feather * 0.5, threshold + feather * 0.5, third, 0],
+      [0.2, soil ? 18 : 1e9, 18, 28], material.rockyCoasts ? [-1e4, -1e3, 0, 0] : [12, 36, 0, 0], [0.45, 0.9, mineral ? 0.45 : 0, mineral ? 1.4 : 0],
+      [face[0], face[1], num('faceEdge', 0.8), 0], [share[0], share[1], 0, 0], score, [num('gullyRock', 0.5), num('rockOrder', 0), 0, 0]);
+    return rows;
   }
 
   // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).

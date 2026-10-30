@@ -3101,7 +3101,7 @@ function moveHistory(delta) {
 // Archipelago's dark hills) keep roughly their final look instead of
 // turning pale until refinement finishes.
 // H3: with the material model the draw reads no material field, so the worker and the quick preview skip it.
-const materialPreview=() => !renderer?.materialModel && experiment.get('deposits')!=='off' && Number($('material-weathering').value)>0;
+const materialPreview=() => !renderer?.materialModel && !renderer?.engine && experiment.get('deposits')!=='off' && Number($('material-weathering').value)>0;
 function clearRendererWeather() { if (regionalFields) { regionalWeather=null; if (gpuWeather) gpuWeather.mapsOn=false; } else renderer?.setWeather(); }
 function quickMaterials() {
   if (regionalFields) return;
@@ -3185,18 +3185,32 @@ function queueWeather() {
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           // The maps stay packed (three rgba8 arrays, 4 bytes a sample); the chunk crop unpacks only the samples a chunk needs.
           regionalWeather={p0:result.maps[0],p1:result.maps[1],p2:result.maps[2]};
-          weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
-          markViewChanged(); updateControls(); schedule(); return;
+          // H8: the terrain is final once the material field (when the world asks for one) is in.
+          materialRule(result.height).then(field => { if (job!==weatherJob || stroke || !regionalWeather) return; if (field) regionalWeather.materialField=field;
+            weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; markViewChanged(); updateControls(); schedule(); });
+          return;
         }
         if (own) {
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);
-          heightDirty=false; weatherState='ready'; renderedRevision=-1; updateControls();
-          $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); return;
+          heightDirty=false;
+          materialRule(refined).then(field => { if (job!==weatherJob || stroke) return; if (field) renderer.setMaterialField(field);
+            weatherState='ready'; renderedRevision=-1; updateControls(); $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); });
+          return;
         }
         eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
       .catch(err => { if (job===weatherJob) failWeather(err.message); });
   } catch (err) { failWeather(err.message); }
+}
+// H8: the Time pass's material field (sediment arrival, soil, softened source), when the Material weathering control is above 0. It replaces the
+// worker's weatherMaterials on the engine path; null when the control is 0 or deposits are off.
+async function materialRule(height) {
+  const amount=Number($('material-weathering').value)/100;
+  if (!(amount>0) || experiment.get('deposits')==='off') return null;
+  try {
+    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
+    return await erosion.materialField({height,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:refinementSeed,depositSpread:Number($('deposit-spread').value)/100,profile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}});
+  } catch (err) { console.error(err); return null; }
 }
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
 async function runFedWeather(job) {

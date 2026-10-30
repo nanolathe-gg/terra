@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
-    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-weather.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
+    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
     'relief-bake.wgsl', 'erosion.wgsl', 'engine-erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
@@ -213,7 +213,7 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # with no prepared image (0: the images, as before).
 KNOB_DEFAULTS.update(materialModel=0)
 # H4 (Green): engine 1 draws and bakes with engine-frag/engine-bake/engine-common, Green's own copies (0: the shared shaders, as merge-h3).
-KNOB_DEFAULTS.update(engine=0)
+KNOB_DEFAULTS.update(engine=1)   # H8: every world draws on the engine; ?engine=0 is the shared draw (merge-h6c)
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
 KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
@@ -224,14 +224,19 @@ KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillD
 # H6 (Green): gpuShape 1 evaluates the brushes Green's windows use on the GPU (engine-shape.wgsl); 0 is the JS engine.
 KNOB_DEFAULTS.update(gpuShape=0)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
+# H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
+# had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
+# BUDGET 3, sculpt-erosion.js): its maps are made, its height moves no further than the worker's did.
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
 # Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
 # scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
+LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)   # gpuShape stays 0: the GPU shape moves these worlds' pictures (NOTES H8 item 2)
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
                   rockMoss=.4, hillBlocks=.5, gpuShape=1,
                   terraceBreak=1.4, terraceCalm=0, wetSwath=.35, outcrop=0),
+    **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
 # deepDepth come from each world's measured water ramp).
@@ -239,7 +244,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(engine=1, materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
+    'green': dict(materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -793,12 +798,18 @@ def lighten_red_shallows(config, assets):
     config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
 
 
+# H8: the worlds whose land materials are numbers. The engine reads the table; every other world bridges its prepared images.
+MATERIAL_TABLES = {'green': '/materials/green.json'}
+
+
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
+    if biome in MATERIAL_TABLES:
+        config['materialTable'] = MATERIAL_TABLES[biome]
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)
     return config
