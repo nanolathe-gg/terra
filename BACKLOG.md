@@ -101,6 +101,8 @@ branches and the projection fix below, so re-render before judging.
    | H8 | 8873 | 9673 | `$R/agent-H8/out` | `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice` |
    | H9 | 8874 | 9674 | `$R/agent-H9/out` | `--worlds none` |
    | H8b | 8875 | 9675 | `$R/agent-H8b/out` | `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice` |
+   | H10 | 8876 | 9676 | `$R/agent-H10/out` | `--worlds lava,crystal,ice` |
+   | H12 | 8877 | 9677 | `$R/agent-H12/out` | the same look as `merge-h10` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -5533,6 +5535,126 @@ before and after, and what stays on JS and why.
 - **Still on JS by design:** Lava's coast pass; Crystal's columns and
   bergs, fingers, bank and plates, and crater facets; Ice's plates,
   fingers and columns. Shores and Bodies rebuild them.
+
+### H10. The last shapes on the GPU
+
+> **Owner, 2026-10-30:** "Then ASAP I would like to have everything use
+> the GPU in the UI so we can delete all the CPU work and get on one
+> single path ... I do not want to worry about back compat." "We want a
+> similar look, tiny changes in height or shape or shading due to the GPU
+> math are acceptable."
+
+Read TERRAIN_ENGINE decisions 14 and 17-19, "Migration" (phase 1) and
+"Rules for the cards". Then read H9's and H8b's Done and Still open lists,
+and in `$R/agent-H6c/NOTES.md` the inventory lines on the options that
+stayed on JS.
+
+**What is there today.** After H8b, every world's preset runs the GPU
+shape. A scene still falls back to the JS engine as a whole when a stroke
+uses one of these options:
+- **the coast pass** (`fingerCoast`, `shoreLayers`): `stampCoastShore` in
+  `sculpt.js`, about 300 lines. It runs a connectivity flood and distance
+  transforms over the prefix. Every stroke of Lava's three scenes uses it;
+- **water fingers, bank and shore plates** (`fingers`, `bankPx`,
+  `shorePlates`): `fingerRibs` and `fingerShift` read the coast;
+  `stampShorePlates`, `Slabs` and `Frost` take a coast distance transform
+  of the prefix. Crystal and Ice use them;
+- **crystal columns and bergs** (`crystalForm`), about 140 lines. Crystal
+  and Ice use them;
+- **mountain and crater facets** (`iceFacets`, `craterFacets`). They read
+  ±3 cells of their own result. Crystal and Ice use them;
+- **`hillLobes`.** Dropped (decision 17); H12 deletes it. Do not port it.
+
+**Scope.**
+- GPU versions of these options, judged by look, not by bits
+  (decision 17). A GPU-shaped model may replace the JS algorithm.
+- **Share:** one coast distance field on the GPU, computed from the
+  prefix by jump flooding, for example. The coast pass, fingers, bank and
+  plates all read it. It is also where the Shores feature card starts.
+- The JS engine is not edited; H12 deletes it.
+
+**Deliver.**
+
+1. **Inventory (a stop point).** For each option, hand back:
+   - what the JS does;
+   - the GPU model you propose and what it reads;
+   - its reach, for the page ring or a window of its own;
+   - its expected cost;
+   - the scenes that use it.
+
+   Add the order.
+2. **The coast distance field,** a shared pass, at both resolutions.
+3. **The coast pass, fingers and bank** on it.
+4. **Shore plates.**
+5. **Crystal columns and bergs.**
+6. **Facets,** as a pass over the node's own result.
+7. **The census:** every stroke of the 27 scenes runs on the GPU.
+   `hillLobes` is the only reason left (lava-3).
+8. **Maps.**
+   - 4×4 exports of Lava, Crystal and Ice: self-check, no seams at 2×.
+   - 8×8 Lava through pages.
+   - `perf.mjs` on Lava at 4×4.
+
+**Acceptance.**
+- **The same look** on Lava, Crystal and Ice against `merge-h8b`, which
+  still draws them with the JS engine:
+  - triptychs by eye at 1× and 2×;
+  - `stats.py`: no metric leaves the world's retail range where
+    `merge-h8b` was inside it.
+- **The other six worlds** are exact against `merge-h8b`.
+- **`regional.mjs`** finds 0 on all 27.
+- **The gate** passes.
+
+**Files:**
+- `engine-shape.wgsl`, and a new `engine-coast.wgsl` if you want one;
+- `sculpt-gpu-fields.js`;
+- in `sculpt.js`, only `shapeContext` and the probe-stroke parameters;
+- `repro/shape-scenes/` and `repro/` tools.
+- Not the draw, bake or bridge shaders, and not the JS engine.
+
+**Budget:**
+- Item 1 is a stop point.
+- If the budget runs short, go in this order and stop at a finished one:
+  the coast pass (every Lava stroke), plates, columns, facets.
+
+**Server and guard:**
+- port 8876, CDP 9676;
+- worktree `../terraform-wt-H10`, branch `H10-last-shapes`;
+- assets `$R/agent-H10`, with `mapcheck.mjs` and `refusals.mjs`;
+- baseline `$R/repro-out/merge-h8b`;
+- guard `--worlds lava,crystal,ice`.
+
+### H12. One path — outline
+
+After H10. The owner (decision 18): "delete all the CPU work and get on one
+single path ... I do not want to worry about back compat."
+
+**Delete:**
+- engine 0: `sculpt-frag.wgsl`, `relief-bake.wgsl`, `sculpt-common.wgsl`,
+  `erosion.wgsl` and `material-model.wgsl`, and the renderer's engine-0
+  branches;
+- the JS shape engine in `sculpt.js` (`applyNode`, `dab`, the stamps, the
+  prefix snapshots) wherever the GPU covers it, which is everywhere after
+  H10;
+- the CPU workers: `sculpt-weathering.js`, `sculpt-tiled-weather.js`,
+  `sculpt-sand.js`, `sculpt-material-weathering.js` and
+  `sculpt-map-weather.js`;
+- the River and Source tools with the flow bake (`sculpt-flow.js`,
+  `sculpt-flow-ui.js`), and their strokes in zhon-1..3 (decision 19);
+- `hillLobes` and the URL-only experiments (decision 17);
+- the switches and their fallbacks: `engine`, `gpuShape`, `gpuFeed`,
+  `gpuPages`, `materialModel` and `quarterFirst`, and every knob only the
+  deleted code reads;
+- the checks against JS: `shapecheck.mjs`'s JS reference, and the
+  `gpuShape=0` and `engine=0` comparisons.
+
+**Acceptance:**
+- every scene the same look as `merge-h10`;
+- exports pass their self-checks;
+- `regional.mjs` finds 0;
+- the editor works with no CPU path;
+- the full simplification report against the 467c744 baseline: shader
+  lines, uniforms, knobs, CPU worker lines, and `sculpt.js` lines.
 
 ## After the cards
 

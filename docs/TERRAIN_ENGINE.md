@@ -108,6 +108,33 @@ feature.
     - **When:** during the GPU move where that is easier (Shape after H9,
       Geology in place of the layered-rock card); the rest in the
       [combine-or-drop pass](#combine-or-drop) after the retire card.
+17. **Answers, and GPU differences are fine.**
+    - `hillLobes` is dropped in favour of the cross-section's terraces.
+    - The URL-only shape experiments are deleted.
+    - `moonLobes` merges into `baseVary` and `baseBump`, if the look
+      allows.
+    - *"As for slight differences on the GPU version, I think that's
+      totally fine. We want a similar look, tiny changes in height or
+      shape or shading due to the GPU math are acceptable."*
+18. **One GPU path, as soon as possible.** *"Then ASAP I would like to
+    have everything use the GPU in the UI so we can delete all the CPU
+    work and get on one single path that we can then optimize and move
+    forward with. I do not want to worry about back compat or drag two
+    render paths along with us. This is still an early stage project."*
+    - Everything the UI computes runs on the GPU: shape, weathering,
+      rivers and the draw.
+    - Then one card deletes the CPU paths, keeping no compatibility:
+      engine 0, the JS shape engine, the CPU workers, and the switches
+      and fallbacks. An old save that uses a dropped option draws without
+      it.
+    - This brings the retire card forward, ahead of the feature cards,
+      which then work on the one path.
+    - The TA output's packaging (TNT, tiles, the archive) is file
+      writing, not the UI. It stays as it is until an output card.
+19. **The river bake is dropped.** *"Honestly we could drop the river bake
+    feature for now, it's not used by any retail map biome."* The River
+    and Source tools and the flow bake go in H12 instead of moving to the
+    GPU.
 
 ## The Green slice
 
@@ -347,17 +374,30 @@ palette.
 
 ## Migration
 
-From decisions 13-15:
+From decisions 13-19, in three phases.
 
-1. **One engine for every world (H8).** Every world draws with the engine
-   and runs its pipeline: the GPU Time pass, the chunk feed, levels and
-   pages. A world's preset turns its agents and features on. Where a
-   world's materials are not yet numbers, the engine reads its prepared
-   images until the Materials card.
-2. **Every shape option on the GPU (H9),** beside H8: the options the GPU
-   path still refuses that are passes of their own. The coast pass, shore
-   plates, fingers, facets and crystal columns go to Shores and Bodies.
-3. **Features, one card each,** each landing for every world that uses it:
+**Phase 1: one GPU path (decision 18).**
+1. **H8, merged:** every world draws with the engine and runs the GPU Time
+   pass. Where a world's materials are not yet numbers, the engine reads
+   its prepared images through the bridge until the Materials card.
+2. **H9, merged:** every shape option that is a pass of its own runs on
+   the GPU.
+3. **H8b:** the GPU shape on in every world's preset, so every world's
+   maps are paged and fed.
+4. **H10, the last shapes on the GPU:** the coast pass, water fingers,
+   bank and shore plates, crystal columns and bergs, and mountain and
+   crater facets. A similar look is enough (decision 17), so a GPU-shaped
+   model may replace the JS algorithm: a coast distance field by jump
+   flooding, for example.
+5. **H12, one path:** delete engine 0, the JS shape engine, the CPU
+   workers, and the switches and fallbacks. Also delete `hillLobes`, the
+   URL-only experiments, the CPU sand model, and the River and Source
+   tools with the flow bake (decision 19). This is the retire card,
+   brought forward.
+
+**Phase 2: features on the one path.**
+
+1. **Features, one card each,** each landing for every world that uses it:
 
    | Feature | What it makes | Worlds | Separate versions today |
    | --- | --- | --- | --- |
@@ -368,15 +408,14 @@ From decisions 13-15:
    | Shores | shallows, shoals, beaches, banks, coast fingers and shore plates, from one coast distance field on the GPU | Green, Red, Archipelago, Lava, Crystal, Ice, Zhon | `shoal*`, `plate*`, `shore*`, `beach*`, `finger*`, `bank*`; the JS coast pass |
    | Bodies | painted bodies of one material: crystal mounds and columns, ice slabs and shelves, lava flows | Crystal, Ice, Lava | `crystal*`, `ice*`, `frost*`, `lava*` |
    | Impacts | craters, cups, ribs, folds and pockmarks in regolith | Moon; craters in Red and Crystal | `moon*`, `crater*`, `pock*` |
-   | Rivers | the flow bake on the GPU | all | `sculpt-flow.js` |
 
    Materials comes first, since every other feature draws with them, and
    Shape follows H9. The rest follow by how many worlds they serve. Two features may share a
    card when they share most of their code.
-4. **Retire, the last card.** Delete engine 0: `sculpt-frag.wgsl`,
-   `relief-bake.wgsl` and `sculpt-common.wgsl`, the CPU workers, the Python
-   preparation, the JS shape engine where the GPU covers it, and every knob
-   and uniform only they read.
+2. **The Python material preparation** goes with the Materials card,
+   once every world's materials are numbers.
+
+**Phase 3:** the [combine-or-drop pass](#combine-or-drop).
 
 - **Judging a world.** A world that moves is judged on its three retail
   windows (BACKLOG rule 5), by eye and by `repro/stats.py`, never only
@@ -394,10 +433,11 @@ deleted before the owner rules.
 
 | Candidate | Found by | Why |
 | --- | --- | --- |
-| The CPU sand model (`sculpt-sand.js`) | H8 | No world uses it |
-| URL-only shape experiments: edges not natural, forms not shouldered, `replay=full`, restrained coast | H9 | No world or scene reaches them |
-| `hillLobes` | H9 | Only one Lava scene uses it; the cross-section's terraces do the same |
-| `moonLobes` with `baseVary` and `baseBump` | H9 | The same outline noise; one shared GPU function now, one control after re-tuning Moon and Desert |
+| The CPU sand model (`sculpt-sand.js`) | H8 | No world uses it. **Delete (H12)** |
+| The River and Source tools and the flow bake | owner | No retail world uses them. **Drop (owner, decision 19; H12)** |
+| URL-only shape experiments: edges not natural, forms not shouldered, `replay=full`, restrained coast | H9 | No world or scene reaches them. **Delete (owner, decision 17; H12)** |
+| `hillLobes` | H9 | Only one Lava scene uses it; the cross-section's terraces do the same. **Drop (owner, decision 17; H12)** |
+| `moonLobes` with `baseVary` and `baseBump` | H9 | The same outline noise; one shared GPU function now. **Merge if the look allows (owner, decision 17; Shape)** |
 | Shape mask writes, and per-stroke water mask choices | H9 | Near-duplicates of the Paint tool and the World panel's water options |
 | Each kind's classic curve | decision 16 | Becomes a preset of the cross-section (Shape) |
 | Pick-one variants (`experiment`, `variant`) | decision 16 | Each becomes a parameter or goes |
@@ -411,6 +451,11 @@ code untouched and reported its own size for comparison. For the ports
 (H8 on), deletion waits for the retire card (decision 13), but sharing
 does not (decisions 14 and 15).
 
+- **The same look, not the same bits (decision 17).** A GPU port is
+  judged by eye at 1× and 2× and by `stats.py` against retail. Tiny
+  differences in height, shape or shading from GPU arithmetic are fine.
+  Determinism still matters: `regional.mjs` must find 0, and the same
+  scene must export the same bytes on the same machine.
 - **Share, don't copy (H8 on).** A card adds one shared model, with each
   world's numbers in its preset. It never adds a knob family for one world
   or a branch on a world. The renderer chooses by what data a world has,
@@ -516,10 +561,11 @@ Each is written in full when the one before it lands.
 | H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Merged 1fffe4f (quarter levels and drag p95 open) |
 | H7b | Quarter levels on the GPU-fed map canvas: a scaled bake, quarter while dragging and first on load, final unchanged | Merged 31e995e (latency p95 50 ms, target 30 missed) |
 | H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Merged 92c1b63 (GPU shape for the other eight is H8b) |
-| H8b | GPU shape for every world: why `gpuShape` moves zhon-1, archipelago-3 and red-1, and H9's map-canvas gaps; then on in every preset (pages, feed and the material field everywhere) | Written |
+| H8b | GPU shape for every world: why `gpuShape` moves zhon-1, archipelago-3 and red-1, and H9's map-canvas gaps; then on in every preset (pages, feed and the material field everywhere) | Running |
+| H10 | The last shapes on the GPU: coast pass, fingers, bank and plates, crystal columns and bergs, facets (a similar look) | Written; after H8b |
+| H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Outlined; after H10 |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Merged a7c2256 (deep cross-section and the map-canvas gaps are H8b; `hillLobes` on JS) |
-| Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts, Rivers: one card each, for every world that uses it | Not yet written |
-| Retire | Delete engine 0: the shared shaders, CPU workers, Python preparation, JS shape engine, and the knobs only they read | After the features |
+| Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path | Not yet written |
 | Combine or drop | Every remaining control against decision 16 and the impact rule, from the candidates list | After Retire |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
