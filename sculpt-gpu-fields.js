@@ -42,6 +42,7 @@ function shapeMaskWrites(kind, q, sat) {
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
+  ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plScale', 'plSeam', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
   ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'sOn', 'sWater', 'sDome', 'sSteps', 'sShelfSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'coFlatOn'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
@@ -234,14 +235,16 @@ export function nodeSupport(n, c) {
     if (q.craterFacets > 0) return 'crater facets';
   }
   if (kind === 'plateau' || kind === 'offset' || kind === 'crater') {
-    if (kind === 'offset' && q.shorePlates > 0) return 'water fingers, bank or plates';
+    if (kind === 'offset' && q.shorePlates > 0 && !(q.plateMaterial >= .5)) return 'shore plates, material 0';
   }
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   // The coast pass runs for water strokes only (hasCoastPass in sculpt.js); a world default must not refuse its hills and plateaus.
   // H10: the coast pass (fingers on the joined coast as thumbs, layers in styles 0 and 1). Ribs fingers and the mounds style wait for the owner's ruling.
   if (water && q.fingerCoast >= .5 && q.fingers > 0 && !(q.fingerBlunt >= .5)) return 'coast fingers without thumbs';
   if (water && Math.round(q.shoreLayers) >= 1 && Math.round(q.layerStyle) === 2) return 'layer style 2 (mounds)';
-  if (water && ((q.fingers > 0 && !(q.fingerCoast >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
+  if (water && q.fingers > 0 && !(q.fingerCoast >= .5)) return 'water fingers, bank or plates';
+  // H10: shore plates in materials 1 (slabs) and 2 (frost); material 0 (plain floes) waits for the owner's ruling.
+  if ((water || kind === 'offset') && q.shorePlates > 0 && !(q.plateMaterial >= .5)) return 'shore plates, material 0';
   return null;
 }
 
@@ -402,7 +405,7 @@ export function prepareNode(n, geom, c) {
       fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,
       hole: n.hole ? 1 : 0, hx: n.hole?.x ?? 0, hy: n.hole?.y ?? 0, hR: n.hole?.R ?? 0, hRough: n.hole?.rough ?? 0, hSeed: n.hole?.seed ?? 0,
       nSect: rim ? rim.sect.length : 0, nGap: rim ? rim.gaps.length : 0, gapHw: rim?.hw ?? 0}};
-  if (water && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
+  if ((water || (kind === 'offset' && q.shorePlates > 0)) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
   const count = Math.round(q.craterlets || 0), centre = pts[pts.length >> 1], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };
@@ -440,11 +443,12 @@ const coastLayerReach = q => {
 // The coast pass of a deep or shallow stroke, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
 // beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
 // size of the circular bites' lattice.
-function coastSetup(q, geom, region, bankScale, radius, inv, seed) {
-  const fingers = q.fingerCoast >= .5 && q.fingers > 0, layers = Math.round(q.shoreLayers) >= 1;
-  if (!fingers && !layers) return null;
+function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c) {
+  const fingers = water && q.fingerCoast >= .5 && q.fingers > 0, layers = water && Math.round(q.shoreLayers) >= 1;
+  const plWater = Math.max(0, q.plateWaterPx || 0), plLand = Math.max(0, q.plateLandPx || 0), plates = q.shorePlates > 0 && Math.max(plWater, plLand) > 0 && q.plateMaterial >= .5;
+  if (!fingers && !layers && !plates) return null;
   const {grid, spacing, refSpacing = spacing} = geom;
-  const fReach = .5 * radius * bankScale, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach);
+  const fReach = .5 * radius * bankScale, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
   const m = Math.ceil(reach / spacing) + 12, box = expand(region, m, grid), blurR = Math.max(1, Math.round(10 * refSpacing / spacing));
   const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), vary = clamp(q.layerVary, 0, 1), scal = layers && Math.round(q.layerStyle) === 1;
   const Rc = Math.max(8, q.layerCircle), cv = clamp(q.lavaCircleVary || 0, 0, 1), C = Rc * 1.3, flat = q.fingerHeight > 0;
@@ -462,8 +466,10 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed) {
     sites = {i0, j0, ni: i1 - i0 + 1, nj: j1 - j0 + 1};
   }
   return {
-    box, readR: m + blurR + 2, fingers, layers, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, extra,
+    box, readR: m + (fingers ? blurR : 0) + 2, fingers, layers, plates, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, extra,
     u: {
+      plMat: plates ? Math.round(q.plateMaterial) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plScale: q.crystalShoreScale ?? 1, plSeam: q.crystalShoreSeam ?? .5, plNeedles: q.frostNeedles ?? 0,
+      frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
       coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius * bankScale / 140, .35, 1), coFLow: q.fingerHeight, coFlatOn: flat ? 1 : 0,
       cfAmount: q.fingerAmount ?? 1, cfSpread: q.fingerSpread ?? .5, cfSize: q.fingerSize ?? 1,
       coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: clamp(q.lavaMeander || 0, 0, 3),
@@ -509,7 +515,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'packPlane'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'packPlane'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;
@@ -589,13 +595,11 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const emitCoast = (p, node, R, ex, noise) => {
       const c = p.coast, hit = intersect(R, c.box), wide = hit ? intersect(ex(hit, c.readR), c.box) : null;
       if (!wide) return;
-      const body = intersect(wide, p.region);
-      if (noise && body) add('noise', ex(p.region, 1), node);
       add('coastInit', wide, node);
-      if (body) add('stamp', body, {...node, coPutW: 1});
-      const field = () => {
+      emitBody(p, {...node, coPutW: 1}, wide, ex, noise);
+      const field = (moved = 1) => {
         const N = Math.max(1, Math.ceil(Math.log2(c.maxCells + 1)));
-        add('coastSeed', wide, {...node, coSrc: 0, coMoved: 1});
+        add('coastSeed', wide, {...node, coSrc: 0, coMoved: moved});
         let src = 0;
         for (let k = N - 1; k >= -0; k--) { add('coastJump', wide, {...node, coSrc: src, coStep: 1 << k}); src ^= 1; if (k === 0) { add('coastJump', wide, {...node, coSrc: src, coStep: 1}); src ^= 1; } }
         add('coastFinish', wide, {...node, coSrc: src});
@@ -611,12 +615,18 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
         if (c.scal) add('coastSites', {x0: 0, y0: 0, x1: c.sites.ni - 1, y1: c.sites.nj - 1}, node);
         add('coastLayers', wide, node);
       }
+      // Shore plates run after the coast pass on the heights it left, with every crossing of the sea the footprint touches (not only the ones this node moved).
+      if (c.plates) { field(0); add('coastPlates', wide, node); }
     };
     // Phase 2: the passes of one node over the rectangle R (the evaluation's, or a window's), `ex` growing a rectangle inside what exists.
     const emitOp = (op, R, ex, noise) => {
       if (op.ground) { add('ground', R, op.u); return; }
       const p = op.p, node = op.node;
       if (p.coast) { emitCoast(p, node, R, ex, noise); return; }
+      emitBody(p, node, R, ex, noise);
+    };
+    // The node's own stamp passes over R (the host's coast pass runs them with the footprint plane switched on).
+    const emitBody = (p, node, R, ex, noise) => {
       const reg = p.settle ? ex(p.region, 4) : p.region, body = reg ? intersect(R, reg) : null;
       if (!body) return;
       if (noise) add('noise', ex(p.region, 1), node);

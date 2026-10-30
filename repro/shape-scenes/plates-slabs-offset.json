@@ -1,0 +1,67 @@
+{
+ "biome": "crystal",
+ "source": {
+  "map": "crystal cracked",
+  "x": 1536,
+  "y": 4096
+ },
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "offset",
+   [
+    [
+     725,
+     765
+    ],
+    [
+     870,
+     760
+    ],
+    [
+     900,
+     900
+    ],
+    [
+     730,
+     905
+    ],
+    [
+     1000,
+     1000
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 300,
+     "amount": -45,
+     "roughness": 30,
+     "shorePlates": 1,
+     "plateWaterPx": 60,
+     "plateLandPx": 44
+    }
+   }
+  ],
+  [
+   "deep",
+   [
+    [
+     1010,
+     1010
+    ],
+    [
+     1100,
+     1100
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 300,
+     "shelves": 0,
+     "roughness": 30
+    }
+   }
+  ]
+ ]
+}

@@ -718,6 +718,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
   }
   if (!visited) { return; }
   let w = best;
+  if (u.coPutW != 0u) { Sc[4u * cells + i] = w; }   // H10: the footprint of an offset that carries shore plates
   let base = F[PH * cells + i];
   let pbase = F[PP * cells + i];
   var value = base;
@@ -1346,4 +1347,103 @@ fn coastLayers(@builtin(global_invocation_id) g: vec3u) {
   let ff = Sc[CFF * cells + i];
   if (ff > 0.0) { level = min(level, ff); }
   F[PH * cells + i] = clamp(min(min(base, u.baseH), sea + level * sm(0.0, 5.0, d)) + max(0.0, base - u.baseH), u.minH, u.maxH);
+}
+
+// ---- H10: shore plates (materials 1 slabs and 2 frost), after the coast field (coMoved 0, so every crossing the footprint touches seeds it) ----
+// One thread per cell of the band: its own distance D, the snapshot of its own height R, a jittered Voronoi lattice in the shape's frame, value noise. No cell reads another's
+// result, so a repeat run is identical. The band is plWater px into the water and plLand px onto land from the stroke's waterline.
+fn plH(x: i32, y: i32, salt: u32) -> f32 { return hashi(x, y, u.seed ^ salt); }
+fn plHalf(x: i32, y: i32, salt: u32) -> f32 { return hashi(x, y, u.seed ^ salt) * 0.5 + 0.5; }
+
+@compute @workgroup_size(8, 8)
+fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y); let sea = u.sea;
+  let raw = Sc[CRR * cells + i];
+  let wet = raw <= sea;
+  let width = select(u.plLand, u.plWater, wet);
+  let d = Sc[CDD * cells + i];
+  if (!(width > 0.0) || d >= width) { return; }
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy; var scale = 1.0;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; scale = 1.0 / length(vec2f(u.inv0, u.inv1)); }
+  let ph = PH * cells + i; let pp = PP * cells + i; let pr = PR * cells + i; let pv = PV * cells + i; let px = PX * cells + i;
+  if (u.plMat == 1u) {
+    let L = max(8.0, u.plSize * clamp(u.plScale, 0.1, 1.0)); let seam = max(u.spacing * 0.5, max(0.0, u.plGap) * 0.5);
+    let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
+    var d1 = 3.0e38; var d2 = 3.0e38; var bx = 0.0; var by = 0.0; var nx = 0.0; var ny = 0.0; var bi = 0; var bj = 0;
+    for (var v = cj - 1; v <= cj + 1; v++) { for (var w = ci - 1; w <= ci + 1; w++) {
+      let cx = (f32(w) + 0.5 + plH(w, v, 0x481u) * 0.4) * L; let cy = (f32(v) + 0.5 + plH(w, v, 0x287u) * 0.4) * L;
+      let q = (lx - cx) * (lx - cx) + (ly - cy) * (ly - cy);
+      if (q < d1) { d2 = d1; nx = bx; ny = by; d1 = q; bx = cx; by = cy; bi = w; bj = v; } else if (q < d2) { d2 = q; nx = cx; ny = cy; }
+    } }
+    let keep = plHalf(bi, bj, 0x721u); let shade = 0.8 + 0.2 * plHalf(bi, bj, 0x3b9u); let lift = plHalf(bi, bj, 0x6d3u);
+    if (keep > 1.0 - sm(0.2, 1.0, d / width)) { return; }
+    let edge = (d2 - d1) / (2.0 * max(1.0, length(vec2f(bx - nx, by - ny)))) * scale + vnoise(lx / 6.0, ly / 6.0, u.seed ^ 0x317u) * 0.5;
+    let seamed = edge < seam;
+    F[px] = select(shade, u.plSeam, seamed); F[pp] = 1.0;
+    if (wet) { F[ph] = clamp(max(raw, sea - 3.2 + lift), u.minH, u.maxH); }
+    else if (!seamed) { F[ph] = clamp(raw + lift * u.plHeight, u.minH, u.maxH); }
+    return;
+  }
+  if (u.plMat != 2u) { return; }
+  // Frost: patches (size L) carry needles in one of three directions 60 degrees apart; seams run between much larger cells (3 L).
+  let gapSize = u.frGapSize; let L = max(20.0, u.plSize); let sp0 = max(3.0, u.plGap); let turn = atan2(u.rotY, u.rotX);
+  F[pp] = max(F[pp], 0.04);
+  F[pr] = max(F[pr], (1.0 + 4.0 * (1.0 - d / width)) / 255.0);
+  let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
+  var d1 = 3.0e38; var bx = 0.0; var by = 0.0; var bi = 0; var bj = 0;
+  for (var v = cj - 1; v <= cj + 1; v++) { for (var w = ci - 1; w <= ci + 1; w++) {
+    let cx = (f32(w) + 0.5 + plH(w, v, 0x481u) * 0.4) * L; let cy = (f32(v) + 0.5 + plH(w, v, 0x287u) * 0.4) * L;
+    let q = (lx - cx) * (lx - cx) + (ly - cy) * (ly - cy);
+    if (q < d1) { d1 = q; bx = cx; by = cy; bi = w; bj = v; }
+  } }
+  let kind3 = i32(floor(plHalf(bi, bj, 0x5d1u) * 3.0)) % 3;
+  let pkeep = plHalf(bi, bj, 0x721u); let needles = plHalf(bi, bj, 0x9c5u) < u.plNeedles;
+  let angle = turn + 1.5707963 + f32(kind3) * 1.0471976 + plH(bi, bj, 0x3c9u) * 0.12;
+  let pgap = sp0 * (0.8 + 0.5 * plHalf(bi, bj, 0x6b7u)); let phase = plHalf(bi, bj, 0x1f3u);
+  let pid = (bi * 73856093) ^ (bj * 19349663);
+  let support = 1.0 - sm(0.1, 1.0, d / width);
+  let ca = cos(angle); let sa = sin(angle);
+  let across = (lx * ca + ly * sa) / (pgap * scale) + phase; let along = (-lx * sa + ly * ca) / scale;
+  let index = i32(floor(across + 0.5)); let off = abs(across - f32(index)) * pgap;
+  let nlen = pgap * (1.5 + 4.0 * plHalf(index, pid, 0x2e7u)); let stretch = i32(floor(along / nlen + plH(index, pid, 0x4a9u) * 2.0));
+  let here = plHalf(index, stretch ^ pid, 0x91du); let line = plHalf(index, pid, 0x63du);
+  var strip = 0.0;
+  if (needles && !(pkeep > support) && !(line < 0.45)) { strip = sm(1.5, 0.5, off) * sm(0.15, 0.5, here - (1.0 - support) * 0.35); }
+  if (wet) {
+    let across2 = (lx * ca + ly * sa) / scale;
+    let field = vnoise(along / 64.0, across2 / 20.0, u.seed ^ 0x1a7u) * 0.45 + vnoise(along / 26.0, across2 / 6.0, u.seed ^ 0x2b1u) * 0.3 + vnoise(along / 10.0, across2 / 3.0, u.seed ^ 0x3d7u) * 0.18 + 0.5;
+    strip = max(strip, sm(0.0, 0.12, pow(support, 1.25) * 0.9 - field));
+    if (strip <= 0.05) { return; }
+    let top = sea + u.plHeight * (0.6 + 0.4 * plHalf(index, pid, 0x7b3u));
+    F[ph] = clamp(raw + (max(raw, top) - raw) * strip, u.minH, u.maxH);
+    F[pp] = max(F[pp], strip); F[pr] = max(F[pr], strip); F[pv] = min(F[pv], -strip);
+    return;
+  }
+  // Land: a low ridge along each needle, a groove along the seam between the big cells, melt pockets.
+  let SL = L * 3.0; let sci = i32(floor(lx / SL)); let scj = i32(floor(ly / SL));
+  var s1 = 3.0e38; var s2 = 3.0e38; var sbx = 0.0; var sby = 0.0; var snx = 0.0; var sny = 0.0; var skb = 0.0; var skn = 0.0;
+  for (var v = scj - 1; v <= scj + 1; v++) { for (var w = sci - 1; w <= sci + 1; w++) {
+    let cx = (f32(w) + 0.5 + plH(w, v, 0x6c1u) * 0.42) * SL; let cy = (f32(v) + 0.5 + plH(w, v, 0x7e9u) * 0.42) * SL; let kk = plHalf(w, v, 0x8d3u);
+    let q = (lx - cx) * (lx - cx) + (ly - cy) * (ly - cy);
+    if (q < s1) { s2 = s1; snx = sbx; sny = sby; skn = skb; s1 = q; sbx = cx; sby = cy; skb = kk; } else if (q < s2) { s2 = q; snx = cx; sny = cy; skn = kk; }
+  } }
+  let sedge = (s2 - s1) / (2.0 * max(1.0, length(vec2f(sbx - snx, sby - sny)))) * scale + vnoise(lx / 9.0, ly / 9.0, u.seed ^ 0x317u) * 1.2;
+  var seam = 0.0;
+  if (max(skb, skn) > 1.0 - support * 0.9) { seam = sm(1.6, 0.3, sedge); }
+  let lift = strip * min(2.5, u.plHeight * 0.7) - seam * 2.5;
+  var holeShare = 0.0;
+  if (u.frGapReach > 0.0) { holeShare = u.frGaps * sm(u.frGapReach, 0.0, d / width); }
+  var hole = 0.0;
+  if (holeShare > 0.0) { hole = sm(0.0, 0.1, vnoise(lx / gapSize, ly / gapSize, u.seed ^ 0x4e1u) * 0.5 + vnoise(lx / (gapSize * 0.41), ly / (gapSize * 0.41), u.seed ^ 0x5f3u) * 0.22 + 0.5 - (1.0 - holeShare)); }
+  if (hole > 0.02) {
+    F[ph] = clamp(raw + (min(raw, sea - u.frGapDepth) - raw) * hole, u.minH, u.maxH);
+    F[pp] = max(F[pp], hole); F[pr] = max(F[pr], hole); F[pv] = min(F[pv], -hole);
+    return;
+  }
+  if (lift == 0.0) { return; }
+  F[ph] = clamp(raw + lift, u.minH, u.maxH);
+  let keepM = max(strip, seam); F[pp] = max(F[pp], keepM); F[pr] = max(F[pr], keepM); F[pv] = min(F[pv], -keepM);
 }

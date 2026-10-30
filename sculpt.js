@@ -2703,7 +2703,8 @@ const gpuShapeOn=() => {
 };
 // A flow bake writes nothing the shape passes make: its stored planes are copied in after the result (applyBakes).
 const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:k => isFlowKind(k) || k==='flowbake',seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
-  shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full'});
+  shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full',
+  frost:{gapSize:worldDefault('frostGapSize'),gapDepth:worldDefault('frostGapDepth'),gaps:worldDefault('frostGaps'),gapReach:worldDefault('frostGapReach')}});
 // The study (1024 px): the whole grid is evaluated by the passes and the rectangle read back into the live planes. The result arrives asynchronously;
 // canExport() and the weather wait for it (shapePending), and the frame never does.
 // The GPU result carries zeros in the flow planes, so the stored bake planes go back in over it (what applyNode does for a flowbake node on the JS path).
