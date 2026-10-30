@@ -19,9 +19,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
+  const levels=query.get('levels')!=='0',quarterFirst=query.get('quarterFirst')==='1',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
   const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let afterGesture=false,lastViewEpoch=-1,heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
   let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(128,128),cg=coarse.getContext('2d');
   const panel=document.createElement('section'); panel.className='section files';
@@ -47,7 +48,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes(),accounted=heap+owned;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake`;
-    return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,evictions,bakes,hits,rebakes,canonicalChunkSize:canonicalSize,field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
+    return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
@@ -81,19 +82,20 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return {...request,...r,fields:r.fields,material:r.materialField??r.material,gridOrigin:r.gridOrigin,gridSpacing:r.gridSpacing,gridWidth:r.gridWidth,gridHeight:r.gridHeight,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
   }
   function chunkSize() { return canonicalSize; }
-  async function bake(rect,exportArt=false,signal,stale=null) {
+  // H7b: `scale` 2 bakes a quarter image (half the width and height, drawn at 2x); only the GPU-fed path takes it, and export never asks.
+  async function bake(rect,exportArt=false,signal,stale=null,scale=1) {
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
     const feed=await api.gpuFeedSource?.(signal);
     if(feed)try{
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
-      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount),copyBytes=rect.width*rect.height*8;
+      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8;
       trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
       renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
-      const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed});bakes++;
-      const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
-      const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
+      const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale});bakes++;
+      const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
     const fields=await region(request,options,signal);
     // H7 2b: the scene changed while this bake waited for its fields; its image would be dropped, so it never reaches the GPU.
@@ -151,9 +153,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const v=state(); ink.setTransform(1,0,0,1,0,0); ink.clearRect(0,0,overlay.width,overlay.height); ink.save(); ink.scale(scale,scale); ink.translate(-v.x,-v.y);
     drawMapBounds(ink,map,config,api.sampleAuthored??sourceSample); features?.draw(ink,v); api.drawOverlay?.(ink,v);
     if (hover && !features?.active) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
+    // H7b: ?levelsOverlay=1 marks each shown chunk with its level: orange Q for a quarter image, green F for a final one.
+    if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
     ink.restore();
   }
-  function paint(entry,v=state()) { g.imageSmoothingEnabled=false;g.drawImage(entry.bitmap,(entry.x-v.x)*scale,(entry.y-v.y)*scale,entry.width*scale,entry.height*scale); }
+  function paint(entry,v=state()) { g.imageSmoothingEnabled=false;const k=entry.scale??1;g.drawImage(entry.bitmap,(entry.x-v.x)*scale,(entry.y-v.y)*scale,entry.bitmap.width*k*scale,entry.bitmap.height*k*scale); }
   function presented() {
     const now=performance.now();if(lastPresented&&now-lastScroll<300&&now-lastPresented<3000){frameTimes.push(now-lastPresented);if(frameTimes.length>1024)frameTimes.shift();}lastPresented=now;
     if(pendingStrokeTime){strokeTimes.push(now-pendingStrokeTime);if(strokeTimes.length>256)strokeTimes.shift();pendingStrokeTime=0;}
@@ -172,29 +176,52 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(!overview&&!busy){
         const size=chunkSize(),v=state(),jobs=[],token=epoch,viewToken=viewEpoch;
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
-        jobs.sort((a,b)=>Math.hypot(a.x+size/2-v.x-v.width/2,a.y+size/2-v.y-v.height/2)-Math.hypot(b.x+size/2-v.x-v.width/2,b.y+size/2-v.y-v.height/2));
+        const dist=r=>Math.hypot(r.x+size/2-v.x-v.width/2,r.y+size/2-v.y-v.height/2);
+        // H7b: with levels on, the visible chunks come before the margin, each group nearest the view's centre first.
+        const levelsOn=levels&&api.gpuFeedActive?.();
+        jobs.sort((a,b)=>levelsOn?(intersects(b,v)-intersects(a,v))||dist(a)-dist(b):dist(a)-dist(b));
         const near={x:v.x-size,y:v.y-size,width:v.width+size*2,height:v.height+size*2};for(const e of cache.values())if(!intersects(e,near))e.heightPatch=null;
         for(const rect of jobs){const e=cache.get(rect.x+','+rect.y+','+size);if(e&&intersects(rect,v))paint(e,v);}overlays();
-        for(const rect of jobs){
+        // H7b: the plan. `want` 2 is a quarter image, 1 final. During a gesture every chunk without an image gets a quarter one and nothing
+        // is refined; once it ends, a quarter image is replaced by a final one (visible chunks first, then the margin), and a chunk
+        // that already shows final is never replaced by a quarter one. On a load or a scroll the visible chunks come at quarter first when quarterFirst is on.
+        const plan=[];
+        if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
+        else{
+          if(gesture)for(const rect of jobs)plan.push({rect,want:2});
+          else{
+            if(viewEpoch!==lastViewEpoch){afterGesture=false;lastViewEpoch=viewEpoch;}   // a new view (a scroll or a zoom) starts afresh; a release goes straight to final
+            if(quarterFirst&&!afterGesture)for(const rect of jobs)if(intersects(rect,v))plan.push({rect,want:2});
+            for(const rect of jobs)plan.push({rect,want:1});
+          }
+        }
+        for(const {rect,want} of plan){
           if(token!==epoch||viewToken!==viewEpoch||busy)break;
-          const key=rect.x+','+rect.y+','+size;let e=cache.get(key);
-          if(!e&&holding)continue;
-          if(!e){e=await bake(rect,false,undefined,()=>token!==epoch||false);if(token!==epoch){
+          const key=rect.x+','+rect.y+','+size;let e=cache.get(key);const old=e;let baked=false;
+          if(want===2&&e)continue;   // a quarter plan item never replaces an image
+          const upgrade=want===1&&e&&(e.scale??1)>1;
+          if((!e||upgrade)&&holding)continue;
+          if(!e||upgrade){e=await bake(rect,false,undefined,()=>token!==epoch||false,want);baked=true;if(token!==epoch){
             // H6b: a finished fed bake is shown even when a later change touched it (the picture is at most one move old), but not kept: the chunk bakes again.
             if(e.fed&&changedSince(e.seq,e.input)){if(intersects(rect,v)){paint(e,v);overlays();presented();}e.bitmap.close?.();break;}
             if(!e.fed){e.bitmap.close?.();break;}
-          }cache.set(key,e);cacheBytes+=e.bytes;}
+          }
+          // The image it replaces (a quarter one) is dropped now that the final one is in hand.
+          const prior=cache.get(key);if(prior){prior.bitmap.close?.();cacheBytes-=prior.bytes;cache.delete(key);}
+          cache.set(key,e);cacheBytes+=e.bytes;}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch&&!e.fed){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{});checkHeap(input);e.heightPatch=keepHeight(input);}}
           if(token!==epoch||cache.get(key)!==e)break;
           if(viewToken!==viewEpoch){rerun=true;break;}
-          if(intersects(rect,v)){paint(e,v);overlays();presented();}await tick();
+          if(intersects(rect,v)){paint(e,v);overlays();presented();}await (levels&&(gesture||baked)?undefined:tick());
         }
       }else if(overview)presented();
       const m=metrics();$('timing').textContent=`${bakes} bakes · ${(m.gpuBytes/MB).toFixed(1)} MiB terrain · ${evictions} evictions`;
     }catch(err){if(err.name!=='AbortError'){$('error').hidden=false;$('error').textContent=err.message;}}
     finally{drawing=false;if(rerun){rerun=false;schedule();}}
   }
-  function schedule() { if (!pending) { pending=true; requestAnimationFrame(frame); } }
+  // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
+  // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
+  function schedule() { if (!pending) { pending=true; if(levels&&gesture&&!drawing)queueMicrotask(frame);else requestAnimationFrame(frame); } }
   function resize() {
     if(busy){resizePending=true;return;}resizePending=false;
     if (overview) scale=Math.min((viewport.clientWidth-28)/map.width,(viewport.clientHeight-28)/map.height);
@@ -247,7 +274,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(pan?.id===event.pointerId){viewport.scrollLeft=pan.left-event.clientX+pan.x;viewport.scrollTop=pan.top-event.clientY+pan.y;position();viewEpoch++;lastScroll=performance.now();schedule();return;}
     preview(event);if(gesture?.id===event.pointerId)schedule();overlays();
   });
-  const end=event=>{if(pan?.id===event.pointerId)pan=null;if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();queueSave();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
+  const end=event=>{if(pan?.id===event.pointerId)pan=null;if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;afterGesture=true;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();queueSave();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
   document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture)end({pointerId:gesture.id,type:'pointercancel'});});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
   window.addEventListener('blur',()=>{space=false;pan=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});});
@@ -298,6 +325,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function setBusy(on){busy=on;api.setBusy(on);find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on||saving;if(!on){if(resizePending)resize();else schedule();}}
   features=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();queueSave();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
-  const result={renderer,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];}};
+  const result={renderer,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];}};
   window.sculptCanvas=result;resize();budgets();return result;
 }

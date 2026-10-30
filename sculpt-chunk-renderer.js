@@ -130,11 +130,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       fieldsX,fieldsY,fieldsWidth:fieldsEndX-fieldsX+1,fieldsHeight:fieldsEndY-fieldsY+1,
       screenOrigin:[x,y+shift],mesh:{col0,col1,row0,row1,resolution},reach};
   }
-  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount) {
-    const field=pow2(region.fieldsWidth)*pow2(region.fieldsHeight)*8;
+  // H7b: at scale s (2 for a quarter bake) the fields lattice and the output have one texel per s world pixels each way.
+  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1) {
+    const field=pow2(Math.ceil(region.fieldsWidth/scale))*pow2(Math.ceil(region.fieldsHeight/scale))*8;
     const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(16+maskLayers*4);
     const m=region.mesh,cols=m.col1-m.col0,rows=m.row1-m.row0;
-    const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24),output=width*height*12;
+    const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24),output=Math.ceil(width/scale)*Math.ceil(height/scale)*12;
     return {field,input,mesh,output,maskPlaneCount,maskLayers,workingBytes:field+input+mesh+output,
       retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+mesh+output,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:Math.max(input,mesh),cpuPeakBytes:this.cpuRetainedBytes+Math.max(input,mesh)};
@@ -161,10 +162,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   texture(label,width,height,layers,format,bytes,usage,kind='working') {
     return this.track(this.device.createTexture({label,size:[width,height,layers],format,usage}),label,width*height*layers*bytes,kind);
   }
-  allocate(region,gridWidth,gridHeight,width,height,fed=false) {
+  allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
     this.evict();
-    const fw=pow2(region.fieldsWidth),fh=pow2(region.fieldsHeight),gw=pow2(gridWidth),gh=pow2(gridHeight);
-    const e=this.estimate({...region,gridWidth,gridHeight},width,height),required=e.gpuBytes;
+    const width=Math.ceil(world_width/scale),height=Math.ceil(world_height/scale);   // H7b: the output has one texel per `scale` world pixels
+    const fw=pow2(Math.ceil(region.fieldsWidth/scale)),fh=pow2(Math.ceil(region.fieldsHeight/scale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
+    const e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale),required=e.gpuBytes;
     if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes)
       throw new Error(`nanolathe: chunk needs ${Math.ceil(required/MB)} MB of GPU memory; use chunks of ${this.chunkSize()} px or smaller`);
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);   // H6b: the feed pass writes these four
@@ -181,11 +183,13 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const rasterSize=Math.min(this.size,this.limit),span=rasterSize/2;
     const rasterOrigin=this.size<=this.limit?[0,0]:region.screenOrigin.map(v=>Math.floor(v/span)*span);
     this.f('uChunkRasterOrigin',rasterOrigin);this.f('uChunkRasterSize',rasterSize);
-    this.chunkViewport=[rasterOrigin[0]-region.screenOrigin[0],rasterOrigin[1]-region.screenOrigin[1],rasterSize,rasterSize];
+    this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/scale,(rasterOrigin[1]-region.screenOrigin[1])/scale,rasterSize/scale,rasterSize/scale];   // clip space stays in world units; the viewport is what scales
     this.depthTexture=this.texture('chunk depth',width,height,1,'depth32float',4,T.RENDER_ATTACHMENT);this.depthView=this.depthTexture.createView();
     this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
-    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[width,height]);
+    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',scale);
+    // H7b: a drawn texel covers scale x scale final pixels, so the generated materials read their mip for that footprint (the variant's own foot, times the scale).
+    this.f('uMaterialFoot',(this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1)*scale);
     this.meshes=[this.regionMesh(region.mesh),null];this.meshes[1]=this.meshes[0];
     this.bindGroups={};this.fieldsDirty=true;
     this.recordMemory();return {gw,gh,fw,fh};
@@ -247,6 +251,40 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     this.materialReady=Boolean(material);this.weatherMaps=Boolean(weather?.wear);this.cpuWorkingBytes=0;
   }
+  // H7b: the six painted-mask flags (uniforms that gate whole branches) used to come back to the CPU through a mapped read, a full GPU round trip
+  // (about 8 ms) between the feed pass and the draw. They are now expanded from the feed pass's word by one more tiny pass and copied into the
+  // uniform buffer inside the same submission, so nothing waits. The expansion is the arithmetic the CPU applied to the word:
+  //   paintOn: any of bits 0-8, scatterOn: bit 4, styleOn: any of 5-8, waterOn: any of 9-11 or bit 13, lumpOn: bit 12, flowOn: any of 20-24.
+  // While it is in use, flushUniforms writes the CPU copy around those six fields, so the CPU never overwrites the GPU's values.
+  static FLAGS=['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'];
+  flagPass() {
+    if(this.flagsPass)return this.flagsPass;
+    const device=this.device,module=device.createShaderModule({label:'chunk flags',code:`
+      @group(0) @binding(0) var<storage, read> painted: array<u32>;
+      @group(0) @binding(1) var<storage, read_write> flags: array<u32, 6>;
+      fn any_(w: u32, a: u32, b: u32) -> u32 { let mask = ((1u << (b - a)) - 1u) << a; return select(0u, 1u, (w & mask) != 0u); }
+      @compute @workgroup_size(1) fn main() {
+        let w = painted[0];
+        flags[0] = any_(w, 0u, 9u);
+        flags[1] = (w >> 4u) & 1u;
+        flags[2] = any_(w, 5u, 9u);
+        flags[3] = max(any_(w, 9u, 12u), (w >> 13u) & 1u);
+        flags[4] = (w >> 12u) & 1u;
+        flags[5] = any_(w, 20u, 25u);
+      }`});
+    const pipe=device.createComputePipeline({label:'chunk flags',layout:'auto',compute:{module,entryPoint:'main'}});
+    const out=device.createBuffer({label:'chunk flags out',size:24,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+    const offsets=ChunkTerrainRenderer.FLAGS.map(k=>this.layout.fields.get(k).offset);
+    return this.flagsPass={pipe,out,offsets,ranges:[...offsets].sort((a,b)=>a-b)};
+  }
+  flushUniforms() {
+    if(!this.gpuFlags)return super.flushUniforms();
+    if(!this.uniformsDirty)return;
+    const data=this.uniformData;let at=0;
+    for(const o of this.flagsPass.ranges){if(o>at)this.device.queue.writeBuffer(this.uniformBuffer,at,data,at,o-at);at=o+4;}
+    if(at<data.byteLength)this.device.queue.writeBuffer(this.uniformBuffer,at,data,at,data.byteLength-at);
+    this.uniformsDirty=false;
+  }
   // H6b: engine-feed.wgsl's feedMain makes the chunk's height, route, weather and mask textures from the whole-map buffers: the same
   // arithmetic as the CPU read (the weather blend) and `upload` (the export clamp, the byte conversions, the edge repeat), in f32. The
   // painted flags come back as a 25-bit word (one small mapped read), then set the same uniforms `upload` does.
@@ -263,22 +301,32 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const encoder=device.createCommandEncoder({label:'chunk feed'}),pass=encoder.beginComputePass({label:'chunk feed'});
     pass.setPipeline(passes.pipes.feedMain);for(const [g,bg] of passes.groups('feedMain',res))pass.setBindGroup(g,bg);
     pass.dispatchWorkgroups(Math.ceil(gw/8),Math.ceil(gh/8));pass.end();
-    encoder.copyBufferToBuffer(painted,0,stage,0,16);device.queue.submit([encoder.finish()]);feed.release?.();   // submitted: the buffers it reads may be destroyed now
+    const onGpu=!request.maskFlags;   // an explicit flag override (none on the map canvas) keeps the read-back below
+    if(onGpu){
+      const f=this.flagPass(),flagPass=encoder.beginComputePass({label:'chunk flags'});
+      flagPass.setPipeline(f.pipe);flagPass.setBindGroup(0,device.createBindGroup({layout:f.pipe.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:painted}},{binding:1,resource:{buffer:f.out}}]}));
+      flagPass.dispatchWorkgroups(1);flagPass.end();
+      f.offsets.forEach((o,i)=>encoder.copyBufferToBuffer(f.out,i*4,this.uniformBuffer,o,4));this.gpuFlags=true;
+    }else encoder.copyBufferToBuffer(painted,0,stage,0,16);
+    device.queue.submit([encoder.finish()]);feed.release?.();   // submitted: the buffers it reads may be destroyed now
     this.uploadBytes=0;this.cpuUploadBytes=0;
-    await stage.mapAsync(GPUMapMode.READ);const word=new Uint32Array(stage.getMappedRange().slice(0))[0];stage.unmap();stage.destroy();painted.destroy();uniform.destroy();
-    const on=k=>(word>>>k)&1,any=(a,b)=>{for(let k=a;k<b;k++)if(on(k))return 1;return 0;};
-    const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,12)||on(13),lumpOn:on(12),flowOn:any(20,25),...request.maskFlags};
-    for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
+    if(onGpu){painted.destroy();stage.destroy();uniform.destroy();}
+    else{
+      await stage.mapAsync(GPUMapMode.READ);const word=new Uint32Array(stage.getMappedRange().slice(0))[0];stage.unmap();stage.destroy();painted.destroy();uniform.destroy();
+      const on=k=>(word>>>k)&1,any=(a,b)=>{for(let k=a;k<b;k++)if(on(k))return 1;return 0;};
+      const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,12)||on(13),lumpOn:on(12),flowOn:any(20,25),...request.maskFlags};
+      for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
+    }
     this.materialReady=false;this.weatherMaps=Boolean(feed.maps);
   }
   // A reusable canvas is returned. Copy it before the next renderChunk; the
   // caller must count its retained bitmap/canvas bytes separately from stats.
   // H6b: options.feed (the GPU shape fields' buffers and the Time pass's, see sculpt.js gpuFeedSource) makes the chunk's textures by a compute pass
   // in place of the CPU read and `upload`; the request then carries no fields, only the chunk's rectangle.
-  async renderChunk(request,{feed=null,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
+  async renderChunk(request,{feed=null,scale=1,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
     if(this.disposed)throw new Error('nanolathe: chunk renderer is disposed');
     if(this.busy)throw new Error('nanolathe: chunk renderer is already rendering');
-    this._busy=true;
+    this._busy=true;this.gpuFlags=false;   // set by a fed bake whose flags the GPU writes
     try {
       const passes=feed?await feedPasses(this.device):null;   // nothing awaits between here and the feed pass's submit: the buffers it reads stay current
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
@@ -286,7 +334,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
       const planes=feed?new Array(feed.maskCount).fill(null):this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
       this.recommendedChunkSize=this.chunkSize();
-      const dimensions=this.allocate(region,w,h,request.width,request.height,Boolean(feed));
+      const dimensions=this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;
       if(options.sedimentColors!==undefined)this.setSediment(options.sedimentColors);
@@ -295,7 +343,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       // synchronously before waiting for the queue, so the returned pixels live.
       this.outputCanvas.getContext('2d').drawImage(this.canvas,0,0);
       await this.device.queue.onSubmittedWorkDone();
-      return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,exportArt:Boolean(request.exportArt),outputBytes:request.width*request.height*4,region,stats:{...this.stats(),busy:false}};
+      return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};
     } finally { this._busy=false;this.cpuWorkingBytes=0; }
   }
   evict() {
