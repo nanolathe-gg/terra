@@ -371,10 +371,22 @@ does not (decisions 14 and 15).
 
 - **Share, don't copy (H8 on).** A card adds one shared model, with each
   world's numbers in its preset. It never adds a knob family for one world
-  or a branch on a world. The gate: `grep -n -E "biome|world"` over
-  `engine-*.wgsl`, `sculpt-erosion.js` and `sculpt-chunk-renderer.js`
-  names no world. The renderer chooses by what data a world has, never by
-  its name.
+  or a branch on a world. The renderer chooses by what data a world has,
+  never by its name. **The gate,** on code with comments stripped, over
+  `engine-*.wgsl`, `sculpt-gpu-fields.js`, `sculpt-erosion.js`,
+  `sculpt-chunk-renderer.js` and the engine path of `sculpt-renderer.js`:
+  - no `biome`, `biomeId` or `worldId`, and no world's name as a string;
+  - no new knob, uniform or function named after a world. The
+    world-named ones that already exist (`moonCups`, `iceHatch`,
+    `crystalShallow` and the like) are listed, each with the feature
+    card that renames or replaces it, and the list may only shrink.
+
+  (`worldSize` and `worldGrid` are the map's extent, not a planet.)
+- **Bridges are separate and counted.** Old per-world code that a world
+  needs on the engine until its feature card lands lives in
+  `engine-bridge.wgsl`, gated by the uniforms it already has. Each block
+  names the card that replaces it. The counts table reports the bridge's
+  lines on their own line, and the feature cards drain it to nothing.
 - **Hold or lower the engine's counts (H8 on).** Each Done list reports
   them against this table (terraform 843b7fc, when the slice was
   accepted). A count may grow only through a bridge the card names and a
@@ -383,6 +395,7 @@ does not (decisions 14 and 15).
   | The engine path | 843b7fc |
   | --- | --- |
   | Engine shader lines: frag, bake, common | 1,963, 1,439 and 769 |
+  | Bridge lines (`engine-bridge.wgsl`) and bridged images | none |
   | GPU pass lines: shape, erosion, feed, materials, weather | 808, 249, 252, 127 and 85 |
   | Uniforms the engine reads | 351 |
   | Knobs: total, and set by worlds on the engine | 430, and 90 (Green) |
