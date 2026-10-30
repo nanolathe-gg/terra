@@ -249,6 +249,7 @@ fn genColor(layer: i32, pixel: vec2f) -> vec3f {
 // H7b: at a footprint above 1 the plain's tiles are averaged over the final pixels the drawn one covers (2 x 2 at quarter), as the mip does
 // for the generated materials; at final (the study included) the branch is not taken and the lookup is the one it was.
 fn groundSource(pixel: vec2f) -> vec3f {
+    if (u.groundMode == 0) { return bridgeGround(pixel); }   // H8 bridge: a world whose plain is one quilted image
 #ifdef CHUNK
     if (u.materialFoot > 1.5) {
         return 0.25 * (groundTile(pixel + vec2f(-0.5, -0.5)) + groundTile(pixel + vec2f(0.5, -0.5)) + groundTile(pixel + vec2f(-0.5, 0.5)) + groundTile(pixel + vec2f(0.5, 0.5)));
@@ -256,7 +257,7 @@ fn groundSource(pixel: vec2f) -> vec3f {
 #endif
     return groundTile(pixel);
 }
-fn grassImage(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
+fn grassImage(pixel: vec2f) -> vec3f { if (u.bridged != 0) { return bridgeGrassImage(pixel); } return genColor(0, pixel); }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
 // Lab histogram of the rock face is worse with it (.057/.076/.083 against .049/.067/.079 by class).
@@ -268,10 +269,10 @@ fn fracturedSource(pixel: vec2f) -> vec3f { return genColor(3, pixel); }
 // land placement. Its numbers are rows of materials/green.json after the five materials (MM_PLACE):
 //   row 0  x: slope weight, y: form-slope weight, z: convexity weight, w: convexity range
 //   row 1  x: noise weight (n.g), y: noise weight (n.r), z: weather weight, w: tap spacing, px
-//   row 2  x,y: rock score start and full (the score is slope-like, about 1 on a steep face)
+//   row 2  x,y: rock score start and full (the score is slope-like, about 1 on a steep face); z: weight of the third noise (n.b)
 //   row 3  x: soil slope gate, y: soil height gate, z,w: soil height fade
 //   row 4  x,y: low-bank source heights above the plain (rock needs land this high up-slope)
-//   row 5  x,y: slope at which a smooth route stops holding rock off (start, full)
+//   row 5  x,y: slope at which a smooth route stops holding rock off (start, full); z,w: with z above 0, rock only on slopes from z to w
 //   row 6  x,y: face slope start and full, z: face edge noise
 //   row 7  x,y: rock share at the face start and at its steepest
 //   row 8  face score: x: surface roughness, y: lump top, z: fine noise, w: broad noise
@@ -306,7 +307,7 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     let south = surfaceHeight(p + vec2f(0.0, d));
     let formSlope = length(vec2f(east - west, south - north) / (2.0 * d));
     let convexity = clamp((h - 0.25 * (west + east + north + south)) / r0.w, -1.0, 1.0);
-    let score = r0.x * slope + r0.y * formSlope + convexity * r0.z + (n.g - 0.5) * r1.x - weather.g * r1.z + (n.r - 0.5) * r1.y;
+    let score = r0.x * slope + r0.y * formSlope + convexity * r0.z + (n.g - 0.5) * r1.x - weather.g * r1.z + (n.r - 0.5) * r1.y + (n.b - 0.5) * r2.z;
     var exposed = smoothstep(r2.x, r2.y, score);
     // Soil: nearby gentle ground above keeps grass on the ledges and pockets of a steep face.
     if (h > r3.y && slope > r3.x && exposed > 0.01) {
@@ -330,7 +331,10 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
         lowBank = smoothstep(u.base + r4.x, u.base + r4.y, source);
         exposed *= lowBank;
     }
+    if (r5.z > 0.0) { exposed *= smoothstep(r5.z, r5.w, slope); }   // H8: mineral margins keep rock to the steep ground
     exposed *= 1.0 - route * (1.0 - smoothstep(r5.x, r5.y, slope));
+    let sandBar = bridgeSandBar(p);
+    exposed *= 1.0 - sandBar;
     exposed = 1.0 - clamp((1.0 - clamp(exposed * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
     // H5: the vegetation override also scales how much rock shows: +1 lets grass and moss take 40% of it back, -1 bares 40% more.
     exposed = clamp(exposed * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);
@@ -342,15 +346,17 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     let top = clamp((h - around) / 1.5, -1.0, 1.0);
     let edgeNoise = terrainNoise(p * 1.5 + vec2f(53.0, 11.0));
     let faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * r6.z);
-    var face = smoothstep(r6.x, r6.y, faceSlope) * (1.0 - route);
+    var face = smoothstep(r6.x, r6.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
     var share = mix(r7.x, r7.y, smoothstep(r6.y, r6.y * 1.8, slope));
+    let slate = bridgeSlateFace(face, share, faceSlope, route, sandBar);
+    face = slate.x; share = slate.y;
     var lowGate = lowBank;
     if (u.styleOn != 0) {
         let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));
         share = select(share * (1.0 + f), mix(share, 1.0, f), f > 0.0);
     }
     if (u.paintOn != 0) {
-        face = max(face, painted.x);
+        face = max(face, painted.x * (1.0 - sandBar));
         share = mix(share, 0.92, painted.x);
         lowGate = max(lowBank, painted.x);
     }
@@ -362,6 +368,7 @@ fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, we
     let faceScore = r8.x * length(g) / max(slope, 0.25) - topTerm + r9.x * gully + (fine.g - 0.5) * r8.z + (n.r - 0.5) * r8.w;
     let threshold = mix(1.4, -0.9, share);
     var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, faceScore) * lowGate;
+    rockMask = bridgeSlateRock(rockMask, lowGate);
     // Inside painted rock the face is rock; moss stays at its edges and on the ledges below.
     if (u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * r9.z); }
     rockMask = 1.0 - clamp((1.0 - clamp(rockMask * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
@@ -716,6 +723,7 @@ fn snowMaterial(pixel: vec2f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     var snow = groundBased(groundSource(pixel));
     var mean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
+    bridgeSnow(pixel, &snow, &mean);
     return saturate(mix(mix(snow, mean, 0.50), vec3f(1.0), 0.55));
 }
 // Moss: the world's slope cover (leaning toward its ground by Moss from
@@ -856,6 +864,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
              slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32) -> vec4f {
     var sand = 0.0;
     if (u.reliefMode == 1) { sand = smoothstep(0.35, 0.95, bakedFields(p).a); }
+    sand = bridgeBeachSand(p, sand);
     // Crystal tops only: the risers between columns stay dark and take the
     // surrounding material's lobe (the world's own note: faces are dark at every facing).
     let crystal = smoothstep(0.05, 0.3, crystalMask) * (1.0 - smoothstep(1.2, 2.5, length(g)));
@@ -1328,7 +1337,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
     var slopeBased = vec3f(0.0);
-    if (slope > u.slopeProfile.x || u.paintOn != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
+    if (slope > u.slopeProfile.x || u.paintOn != 0 || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
     var slopeShare = 0.0;
@@ -1339,6 +1348,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var slopeGrass = slopeBased;
         var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope)
                        * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
+        bridgeMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);   // H8 bridge
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
         if (u.slopeOnLowBanks == 0 && h < u.base - 0.25) {
@@ -1393,9 +1403,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let timeMaps = timeMapsAt(p);
     exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
-    let sandBar = 0.0;
+    let sandBar = bridgeSandBar(p);
     let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
     var material = mix(grass, rock, exposed);
+    material = bridgeBeach(material, p, pixel, h, slope, slopeShare, exposed);   // H8 bridge
+    material = bridgeTransition(material, pixel, rock, exposed, materialWeather);
     if (u.reliefMode == 1 && u.microRock > 0.0) {
         // TA-style faces: moss and rock interleave at lump scale. The broad
         // slope sets how much of the face is rock; the detailed surface

@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
-    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-weather.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
+    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
     'relief-bake.wgsl', 'erosion.wgsl', 'engine-erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
@@ -793,12 +793,18 @@ def lighten_red_shallows(config, assets):
     config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
 
 
+# H8: the worlds whose land materials are numbers. The engine reads the table; every other world bridges its prepared images.
+MATERIAL_TABLES = {'green': '/materials/green.json'}
+
+
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
+    if biome in MATERIAL_TABLES:
+        config['materialTable'] = MATERIAL_TABLES[biome]
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)
     return config
