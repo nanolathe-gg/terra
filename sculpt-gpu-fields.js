@@ -464,7 +464,7 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, fac
   if (facet) {
     // Crater and mountain facets: a pass over the node's own result. The seeds of the 3 x 3 lattice neighbours lie within 2 widths of a cell, and read 3 cells round themselves.
     const L = facet === 1 ? (q.crystalCraterPx > 0 ? q.crystalCraterPx : clamp(radius * .36, 14, 36)) : clamp(q.iceFacetSize, 16, 96), mF = Math.ceil(2.1 * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
-    return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, extra: [],
+    return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, sideR: 0, extra: [],
       u: {fcMode: facet, fcL: L, fcStrength: clamp(q.craterFacets, 0, 1), fcStep: q.crystalCraterStep ?? 0, fcSkin: q.crystalCraterSkin >= .5 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
   }
   const fReach = .5 * radius * bankScale, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
@@ -485,7 +485,7 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, fac
     sites = {i0, j0, ni: i1 - i0 + 1, nj: j1 - j0 + 1};
   }
   return {
-    box, readR: m + (fingers ? blurR : 0) + 2, fingers, layers, plates, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, extra,
+    box, readR: m + (fingers ? blurR : 0) + 2, fingers, layers, plates, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, sideR: Math.ceil(Math.max(fingers ? fLimit : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0) / spacing) + 2, extra,
     u: {
       plMat: plates ? (q.plateMaterial >= 1.5 ? 2 : 1) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plScale: q.crystalShoreScale ?? 1, plSeam: q.crystalShoreSeam ?? .5, plNeedles: q.frostNeedles ?? 0,
       frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
@@ -793,7 +793,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
 // opts: the createRegionalFields options (worldSize, worldGrid, baseHeight, keys, maskKeys, nodes), plus device() (the GPU device, or null
 // until the renderer exists), context() (the host context for prepareNode) and fallback (a createRegionalFields instance).
 export function createGpuFields(opts) {
-  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, fallback, device, context} = opts;
+  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, fallback, device, context} = opts;   // opts.forceRing (page parameter pageRing=N): a ring chosen by hand, for checking the ring rule against the whole-map engine
   const spacing = (worldSize - 1) / (worldGrid - 1), cells = worldGrid * worldGrid, listeners = new Set();
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
@@ -1012,16 +1012,48 @@ export function createPagedFields(opts) {
   const windowRect = pg => ({x0: pg.x0 - APRON, y0: pg.y0 - APRON, x1: pg.x0 + CORE + APRON - 1, y1: pg.y0 + CORE + APRON - 1});
   const overlapping = r => { const out = []; for (let py = r.y0 >> SHIFT; py <= r.y1 >> SHIFT; py++) for (let px = r.x0 >> SHIFT; px <= r.x1 >> SHIFT; px++) out.push(page(px, py)); return out; };
   const touch = pg => { pg.used = ++tick; };
-  // The ring the node list needs: 4 plus the deepest chain of smooth nodes that read each other's output (a smooth reads the prefix height `smoothR` cells beyond its footprint).
+  // The ring the node list needs: 4 (the hill's blur) plus how far, beyond a page's core, the cells the shape reads reach going back through the nodes.
+  // It follows the engine's own rectangles (rects in the shape run), page by page and clipped to the world, with one difference for coast nodes (H10).
+  // A smooth node reads the prefix height `smoothR` cells beyond its footprint, and the next one reads that, so those add. A coast node reads the land/sea
+  // side of the prefix at its seeds (cells of its own footprint) and the prefix height of its own cell. Stamps and layers are local (layers cut heights on
+  // land and never across sea level: a land cell keeps sea + level * sm(0, 5, d) over the sea, equal to it only at a seed), so heights pass through them;
+  // fingers and plates move the waterline away from the stroke, by `sideR` cells. Two rectangles go back through the nodes: H, where heights must be
+  // exact, and S, where sides must be exact. A coast node needs its seeds present within its reach of H (the buffer must hold them: K, coverage) and within
+  // `sideR` of S. Only the presence of seeds needs the whole reach. A seed whose side an earlier node got wrong (it too lacked seeds beyond the buffer) moves
+  // the later node's coast by about the distance field's blur (blurR + 2 cells), not by its reach again: so S grows by that per link and K by the reach
+  // once. A chain of lake strokes then costs the extent of its strokes plus a margin a link, not the sum of their reaches (5 lava strokes summed to 640).
+  // [Supported inference: checked with chained lakes at rings below the rule's value (pagedShapeCompare), see H10 notes; not proven for every stroke order.]
+  const grow = (r, m) => ({x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m});
+  const meet = (a, b) => { const r = {x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1)}; return r.x0 <= r.x1 && r.y0 <= r.y1 ? r : null; };
+  const span = (a, b) => !a ? b : !b ? a : {x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1)};
   function ringNeed() {
-    const geom = {grid: worldGrid, spacing, refSpacing: spacing}, c = context(), sm = [];
-    for (const n of nodes()) { if (nodeSupport(n, c)) continue; const p = prepare(n, geom, c); if (p.smoothR && p.region) sm.push({r: p.smoothR, reg: p.region, depth: 0}); else if (p.coast) sm.push({r: p.coast.readR, reg: p.region, depth: 0}); }   // H10: a coast node reads readR cells round its footprint, like a smooth
+    const geom = {grid: worldGrid, spacing, refSpacing: spacing}, c = context(), ns = [];
+    for (const n of nodes()) {
+      if (nodeSupport(n, c)) continue;
+      const p = prepare(n, geom, c);
+      if (p.smoothR && p.region) ns.push({smooth: true, read: p.smoothR, reg: p.region});
+      else if (p.coast) ns.push({smooth: false, read: p.coast.readR, side: p.coast.sideR, local: p.coast.blurR + 2, reg: p.region, box: p.coast.box});
+    }
+    const top = worldGrid - 1, clipW = r => ({x0: Math.max(0, r.x0), y0: Math.max(0, r.y0), x1: Math.min(top, r.x1), y1: Math.min(top, r.y1)});
     let deepest = 0;
-    sm.forEach((a, i) => {
-      const grown = {x0: a.reg.x0 - a.r, y0: a.reg.y0 - a.r, x1: a.reg.x1 + a.r, y1: a.reg.y1 + a.r};
-      a.depth = a.r + Math.max(0, ...sm.slice(0, i).filter(b => hits(grown, b.reg)).map(b => b.depth));
-      deepest = Math.max(deepest, a.depth);
-    });
+    for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) {
+      const core = {x0: px * CORE, y0: py * CORE, x1: Math.min(top, px * CORE + CORE - 1), y1: Math.min(top, py * CORE + CORE - 1)};
+      let H = core, S = null, K = null;
+      for (let i = ns.length - 1; i >= 0; i--) {
+        const a = ns[i];
+        if (a.smooth) {
+          const hit = meet(span(H, S), a.reg);
+          if (hit) { const e = clipW(grow(hit, a.read)); H = span(H, e); S = span(S, e); }
+          continue;
+        }
+        const seeds = grow(a.reg, 2), hitH = meet(H, a.box);
+        if (hitH) { const e = meet(clipW(grow(hitH, a.read)), seeds); if (e) { K = span(K, e); S = span(S, meet(clipW(grow(hitH, a.local)), seeds)); } }
+        const hitS = a.side > 0 && S ? meet(S, grow(a.reg, a.side)) : null;
+        if (hitS) { const e = meet(clipW(grow(hitS, a.side)), seeds); if (e) K = span(K, e); const l = meet(clipW(grow(hitS, a.local)), seeds); if (l) S = span(S, l); }
+      }
+      const U = span(span(H, S), K);
+      deepest = Math.max(deepest, core.x0 - U.x0, core.y0 - U.y0, U.x1 - core.x1, U.y1 - core.y1);
+    }
     return 4 + deepest;
   }
   function setRing(need) {
@@ -1034,11 +1066,12 @@ export function createPagedFields(opts) {
     }
     return true;
   }
-  let ringChanges = 0;
+  let ringChanges = 0, lastNeed = 0;
   const check = () => {
     reason = null;
     for (const n of nodes()) { const r = nodeSupport(n, context()); if (r) { reason = r; return false; } }
-    if (!setRing(ringNeed())) { reason = 'smooth chain too deep for the page ring'; return false; }
+    lastNeed = opts.forceRing || ringNeed();
+    if (!setRing(lastNeed)) { reason = `smooth chain too deep for the page ring (needs ${lastNeed} cells, the top ring is ${RINGS[RINGS.length - 1]})`; return false; }
     return true;
   };
   const getEngine = () => enginePromise ??= (async () => {
@@ -1369,7 +1402,7 @@ export function createPagedFields(opts) {
       set.destroy(); tmp.forEach(b => b.destroy()); return {W, maps, n};
     },
     debugPages: () => [...pagesMap.values()].filter(p => p.weather).map(p => ({x0: p.x0, y0: p.y0, cw: p.cw, ch: p.ch, weather: p.weather.weather, maps: p.weather.maps, core: CORE})),
-    pageInfo: () => ({np, core: CORE, ring: RING, apron: APRON, side: SIDE}),
+    pageInfo: () => ({np, core: CORE, need: lastNeed, ring: RING, apron: APRON, side: SIDE}),
     destroy() { for (const pg of pagesMap.values()) { dropShape(pg); dropWeather(pg); } staging?.destroy(); scratchT?.destroy(); engine?.destroy(); },
   };
 }
