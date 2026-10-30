@@ -20,6 +20,7 @@ const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 
 const server = opt('--server', 'http://127.0.0.1:8867'), port = Number(opt('--port', 9667));
 const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out', 'perf-out'), label = opt('--label', '');
 const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : fallback; };
+const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
 const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
 const [mode] = args;
 if (!['map4', 'map8', 'study'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|study> --scene <scene.json> --out <dir>'); process.exit(1); }
@@ -116,8 +117,8 @@ function patch(c) {
   r.timer = () => null;                 // (our hooks time every pass instead)
   const rc = r.renderChunk.bind(r);
   r.renderChunk = async (request, options) => {
-    const t = now(); ev('bake-start', {x: request.x, y: request.y, w: request.width, h: request.height}); const prev = P.ctx; P.ctx = 'chunk';
-    try { return await rc(request, options); } finally { P.ctx = prev; ev('bake-end', {x: request.x, y: request.y, ms: now() - t, rev: options?.feed?.revision ?? null}); add('chunk bake (wall)', now() - t); }
+    const t = now(); ev('bake-start', {x: request.x, y: request.y, w: request.width, h: request.height, level: options?.scale ?? 1}); const prev = P.ctx; P.ctx = 'chunk';
+    try { return await rc(request, options); } finally { P.ctx = prev; ev('bake-end', {x: request.x, y: request.y, ms: now() - t, rev: options?.feed?.revision ?? null, level: options?.scale ?? 1}); add('chunk bake (wall)', now() - t); }
   };
   wrap(r, 'upload', 'field upload (CPU pack + write)');
   wrap(Base, 'draw', 'draw + bake encode (CPU)');
@@ -178,9 +179,9 @@ const ev = async expression => { const r = await Promise.race([send('Runtime.eva
 const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
 
 const isMap = mode !== 'study';
-const url = isMap ? `${server}/sculpt?biome=green&mapX=${mode === 'map4' ? 4 : 8}&mapY=${mode === 'map4' ? 4 : 8}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`
+const url = isMap ? `${server}/sculpt?biome=green&mapX=${mode === 'map4' ? 4 : 8}&mapY=${mode === 'map4' ? 4 : 8}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`
   : `${server}/sculpt?biome=green&scratch=1${scene.query ? '&' + scene.query : ''}`;
-const result = {mode, label, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
+const result = {mode, label, query: extraQuery, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
 const stable = async (quietMs = 1500, limitMs = 120000) => {   // wait for no bake/erode/read event for quietMs
   const t0 = Date.now();
   while (Date.now() - t0 < limitMs) {
@@ -196,19 +197,21 @@ function analyse(events, visible, t0) {
   const open = new Map();
   for (const e of events) {
     if (e.type === 'bake-start') open.set(e.x + ',' + e.y, e.t);
-    if (e.type === 'bake-end') { const k = e.x + ',' + e.y; (bakes.get(k) ?? bakes.set(k, []).get(k)).push({start: open.get(k), end: e.t}); }
+    if (e.type === 'bake-end') { const k = e.x + ',' + e.y; (bakes.get(k) ?? bakes.set(k, []).get(k)).push({start: open.get(k), end: e.t, level: e.level ?? 1}); }
   }
   const ready = events.filter(e => e.type === 'weather-state' && /Weathered edges|ready on demand/.test(e.text) && e.t >= t0).map(e => e.t);
   const weatherReady = ready.length ? ready[0] - t0 : null;   // the first 'Weathered edges' text after t0
   const perChunk = {};
-  let finalAll = 0, staleFinal = 0;
+  // H7b: a bake at level 2 is a quarter image. 'final' is the last final-level bake; 'shown' is the first bake of any level (the chunk is on screen at least at quarter).
+  let finalAll = 0, staleFinal = 0, shownAll = 0, missing = 0;
   for (const k of visible) {
-    const list = bakes.get(k) ?? [], last = list.at(-1);
-    perChunk[k] = last ? {final: last.end - t0, bakes: list.length, startedAfterWeather: weatherReady === null || last.start - t0 >= weatherReady - 1} : null;
-    if (last) { finalAll = Math.max(finalAll, last.end - t0); if (weatherReady !== null && last.start - t0 < weatherReady - 1) staleFinal++; }
+    const list = bakes.get(k) ?? [], finals = list.filter(b => b.level === 1), last = finals.at(-1), first = list[0];
+    perChunk[k] = last ? {final: last.end - t0, shown: first.end - t0, bakes: list.length, quarterBakes: list.length - finals.length, startedAfterWeather: weatherReady === null || last.start - t0 >= weatherReady - 1} : (first ? {final: null, shown: first.end - t0, bakes: list.length} : null);
+    if (first) shownAll = Math.max(shownAll, first.end - t0);
+    if (last) { finalAll = Math.max(finalAll, last.end - t0); if (weatherReady !== null && last.start - t0 < weatherReady - 1) staleFinal++; } else missing++;
   }
   const erode = events.filter(e => e.type === 'erode-end').map(e => e.t - t0);
-  return {weatherReady, finalInView: finalAll, chunksNotFinalAfterWeather: staleFinal, bakeCount: [...bakes.values()].reduce((n, l) => n + l.length, 0), erodeEnds: erode, visible: perChunk};
+  return {weatherReady, finalInView: finalAll, shownInView: shownAll, visibleWithoutFinal: missing, quarterBakes: [...bakes.values()].reduce((n, l) => n + l.filter(b => b.level > 1).length, 0), chunksNotFinalAfterWeather: staleFinal, bakeCount: [...bakes.values()].reduce((n, l) => n + l.length, 0), erodeEnds: erode, visible: perChunk};
 }
 const splitStages = async () => {
   const stage = await ev('__perf.stage'), passes = await ev('__perf.readPasses()'), waits = await ev('__perf.waits.map(w=>w.ms)');
@@ -288,6 +291,7 @@ try {
       lat.push(d.t - m.t);
       const run = runs.find(r => r.t >= m.t - 1 && r.doneAt); if (run) share.push((run.doneAt - m.t) / (d.t - m.t));
     }
+    writeFileSync(`${out}/${mode}-events-drag.json`, JSON.stringify({t0: dragT0, events, draws}));
     result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), shapeShareP50: q(share, .5), shapeShareP95: q(share, .95), shapeShareN: share.length};
   }
 
@@ -339,7 +343,7 @@ try {
     let g = null; for (let i = 0; i < 2400 && !g?.done; i++) { g = await ev('window.gateExport'); if (!g?.done) await sleep(500); }
     result.export = {name, ms: g?.ms ?? null, error: g?.error ?? null, split: await splitStages()};
   }
-  result.memory = isMap ? await ev('(() => { const m = sculptCanvas.stats(); return {gpuBytes: m.gpuBytes, peakGPUBytes: m.peakGPUBytes, heapBytes: m.heapBytes, peakHeapBytes: m.peakHeapBytes, cachedChunks: m.cachedChunks, bakes: m.bakes, rebakes: m.rebakes}; })()') : null;
+  result.memory = isMap ? await ev('(() => { const m = sculptCanvas.stats(); return {gpuBytes: m.gpuBytes, peakGPUBytes: m.peakGPUBytes, heapBytes: m.heapBytes, peakHeapBytes: m.peakHeapBytes, cachedChunks: m.cachedChunks, bakes: m.bakes, rebakes: m.rebakes, cacheBytes: m.cacheBytes, levels: m.levels}; })()') : null;
 } catch (e) {
   result.error = String(e.stack || e);
 } finally {
