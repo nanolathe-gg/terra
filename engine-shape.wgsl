@@ -158,6 +158,24 @@ fn hillSection(t: f32) -> f32 {
 
 // One thread per cell: every capsule of the node in order. Kinds: 0 paint 1 erase 2 deep 3 shallow 4 mountain 5 hill.
 // A hill with settle != 0 only writes its raw weights (Sc plane 0); blur and compose passes finish it.
+// H9 outline displacement: baseVary (Desert's ragged feet) and moonLobes (Moon's folded outline) are one function with two parameter sets (u.ol*).
+// It returns the shift of r in radius units; the caller divides by width * bankScale. Window: smoothstep(olLo, olHi, r), or 1 for an offset (olFlat).
+fn outlineShift(r: f32, lx: f32, ly: f32) -> f32 {
+  if (u.olAmp <= 0.0) { return 0.0; }
+  var win = 1.0;
+  if (u.olFlat == 0u) { win = sm(u.olLo, u.olHi, r); }
+  var n = u.olW0 * vnoise(lx / u.olL0, ly / u.olL0, u.seed ^ u.olS0) + u.olW1 * vnoise(lx / u.olL1, ly / u.olL1, u.seed ^ u.olS1);
+  if (u.olW2 > 0.0) { n = n + u.olW2 * vnoise(lx / u.olL2, ly / u.olL2, u.seed ^ u.olS2); }
+  return u.olAmp * win * n;
+}
+// baseBump: lumps on the apron and lower face, added to the value of a plateau, offset, hill or mountain (baseBumps in sculpt.js).
+fn baseBump(lx: f32, ly: f32, w: f32) -> f32 {
+  if (u.bpAmp <= 0.0) { return 0.0; }
+  let off = u.bpOffset != 0u;
+  return u.bpAmp * sm(0.03, select(0.12, 0.2, off), w) * select(1.0 - sm(0.12, 0.3, w), 1.0, off)
+    * (0.55 * vnoise(lx / 30.0, ly / 30.0, u.seed ^ 0x4c91u) + 0.3 * vnoise(lx / 13.0, ly / 13.0, u.seed ^ 0x1a77u) + 0.25 * vnoise(lx / 6.5, ly / 6.5, u.seed ^ 0x63d9u));
+}
+
 @compute @workgroup_size(8, 8)
 fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -206,7 +224,9 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var width = 1.0;
     if (kind == 2u && u.natural != 0u) { width = clamp(1.0 + u.rough * 1.6 * nCW, 0.45, 1.9); }
     else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
-    let r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    var r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    var lobe = 0.0;
+    if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
     var core = 0.0;
     if (kind == 2u && u.natural != 0u) { core = 1.0 - sm(0.20, u.coreEdge, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / radius); }
     if (r >= 1.0 && core == 0.0 && !shouldered) { continue; }
@@ -230,7 +250,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
         let len = sqrt(fx * fx + fy * fy);
         if (len > 1e-5) { fx = fx / len; fy = fy / len; } else { fx = face.x; fy = face.y; }
       }
-      let localRadius = radius * (1.0 + u.rough * 0.75 * nShelf);
+      let localRadius = radius * (1.0 + u.rough * 0.75 * nShelf + lobe);
       let uu = (dx * fx + dy * fy) / localRadius;
       let vv = (-dx * fy + dy * fx) / localRadius;
       let cross = uu - u.rough * 0.18 * nDet;
@@ -275,8 +295,10 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     }
   } else if (kind == 4u) {
     value = base + u.amount * w;
+    value = value + baseBump(lx, ly, w);
   } else if (kind == 5u) {
     value = base + u.amount * w * (1.0 + u.rough * (0.75 * nCW + 0.30 * nDet));
+    value = value + baseBump(lx, ly, w);
   } else {
     var bed = u.sea + select(-7.0, -55.0, kind == 2u);
     if (kind == 2u && u.natural != 0u) { bed = bed + 42.0 * (sm(-0.15, 0.55, nShelf) * sm(0.08, 0.50, br)) * u.shelves; }
@@ -495,7 +517,8 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (natural) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
-    let r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    var r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / (width * u.bankScale); }
     if (r >= 1.0) { continue; }
     var w = 0.0;
     if (natural) {
@@ -529,6 +552,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     F[PV * cells + i] = vb + (tv - vb) * w * u.amountPct;
   }
   else if (kind == 11u) { value = base + (Sc[2u * cells + i] - base) * w * u.amountPct; }
+  value = value + baseBump(lx, ly, w);
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   if (kind != 11u && value != base) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
   if (kind == 6u) { F[PP * cells + i] = max(pbase * (1.0 - w), sm(0.65, 0.95, w)); }

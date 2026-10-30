@@ -1,5 +1,5 @@
 // Compare Green's shape on the GPU (gpuShape 1) with the JS engine, per scene and per plane, in one browser page.
-//   node shapecheck.mjs <scene.json>... [--server http://127.0.0.1:8868] [--port 9668] [--out dir] [--map]
+//   node shapecheck.mjs <scene.json>... [--server http://127.0.0.1:8874] [--port 9668] [--out dir] [--map]
 // Study scenes run on the 1024-px editor; with --map the same strokes run on a 4x4 map canvas (1168 samples, the whole map compared).
 // The page evaluates the scene on the GPU, then on the JS engine (the same node list), then on the GPU again, and returns for every plane:
 //   float planes (h p r c v x): max |d| and the share of cells over 0.01, 0.5 and 1 unit;
@@ -12,7 +12,7 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {basename} from 'node:path';
 
 const args = process.argv.slice(2), opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
-const server = opt('--server', 'http://127.0.0.1:8868'), port = Number(opt('--port', 9668)), out = opt('--out', 'shapecheck-out'), mapMode = args.includes('--map') && args.splice(args.indexOf('--map'), 1).length > 0;
+const server = opt('--server', 'http://127.0.0.1:8874'), port = Number(opt('--port', 9674)), out = opt('--out', 'shapecheck-out'), mapMode = args.includes('--map') && args.splice(args.indexOf('--map'), 1).length > 0;
 const scenes = args;
 if (!scenes.length) { console.error('usage: node shapecheck.mjs <scene.json>... [--server url] [--port n] [--out dir] [--map]'); process.exit(2); }
 mkdirSync(out, {recursive: true});
@@ -20,8 +20,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0;
 for (const file of scenes) {
   const scene = JSON.parse(readFileSync(file, 'utf8')), name = basename(file, '.json') + (mapMode ? '-map' : '');
-  const url = mapMode ? `${server}/sculpt?biome=${scene.biome}&mapX=4&mapY=4&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536&gpuShape=1${scene.query ? '&' + scene.query : ''}`
-    : `${server}/sculpt?biome=${scene.biome}&scratch=shapecheck${Date.now()}&gpuShape=1${scene.query ? '&' + scene.query : ''}`;
+  const url = mapMode ? `${server}/sculpt?biome=${scene.biome}&mapX=4&mapY=4&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536&engine=1&gpuShape=1${scene.query ? '&' + scene.query : ''}`
+    : `${server}/sculpt?biome=${scene.biome}&scratch=shapecheck${Date.now()}&engine=1&gpuShape=1${scene.query ? '&' + scene.query : ''}`;
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/prof-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   try {

@@ -1,0 +1,9 @@
+{"biome": "desert", "source": {"note": "authored for shapecheck (H9): Desert's base options (ragged feet, lumps) on plateau, offset, hill, mountain, with ground cover; the world sets baseVary 36 and baseBump 3.5"},
+ "ground": false, "query": "",
+ "strokes": [
+  ["offset", [[200,300],[320,360],[430,330]], {"card": {"diameter": 240, "amount": 20, "roughness": 40}}],
+  ["mountain", [[600,300]], {"card": {"diameter": 200, "amount": 60, "roughness": 30}}],
+  ["hill", [[300,700]], {"card": {"diameter": 220, "amount": 40, "roughness": 30}}],
+  ["hill", [[600,700],[700,740],[820,700]], {"card": {"diameter": 200, "amount": 40, "roughness": 30}}],
+  ["offset", [[800,250]], {"card": {"diameter": 160, "amount": -15, "roughness": 30}}]
+ ]}
