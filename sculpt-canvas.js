@@ -20,9 +20,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
-  const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,lastCoarse=0,budgetUpdating=false;
-  let pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
-  let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],coarseRevision=-1,resizePending=false;
+  const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
+  let heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(128,128),cg=coarse.getContext('2d');
   const panel=document.createElement('section'); panel.className='section files';
   panel.innerHTML=`<h3>Map view and memory</h3><div class="row"><button data-half>0.5×</button><button data-overview>Overview</button></div><canvas data-nav width="200" height="200" aria-label="Map minimap navigator" style="width:100%;height:auto;margin-top:9px;cursor:crosshair;image-rendering:pixelated"></canvas><label class="control" style="display:block">Terrain GPU budget (MiB)<input data-gpu type="number" min="128" max="4096" step="128" value="${gpuBudget/MB}"></label><label class="control" style="display:block">Page heap budget (MiB)<input data-heap type="number" min="128" max="8192" step="128" value="${heapBudget/MB}"></label><p class="small" data-memory></p><label class="control" style="display:block">Server document<input data-document value="${docId}"></label><div class="row"><button data-save>Save to server</button><button data-load>Reload document</button></div><p class="small" data-save-state>Changes save incrementally on this local server.</p>`;
@@ -50,7 +50,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,evictions,bakes,hits,rebakes,canonicalChunkSize:canonicalSize,field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
-  function clear(rect=null) { epoch++;for(const [key,e] of cache)if(!rect||intersects(rect,e.input??e))remove(key);coarseRevision=-1;schedule(); }
+  function clear(rect=null) { epoch++;for(const [key,e] of cache)if(!rect||intersects(rect,e.input??e))remove(key);coarseColour=true;schedule(); }
   function trimTo(limit){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
   function configureChunks() {
     if(budgetUpdating)return;budgetUpdating=true;
@@ -77,9 +77,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return {...request,...r,fields:r.fields,material:r.materialField??r.material,gridOrigin:r.gridOrigin,gridSpacing:r.gridSpacing,gridWidth:r.gridWidth,gridHeight:r.gridHeight,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
   }
   function chunkSize() { return canonicalSize; }
-  async function bake(rect,exportArt=false,signal) {
+  async function bake(rect,exportArt=false,signal,stale=null) {
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
-    const fields=await region(request,options,signal),required=renderer.requiredRegion(request,options),estimate=renderer.estimate({...required,gridWidth:fields.gridWidth,gridHeight:fields.gridHeight},rect.width,rect.height,fields.maskPlanes?.length??api.maskKeys.length);
+    const fields=await region(request,options,signal);
+    // H7 2b: the scene changed while this bake waited for its fields; its image would be dropped, so it never reaches the GPU.
+    if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
+    const required=renderer.requiredRegion(request,options),estimate=renderer.estimate({...required,gridWidth:fields.gridWidth,gridHeight:fields.gridHeight},rect.width,rect.height,fields.maskPlanes?.length??api.maskKeys.length);
     checkHeap(fields,estimate.cpuPeakBytes);
     const copyBytes=rect.width*rect.height*8;trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
     renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
@@ -87,15 +90,43 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
     const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
   }
+  // H7 2a: the overview is sampled once per edit, over the edit's dirty rectangle only, in slices that leave the frame free.
+  // A 4 x 4 lattice of the 128 x 128 points (the same points the full overview samples) comes first and fills its blocks, so a
+  // picture exists after ~1k samples; the rest follow when the page is idle. Heights are kept apart from colours: a colour or
+  // weather change recolours without sampling (the overview shows authored heights, which weather never touches).
+  const CW=coarse.width,CH=coarse.height,coarseH=new Float32Array(CW*CH),coarseHave=new Uint8Array(CW*CH),coarseQueued=new Uint8Array(CW*CH),coarseFirst=[],coarseRest=[];
+  let coarseColour=true;
+  function markCoarse(rect=null) {
+    const wx=x=>x/(CW-1)*(map.width-1),wy=y=>y/(CH-1)*(map.height-1),px=map.width/(CW-1),py=map.height/(CH-1);
+    for(let y=0;y<CH;y++)for(let x=0;x<CW;x++){
+      const i=y*CW+x;if(coarseQueued[i])continue;
+      if(rect&&(wx(x)<rect.x-px||wx(x)>rect.x+rect.width+px||wy(y)<rect.y-py||wy(y)>rect.y+rect.height+py))continue;
+      coarseQueued[i]=1;((x&3)===0&&(y&3)===0?coarseFirst:coarseRest).push(i);
+    }
+  }
+  function stepCoarse(budget) {
+    const start=performance.now(),sample=api.sampleAuthored??api.sample;let did=false;
+    for(const queue of [coarseFirst,coarseRest]){
+      while(queue.length&&performance.now()-start<budget){
+        const i=queue.pop(),x=i%CW,y=(i/CW)|0;coarseQueued[i]=0;
+        const h=sample(x/(CW-1)*(map.width-1),y/(CH-1)*(map.height-1));coarseH[i]=h;coarseHave[i]=1;did=true;
+        if((x&3)===0&&(y&3)===0)for(let dy=0;dy<4&&y+dy<CH;dy++)for(let dx=0;dx<4&&x+dx<CW;dx++){const j=i+dy*CW+dx;if(!coarseHave[j])coarseH[j]=h;}
+      }
+      if(queue.length)break;
+    }
+    if(did)coarseColour=true;return coarseFirst.length+coarseRest.length>0;
+  }
+  markCoarse();
   function drawCoarse() {
-    const rev=api.revision?.()??epoch;
-    if(coarseRevision!==rev && (!gesture || performance.now()-lastCoarse>250)) {
+    // Sample in slices, but never during a gesture: the overview is stale under the edit and refreshes on release.
+    if(!gesture&&coarseFirst.length+coarseRest.length&&stepCoarse(coarseFirst.length?400:overview?12:6)&&!gesture)schedule();
+    if(coarseColour) {
       const image=cg.createImageData(coarse.width,coarse.height),base=config.baseHeight,sea=config.seaLevel,mean=renderer.means?.ground||[.2,.3,.15];
       for(let y=0;y<coarse.height;y++)for(let x=0;x<coarse.width;x++) {
-        const h=(api.sampleAuthored??api.sample)(x/(coarse.width-1)*(map.width-1),y/(coarse.height-1)*(map.height-1)),i=(y*coarse.width+x)*4,wet=h<sea,shade=clamp(.8+(h-base)*.005,.3,1.5),water=config.water?.shallowRGB||[42,87,130];
+        const i0=y*coarse.width+x,h=coarseH[i0],i=i0*4,wet=h<sea,shade=clamp(.8+(h-base)*.005,.3,1.5),water=config.water?.shallowRGB||[42,87,130];
         for (let c=0;c<3;c++) image.data[i+c]=wet?water[c]:mean[c]*255*shade; image.data[i+3]=255;
       }
-      cg.putImageData(image,0,0);coarseRevision=rev;lastCoarse=performance.now();
+      cg.putImageData(image,0,0);coarseColour=false;
     }
     const v=state(); g.imageSmoothingEnabled=false; g.drawImage(coarse,v.x/map.width*coarse.width,v.y/map.height*coarse.height,v.width/map.width*coarse.width,v.height/map.height*coarse.height,0,0,canvas.width,canvas.height);
     ng.imageSmoothingEnabled=false; ng.drawImage(coarse,0,0,navigatorCanvas.width,navigatorCanvas.height); ng.strokeStyle='#fff0a0'; ng.lineWidth=1; ng.strokeRect(v.x/map.width*200+.5,v.y/map.height*200+.5,Math.min(200,v.width/map.width*200),Math.min(200,v.height/map.height*200));
@@ -116,6 +147,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     try {
       const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
       drawCoarse();overlays();
+      // H7 2b: while the Time pass is running, a bake would read the unweathered height and be redone when the weather lands.
+      // The pass is submitted first (it starts with the edit) and chunks wait for it, for at most 8 s so a failed pass cannot hide the map.
+      const weatherPending=api.canExport&&!api.canExport()&&!gesture&&!features?.busy;
+      if(weatherPending){heldSince??=performance.now();}else heldSince=null;
+      const holding=weatherPending&&performance.now()-heldSince<8000;
+      if(holding)setTimeout(schedule,100);
       if(!overview&&!busy){
         const size=chunkSize(),v=state(),jobs=[],token=epoch,viewToken=viewEpoch;
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
@@ -125,7 +162,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         for(const rect of jobs){
           if(token!==epoch||viewToken!==viewEpoch||busy)break;
           const key=rect.x+','+rect.y+','+size;let e=cache.get(key);
-          if(!e){e=await bake(rect);if(token!==epoch){e.bitmap.close?.();break;}cache.set(key,e);cacheBytes+=e.bytes;}
+          if(!e&&holding)continue;
+          if(!e){e=await bake(rect,false,undefined,()=>token!==epoch||false);if(token!==epoch){e.bitmap.close?.();break;}cache.set(key,e);cacheBytes+=e.bytes;}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{});checkHeap(input);e.heightPatch=keepHeight(input);}}
           if(token!==epoch||cache.get(key)!==e)break;
           if(viewToken!==viewEpoch){rerun=true;break;}
@@ -233,7 +271,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function queueSave(){clearTimeout(saveTimer);if(gesture||busy)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
   find('[data-save]').onclick=()=>saveDocument().catch(()=>{});find('[data-load]').onclick=()=>loadDocument().catch(err=>{find('[data-save-state]').textContent=err.message;});
-  api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);queueSave();});
+  api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);queueSave();});
   function setBusy(on){busy=on;api.setBusy(on);find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on||saving;if(!on){if(resizePending)resize();else schedule();}}
   features=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();queueSave();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
