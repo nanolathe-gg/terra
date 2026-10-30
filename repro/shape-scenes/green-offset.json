@@ -1,0 +1,9 @@
+{"biome": "green", "source": {"note": "authored for shapecheck (H6c): Raise / lower up and down over a hill, water and flat ground, with cracks"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["deep", [[80,700],[300,760],[520,820]], {"card": {"diameter": 260, "roughness": 35, "shelves": 60}}],
+  ["offset", [[400,330],[520,380]], {"card": {"diameter": 200, "amount": 30, "roughness": 30, "cracks": 50}}],
+  ["offset", [[200,500],[330,540],[420,600]], {"card": {"diameter": 160, "amount": -20, "roughness": 40}}],
+  ["offset", [[300,740],[420,780]], {"card": {"diameter": 150, "amount": 25, "roughness": 20}}]
+ ]}

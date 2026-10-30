@@ -1,0 +1,12 @@
+{"biome": "green", "source": {"note": "authored for shapecheck (H6c): plateaus whose level is read from the prefix: on flat ground, on a hill, on water, on another plateau, framed by a later move"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["deep", [[80,700],[300,760],[520,820]], {"card": {"diameter": 260, "roughness": 35, "shelves": 60}}],
+  ["plateau", [[400,330],[520,380],[600,330]], {"card": {"diameter": 200, "amount": 40, "roughness": 30}}],
+  ["plateau", [[200,500],[330,540]], {"card": {"diameter": 160, "amount": 25, "roughness": 40}}],
+  ["plateau", [[260,740],[360,760]], {"card": {"diameter": 150, "amount": 30, "roughness": 20, "softness": 70}}],
+  ["plateau", [[480,360]], {"card": {"diameter": 90, "amount": 20, "roughness": 10, "cracks": 60}}],
+  ["plateau", [[820,820],[900,760],[940,850],[880,900]], {"card": {"diameter": 200, "amount": 35, "roughness": 50}}],
+  ["paint", [[700,500],[800,540]], {"card": {"diameter": 120, "roughness": 30}}]
+ ]}

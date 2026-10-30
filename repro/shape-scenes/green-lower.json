@@ -1,0 +1,7 @@
+{"biome": "green", "source": {"note": "authored for shapecheck (H6c): Lower over a hill and flat ground"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["lower", [[400,330],[520,380]], {"card": {"diameter": 200, "amount": 30, "roughness": 30}}],
+  ["lower", [[200,600],[330,640]], {"card": {"diameter": 160, "amount": 20, "roughness": 60}}]
+ ]}

@@ -1,0 +1,10 @@
+{"biome": "green", "source": {"note": "authored for shapecheck (H6c): fissures at Green's defaults (branches, zigzag, cracks, wet mark): a long one across a hill, a short one by water, a one-point one, and a network"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["deep", [[80,760],[300,820],[520,880]], {"card": {"diameter": 260, "roughness": 35, "shelves": 60}}],
+  ["fissure", [[250,420],[360,380],[480,400],[620,360],[700,300]], {"card": {"diameter": 120, "amount": 20}}],
+  ["fissure", [[150,700],[260,720],[380,740]], {"card": {"diameter": 120, "amount": 30, "fissureWidth": 9, "fissureBranches": 5}}],
+  ["fissure", [[800,500]], {"card": {"diameter": 100, "amount": 15}}],
+  ["fissure", [[760,700],[860,760]], {"card": {"diameter": 240, "amount": 25, "fissureNetwork": 1}}]
+ ]}
