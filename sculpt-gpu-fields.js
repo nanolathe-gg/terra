@@ -309,7 +309,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (let k = 0; k < 6; k++) { const dst = planes[FIELD_KEYS_FLOAT[k]]; for (let y = 0; y < height; y++) dst.set(out.floats[k].subarray(y * width, (y + 1) * width), (rect.y0 + y) * grid + rect.x0); }
     for (let m = 0; m < 25; m++) { const dst = planes.masks[m]; for (let y = 0; y < height; y++) dst.set(out.masks[m].subarray(y * width, (y + 1) * width), (rect.y0 + y) * grid + rect.x0); }
   }
-  return {run, copyOut, bytes, stats: () => ({gpuBytes: bytes(), peakGpuBytes: peak, planeBytes: F.size, maskBytes: Mk.size, noiseBytes: Nz?.size || 0, scratchBytes: Sc?.size || 0, last}),
+  return {run, copyOut, bytes, planes: F, masks: Mk, stats: () => ({gpuBytes: bytes(), peakGpuBytes: peak, planeBytes: F.size, maskBytes: Mk.size, noiseBytes: Nz?.size || 0, scratchBytes: Sc?.size || 0, last}),
     destroy() { F.destroy(); Mk.destroy(); Nz?.destroy(); Sc?.destroy(); Nz = Sc = null; }, grid, spacing};
 }
 
@@ -426,7 +426,62 @@ export function createGpuFields(opts) {
       return out;
     },
     planes: () => planes, engine: () => engine,
+    // H6b: the engine's whole-map buffers (the h p r c v x planes, the packed masks) for the passes that read them in place. Await ready() first.
+    gpuBuffers: () => !front() && valid && engine ? {planes: engine.planes, masks: engine.masks, grid: worldGrid, spacing} : null,
   };
+}
+
+// ---- H6b: the feed passes (engine-feed.wgsl) ----
+// Which bindings (group.binding) each entry point reads or writes: the pipelines take their layouts from the shader ('auto'), which holds only
+// the bindings an entry point uses, so a bind group must carry exactly these.
+const FEED_USES = {
+  seedMain: ['0.0', '0.1', '0.2', '1.0', '1.1', '1.2', '1.3'], tileFlagMain: ['0.0', '1.3', '1.4'], tileListMain: ['0.0', '1.4', '1.5', '1.6'],
+  tileArgsMain: ['1.6', '1.7'], refinedMain: ['0.0', '1.8', '1.9'],
+  feedMain: ['0.0', '0.1', '0.2', '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8']};
+const feedCache = new WeakMap();
+// {pipes, groups(entry, resources)}: resources maps 'group.binding' to a binding resource; groups() returns [[index, bindGroup]...].
+export function feedPasses(device) {
+  let cached = feedCache.get(device);
+  if (cached) return cached;
+  cached = (async () => {
+    const module = device.createShaderModule({label: 'engine-feed', code: await (await fetch('/engine-feed.wgsl')).text()});
+    const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
+    if (errors.length) throw new Error('nanolathe: engine-feed.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+    const pipes = {};
+    await Promise.all(Object.keys(FEED_USES).map(async entry => { pipes[entry] = await device.createComputePipelineAsync({label: entry, layout: 'auto', compute: {module, entryPoint: entry}}); }));
+    const groups = (entry, resources) => {
+      const byGroup = new Map();
+      for (const key of FEED_USES[entry]) {
+        const [g, b] = key.split('.').map(Number);
+        if (!resources[key]) throw new Error(`nanolathe: feed pass ${entry} needs binding ${key}`);
+        if (!byGroup.has(g)) byGroup.set(g, []);
+        byGroup.get(g).push({binding: b, resource: resources[key]});
+      }
+      return [...byGroup].map(([g, entries]) => [g, device.createBindGroup({label: entry, layout: pipes[entry].getBindGroupLayout(g), entries})]);
+    };
+    return {pipes, groups};
+  })();
+  feedCache.set(device, cached);
+  return cached;
+}
+// The feed passes' uniform (struct FU of engine-feed.wgsl): 16 words.
+export function feedUniform(device, f) {
+  const buffer = device.createBuffer({label: 'feed uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(64));
+  const u = ['grid', 'cells', 'ox', 'oy', 'gw', 'gh', 'cw', 'ch', 'mode', 'rateMask'], fl = ['sea', 'spacing', 'envelope'];
+  u.forEach((k, i) => { if (['ox', 'oy'].includes(k)) dv.setInt32(i * 4, f[k] ?? 0, true); else dv.setUint32(i * 4, (f[k] ?? 0) >>> 0, true); });
+  fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
+  dv.setUint32(13 * 4, f.tilesWide ?? 0, true);
+  device.queue.writeBuffer(buffer, 0, dv.buffer);
+  return buffer;
+}
+// Read `bytes` of a buffer (which needs COPY_SRC) from `offset`, through a staging buffer.
+export async function readBuffer(device, buffer, offset, bytes) {
+  const stage = device.createBuffer({label: 'feed readback', size: Math.max(4, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}), enc = device.createCommandEncoder({label: 'feed readback'});
+  enc.copyBufferToBuffer(buffer, offset, stage, 0, bytes);
+  device.queue.submit([enc.finish()]);
+  await stage.mapAsync(GPUMapMode.READ);
+  const out = stage.getMappedRange().slice(0, bytes); stage.unmap(); stage.destroy();
+  return out;
 }
 
 // ---- the check tool's comparison (repro/shapecheck.mjs reads it through sculptDebug.shapeCompare) ----

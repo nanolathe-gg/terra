@@ -1,0 +1,183 @@
+// H6b (Green): the map canvas fed from the GPU fields. Compute passes that read the whole-map buffers of the GPU shape fields
+// (sculpt-gpu-fields.js) and the Time pass's own buffers, and write what the CPU used to pack and upload:
+//
+//   Time pass input    seedMain, tileFlagMain, tileListMain, tileArgsMain   the erosion state, its fixed field (bounds, mobility) and the
+//                                                                          list of active 8 x 8 tiles, from the height, protection and
+//                                                                          erosion-rate planes (sculpt-erosion.js fixedField, in f32)
+//   Time pass output   refinedMain                                         the eroded height beside the authored one
+//   Chunk bake         feedMain                                            one chunk's height, route, weather/material and mask textures
+//                                                                          (sculpt-chunk-renderer.js upload, in f32), and the painted flags
+//
+// Planes: F holds h p r c v x as six f32 planes of grid * grid; Mk holds the 25 int8 mask planes, 7 words a cell (engine-shape.wgsl).
+// Every pass is one thread per output element and no thread reads what another writes in the same dispatch (atomics aside, and those
+// only gather flags), so the results do not depend on thread order.
+
+struct FU {
+    grid: u32,
+    cells: u32,
+    ox: i32,            // the chunk's first lattice column and row
+    oy: i32,
+    gw: u32,            // the chunk textures' size
+    gh: u32,
+    cw: u32,            // the chunk's lattice size; texels beyond it repeat the last column and row
+    ch: u32,
+    mode: u32,          // 1: blend the Time pass's height, 2: the weather maps are present, 4: export art (height clamped to 0..255)
+    rateMask: u32,      // the mask plane that holds the erosion override
+    sea: f32,
+    spacing: f32,
+    envelope: f32,      // the erosion budget's envelope (erosionEnvelope)
+    tilesWide: u32,
+    pad0: u32,
+    pad1: u32,
+}
+
+@group(0) @binding(0) var<uniform> fu: FU;
+@group(0) @binding(1) var<storage, read> F: array<f32>;
+@group(0) @binding(2) var<storage, read> Mk: array<u32>;
+
+// ---------------------------------------------------------------- Time pass input
+
+@group(1) @binding(0) var<storage, read_write> st0: array<vec4f>;
+@group(1) @binding(1) var<storage, read_write> st1: array<vec4f>;
+@group(1) @binding(2) var<storage, read_write> st2: array<vec4f>;
+@group(1) @binding(3) var<storage, read_write> fixedField: array<vec4f>;   // lower bound, upper bound, mobility (-1 submerged), column offset
+@group(1) @binding(4) var<storage, read_write> tileFlag: array<atomic<u32>>;
+@group(1) @binding(5) var<storage, read_write> tileList: array<vec2u>;
+@group(1) @binding(6) var<storage, read_write> tileCount: atomic<u32>;
+@group(1) @binding(7) var<storage, read_write> tileArgs: array<u32>;
+@group(1) @binding(8) var<storage, read_write> refinedOut: array<f32>;      // the weather buffer: plane 0 the authored height, plane 1 (written here) the eroded height
+@group(1) @binding(9) var<storage, read> finalState: array<vec4f>;
+
+const SHORE_BUDGET = 0.35;
+const BUDGET = 3.0;
+
+fn sm(a: f32, b: f32, v: f32) -> f32 { let t = clamp((v - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+fn maskByte(i: u32, p: u32) -> i32 {
+    let w = Mk[i * 7u + (p >> 2u)];
+    return (i32(w << (24u - (p & 3u) * 8u))) >> 24u;
+}
+fn height(x: i32, y: i32) -> f32 { return F[u32(y) * fu.grid + u32(x)]; }
+fn gradientAt(x: i32, y: i32) -> f32 {
+    let n = i32(fu.grid);
+    let lx = max(0, x - 1); let rx = min(n - 1, x + 1); let ty = max(0, y - 1); let by = min(n - 1, y + 1);
+    return length(vec2f((height(rx, y) - height(lx, y)) / (f32(rx - lx) * fu.spacing), (height(x, by) - height(x, ty)) / (f32(by - ty) * fu.spacing)));
+}
+
+@compute @workgroup_size(8, 8)
+fn seedMain(@builtin(global_invocation_id) id: vec3u) {
+    let n = i32(fu.grid);
+    let x = i32(id.x); let y = i32(id.y);
+    if (x >= n || y >= n) { return; }
+    let i = u32(y) * fu.grid + u32(x);
+    let h = F[i];
+    // Every state buffer starts with the authored height: the tiles the steps never visit keep it.
+    st0[i] = vec4f(h, 0.0, 0.0, 0.0); st1[i] = st0[i]; st2[i] = st0[i];
+    var out = vec4f(h, h, 0.0, 0.0);
+    let sea = fu.sea;
+    if (h <= sea) { out.z = -1.0; fixedField[i] = out; return; }
+    let p = F[fu.cells + i];
+    if (p >= 1.0) { fixedField[i] = out; return; }
+    var slope = gradientAt(x, y);
+    for (var yy = max(0, y - 1); yy <= min(n - 1, y + 1); yy++) { for (var xx = max(0, x - 1); xx <= min(n - 1, x + 1); xx++) { slope = max(slope, gradientAt(xx, yy)); } }
+    let weight = sm(0.035, 0.20, slope) * (1.0 - clamp(p, 0.0, 1.0));
+    if (weight <= 0.0) { fixedField[i] = out; return; }
+    let steep = sm(0.7, 1.5, slope);
+    let budget = SHORE_BUDGET + (BUDGET * fu.envelope - SHORE_BUDGET) * sm(sea + 2.0, sea + 20.0, h);
+    out.x = max(max(sea - 90.0, min(h, sea + 1.0)), h - (4.0 + 8.0 * steep) * budget * weight);
+    out.y = min(sea + 300.0, h + (2.5 + 2.5 * steep) * budget * weight);
+    // The erosion override plane is a rate: 1 + v / 127 (no erosion at -1).
+    let rate = 1.0 + f32(maskByte(i, fu.rateMask)) / 127.0;
+    out.z = weight * max(0.0, rate);
+    fixedField[i] = out;
+}
+
+@compute @workgroup_size(8, 8)
+fn tileFlagMain(@builtin(global_invocation_id) id: vec3u) {
+    let n = fu.grid;
+    if (id.x >= n || id.y >= n) { return; }
+    if (fixedField[id.y * n + id.x].z > 0.0) { atomicStore(&tileFlag[(id.y >> 3u) * fu.tilesWide + (id.x >> 3u)], 1u); }
+}
+
+// A tile is active when it or a tile beside it holds a sample that can move. The list's order is whatever the atomic gives; the steps
+// write one sample per thread from buffers they do not write, so the order does not matter.
+@compute @workgroup_size(8, 8)
+fn tileListMain(@builtin(global_invocation_id) id: vec3u) {
+    let tw = i32(fu.tilesWide);
+    let tx = i32(id.x); let ty = i32(id.y);
+    if (tx >= tw || ty >= tw) { return; }
+    var on = false;
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            let a = tx + dx; let b = ty + dy;
+            if (a >= 0 && b >= 0 && a < tw && b < tw && atomicLoad(&tileFlag[u32(b * tw + a)]) != 0u) { on = true; }
+        }
+    }
+    if (on) { let k = atomicAdd(&tileCount, 1u); tileList[k] = vec2u(u32(tx), u32(ty)); }
+}
+
+@compute @workgroup_size(1)
+fn tileArgsMain() {
+    tileArgs[0] = atomicLoad(&tileCount); tileArgs[1] = 1u; tileArgs[2] = 1u;
+}
+
+@compute @workgroup_size(8, 8)
+fn refinedMain(@builtin(global_invocation_id) id: vec3u) {
+    let n = fu.grid;
+    if (id.x >= n || id.y >= n) { return; }
+    let i = id.y * n + id.x;
+    let s = finalState[i];
+    refinedOut[fu.cells + i] = s.x + s.y;
+}
+
+// ---------------------------------------------------------------- chunk bake
+
+@group(2) @binding(0) var<storage, read> W: array<f32>;      // plane 0: the authored height the Time pass started from; plane 1: its result
+@group(2) @binding(1) var<storage, read> map0: array<u32>;   // the Time pass's maps, rgba8 a sample: flow, deposit, talus, sand
+@group(2) @binding(2) var<storage, read> map1: array<u32>;   // wear, wetness, hardness, slope
+@group(2) @binding(3) var<storage, read> map2: array<u32>;   // fall line x, fall line y, channel, ridge
+@group(2) @binding(4) var<storage, read_write> painted: atomic<u32>;
+@group(2) @binding(5) var outHeight: texture_storage_2d<r32float, write>;
+@group(2) @binding(6) var outRoutes: texture_storage_2d<rgba8unorm, write>;
+@group(2) @binding(7) var outGrid: texture_storage_2d_array<rgba8unorm, write>;
+@group(2) @binding(8) var outMasks: texture_storage_2d_array<rgba8snorm, write>;
+
+var<workgroup> groupPainted: atomic<u32>;
+
+fn toByte(v: f32) -> f32 { return floor(clamp(v, 0.0, 1.0) * 255.0 + 0.5) / 255.0; }
+
+@compute @workgroup_size(8, 8)
+fn feedMain(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_index) li: u32) {
+    if (li == 0u) { atomicStore(&groupPainted, 0u); }
+    workgroupBarrier();
+    var bits = 0u;
+    if (id.x < fu.gw && id.y < fu.gh) {
+        let cx = i32(min(id.x, fu.cw - 1u)); let cy = i32(min(id.y, fu.ch - 1u));
+        let i = u32(fu.oy + cy) * fu.grid + u32(fu.ox + cx);
+        var h = F[i];
+        let r = F[2u * fu.cells + i];
+        if ((fu.mode & 1u) != 0u) {
+            let base = W[i]; let refined = W[fu.cells + i];
+            h = h + (refined - base) * (1.0 - sm(0.0, 10.0, abs(h - base))) * (1.0 - r);
+        }
+        if ((fu.mode & 4u) != 0u) { h = clamp(h, 0.0, 255.0); }
+        let xy = vec2i(i32(id.x), i32(id.y));
+        textureStore(outHeight, xy, vec4f(h - fu.sea, 0.0, 0.0, 0.0));
+        textureStore(outRoutes, xy, vec4f(toByte(r), toByte(F[3u * fu.cells + i]), floor((clamp(F[4u * fu.cells + i], -1.0, 1.0) * 0.5 + 0.5) * 255.0 + 0.5) / 255.0, toByte(F[5u * fu.cells + i])));
+        textureStore(outGrid, xy, 0, select(vec4f(0.0), unpack4x8unorm(map0[i]), (fu.mode & 2u) != 0u));
+        textureStore(outGrid, xy, 1, vec4f(0.0));
+        textureStore(outGrid, xy, 2, select(vec4f(0.0), unpack4x8unorm(map1[i]), (fu.mode & 2u) != 0u));
+        textureStore(outGrid, xy, 3, select(vec4f(0.0), unpack4x8unorm(map2[i]), (fu.mode & 2u) != 0u));
+        for (var l = 0u; l < 7u; l++) {
+            let w = Mk[i * 7u + l];
+            let b = vec4i(i32(w << 24u) >> 24u, i32(w << 16u) >> 24u, i32(w << 8u) >> 24u, i32(w) >> 24u);
+            textureStore(outMasks, xy, l, vec4f(b) / 127.0);
+            // Only the lattice itself counts as painted; the repeated edge texels hold the same bytes.
+            if (id.x < fu.cw && id.y < fu.ch) {
+                for (var k = 0u; k < 4u; k++) { if (l * 4u + k < 25u && b[k] != 0) { bits |= 1u << (l * 4u + k); } }
+            }
+        }
+    }
+    if (bits != 0u) { atomicOr(&groupPainted, bits); }
+    workgroupBarrier();
+    if (li == 0u) { let g = atomicLoad(&groupPainted); if (g != 0u) { atomicOr(&painted, g); } }
+}

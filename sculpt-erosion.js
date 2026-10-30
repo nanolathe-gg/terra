@@ -6,6 +6,8 @@
 // with the height this returns, so the apron, sand and material field are as before.
 // Authoring prototype, not retail rules.
 
+import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -91,6 +93,76 @@ export class GpuErosion {
     const layout = device.createBindGroupLayout({label: 'engine-weather', entries: [buffer('uniform', 0), ...[1, 2, 3, 4].map(b => buffer('read-only-storage', b)), ...[5, 6, 7].map(b => buffer('storage', b))]});
     const pipeline = await device.createComputePipelineAsync({label: 'mapsMain', layout: device.createPipelineLayout({bindGroupLayouts: [this.layout0, layout]}), compute: {module, entryPoint: 'mapsMain'}});
     return this.maps = {layout, pipeline};
+  }
+
+  // H6b: the whole Time pass on GPU buffers (Green's map canvas, engine 1). The input is the GPU shape fields' own planes and masks
+  // (request.planes, request.masks: the height, protection and erosion-override planes); engine-feed.wgsl builds the erosion state, the
+  // fixed field and the active-tile list from them, and the maps pass follows the erosion as in run(). Nothing is read back: the result
+  // is two buffers, `weather` (plane 0 the authored height the pass started from, plane 1 the eroded height) and `maps` (the three packed
+  // layers), which the chunk bake reads in place and `readBuffer` brings to the CPU only when a CPU reader asks.
+  async runGpu(request) {
+    await this.ready;
+    window.erodeRuns = (window.erodeRuns || 0) + 1;
+    const feed = await feedPasses(this.device), mp = await this.mapsPipeline();
+    const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = (size - 1) / (grid - 1);
+    const age = Math.max(1, Math.round(request.age)), rain = BASE_RAIN * request.rain, started = performance.now();
+    const talus = Math.tan(request.talusAngle * Math.PI / 180);
+    const params = new Float32Array([grid, spacing, rain, K_FLUX, DAMP, K_CAP, K_DISSOLVE, K_DEPOSIT, EVAPORATION, WET_FULL,
+      this.renderer.variantNumber('columnContrast', 1), ROCK_WEAR, talus, Math.min(request.talusAngle + SOFT_EXTRA, 85) * Math.PI / 180, HARD_ANGLE * Math.PI / 180, THERMAL]);
+    const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const make = (label, bytes, usage = S) => device.createBuffer({label, size: Math.max(16, bytes), usage});
+    const tw = Math.ceil(grid / 8);
+    const state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
+    const fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
+    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    const tileFlag = make('erosion tile flags', tw * tw * 4), tileList = make('erosion tiles', tw * tw * 8), tileCount = make('erosion tile count', 4);
+    const tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
+    const weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
+    const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
+    device.queue.writeBuffer(paramBuffer, 0, params);
+    this.renderer.setColumn();
+    this.renderer.flushUniforms();
+    const res = {'0.0': {buffer: uniform}, '0.1': {buffer: request.planes}, '0.2': {buffer: request.masks},
+      '1.0': {buffer: state[0]}, '1.1': {buffer: state[1]}, '1.2': {buffer: state[2]}, '1.3': {buffer: fixedBuffer}, '1.4': {buffer: tileFlag}, '1.5': {buffer: tileList},
+      '1.6': {buffer: tileCount}, '1.7': {buffer: tileArgs}, '1.8': {buffer: weather}, '1.9': {buffer: state[1]}};
+    const group1 = (src, dst, fIn, fOut) => device.createBindGroup({layout: this.layout1, entries: [{binding: 0, resource: {buffer: paramBuffer}},
+      {binding: 1, resource: {buffer: src}}, {binding: 2, resource: {buffer: dst}}, {binding: 3, resource: {buffer: fIn}}, {binding: 4, resource: {buffer: fOut}},
+      {binding: 5, resource: {buffer: vel}}, {binding: 6, resource: {buffer: acc}}, {binding: 7, resource: {buffer: fixedBuffer}}, {binding: 8, resource: {buffer: tileList}}]});
+    const group0 = device.createBindGroup({layout: this.layout0, entries: [{binding: 0, resource: {buffer: this.renderer.uniformBuffer}}]});
+    const [s0, s1, s2] = state;
+    const flux = group1(s0, s1, fluxA, fluxB), water = group1(s0, s2, fluxB, fluxA), exchange = group1(s2, s1, fluxA, fluxB), carry = group1(s1, s0, fluxA, fluxB);
+    const thermalA = group1(s0, s1, fluxA, fluxB), thermalB = group1(s1, s0, fluxA, fluxB);
+    const groups = Math.ceil(grid / 8), encoder = device.createCommandEncoder({label: 'erosion gpu'});
+    // The erosion state, the fixed field and the active tiles, from the shape fields' planes.
+    const input = encoder.beginComputePass({label: 'erosion input'});
+    const feedStep = (entry, x, y = 1) => { input.setPipeline(feed.pipes[entry]); for (const [g, bg] of feed.groups(entry, res)) input.setBindGroup(g, bg); input.dispatchWorkgroups(x, y); };
+    feedStep('seedMain', groups, groups); feedStep('tileFlagMain', groups, groups); feedStep('tileListMain', Math.ceil(tw / 8), Math.ceil(tw / 8)); feedStep('tileArgsMain', 1);
+    input.end();
+    encoder.copyBufferToBuffer(request.planes, 0, weather, 0, n * 4);   // plane 0 of `weather`: the authored height, which the blend and the maps pass read
+    const pass = encoder.beginComputePass({label: 'erosion'});
+    const step = (entry, group) => { pass.setPipeline(this.pipelines[entry]); pass.setBindGroup(0, group0); pass.setBindGroup(1, group); if (entry !== 'offsetMain') pass.dispatchWorkgroupsIndirect(tileArgs, 0); else pass.dispatchWorkgroups(groups, groups); };
+    step('offsetMain', flux);
+    for (let it = 0; it < age; it++) {
+      step('fluxMain', flux); step('waterMain', water); step('exchangeMain', exchange); step('carryMain', carry);
+      step('thermalMain', thermalA); step('thermalMain', thermalB);
+    }
+    step('settleMain', thermalA);
+    step('thermalMain', thermalB); step('thermalMain', thermalA); step('thermalMain', thermalB); step('thermalMain', thermalA);
+    pass.end();
+    const output = encoder.beginComputePass({label: 'time pass output'});
+    output.setPipeline(feed.pipes.refinedMain); for (const [g, bg] of feed.groups('refinedMain', res)) output.setBindGroup(g, bg); output.dispatchWorkgroups(groups, groups);
+    output.end();
+    const mapParams = make('erosion map params', 32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    device.queue.writeBuffer(mapParams, 0, new Float32Array([grid, spacing, .36 / (age * BASE_RAIN), request.sand ?? 0, request.wetReach ?? 3, request.talusFull ?? 2.5, request.wearFull ?? 6, request.flowK ?? 4]));
+    const mapGroup = device.createBindGroup({layout: mp.layout, entries: [{buffer: mapParams}, {buffer: s1}, {buffer: acc}, {buffer: fixedBuffer}, {buffer: weather, offset: 0, size: n * 4}, ...maps.map(buffer => ({buffer}))].map((resource, binding) => ({binding, resource}))});
+    const second = encoder.beginComputePass({label: 'erosion maps'});
+    second.setPipeline(mp.pipeline); second.setBindGroup(0, group0); second.setBindGroup(1, mapGroup); second.dispatchWorkgroups(groups, groups); second.end();
+    const tSubmit = performance.now();
+    device.queue.submit([encoder.finish()]);
+    await device.queue.onSubmittedWorkDone();
+    const gpu = performance.now() - tSubmit;
+    [...state, fluxA, fluxB, vel, acc, fixedBuffer, paramBuffer, tileFlag, tileList, tileCount, tileArgs, mapParams, uniform].forEach(b => b.destroy());
+    return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu, tiles: null, gpuFed: true}};
   }
 
   // request: {height, protect, grid, size, seaLevel, age, rain, talusAngle}. Returns the eroded height (rock + debris), the
@@ -194,4 +266,13 @@ export class GpuErosion {
     for (let i = 0; i < n; i++) offset[i] = fx[i * 4 + 3];
     return {height, flow, deposit, debris, offset, maps, milliseconds: performance.now() - started, parts: {backlog: tBacklog, tiles: tileCount, fixedField: tFixed, gpu: tGpu, readback: tRead, post: performance.now() - tPost0}};
   }
+}
+
+// H6b: the renderer's erosion instance, built on first use as TerrainRenderer.erode does (Green's engine steps over active tiles).
+export async function erosionOf(renderer) {
+  if (!renderer.erosion) {
+    const source = await (await fetch('/engine-erosion.wgsl')).text();
+    renderer.erosion ??= new GpuErosion(renderer, renderer.preprocessShader(source), true);
+  }
+  return renderer.erosion;
 }
