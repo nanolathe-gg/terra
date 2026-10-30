@@ -5286,8 +5286,8 @@ Read H8's and H9's Done and Still open lists above, and in
   - crater rims are .41 off;
   - Desert's section is .84 off on 0.003% of cells.
 
-  The study is exact for all of them. The JS engine's own entry paths
-  disagree by about .16 for ridges and spurs.
+  The study shows the same gaps (H8b's corrected check). H9's ".16
+  between the JS engine's own entry paths" did not reproduce.
 - **The census after H9** (`$R/agent-H9/refusals.mjs`; output in
   `$R/repro-out/merge-h9-census.log`):
   - every stroke of Green, Archipelago, Zhon, Desert and Moon runs on the
@@ -5490,11 +5490,16 @@ before and after, and what stays on JS and why.
     mask-write list;
   - ridge options (crest jag, vary, taper, spurs);
   - crater rim spurs, sectors and gaps.
-- **`shapecheck`, GPU against JS, max |Δh|:** 0 on the study for every
-  option. On a 4×4 map: base options .0001; cross-section .0001 (Desert's
-  section .84 on 0.003% of cells); mask writes .0003, with one mask cell
-  one step off; ridge options up to 1.15 on 0.6-1.2% of cells; crater rim
-  .41.
+- **`shapecheck`, GPU against JS, max |Δh|,** on a 4×4 map: base options
+  .0001; cross-section .0001 (Desert's section .84 on 0.003% of cells);
+  mask writes .0003, with one mask cell one step off; ridge options up to
+  1.15 on 0.6-1.2% of cells; crater rim .41.
+  - **Correction (H8b):** the study figures, which were 0 for every
+    option, were void. With `gpuShape=1` in the address, `shapeCompare`
+    ran the GPU on both sides, because `gpuShapeOn()` reads the address
+    first. H8b fixed the check (084609c on its branch). Corrected, the
+    study shows the same gaps as the map: ridges 1.07, Desert's section
+    1.05, crater rim .42, deep section 4.0. The 4×4 figures were real.
 - **Fixed on the way:** a ground node in a map scene threw in the
   point-read scan (on main since H6c).
 - **The census after the merge** (every stroke of the 27 scenes with
