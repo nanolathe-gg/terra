@@ -4927,6 +4927,88 @@ why.
 - baseline `$R/repro-out/merge-h5b`;
 - guard `--worlds none`.
 
+**Done (merged as b6dc0a1; EXPERIMENTS row 151; notes in
+`$R/agent-H6c/NOTES.md`).**
+- **Ten kinds on the GPU,** one commit each: plateau, offset, lower,
+  sand and ground cover, smooth, ramp, crater (with its craterlets),
+  fissure, and crystal (pyramid form). At Green's default options none
+  of them falls back. The new kinds are in new entry points (`stampN`
+  and others), and the existing kinds' shader code is textually
+  unchanged.
+- **Shapecheck, GPU against JS** (max |Δh|, study / 4×4):
+
+  | Kind | Study | 4×4 |
+  | --- | --- | --- |
+  | Plateau | 0 | .00029 (1 mask cell one step off) |
+  | Offset, lower, cover, smooth, crystal | 0 | .00027 |
+  | Ramp | 0 | .00029 |
+  | Crater | 0 | .00041 |
+  | Fissure | 0 | .00209, over the card's .001 (5 mask cells one step off; 0 cells over .01) |
+
+- **Point reads.**
+  - A node that reads the prefix at a point gets it from a small window
+    of the earlier nodes, evaluated with the PAGES shader. A `pointRead`
+    pass writes the bilinear value into a new binding. All of it runs in
+    one submission, with no CPU round trip.
+  - Plateau reads one point, ramp two, and a crater one per crater: each
+    craterlet reads after the main crater and the earlier craterlets.
+- **The page ring** depends on the node list: 4 plus the deepest chain
+  of overlapping smooth radii, bucketed to 4, 16, 32 or 64 (14.1-21.3 MB
+  a page).
+  - A deeper chain falls back to JS with a stated reason.
+  - A bucket change drops the pages' shape buffers but keeps their
+    weather.
+  - At ring 4 the smooth scene was 1.09 off on paged 4×4; the bucketed
+    ring makes it 0.
+- **Paged against whole-map** (4×4 `gpuPages=force`): 0 for every kind,
+  except ramp at 1 ulp in 3 planes.
+- **A plateau scene** (green-2 plus 5 plateaus), GPU against the JS
+  fallback, which is the path main took for any plateau:
+
+  | | 4×4 GPU | 4×4 JS | 8×8 GPU | 8×8 JS |
+  | --- | --- | --- | --- | --- |
+  | Load, final | 0.63 s | 8.46 s | 0.74 s | 17.6 s |
+  | Drag rAF p95 | 16.7 ms | 333 ms | 16.8 ms | 267 ms |
+  | Move to picture, p50 | 45 ms | 1,122 ms | 49 ms | 832 ms |
+  | After release, final | 0.53 s | 2.11 s | 0.72 s | 7.82 s |
+  | Export | 1.64 s | 4.87 s | 7.04 s | 15.5 s |
+
+  My runs on 8801 (GPU): 4×4 load 0.61 s, release 0.55 s, drag p95 16.8 ms, move to picture 45 / 50 ms, export 1.93 s; 8×8 load 0.92 s, release 0.80 s, drag p95 16.7 ms, 47 / 54 ms, export 7.15 s (load 5.0-5.3).
+- **Exactness** (the agent's checks, then mine on the merge):
+  - the 27 study scenes are exact against `merge-h5b` on the final build;
+    `regional.mjs` gives 0 on all 27;
+  - the 4×4 green-2 default export's TNT section is byte-identical to
+    H5b's, its indexed PNG identical, and its self-check passes;
+  - the three minimap checks are 0 pixels from H5b's;
+  - **the plateau scene on 4×4, GPU against `gpuShape=0`:** TNT heights,
+    features and tile indices identical; 440 indexed pixels of 4.5M
+    differ; the 1× view is at the noise floor of the existing kinds;
+  - **on 8×8:** the export self-check passes, and by eye there is no seam
+    at 2× across a page boundary;
+  - my shapecheck on the merge: plateau .0003 (1 mask cell), fissure .0021 (5 mask cells), both repeat-identical.
+
+**Still open:**
+- **Fissure at 4×4** is .00209 from JS, over the card's .001. The study is
+  exact. A guess: f32 world positions at map scale on the steep cut edge.
+- **Not ported, though cheap:**
+  - base options (baseVary, baseBump, moonLobes);
+  - shape-mask writes and water mask choices for plateau, offset and
+    crater;
+  - plateau, offset, sand and grass without natural edges;
+  - hill lobes, the parametric cross-section and ridge options.
+
+  Each falls back with a stated reason.
+- **On JS by design:**
+  - the coast pass, water fingers, bank and shore plates;
+  - mountain and crater facets, crater rim spurs, rim sectors and gaps;
+  - crystal columns and bergs;
+  - a smooth chain deeper than ring 64.
+- **Routes rule.** The new kinds use JS's rule (`kind != smooth && value
+  != base`). Hill and erase still use `influence > 0`; the two differ only
+  where a value lands exactly on its base.
+- **The F-direct shortcut** for point reads inside the evaluated
+  rectangle was not built.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
