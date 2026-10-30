@@ -7,7 +7,8 @@ files="engine-*.wgsl sculpt-gpu-fields.js sculpt-erosion.js sculpt-chunk-rendere
 strip() { sed -e 's://.*$::' -e 's:/\*.*\*/::' "$1"; }
 bad=0
 for f in $files; do
-  hits=$(strip "$f" | /usr/bin/grep -n -E "biome|biomeId|worldId|['\"](green|red|archipelago|moon|zhon|lava|desert|crystal|ice)['\"]")
+  # 'crystal' is left out: it is also a stroke kind and a material's colour key, not only a planet.
+  hits=$(strip "$f" | /usr/bin/grep -n -E "biome|biomeId|worldId|['\"](green|red|archipelago|moon|zhon|lava|desert|ice)['\"]")
   [ -n "$hits" ] && { echo "$f:"; echo "$hits"; bad=1; }
 done
 echo "--- world-named identifiers (feature cards rename or replace them)"
