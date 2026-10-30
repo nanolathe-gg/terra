@@ -46,7 +46,7 @@ const NODE_FIELDS = [
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary'].map(k => [k, 'f'])];
+    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -239,7 +239,7 @@ export function nodeSupport(n, c) {
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   // The coast pass runs for water strokes only (hasCoastPass in sculpt.js); a world default must not refuse its hills and plateaus.
   if (water && ((q.fingerCoast >= .5 && q.fingers > 0) || Math.round(q.shoreLayers) >= 1)) return 'coast pass';
-  if (water && (q.fingers > 0 || (q.bankPx > 0 && !(q.profile >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
+  if (water && (q.fingers > 0 || q.shorePlates > 0)) return 'water fingers, bank or plates';
   return null;
 }
 
@@ -394,7 +394,7 @@ export function prepareNode(n, geom, c) {
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
       shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
-      ...outlineUniforms(kind, q, radius), ...sectionUniforms(kind, q, c), bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
+      ...outlineUniforms(kind, q, radius), ...sectionUniforms(kind, q, c), bankFlat: (kind === 'deep' || kind === 'shallow') && !(q.profile >= .5) ? Math.max(0, q.bankPx || 0) : 0, bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
       fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,

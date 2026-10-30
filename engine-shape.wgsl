@@ -381,6 +381,14 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     if (u.ridge != 0u) { r = r / (s1.x + (s1.y - s1.x) * t); }
     var lobe = 0.0;
     if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
+    // Dry bank (bankPx): the dry part of the outline radius, from this cell's waterline out, is stretched to bankPx; reads only the cell's own prefix height.
+    if (u.bankFlat > 0.0 && F[PH * cells + i] > u.sea) {
+      let pre = F[PH * cells + i];
+      let bed = u.sea + select(-7.0, -55.0, kind == 2u) + select(0.0, 42.0 * sm(-0.15, 0.55, nShelf) * u.shelves, kind == 2u && u.natural != 0u);
+      let yy = 1.0 - (pre - u.sea) / (pre - bed);
+      let rw = 0.1 + 0.9 * (0.5 - sin(asin(clamp(1.0 - 2.0 * yy, -1.0, 1.0)) / 3.0));
+      if (r > rw) { r = rw + (r - rw) * (1.0 - rw) * radius * width * u.bankScale / u.bankFlat; }
+    }
     var core = 0.0;
     if (kind == 2u && u.natural != 0u) { core = 1.0 - sm(0.20, u.coreEdge, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / radius); }
     if (r >= 1.0 && core == 0.0 && !shouldered) { continue; }

@@ -1,0 +1,115 @@
+{
+ "biome": "lava",
+ "source": {
+  "map": "lava & two hills",
+  "x": 2048,
+  "y": 1536
+ },
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "plateau",
+   [
+    [
+     300,
+     300
+    ],
+    [
+     500,
+     300
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 500,
+     "amount": 60,
+     "roughness": 25,
+     "softness": 70
+    }
+   }
+  ],
+  [
+   "deep",
+   [
+    [
+     760,
+     60
+    ],
+    [
+     500,
+     80
+    ],
+    [
+     330,
+     150
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 240,
+     "roughness": 15,
+     "fingers": 0,
+     "bankPx": 28,
+     "shoreLayers": 0
+    }
+   }
+  ],
+  [
+   "deep",
+   [
+    [
+     300,
+     150
+    ],
+    [
+     275,
+     400
+    ],
+    [
+     250,
+     560
+    ],
+    [
+     130,
+     680
+    ],
+    [
+     -20,
+     740
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 180,
+     "roughness": 15,
+     "fingers": 0,
+     "bankPx": 28,
+     "shoreLayers": 0
+    }
+   }
+  ],
+  [
+   "deep",
+   [
+    [
+     760,
+     190
+    ],
+    [
+     1050,
+     230
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 150,
+     "roughness": 15,
+     "fingers": 0,
+     "bankPx": 28,
+     "shoreLayers": 0
+    }
+   }
+  ]
+ ]
+}
