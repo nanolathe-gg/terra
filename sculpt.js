@@ -2821,8 +2821,8 @@ function sampleRegional(x,y) {
 // fields' buffers and leaves its result in two GPU buffers (gpuWeather: weather = authored then eroded height, maps = the three packed layers); a chunk
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
-const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
-const gpuFeedEligible=() => Boolean(renderer?.engine && regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
+const feedWeatherOk=() => Boolean(gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
+const gpuFeedEligible=() => Boolean(regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
 // A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
 // keeps its buffers), so a retired result is destroyed at that moment and not on a timer. gpuBytes() is what the canvas counts against its budget.
 const retiredWeather=new Set(); let gpuPassBytes=0;
@@ -3080,7 +3080,7 @@ function moveHistory(delta) {
 // Archipelago's dark hills) keep roughly their final look instead of
 // turning pale until refinement finishes.
 // H3: with the material model the draw reads no material field, so the worker and the quick preview skip it.
-const materialPreview=() => !renderer?.materialModel && !renderer?.engine && experiment.get('deposits')!=='off' && Number($('material-weathering').value)>0;
+const materialPreview=() => false;   // the engine draws no quick material field; deleted with the CPU workers
 function clearRendererWeather() { if (regionalFields) { regionalWeather=null; if (gpuWeather) gpuWeather.mapsOn=false; } else renderer?.setWeather(); }
 function quickMaterials() {
   if (regionalFields) return;
@@ -3135,7 +3135,7 @@ function queueWeather() {
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
-    if (!weatherWorker && !(renderer.engine && (!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
+    if (!weatherWorker && !((!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
     const job=++weatherJob;
     // H6b: on a map canvas whose fields are on the GPU the Time pass reads the fields' buffers and leaves its result in GPU buffers (below).
     const fed=Boolean(feedWeatherOk() && regionalFields.gpuBuffers());
@@ -3145,7 +3145,7 @@ function queueWeather() {
     const profile=experiment.get('weather')==='broad'?'broad':undefined;
     // H2: erosion 1 (Green) runs the GPU pass first and hands its height to the worker, which skips the droplets.
     // H5: Green's engine also runs the GPU pass over a whole map canvas up to 1168 samples a side (larger maps keep the tiled worker, H5b).
-    const gpu=(!regionalFields || (renderer.engine && grid<=1168)) && renderer.variantNumber?.('erosion',0)>0;
+    const gpu=(!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0;
     gpuErosionMs=null;
     let eroded=null;
     const post=() => weatherWorker.postMessage({job,height:weatherBase,...eroded,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
@@ -3153,7 +3153,7 @@ function queueWeather() {
     if (!gpu) { post(); return; }
     if (fed) { runFedWeather(job); return; }
     // H5: Green's engine (engine 1) takes the height and the data maps from the GPU pass alone; no worker runs (engine-weather.wgsl).
-    const own=renderer.engine;
+    const own=true;
     const erodeRequest={height:weatherBase,protect:authored?.p??protection,rate:authored?authored.e:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
       ...(own?{maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)}:{})};
     window.erodeAgain=() => renderer.erode(erodeRequest).then(r => ({ms:r.milliseconds,parts:r.parts}));   // dev hook: time the pass alone
@@ -4146,7 +4146,7 @@ async function boot() {
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
     // H5: Green's engine has no apron (the Time pass's debris is in the height), so the Scree slider reads nothing there.
-    if (renderer.engine) $('scree').closest('.control').hidden=true;
+    $('scree').closest('.control').hidden=true;
     renderer.onerror=message => error(message);
     renderer.setColors(worldColors());
     buildKnobs(); buildWorldPanel();

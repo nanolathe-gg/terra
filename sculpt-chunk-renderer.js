@@ -187,7 +187,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.depthTexture=this.texture('chunk depth',width,height,1,'depth32float',4,T.RENDER_ATTACHMENT);this.depthView=this.depthTexture.createView();
     this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
-    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);if(this.engine)this.f('uChunkScale',scale);   // H8: the shared shaders (engine 0) have no chunk scale; its map draws are final-resolution
+    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',scale);   // H8: the shared shaders (engine 0) have no chunk scale; its map draws are final-resolution
     // H7b: a drawn texel covers scale x scale final pixels, so the generated materials read their mip for that footprint (the variant's own foot, times the scale).
     this.f('uMaterialFoot',(this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1)*scale);
     this.meshes=[this.regionMesh(region.mesh),null];this.meshes[1]=this.meshes[0];
