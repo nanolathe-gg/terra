@@ -94,6 +94,7 @@ branches and the projection fix below, so re-render before judging.
    | H4b | 8866 | 9666 | `$R/agent-H4b/out` | `--worlds green` |
    | H7 | 8867 | 9667 | `$R/agent-H7/out` | `--worlds none` |
    | H6 | 8868 | 9668 | `$R/agent-H6/out` | `--worlds none`, then `green` |
+   | H6b | 8869 | 9669 | `$R/agent-H6b/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -4109,9 +4110,154 @@ and Still open lists above.
 - **Scene load still builds a JS probe stroke per node** to get its
   parameters, about 65 ms a seed on the study.
 
-H6b (chunks and the Time pass fed from the GPU fields) is outlined in
-[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards). It is written here
-in full when H6 lands.
+### H6b. The map canvas fed from the GPU fields (Green)
+
+> **Owner, 2026-10-29:** "Keep going", after H6. This finishes what H6
+> started for the map canvas: no CPU stage on the path from a pointer move
+> to the pixels, and a drag under 33 ms (H7's target).
+
+Read H6's and H7's Done and Still open lists above, then the H6 and H6b
+outlines in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards).
+
+**What is there today** (4×4 Green, `gpuShape` 1, after H6):
+- **The fields.** The whole-map shape fields live in GPU buffers
+  (`sculpt-gpu-fields.js`), and everything reads a CPU copy of them. The
+  copy is refreshed after every evaluation, including during a drag.
+- **The Time pass** (`sculpt-erosion.js`, through `queueWeather` in
+  `sculpt.js`):
+  - `globalWeatherInput()` reads h, p and the erosion override out of
+    that CPU copy;
+  - the pass runs on the GPU and reads its height and the three packed
+    maps back into `refined` and `regionalWeather`.
+- **Each chunk bake:**
+  - `readRegional` crops the CPU copy, blends in the weather
+    (`(refined − base) × (1 − smooth(0, 10, |h − base|)) × (1 − r)`), and
+    unpacks the maps;
+  - `ChunkTerrainRenderer.upload` then packs every plane and writes the
+    chunk textures.
+- **A drag** costs about 19 ms of shape read and **156 ms of upload per
+  chunk**, all on the main thread: drag p95 is 167-183 ms. After release,
+  chunks are final in 2.2 s, and the load takes 2.6 s.
+- **One device.** In map mode, `renderer` is the chunk renderer, so the
+  GPU fields, the Time pass and the chunk bakes already share a device.
+
+**Scope.**
+- The map canvas, where the GPU fields are active: `gpuShape` 1, up to
+  1168 samples, no fallback. The study is not in scope.
+- **Every other case keeps today's CPU path, unchanged:**
+  - other worlds;
+  - `gpuShape` 0;
+  - fallback scenes;
+  - maps over 1168 samples.
+- **A query switch, `gpuFeed`** (default 1), turns the new path off for
+  A/B. No knob is needed in `sculpt.py`.
+
+**Deliver.**
+
+1. **The Time pass on GPU buffers.**
+   - Its input (h, p, and the erosion override as a rate) comes from the
+     GPU fields' buffers, not from `globalWeatherInput()`.
+   - Its output (height and the three maps) stays in GPU buffers.
+   - `refined` and `regionalWeather` are read back only when a CPU reader
+     needs them, and never on the bake or drag path. The readers that do:
+     - `sampleRegional`;
+     - features and picking;
+     - export (`sampleHeights`, TNT corners);
+     - `regionalCheck`.
+2. **Chunk bakes from GPU buffers.**
+   - **A compute pass** (a new `engine-feed.wgsl`) builds a chunk's
+     height, routes, grid layers and mask textures from the whole-map
+     buffers. It does the same arithmetic as `readRegional` plus `upload`,
+     in f32:
+     - the weather blend;
+     - the `exportArt` clamp;
+     - `toByte` as `floor(v × 255 + .5)` after the clamp;
+     - the mask packing;
+     - the `painted` flags.
+
+     The flags may come from a small reduction, or from the fields'
+     own record of which planes are non-zero.
+   - `sculpt-canvas.js` chooses this path when the fields offer it.
+     `ChunkTerrainRenderer` keeps `upload` for every other case.
+   - **Measure** the per-chunk cost and the load, release and drag
+     figures with `perf.mjs`.
+   - **This is a stop point:** hand back with the numbers before item 3.
+3. **The drag path.**
+   - **A committed prefix.** These are the fields after every node before
+     the moved or live one. A move re-runs only that node and the nodes
+     after it, over the dirty rectangle. Measure small and large nodes:
+     H6 measured 7-9 ms and 25-36 ms. Keep it only if it helps, and say
+     what it costs in memory.
+   - **Coalescing.** A queued run that has not started takes the union
+     rectangle and the newest node list, so a bake never waits behind a
+     chain of runs.
+   - **No CPU readback during a gesture.** The copy refreshes on release.
+     The minimap and the overview must still update after the release.
+     H6's review found them flat when a change was announced before the
+     copy held it.
+4. **Memory.**
+   - `fixedGPU()` in `sculpt-canvas.js` counts the GPU fields, the Time
+     pass's buffers and the prefix (H6 left 71 MB, peak 259 MB, uncounted).
+   - Report the totals against the 512 MB default budget.
+5. **Targets** (4×4 Green, `perf.mjs map4`):
+   - drag rAF p95 under 33 ms;
+   - after release, visible chunks final in at most 1.0 s (from 2.2 s);
+   - load, visible chunks final in at most 1.5 s (from 2.6 s);
+   - scroll p95 unchanged;
+   - export no slower.
+
+**Exactness and acceptance:**
+- **The study is untouched.** `compare.py $R/repro-out/merge-h6 <yours>
+  --worlds none` must be exact on all 27 scenes.
+- **The CPU path is unchanged.**
+  - The 4×4 export at `gpuShape=0` must be identical to
+    `$R/exports/H2Check8801x40251.ufo` apart from the name.
+  - At `gpuFeed=0` it must be identical to
+    `$R/exports/H2Check8801x23093.ufo` (`gpuShape` 1) apart from the
+    name.
+- **The GPU feed** (default):
+  - **Export heights:** the TNT heights, features and tile indices are
+    identical to `H2Check8801x23093`. Report how many tile pixels differ.
+  - **The 1× view** (mapcheck's `view.png`) at `gpuFeed` 1 against 0:
+    changed 16-px blocks are at or under the shift floor, and by eye it is
+    the same picture.
+  - **The minimap** after load and after an edit equals `gpuFeed` 0, using
+    `$R/navcheck.mjs` (usage in its first line).
+  - **`regional.mjs`** finds 0 mismatches on all 27 scenes.
+- **A TNT height comparer** is in `$R/tntheights.py`
+  (`tntheights.py a.ufo b.ufo`).
+
+**Done when** NOTES.md has:
+- each item measured on its own;
+- the targets met, or by how much they were missed;
+- memory;
+- every exactness check above.
+
+**Files:**
+- New: `engine-feed.wgsl`.
+- `sculpt-gpu-fields.js`: expose buffers, the prefix, coalescing, the
+  readback policy.
+- `sculpt-erosion.js`: GPU input and output buffers, lazy readback.
+- `sculpt-chunk-renderer.js`: the GPU feed beside `upload`.
+- `sculpt-canvas.js`: the bake's choice and `fixedGPU()`.
+- `sculpt.js`, only at the seams: the map's weather glue,
+  `readRegional`, `sampleRegional`, `canExport`.
+- Not any draw or bake shader (`engine-frag`, `engine-bake`,
+  `engine-common`, `sculpt-*.wgsl`), not `sculpt.py`, and not the study
+  path.
+
+**Budget:**
+- Item 2 is a stop point.
+- After it, each item is its own commit.
+- If the budget runs short, stop after item 2. It is the biggest single
+  win.
+
+**Server and guard:**
+- port 8869, CDP 9669;
+- worktree `../terraform-wt-H6b`;
+- assets `$R/agent-H6b`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h6`;
+- guard `--worlds none`.
 
 ## After the cards
 
