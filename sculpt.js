@@ -3,7 +3,6 @@ import {configureMap,resizeMap,drawMapBounds,exportMapField,mountMapCanvas} from
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer} from './sculpt-gpu-fields.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
-import {FLOW_FIRST,isFlowKind,flowParams,applyResult,encodeResult,decodeResult,savedResultBytes,mountFlow} from './sculpt-flow-ui.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -29,15 +28,12 @@ const HELP = {
   fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
-  river:'Drag along the current: the line sets the water\'s direction, Diameter its width and Amount its strength. It writes nothing until you Bake (Current and sediment panel).',
-  source:'Dab, or drag, where sediment enters the water: Diameter is the dab, Amount how much, and the colour is chosen in the Current and sediment panel. It writes nothing until you Bake.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
 let mapUpdate=() => {},exportSurface=null,mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
-let flow=null;   // card F1: the flow bake's driver and panel (sculpt-flow-ui.js)
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
 let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
 let regionalPrefixSample=null,regionalNoiseMeta=new WeakMap(),regionalConnects=null,regionalCoastCandidate=false,regionalCoastRaw=null,regionalCoastBounds=null,regionalBoundsOnly=false,regionalBodyWeights=null;
@@ -93,10 +89,8 @@ const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terr
 // Card E1 adds five more: the water choices of a deep or shallow stroke (shore
 // edge, shallow-to-deep edge, bed; +127 hard / lit bed, -127 faded / noise
 // water), painted ground lumps (+127 more, -127 fewer) and the cracked-bed flag.
-// Card F1 (flow bake): planes 20-24 hold the baked current (flow x and y, signed) and the concentration of up to
-// three sediments (sculpt-flow-ui.js). Planes 14-19 are free placeholders; 25 and above are not allocated.
+// Planes 14-24 are unused placeholders (the flow bake's planes 20-24 went with it); the layout stays as the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
-if (MASK_KEYS.indexOf('fu')!==FLOW_FIRST) throw new Error('The flow planes moved: update FLOW_FIRST in sculpt-flow-ui.js.');
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
 const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
@@ -298,12 +292,12 @@ const hillLift=(s,i) => 1+s.rough*(.75*s.noise.coastWidth[i]+.30*s.noise.detail[
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
-const amountRange=kind => isFlowKind(kind)?[5,100]:kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind==='offset'?[-80,80]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
+const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind==='offset'?[-80,80]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:kind==='source'?80:kind==='river'?160:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -325,11 +319,11 @@ function updateControls() {
   try {
   const fixed=['deep','shallow','ramp','erase'].includes(tool);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=tool==='river'?'Current strength':tool==='source'?'Sediment amount':tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
+  $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
   const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
-  $('amount-value').textContent=tool==='smooth' || isCover(tool) || isFlowKind(tool)?amountNow+'%':tool==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(tool==='lower'?'−':'+')+amountNow;
+  $('amount-value').textContent=tool==='smooth' || isCover(tool)?amountNow+'%':tool==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(tool==='lower'?'−':'+')+amountNow;
   $('diameter-value').textContent=$('diameter').value+' units';
   $('roughness-value').textContent=$('roughness').value+'%';
   $('roughness-label').textContent=tool==='ramp'?'Shoulder freedom':tool==='deep' && NATURAL_COAST?'Coast freedom':['plateau','erase','sand','grass','paint'].includes(tool) && experiment.get('edges')==='natural'?'Edge freedom':'Roughness';
@@ -338,7 +332,7 @@ function updateControls() {
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
-  $('roughness').closest('.control').hidden=tool==='fissure' || isFlowKind(tool);
+  $('roughness').closest('.control').hidden=tool==='fissure';
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(tool);
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
@@ -394,8 +388,8 @@ function updateControls() {
 
 function canExport() {
   if (shapePending) return false;   // H6: the GPU shape result has not reached the CPU copy
-  if (regionalFields) return ready && !loading && !stroke && !moving && !mapFeatures?.busy && !flow?.busy() && (!$('weather').checked || weatherState==='ready');
-  return ready && !loading && !stroke && !mapFeatures?.busy && !flow?.busy() && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
+  if (regionalFields) return ready && !loading && !stroke && !moving && !mapFeatures?.busy && (!$('weather').checked || weatherState==='ready');
+  return ready && !loading && !stroke && !mapFeatures?.busy && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
 }
 
 function hash(x,y,s) {
@@ -2305,7 +2299,7 @@ function markChanged() { markViewChanged(false); heightDirty=true; error(); }
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const noiseCache=new Map();
 function noiseFor(s) { if (regionalReplay && !noiseCache.has(s)) noiseCache.clear(); if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
-const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',river:'River (current)',source:'Sediment source',flowbake:'Flow bake'};
+const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
 function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
@@ -2319,9 +2313,6 @@ function groundHeight(n,h,protect,wx,wy) {
 }
 function applyNode(n) {
   if (n.hidden) return;
-  // Card F1: rivers and sources are inputs of the bake and write nothing; the bake node copies its stored planes.
-  if (isFlowKind(n.kind)) return;
-  if (n.kind==='flowbake') { renderer?.setSediment(n.result?.colors); applyResult(n.result,maskPlanes,clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},grid,[originCellX,originCellY]); return; }
   if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
   if (n.kind==='ground') {
     // Broad, low undulation of dry ground, as retail maps have: about half of
@@ -2521,7 +2512,6 @@ function* clipCells() {
 function nodeBounds(n) {
   // World-space reach of a shape, from the same extents its brush uses,
   // plus a few cells for the hill's softening blur.
-  if (n.kind==='flowbake' && n.result) return n.result.rect;
   if (!n.points) return {x0:0,y0:0,x1:grid-1,y1:grid-1};
   const q={...shapeDefaults(),...n.params},radius=q.radius||40,rough=q.rough??.35,soft=q.softness??.5;
   const bank=['deep','shallow'].includes(n.kind)?2**(((q.bankWidth??.5)-.5)*1.3):1;
@@ -2675,16 +2665,11 @@ function regionalDirtyRect(from,rect) {
   return dirty;
 }
 // Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
-// A flow bake writes nothing the shape passes make: its stored planes are copied in after the result (applyBakes).
-const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:k => isFlowKind(k) || k==='flowbake',seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
+const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
   shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full',
   frost:{gapSize:worldDefault('frostGapSize'),gapDepth:worldDefault('frostGapDepth'),gaps:worldDefault('frostGaps'),gapReach:worldDefault('frostGapReach')}});
 // The study (1024 px): the whole grid is evaluated by the passes and the rectangle read back into the live planes. The result arrives asynchronously;
 // canExport() and the weather wait for it (shapePending), and the frame never does.
-// The GPU result carries zeros in the flow planes, so the stored bake planes go back in over it (what applyNode does for a flowbake node on the JS path).
-function applyBakes(list) { for (const n of list) if (n.kind==='flowbake' && !n.hidden && n.result) { renderer?.setSediment(n.result.colors); applyResult(n.result,maskPlanes,{x0:0,y0:0,x1:grid-1,y1:grid-1},grid,[originCellX,originCellY]); } }
-// Settled shape: null when no GPU shape result is outstanding, else a promise for it. A bake reads the heights, so it waits for them.
-function shapeSettled() { if (pendingEval>=0) flushEval(); return shapePending?new Promise(res => shapeAfter.push(res)):null; }
 let shapePending=0, shapeStudy={engine:null,valid:false,used:false}, shapeAfter=[];
 function studyShape(rect) {
   const ctx=shapeContext();
@@ -2697,7 +2682,7 @@ function studyShape(rect) {
     try {
       shapeStudy.engine??=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
       const started=performance.now(),out=await shapeStudy.engine.run(list,ctx,r,{release:whole});
-      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); applyBakes(list); if (whole) shapeStudy.valid=true; }
+      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); if (whole) shapeStudy.valid=true; }
       shapeStudy.last={ms:performance.now()-started,whole,...shapeStudy.engine.stats().last};
     } catch (err) { error('Shape on the GPU failed: '+err.message); shapeStudy.valid=false; }
     finally { shapePending--; if (!shapePending) { heightDirty=true; markChanged(); for (const fn of shapeAfter.splice(0)) fn(); } }
@@ -2744,7 +2729,7 @@ function regionalPoints(points) {
 }
 function beginRegionalStroke(kind,point,options={}) {
   if (stroke || moving || !HELP[kind] || kind==='move') throw new Error('A terrain gesture is already active or the brush is invalid.');
-  const points=regionalPoints([point]),params=isFlowKind(kind)?flowParams(options.radius??Number($('diameter').value)/2,options.amount??Number($('amount').value),options.color??flow?.colour()??''):{...currentStrokeOptions(),...options},node={kind,points,params,seed:params.seed??seed};
+  const points=regionalPoints([point]),params={...currentStrokeOptions(),...options},node={kind,points,params,seed:params.seed??seed};
   delete params.seed; cancelWeather();
   const index=nodes.length,selectionBefore=selected;
   nodes.push(node); selected=-1; stroke={regional:true,kind,node,index,selectionBefore,path:points};
@@ -2762,7 +2747,7 @@ function endRegionalStroke(commit=true) {
   if (!stroke?.regional) return false;
   const gesture=stroke,node=gesture.node,rect=nodeBounds(node); stroke=null;
   if (!commit) { nodes.splice(gesture.index,1); selected=gesture.selectionBefore; evaluate(gesture.index,rect); }
-  else { if(node.kind==='source')flow?.remember(node.params.color);selected=-1; checkpoint(); }
+  else { selected=-1; checkpoint(); }
   renderLayers(); updateControls(); schedule(); queueWeather();
   return commit?gesture.index:false;
 }
@@ -2802,7 +2787,7 @@ function endRegionalMove(commit=true) {
   selectNode(gesture.index); updateControls(); schedule(); queueWeather(); return commit?gesture.index:false;
 }
 function currentDrawOptions() {
-  return {sedimentColors:[...nodes].reverse().find(n=>n.kind==='flowbake'&&!n.hidden)?.result?.colors??[],clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
+  return {clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
 }
 function regionalHeightCell(x,y) {
   const h=regionalFields.cell(x,y),i=y*worldGrid+x;
@@ -2919,7 +2904,6 @@ function readRegional(request) {
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
 function drawRegionalOverlay(ctx) {
-  flow?.draw(ctx,tool,selected);
   const n=nodes[selected]; if (!n?.points) return;
   ctx.strokeStyle='#f3d36b'; ctx.lineWidth=2; ctx.beginPath();
   for (const [i,p] of n.points.entries()) { const y=p.y-(Math.max(config.seaLevel,sampleRegional(p.x,p.y))-config.baseHeight)*.5; if (i) ctx.lineTo(p.x,y); else ctx.moveTo(p.x,y); }
@@ -2938,7 +2922,6 @@ function uniformAuthored({x=0,y=0,width=0,height=width,apron=0}={}) {
   let h=Math.fround(config.baseHeight);
   if (!Number.isFinite(h) || h<MIN_HEIGHT || h>MAX_HEIGHT) return null;
   for (const n of nodes) if (!n.hidden) {
-    if(isFlowKind(n.kind)||n.kind==='flowbake')continue;
     if (n.points?.length) { if (overlaps(nodeBounds(n),rect)) return null; continue; }
     if (n.kind==='ground') { if ((n.amplitude??8)!==0 || !Number.isFinite(n.wavelength??160) || (n.wavelength??160)<1 || !Number.isFinite(n.coverage??.5)) return null; }
     else if (n.kind==='compact') { if (h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor); }
@@ -2953,11 +2936,11 @@ function regionalStats() {
 }
 const sculptRegion={
   fitGpuBudget:() => regionalFields?.refit?.(),
-  workingBytes:()=>flow?.stats().inflightBytes??0,read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },checkGraphMemory:preflightNodeBakes,
-  loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); flow?.reset();cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
+  read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },
+  loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
-  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
@@ -3018,7 +3001,6 @@ function selectNode(i) {
     $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='passage'?'passage':'area'; $('cracks').value=Math.round((p.cracks||0)*100);
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
   }
-  if (n?.kind==='source' && n.params?.color) flow?.setColour(n.params.color);
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Editing ${NODE_NAMES[n.kind]||n.kind} #${i+1}: sliders change this shape. Draw to start a new one.`);
 }
@@ -3036,13 +3018,12 @@ function renderLayers() {
   const list=$('layers'); if (!list) return;
   list.replaceChildren(...nodes.map((n,i) => {
     const item=document.createElement('li');
-    item.textContent=`${NODE_NAMES[n.kind]||n.kind}${n.hidden?' (hidden)':''}${n.kind==='flowbake' && flow?.stale()?' (stale)':''}`;
+    item.textContent=`${NODE_NAMES[n.kind]||n.kind}${n.hidden?' (hidden)':''}`;
     item.className=i===selected?'selected':'';
     item.addEventListener('click',() => selectNode(i===selected?-1:i));
     return item;
   }));
   for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0;
-  flow?.changed();
 }
 function nodeAction(kind) {
   const i=selected; if (i<0 || stroke) return;
@@ -3071,7 +3052,7 @@ function checkpoint(mapOnly=false) {
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
-  flow?.reset();lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
+  lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
@@ -3215,7 +3196,7 @@ function frame(timestamp) {
   try {
     flushEval();
     if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); heightDirty=false; }
-    if (needsDraw || (stroke && !stroke.flow) || moving) {
+    if (needsDraw || stroke || moving) {
       const quality=stroke||moving?'preview':'full',start=performance.now();
       const stats=renderer.draw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
       drawTiming(stats,performance.now()-start,quality);
@@ -3232,12 +3213,6 @@ function drawOverlay() {
   if (config.map) { const display=previewHeight(); drawMapBounds(ink,config.map,config,(x,y) => sample(display,x,y)); }
   mapFeatures?.draw(ink);
   if (mapFeatures?.active && !pan && !space) { overlay.style.cursor='crosshair'; return; }
-  flow?.draw(ink,tool,selected);
-  if (stroke?.flow) {
-    ink.strokeStyle=stroke.kind==='river'?'#7fe3ff':stroke.color||'#b8eef3'; ink.lineWidth=3; ink.beginPath();
-    stroke.path.forEach((p,i) => { const y=p.y-liftAt(p.x,p.y); if (i) ink.lineTo(p.x,y); else ink.moveTo(p.x,y); });
-    ink.stroke();
-  }
   if (cursor && !pan && !space && tool!=='move') {
     ink.strokeStyle='#b8eef3'; ink.fillStyle='#a7e6f00c'; ink.lineWidth=1.5;
     ink.beginPath(); ink.arc(cursor.cx,cursor.cy,stroke?.radius ?? Number($('diameter').value)/2,0,Math.PI*2); ink.fill(); ink.stroke();
@@ -3314,11 +3289,6 @@ overlay.addEventListener('pointerdown',event => {
       pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule(); return;
     }
     if (selected>=0) { selected=-1; renderLayers(); }
-    // Card F1: a river or source stroke only collects points (no field changes, so the weathering keeps running).
-    if (isFlowKind(tool)) {
-      stroke={kind:tool,flow:true,path:[p],radius:Number($('diameter').value)/2,amount:Number($('amount').value),color:flow?.colour()||'',screenStart:cursor};
-      status(tool==='river'?'Drag along the current, then release.':'Drag to lay a line of sediment, or just click.'); updateControls(); pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule(false); return;
-    }
     cancelWeather();
     stroke=startStroke(tool,p); stroke.screenStart=cursor; paintingIntervals=[]; lastPaintingRAF=null; markChanged();
     if (tool==='crystal') stampCrystals(stroke); else if (tool!=='ramp') dab(stroke,p);
@@ -3347,23 +3317,9 @@ overlay.addEventListener('pointermove',event => {
     pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index);
     moving.rect=unionRect(moving.rect,pendingRect);
   }
-  else if (stroke?.flow) { const p=picked(cursor),q=stroke.path[stroke.path.length-1]; if (p && Math.hypot(p.x-q.x,p.y-q.y)>=6) stroke.path.push(p); }
   else if (stroke) { const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
-  schedule(Boolean(stroke) && !stroke.flow);
+  schedule(Boolean(stroke));
 });
-// A river or source stroke becomes a node; the bake reads it when asked.
-function finishFlowStroke(event) {
-  if (event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor),q=stroke.path[stroke.path.length-1]; if (p && Math.hypot(p.x-q.x,p.y-q.y)>=2) stroke.path.push(p); }
-  const s=stroke; stroke=null; pan=null; pointerId=null;
-  if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId);
-  if (s.kind==='river' && s.path.length<2) status('A river needs a direction: drag along the current.');
-  else {
-    addNode({kind:s.kind,points:s.path.map(p => ({x:p.x,y:p.y})),params:flowParams(s.radius,s.amount,s.kind==='source'?s.color:''),seed});
-    if (s.kind==='source') flow?.remember(s.color);
-    checkpoint(); status(`${NODE_NAMES[s.kind]} added. Bake to see its effect.`);
-  }
-  updateControls(); schedule(false);
-}
 function endPointer(event) {
   if (regionalFields) return;
   if (pointerId!==event.pointerId) return;
@@ -3371,7 +3327,6 @@ function endPointer(event) {
     flushEval();
     if (moving.rect) { pendingRect=moving.rect; pendingEval=moving.index; }
     moving=null; pointerId=null; if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId); flushEval(); markViewChanged(); checkpoint(); queueWeather(); updateControls(); schedule(); return; }
-  if (stroke?.flow) { finishFlowStroke(event); return; }
   if (stroke && event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   const hadStroke=Boolean(stroke);
   const rawPath=stroke?stroke.path.map(p => ({...p})):null;
@@ -3416,15 +3371,7 @@ function scriptedScene(list,{ground=true}={}) {
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
   nodes=[]; prefix=[]; selected=-1;
   if (ground) addGroundNode();
-  // Card F1: river and source strokes, and one flowbake entry that bakes them once the scene is built.
-  let bakeRequest=null; flow?.load(null);
   list.forEach(([kind,points,options={}],i) => {
-    if (kind==='flowbake') { bakeRequest=options; return; }
-    if (isFlowKind(kind)) {
-      const card=options.card||{};
-      addNode({kind,points:points.map(([x,y]) => ({x,y})),params:flowParams((card.diameter??(kind==='source'?80:160))/2,card.amount??70,kind==='source'?options.color||'':''),seed:(seed+i*7919)>>>0});
-      return;
-    }
     const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
       ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),seed:(seed+i*7919)>>>0};
@@ -3433,12 +3380,11 @@ function scriptedScene(list,{ground=true}={}) {
   });
   if (regionalFields) regionalFields.changed();
   markChanged(); checkpoint();
-  if (bakeRequest) flow.bake(bakeRequest);
   updateControls(); schedule(); queueWeather();
   return nodes.length;
 }
 function mixedScene() {
-  flow?.reset();
+  
   applySeedControl(); refinementSeed=seed;
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
   nodes=[]; prefix=[]; selected=-1;
@@ -3533,7 +3479,7 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:regionalFields?5:4,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,flow:flow?.serialize(),
+  return {format:'nanolathe-terrain-sculpt',version:regionalFields?5:4,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -3565,7 +3511,7 @@ function loadSketch(s) {
     const values=new DataView(Uint8Array.from(raw,c=>c.charCodeAt(0)).buffer);
     for (let i=0;i<next.length;i++) { const v=values.getFloat32(i*4,true); if (!Number.isFinite(v)||v<0||v>1) throw new Error('Invalid ramp surface value.'); nextRoutes[i]=v; }
   }
-  flow?.reset();lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather();
+  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather();
   heights.set(next); protection.set(nextProtect); routes.set(nextRoutes); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; $('seed').value=seed; noise=makeNoise(seed);
   refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
@@ -3602,13 +3548,13 @@ function loadSketch(s) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   // A v4 recipe rebuilds from its nodes; a v3 sketch becomes one raster node.
   nodes=s.version===4 && Array.isArray(s.nodes)?deserializeNodes(s.nodes):[{kind:'raster',heights:heights.slice(),protection:protection.slice(),routes:routes.slice()}];
-  prefix=[]; selected=-1; evaluate(0); flow?.load(s.flow); renderLayers();
+  prefix=[]; selected=-1; evaluate(0); renderLayers();
   restoreMapData(s.mapData); markChanged(); updateControls();
 }
 function loadRegionalSketch(s) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const next=deserializeNodes(s.nodes);
-  flow?.reset();cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather(); lastWaterStroke=null;
+  cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather(); lastWaterStroke=null;
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
   for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(s.toolSettings?.[kind]||{})};
@@ -3620,7 +3566,7 @@ function loadRegionalSketch(s) {
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   if (['rings','veins'].includes(s.fringeStyle)) $('fringe-style').value=s.fringeStyle;
-  nodes=next; prefix=[]; selected=-1; evaluate(0); restoreMapData(s.mapData);flow?.load(s.flow); renderLayers(); updateControls(); queueWeather();
+  nodes=next; prefix=[]; selected=-1; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -3668,30 +3614,11 @@ function addGroundNode() {
   if (amplitude>0) addNode({kind:'ground',amplitude,wavelength:experiment.has('undulationScale')?Number(experiment.get('undulationScale')):200,coverage:experiment.has('undulationCover')?Number(experiment.get('undulationCover')):.45,seed:seed^0x9e37});
 }
 function serializeNodes() {
-  return nodes.map(n => n.kind==='raster'?{kind:'raster',hidden:n.hidden,heights:encodedHeights(n.heights),protection:encodedHeights(n.protection),routes:encodedHeights(n.routes)}:n.kind==='flowbake'?{kind:'flowbake',hidden:n.hidden,result:encodeResult(n.result)}:{...n,points:n.points?.map(p => ({x:p.x,y:p.y}))});
-}
-// Admission precedes decoding or editor mutation, including server documents
-// whose compressed zero runs can describe a very large stored bake.
-function preflightNodeBakes(list) {
-  let bytes=0;
-  for (const n of list) if(n?.kind==='flowbake'&&n.result) bytes+=savedResultBytes(n.result,grid);
-  if(bytes)sculptRegion.checkMemory?.(bytes);
-  return bytes;
+  return nodes.map(n => n.kind==='raster'?{kind:'raster',hidden:n.hidden,heights:encodedHeights(n.heights),protection:encodedHeights(n.protection),routes:encodedHeights(n.routes)}:{...n,points:n.points?.map(p => ({x:p.x,y:p.y}))});
 }
 function deserializeNodes(list) {
-  preflightNodeBakes(list);
   const decode=text => { const raw=atob(text),view=new DataView(Uint8Array.from(raw,c => c.charCodeAt(0)).buffer),out=new Float32Array(raw.length/4); for (let i=0;i<out.length;i++) out[i]=view.getFloat32(i*4,true); return out; };
-  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:n.kind==='flowbake'?{kind:'flowbake',hidden:Boolean(n.hidden),result:n.result?decodeResult(n.result,grid):undefined}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined});
-}
-// Card F1: a finished bake. The first one is appended as a node; later ones replace the node's stored result in place, so its place in the
-// list (and with it the heights it read) stays. Replay copies the planes: only the old and new rects are redrawn.
-function placeBake(result) {
-  let i=nodes.findIndex(n => n.kind==='flowbake'),old=null;
-  if (i<0) { prefix[nodes.length]=snapshot(); nodes.push({kind:'flowbake'}); i=nodes.length-1; prefix.length=nodes.length; }
-  else old=nodes[i].result?.rect;
-  nodes[i]={...nodes[i],result};
-  evaluate(i,unionRect(old,result.rect)); checkpoint(); schedule();
-  if (shapePending) queueWeather();   // H8b: the GPU result lands later and marks the weather pending; the pass runs again once it has
+  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined});
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; mapFeatures?.deactivate(); rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
@@ -3726,7 +3653,7 @@ $('demo').addEventListener('click',() => {
   experiment.set('example',$('example').value); mixedScene(); checkpoint();
   status('Example loaded · sculpt across the joins.'); schedule(); queueWeather();
 });
-$('blank').addEventListener('click',() => { if (stroke) return;flow?.reset(); applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); nodes=[]; prefix=[]; selected=-1; addGroundNode(); if (regionalFields) regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
+$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); nodes=[]; prefix=[]; selected=-1; addGroundNode(); if (regionalFields) regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
 $('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),'terrain-sculpt-v3.json'); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
@@ -3821,8 +3748,6 @@ const KNOBS = [
   ['Fringe lines (Archipelago)', [['bandFoot','Band lines start above the base (units)',0,30,1,0],['ringContrast','Fringe contour lines: contrast',0,1,.05,0],['ringCount','Fringe contour lines: count',1,30,1,7],['ringSize','Fringe contour lines: reach',.1,2,.05,1]]],
   // G3
   ['Fringe copies (Archipelago)', [['ringShift','Offset between copies (px; 0: concentric lines)',0,30,.5,0],['ringShiftDir','Drift direction (deg clockwise from east)',0,360,5,315],['ringScatter','Direction wander (share of a half turn)',0,1,.05,.5],['ringWobble','Outline waver (px)',0,10,.5,3],['ringLobe','Lobe size (px)',8,60,1,22],['ringTaper','Outer lines fainter by',0,1,.05,0],['ringFill','Pale tint where copies overlap',0,1,.05,0],['ringPatch','Reach varies along the outline',0,1,.05,0],['ringPatchSize','Reach variation size (px)',30,400,5,120],['ringTone','Retail rose, paler outward',0,1,.05,0]]],
-  // F1: drawn only where a flow bake exists.
-  ['Current and sediment', [['flowTint','Sediment tint strength',0,1,.05,1],['flowShallow','Tint kept in the shallows',0,1,.05,.85],['flowStreak','Streak contrast',0,1,.05,.5],['flowStreakLen','Streak length (px)',8,160,4,140],['flowBank','Bank tint strength',0,1.5,.05,.9]]],
   // E10 (Lava)
   ['Lava hill rock', [['lavaCrust','Crust: pillows, chips and creases on hills',0,1,.05,0],['lavaPillow','Pillow size (px)',16,80,1,34],['lavaChip','Chip size (px)',3,12,.5,5.5],['lavaVeins','Veins hanging down the slope',0,1,.05,0],['lavaCalm','Fall-line relief replaced by the crust',0,1,.05,.6],['lavaDusk','Dusk on rock turned from the sun',0,2,.05,0]]],
   ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['lavaCreaseVary','Crease breaks into dashes of varying darkness',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
@@ -3860,13 +3785,6 @@ function defaultColor(key) {
   const strata=(config.strataColors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
-}
-// Suggested sediment colours: the world's own materials (what the World panel's Colours edit).
-function flowSuggestions() {
-  const out=[];
-  for (const [key,label] of COLOR_KEYS.slice(0,7)) { if (key==='beach' && !config.textures.beach) continue; out.push([label,mergedColors()[key]||hexColor(defaultColor(key))]); }
-  if (config.water?.midRGB) out.push(['Mid water',hexColor(config.water.midRGB.map(v => v/255))]);
-  return out;
 }
 function goToWorld(base,id,extra) {
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
@@ -4001,27 +3919,6 @@ function setKnob(key, value) {
   // Transport knobs change where sand is carried, so the worker re-runs.
   if (['sand','sandReach','windStrength','wind','sandPatchy','sandTail'].includes(key)) { cancelWeather(); queueWeather(); }
 }
-// A flow bake hashes every authored input cell, including off-screen cells.
-// Its height prefix is collected in bounded reads, never a world of mask planes.
-function readFlowBefore(rect,index){
-  const w=rect.x1-rect.x0+1,h=rect.y1-rect.y0+1,out=new Float32Array(w*h),prefixCount=regionalStages(index<0?nodes:nodes.slice(0,index)).length;
-  for(let y=rect.y0;y<=rect.y1;y+=256)for(let x=rect.x0;x<=rect.x1;x+=256){
-    const q={x0:x,y0:y,x1:Math.min(x+255,rect.x1),y1:Math.min(y+255,rect.y1)},part=regionalFields.readCells(q,{prefixCount});
-    for(let yy=q.y0;yy<=q.y1;yy++)out.set(part.fields.h.subarray((yy-q.y0)*part.gridWidth,(yy-q.y0+1)*part.gridWidth),(yy-rect.y0)*w+q.x0-rect.x0);
-  }return out;
-}
-function sampleFlow(x,y){
-  const gx=Math.round(x/spacing),gy=Math.round(y/spacing);
-  for(let i=nodes.length-1;i>=0;i--){const n=nodes[i],r=n.result?.rect;if(n.hidden||n.kind!=='flowbake'||!r||gx<r.x0||gx>r.x1||gy<r.y0||gy>r.y1)continue;const k=(gy-r.y0)*(r.x1-r.x0+1)+gx-r.x0;return[n.result.planes[0][k],n.result.planes[1][k]];}
-  return[0,0];
-}
-function mountCurrentFlow(){
-  flow=mountFlow({$,settled:shapeSettled,nodes:() => nodes,prefix:() => prefix,heights:() => heights,grid:() => grid,size:() => size,spacing:() => spacing,sea:() => config.seaLevel,nodeBounds,place:placeBake,...(regionalFields?{readBefore:readFlowBefore,revision:()=>revision,reserve:bytes=>sculptRegion.checkMemory?.(bytes),view:()=>mapCanvas?.view(),flowAt:sampleFlow}:{}),
-      world:activeWorld,saveWorlds,suggestions:flowSuggestions,status,error,schedule:() => schedule(false),updateControls,persist:persistLater,editing:() => Boolean(stroke||moving||loading),
-      relabel:renderLayers,lift:(x,y)=>regionalFields?(Math.max(config.seaLevel,sampleRegional(x,y))-config.baseHeight)*.5:liftAt(x,y),planes:() => maskPlanes,mountPanel:el => { const panels=$('editor').querySelectorAll(':scope > section.panel'); $('editor').insertBefore(el,panels[panels.length-1]); },
-      recolourSelected:color => { if (nodes[selected]?.kind==='source') changeSelected(n => { n.params={...n.params,color}; }); }});
-
-}
 async function bootMap() {
   worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
   size=worldSize; grid=worldGrid; spacing=(worldSize-1)/(worldGrid-1);
@@ -4033,7 +3930,7 @@ async function bootMap() {
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
-  buildKnobs(); buildWorldPanel();mountCurrentFlow();
+  buildKnobs(); buildWorldPanel();
   $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
   $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100); $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
   let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
@@ -4096,7 +3993,6 @@ async function boot() {
     renderer.onerror=message => error(message);
     renderer.setColors(worldColors());
     buildKnobs(); buildWorldPanel();
-    mountCurrentFlow();
     // The fracture texture only applies to the lab surface; the fall-line
     // surface draws its cracks in the bake (Cracks knobs).
     $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
@@ -4161,8 +4057,7 @@ async function gpuRegionalCheck() {
     const part={h:new Float32Array(grid*grid),p:new Float32Array(grid*grid),r:new Float32Array(grid*grid),c:new Float32Array(grid*grid),v:new Float32Array(grid*grid),x:new Float32Array(grid*grid),masks:MASK_KEYS.map(() => new Int8Array(grid*grid))};
     engine.copyOut(out,part);
     const {x0,y0,x1,y1}=out.rect;
-    // The flow planes (mask planes 20-24) come from the stored bake, which the passes skip and applyBakes copies in, so they are not the pass's to compare.
-    for (const key of FIELD_KEYS) if (!(MASK_KEYS.indexOf(key)>=FLOW_FIRST)) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+    for (const key of FIELD_KEYS) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
       const j=MASK_KEYS.indexOf(key),expected=whole[key][y*grid+x],actual=j>=0?part.masks[j][y*grid+x]:part[key][y*grid+x];
       if (expected===actual && Number.isFinite(actual)) continue;
       const p=planes[key]; p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity); p.firstMismatch??={x,y,whole:expected,gpu:actual,run:tag};
@@ -4192,7 +4087,7 @@ function checkRegionalFields() {
   if(config.map)throw new Error('Run the regional field check on a 1024px study scene.');
   return gpuRegionalCheck();
 }
-window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
+window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),

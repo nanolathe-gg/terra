@@ -222,7 +222,7 @@ function craterRim(q, seed) {
 // The smooth brush's box blur radius in cells: sculpt.js's clamp(round(radius / (7 spacing)), 1, 24) at the final grid, scaled to this level's spacing.
 export const smoothRadius = (radius, {spacing, refSpacing = spacing}) => Math.max(1, Math.round(clamp(Math.round(radius / (refSpacing * 7)), 1, 24) * refSpacing / spacing));
 export function prepareNode(n, geom, c) {
-  if (n.hidden || c.skipKind(n.kind) || (n.kind !== 'ground' && (!(n.kind in KIND) || !n.points?.length))) return {skip: true};
+  if (n.hidden || (n.kind !== 'ground' && (!(n.kind in KIND) || !n.points?.length))) return {skip: true};
   const {grid, spacing} = geom;
   if (n.kind === 'ground') return {op: 'ground', seed: (n.seed ?? 1) >>> 0, amp: n.amplitude ?? 8, wave: n.wavelength ?? 160, cover: n.coverage ?? .5};
   const q = c.params(n), kind = n.kind, kcode = KIND[kind];
