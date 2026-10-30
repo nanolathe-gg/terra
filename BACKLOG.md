@@ -3993,6 +3993,122 @@ and Still open lists above.
 - guard `--worlds none` at `gpuShape` 0 until acceptance, then
   `--worlds green`.
 
+**Done (merged as 48818aa; EXPERIMENTS row 147; notes in
+`$R/agent-H6/NOTES.md`).**
+- **The inventory (item 1).** With Green's knobs the ridge, spur, coast,
+  plate, lobe and facet code never runs.
+  - A hill is about 130 lines: sections, plus two box blurs of radius 2.
+  - A mountain is a chain of dabs.
+  - The 4×4 load's 4.3 s came from replaying the same nodes in many
+    windows, not from the arithmetic: 262 window replays and 103 noise
+    builds for green-2.
+- **What landed:**
+  - **`engine-shape.wgsl`** (333 lines) has noise (framed through the
+    inverse frame), stamp, hill section, blur, compose, ground and pack
+    passes. Each node is one chain of dispatches, in node order.
+  - **`sculpt-gpu-fields.js`** (460 lines) has the shape engine and
+    `createGpuFields`. That is the `createRegionalFields` interface over
+    one whole-map evaluation, with the JS fields as the whole-scene
+    fallback, for maps up to 1168 samples.
+  - **The study** evaluates on the GPU and reads the result back into its
+    live planes. Export and weather wait for the copy.
+  - **Kinds on the GPU:** paint, erase, deep, shallow, mountain, hill
+    (point, span and settled) and the ground node. Anything else, or an
+    exotic option, runs the whole scene on JS, and the status line says
+    why.
+  - **The knob** `gpuShape`: 0 is JS and 1 is GPU. Green sets 1 in
+    `ENGINE_KNOBS`.
+  - **Check tools:** `repro/shapecheck.mjs` and
+    `repro/shape-scenes/green-shallow.json`.
+- **Review fix (1a1a85f).** The GPU fields told the canvas of a change
+  before the CPU copy held it. So the minimap was flat on a fresh load
+  (green-2's hill was missing), and it stayed one edit behind after each
+  edit. Now the listeners hear of a change when the copy lands, and the
+  minimap equals the JS engine's pixel for pixel.
+- **GPU against JS** (`shapecheck.mjs`, on green-1..3, green-shallow and
+  the 4×4 map):
+  - max |Δh| is 0.0002-0.0005, and no cell is over .01;
+  - masks differ only by one step, on 8-10 cells (rounding at f32);
+  - GPU runs repeat bit for bit.
+- **Renders:**
+  - green-1..3 change on 193, 248 and 216 of 1,048,576 pixels, isolated
+    single pixels where a material threshold flips;
+  - `impact.py` shows 0.0% changed blocks in every class;
+  - Lab is identical to `merge-h7` on all nine;
+  - by eye at 4×, it is the same picture.
+- **The 4×4 export:**
+  - TNT heights, features and tile indices are identical to the JS
+    export, and 265 of 4.5M tile pixels differ;
+  - the self-check passes;
+  - at `gpuShape` 0 the export equals `H2Check8801x77804` apart from the
+    name.
+- **Regional exactness for Green is dropped, and recorded as dropped.**
+  Whole-map evaluation replaces regional replay. Under `gpuShape` 1,
+  `regionalCheck()` checks that a fresh evaluation equals the CPU copy and
+  that each quadrant equals the whole: 0 mismatches on green-1..3.
+  `render.mjs`'s `mismatch` is trivially 0 for those scenes;
+  `shapecheck.mjs` is the real comparison.
+- **Merge checks:**
+  - the 24 non-Green scenes are exact against `merge-h7`;
+  - Green at `gpuShape` 0 is pixel-identical to `merge-h7`;
+  - the merged renders equal the agent's;
+  - `regional.mjs` finds 0 mismatches on all 27 scenes (Green's through
+    the GPU check).
+- **Performance** (4×4 green-2, `perf.mjs`; for H6, the agent's run and
+  mine on 8801):
+
+  | | H7 | H6 |
+  | --- | --- | --- |
+  | Load, visible chunks final | 7.2-7.9 s | 2.65 / 2.6 s |
+  | Weather ready on load | 5.5 s | 0.67 / 0.66 s |
+  | Drag rAF p95 | 350-367 ms | 167 / 183 ms |
+  | After release, chunks final | 2.1-2.25 s | 2.15 / 2.23 s |
+  | Scroll p95 | 16.8 ms | 16.8 ms |
+
+  - The whole-map shape evaluation takes about 31 ms for 1.36M cells and
+    25 passes, including the readback of all 31 planes.
+  - The shape share of one drag move fell from about 160 ms to 7-9 ms for
+    a small node, about 18 ms for the erase node, and 25-36 ms for the
+    largest.
+  - The study (512²) loads in 0.90 s, from 1.28 s, and is final after
+    release in 0.43 s, from 0.58 s.
+- **Resolution.** green-2 at a quarter of the cells (257²) beside final
+  (512²) is the same picture: mean |Δh| .09, p95 .35, max 1.25. The hill
+  blur is 2 final cells in world units, which is 1 cell at double
+  spacing. The side-by-side is `$R/agent-H6/out/levels-green-2.png`.
+- **Memory at 1168²:**
+  - 71 MB of persistent GPU (planes 32.7 MB, masks 38.2 MB);
+  - noise 38 MB and scratch 16 MB, transient;
+  - a peak of 259 MB;
+  - a CPU copy of 67 MB.
+- **Size.** 333 lines of WGSL, 460 of JS and 105 at the seam, replacing
+  about 430 lines of JS for Green's kinds. The JS engine stays
+  (decision 10).
+
+**Still open:**
+- **Drag p95 is 167-183 ms.** The cost is now the per-chunk upload (156 ms
+  a chunk during a drag) and the chunk bakes: H6b.
+- **After release, 2.2 s is unchanged.** It is chunk bakes and uploads:
+  H6b.
+- **The committed prefix is not built.** Each move re-runs every node over
+  the dirty rectangle and reads it back, so large nodes take 25-36 ms. A
+  prefix copy (about 70 MB at 1168²) would re-run only the moved node and
+  the ones after it.
+- **The study's live stroke is still JS.** The JS engine draws a new
+  stroke on the live arrays, and the GPU re-evaluates it afterwards. Drag
+  p95 is 16.7 ms either way.
+- **Reads wait for every queued run.** During a fast drag, a bake can wait
+  across several runs. Coalescing queued runs would bound this.
+- **The canvas's GPU budget** (`fixedGPU()` in `sculpt-canvas.js`) does
+  not count the GPU fields (71 MB, peak 259 MB). Fold it in with H6b.
+- **Fallbacks:**
+  - plateau, offset, lower and crater still fall back; plateau, crater
+    and ramp read points of the prefix;
+  - so do exotic options;
+  - maps over 1168 samples stay on JS (H5b).
+- **Scene load still builds a JS probe stroke per node** to get its
+  parameters, about 65 ms a seed on the study.
+
 H6b (chunks and the Time pass fed from the GPU fields) is outlined in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards). It is written here
 in full when H6 lands.

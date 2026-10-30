@@ -386,7 +386,7 @@ Each is written in full when the one before it lands.
 | H5 | Green's weather on the GPU at TA's scale: data maps, marks at 1 px, controls that matter (study and maps up to 1168 samples) | Merged ca0c310 |
 | H5b | Weather on large map canvases: coarse and fine tiles, stored planes, regional exactness (absorbs H2b) | Outlined |
 | H4b | Rock blocks on hill rock (Green), judged with H5's outcrops | Merged cb57320 |
-| H6 | Green's shape on the GPU: whole-map fields by compute passes, behind `gpuShape`, read through a CPU copy | Written |
+| H6 | Green's shape on the GPU: whole-map fields by compute passes, behind `gpuShape`, read through a CPU copy | Merged 48818aa |
 | H6b | Chunks and the Time pass fed from the GPU fields: no CPU copy or per-chunk upload on the hot path | Outlined |
 | H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Merged 1fffe4f (quarter levels and drag p95 open) |
 | Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
