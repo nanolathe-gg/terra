@@ -4,7 +4,7 @@
 # Retail crops are read from $REPRO_CROPS/<world> (retail_crop.py output;
 # default /private/tmp/nanolathe-map-editor/repro-r7, the crops every merge
 # since round 7 is judged on). REPRO_QUERY adds page parameters to every
-# scene (render.mjs --query), e.g. REPRO_QUERY='engine=1'. Writes <out-dir>/<world>/
+# scene (render.mjs --query), e.g. REPRO_QUERY='sun=90,45'. Writes <out-dir>/<world>/
 # pair.png and layout.png, and <out-dir>/sheet.png with every world.
 set -e
 out=$1; server=${2:-http://127.0.0.1:8801}; port=${3:-9450}

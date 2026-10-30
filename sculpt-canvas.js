@@ -19,7 +19,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
-  const levels=query.get('levels')!=='0',quarterFirst=query.get('quarterFirst')==='1',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
+  const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
   const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
   let afterGesture=false,lastViewEpoch=-1,heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
@@ -184,14 +184,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         for(const rect of jobs){const e=cache.get(rect.x+','+rect.y+','+size);if(e&&intersects(rect,v))paint(e,v);}overlays();
         // H7b: the plan. `want` 2 is a quarter image, 1 final. During a gesture every chunk without an image gets a quarter one and nothing
         // is refined; once it ends, a quarter image is replaced by a final one (visible chunks first, then the margin), and a chunk
-        // that already shows final is never replaced by a quarter one. On a load or a scroll the visible chunks come at quarter first when quarterFirst is on.
+        // that already shows final is never replaced by a quarter one. 
         const plan=[];
         if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
         else{
           if(gesture)for(const rect of jobs)plan.push({rect,want:2});
           else{
             if(viewEpoch!==lastViewEpoch){afterGesture=false;lastViewEpoch=viewEpoch;}   // a new view (a scroll or a zoom) starts afresh; a release goes straight to final
-            if(quarterFirst&&!afterGesture)for(const rect of jobs)if(intersects(rect,v))plan.push({rect,want:2});
             for(const rect of jobs)plan.push({rect,want:1});
           }
         }

@@ -156,14 +156,11 @@ export class TerrainRenderer {
     this.context.configure({device, format: this.format, alphaMode: 'opaque',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
 
-    // H3: Green's land materials from numbers (materialModel 1, the world's default, or ?materialModel=1|0 on the page).
-    const query = new URLSearchParams(location.search);
-    // H4: engine 1 draws with engine-frag / engine-bake / engine-common (Green's own shaders); 0 is the shared set, as merge-h3 draws.
-    this.engine = Number(query.get('engine') ?? this.config.defaults?.engine ?? 0) === 1;
-    const modelQuery = query.get('materialModel');
+    // The engine's shaders (engine-frag / engine-bake / engine-common) draw every world; sculpt-frag.wgsl and its set go in group 5.
+    this.engine = true;
     // H8: a world whose materials are numbers names its table in the config (config.materialTable); the others bridge their prepared images.
     const tableUrl = this.config.materialTable;
-    this.materialModel = this.engine ? Boolean(tableUrl) : Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
+    this.materialModel = Boolean(tableUrl);
     this.bridge = this.engine && !tableUrl;
     this.materialData = null;
     const names = this.engine ? ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', ...(tableUrl ? [tableUrl.replace(/^\//, '')] : [])]

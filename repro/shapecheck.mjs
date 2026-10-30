@@ -1,12 +1,7 @@
-// Compare Green's shape on the GPU (gpuShape 1) with the JS engine, per scene and per plane, in one browser page.
+// Repeat check of the shape on the GPU: two evaluations of a scene give identical planes (all 31), in one browser page.
 //   node shapecheck.mjs <scene.json>... [--server http://127.0.0.1:8874] [--port 9668] [--out dir] [--map]
 // Study scenes run on the 1024-px editor; with --map the same strokes run on a 4x4 map canvas (1168 samples, the whole map compared).
-// The page evaluates the scene on the GPU, then on the JS engine (the same node list), then on the GPU again, and returns for every plane:
-//   float planes (h p r c v x): max |d| and the share of cells over 0.01, 0.5 and 1 unit;
-//   mask planes: the share of cells that differ, those off by exactly one step, and those off by more;
-//   the height clusters over 0.5 unit (cell count, peak, box, the two values) for finding their cause;
-//   repeat: the GPU run against a second GPU run on this machine, which must be identical (all zero).
-// Writes <out>/<scene>.json and prints a one-line summary per scene. Exit code 1 if a repeat differs or a scene fell back.
+// Writes <out>/<scene>.json and prints a one-line summary per scene. Exit code 1 if a repeat differs.
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {basename} from 'node:path';
@@ -20,8 +15,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0;
 for (const file of scenes) {
   const scene = JSON.parse(readFileSync(file, 'utf8')), name = basename(file, '.json') + (mapMode ? '-map' : '');
-  const url = mapMode ? `${server}/sculpt?biome=${scene.biome}&mapX=${mapSize}&mapY=${mapSize}&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536&engine=1&gpuShape=1${scene.query ? '&' + scene.query : ''}`
-    : `${server}/sculpt?biome=${scene.biome}&scratch=shapecheck${Date.now()}&engine=1&gpuShape=1${scene.query ? '&' + scene.query : ''}`;
+  const url = mapMode ? `${server}/sculpt?biome=${scene.biome}&mapX=${mapSize}&mapY=${mapSize}&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`
+    : `${server}/sculpt?biome=${scene.biome}&scratch=shapecheck${Date.now()}${scene.query ? '&' + scene.query : ''}`;
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/prof-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   try {
@@ -42,11 +37,8 @@ for (const file of scenes) {
     const r = await ev('sculptDebug.shapeCompare()');
     writeFileSync(`${out}/${name}.json`, JSON.stringify({scene: file, sceneMs, console: logs.slice(0, 6), ...r}, null, 1));
     if (r.error) { console.log(`${name}: ${r.error}`); bad++; continue; }
-    const P = r.vsJs.planes, h = P.h, rep = Object.values(r.repeat.planes).some(p => p.max > 0);
-    const worstFloat = ['p', 'r', 'c', 'v', 'x'].map(k => `${k} ${P[k].max.toFixed(4)}`).join(' ');
-    const masks = Object.entries(P).filter(([k]) => !'hprcvx'.includes(k) || k.length > 1);
-    const m1 = masks.reduce((n, [, p]) => n + (p.cellsExactly1 || 0), 0), m2 = masks.reduce((n, [, p]) => n + (p.cellsOver1 || 0), 0);
-    console.log(`${name}: h max ${h.max.toFixed(4)} over .01 ${(100 * h.over001).toFixed(3)}% .5 ${(100 * h.over05).toFixed(4)}% 1 ${(100 * h.over1).toFixed(4)}% | ${worstFloat} | masks off by 1: ${m1} cells, by more: ${m2} | clusters>.5: ${r.vsJs.clusterCount} | repeat ${rep ? 'DIFFERS' : 'identical'} | scene ${sceneMs} ms`);
+    const rep = Object.values(r.repeat.planes).some(p => p.max > 0);
+    console.log(`${name}: ${rep ? 'REPEAT DIFFERS' : 'repeat identical'} (two GPU runs, ${Object.keys(r.repeat.planes).length} planes)`);
     if (rep) bad++;
     if (logs.length) console.log('  console errors:', logs.slice(0, 3));
   } finally { chrome.kill(); await sleep(500); }

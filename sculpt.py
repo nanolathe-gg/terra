@@ -209,11 +209,6 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # eight, repeating upward) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). erosion 1 runs the GPU shallow-water pass in place of the droplet worker for the 1024-px study:
 # erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
-# H3 (Green): materialModel 1 draws the land materials from materials/green.json through material-model.wgsl,
-# with no prepared image (0: the images, as before).
-KNOB_DEFAULTS.update(materialModel=0)
-# H4 (Green): engine 1 draws and bakes with engine-frag/engine-bake/engine-common, Green's own copies (0: the shared shaders, as merge-h3).
-KNOB_DEFAULTS.update(engine=1)   # H8: every world draws on the engine; ?engine=0 is the shared draw (merge-h6c)
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
 KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
@@ -221,8 +216,6 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
-# H6 (Green): gpuShape 1 evaluates the brushes Green's windows use on the GPU (engine-shape.wgsl); 0 is the JS engine.
-KNOB_DEFAULTS.update(gpuShape=0)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
@@ -230,11 +223,11 @@ KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0,
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
 # Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
 # scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
-LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12, gpuShape=1)   # a shape the passes refuse (Lava, Crystal, Ice) falls back to the JS engine as a whole
+LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
-                  rockMoss=.4, hillBlocks=.5, gpuShape=1,
+                  rockMoss=.4, hillBlocks=.5,
                   terraceBreak=1.4, terraceCalm=0, wetSwath=.35, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
 }
@@ -244,7 +237,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
+    'green': dict(banding=.8, bandLine=.84, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.

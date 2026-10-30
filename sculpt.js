@@ -1,8 +1,7 @@
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {quickMaterialField} from './sculpt-material-weathering.js';
 import {configureMap,resizeMap,drawMapBounds,exportMapField,mountMapCanvas} from './sculpt-map.js';
-import {createRegionalFields} from './sculpt-fields.js';
-import {createGpuFields,createPagedFields,createShapeEngine,nodeSupport,comparePlanes,readBuffer} from './sculpt-gpu-fields.js';
+import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer} from './sculpt-gpu-fields.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 import {mountMapWeather} from './sculpt-map-weather.js';
@@ -2508,11 +2507,7 @@ function resetFields() { heights.fill(config.baseHeight); for (const a of [prote
 function snapshot() { const f=live(); return Object.fromEntries(FIELD_KEYS.map(k => [k,f[k].slice()])); }
 function addNode(n) {
   if (regionalFields && !regionalReplay) { nodes.push(n); regionalFields.changed(nodeBounds(n)); return; }
-  if (!regionalFields && gpuShapeOn() && (shapePending || !nodeSupport(n,shapeContext()))) { nodes.push(n); pendingEval=0; pendingRect=null; return; }   // H6: the GPU replays the whole list at the next flush
-  // H9: a node the passes refuse is applied by the JS engine at once and never reaches studyShape, so record its reason here (a scene whose
-  // every stroke is refused, Desert's, would otherwise show no reason and the stale `used` of the page load).
-  if (!regionalFields && gpuShapeOn()) { const why=nodeSupport(n,shapeContext()); if (why) { shapeStudy.reason=why; shapeStudy.used=false; shapeStudy.valid=false; } }
-  prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n);
+  nodes.push(n); pendingEval=0; pendingRect=null;   // the GPU replays the whole list at the next flush
 }
 let lastEvalMs=0;
 // Region-limited replay. clip is the rectangle (grid cells, inclusive) that
@@ -2612,20 +2607,8 @@ function evaluateRegion(from,rect) {
   prefix.length=nodes.length; heightDirty=true; markChanged();
 }
 function evaluate(from=0,rect=null) {
-  if (regionalFields && !regionalReplay) { prefix=[]; regionalFields.changed(regionalDirtyRect(from,rect),regionalStages(nodes.slice(0,from)).length); heightDirty=true; markChanged(); return; }
-  if (gpuShapeOn() && studyShape(rect)) return;
-  const evalStart=performance.now();
-  // Shore distance depends on neighbouring heights; replay the full suffix
-  // when it contains a plate band or a coast pass (joined-coast fingers, shore
-  // layers) so changes outside a small edit stay exact.
-  if (rect && nodes.slice(from).some(n => (['deep','shallow','offset'].includes(n.kind) && n.params?.shorePlates>0) || hasCoastPass(n.kind,n.params))) rect=null;
-  if (rect && from>0 && prefix[from] && prefix.length>=nodes.length) { evaluateRegion(from,rect); lastEvalMs=performance.now()-evalStart; return; }
-  from=Math.max(0,Math.min(from,nodes.length));
-  if (from>0 && prefix[from]) { const now=live(); for (const k of FIELD_KEYS) now[k].set(prefix[from][k]); }
-  else { from=0; resetFields(); }
-  for (let i=from;i<nodes.length;i++) { prefix[i]=snapshot(); applyNode(nodes[i]); }
-  prefix.length=nodes.length; heightDirty=true; markChanged();
-  lastEvalMs=performance.now()-evalStart;
+  if (regionalFields) { prefix=[]; regionalFields.changed(regionalDirtyRect(from,rect),regionalStages(nodes.slice(0,from)).length); heightDirty=true; markChanged(); return; }
+  studyShape(rect);
 }
 
 // Satellite crater baselines see the completed bowl and preceding satellites.
@@ -2693,14 +2676,7 @@ function regionalDirtyRect(from,rect) {
   }
   return dirty;
 }
-// H6: shape on the GPU (Green). gpuShape 0 is the JS engine; 1 evaluates paint, erase, deep, shallow, hill, mountain and the ground node with the compute passes
-// of engine-shape.wgsl (sculpt-gpu-fields.js). A scene with any other node, or an exotic option, runs on the JS engine as a whole and the status line says why.
-// Green's engine (engine 1) sets gpuShape in ENGINE_KNOBS, which the renderer reads later than the fields are made, so the engine's default is read here from the config.
-const gpuShapeOn=() => {
-  const url=new URLSearchParams(location.search),q=url.get('gpuShape'); if (q!==null) return Number(q)>0;   // `experiment` already holds every knob default, so only the address says the user asked
-  const engine=Number(url.get('engine')??config?.defaults?.engine??0)===1,own=Number(config?.engineDefaults?.gpuShape);
-  return (engine && Number.isFinite(own)?own:worldDefault('gpuShape'))>0;
-};
+// Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
 // A flow bake writes nothing the shape passes make: its stored planes are copied in after the result (applyBakes).
 const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:k => isFlowKind(k) || k==='flowbake',seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
   shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full',
@@ -2711,16 +2687,12 @@ const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKi
 function applyBakes(list) { for (const n of list) if (n.kind==='flowbake' && !n.hidden && n.result) { renderer?.setSediment(n.result.colors); applyResult(n.result,maskPlanes,{x0:0,y0:0,x1:grid-1,y1:grid-1},grid,[originCellX,originCellY]); } }
 // Settled shape: null when no GPU shape result is outstanding, else a promise for it. A bake reads the heights, so it waits for them.
 function shapeSettled() { if (pendingEval>=0) flushEval(); return shapePending?new Promise(res => shapeAfter.push(res)):null; }
-let shapePending=0, shapeStudy={engine:null,valid:false,reason:null,used:false}, shapeAfter=[];
+let shapePending=0, shapeStudy={engine:null,valid:false,used:false}, shapeAfter=[];
 function studyShape(rect) {
-  const ctx=shapeContext(); let reason=null;
-  for (const n of nodes) { reason=nodeSupport(n,ctx); if (reason) break; }
-  if (reason || !renderer?.device) {
-    if (reason!==shapeStudy.reason || shapeStudy.used) status(reason?'Shape on the GPU: '+reason+'; this scene runs on the JS engine.':'Shape on the GPU waits for the renderer.');
-    shapeStudy.reason=reason; shapeStudy.used=false; shapeStudy.valid=false; return false;
-  }
+  const ctx=shapeContext();
+  if (!renderer?.device) { status('Shape on the GPU waits for the renderer.'); shapeStudy.used=false; shapeStudy.valid=false; return false; }
   if (!shapeStudy.used) status('Shape evaluated on the GPU.');
-  shapeStudy.reason=null; shapeStudy.used=true; prefix=[];
+  shapeStudy.used=true; prefix=[];
   const whole=!rect || !shapeStudy.valid, r=whole?null:{x0:Math.max(0,rect.x0-6),y0:Math.max(0,rect.y0-6),x1:Math.min(grid-1,rect.x1+6),y1:Math.min(grid-1,rect.y1+6)}, list=nodes.slice();
   shapePending++;
   (async () => {
@@ -2734,23 +2706,15 @@ function studyShape(rect) {
   })();
   return true;
 }
-// H5b: gpuPages (default 1 over 1168 samples a side, 0 the CPU path as before, force pages a 4x4 map too, for comparison): Green's fields and Time pass in pages.
-const gpuPages=() => { const q=new URLSearchParams(location.search).get('gpuPages'); return q==='force'?'force':q===null?1:Number(q); };
-const pagedWanted=() => gpuShapeOn() && (worldGrid>1168?gpuPages()!==0:gpuPages()==='force');
+// H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
+const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
+const pagedWanted=() => worldGrid>1168 || gpuPagesForced();
 const pagedOn=() => Boolean(regionalFields?.paged && regionalFields.active());
 function makeRegionalFields() {
-  const js=createRegionalFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,stages:regionalStages,bounds:nodeBounds,
-    reduceBounds:n=>{const q={...shapeDefaults(),...n.params};return ['deep','shallow'].includes(n.kind)&&Math.round(q.layerStyle)===1&&Math.round(q.shoreLayers)>=1;},readApron:regionalReadApron,pointReads:n => ['plateau','crater'].includes(n.kind)?[n.points[0]]:n.kind==='ramp'?[n.points[0],n.points[n.points.length-1]]:[],
-    baseCell:(x,y) => {
-      let h=Math.fround(config.baseHeight);
-      for (const n of nodes) if (!n.hidden) {
-        if (n.kind==='ground') h=Math.fround(groundHeight(n,h,0,x*spacing,y*spacing));
-        else if (n.kind==='compact' && h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor);
-      }
-      return h;
-    },workspaceBytesPerCell:FIELD_KEYS.reduce((v,k) => v+(MASK_KEYS.includes(k)?3:12),0)+Object.keys(NOISE_FIELDS).length*8+96,replay:replayWindow});
-  // H6: gpuShape 1 evaluates Green's brushes on the GPU over the whole map; a scene with any node the passes do not take is handed to the JS fields as a whole.
-  return pagedWanted()?createPagedFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:js,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving),apron:Number(new URLSearchParams(location.search).get('timeApron')||128),forceRing:Number(new URLSearchParams(location.search).get('pageRing')||0)}):gpuShapeOn() && worldGrid<=1168 && gpuPages()!=='force'?createGpuFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:js,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving)}):js;
+  const common={worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving)};
+  // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
+  const query=new URLSearchParams(location.search);
+  return pagedWanted()?createPagedFields({...common,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
@@ -2853,13 +2817,12 @@ function sampleRegional(x,y) {
   const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
   return (regionalHeightCell(ix,iy)*(1-fx)+regionalHeightCell(jx,iy)*fx)*(1-fy)+(regionalHeightCell(ix,jy)*(1-fx)+regionalHeightCell(jx,jy)*fx)*fy;
 }
-// H6b: the map canvas fed from the GPU fields (Green's engine, maps up to 1168 samples a side, query gpuFeed=0 turns it off). The Time pass reads the
+// H6b: the map canvas fed from the GPU fields (Green's engine, maps up to 1168 samples a side). The Time pass reads the
 // fields' buffers and leaves its result in two GPU buffers (gpuWeather: weather = authored then eroded height, maps = the three packed layers); a chunk
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
-const gpuFeedOn=() => new URLSearchParams(location.search).get('gpuFeed')!=='0';
 const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
-const gpuFeedEligible=() => Boolean(gpuFeedOn() && renderer?.engine && regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
+const gpuFeedEligible=() => Boolean(renderer?.engine && regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
 // A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
 // keeps its buffers), so a retired result is destroyed at that moment and not on a timer. gpuBytes() is what the canvas counts against its budget.
 const retiredWeather=new Set(); let gpuPassBytes=0;
@@ -2989,11 +2952,12 @@ function regionalStats() {
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
+  setBudget:() => {},evict:() => {},   // nothing budgets CPU field planes now; the tiled-weather wrapper (deleted with the CPU workers) still wraps these two
   workingBytes:()=>flow?.stats().inflightBytes??0,read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },checkGraphMemory:preflightNodeBakes,
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); flow?.reset();cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
-  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
@@ -4223,55 +4187,27 @@ function replayDetail() {
   keys.forEach((k,j) => { let w=0; for (let i=0;i<before[j].length;i++) w=Math.max(w,Math.abs(before[j][i]-now[k][i])); worst[k]=w; });
   return worst;
 }
-// H6 check tool (repro/shapecheck.mjs): the GPU shape result against the JS engine's and against a second GPU run, on this page's scene.
-// H10: the coast distance field on the GPU (scratch plane 9 after the node list) against the JS engine's coastField for the same node, the last one of the list.
-async function coastCheck(which='layers') {
-  flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
-  const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0');
-  window.coastKeep=[]; experiment.set('gpuShape','0'); window.history.replaceState(null,'',off); prefix=[]; evaluate(0);
-  const keep=window.coastKeep.filter(k => k.kind===which); window.coastKeep=null; window.history.replaceState(null,'',href); experiment.set('gpuShape','1');
-  if (!keep.length) return {error:'the JS engine ran no '+which+' pass'};
-  const js=keep[keep.length-1];
-  const engine=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
-  try {
-    const out=await engine.run(nodes.slice(),shapeContext(),null,{plane:9}), g=out.plane, b=js.box;
-    const diffs=[], far=1e4; let farOnly=0, gpuOnly=0, worst=null;
-    for (let y=b.y0;y<=b.y1;y++) for (let x=b.x0;x<=b.x1;x++) {
-      const i=y*grid+x, a=g[i], r=js.dist[i];
-      if (a>=far && r>=far) continue;
-      if (a>=far) { farOnly++; continue; } if (r>=far) { gpuOnly++; continue; }
-      const d=Math.abs(a-r); diffs.push(d); if (!worst || d>worst.d) worst={d,x,y,gpu:a,js:r};
-    }
-    diffs.sort((p,q) => p-q);
-    const at=f => diffs[Math.min(diffs.length-1,Math.floor(f*diffs.length))];
-    return {spacing,cells:diffs.length,max:diffs[diffs.length-1],p95:at(.95),p50:at(.5),worst,jsFarGpuNear:gpuOnly,gpuFarJsNear:farOnly,box:b};
-  } finally { engine.destroy(); }
-}
+// Repeat check (repro/shapecheck.mjs): two GPU evaluations of this page's scene give identical planes.
 async function shapeCompare() {
   const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
   const idle=async () => { for (let i=0;i<4000 && (shapePending || regionalFields?.pending?.());i++) await new Promise(r => setTimeout(r,10)); };
   if (regionalFields) {
-    const js=regionalFields.reference?.(); if (!js) return {error:'gpuShape is off or the scene fell back: '+(regionalFields.reason?.()||'knob 0')};
     const all={x0:0,y0:0,x1:worldGrid-1,y1:worldGrid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,masks:MASK_KEYS.map(k => r.fields[k])});
-    await idle(); const t0=performance.now(); const a=copy(grab(regionalFields.readCells(all))); const copyMs=performance.now()-t0;
-    const t1=performance.now(); const ref=copy(grab(js.readCells(all,{cacheResult:false}))); const jsMs=performance.now()-t1;
+    await idle(); const a=copy(grab(regionalFields.readCells(all)));
     regionalFields.changed(); await idle(); const b=copy(grab(regionalFields.readCells(all)));
-    return {grid:worldGrid,jsReadMs:jsMs,vsJs:comparePlanes(a,ref,worldGrid,MASK_KEYS),repeat:comparePlanes(a,b,worldGrid,MASK_KEYS)};
+    return {grid:worldGrid,repeat:comparePlanes(a,b,worldGrid,MASK_KEYS)};
   }
   flushEval(); await idle();
-  if (!shapeStudy.used) return {error:'gpuShape is off or the scene fell back: '+(shapeStudy.reason||'knob 0')};
-  const a=copy(live()),saved=experiment.get('gpuShape');
-  // gpuShapeOn reads the address first, so the JS reference has to change the address (H8b: the experiment value alone left the GPU running both sides).
-  const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0');
-  experiment.set('gpuShape','0'); window.history.replaceState(null,'',off); const t0=performance.now(); prefix=[]; evaluate(0); const jsMs=performance.now()-t0; const ref=copy(live()); experiment.set('gpuShape',saved??'1'); window.history.replaceState(null,'',href);
+  if (!shapeStudy.used) return {error:'the study scene has no GPU shape result'};
+  const a=copy(live());
   evaluate(0); await idle(); const b=copy(live());
-  return {grid,jsEvalMs:jsMs,vsJs:comparePlanes(a,ref,grid,MASK_KEYS),repeat:comparePlanes(a,b,grid,MASK_KEYS)};
+  return {grid,repeat:comparePlanes(a,b,grid,MASK_KEYS)};
 }
-// H6: under gpuShape 1 regional replay is replaced by one whole-map evaluation, so the regional check asks two other things: a fresh whole-map
+// Regional replay is one whole-map evaluation, so the regional check asks two other things: a fresh whole-map
 // evaluation read back equals the CPU copy, and a window evaluated alone (the four quadrants) equals the same crop of the whole.
 async function gpuRegionalCheck() {
   flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
-  if (!shapeStudy.used) throw new Error('gpuShape is off or the scene fell back to the JS engine: '+(shapeStudy.reason||'knob 0'));
+  if (!shapeStudy.used) throw new Error('the study scene has no GPU shape result yet');
   const engine=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT}),ctx=shapeContext();
   const whole=live(),planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
   let mismatches=0;
@@ -4307,33 +4243,10 @@ async function shapeLevel(factor=2) {
 // the map engine independently replays its graph through four regional reads.
 // Weather and GPU pixels have separate guards: this checks every brush plane.
 function checkRegionalFields() {
-  // A scene the passes refuse ran on the JS engine, so its regional check is the JS one below.
-  if(!config.map && gpuShapeOn() && (shapePending || shapeStudy.used))return gpuRegionalCheck();
   if(config.map)throw new Error('Run the regional field check on a 1024px study scene.');
-  if(!canExport())throw new Error('Wait for the scene and its flow bake before checking regional fields.');
-  flushEval();
-  const whole=live(),saved={regionalFields,worldSize,worldGrid},planes=Object.fromEntries(FIELD_KEYS.map(k=>[k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
-  let mismatches=0;
-  try {
-    // The JS regional engine is what this checks: take the address's gpuShape away while the fields are made (gpuShapeOn reads it first).
-    const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0'); window.history.replaceState(null,'',off);
-    worldSize=size;worldGrid=grid;try { regionalFields=makeRegionalFields(); } finally { window.history.replaceState(null,'',href); }
-    const middle=Math.floor(grid/2),cuts=[[0,middle-1],[middle,grid-1]];
-    for(const [y0,y1]of cuts)for(const [x0,x1]of cuts){
-      const part=regionalFields.readCells({x0,y0,x1,y1});
-      for(const key of FIELD_KEYS)for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
-        const expected=whole[key][y*grid+x],actual=part.fields[key][(y-y0)*part.gridWidth+x-x0];
-        if(expected===actual&&Number.isFinite(actual))continue;
-        const p=planes[key];p.mismatches++;mismatches++;p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity);
-        p.firstMismatch??={x,y,whole:expected,regional:actual};
-      }
-    }
-    return {grid,planes,mismatches};
-  } finally {
-    regionalFields?.clear();({regionalFields,worldSize,worldGrid}=saved);
-  }
+  return gpuRegionalCheck();
 }
-window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,coastCheck,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,reason:shapeStudy.reason,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
+window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),
@@ -4377,7 +4290,7 @@ window.sculptDebug.pagedWeatherCompare=async () => {
 };
 // H5b: the Time pass at two window aprons over the same shape (8x8, say): a second paged object at `other` cells of apron against the live one; max and count of the eroded height differences and the maps.
 window.sculptDebug.apronCompare=async other => {
-  const B=createPagedFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:regionalFields.reference(),device:() => renderer?.device,context:shapeContext,gesture:() => false,apron:other});
+  const B=createPagedFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => false,apron:other});
   configurePagedTime(B); const A=regionalFields,np=A.pageInfo().np,C=A.core; let maxE=0,over001=0,over01=0,mapBad=0,cells=0,at=null;
   const rd=(b,bytes) => readBuffer(renderer.device,b,0,bytes);
   for (let py=0;py<np;py++) for (let px=0;px<np;px++) {
