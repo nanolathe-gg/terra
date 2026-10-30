@@ -282,7 +282,7 @@ try {
     const events = await ev('__perf.ev'), draws = (await ev('__perf.draws')).filter(d => d.chunk), runs = (await ev('window.sculptRegion?.stats().gpuShape?.runLog || []')) || [];
     const marks = new Map(); for (const e of events) { if (e.type === 'move') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).t = e.t; if (e.type === 'rev') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).rev = e.rev; }
     const bakes = []; let lastRead = null;
-    for (const e of events) { if (e.type === 'read') lastRead = e; if (e.type === 'bake-end') { const start = e.t - e.ms, read = events.filter(r => r.type === 'read' && r.t <= start).at(-1); bakes.push({end: e.t, rev: e.rev ?? read?.rev ?? null}); } }
+    for (const e of events) { if (e.type === 'read') lastRead = e; if (e.type === 'bake-end') { const start = e.t - e.ms, read = events.filter(r => r.type === 'read' && r.t <= start).at(-1); bakes.push({end: e.t, rev: e.rev ?? read?.rev ?? null, key: e.x + ',' + e.y, level: e.level ?? 1}); } }
     const lat = [], share = []; let censored = 0;
     for (const [k, m] of marks) {
       if (m.t === undefined || m.rev == null) continue;
@@ -292,6 +292,18 @@ try {
       const run = runs.find(r => r.t >= m.t - 1 && r.doneAt); if (run) share.push((run.doneAt - m.t) / (d.t - m.t));
     }
     writeFileSync(`${out}/${mode}-events-drag.json`, JSON.stringify({t0: dragT0, events, draws}));
+    // H7b: the first picture is only the first dirty chunk to show the move. 'All' waits for every chunk the drag keeps rebaking (one that
+    // baked at least 10 times) to show it, which is what a picture of the whole edit needs.
+    const counts = {}; for (const b of bakes) counts[b.key] = (counts[b.key] ?? 0) + 1;
+    const dirty = Object.keys(counts).filter(k => counts[k] >= 10), all = [];
+    for (const [k, m] of marks) {
+      if (m.t === undefined || m.rev == null || !dirty.length) continue;
+      let worst = 0, ok = true;
+      for (const key of dirty) { const b = bakes.find(b => b.key === key && b.end >= m.t && b.rev != null && b.rev >= m.rev), d = b && draws.find(d => d.t >= b.end); if (!d) { ok = false; break; } worst = Math.max(worst, d.t - m.t); }
+      if (ok) all.push(worst);
+    }
+    result.drag.latencyAll = {dirtyChunks: dirty.length, measured: all.length, p50: q(all, .5), p95: q(all, .95), max: Math.max(...all, 0)};
+    result.drag.quarterBakes = bakes.filter(b => b.level > 1).length; result.drag.bakes = bakes.length;
     result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), shapeShareP50: q(share, .5), shapeShareP95: q(share, .95), shapeShareN: share.length};
   }
 
