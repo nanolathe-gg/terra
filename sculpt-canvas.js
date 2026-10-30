@@ -79,6 +79,18 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function chunkSize() { return canonicalSize; }
   async function bake(rect,exportArt=false,signal,stale=null) {
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
+    // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
+    const feed=await api.gpuFeedSource?.(signal);
+    if(feed){
+      signal?.throwIfAborted();
+      if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
+      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount),copyBytes=rect.width*rect.height*8;
+      trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
+      renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
+      const result=await renderer.renderChunk(request,{...options,quality:'full',feed});bakes++;
+      const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,fed:true,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
+    }
     const fields=await region(request,options,signal);
     // H7 2b: the scene changed while this bake waited for its fields; its image would be dropped, so it never reaches the GPU.
     if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
@@ -164,7 +176,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const key=rect.x+','+rect.y+','+size;let e=cache.get(key);
           if(!e&&holding)continue;
           if(!e){e=await bake(rect,false,undefined,()=>token!==epoch||false);if(token!==epoch){e.bitmap.close?.();break;}cache.set(key,e);cacheBytes+=e.bytes;}
-          else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{});checkHeap(input);e.heightPatch=keepHeight(input);}}
+          else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch&&!e.fed){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{});checkHeap(input);e.heightPatch=keepHeight(input);}}
           if(token!==epoch||cache.get(key)!==e)break;
           if(viewToken!==viewEpoch){rerun=true;break;}
           if(intersects(rect,v)){paint(e,v);overlays();presented();}await tick();
