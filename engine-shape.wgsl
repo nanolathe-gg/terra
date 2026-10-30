@@ -443,6 +443,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   }
   if (u.settle != 0u) { Sc[i] = best; return; }
   let influence = best; let w = bw;
+  if (u.coPutW != 0u) { Sc[4u * cells + i] = influence; }   // H10: the footprint the coast pass guards its crossings with (CW)
   let base = F[PH * cells + i];
   var value = base;
   let pbase = F[PP * cells + i];
@@ -1010,4 +1011,333 @@ fn stampCrystal(@builtin(global_invocation_id) g: vec3u) {
   F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
   F[PP * cells + i] = 1.0;
   F[PX * cells + i] = max(F[PX * cells + i], sm(0.2, 1.5, best));
+}
+
+// ---- H10: the coast pass (Lava's shore layers and fingers) ----
+// The coast planes live in the scratch buffer Sc after the hill's three planes (see CB..CFF). Every pass below runs over the node's coast box (the
+// region the host gives it: the footprint grown by the coast's reach), one thread per cell, reading only its own cells of the planes a previous pass
+// finished, so a repeat run is identical. Distances are world px, so the same passes serve every resolution.
+const CB = 3u; const CW = 4u; const CPX = 5u; const CPY = 6u; const CQX = 7u; const CQY = 8u; const CDD = 9u; const CSS = 10u; const CRR = 11u; const CUU = 12u; const CFF = 13u;
+const CNPL = 14u;
+
+fn cIdx(x: i32, y: i32) -> u32 {
+#ifdef PAGES
+  return lidx(x, y);
+#else
+  return u32(y) * u.grid + u32(x);
+#endif
+}
+fn cCells() -> u32 {
+#ifdef PAGES
+  return pcells();
+#else
+  return u.grid * u.grid;
+#endif
+}
+fn cInBox(x: i32, y: i32) -> bool { return x >= u.rx0 && x <= u.rx1 && y >= u.ry0 && y <= u.ry1; }
+
+// Before the node's stamp: the prefix height (B) over the box, and no footprint (W), no finger marks.
+@compute @workgroup_size(8, 8)
+fn coastInit(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  Sc[CB * cells + i] = F[PH * cells + i];
+  Sc[CW * cells + i] = 0.0; Sc[CUU * cells + i] = 0.0; Sc[CFF * cells + i] = 0.0;
+}
+
+// The nearest crossing of the sea (a point where the height meets the sea level along a grid edge) among the cell's four edges. A crossing needs the
+// footprint on one side at least; with coMoved, one side must also have changed side of the sea since the prefix (an older lake's coast under this
+// stroke's bank is that stroke's to shape). Also snapshots the heights the field was computed from (R).
+@compute @workgroup_size(8, 8)
+fn coastSeed(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y); let sea = u.sea;
+  let hi = F[PH * cells + i];
+  Sc[CRR * cells + i] = hi;
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var bd = 3.0e38; var bp = vec2f(-1.0e9, -1.0e9);
+  let wi = Sc[CW * cells + i]; let bi = Sc[CB * cells + i];
+  for (var k = 0; k < 4; k++) {
+    let ddx = select(0, 1, k == 0) + select(0, -1, k == 1); let ddy = select(0, 1, k == 2) + select(0, -1, k == 3);
+    let jx = x + ddx; let jy = y + ddy;
+    if (!cInBox(jx, jy)) { continue; }
+    let j = cIdx(jx, jy);
+    let hj = F[PH * cells + j];
+    if ((hi > sea) == (hj > sea)) { continue; }
+    if (wi <= 0.0 && Sc[CW * cells + j] <= 0.0) { continue; }
+    if (u.coMoved != 0u && (bi > sea) == (hi > sea) && (Sc[CB * cells + j] > sea) == (hj > sea)) { continue; }
+    let t = abs(hi - sea) / max(1.0e-6, abs(hi - hj));
+    let p = vec2f(wx + f32(ddx) * t * u.spacing, wy + f32(ddy) * t * u.spacing);
+    let d2 = dot(p - vec2f(wx, wy), p - vec2f(wx, wy));
+    if (d2 < bd) { bd = d2; bp = p; }
+  }
+  let dst = select(CPX, CQX, u.coSrc != 0u);
+  Sc[dst * cells + i] = bp.x; Sc[(dst + 1u) * cells + i] = bp.y;
+}
+
+// One jump of the flood: coSrc selects the source pair of planes (0: P, 1: Q); the result goes to the other pair. A strict < keeps the first of equal candidates.
+@compute @workgroup_size(8, 8)
+fn coastJump(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  let sx = select(CPX, CQX, u.coSrc != 0u); let dx0 = select(CQX, CPX, u.coSrc != 0u);
+  let me = vec2f(f32(x) * u.spacing, f32(y) * u.spacing);
+  var bd = 3.0e38; var bp = vec2f(-1.0e9, -1.0e9);
+  for (var oy = -1; oy <= 1; oy++) { for (var ox = -1; ox <= 1; ox++) {
+    let nx = x + ox * u.coStep; let ny = y + oy * u.coStep;
+    if (!cInBox(nx, ny)) { continue; }
+    let j = cIdx(nx, ny);
+    let p = vec2f(Sc[sx * cells + j], Sc[(sx + 1u) * cells + j]);
+    if (p.x < -1.0e8) { continue; }
+    let d2 = dot(p - me, p - me);
+    if (d2 < bd) { bd = d2; bp = p; }
+  } }
+  Sc[dx0 * cells + i] = bp.x; Sc[(dx0 + 1u) * cells + i] = bp.y;
+}
+
+// D: the distance to that point (world px), or the far value where no crossing came.
+@compute @workgroup_size(8, 8)
+fn coastFinish(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  let sx = select(CPX, CQX, u.coSrc != 0u);
+  let p = vec2f(Sc[sx * cells + i], Sc[(sx + 1u) * cells + i]);
+  var d = u.coFar;
+  if (p.x > -1.0e8) { d = length(p - vec2f(f32(x) * u.spacing, f32(y) * u.spacing)); }
+  Sc[CDD * cells + i] = d;
+}
+
+// The signed distance (positive on dry ground) into plane P.x, ready for the blur.
+@compute @workgroup_size(8, 8)
+fn coastSd(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  let d = Sc[CDD * cells + i];
+  Sc[CPX * cells + i] = select(-d, d, Sc[CRR * cells + i] > u.sea);
+}
+// blurredBox: a box blur of radius blurR from plane bsrc to bdst, clamped at the box edge (the pass region).
+@compute @workgroup_size(8, 8)
+fn coastBlurH(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); var sum = 0.0; let rr = i32(u.blurR);
+  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + cIdx(clamp(x + k, u.rx0, u.rx1), y)]; }
+  Sc[u.bdst * cells + cIdx(x, y)] = sum / f32(2 * rr + 1);
+}
+@compute @workgroup_size(8, 8)
+fn coastBlurV(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); var sum = 0.0; let rr = i32(u.blurR);
+  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + cIdx(x, clamp(y + k, u.ry0, u.ry1))]; }
+  Sc[u.bdst * cells + cIdx(x, y)] = sum / f32(2 * rr + 1);
+}
+
+// Debug and checks: one scratch plane (bsrc) over the rectangle into Out, as floats.
+@compute @workgroup_size(256)
+fn packPlane(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: vec3u) {
+  let j = g.y * (ng.x * 256u) + g.x;
+  let w = u32(u.rx1 - u.rx0 + 1); let h = u32(u.ry1 - u.ry0 + 1);
+  if (j >= w * h) { return; }
+  let cx = i32(u.rx0) + i32(j % w); let cy = i32(u.ry0) + i32(j / w);
+  Out[j] = bitcast<u32>(Sc[u.bsrc * cCells() + cIdx(cx, cy)]);
+}
+
+// ---- coast fingers ----
+// Thumb fingers (retail lava-1: tendrils and stubs in clusters, tapering to a round tip, now and then forked): one per jittered lattice site in the shape's
+// frame; the coast point at tangent offset tau from a site's axis reaches the finger's outline. Everything about a finger comes from its site's hashes.
+const THUMB_CELL = 44.0;
+fn uhash(i: i32, j: i32, salt: u32, k: u32) -> f32 { return hashi(i, j, salt ^ k) * 0.5 + 0.5; }
+fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
+  let tx = -ny; let ty = nx; let salt = u.seed;
+  let ci = i32(floor(lx / THUMB_CELL)); let cj = i32(floor(ly / THUMB_CELL));
+  var best = 0.0;
+  let fa = u.cfAmount; let spread = u.cfSpread; let size = u.cfSize;
+  for (var j = cj - 1; j <= cj + 1; j++) { for (var i = ci - 1; i <= ci + 1; i++) {
+    let ax = (f32(i) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x5a7u)) * THUMB_CELL;
+    let ay = (f32(j) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x1d3u)) * THUMB_CELL;
+    let chance = clamp((0.7 + 1.5 * spread * vnoise(ax / 130.0, ay / 130.0, salt ^ 0x1f3u)) * fa, 0.04 * clamp(fa, 0.0, 1.0), 0.97);
+    if (uhash(i, j, salt, 0x31fu) >= chance) { continue; }
+    // Only sites within half a cell of the coast along its normal grow a finger here.
+    if (abs((lx - ax) * nx + (ly - ay) * ny) >= THUMB_CELL * 0.5) { continue; }
+    let L = amount * 52.0 * (0.3 + 2.0 * pow(uhash(i, j, salt, 0x4e5u), 2.4)) * size;
+    let fork = L > 40.0 * amount * size && L < 95.0 * amount * size && uhash(i, j, salt, 0x2c9u) > 0.8;
+    var h0 = clamp(5.0 + 0.15 * L / max(amount, 0.2) + (uhash(i, j, salt, 0x6b1u) - 0.5) * 6.0, 7.0, 24.0) * min(1.0, 0.4 + amount * 0.6);
+    if (fork) { h0 = clamp(h0 * 1.3, 16.0, 26.0); }
+    let tau = abs((lx - ax) * tx + (ly - ay) * ty);
+    if (tau >= h0) { continue; }
+    let ht = max(4.5, 0.8 * h0); let Ls = max(L - ht, 0.0);
+    let sh = (tau - ht) / (h0 - ht);
+    var r = Ls + sqrt(max(ht * ht - tau * tau, 0.0));
+    if (tau > ht) { r = Ls * (1.0 - sh * sh); }
+    if (fork && r > 0.5 * L) { let wn = 0.42 * h0; if (tau < wn) { r = min(r, 0.5 * L + (r - 0.5 * L) * tau / wn); } }
+    best = max(best, r);
+  } }
+  return best + vnoise(lx / 12.0, ly / 12.0, salt ^ 0x5c1u) * 1.6;
+}
+// thumbReach: the world position and inland normal go into the shape's frame; the lattice is turned 26 degrees off the axes.
+fn thumbReach(wx: f32, wy: f32, nx: f32, ny: f32, amount: f32) -> f32 {
+  var lx = wx; var ly = wy; var mx = nx; var my = ny;
+  if (u.framed != 0u) {
+    lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5;
+    mx = u.inv0 * nx + u.inv2 * ny; my = u.inv1 * nx + u.inv3 * ny;
+    var ml = sqrt(mx * mx + my * my); if (ml == 0.0) { ml = 1.0; }
+    mx = mx / ml; my = my / ml;
+  }
+  let ca = 0.8988; let sa = 0.4384;
+  return thumbAt(ca * lx + sa * ly, -sa * lx + ca * ly, ca * mx + sa * my, -sa * mx + ca * my, amount);
+}
+// The inland unit normal at a cell: the gradient of the blurred signed distance (plane CSS), clamped at the box.
+fn coastNormal(x: i32, y: i32, cells: u32) -> vec3f {
+  let gx = Sc[CSS * cells + cIdx(min(x + 1, u.rx1), y)] - Sc[CSS * cells + cIdx(max(x - 1, u.rx0), y)];
+  let gy = Sc[CSS * cells + cIdx(x, min(y + 1, u.ry1))] - Sc[CSS * cells + cIdx(x, max(y - 1, u.ry0))];
+  let len = sqrt(gx * gx + gy * gy);
+  if (len < 1.0e-3) { return vec3f(0.0, 0.0, 0.0); }
+  return vec3f(gx / len, gy / len, 1.0);
+}
+// At each cell near the coast the finger field is read at the nearest coast point (back along the normal) and the cell is raised to a flat tongue (or
+// sunk, for an inlet). U marks the raised cells for the connectivity march; F keeps a flat finger's height for the layers.
+@compute @workgroup_size(8, 8)
+fn coastFinger(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y); let sea = u.sea;
+  let dist = Sc[CDD * cells + i];
+  if (dist > u.coLimit) { return; }
+  let nm = coastNormal(x, y, cells);
+  if (nm.z == 0.0) { return; }
+  let sd = select(-dist, dist, Sc[CRR * cells + i] > sea);
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  let low = select(min(6.0, 0.3 * (u.baseH - sea)), max(2.5, u.coFLow), u.coFlatOn != 0u);
+  let f = clamp(thumbReach(wx - sd * nm.x, wy - sd * nm.y, nm.x, nm.y, u.coFAmt), -u.coFReach, u.coFReach);
+  if (sd < 0.0 && -sd < f) {
+    let uu = -sd / f;
+    F[PH * cells + i] = clamp(sea + low * select(0.7 + 0.3 * (1.0 - sm(0.0, 1.0, uu)), 1.0, u.coFlatOn != 0u), u.minH, u.maxH);
+    Sc[CUU * cells + i] = 1.0;
+    if (u.coFlatOn != 0u) { Sc[CFF * cells + i] = low; }
+  } else if (sd > 0.0 && sd < -f) {
+    F[PH * cells + i] = clamp(sea - 0.5 - 2.5 * (1.0 - sd / -f), u.minH, u.maxH);
+  }
+}
+// A tongue is land joined to land. Instead of flooding out from the old dry ground, a raised cell marches back along its normal toward the coast and keeps
+// its height only if it reaches ground that was dry before the fingers by way of raised cells alone (a finger is one prism from the coast to its tip).
+@compute @workgroup_size(8, 8)
+fn coastJoin(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y); let sea = u.sea;
+  if (Sc[CUU * cells + i] == 0.0) { return; }
+  let nm = coastNormal(x, y, cells);
+  var ok = false;
+  if (nm.z != 0.0) {
+    let reachPx = Sc[CDD * cells + i] + 2.0 * u.spacing;
+    let step = 0.5 * u.spacing; let steps = i32(ceil(reachPx / step));
+    let p0 = vec2f(f32(x), f32(y));
+    for (var k = 1; k <= steps; k++) {
+      let p = p0 + vec2f(nm.x, nm.y) * (f32(k) * step / u.spacing);
+      let cx = i32(floor(p.x + 0.5)); let cy = i32(floor(p.y + 0.5));
+      if (!cInBox(cx, cy)) { break; }
+      let j = cIdx(cx, cy);
+      if (Sc[CRR * cells + j] > sea) { ok = true; break; }
+      if (Sc[CUU * cells + j] == 0.0) { break; }
+    }
+  }
+  if (!ok) { F[PH * cells + i] = Sc[CRR * cells + i]; Sc[CFF * cells + i] = 0.0; }
+}
+
+// ---- shore layers ----
+// Circular layers: the bites. One thread per jittered lattice site (in the shape's frame); a bite is kept only if it straddles the waterline. A site is four
+// floats at the end of the scratch buffer: world x, world y, radius (negative: none), spacing factor.
+@compute @workgroup_size(8, 8)
+fn coastSites(@builtin(global_invocation_id) g: vec3u) {
+  if (g.x >= u.coSNI || g.y >= u.coSNJ) { return; }
+  let i = u.coSI0 + i32(g.x); let j = u.coSJ0 + i32(g.y);
+  let cells = cCells(); let salt = u.seed; let cv = u.coCV; let C = u.coRc * 1.3;
+  let at = (CNPL * cells + (g.y * u.coSNI + g.x) * 4u);
+  Sc[at + 2u] = -1.0;
+  if (hashi(i, j, salt ^ 0x91du) < -0.55 + 0.45 * cv) { return; }
+  let lx = (f32(i) + 0.5 + 0.4 * hashi(i, j, salt ^ 0x13bu)) * C; let ly = (f32(j) + 0.5 + 0.4 * hashi(i, j, salt ^ 0x5c9u)) * C;
+  var wx = lx; var wy = ly;
+  if (u.framed != 0u) {
+    // the frame's inverse of inv: the forward transform
+    let det = u.inv0 * u.inv3 - u.inv1 * u.inv2;
+    let a = u.inv3 / det; let b = -u.inv1 / det; let c = -u.inv2 / det; let d = u.inv0 / det;
+    let e = -(a * u.inv4 + c * u.inv5); let f = -(b * u.inv4 + d * u.inv5);
+    wx = a * lx + c * ly + e; wy = b * lx + d * ly + f;
+  }
+  let gx = i32(floor(wx / u.spacing + 0.5)); let gy = i32(floor(wy / u.spacing + 0.5));
+  if (gx < u.coBx0 || gx > u.coBx1 || gy < u.coBy0 || gy > u.coBy1) { return; }
+  let u0 = hashi(i, j, salt ^ 0x77fu) * 0.5 + 0.5; let k = cIdx(gx, gy);
+  let dk = Sc[CDD * cells + k]; let sd = select(-dk, dk, Sc[CRR * cells + k] > u.sea);
+  let r = u.coRc * ((0.4 + pow(u0, 1.3)) * (1.0 - cv) + (0.3 + 1.2 * u0 * u0) * cv);
+  let sc = 1.0 - cv + cv * (0.55 + 0.9 * (hashi(i, j, salt ^ 0x2c1u) * 0.5 + 0.5));
+  if (sd < -0.5 * r || sd > 0.8 * r) { return; }
+  Sc[at] = wx; Sc[at + 1u] = wy; Sc[at + 2u] = r; Sc[at + 3u] = sc;
+}
+// The land's height as a staircase in the distance from the coast (or, scalloped, from the nearest bite's edge), the layers' edges wandering with
+// position-only noise in the shape's frame. Layer k tops out at sea + foot + riser k; the last riser meets the plain. Weights (varied risers) are the
+// node's mask-write records after its own writes: x the riser's height weight, y the height below it (both in risers).
+@compute @workgroup_size(8, 8)
+fn coastLayers(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y); let sea = u.sea;
+  let raw = Sc[CRR * cells + i];
+  if (!(raw > sea)) { return; }
+  let d = Sc[CDD * cells + i]; let base = Sc[CB * cells + i];
+  let W = u.coW; let vary = u.coVary; let n = i32(u.coN); let salt = u.seed;
+  let rise = u.baseH - sea; let foot = min(6.0, 0.3 * rise); var riser = u.coRiser;
+  if (riser <= 0.0) { riser = (rise - foot) / f32(n); }
+  if (d >= u.coLReach) { if (Sc[CW * cells + i] > 0.0 && raw < base) { F[PH * cells + i] = base; } return; }
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let scal = u.coScal != 0u;
+  let ledge = clamp(u.coLedge + u.coIrr * 0.3 * vnoise(lx / 33.0, ly / 33.0, salt ^ 0x2b1u), 0.3, 0.95);
+  var dd = d;
+  if (scal) {
+    let C = u.coRc * 1.3; let rs = u.coRs;
+    let ia = max(i32(floor((lx - rs) / C)), u.coSI0); let ib = min(i32(floor((lx + rs) / C)), u.coSI0 + i32(u.coSNI) - 1);
+    let ja = max(i32(floor((ly - rs) / C)), u.coSJ0); let jb = min(i32(floor((ly + rs) / C)), u.coSJ0 + i32(u.coSNJ) - 1);
+    for (var j = ja; j <= jb; j++) { for (var ii = ia; ii <= ib; ii++) {
+      let at = CNPL * cells + (u32(j - u.coSJ0) * u.coSNI + u32(ii - u.coSI0)) * 4u;
+      let r = Sc[at + 2u];
+      if (r < 0.0) { continue; }
+      dd = min(dd, (length(vec2f(wx - Sc[at], wy - Sc[at + 1u])) - r) / Sc[at + 3u]);
+    } }
+    dd = max(0.0, dd);
+  }
+  let wob = u.coIrr * select(1.0, 0.4, scal) * (0.55 * vnoise(lx / 42.0, ly / 42.0, salt ^ 0x7a1u) + 0.25 * vnoise(lx / 14.0, ly / 14.0, salt ^ 0x3c5u) + 0.12 * vnoise(lx / 6.0, ly / 6.0, salt ^ 0x5e3u));
+  var Wl = W;
+  if (vary > 0.0 || u.coSpread > 0.0) { Wl = W * exp((0.5 * vary + 0.5 * u.coSpread) * vnoise(lx / 75.0, ly / 75.0, salt ^ 0x91fu)); }
+  var meanderQ = 0.0;
+  if (u.coMeander > 0.0 && !scal) {
+    meanderQ = u.coMeander * (0.55 * vnoise(lx / (3.6 * W), ly / (3.6 * W), salt ^ 0x1d7u) + 0.35 * vnoise(lx / (1.6 * W), ly / (1.6 * W), salt ^ 0x4c3u) + 0.2 * vnoise(lx / (0.7 * W), ly / (0.7 * W), salt ^ 0x2f9u));
+  }
+  var extraQ = 0.0;
+  if (vary > 0.0) { extraQ = vary * (0.4 * vnoise(lx / 17.0, ly / 17.0, salt ^ 0x6d3u) + 0.2 * vnoise(lx / 8.0, ly / 8.0, salt ^ 0x4e1u)); }
+  let q = max(0.0, dd / Wl + wob + meanderQ + extraQ);
+  if (q >= f32(n) + select(0.0, 1.0, vary > 0.0)) { if (raw < base) { F[PH * cells + i] = base; } return; }
+  var level = 0.0;
+  if (vary > 0.0) {
+    let k0 = max(0, i32(floor(q)) - 2); let k1 = min(n - 1, i32(floor(q)) + 1);
+    level = foot + riser * MW[u.mwBase + u.nwrites + u32(k0)].y;
+    for (var k = k0; k <= k1; k++) {
+      let wsz = 24.0 + 9.0 * f32(k % 4);
+      let off = vary * 0.45 * vnoise(lx / wsz, ly / wsz, salt ^ u32(0x3a7 + k * 977));
+      level = level + riser * MW[u.mwBase + u.nwrites + u32(k)].x * sm(f32(k) + ledge + off, f32(k) + 1.0 + off, q);
+    }
+  } else {
+    let k = floor(q);
+    level = foot + riser * (k + sm(ledge, 1.0, q - k));
+  }
+  // Fingers stay as flat as they were laid, under the ledge they would be raised to.
+  let ff = Sc[CFF * cells + i];
+  if (ff > 0.0) { level = min(level, ff); }
+  F[PH * cells + i] = clamp(min(min(base, u.baseH), sea + level * sm(0.0, 5.0, d)) + max(0.0, base - u.baseH), u.minH, u.maxH);
 }

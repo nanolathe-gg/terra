@@ -1704,6 +1704,7 @@ function thumbAt(s,lx,ly,nx,ny,amount) {
 const coastFingerLimit=s => .5*s.radius*2**((s.bankWidth-.5)*1.3)+spacing*3;
 function coastFingers(s,sea,box) {
   const raw=heights.slice(),dist=coastField(s,raw,sea,box),n=raw.length,sd=new Float32Array(n);
+  if (window.coastKeep) window.coastKeep.push({kind:'fingers',dist:dist.slice(),box:{...box},raw:raw.slice()});
   const bankScale=2**((s.bankWidth-.5)*1.3),reach=.5*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
   // A finger stands as high as the lowest layer (LAYER_FOOT), a little lower at its tip; any lower and the
   // shader's relief reads it as lava and shadow, a thin dark spike.
@@ -1841,6 +1842,7 @@ function coastLayers(s,sea,box) {
     for (let k=0;k<n;k++) { weight[k]=1+.6*vary*hash(k,7,salt^0x2e9); total+=weight[k]; }
     for (let k=0;k<n;k++) { weight[k]*=riser*n/total; cum[k+1]=cum[k]+weight[k]; }
   }
+  if (window.coastKeep) window.coastKeep.push({kind:'layers',dist:dist.slice(),box:{...box},raw:raw.slice()});
   const sites=scalloped?circleSites(s,raw,dist,sea,box,Math.max(8,s.layerCircle)):null;
   // Sites by bucket, each covering a bite's whole influence (its radius plus the layers beyond it).
   const bucketBox=s.coastWholeBox??box,bucketCells=scalloped?Math.ceil((1.4*Math.max(8,s.layerCircle)+clamp(s.lavaCircleVary||0,0,1)*.1*Math.max(8,s.layerCircle)+n*W*(1+.45*clamp(s.lavaCircleVary||0,0,1)))/spacing):1,bw=Math.floor((bucketBox.x1-bucketBox.x0)/bucketCells)+1,bh=Math.floor((bucketBox.y1-bucketBox.y0)/bucketCells)+1;
@@ -4211,6 +4213,29 @@ function replayDetail() {
   return worst;
 }
 // H6 check tool (repro/shapecheck.mjs): the GPU shape result against the JS engine's and against a second GPU run, on this page's scene.
+// H10: the coast distance field on the GPU (scratch plane 9 after the node list) against the JS engine's coastField for the same node, the last one of the list.
+async function coastCheck(which='layers') {
+  flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
+  const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0');
+  window.coastKeep=[]; experiment.set('gpuShape','0'); window.history.replaceState(null,'',off); prefix=[]; evaluate(0);
+  const keep=window.coastKeep.filter(k => k.kind===which); window.coastKeep=null; window.history.replaceState(null,'',href); experiment.set('gpuShape','1');
+  if (!keep.length) return {error:'the JS engine ran no '+which+' pass'};
+  const js=keep[keep.length-1];
+  const engine=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
+  try {
+    const out=await engine.run(nodes.slice(),shapeContext(),null,{plane:9}), g=out.plane, b=js.box;
+    const diffs=[], far=1e4; let farOnly=0, gpuOnly=0, worst=null;
+    for (let y=b.y0;y<=b.y1;y++) for (let x=b.x0;x<=b.x1;x++) {
+      const i=y*grid+x, a=g[i], r=js.dist[i];
+      if (a>=far && r>=far) continue;
+      if (a>=far) { farOnly++; continue; } if (r>=far) { gpuOnly++; continue; }
+      const d=Math.abs(a-r); diffs.push(d); if (!worst || d>worst.d) worst={d,x,y,gpu:a,js:r};
+    }
+    diffs.sort((p,q) => p-q);
+    const at=f => diffs[Math.min(diffs.length-1,Math.floor(f*diffs.length))];
+    return {spacing,cells:diffs.length,max:diffs[diffs.length-1],p95:at(.95),p50:at(.5),worst,jsFarGpuNear:gpuOnly,gpuFarJsNear:farOnly,box:b};
+  } finally { engine.destroy(); }
+}
 async function shapeCompare() {
   const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
   const idle=async () => { for (let i=0;i<4000 && (shapePending || regionalFields?.pending?.());i++) await new Promise(r => setTimeout(r,10)); };
@@ -4297,7 +4322,7 @@ function checkRegionalFields() {
     regionalFields?.clear();({regionalFields,worldSize,worldGrid}=saved);
   }
 }
-window.sculptDebug = {shapeCompare,shapeLevel,shape:() => ({pending:shapePending,reason:shapeStudy.reason,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
+window.sculptDebug = {coastCheck,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,reason:shapeStudy.reason,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),

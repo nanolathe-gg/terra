@@ -42,11 +42,11 @@ function shapeMaskWrites(kind, q, sat) {
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'sOn', 'sWater', 'sDome', 'sSteps', 'sShelfSteps'].map(k => [k, 'u']),
-  ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy'].map(k => [k, 'i']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'sOn', 'sWater', 'sDome', 'sSteps', 'sShelfSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'coFlatOn'].map(k => [k, 'u']),
+  ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary'].map(k => [k, 'f'])];
+    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -238,8 +238,10 @@ export function nodeSupport(n, c) {
   }
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   // The coast pass runs for water strokes only (hasCoastPass in sculpt.js); a world default must not refuse its hills and plateaus.
-  if (water && ((q.fingerCoast >= .5 && q.fingers > 0) || Math.round(q.shoreLayers) >= 1)) return 'coast pass';
-  if (water && (q.fingers > 0 || q.shorePlates > 0)) return 'water fingers, bank or plates';
+  // H10: the coast pass (fingers on the joined coast as thumbs, layers in styles 0 and 1). Ribs fingers and the mounds style wait for the owner's ruling.
+  if (water && q.fingerCoast >= .5 && q.fingers > 0 && !(q.fingerBlunt >= .5)) return 'coast fingers without thumbs';
+  if (water && Math.round(q.shoreLayers) >= 1 && Math.round(q.layerStyle) === 2) return 'layer style 2 (mounds)';
+  if (water && ((q.fingers > 0 && !(q.fingerCoast >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
   return null;
 }
 
@@ -400,6 +402,7 @@ export function prepareNode(n, geom, c) {
       fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,
       hole: n.hole ? 1 : 0, hx: n.hole?.x ?? 0, hy: n.hole?.y ?? 0, hR: n.hole?.R ?? 0, hRough: n.hole?.rough ?? 0, hSeed: n.hole?.seed ?? 0,
       nSect: rim ? rim.sect.length : 0, nGap: rim ? rim.gaps.length : 0, gapHw: rim?.hw ?? 0}};
+  if (water && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
   const count = Math.round(q.craterlets || 0), centre = pts[pts.length >> 1], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };
@@ -425,6 +428,51 @@ export function prepareNode(n, geom, c) {
   return {multi: out};
 }
 
+// ---- the coast pass (H10): fingers on the joined coast and shore layers, after the stroke is swept (stampCoastShore in sculpt.js) ----
+// How far the layers reach from the coast (px), the skip distance included (coastLayerReach). The mounds style (2) is not on the GPU path.
+const coastLayerReach = q => {
+  const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), style = Math.round(q.layerStyle);
+  if (style === 1) { const cv = clamp(q.lavaCircleVary || 0, 0, 1); return n * W * (1 + .45 * cv) + 2.8 * Math.max(8, q.layerCircle) * (1 + .07 * cv) + 2 * W; }
+  const meander = clamp(q.lavaMeander || 0, 0, 3), spread = clamp(q.lavaSpread || 0, 0, 2), vary = clamp(q.layerVary, 0, 1);
+  if (meander > 0 || spread > 0) { const wide = Math.max(1 + .6 * vary, Math.exp(.5 * (vary + spread))); return (n + 1 + meander) * W * wide + 2 * W; }
+  return n * W * (1 + .6 * vary) + 2 * W;
+};
+// The coast pass of a deep or shallow stroke, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
+// beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
+// size of the circular bites' lattice.
+function coastSetup(q, geom, region, bankScale, radius, inv, seed) {
+  const fingers = q.fingerCoast >= .5 && q.fingers > 0, layers = Math.round(q.shoreLayers) >= 1;
+  if (!fingers && !layers) return null;
+  const {grid, spacing, refSpacing = spacing} = geom;
+  const fReach = .5 * radius * bankScale, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach);
+  const m = Math.ceil(reach / spacing) + 12, box = expand(region, m, grid), blurR = Math.max(1, Math.round(10 * refSpacing / spacing));
+  const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), vary = clamp(q.layerVary, 0, 1), scal = layers && Math.round(q.layerStyle) === 1;
+  const Rc = Math.max(8, q.layerCircle), cv = clamp(q.lavaCircleVary || 0, 0, 1), C = Rc * 1.3, flat = q.fingerHeight > 0;
+  const extra = [];
+  if (layers && vary > 0) {
+    const w = []; let total = 0;
+    for (let k = 0; k < n; k++) { w.push(1 + .6 * vary * hash(k, 7, seed ^ 0x2e9)); total += w[k]; }
+    let cum = 0;
+    for (let k = 0; k < n; k++) { const wn = w[k] * n / total; extra.push([wn, cum, 0, 0]); cum += wn; }
+  }
+  let sites = {i0: 0, j0: 0, ni: 0, nj: 0};
+  if (scal) {
+    const cs = [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]].map(([x, y]) => { const wx = x * spacing, wy = y * spacing; return inv ? [inv[0] * wx + inv[2] * wy + inv[4], inv[1] * wx + inv[3] * wy + inv[5]] : [wx, wy]; });
+    const i0 = Math.floor(Math.min(...cs.map(c => c[0])) / C) - 1, i1 = Math.ceil(Math.max(...cs.map(c => c[0])) / C) + 1, j0 = Math.floor(Math.min(...cs.map(c => c[1])) / C) - 1, j1 = Math.ceil(Math.max(...cs.map(c => c[1])) / C) + 1;
+    sites = {i0, j0, ni: i1 - i0 + 1, nj: j1 - j0 + 1};
+  }
+  return {
+    box, readR: m + blurR + 2, fingers, layers, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, extra,
+    u: {
+      coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius * bankScale / 140, .35, 1), coFLow: q.fingerHeight, coFlatOn: flat ? 1 : 0,
+      cfAmount: q.fingerAmount ?? 1, cfSpread: q.fingerSpread ?? .5, cfSize: q.fingerSize ?? 1,
+      coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: clamp(q.lavaMeander || 0, 0, 3),
+      coLReach: lReach, coRiser: q.layerRiser > 0 ? q.layerRiser : 0, coScal: scal ? 1 : 0, coRc: Rc, coCV: cv, coRs: 1.4 * Rc + cv * .1 * Rc + n * W * (1 + .45 * cv) + spacing,
+      coSI0: sites.i0, coSJ0: sites.j0, coSNI: sites.ni, coSNJ: sites.nj, coBx0: box.x0, coBy0: box.y0, coBx1: box.x1, coBy1: box.y1,
+    },
+  };
+}
+
 const expand = (r, m, grid) => ({x0: Math.max(0, r.x0 - m), y0: Math.max(0, r.y0 - m), x1: Math.min(grid - 1, r.x1 + m), y1: Math.min(grid - 1, r.y1 + m)});
 const intersect = (a, b) => { const r = {x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1)}; return r.x0 > r.x1 || r.y0 > r.y1 ? null : r; };
 
@@ -444,7 +492,8 @@ export function preprocessShader(text, defines = []) {
 // ---- the GPU side ----
 // refSpacing: the final grid's spacing; the hill's blur is defined in world units (2 final cells), so a coarser level uses the whole number of its own cells nearest that distance (1 at double spacing).
 // The smooth radii (cells) of the nodes before ops[j]: how far a window must reach past the point it reads (their neighbourhood reads shrink the exact area).
-const windowMargin = (ops, j) => { let m = 0; for (let k = 0; k < j; k++) m += ops[k].p?.smoothR || 0; return m; };
+const readRadius = p => p?.smoothR || p?.coast?.readR || 0;
+const windowMargin = (ops, j) => { let m = 0; for (let k = 0; k < j; k++) m += readRadius(ops[k].p); return m; };
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
   const raw = await (await fetch('/engine-shape.wgsl')).text();
   const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
@@ -460,7 +509,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'packPlane'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;
@@ -469,7 +518,9 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const F = buf(6 * cells * 4, ST | CD | CS, 'shape planes'), Mk = buf(7 * cells * 4, ST | CD | CS, 'shape masks');
   let Nz = null, Sc = null, dummy = null, queue = Promise.resolve(), peak = 0, last = {};
-  const scratch = () => { Nz ??= buf(7 * cells * 4, ST, 'shape noise'); Sc ??= buf(3 * cells * 4, ST, 'shape scratch'); };
+  // H10: the scratch planes are three (the hill's blur), or CO_PLANES plus the circular bites when the node list has a coast pass.
+  const CO_PLANES = 14, scFloats = (n, sites) => sites < 0 ? 3 * n : CO_PLANES * n + sites;
+  const scratch = floats => { Nz ??= buf(7 * cells * 4, ST, 'shape noise'); if (!Sc || Sc.size < floats * 4) { const old = Sc; Sc = buf(floats * 4, ST, 'shape scratch'); old?.destroy(); } };
   // H5b: a page is a pw x ph block of the map with its own planes and masks (the shader's lidx); its noise is evaluated directly (u.direct), so only the
   // scratch weights of the hill's blur are shared: one buffer, grown to the largest target.
   let pageScratch = null;
@@ -480,8 +531,8 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   }
 
   // Evaluate `list` over `rect` (cells, inclusive; null = the whole map) and read the rectangle back. One at a time, in order (the study).
-  function run(list, ctx, rect, {readback = true, release = false} = {}) {
-    const job = queue.then(async () => { const h = submit(list, ctx, rect, {readback, release}); await h.done; return h.land ? await h.land : null; });
+  function run(list, ctx, rect, {readback = true, release = false, plane = null} = {}) {
+    const job = queue.then(async () => { const h = submit(list, ctx, rect, {readback, release, plane}); await h.done; return h.land ? await h.land : null; });
     queue = job.catch(() => {});
     return job;
   }
@@ -489,15 +540,14 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   // (only with readback) resolves to the rectangle's planes. The queue is in order on one device, so a later submit sees this one's writes.
   // readRect: the rectangle to read back when it is not the one evaluated (the cells changed since the last read); readOnly: no shape passes,
   // only the read of readRect.
-  function submit(list, ctx, rect, {readback = true, release = false, readRect = null, readOnly = false, target = null, prepare = null} = {}) {
+  function submit(list, ctx, rect, {readback = true, release = false, readRect = null, readOnly = false, target = null, prepare = null, plane = null} = {}) {
     const t0 = performance.now();
     const whole = target ? intersect({x0: target.ox, y0: target.oy, x1: target.ox + target.pw - 1, y1: target.oy + target.ph - 1}, {x0: 0, y0: 0, x1: grid - 1, y1: grid - 1}) : {x0: 0, y0: 0, x1: grid - 1, y1: grid - 1};
     const R = rect ? intersect(rect, whole) : whole;
     const P = readRect ? intersect(readRect, whole) : R;
     if (!R || (readback && !P)) return {done: Promise.resolve(), land: null, rect: null};
     const TF = target ? target.F : F, TMk = target ? target.Mk : Mk;
-    if (target) { if (!readOnly && (!pageScratch || pageScratch.size < 3 * target.pw * target.ph * 4)) { pageScratch?.destroy(); pageScratch = buf(3 * target.pw * target.ph * 4, ST, 'page scratch'); } }
-    else if (!readOnly) scratch();
+    let coastSites = -1;   // the longest list of circular bites among the coast nodes (floats), or -1 when none has a coast pass
     dummy ??= buf(16, ST, 'shape unused');
     const expandIn = (r, m) => intersect({x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m}, whole);
     const geom = {grid, spacing, refSpacing};
@@ -512,6 +562,9 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     // Phase 1: prepare every node (segment and mask-write lists are shared by the evaluation and its windows).
     const prepared = [];
     for (const n of list) { const p0 = (prepare || prepareNode)(n, geom, ctx); if (p0.multi) prepared.push(...p0.multi); else prepared.push(p0); }
+    for (const p of prepared) if (p.coast) coastSites = Math.max(coastSites, p.coast.siteFloats);
+    if (target) { const need = scFloats(target.pw * target.ph, coastSites); if (!pageScratch || pageScratch.size < need * 4) { pageScratch?.destroy(); pageScratch = buf(need * 4, ST, 'page scratch'); } }
+    else scratch(scFloats(cells, coastSites));
     for (const p of prepared) {
       if (p.skip) continue;
       if (p.op === 'ground') { ops.push({ground: true, u: {seed: p.seed, gAmp: p.amp, gWave: p.wave, gCover: p.cover}}); continue; }
@@ -530,10 +583,40 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (op.reads.length) node.preIdx = op.reads[0].idx;
       ops.push(op);
     }
+    // H10: a node with a coast pass. Its coast box is the footprint grown by the coast's reach; the cells wanted exact (hit) read the prefix, the crossings of
+    // the sea and the blur's window out to readR, so the passes run over that, inside the box. Order: the prefix and a clear footprint, the stamp (which
+    // writes its influence), then the fingers (the field, the blurred normal, the thumbs, the march) and the layers (the field again on the new heights).
+    const emitCoast = (p, node, R, ex, noise) => {
+      const c = p.coast, hit = intersect(R, c.box), wide = hit ? intersect(ex(hit, c.readR), c.box) : null;
+      if (!wide) return;
+      const body = intersect(wide, p.region);
+      if (noise && body) add('noise', ex(p.region, 1), node);
+      add('coastInit', wide, node);
+      if (body) add('stamp', body, {...node, coPutW: 1});
+      const field = () => {
+        const N = Math.max(1, Math.ceil(Math.log2(c.maxCells + 1)));
+        add('coastSeed', wide, {...node, coSrc: 0, coMoved: 1});
+        let src = 0;
+        for (let k = N - 1; k >= -0; k--) { add('coastJump', wide, {...node, coSrc: src, coStep: 1 << k}); src ^= 1; if (k === 0) { add('coastJump', wide, {...node, coSrc: src, coStep: 1}); src ^= 1; } }
+        add('coastFinish', wide, {...node, coSrc: src});
+      };
+      if (c.fingers) {
+        field();
+        add('coastSd', wide, node);
+        add('coastBlurH', wide, {...node, bsrc: 5, bdst: 7, blurR: c.blurR}); add('coastBlurV', wide, {...node, bsrc: 7, bdst: 10, blurR: c.blurR});
+        add('coastFinger', wide, node); add('coastJoin', wide, node);
+      }
+      if (c.layers) {
+        field();
+        if (c.scal) add('coastSites', {x0: 0, y0: 0, x1: c.sites.ni - 1, y1: c.sites.nj - 1}, node);
+        add('coastLayers', wide, node);
+      }
+    };
     // Phase 2: the passes of one node over the rectangle R (the evaluation's, or a window's), `ex` growing a rectangle inside what exists.
     const emitOp = (op, R, ex, noise) => {
       if (op.ground) { add('ground', R, op.u); return; }
       const p = op.p, node = op.node;
+      if (p.coast) { emitCoast(p, node, R, ex, noise); return; }
       const reg = p.settle ? ex(p.region, 4) : p.region, body = reg ? intersect(R, reg) : null;
       if (!body) return;
       if (noise) add('noise', ex(p.region, 1), node);
@@ -559,6 +642,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       for (let k = ops.length - 1; k >= 0; k--) {
         rects[k] = need;
         const q = ops[k].p;
+        if (q?.coast) { const hit = intersect(need, q.coast.box); if (hit) { const e = expandIn(hit, q.coast.readR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
         if (q?.smoothR && q.region) { const hit = intersect(need, q.region); if (hit) { const e = expandIn(hit, q.smoothR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
       }
       add('init', ops.length ? need : R);
@@ -584,8 +668,8 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     });
     }
     // Pack the rectangle for readback.
-    const rw0 = P ? P.x1 - P.x0 + 1 : 0, rh0 = P ? P.y1 - P.y0 + 1 : 0, rc = rw0 * rh0, q4 = Math.ceil(rc / 4), outWords = 6 * rc + 25 * q4;
-    if (readback) add('pack', P);
+    const rw0 = P ? P.x1 - P.x0 + 1 : 0, rh0 = P ? P.y1 - P.y0 + 1 : 0, rc = rw0 * rh0, q4 = Math.ceil(rc / 4), outWords = plane === null ? 6 * rc + 25 * q4 : rc;
+    if (readback) add(plane === null ? 'pack' : 'packPlane', P, plane === null ? {} : {bsrc: plane});
     const ub = buf(passes.length * NODE_BYTES, GPUBufferUsage.UNIFORM | CD, 'shape uniforms'), udata = new ArrayBuffer(passes.length * NODE_BYTES), dv = new DataView(udata);
     passes.forEach((pass, k) => {
       NODE_FIELDS.forEach(([name, type], j) => {
@@ -612,7 +696,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     let win = null;
     if (windows.length) {
       const cellsW = Math.max(...windows);
-      win = {F: buf(6 * cellsW * 4, ST, 'window planes'), Mk: buf(cellsW * 28, ST, 'window masks'), Sc: buf(3 * cellsW * 4, ST, 'window scratch')};
+      win = {F: buf(6 * cellsW * 4, ST, 'window planes'), Mk: buf(cellsW * 28, ST, 'window masks'), Sc: buf(scFloats(cellsW, coastSites) * 4, ST, 'window scratch')};
       bgs.push(mkGroup(win.F, win.Mk, dummy, win.Sc));
     }
     const wpipes = windows.length ? windowPipes() : null;
@@ -620,7 +704,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     passes.forEach((ps, k) => {
       pass.setPipeline((ps.grp ? wpipes : pipes)[ps.entry]); pass.setBindGroup(0, bgs[ps.grp], [k * NODE_BYTES]);
       const w = ps.region.x1 - ps.region.x0 + 1, h = ps.region.y1 - ps.region.y0 + 1;
-      if (ps.entry === 'pack') { const g = Math.ceil(outWords / 256), gx = Math.min(g, 65535); pass.dispatchWorkgroups(gx, Math.ceil(g / gx)); }
+      if (ps.entry === 'pack' || ps.entry === 'packPlane') { const g = Math.ceil(outWords / 256), gx = Math.min(g, 65535); pass.dispatchWorkgroups(gx, Math.ceil(g / gx)); }
       else if (ps.entry === 'pointRead') pass.dispatchWorkgroups(1);
       else pass.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8));
     });
@@ -636,6 +720,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       await stage.mapAsync(GPUMapMode.READ);
       const raw = stage.getMappedRange().slice(0); stage.unmap(); stage.destroy();
       last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, prepareMs: tSubmit - t0, gpuMs: tGpu - tSubmit, readbackMs: performance.now() - tGpu, cells: rc};
+      if (plane !== null) return {rect: P, width: rw0, height: rh0, plane: new Float32Array(raw)};
       return {rect: P, width: rw0, height: rh0, floats: FIELD_KEYS_FLOAT.map((_, k) => new Float32Array(raw, k * rc * 4, rc)), masks: Array.from({length: 25}, (_, m) => new Int8Array(raw, (6 * rc + m * q4) * 4, rc))};
     })();
     peak = Math.max(peak, bytes() + sd.byteLength + passes.length * NODE_BYTES + (readback ? 2 * outWords * 4 : 0));
