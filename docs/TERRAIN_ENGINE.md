@@ -62,6 +62,30 @@ feature.
     weathering, etc needs to be impactful and not just change a couple
     pixels at the base of a hill that nobody would notice."*
 
+## Decisions (owner, 2026-10-30)
+
+12. **The Green slice is accepted.**
+13. **Port first, retire after.** *"Let's continue porting the other
+    worlds to the GPU before we retire things."* Every world moves onto the
+    engine before the old path is deleted. One retire card at the end
+    deletes it. This replaces "delete its old branches in the same card"
+    for the ports.
+14. **One workflow, branched by feature.** *"I prefer a single workflow,
+    branching based on features not worlds/biomes, and to keep branches
+    simple if possible. Whatever can be shared should be."*
+    - Every world runs the same engine, one pipeline from shape to light.
+    - A world is data: a preset that turns features on and sets their
+      numbers.
+    - Code branches on a feature or on material data, never on a world.
+      Nothing in the engine asks which world it is drawing.
+    - Cards are cut by feature, not by world. Each lands for every world
+      that uses its feature.
+15. **The end goal is still simplification.** A feature card replaces the
+    worlds' separate versions of a look with one shared model and
+    per-world numbers. It must hold or lower the engine's counts
+    ([Rules](#rules-for-the-cards)), even while the old path waits for the
+    retire card.
+
 ## The Green slice
 
 Green gets its own engine: new shaders and GPU passes for every stage,
@@ -89,8 +113,9 @@ can be compared on the same scenes against retail.
 4. **H7, progressive rendering on the slice.** Measure where the time
    goes first. Then build the levels: overview, quarter and final.
 
-When the slice is accepted, it becomes the pattern for the other worlds,
-and the retire rule applies.
+The owner accepted the slice on 2026-10-30 (decision 12). It is now the
+engine for every world ([Migration](#migration)), and the retire rule waits
+for the last port (decision 13).
 
 ## Why change
 
@@ -299,18 +324,39 @@ palette.
 
 ## Migration
 
-- **Build beside the per-world code.** Port one world at a time.
-- **Delete its old branches in the same card,** once its preset is at
-  least as close to retail on all three windows: by eye, and by
-  `repro/stats.py`.
-- **Unported worlds** must keep matching their renders exactly under the
-  `compare.py` guard, as now.
-- **Order of worlds:**
-  1. Green;
-  2. then probably Red and Desert, which share the layered rock;
-  3. Archipelago (shores), Ice (shelves), Crystal (mounds), Lava and Moon.
+From decisions 13-15:
 
-  Zhon waits for its planet.
+1. **One engine for every world (H8).** Every world draws with the engine
+   and runs its pipeline: the GPU Time pass, the chunk feed, levels and
+   pages. A world's preset turns its agents and features on. Where a
+   world's materials are not yet numbers, the engine reads its prepared
+   images until the Materials card.
+2. **Every shape option on the GPU (H9),** beside H8: the options the GPU
+   path still refuses that are passes of their own. The coast pass, shore
+   plates, fingers, facets and crystal columns go to Shores and Bodies.
+3. **Features, one card each,** each landing for every world that uses it:
+
+   | Feature | What it makes | Worlds | Separate versions today |
+   | --- | --- | --- | --- |
+   | Materials | each material's colour, grain, relief and shine as numbers; no run-time images | all but Green | the Python preparation per world; `shine*` |
+   | Layered rock | beds, strata, bands, rings and lava layers, from the rock column | Green, Red, Desert, Archipelago, Lava | `bed*`, `band*`, `strata*`, `ring*`, `layer*`, `shelf*`, `step*` |
+   | Fractures | cracks, joints, facets, blocks, gullies and scratches | all | `crack*`, `joint*`, `facet*`, `block*`, `gully*`, `scratch*` |
+   | Shores | shallows, shoals, beaches, banks, coast fingers and shore plates, from one coast distance field on the GPU | Green, Red, Archipelago, Lava, Crystal, Ice, Zhon | `shoal*`, `plate*`, `shore*`, `beach*`, `finger*`, `bank*`; the JS coast pass |
+   | Bodies | painted bodies of one material: crystal mounds and columns, ice slabs and shelves, lava flows | Crystal, Ice, Lava | `crystal*`, `ice*`, `frost*`, `lava*` |
+   | Impacts | craters, cups, ribs, folds and pockmarks in regolith | Moon; craters in Red and Crystal | `moon*`, `crater*`, `pock*` |
+   | Rivers | the flow bake on the GPU | all | `sculpt-flow.js` |
+
+   Materials comes first, since every other feature draws with them. The
+   rest follow by how many worlds they serve. Two features may share a
+   card when they share most of their code.
+4. **Retire, the last card.** Delete engine 0: `sculpt-frag.wgsl`,
+   `relief-bake.wgsl` and `sculpt-common.wgsl`, the CPU workers, the Python
+   preparation, the JS shape engine where the GPU covers it, and every knob
+   and uniform only they read.
+
+- **Judging a world.** A world that moves is judged on its three retail
+  windows (BACKLOG rule 5), by eye and by `repro/stats.py`, never only
+  against its old render. Zhon has no retail windows; it is judged by eye.
 - **Mask planes.** There are 25 planes in 7 RGBA layers today; 14-19 and
   25+ are free. The data maps need more. Growing the layer count is a
   bounded change, but it costs memory per chunk on 40×40 maps.
@@ -318,17 +364,39 @@ palette.
 ## Rules for the cards
 
 These hold for every H card from H3 on. For the Green slice (H4-H7) the
-owner set simplification aside (decision 10). The slice keeps the shared
-code untouched and reports its own size for comparison; deletion waits
-until it is accepted.
+owner set simplification aside (decision 10). The slice kept the shared
+code untouched and reported its own size for comparison. For the ports
+(H8 on), deletion waits for the retire card (decision 13), but sharing
+does not (decisions 14 and 15).
 
-- **Retire what you replace.** A card that moves Green onto the model is
-  not done until it has deleted what the model replaced: branches,
-  uniforms, knobs and Python steps. The three-window check must pass after
-  the deletion. Gating new work behind a knob and keeping the old path is
-  how the editor reached 400 knobs.
-- **Report how much simpler it got.** Put it in the Done list, beside the
-  retail numbers, against this baseline (terraform 467c744):
+- **Share, don't copy (H8 on).** A card adds one shared model, with each
+  world's numbers in its preset. It never adds a knob family for one world
+  or a branch on a world. The gate: `grep -n -E "biome|world"` over
+  `engine-*.wgsl`, `sculpt-erosion.js` and `sculpt-chunk-renderer.js`
+  names no world. The renderer chooses by what data a world has, never by
+  its name.
+- **Hold or lower the engine's counts (H8 on).** Each Done list reports
+  them against this table (terraform 843b7fc, when the slice was
+  accepted). A count may grow only through a bridge the card names and a
+  later card removes.
+
+  | The engine path | 843b7fc |
+  | --- | --- |
+  | Engine shader lines: frag, bake, common | 1,963, 1,439 and 769 |
+  | GPU pass lines: shape, erosion, feed, materials, weather | 808, 249, 252, 127 and 85 |
+  | Uniforms the engine reads | 351 |
+  | Knobs: total, and set by worlds on the engine | 430, and 90 (Green) |
+  | Worlds on the engine | 1 of 9 |
+  | Retail-derived images read at run time | water only (Green) |
+  | Worlds that run a CPU worker on the engine path | none |
+  | Reasons a shape falls back to JS | 15 (H6c's Still open) |
+- **Retire what you replace (the retire card).** It is not done until it
+  has deleted what the model replaced: branches, uniforms, knobs and
+  Python steps. The three-window check must pass after the deletion.
+  Gating new work behind a knob and keeping the old path is how the editor
+  reached 400 knobs.
+- **Report how much simpler it got overall.** Put it in the Done list,
+  beside the retail numbers, against this baseline (terraform 467c744):
 
   | Measure | Today |
   | --- | --- |
@@ -391,7 +459,10 @@ Each is written in full when the one before it lands.
 | H6c | The remaining shapes on the GPU: plateau first, then every palette kind; point reads by evaluation | Merged b6dc0a1 (cheap options still on JS) |
 | H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Merged 1fffe4f (quarter levels and drag p95 open) |
 | H7b | Quarter levels on the GPU-fed map canvas: a scaled bake, quarter while dragging and first on load, final unchanged | Merged 31e995e (latency p95 50 ms, target 30 missed) |
-| Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
+| H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Written |
+| H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Written |
+| Features | Materials, Layered rock, Fractures, Shores, Bodies, Impacts, Rivers: one card each, for every world that uses it | Not yet written |
+| Retire | Delete engine 0: the shared shaders, CPU workers, Python preparation, JS shape engine, and the knobs only they read | After the features |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
 **H3, one material model (Green):**

@@ -98,6 +98,8 @@ branches and the projection fix below, so re-render before judging.
    | H7b | 8870 | 9670 | `$R/agent-H7b/out` | `--worlds none` |
    | H5b | 8871 | 9671 | `$R/agent-H5b/out` | `--worlds none` |
    | H6c | 8872 | 9672 | `$R/agent-H6c/out` | `--worlds none` |
+   | H8 | 8873 | 9673 | `$R/agent-H8/out` | `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice` |
+   | H9 | 8874 | 9674 | `$R/agent-H9/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -159,6 +161,12 @@ branches and the projection fix below, so re-render before judging.
    append new uniforms to `struct Uniforms` (`sculpt-common.wgsl`) with a
    comment naming the world, pass them in `sculpt-renderer.js`, and put new
    shading in its own function. Never change another world's defaults.
+
+   **From H8 on, gate by feature, not by world** (TERRAIN_ENGINE decision
+   14). A new knob belongs to a feature and is shared by every world that
+   uses it; a world turns it on in its preset. Reuse a feature's knob
+   before adding one, and never name a knob, uniform or function after a
+   world. Engine uniforms go in `engine-common.wgsl`.
 
 5. **Judge across every window of the world.** Each world has three
    windows from different maps (`repro/scenes/<world>-1..3.json`). Keep a
@@ -2296,7 +2304,9 @@ surface becomes the default.
 From the owner's direction of 2026-10-28. Read
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) first: it explains the five
 stages these cards build toward, and why drift is allowed. Green goes first.
-Keep the other worlds in mind, and gate everything to Green (rule 4).
+Keep the other worlds in mind, and gate everything to Green (rule 4). From
+H8 on, every world runs the engine and cards are cut by feature (decisions
+12-15).
 
 > **Owner, 2026-10-28:** I want to see Gaea level realistic geology and
 > weathering/decay if possible. Btw one important thing I didn't mention is
@@ -5008,6 +5018,250 @@ why.
   where a value lands exactly on its base.
 - **The F-direct shortcut** for point reads inside the evaluated
   rectangle was not built.
+
+### H8. One engine for every world
+
+> **Owner, 2026-10-30:** "Green slice is accepted. Let's continue porting
+> the other worlds to the GPU before we retire things." "I prefer a single
+> workflow, branching based on features not worlds/biomes, and to keep
+> branches simple if possible. Whatever can be shared should be." "The end
+> goal is still simplification."
+
+Read [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) first: decisions
+12-15, "Migration", and in "Rules for the cards" the two H8 rules (share,
+don't copy; the engine's counts). Then read H4's, H5's, H6b's and H5b's
+Done and Still open lists above. H9 runs beside this card.
+
+**What is there today.**
+- **The engine is Green's.**
+  - `WORLD_KNOBS['green']` sets `engine` 1 and `materialModel` 1.
+    `ENGINE_KNOBS['green']` holds 21 more knobs that apply only under
+    engine 1, `gpuShape` 1 among them (`sculpt.py`).
+  - Under engine 1 the renderer always loads `materials/green.json` and
+    `engine-materials.wgsl`, and binds the generated textures in place of
+    the rock images, whatever the world (`sculpt-renderer.js`: the shader
+    list in the constructor, and the texture loop).
+  - The engine shaders began as copies of the shared ones, so they still
+    carry every world's helpers: 20 functions, about 330 lines (moon cups,
+    ice hatch, crystal water and others). Knobs reach them, not a world id.
+- **Weather.** `queueWeather` (`sculpt.js`) starts the CPU worker unless
+  the engine is on, `erosion` is above 0 and the canvas is at most 1168
+  samples. So a world with `erosion` 0 runs the worker even under
+  engine 1.
+  - The worker also makes the apron (at the `scree` slider), sand
+    (`sculpt-sand.js`), flow, deposit and material weathering, set per
+    world through `config.defaults` and `config.material`.
+  - Paged canvases (`pagedOn`) run only the GPU pass.
+- **Shape.** With `?engine=1&gpuShape=1`, each stroke of the 27 scenes run
+  alone (coordinator's census, 2026-10-30):
+  - Green, Archipelago and Zhon: every stroke on the GPU.
+  - Red, Moon, Lava, Crystal and Ice use options the GPU refuses, and
+    Desert never tries the GPU path. H9 owns all of this.
+  - A scene that falls back runs the JS engine and, on a map canvas, the
+    old CPU path (no feed, levels or pages). Leave that as it is.
+- **A world's settings live in four places:** `KNOB_DEFAULTS` with
+  `WORLD_KNOBS`, `ENGINE_KNOBS`, and `config.defaults` (variants) and
+  `config.material` (both set in `biome_config`). Its prepared images are
+  a fifth. The target is one preset per world; move only what this card
+  needs.
+
+**Scope.**
+- Every world draws with the engine and runs its pipeline: the Time pass
+  on the GPU, the chunk feed, levels and pages, and the GPU shape wherever
+  `nodeSupport` takes the scene.
+- **Engine 0 stays exactly as it is.** It is the comparison, and the
+  retire card's target.
+- **No deletion** (decision 13) **and no look work.** A world should draw
+  on the engine as close to its current render as the engine allows.
+  Where it moves, NOTES.md says why and which feature card owns the gap
+  (TERRAIN_ENGINE "Migration").
+- **Not H9's work:** `engine-shape.wgsl`, `sculpt-gpu-fields.js`, and in
+  `sculpt.js` `shapeContext` and the probe-stroke parameters.
+
+**Deliver.**
+
+1. **Inventory (a stop point).** Hand back:
+   - every place the engine path assumes Green, by file and function, and
+     how each becomes data;
+   - per world, what its draw reads that the CPU worker makes today
+     (apron, sand, flow, deposit, material weathering, the `broad`
+     profile), and whether the Time pass already makes it, at what
+     settings;
+   - renders of all 27 scenes with `engine=1` as the code stands:
+     `compare.py` against `merge-h6c`, the triptychs, and any console
+     errors. Let `repro/all.sh` take extra page parameters (a
+     `REPRO_QUERY` variable passed to `render.mjs --query`);
+   - a proposal: each world's preset (which agents run, at what rates),
+     and the shared rules the Time pass still lacks.
+2. **The engine by preset.** Engine 1 becomes every world's default, with
+   `gpuShape` on. A world's engine settings sit in its preset. With
+   `?engine=0` every world still draws as `merge-h6c` does.
+3. **Materials by data.**
+   - The renderer loads `materials/<world>.json` when the world has one.
+   - Otherwise it binds the world's prepared images as engine 0 does.
+     This is the bridge the Materials card removes.
+   - Nothing chooses by world id; the renderer chooses by what the
+     world's data holds.
+4. **The Time pass for every world.** No world runs a CPU worker on the
+   engine path.
+   - The agents run by preset numbers. A world with no rain erosion today
+     runs the pass with rain off, and the pass still makes every data map
+     its draw reads.
+   - A data map the worker makes and the pass lacks (Archipelago's sand,
+     material weathering, the apron at a world's `scree`) becomes a shared
+     rule in the pass, or goes in NOTES.md with its reason.
+5. **Map canvases.**
+   - A 4×4 export for every world: clean console, unique tiles reported,
+     no seams at 2×.
+   - An 8×8 export of one world other than Green, through pages.
+   - `perf.mjs` on that world at 4×4 and 8×8 (load, drag, release,
+     export), against `engine=0`.
+6. **Counts.** The engine's counts table from the rules, before and after.
+
+**Exactness and acceptance.**
+- **Green** is exact against `merge-h6c` on its three scenes.
+- **Engine 0:** with `REPRO_QUERY=engine=0`, every world is exact against
+  `merge-h6c`.
+- **The other worlds on the engine:**
+  - `stats.py` on each world's three windows. No metric may leave the
+    world's retail range (p10-p90) where `merge-h6c` was inside it.
+  - The triptychs show no new artefact at 1×.
+  - A move toward retail is fine (decision 2).
+  - Zhon has no retail windows; judge it by eye against `merge-h6c`.
+- **`regional.mjs`** finds 0 on all 27.
+- **The gate** in the rules names no world.
+
+**Done when** NOTES.md has the inventory, each world's preset and why,
+the stats tables and sheets, the map checks, the measurements, and the
+counts table.
+
+**Files:**
+- `sculpt-renderer.js`;
+- `sculpt.py`: the presets (`WORLD_KNOBS`, `ENGINE_KNOBS`), and
+  `biome_config` only as far as the presets need;
+- in `sculpt.js`, the engine and weather choices: `queueWeather` and the
+  paged weather, `gpuShapeOn`, `pagedWanted` and the feed's eligibility;
+- `engine-frag.wgsl`, `engine-bake.wgsl`, `engine-common.wgsl`,
+  `engine-materials.wgsl`, `engine-erosion.wgsl`, `engine-weather.wgsl`
+  and `sculpt-erosion.js`;
+- `materials/`, and `repro/all.sh` for `REPRO_QUERY`.
+- Not `engine-shape.wgsl` or `sculpt-gpu-fields.js` (H9's: if the paged
+  Time pass needs a change there, report it at the stop), the shared
+  shaders, the CPU workers, or the JS shape engine.
+
+**Budget:**
+- Item 1 is a stop point.
+- After it, items 2, 3 and 4 are a commit each, at least.
+- If the budget runs short, stop after items 2-4 on the study, with
+  NOTES.md saying what remains.
+
+**Server and guard:**
+- port 8873, CDP 9673;
+- worktree `../terraform-wt-H8`, branch `H8-one-engine`;
+- assets `$R/agent-H8`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h6c`;
+- guard `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice`
+  (Green stays exact).
+
+### H9. Every shape option on the GPU
+
+> **Owner, 2026-10-30:** as H8. After this card, the only shapes that
+> fall back to JS are the ones the Shores and Bodies features rebuild.
+
+Read H6c's card, its Done and Still open lists above, and
+`$R/agent-H6c/NOTES.md` (its inventory, "Item 1"). Read the TERRAIN_ENGINE
+decisions 12-15 and the two H8 rules. H8 runs beside this card.
+
+**What is there today.**
+- **The census** (`?engine=1&gpuShape=1`, each stroke of a scene run
+  alone, coordinator's run on 2026-10-30; the script is
+  `$R/agent-H9/refusals.mjs`, usage in its first lines; its output is
+  `$R/agent-H9/census-merge-h6c.json`):
+
+  | World | Reasons |
+  | --- | --- |
+  | Green, Archipelago, Zhon | none |
+  | Red | parametric cross-section (red-2, red-3); water mask choices (red-3) |
+  | Moon | hill lobes, facets or base options (most hills); ridge options (moon-3); crater rim spurs (moon-2) |
+  | Lava | the coast pass (every stroke of all three); ridge options (lava-3) |
+  | Crystal | crystal columns or bergs; water fingers, bank or plates; crater facets |
+  | Ice | water fingers, bank or plates; crystal columns or bergs |
+  | Desert | none given, but the GPU path is never tried: `sculptDebug.shape()` stays `{reason: null, used: false}` for every stroke. Cause unknown |
+- **H6c's inventory** sorted the refused options:
+  - cheap and positional: the base options (`baseVary`, `baseBump`,
+    `moonLobes`); shape-mask writes and water mask choices for plateau,
+    offset and crater; plateau, offset, sand and grass without natural
+    edges;
+  - medium: hill lobes (about 32 JS lines), the parametric cross-section
+    (about 190), ridge options (spurs and crest jag, vary and taper, about
+    150);
+  - left on JS: the coast pass (a connectivity flood and distance
+    transforms over the prefix, about 300 lines), water fingers, bank and
+    shore plates; mountain and crater facets (they read ±3 cells of their
+    own result); crater rim spurs, rim sectors and gaps; crystal columns
+    and bergs.
+
+**Scope.**
+- Desert's cause first. Then every option H6c called cheap or medium,
+  then crater rim spurs, sectors and gaps.
+- **Not** the coast pass, fingers, bank, shore plates, facets, or crystal
+  columns and bergs. The Shores and Bodies cards rebuild those as shared
+  models (a coast distance field on the GPU). Say what each would need.
+- The JS engine stays as the reference.
+
+**Deliver.**
+
+1. **Inventory (a stop point).** Bring H6c's up to date and add:
+   - Desert's cause;
+   - per option, the worlds and scenes that use it;
+   - options that duplicate another (the same effect by another route) and
+     could be dropped to simplify. The owner decides those, so list them
+     with the evidence;
+   - the order.
+2. **Port the options** in that order, each its own commit, each with:
+   - a scene in `repro/shape-scenes/`;
+   - `shapecheck.mjs` against JS, on the study and on a 4×4 map: max |Δh|
+     at most .001, masks at most one step on a few cells.
+     `shapecheck.mjs` runs Green's engine today; let it take any world
+     (the scene's world, with `engine=1&gpuShape=1`).
+3. **The census again,** with the reasons left for each world.
+4. **The page ring** for any option that reaches past it.
+
+**Exactness and acceptance.**
+- **The study at the defaults** is exact against `merge-h6c` on all 27
+  (`--worlds none`). Only Green has `gpuShape` on by default, and its
+  scenes use no refused option.
+- **Per option:** `shapecheck.mjs` as in item 2.
+- **`regional.mjs`** finds 0 on all 27, and again on every Red and Moon
+  scene with `engine=1&gpuShape=1`.
+- **A 4×4 map** of one Red and one Moon scene with `engine=1&gpuShape=1`:
+  TNT heights, features and tile indices against `gpuShape=0`, reported
+  (identical is the goal).
+
+**Done when** NOTES.md has the inventory, each option's check, the census
+before and after, and what stays on JS and why.
+
+**Files:**
+- `engine-shape.wgsl` and `sculpt-gpu-fields.js`;
+- in `sculpt.js`, only `shapeContext`, the probe-stroke parameters, and
+  the code that decides whether the study runs the GPU shape (Desert);
+- `repro/shapecheck.mjs` and `repro/shape-scenes/`.
+- Not the draw, bake, feed or Time pass shaders, `sculpt.py`, H8's parts
+  of `sculpt.js`, or the JS engine itself.
+
+**Budget:**
+- Item 1 is a stop point.
+- After it, each option is its own commit.
+- If the budget runs short, stop once Desert, Red and Moon run on the GPU
+  (Desert's cause, the cross-section, water mask choices, base options,
+  hill lobes and ridge options), with NOTES.md saying what remains.
+
+**Server and guard:**
+- port 8874, CDP 9674;
+- worktree `../terraform-wt-H9`, branch `H9-shape-options`;
+- assets `$R/agent-H9`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h6c`;
+- guard `--worlds none`.
 
 ## After the cards
 
