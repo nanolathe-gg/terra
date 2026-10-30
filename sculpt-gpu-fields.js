@@ -227,8 +227,6 @@ export function nodeSupport(n, c) {
   if (kind === 'hill' && (!c.shouldered || c.replayFull)) return 'hill outside the shouldered form';
   if ((kind === 'paint' || kind === 'erase') && !c.edgesNatural) return `${kind} without natural edges`;
   if (kind === 'deep' && !c.natural) return 'restrained coast';
-  // H9: a deep stroke with a cross-section is exact on the study but 4.0 off on about 120 cells of a 4x4 map; JS until H8b finds why.
-  if (kind === 'deep' && q.profile >= .5) return 'deep cross-section';
   // H6c: plateau, offset, lower, sand, grass.
   if (['plateau', 'offset', 'sand', 'grass'].includes(kind) && !c.edgesNatural) return `${kind} without natural edges`;
   if (kind === 'crystal' && q.crystalForm >= .5) return 'crystal columns or bergs';
