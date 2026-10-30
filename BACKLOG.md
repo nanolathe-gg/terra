@@ -5258,8 +5258,11 @@ counts table.
 ### H8b. GPU shape for every world — outline
 
 After H9. Find why `gpuShape=1` moves zhon-1, archipelago-3 and red-1
-(H8's Still open), and fix it on the GPU path. Then set `gpuShape` 1 in
-every world's preset, so that:
+(H8's Still open), and fix it on the GPU path. Also find H9's map-canvas
+gaps: a deep stroke with a cross-section (4.0 on about 120 cells of a 4×4
+map; it stays on JS until then), and ridge options, crater rims and
+Desert's section (.41-1.15). Then set `gpuShape` 1 in every world's
+preset, so that:
 - every world's maps over 1168 samples run pages;
 - the fed path carries the material field;
 - no world runs a CPU worker anywhere on the engine.
@@ -5366,6 +5369,63 @@ before and after, and what stays on JS and why.
 - assets `$R/agent-H9`, with `mapcheck.mjs` copied from `$R/agent-H4`;
 - baseline `$R/repro-out/merge-h6c`;
 - guard `--worlds none`.
+
+**Done (merged as a7c2256; EXPERIMENTS row 153; notes in
+`$R/agent-H9/NOTES.md`).**
+- **Desert's cause.** Desert's world knobs set `baseVary` 36 and `baseBump`
+  3.5, which the GPU refused on every stroke. A refused node goes straight
+  to the JS engine in `addNode`, so no reason was recorded. `addNode` now
+  records it. The coordinator's first census also missed archipelago-1:
+  its five shallow strokes set `waterDeep`.
+- **On the GPU now,** each in its own commit with a scene in
+  `repro/shape-scenes/`:
+  - the base options and `moonLobes`, as one shared `outlineShift` and
+    one `baseBump`, each fed by its own knobs (decision 14; the knobs are
+    not merged);
+  - the parametric cross-section, on every kind but `deep`. A hill with a
+    profile or ridge options is the plain swept hill, as in JS;
+  - shape mask writes and water mask choices, as one extension of the
+    mask-write list;
+  - ridge options (crest jag, vary, taper, spurs);
+  - crater rim spurs, sectors and gaps.
+- **`shapecheck`, GPU against JS, max |Δh|:** 0 on the study for every
+  option. On a 4×4 map: base options .0001; cross-section .0001 (Desert's
+  section .84 on 0.003% of cells); mask writes .0003, with one mask cell
+  one step off; ridge options up to 1.15 on 0.6-1.2% of cells; crater rim
+  .41.
+- **Fixed on the way:** a ground node in a map scene threw in the
+  point-read scan (on main since H6c).
+- **The census after the merge** (every stroke of the 27 scenes with
+  `engine=1&gpuShape=1`): every stroke of Green, Archipelago, Zhon, Desert and Moon runs on the GPU, and all of Red's but red-3's one deep cross-section. Lava stays on JS (the coast pass on every stroke, and `hillLobes`), and so do Crystal's and Ice's columns and bergs, fingers, bank and plates, and crater facets.
+- **Merge checks:**
+  - The study at the defaults: the eight other worlds are exact against
+    `merge-h8`. Green moves 45 pixels on green-1 and 10 on green-3 (mean
+    |diff| 0.00): the compiler-order false alarm (ground rule 3). With
+    every new branch replaced by `false`, both match exactly.
+  - `regional.mjs` finds 0 on all 27, and on the ten Red, Moon, Desert and
+    archipelago-1 scenes with `engine=1&gpuShape=1`.
+  - Paged against whole-map: 0 of 31 planes differ on five scenes. Every
+    option is positional, so the page ring is unchanged.
+  - 4×4 exports with `gpuShape` 1 against 0: red-2 differs in 1 height of
+    17,680 (by 1) and no tile index. moon-2 differs in 16 heights (by 1)
+    and 1,086 tile indices, a reordering by the tile dedup.
+- **Counts.** GPU shape lines 808 → 997, and shape uniforms 82 → 130, as
+  the JS options moved over. The JS they replace goes in the retire card.
+  Fallback reasons: 16 → 11.
+
+**Still open** (H8b):
+- **A deep stroke with a cross-section** is exact on the study but off
+  by 4.0 on about 120 cells of a 4×4 map. It stays on JS (the coordinator
+  added the refusal at merge); three cycles did not find the cause.
+- **The 4×4 gaps** of ridge options (1.15), crater rims (.41) and
+  Desert's section (.84 on 0.003%) miss the card's .001. The JS engine's
+  own entry paths disagree by about .16 for ridges and spurs; the GPU
+  equals the replay path `shapecheck` uses.
+- **`hillLobes`** stays on JS (budget). Only lava-3 uses it, and Lava
+  stays on JS for the coast pass; the owner is asked whether to drop it.
+- **Still on JS by design:** Lava's coast pass; Crystal's columns and
+  bergs, fingers, bank and plates, and crater facets; Ice's plates,
+  fingers and columns. Shores and Bodies rebuild them.
 
 ## After the cards
 
