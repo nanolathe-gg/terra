@@ -2855,7 +2855,8 @@ function sampleRegional(x,y) {
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
 const gpuFeedOn=() => new URLSearchParams(location.search).get('gpuFeed')!=='0';
-const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
+// H8b: the fed pass leaves its result in GPU buffers, where the material field (a CPU array from the height) cannot join it yet, so a world that asks for the field takes the unfed pass.
+const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0 && !(Number($('material-weathering')?.value)>0));
 const gpuFeedEligible=() => Boolean(gpuFeedOn() && renderer?.engine && regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
 // A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
 // keeps its buffers), so a retired result is destroyed at that moment and not on a timer. gpuBytes() is what the canvas counts against its budget.
