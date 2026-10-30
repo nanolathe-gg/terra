@@ -1,0 +1,28 @@
+{
+ "biome": "ice",
+ "source": {
+  "map": "icy bergs",
+  "x": 3840,
+  "y": 1536
+ },
+ "ground": true,
+ "query": "variant=bergs",
+ "strokes": [
+  [
+   "offset",
+   [
+    [
+     512,
+     512
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 2600,
+     "amount": -80,
+     "roughness": 20
+    }
+   }
+  ]
+ ]
+}

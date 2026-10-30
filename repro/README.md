@@ -93,9 +93,8 @@ Barrier Reef rounded hills with irregular, broken slopes; ice: `bergs`; desert: 
 renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt in.
 
 Ice's shore (card E5): a deep stroke in Ice makes frost crystals by default (plate
-material 2: needles in parallel runs, straight seams, thinning toward deep water). The
-floe shelf Ice had before is plate material 0 and is shown by `demo/ice-plates` (the
-old ice-1 scene with `plateMaterial: 0` and its own plate sizes). The berg form of the
+material 2: needles in parallel runs, straight seams, thinning toward deep water; the
+floe shelf of plate material 0 was dropped with the JS shape engine). The berg form of the
 Crystals brush (`crystalForm: 2`, with `bergFace`, `bergJitter`, `bergBreak`, `bergRough`,
 `bergTilt`, `bergTiltDir`, `bergFlat` and `crystalAlign`) builds ice-2's bergs and
 ice-3's box; `variant=bergs` gives the bergs their blue ice.

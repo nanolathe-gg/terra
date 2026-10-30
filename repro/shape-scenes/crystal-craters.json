@@ -1,0 +1,60 @@
+{
+ "biome": "crystal",
+ "source": {
+  "map": "crystal cracked",
+  "x": 1536,
+  "y": 4096
+ },
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "crater",
+   [
+    [
+     165,
+     820
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 150,
+     "amount": 18,
+     "roughness": 80
+    }
+   }
+  ],
+  [
+   "crater",
+   [
+    [
+     385,
+     815
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 150,
+     "amount": 18,
+     "roughness": 80
+    }
+   }
+  ],
+  [
+   "crater",
+   [
+    [
+     260,
+     945
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 110,
+     "amount": 14,
+     "roughness": 80
+    }
+   }
+  ]
+ ]
+}
