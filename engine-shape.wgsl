@@ -364,8 +364,10 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var ex = nzx; var ey = nzy;
     if (span2 > 0.0) { ex = nzx - sampleN(fxF, cx, cy); ey = nzy - sampleN(fyF, cx, cy); }
     else { ex = nzx - s2.x; ey = nzy - s2.y; }
-    let dx = wx - cx + u.amp * (u.rotX * ex - u.rotY * ey);
-    let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
+    // A ridge piece scales the outline wobble by its mean width (dab(): amp * pc.mean).
+    var ampK = u.amp; if (u.ridge != 0u) { ampK = u.amp * (s1.x + s1.y) * 0.5; }
+    let dx = wx - cx + ampK * (u.rotX * ex - u.rotY * ey);
+    let dy = wy - cy + ampK * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (kind == 2u && u.natural != 0u) { width = clamp(1.0 + u.rough * 1.6 * nCW, 0.45, 1.9); }
     else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }

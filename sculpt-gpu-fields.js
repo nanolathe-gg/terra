@@ -368,7 +368,7 @@ export function prepareNode(n, geom, c) {
     // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
     const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
     for (const pc of n.pieces ?? ridgePieces(rs, simplifyPath(pts, Math.max(1, radius * .04)))) {
-      const at = segs.length, ex = radius * pc.reach * (1) + 2 * amp + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0), e = pc.b || pc.a;
+      const at = segs.length, ex = radius * pc.reach * (1) + 2 * amp * (pc.r0 + pc.r1) / 2 + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0), e = pc.b || pc.a;
       dab(pc.a, pc.b, [pc.r0, pc.r1], [pc.h0, pc.h1]); segs[at].jag = pc.jag;
       segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
     }
