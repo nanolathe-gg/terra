@@ -1,0 +1,8 @@
+{"biome": "moon", "source": {"note": "authored for shapecheck (H9): Moon's outline lobes (moonLobes .5 from the world) on swept and single hills, a mountain and craters"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 300, "amount": 60, "roughness": 35}}],
+  ["hill", [[700,700]], {"card": {"diameter": 200, "amount": 40, "roughness": 30}}],
+  ["mountain", [[250,700]], {"card": {"diameter": 220, "amount": 70, "roughness": 40}}],
+  ["crater", [[800,300]], {"card": {"diameter": 160, "amount": 30, "roughness": 40}}]
+ ]}

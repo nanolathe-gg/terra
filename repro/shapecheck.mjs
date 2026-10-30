@@ -12,7 +12,7 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {basename} from 'node:path';
 
 const args = process.argv.slice(2), opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
-const server = opt('--server', 'http://127.0.0.1:8874'), port = Number(opt('--port', 9674)), out = opt('--out', 'shapecheck-out'), mapMode = args.includes('--map') && args.splice(args.indexOf('--map'), 1).length > 0;
+const server = opt('--server', 'http://127.0.0.1:8874'), port = Number(opt('--port', 9674)), out = opt('--out', 'shapecheck-out'), mapSize = opt('--size', 4), mapMode = args.includes('--map') && args.splice(args.indexOf('--map'), 1).length > 0;
 const scenes = args;
 if (!scenes.length) { console.error('usage: node shapecheck.mjs <scene.json>... [--server url] [--port n] [--out dir] [--map]'); process.exit(2); }
 mkdirSync(out, {recursive: true});
@@ -20,7 +20,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0;
 for (const file of scenes) {
   const scene = JSON.parse(readFileSync(file, 'utf8')), name = basename(file, '.json') + (mapMode ? '-map' : '');
-  const url = mapMode ? `${server}/sculpt?biome=${scene.biome}&mapX=4&mapY=4&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536&engine=1&gpuShape=1${scene.query ? '&' + scene.query : ''}`
+  const url = mapMode ? `${server}/sculpt?biome=${scene.biome}&mapX=${mapSize}&mapY=${mapSize}&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536&engine=1&gpuShape=1${scene.query ? '&' + scene.query : ''}`
     : `${server}/sculpt?biome=${scene.biome}&scratch=shapecheck${Date.now()}&engine=1&gpuShape=1${scene.query ? '&' + scene.query : ''}`;
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/prof-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
