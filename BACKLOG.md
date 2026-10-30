@@ -5856,6 +5856,71 @@ current; a successor continues.
 - assets `$R/agent-H12`;
 - baseline `$R/repro-out/merge-h10`.
 
+**Part 1 done (merged as bfabbab; EXPERIMENTS row 156; notes in
+`$R/agent-H12/NOTES.md`).** Groups 2-8, by two agents. The branch deleted
+8,215 lines and added 292.
+- **The material field on the fed and paged pass.** `materialField` takes
+  the Time pass's eroded-height buffer and returns a GPU buffer, which the
+  chunk feed writes into grid layer 1. Each drop starts from a world-cell
+  hash, so pages join. Archipelago takes the fed pass: 4×4 drag p95 166.7
+  → 16.8 ms. Its scenes move by mean |diff| .03-.09; paged against whole
+  on a 4×4 is a speckle ring of .33 around one hill, with no seams.
+- **The page ring clamp.** A chain over the largest ring that fits the GPU
+  budget clamps to it with one console warning and never errors.
+  smooth16 at the default `gpuMB` 512 draws at ring 192; at 2048 it draws
+  at 320. Lava 8×8 still pages at the default budget.
+- **Gone:**
+  - the switches `engine`, `gpuShape`, `gpuFeed`, `materialModel` and
+    `quarterFirst`, and their fallbacks. `nodeSupport` is deleted: a node
+    the passes do not draw draws nothing. `gpuPages=force`, `pageRing` and
+    `timeApron` stay as test hooks;
+  - engine 0's five shaders (4,579 lines) and the renderer's engine-0
+    branches;
+  - the CPU workers (1,050 lines). `erosion` 0 means "Weathering off";
+  - the River and Source tools, the flow bake, `FLOW_BAKE.md` and their
+    strokes in zhon-1..3;
+  - `sculpt-fields.js`, `hillLobes` with `hillSteps` and `lavaTread`, the
+    URL-only experiments, and 767 dead lines of `sculpt.js`.
+- **Checks (the agents', then the coordinator's after the merge):**
+  - all 27 scenes `"mismatch":0` with a clean console; against
+    `merge-h10`, 0.00 except Archipelago (.03-.09), lava-3 (1.20, the hill
+    lobes) and zhon-1..3 (5.9-7.0, the river tint and bank stain gone,
+    geometry unchanged by eye);
+  - `regional.mjs` 0 on all 27; the 4×4 green-2 export's indexed picture
+    is byte-identical to `merge-h10`'s; the gate passes.
+- **Learned:** an exception inside a shape pass is swallowed, and the
+  scene renders flat with a clean console. H12b makes errors surface.
+
+**Part 2: H12b, below.**
+
+### H12b. Retire the study
+
+> **Owner, 2026-10-30 (decision 21):** retire the 1024-px study view; the
+> editor always works on a map.
+
+The study, `/sculpt` with no map size, still previews strokes with the JS
+engine and draws from CPU copies of the terrain, and the 27 scenes render
+through it. Without it the JS shape engine has no caller.
+
+**Deliver,** one commit each:
+1. `repro/render.mjs` renders a scene as a 1024-px window on a map, with
+   the same outputs, and also runs against main. A baseline from main
+   (`base-main-map`) shows the study-to-map look change.
+2. `regional.mjs` and `shapecheck.mjs` on a map.
+3. `/sculpt` opens a default map.
+4. Delete the study, its pointer handlers, the JS shape engine, the
+   whole-image draw, the CPU readback of the Time pass and `materialRule`.
+5. Exceptions in the shape and Time passes reach the console and the
+   editor's error line.
+6. The dead `uReliefMode` branches go.
+7. The simplification report against 467c744 and 843b7fc.
+
+**Acceptance:** H12's list, with `base-main-map` as the baseline (0.00 on
+all 27), and a smoke run that opens `/sculpt` on its default map.
+
+**Server and guard:** port 8877, CDP 9677; worktree
+`../terraform-wt-H12b`, branch `H12b-study`; assets `$R/agent-H12b`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs

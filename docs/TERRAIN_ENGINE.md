@@ -141,6 +141,11 @@ feature.
     used them. Fingers always join the coast, plates are slabs or frost,
     coast layers are steps or scallops, and facets apply to craters and
     mountains. Their controls went in H10; their JS goes in H12.
+21. **The study view is retired.** Asked whether to keep the 1024-px
+    study (a second editor mode that previewed strokes with the JS engine
+    and drew from CPU copies), the owner chose to retire it: the editor
+    always works on a map, `/sculpt` opens a default map, and the test
+    scenes render as a window on a map. One stroke path, one draw path.
 
 ## The Green slice
 
@@ -380,7 +385,7 @@ palette.
 
 ## Migration
 
-From decisions 13-20, in three phases.
+From decisions 13-21, in three phases.
 
 **Phase 1: one GPU path (decision 18).**
 1. **H8, merged:** every world draws with the engine and runs the GPU Time
@@ -573,7 +578,8 @@ Each is written in full when the one before it lands.
 | H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Merged 92c1b63 (GPU shape for the other eight is H8b) |
 | H8b | GPU shape for every world: why `gpuShape` moves zhon-1, archipelago-3 and red-1, and H9's map-canvas gaps; then on in every preset (pages, feed and the material field everywhere) | Merged 2be97b1 (the material field on the fed path open) |
 | H10 | The last shapes on the GPU: coast pass, fingers, bank and plates, crystal columns and bergs, facets (a similar look) | Merged eb99479 (Lava's terraces a little softer; the ring clamp is H12) |
-| H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Next |
+| H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Part 1 merged bfabbab (groups 2-8); part 2 is H12b |
+| H12b | Retire the study (decision 21): scenes render on a map, `/sculpt` opens a map; delete the study, the JS shape engine and the CPU draw; errors surface; the simplification report | Running |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Merged a7c2256 (deep cross-section and the map-canvas gaps are H8b; `hillLobes` on JS) |
 | Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path | Not yet written |
 | Combine or drop | Every remaining control against decision 16 and the impact rule, from the candidates list | After Retire |
