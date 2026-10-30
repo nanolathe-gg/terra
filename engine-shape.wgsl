@@ -1240,11 +1240,17 @@ fn coastJoin(@builtin(global_invocation_id) g: vec3u) {
     let p0 = vec2f(f32(x), f32(y));
     for (var k = 1; k <= steps; k++) {
       let p = p0 + vec2f(nm.x, nm.y) * (f32(k) * step / u.spacing);
-      let cx = i32(floor(p.x + 0.5)); let cy = i32(floor(p.y + 0.5));
-      if (!cInBox(cx, cy)) { break; }
-      let j = cIdx(cx, cy);
-      if (Sc[CRR * cells + j] > sea) { ok = true; break; }
-      if (Sc[CUU * cells + j] == 0.0) { break; }
+      // The four cells round the sample: dry old ground among them joins the finger; none raised or dry ends the march.
+      let fx = i32(floor(p.x)); let fy = i32(floor(p.y));
+      var any = false;
+      for (var q = 0; q < 4; q++) {
+        let cx = fx + (q & 1); let cy = fy + (q >> 1);
+        if (!cInBox(cx, cy)) { continue; }
+        let j = cIdx(cx, cy);
+        if (Sc[CRR * cells + j] > sea) { ok = true; break; }
+        if (Sc[CUU * cells + j] != 0.0) { any = true; }
+      }
+      if (ok || !any) { break; }
     }
   }
   if (!ok) { F[PH * cells + i] = Sc[CRR * cells + i]; Sc[CFF * cells + i] = 0.0; }

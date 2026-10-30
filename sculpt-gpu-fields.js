@@ -604,7 +604,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
         field();
         add('coastSd', wide, node);
         add('coastBlurH', wide, {...node, bsrc: 5, bdst: 7, blurR: c.blurR}); add('coastBlurV', wide, {...node, bsrc: 7, bdst: 10, blurR: c.blurR});
-        add('coastFinger', wide, node); add('coastJoin', wide, node);
+        add('coastFinger', wide, node); if (!(typeof location !== 'undefined' && /[?&]noJoin/.test(location.search))) add('coastJoin', wide, node);   // (noJoin: a diagnostic switch for comparing the march with the flood)
       }
       if (c.layers) {
         field();
@@ -954,7 +954,7 @@ export function createPagedFields(opts) {
   const CORE = opts.core ?? 512, APRON = opts.apron ?? 128, COARSE = 8, SHIFT = Math.log2(CORE);
   const spacing = (worldSize - 1) / (worldGrid - 1), np = Math.ceil(worldGrid / CORE), gesture = opts.gesture || (() => false);
   // H6c: the ring is 4 cells (the hill's blur) plus the longest chain of overlapping smooth radii among the nodes, bucketed to RINGS; it follows the node list.
-  const RINGS = [4, 16, 32, 64];
+  const RINGS = [4, 16, 32, 64, 128, 192, 320];
   let RING = 4, SIDE = CORE + 2 * RING, SHAPE_BYTES = SIDE * SIDE * 52;
   const WEATHER_BYTES = CORE * CORE * 20, CPU_PAGES = 16;
   const shapeBudget = () => opts.shapeBudget ?? 9 * SHAPE_BYTES, weatherBudget = opts.weatherBudget ?? 24 * WEATHER_BYTES;
@@ -985,7 +985,7 @@ export function createPagedFields(opts) {
   // The ring the node list needs: 4 plus the deepest chain of smooth nodes that read each other's output (a smooth reads the prefix height `smoothR` cells beyond its footprint).
   function ringNeed() {
     const geom = {grid: worldGrid, spacing, refSpacing: spacing}, c = context(), sm = [];
-    for (const n of nodes()) { if (nodeSupport(n, c)) continue; const p = prepare(n, geom, c); if (p.smoothR && p.region) sm.push({r: p.smoothR, reg: p.region, depth: 0}); }
+    for (const n of nodes()) { if (nodeSupport(n, c)) continue; const p = prepare(n, geom, c); if (p.smoothR && p.region) sm.push({r: p.smoothR, reg: p.region, depth: 0}); else if (p.coast) sm.push({r: p.coast.readR, reg: p.region, depth: 0}); }   // H10: a coast node reads readR cells round its footprint, like a smooth
     let deepest = 0;
     sm.forEach((a, i) => {
       const grown = {x0: a.reg.x0 - a.r, y0: a.reg.y0 - a.r, x1: a.reg.x1 + a.r, y1: a.reg.y1 + a.r};
