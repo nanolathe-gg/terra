@@ -262,7 +262,7 @@ export function prepareNode(n, geom, c) {
     return {kf, hw0, hw, net, jag, amp: famp, reach: net ? radius * 1.05 + hw + 8 : hw * 3.5 + famp + 6};
   })() : null;
   const amp = kind === 'crater' ? q.rough * radius * .45 : kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * (naturalWater ? 1.1 : naturalPlateau ? .95 : shouldered ? .85 : .2);
-  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
+  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp + (water && !(q.profile >= .5) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
