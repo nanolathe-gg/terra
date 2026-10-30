@@ -3060,6 +3060,7 @@ function globalWeatherInput() {
 function queueWeather() {
   flushEval();
   if (shapePending) { shapeAfter.push(queueWeather); return; }
+  if (regionalFields?.pending?.()) { regionalFields.ready().then(queueWeather); return; }   // H6: the map's GPU fields are still being copied
   if (!$('weather').checked) {
     mapWeather?.queue();
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;

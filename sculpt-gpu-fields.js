@@ -361,7 +361,8 @@ export function createGpuFields(opts) {
     for (const fn of listeners) fn(event);
     return event;
   }
-  const whenReady = async () => { while (pendingRuns > 0) await settled; };
+  // A copy that was never filled (no evaluation ran, or the last one failed) is started here, so a reader that waits cannot wait forever.
+  const whenReady = async () => { if (mode && !valid && pendingRuns === 0) evaluate(null); while (pendingRuns > 0) await settled; };
   const front = () => mode ? null : fallback;
   function crop(request) {
     const rect = clip({x0: Math.floor(request.x0), y0: Math.floor(request.y0), x1: Math.ceil(request.x1), y1: Math.ceil(request.y1)});
@@ -400,7 +401,7 @@ export function createGpuFields(opts) {
   };
   return {
     buffers: () => front() ? fallback.buffers() : planes ? [...FIELD_KEYS_FLOAT.map(k => planes[k].buffer), ...planes.masks.map(a => a.buffer)] : [],
-    read, readCells, sample, cell, changed, ready: () => front() ? Promise.resolve() : whenReady(), pending: () => !front() && pendingRuns > 0,
+    read, readCells, sample, cell, changed, ready: () => front() ? Promise.resolve() : whenReady(), pending: () => !front() && (pendingRuns > 0 || !valid),
     readAsync: async (request, o) => { await (front() ? null : whenReady()); return read(request, o); },
     replayDetail: () => front() ? fallback.replayDetail() : Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
