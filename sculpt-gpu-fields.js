@@ -42,6 +42,7 @@ function shapeMaskWrites(kind, q, sat) {
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
+  ...['cgForm'].map(k => [k, 'u']), ...['cgSize', 'cgFacet', 'cgSizeVar', 'cgSmooth', 'cgTiers', 'cgStep', 'cgVar', 'bgFace', 'bgTilt', 'bgFlat', 'bgRough', 'bgTx', 'bgTy', 'bgJit', 'bgAlign', 'bgBreak', 'bgTurn'].map(k => [k, 'f']),
   ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plScale', 'plSeam', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
   ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'sOn', 'sWater', 'sDome', 'sSteps', 'sShelfSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'coFlatOn'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
@@ -230,7 +231,6 @@ export function nodeSupport(n, c) {
   if (kind === 'deep' && !c.natural) return 'restrained coast';
   // H6c: plateau, offset, lower, sand, grass.
   if (['plateau', 'offset', 'sand', 'grass'].includes(kind) && !c.edgesNatural) return `${kind} without natural edges`;
-  if (kind === 'crystal' && q.crystalForm >= .5) return 'crystal columns or bergs';
   if (kind === 'crater') {
     if (q.craterFacets > 0) return 'crater facets';
   }
@@ -326,22 +326,38 @@ export function prepareNode(n, geom, c) {
   } else if (kind === 'crystal') {
     // crystalList() (the pyramid form): crystals scattered along the path and within the brush, each a polygon of planes that meets at the apex.
     const rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return (x >>> 0) / 4294967296; };
-    const path = simplifyPath(pts, Math.max(1, radius * .05)), lengths = [0];
+    const path = simplifyPath(pts, Math.max(1, radius * .05)), lengths = [0], form = q.crystalForm >= 1.5 ? 2 : q.crystalForm >= .5 ? 1 : 0;
     for (let k = 1; k < path.length; k++) lengths.push(lengths[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
+    if (form === 1) {
+      // Column mound (stampColumns): the shader evaluates the lattice of columns round every cell, so the host hands over the simplified path (the mound's distance) and the box.
+      const pad = radius * 1.4, ax = Math.min(...path.map(p => p.x)), ay = Math.min(...path.map(p => p.y)), bx = Math.max(...path.map(p => p.x)), by = Math.max(...path.map(p => p.y));
+      const box = [Math.max(0, Math.floor((ax - pad) / spacing)), Math.max(0, Math.floor((ay - pad) / spacing)), Math.min(grid - 1, Math.ceil((bx + pad) / spacing)), Math.min(grid - 1, Math.ceil((by + pad) / spacing))];
+      for (let k = 0; k < path.length; k++) { const a = path[k], b = path[Math.min(k + 1, path.length - 1)]; segs.push({px: a.x, py: a.y, ex: b.x, ey: b.y, f0: [0, 0], f1: [0, 0], nx: 0, ny: 0, box}); }
+    } else {
     const total = lengths[lengths.length - 1], count = Math.max(1, Math.round(q.crystalCount * (1 + total / Math.max(8, radius * 1.2))));
     const variation = q.crystalVariation, scale = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1, crystalSize = q.crystalSize * scale;
     for (let k = 0; k < count; k++) {
       const along = rnd(k, 1) * total; let j = 1; while (j < path.length - 1 && lengths[j] < along) j++;
       const a = path[j - 1], b = path[j] || a, f = lengths[j] > lengths[j - 1] ? (along - lengths[j - 1]) / (lengths[j] - lengths[j - 1]) : 0;
-      const spread = Math.pow(rnd(k, 2), .8), angle = rnd(k, 3) * Math.PI * 2 + turn;
+      const spread = form === 2 && k === 0 ? 0 : Math.pow(rnd(k, 2), .8), angle = rnd(k, 3) * Math.PI * 2 + turn;
       const cx = a.x + (b.x - a.x) * f + Math.cos(angle) * spread * radius, cy = a.y + (b.y - a.y) * f + Math.sin(angle) * spread * radius;
       const width = crystalSize * (1 + variation * (rnd(k, 4) - .5) * 1.2) * (1 - .4 * spread);
       const height = q.amount * (1 - .45 * spread) * (1 + variation * (rnd(k, 5) - .5)) * Math.min(1.3, width / (Math.max(4, q.crystalSize) * scale));
       const sides = clamp(Math.round(q.crystalSides + variation * (rnd(k, 6) - .5) * 2.4), 3, 12), R = width / 2, lean = q.crystalLean * R * .75 * rnd(k, 7), leanAngle = rnd(k, 8) * Math.PI * 2 + turn;
+      if (form === 2) {
+        // A berg (stampBergs): the lowest of its face planes and broken-corner planes; the shader adds the waving of each outline from the plane's salt.
+        const nP = clamp(Math.round(sides), 3, 12), jit = clamp(q.bergJitter, 0, 1), align = clamp(q.crystalAlign, 0, 1), rot0 = turn + (1 - align) * rnd(k, 9) * Math.PI * 2, edgeB = extra.length, reachB = R * 1.55, nBreak = Math.round(q.bergBreak);
+        for (let e = 0; e < nP; e++) { const a = rot0 + (e + jit * (rnd(k, 40 + e) - .5) * .7) * Math.PI * 2 / nP; extra.push([Math.cos(a), Math.sin(a), R * Math.cos(Math.PI / nP) * (1 + jit * (rnd(k, 60 + e) - .5) * .6), q.bergFace * (1 + jit * (rnd(k, 80 + e) - .5) * 1.2)]); }
+        for (let j = 0; j < nBreak; j++) { const a = rnd(k, 100 + j) * Math.PI * 2; extra.push([Math.cos(a), Math.sin(a), R * (.55 + .35 * rnd(k, 120 + j)), q.bergFace * (.55 + .9 * rnd(k, 140 + j))]); }
+        const boxB = [Math.max(0, Math.floor((cx - reachB) / spacing)), Math.max(0, Math.floor((cy - reachB) / spacing)), Math.min(grid - 1, Math.ceil((cx + reachB) / spacing)), Math.min(grid - 1, Math.ceil((cy + reachB) / spacing))];
+        segs.push({px: cx, py: cy, ex: R, ey: Math.max(1, height), f0: [k, nP], f1: [nP + nBreak, edgeB], nx: 0, ny: 0, box: boxB});
+        continue;
+      }
       const edgeBase = extra.length;
       for (let e = 0; e < sides; e++) { const t = turn + rnd(k, 9) * Math.PI * 2 + (e + .5) * Math.PI * 2 / sides; extra.push([Math.cos(t), Math.sin(t), R * Math.cos(Math.PI / sides) * (1 + q.rough * .35 * (rnd(k, 20 + e) - .5)), 0]); }
       const box = [Math.max(0, Math.floor((cx - R) / spacing)), Math.max(0, Math.floor((cy - R) / spacing)), Math.min(grid - 1, Math.ceil((cx + R) / spacing)), Math.min(grid - 1, Math.ceil((cy + R) / spacing))];
       segs.push({px: cx, py: cy, ex: R, ey: Math.max(1, height), f0: [Math.cos(leanAngle) * lean, Math.sin(leanAngle) * lean], f1: [sides, edgeBase], nx: 0, ny: 0, box});
+    }
     }
   } else if (kind === 'fissure') {
     for (const pc of fissurePieces(fis, simplifyPath(pts, Math.max(1.5, fis.hw)), q, seed, radius)) segs.push({px: pc.a.x, py: pc.a.y, ex: (pc.b || pc.a).x, ey: (pc.b || pc.a).y, f0: [pc.r0, pc.r1], f1: [pc.h0, pc.h1], nx: 0, ny: 0});
@@ -395,7 +411,7 @@ export function prepareNode(n, geom, c) {
   const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : shapeMaskWrites(kind, q, n.satellite);
   const rim = kind === 'crater' ? craterRim(q, seed) : null;
   if (rim) { for (const c of rim.sect) extra.push([c.a, c.h, c.w, c.rel]); for (const g of rim.gaps) extra.push([g, 0, 0, 0]); }
-  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? 'stampCrystal' : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
+  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
       shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
@@ -405,6 +421,11 @@ export function prepareNode(n, geom, c) {
       fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,
       hole: n.hole ? 1 : 0, hx: n.hole?.x ?? 0, hy: n.hole?.y ?? 0, hR: n.hole?.R ?? 0, hRough: n.hole?.rough ?? 0, hSeed: n.hole?.seed ?? 0,
       nSect: rim ? rim.sect.length : 0, nGap: rim ? rim.gaps.length : 0, gapHw: rim?.hw ?? 0}};
+  if (kind === 'crystal') {
+    const bt = turn + (q.bergTiltDir || 0) * Math.PI / 180;
+    Object.assign(main.u, {cgForm: q.crystalForm >= 1.5 ? 2 : q.crystalForm >= .5 ? 1 : 0, cgSize: Math.max(4, q.crystalSize), cgFacet: clamp(q.crystalFacet, 0, 1), cgSizeVar: clamp(q.crystalSizeVar, 0, 1), cgSmooth: clamp(q.crystalSmooth, 0, 1),
+      cgTiers: q.crystalTiers ?? 0, cgStep: q.crystalStep ?? 0, cgVar: q.crystalVariation ?? 0, bgFace: q.bergFace, bgTilt: q.bergTilt, bgFlat: q.bergFlat, bgRough: q.bergRough, bgTx: Math.cos(bt), bgTy: Math.sin(bt), bgJit: clamp(q.bergJitter, 0, 1), bgTurn: turn});
+  }
   if ((water || (kind === 'offset' && q.shorePlates > 0)) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
@@ -515,7 +536,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'packPlane'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'stampColumns', 'stampBerg', 'packPlane'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;

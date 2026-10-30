@@ -1447,3 +1447,161 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
   F[ph] = clamp(raw + lift, u.minH, u.maxH);
   let keepM = max(strip, seam); F[pp] = max(F[pp], keepM); F[pr] = max(F[pr], keepM); F[pv] = min(F[pv], -keepM);
 }
+
+// ---- H10: crystal columns (form 1) and bergs (form 2) ----
+// Columns: a mound tiled with flat polygonal columns in a Voronoi pattern of up to three widths (stampColumns in sculpt.js). Each cell evaluates the columns of the
+// 3 x 3 lattice neighbours of every width in use itself (the mound is a distance to the stroke's path, cheap to evaluate), so there is no record pass and no thread
+// reads another's result. Seg k holds the path point k and the next (the last repeats itself).
+var<private> SZL: array<f32, 3> = array<f32, 3>(1.0, 0.55, 0.3);
+var<private> SZS: array<f32, 3> = array<f32, 3>(1.0, 0.65, 0.4);
+var<private> SZB: array<f32, 3> = array<f32, 3>(1.0, 0.4, 0.0);
+
+fn cgRnd(i: i32, j: i32, a: u32) -> f32 {
+  var x = ((bitcast<u32>(i) * 73856093u) ^ (bitcast<u32>(j) * 19349663u) ^ (u.seed + a * 83492791u)) * 2654435761u;
+  x = x ^ (x >> 15u); x = x * 2246822519u; x = x ^ (x >> 13u);
+  return f32(x) / 4294967296.0;
+}
+fn cgMound(x: f32, y: f32) -> f32 {
+  var d = 3.0e38;
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u];
+    let a = s0.xy; let dd = s0.zw - s0.xy; let l2 = dot(dd, dd);
+    var t = 0.0;
+    if (l2 > 0.0) { t = clamp(dot(vec2f(x, y) - a, dd) / l2, 0.0, 1.0); }
+    d = min(d, length(vec2f(x, y) - a - dd * t));
+  }
+  let edge = u.radius * (1.0 + u.rough * 0.35 * vnoise(x / (u.radius * 0.7), y / (u.radius * 0.7), u.seed ^ 0x2c1u));
+  let r = d / edge;
+  if (r >= 1.0) { return 0.0; }
+  return u.amount * pow(1.0 - r * r, 1.2);
+}
+fn cgLevel(x: f32, y: f32, m: f32) -> i32 {
+  if (!(u.cgSizeVar > 0.0)) { return 0; }
+  let f = 0.5 + 0.32 * vnoise(x / 64.0, y / 64.0, u.seed ^ 0x51au) + 0.18 * vnoise(x / 27.0, y / 27.0, u.seed ^ 0x2e7u) + 0.3 * (m / u.amount - 0.5);
+  if (f > 1.17 - 0.4 * u.cgSizeVar) { return 2; }
+  if (f > 0.84 - 0.3 * u.cgSizeVar) { return 1; }
+  return 0;
+}
+// The column's centre in the shape's frame and in the world.
+struct CgCol { l: vec2f, w: vec2f }
+fn cgCentre(lv: i32, i: i32, j: i32) -> CgCol {
+  let Ll = u.cgSize * SZL[lv]; let o = u32(lv) * 16u;
+  let lx = (f32(i) + 0.5 + (cgRnd(i, j, 1u + o) - 0.5) * 0.9) * Ll; let ly = (f32(j) + 0.5 + (cgRnd(i, j, 2u + o) - 0.5) * 0.9) * Ll;
+  var wx = lx; var wy = ly;
+  if (u.framed != 0u) {
+    let det = u.inv0 * u.inv3 - u.inv1 * u.inv2;
+    let a = u.inv3 / det; let b = -u.inv1 / det; let c = -u.inv2 / det; let d = u.inv0 / det;
+    let e = -(a * u.inv4 + c * u.inv5); let f = -(b * u.inv4 + d * u.inv5);
+    wx = a * lx + c * ly + e; wy = b * lx + d * ly + f;
+  }
+  var r: CgCol; r.l = vec2f(lx, ly); r.w = vec2f(wx, wy); return r;
+}
+
+@compute @workgroup_size(8, 8)
+fn stampColumns(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let cells = u.grid * u.grid; let i = u32(y) * u.grid + u32(x);
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let levels = select(1, 3, u.cgSizeVar > 0.0);
+  var d1 = 3.0e38; var d2 = 3.0e38; var bl = -1; var bi = 0; var bj = 0;
+  // The nearest column centre of any width in use here.
+  for (var lv = 0; lv < levels; lv++) {
+    let Ll = u.cgSize * SZL[lv]; let ci = i32(floor(lx / Ll)); let cj = i32(floor(ly / Ll));
+    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
+      let c = cgCentre(lv, ii, j);
+      if (levels > 1 && cgLevel(c.w.x, c.w.y, cgMound(c.w.x, c.w.y)) != lv) { continue; }
+      let d = length(vec2f(lx, ly) - c.l);
+      if (d < d1) { d2 = d1; d1 = d; bl = lv; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
+    } }
+  }
+  if (bl < 0) {
+    // No width in use is near: the widest columns, whatever they asked for.
+    let ci = i32(floor(lx / u.cgSize)); let cj = i32(floor(ly / u.cgSize));
+    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
+      let c = cgCentre(0, ii, j); let d = length(vec2f(lx, ly) - c.l);
+      if (d < d1) { d2 = d1; d1 = d; bl = 0; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
+    } }
+  }
+  let o = u32(bl) * 16u;
+  let c = cgCentre(bl, bi, bj);
+  let m = cgMound(c.w.x, c.w.y);
+  if (m <= 1.0) { return; }
+  let base = F[PH * cells + i];
+  // A bare column is the mound's own smooth hill: no flat top, no crystal mark, no protection.
+  if (u.cgSmooth > 0.0 && cgRnd(bi, bj, 12u + o) < u.cgSmooth * SZB[bl]) {
+    let hill = cgMound(wx, wy);
+    if (hill > 0.5) { F[PH * cells + i] = clamp(base + hill, u.minH, u.maxH); }
+    return;
+  }
+  let e = 2.0;
+  let gx = (cgMound(c.w.x + e, c.w.y) - cgMound(c.w.x - e, c.w.y)) / (2.0 * e); let gy = (cgMound(c.w.x, c.w.y + e) - cgMound(c.w.x, c.w.y - e)) / (2.0 * e);
+  var step = 0.0;
+  if (!(cgRnd(bi, bj, 3u + o) < 0.4)) { step = (cgRnd(bi, bj, 4u + o) - 0.35) * 2.0 * u.cgStep * (0.5 + u.cgVar) * SZS[bl]; }
+  let shade = 0.8 + 0.2 * cgRnd(bi, bj, 5u + o);
+  let incline = gx * (wx - c.w.x) + gy * (wy - c.w.y);
+  var top = m + step;
+  if (u.cgTiers > 0.0) { top = top + incline * (1.0 - clamp(u.cgTiers, 0.0, 1.0)); } else { top = top + incline; }
+  if (u.cgFacet > 0.0) {
+    let fa = u.cgFacet;
+    let h0 = cgRnd(bi, bj, 6u + o) * 6.2831853; let h1 = h0 + 3.1415927 * (0.5 + cgRnd(bi, bj, 7u + o));
+    let m0 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 8u + o)); var m1 = 0.0;
+    if (!(cgRnd(bi, bj, 9u + o) < 0.3)) { m1 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 10u + o)); }
+    let ox = lx - c.l.x; let oy = ly - c.l.y;
+    let pa = cos(h0) * m0 * ox + sin(h0) * m0 * oy; let pb = cos(h1) * m1 * ox + sin(h1) * m1 * oy;
+    if (cgRnd(bi, bj, 11u + o) < 0.5) { top = top + min(pa, pb); } else { top = top + max(pa, pb); }
+  }
+  let h = max(0.0, top);
+  if (h <= 0.5) { return; }
+  F[PH * cells + i] = clamp(base + h, u.minH, u.maxH); F[PP * cells + i] = 1.0;
+  F[PX * cells + i] = select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
+}
+
+// Bergs: per block the lowest of its face planes and broken-corner planes, each outline waving along its face, a tilted top and roughness; the highest block wins.
+// Seg k: (x, y, R, height), (index, faces, planes, first plane in the extra table), box.
+@compute @workgroup_size(8, 8)
+fn stampBerg(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let cells = u.grid * u.grid; let i = u32(y) * u.grid + u32(x);
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var best = 0.0;
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let qx = wx - s0.x; let qy = wy - s0.y; let R = s0.z; let height = s0.w;
+    let reach = R * 1.55; let wave = R * (0.02 + 0.12 * u.bgJit);
+    var m = (reach - length(vec2f(qx, qy))) * u.bgFace;
+    if (m <= 0.0) { continue; }
+    let idx = i32(s1.x); let nf = u32(s1.y); let np = u32(s1.z); let at = u.mwBase + u.nwrites + u32(s1.w);
+    for (var e = 0u; e < np; e++) {
+      let p = MW[at + e];
+      var salt = u.seed ^ (0x6a1u + e * 977u);
+      if (e >= nf) { salt = u.seed ^ (0x9b3u + (e - nf) * 1301u); }
+      let along = -qx * p.y + qy * p.x; let d = p.z + wave * vnoise(along / (R * 0.45), f32(idx) * 7.3, salt);
+      m = min(m, (d - (qx * p.x + qy * p.y)) * p.w);
+      if (m <= 0.0) { break; }
+    }
+    if (m <= 0.0) { continue; }
+    var h = min(m, height - u.bgTilt * max(0.0, R * u.bgFlat - (qx * u.bgTx + qy * u.bgTy)));
+    if (h <= 0.0) { continue; }
+    if (u.bgRough > 0.0) {
+      let f = vnoise(wx / 40.0, wy / 40.0, u.seed ^ 0x2a1u) * 0.3 + vnoise(wx / 17.0, wy / 17.0, u.seed ^ 0x4c7u) * 0.3 + vnoise(wx / 8.0, wy / 8.0, u.seed ^ 0x6e3u) * 0.28 + vnoise(wx / 4.0, wy / 4.0, u.seed ^ 0x8f9u) * 0.18;
+      h = h + u.bgRough * f * sm(0.0, 4.0, h);
+    }
+    if (h > best) { best = h; }
+  }
+  if (best <= 0.0) { return; }
+  F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
+}
