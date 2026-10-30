@@ -781,6 +781,7 @@ export function createPagedFields(opts) {
         await new Promise(r => setTimeout(r, 0));
       }
       if (!coarseFullAt) coarseFullAt = performance.now();
+      scratchT?.destroy(); scratchT = null;   // the evaluation target the background fill borrowed (14 MB) goes back
     } catch (err) { error = err; console.error(err); }
     finally { coarseRunning = false; }
   }

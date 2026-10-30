@@ -165,38 +165,6 @@ export class GpuErosion {
     return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu, tiles: null, gpuFed: true}};
   }
 
-  // H5b prototype: the Time pass in windows. The map is cut into cores of `core` samples; each core is run alone in a square window of
-  // core + 2 * apron samples (moved inward at the map edge, so a window never leaves the map and the map edge is the window edge there),
-  // and only the core of each result is kept. The kept cores are stitched into whole-map buffers with runGpu's layout, so the chunk feed
-  // reads them as it reads a whole-map result. `onWindow` hears each window's rectangle and milliseconds.
-  async runGpuPaged(request, {core, apron, onWindow = null}) {
-    const {device} = this, {grid, size} = request, n = grid * grid, spacing = (size - 1) / (grid - 1), side = Math.min(grid, core + 2 * apron), started = performance.now();
-    const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-    const make = (label, bytes) => device.createBuffer({label, size: Math.max(16, bytes), usage: S});
-    const weather = make('paged time pass height', n * 8), maps = [0, 1, 2].map(k => make('paged time pass map ' + k, n * 4));
-    const wn = side * side, windows = [];
-    for (let cy = 0; cy < grid; cy += core) for (let cx = 0; cx < grid; cx += core) {
-      const cw = Math.min(core, grid - cx), ch = Math.min(core, grid - cy), ox = Math.max(0, Math.min(grid - side, cx - apron)), oy = Math.max(0, Math.min(grid - side, cy - apron));
-      const planes = make('window planes', 6 * wn * 4), masks = make('window masks', wn * 28), t0 = performance.now();
-      const enc = device.createCommandEncoder({label: 'window copy'});
-      for (let p = 0; p < 6; p++) for (let r = 0; r < side; r++) enc.copyBufferToBuffer(request.planes, ((p * n) + (oy + r) * grid + ox) * 4, planes, ((p * wn) + r * side) * 4, side * 4);
-      for (let r = 0; r < side; r++) enc.copyBufferToBuffer(request.masks, ((oy + r) * grid + ox) * 28, masks, r * side * 28, side * 28);
-      device.queue.submit([enc.finish()]);
-      const result = await this.runGpu({...request, planes, masks, grid: side, spacing, ox, oy});
-      const out = device.createCommandEncoder({label: 'window stitch'});
-      for (let r = 0; r < ch; r++) {
-        const from = (cy - oy + r) * side + (cx - ox), to = (cy + r) * grid + cx;
-        for (let p = 0; p < 2; p++) out.copyBufferToBuffer(result.weather, (p * wn + from) * 4, weather, (p * n + to) * 4, cw * 4);
-        for (let k = 0; k < 3; k++) out.copyBufferToBuffer(result.maps[k], from * 4, maps[k], to * 4, cw * 4);
-      }
-      device.queue.submit([out.finish()]);
-      await device.queue.onSubmittedWorkDone();
-      result.weather.destroy(); result.maps.forEach(b => b.destroy()); planes.destroy(); masks.destroy();
-      windows.push({core: [cx, cy, cw, ch], origin: [ox, oy], side, ms: performance.now() - t0, gpu: result.parts.gpu}); onWindow?.(windows.at(-1));
-    }
-    return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu: windows.reduce((a, w) => a + w.gpu, 0), tiles: null, gpuFed: true, windows}};
-  }
-
   // request: {height, protect, grid, size, seaLevel, age, rain, talusAngle}. Returns the eroded height (rock + debris), the
   // water throughput scaled like the worker's flow, the material deposited, the loose debris and the milliseconds spent.
   async run(request) {
