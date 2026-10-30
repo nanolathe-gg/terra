@@ -4218,7 +4218,9 @@ async function shapeCompare() {
   flushEval(); await idle();
   if (!shapeStudy.used) return {error:'gpuShape is off or the scene fell back: '+(shapeStudy.reason||'knob 0')};
   const a=copy(live()),saved=experiment.get('gpuShape');
-  experiment.set('gpuShape','0'); const t0=performance.now(); prefix=[]; evaluate(0); const jsMs=performance.now()-t0; const ref=copy(live()); experiment.set('gpuShape',saved??'1');
+  // gpuShapeOn reads the address first, so the JS reference has to change the address (H8b: the experiment value alone left the GPU running both sides).
+  const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0');
+  experiment.set('gpuShape','0'); window.history.replaceState(null,'',off); const t0=performance.now(); prefix=[]; evaluate(0); const jsMs=performance.now()-t0; const ref=copy(live()); experiment.set('gpuShape',saved??'1'); window.history.replaceState(null,'',href);
   evaluate(0); await idle(); const b=copy(live());
   return {grid,jsEvalMs:jsMs,vsJs:comparePlanes(a,ref,grid,MASK_KEYS),repeat:comparePlanes(a,b,grid,MASK_KEYS)};
 }
