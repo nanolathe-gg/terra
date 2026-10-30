@@ -328,3 +328,5 @@ try {
   console.log(JSON.stringify(result, (k, v) => k === 'visible' || k === 'events' ? undefined : v).slice(0, 4000));
   ws.close(); chrome.kill(); await sleep(500);
 }
+// A timer or the socket can keep node alive after the JSON is written; --only stops are not failures.
+process.exit(result.error && !result.error.includes('(--only)') ? 1 : 0);

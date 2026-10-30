@@ -387,7 +387,7 @@ Each is written in full when the one before it lands.
 | H5b | Weather on large map canvases: coarse and fine tiles, stored planes, regional exactness (absorbs H2b) | Outlined |
 | H4b | Rock blocks on hill rock (Green), judged with H5's outcrops | Merged cb57320 |
 | H6 | Green's shape on the GPU | Outlined |
-| H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Written |
+| H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Merged 1fffe4f (quarter levels and drag p95 open) |
 | Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 

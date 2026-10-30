@@ -3723,6 +3723,71 @@ new `repro/perf.mjs`. Not any `.wgsl` file, and not `sculpt.py`.
   `merge-h5`);
 - guard `--worlds none`.
 
+**Done (merged as 1fffe4f; EXPERIMENTS row 146; notes in
+`$R/agent-H7/NOTES.md`).** No final pixel changed.
+- **Item 1, the baseline** (`repro/perf.mjs`): see the note under item 1.
+- **2a, sampling once per revision.**
+  - `sculpt-fields.js` keeps each node's reach and each sampled point
+    until the next edit.
+  - `sculpt-canvas.js` samples the 128² overview only over an edit's
+    dirty rectangle, in slices (a 32² lattice first), and not at all
+    during a drag.
+  - Field sampling on a 4×4 load went from 11.7 to 0.45 s.
+- **2b, order.**
+  - While the Time pass is pending, the canvas paints cached chunks and
+    bakes none, for at most 8 s.
+  - A bake whose scene changed while it waited for its fields is
+    dropped before it reaches the GPU.
+  - Alone it is worth only 0.2-0.3 s, because 2a had already removed the
+    wait.
+- **2c, upload.** The packing loop in `ChunkTerrainRenderer.upload` looks
+  each plane up once. It went from 233 to 125 ms a chunk, with the same
+  bytes.
+- **Results** (seconds unless marked; single runs on a shared host):
+
+  | | 4×4 before | 4×4 after | 8×8 before | 8×8 after |
+  | --- | --- | --- | --- | --- |
+  | Load, visible chunks final | 19.1 | 7.2 | 33.2 | 16.2 |
+  | Release, visible chunks final | 12.9 | 2.1 | 26.4 | 7.5 |
+  | Scroll rAF p95 | 1300 ms | 16.8 ms | 3050 ms | 50 ms |
+  | Drag rAF p95 | 3133 ms | 350 ms | 7666 ms | 283 ms |
+  | Export | 7.5 | 4.6 | 25.5 | 16.0 |
+
+  The study already met every target and is unchanged.
+- **Merge checks:**
+  - all 27 scenes are exact against `merge-h4b`;
+  - replay mismatch is 0;
+  - `regional.mjs` finds 0 mismatches in all 31 planes on all 27 scenes;
+  - the 4×4 export's indexed PNG hash is identical, and the .ufo has
+    the same size, differing only in the 12 bytes of the map name;
+  - my own `perf.mjs` run on 8801, at load 4.5, gave load 7.9 s,
+    release 2.25 s, scroll p95 16.8 ms and drag p95 367 ms.
+- `perf.mjs` now exits once it has written its JSON; before, it hung.
+
+**Still open:**
+- **Drag p95 misses 33 ms.** It is 350-367 ms on 4×4 and 283 ms on 8×8.
+  Each pointer move costs:
+  - about 160 ms of shape replay, which is H6's;
+  - about 150 ms of full-resolution upload;
+  - the map outline. `drawMapBounds` re-samples the whole edge on every
+    move, because the memo is cleared each revision: 328k calls, 4.8 s
+    over a 34 s drag.
+
+  Skipping the outline during a gesture, or updating it by dirty
+  rectangle, is a cheap next step. The rest needs H6 and quarter levels.
+- **Item 3 (quarter levels) was not done.** The shaders read baked
+  fields one texel per world pixel (`chunkFieldsOrigin` and
+  `chunkFieldsSize` in `sculpt-common.wgsl`), so a quarter bake needs
+  WGSL changes outside this card's files.
+- **Scene replay** takes 4.3 s on 4×4 and 6.5 s on 8×8 (H6). On 8×8,
+  tile weather adds about 7.5 s to load.
+- **The 2b hold** uses `canExport()` as its "weather pending" signal,
+  but that is also false while loading or during a flow bake. The 8 s
+  cap bounds it. An explicit weather-pending call in `sculpt.js` would
+  be cleaner.
+- **Memory.** Peak heap on 4×4 rose from 508 to 558 MB because of the
+  sample memo, which is capped at 200k entries. GPU memory is unchanged.
+
 H6 (shape on the GPU) is outlined in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
 card from H3 on follows. It is written here in full when the owner asks
