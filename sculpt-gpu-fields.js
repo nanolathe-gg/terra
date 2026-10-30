@@ -1086,14 +1086,14 @@ export function createPagedFields(opts) {
 
   // ---- resources
   const shapeBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.target) n += pg.target.bytes; return n; };
-  const weatherBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.weather) n += WEATHER_BYTES; return n; };
+  const weatherBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.weather) n += WEATHER_BYTES + (pg.weather.field ? CORE * CORE * 16 : 0); return n; };
   const stagingBytes = () => (staging?.bytes || 0) + (scratchT?.bytes || 0);
   const cpuBytes = () => { let n = 0; for (const pg of pagesMap.values()) n += (pg.cpu ? 8 * SIDE * SIDE : 0) + (pg.cpuW ? 8 * CORE * CORE : 0); return n; };
   const gpuBytes = () => shapeBytes() + weatherBytes() + stagingBytes() + (engine?.bytes() || 0);
   // A page that is read or gathered right now (pinned) keeps its buffers until the last reader lets go.
   function dropShape(pg) { if (pg.target) { if (pg.pins) (pg.zombies ??= []).push(pg.target); else pg.target.destroy(); } pg.target = null; pg.cpu = null; pg.cpuRev = -1; }
   function unpin(pg) { pg.pins--; if (!pg.pins && pg.zombies?.length) { for (const t of pg.zombies) t.destroy(); pg.zombies = []; } }
-  function dropWeather(pg) { if (pg.weather) { pg.weather.weather.destroy(); pg.weather.maps.forEach(b => b.destroy()); pg.weather = null; pg.cpuW = null; } }
+  function dropWeather(pg) { if (pg.weather) { pg.weather.weather.destroy(); pg.weather.maps.forEach(b => b.destroy()); pg.weather.field?.destroy(); pg.weather = null; pg.cpuW = null; } }
   function trim() {
     const lru = (has, free, budget, size) => {
       let total = 0; for (const pg of pagesMap.values()) if (has(pg)) total += size;
@@ -1204,18 +1204,20 @@ export function createPagedFields(opts) {
     try {
       engine.submit(nodes(), context(), null, {readback: false, target: T, prepare});
       const r = await tm.run({planes: T.F, masks: T.Mk, grid: side, ox: wx0, oy: wy0});
-      if (time !== tm) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); return; }
+      if (time !== tm) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy(); return; }
       const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-      const w = {weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S}))};
+      const w = {weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S})),
+        field: r.field ? d.createBuffer({label: 'page material field', size: CORE * CORE * 16, usage: S}) : null};
       const enc = d.createCommandEncoder({label: 'page weather crop'}), wn = side * side;
       for (let row = 0; row < pg.ch; row++) {
         const from = (pg.y0 - wy0 + row) * side + (pg.x0 - wx0), to = row * CORE;
         for (let p = 0; p < 2; p++) enc.copyBufferToBuffer(r.weather, (p * wn + from) * 4, w.weather, (p * CORE * CORE + to) * 4, pg.cw * 4);
         for (let k = 0; k < 3; k++) enc.copyBufferToBuffer(r.maps[k], from * 4, w.maps[k], to * 4, pg.cw * 4);
+        if (r.field) enc.copyBufferToBuffer(r.field, from * 16, w.field, to * 16, pg.cw * 16);
       }
       d.queue.submit([enc.finish()]);
       await d.queue.onSubmittedWorkDone();
-      r.weather.destroy(); r.maps.forEach(b => b.destroy());
+      r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy();
       dropWeather(pg); pg.weather = w; if (pg.staleSeq === seq) pg.stale = false;
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
@@ -1257,6 +1259,7 @@ export function createPagedFields(opts) {
       if (wantWeather && pg.weather) {
         const src = {ox: pg.x0, oy: pg.y0, pw: CORE, ph: CORE};
         dispatch('gatherHeight', src, core, {'3.5': {buffer: pg.weather.weather}, '3.6': {buffer: dst.W}});
+        if (pg.weather.field) dispatch('gatherField', src, core, {'3.13': {buffer: pg.weather.field}, '3.14': {buffer: dst.Fd}});
         dispatch('gatherMaps', src, core, {'3.7': {buffer: pg.weather.maps[0]}, '3.8': {buffer: pg.weather.maps[1]}, '3.9': {buffer: pg.weather.maps[2]}, '3.10': {buffer: dst.M[0]}, '3.11': {buffer: dst.M[1]}, '3.12': {buffer: dst.M[2]}});
       }
     }
@@ -1264,8 +1267,8 @@ export function createPagedFields(opts) {
   }
   function makeSet(cells, label) {
     const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, mk = (n, l) => d.createBuffer({label: label + ' ' + l, size: Math.max(16, n), usage: S});
-    const set = {cells, F: mk(cells * 24, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k))};
-    set.bytes = cells * 72; set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); };
+    const set = {cells, F: mk(cells * 24, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k)), Fd: mk(cells * 16, 'material field')};
+    set.bytes = cells * 88; set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); set.Fd.destroy(); };
     return set;
   }
   // The staging set the chunk bake reads, reused (grown, never shrunk): the queue is in order, so a later gather runs after an earlier bake's feed pass.
@@ -1389,7 +1392,7 @@ export function createPagedFields(opts) {
       return {paged: true, weather, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
         gather(enc, passes) {
           const gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, set = stagingFor(gw * gh), tmp = encodeGather(enc, passes, rect, set, weather);
-          return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, grid: gw, cells: gw * gh, tmp};
+          return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, field: weather && time.material ? set.Fd : null, grid: gw, cells: gw * gh, tmp};
         }};
     },
     setTime, timeOn: () => Boolean(time),
@@ -1413,9 +1416,9 @@ export function createPagedFields(opts) {
 const FEED_USES = {
   seedMain: ['0.0', '0.1', '0.2', '1.0', '1.1', '1.2', '1.3'], tileFlagMain: ['0.0', '1.3', '1.4'], tileListMain: ['0.0', '1.4', '1.5', '1.6'],
   tileArgsMain: ['1.6', '1.7'], refinedMain: ['0.0', '1.8', '1.9'],
-  feedMain: ['0.0', '0.1', '0.2', '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8'],
+  feedMain: ['0.0', '0.1', '0.2', '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8', '2.9'],
   // H5b: the gather from pages
-  gatherShape: ['3.0', '3.1', '3.2', '3.3', '3.4'], gatherHeight: ['3.0', '3.5', '3.6'], gatherMaps: ['3.0', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12']};
+  gatherShape: ['3.0', '3.1', '3.2', '3.3', '3.4'], gatherHeight: ['3.0', '3.5', '3.6'], gatherMaps: ['3.0', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12'], gatherField: ['3.0', '3.13', '3.14']};
 const feedCache = new WeakMap();
 // {pipes, groups(entry, resources)}: resources maps 'group.binding' to a binding resource; groups() returns [[index, bindGroup]...].
 export function feedPasses(device) {

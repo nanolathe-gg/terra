@@ -99,6 +99,7 @@ fn mapsMain(@builtin(global_invocation_id) id: vec3u) {
 struct MF {
     grid: f32, spacing: f32, sea: f32, base: f32, spread: f32, seed: u32, count: u32, floorMode: f32,
     mineral: f32, elevatedFrom: f32, elevatedTo: f32, elevatedMix: f32, slopeStart: f32, slopeFull: f32, sigma: f32, axis: f32,
+    ox: f32, oy: f32, pad0: f32, pad1: f32,   // the window's first lattice column and row: the hash and noise run on world cells, so a page's field joins its neighbours'
 }
 @group(2) @binding(0) var<uniform> mf: MF;
 @group(2) @binding(1) var<storage, read> mfHeight: array<f32>;
@@ -181,14 +182,20 @@ fn mfScatter(isFlow: bool, x: f32, y: f32, value: f32) {
 
 @compute @workgroup_size(64)
 fn mfDropsMain(@builtin(global_invocation_id) id: vec3u) {
+    // One thread a cell of the window: a drop starts in the cell with probability 0.52, from a generator seeded by the world cell. The
+    // density and the drops themselves do not depend on how the map is cut into windows or pages.
     if (id.x >= mf.count) { return; }
-    var rng = (mf.seed ^ 0x4e91ad7bu ^ (id.x * 2654435761u)); rng = (rng ^ (rng >> 15u)) * 2246822519u; rng |= 1u;
+    let g = mf.grid;
+    let cx = f32(id.x % u32(g)); let cy = f32(id.x / u32(g));
+    let wcx = u32(i32(mf.ox + cx)); let wcy = u32(i32(mf.oy + cy));
+    var rng = (mf.seed ^ 0x4e91ad7bu ^ (wcx * 2654435761u) ^ (wcy * 2246822519u)); rng = (rng ^ (rng >> 15u)) * 2246822519u; rng = (rng ^ (rng >> 13u)) * 3266489917u; rng |= 1u;
     // xorshift32, as the worker's generator
     var s = rng;
-    let g = mf.grid;
     s ^= s << 13u; s ^= s >> 17u; s ^= s << 5u; let r0 = f32(s) / 4294967296.0;
     s ^= s << 13u; s ^= s >> 17u; s ^= s << 5u; let r1 = f32(s) / 4294967296.0;
-    var x = r0 * (g - 2.0) + 0.5; var y = r1 * (g - 2.0) + 0.5;
+    s ^= s << 13u; s ^= s >> 17u; s ^= s << 5u; let rs = f32(s) / 4294967296.0;
+    if (rs > 0.52) { return; }
+    var x = min(cx + r0, g - 1.5); var y = min(cy + r1, g - 1.5);
     let start = mfSampleG(0u, x, y); let sx = mfSampleG(1u, x, y); let sy = mfSampleG(2u, x, y); let slope = length(vec2f(sx, sy));
     s ^= s << 13u; s ^= s >> 17u; s ^= s << 5u; let ticket = f32(s) / 4294967296.0;
     if (start < 0.04 || slope < 0.04 || ticket > start) { return; }
@@ -198,7 +205,7 @@ fn mfDropsMain(@builtin(global_invocation_id) id: vec3u) {
         let h = mfSampleH(x, y); let xx = mfSampleG(1u, x, y); let yy = mfSampleG(2u, x, y); let grade = length(vec2f(xx, yy));
         if (h <= mf.sea + 0.2) { break; }
         if (grade > 0.018) { dx = dx * 0.78 - xx / max(0.08, grade) * 0.22; dy = dy * 0.78 - yy / max(0.08, grade) * 0.22; }
-        let bend = (mfNoise(x * mf.spacing / 23.0, y * mf.spacing / 23.0, mf.seed ^ 0x6173u) - 0.5) * 0.20;
+        let bend = (mfNoise((x + mf.ox) * mf.spacing / 23.0, (y + mf.oy) * mf.spacing / 23.0, mf.seed ^ 0x6173u) - 0.5) * 0.20;
         let vx = dx - dy * bend; let vy = dy + dx * bend; let norm = length(vec2f(vx, vy));
         dx = vx / norm; dy = vy / norm;
         let nx = x + dx * step; let ny = y + dy * step;
@@ -243,7 +250,7 @@ fn mfCombineMain(@builtin(global_invocation_id) id: vec3u) {
     if (i32(id.x) >= g || i32(id.y) >= g) { return; }
     let i = i32(id.y) * g + i32(id.x);
     if (mfHeight[i] <= mf.sea + 0.2) { mfField[i] = vec4f(0.0); return; }
-    let wx = f32(id.x) * mf.spacing; let wy = f32(id.y) * mf.spacing;
+    let wx = (f32(id.x) + mf.ox) * mf.spacing; let wy = (f32(id.y) + mf.oy) * mf.spacing;
     let clusters = 0.65 * mfNoise(wx / 31.0, wy / 31.0, mf.seed ^ 0x941au) + 0.35 * mfNoise(wx / 11.0, wy / 11.0, mf.seed ^ 0x4b79u);
     let arrival = 1.0 - exp(-(mfSettled[i] * 0.75 + mfBroad[i] * 0.25) * 2.8);
     let soil = (1.0 - mfSource[i]) * 0.22 + mfBasin[i] * 0.6 + mfRunoff[i] / (mfRunoff[i] + 3.0) * 0.26;

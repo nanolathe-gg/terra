@@ -2858,13 +2858,12 @@ function sampleRegional(x,y) {
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
 const gpuFeedOn=() => new URLSearchParams(location.search).get('gpuFeed')!=='0';
-// H8b: the fed pass leaves its result in GPU buffers, where the material field (a CPU array from the height) cannot join it yet, so a world that asks for the field takes the unfed pass.
-const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0 && !(Number($('material-weathering')?.value)>0));
+const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
 const gpuFeedEligible=() => Boolean(gpuFeedOn() && renderer?.engine && regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
 // A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
 // keeps its buffers), so a retired result is destroyed at that moment and not on a timer. gpuBytes() is what the canvas counts against its budget.
 const retiredWeather=new Set(); let gpuPassBytes=0;
-function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retiredWeather.delete(w); w.weather.destroy(); w.maps.forEach(m => m.destroy()); }
+function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retiredWeather.delete(w); w.weather.destroy(); w.maps.forEach(m => m.destroy()); w.field?.destroy(); }
 function leaseGpuWeather(w) { w.leases=(w.leases||0)+1; let given=false; return () => { if (given) return; given=true; w.leases--; if (w.retired && w.leases<=0) destroyGpuWeather(w); }; }
 function retireGpuWeather(w) { w.retired=true; if (w.leases>0) retiredWeather.add(w); else destroyGpuWeather(w); }
 const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+[...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes;
@@ -2894,9 +2893,13 @@ function configurePagedTime(fields=regionalFields) {
   if (!on) return fields.setTime(null);
   const p={age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),columnContrast:renderer.variantNumber('columnContrast',1),
     envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
-  return fields.setTime({key:JSON.stringify(p),run:async win => {
+  const material=materialKnobs();
+  return fields.setTime({key:JSON.stringify({...p,material}),material:Boolean(material),run:async win => {
     const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
-    return erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy});
+    const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy});
+    // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
+    if (material) r.field=await erosion.materialField({heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,ox:win.ox,oy:win.oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
+    return r;
   }});
 }
 function queuePagedWeather() {
@@ -2923,7 +2926,7 @@ async function gpuFeedSource(signal,regionFn) {
   const on=$('weather').checked;
   if (on && refined && !gpuWeather) return null;
   const w=on?gpuWeather:null;
-  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,release:w?leaseGpuWeather(w):() => {}};
+  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,release:w?leaseGpuWeather(w):() => {}};
 }
 function readRegional(request) {
   if (pagedOn()) return regionalFields.readAsync(request);
@@ -3214,14 +3217,20 @@ function queueWeather() {
       .catch(err => { if (job===weatherJob) failWeather(err.message); });
   } catch (err) { failWeather(err.message); }
 }
-// H8: the Time pass's material field (sediment arrival, soil, softened source), when the Material weathering control is above 0. It replaces the
-// worker's weatherMaterials on the engine path; null when the control is 0 or deposits are off.
+// H12: the material field's knobs, or null when the Material weathering control is 0. The field comes from the Time pass's eroded height on the GPU
+// (engine-weather.wgsl mf*) and joins the chunk feed in gridTexture layer 1; a change of any of these drops the weather like a change of the pass's own knobs.
+const materialKnobs=() => { const amount=Number($('material-weathering')?.value)/100; return amount>0?{depositSpread:Number($('deposit-spread').value)/100,seed:refinementSeed,mineral:renderer.variant.get('transition')==='mineral'}:null; };
+// The 1024-px study reads the Time pass back into CPU arrays, so it takes the material field from the eroded height the same way: the GPU field
+// (engine-weather.wgsl mf*) from a height uploaded for it, read back as the Float32Array the whole-image draw wants. Null when the control is 0.
 async function materialRule(height) {
-  const amount=Number($('material-weathering').value)/100;
-  if (!(amount>0) || experiment.get('deposits')==='off') return null;
+  const material=materialKnobs(); if (!material) return null;
   try {
-    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
-    return await erosion.materialField({height,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:refinementSeed,depositSpread:Number($('deposit-spread').value)/100,profile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}});
+    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer),device=renderer.device;
+    const heightBuffer=device.createBuffer({size:height.length*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(heightBuffer,0,Float32Array.from(height));
+    const field=await erosion.materialField({heightBuffer,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
+    const out=new Float32Array(await readBuffer(device,field,0,grid*grid*16)); field.destroy(); heightBuffer.destroy();
+    return out;
   } catch (err) { console.error(err); return null; }
 }
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
@@ -3234,11 +3243,12 @@ async function runFedWeather(job) {
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
     const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
       envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
-    const result=await erosion.runGpu(request);
+    const result=await erosion.runGpu(request),material=materialKnobs();
+    if (material && job===weatherJob && !stroke) result.field=await erosion.materialField({heightBuffer:result.weather,heightOffset:grid*grid,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
     gpuPassBytes=0;
     if (job!==weatherJob || stroke) { retireGpuWeather(result); return; }
     dropGpuWeather();
-    gpuWeather={weather:result.weather,maps:result.maps,bytes:result.bytes,mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
+    gpuWeather={weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy

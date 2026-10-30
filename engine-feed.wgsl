@@ -21,7 +21,7 @@ struct FU {
     gh: u32,
     cw: u32,            // the chunk's lattice size; texels beyond it repeat the last column and row
     ch: u32,
-    mode: u32,          // 1: blend the Time pass's height, 2: the weather maps are present, 4: export art (height clamped to 0..255)
+    mode: u32,          // 1: blend the Time pass's height, 2: the weather maps are present, 4: export art (height clamped to 0..255), 8: the material field is present
     rateMask: u32,      // the mask plane that holds the erosion override
     sea: f32,
     spacing: f32,
@@ -140,6 +140,7 @@ fn refinedMain(@builtin(global_invocation_id) id: vec3u) {
 @group(2) @binding(6) var outRoutes: texture_storage_2d<rgba8unorm, write>;
 @group(2) @binding(7) var outGrid: texture_storage_2d_array<rgba8unorm, write>;
 @group(2) @binding(8) var outMasks: texture_storage_2d_array<rgba8snorm, write>;
+@group(2) @binding(9) var<storage, read> fieldIn: array<vec4f>;   // the material field (engine-weather.wgsl mf*): arrival, soil, softened source, source
 
 var<workgroup> groupPainted: atomic<u32>;
 
@@ -164,7 +165,7 @@ fn feedMain(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_
         textureStore(outHeight, xy, vec4f(h - fu.sea, 0.0, 0.0, 0.0));
         textureStore(outRoutes, xy, vec4f(toByte(r), toByte(F[3u * fu.cells + i]), floor((clamp(F[4u * fu.cells + i], -1.0, 1.0) * 0.5 + 0.5) * 255.0 + 0.5) / 255.0, toByte(F[5u * fu.cells + i])));
         textureStore(outGrid, xy, 0, select(vec4f(0.0), unpack4x8unorm(map0[i]), (fu.mode & 2u) != 0u));
-        textureStore(outGrid, xy, 1, vec4f(0.0));
+        if ((fu.mode & 8u) != 0u) { let m = fieldIn[i]; textureStore(outGrid, xy, 1, vec4f(toByte(m.x), toByte(m.y), toByte(m.z), toByte(m.w))); } else { textureStore(outGrid, xy, 1, vec4f(0.0)); }
         textureStore(outGrid, xy, 2, select(vec4f(0.0), unpack4x8unorm(map1[i]), (fu.mode & 2u) != 0u));
         textureStore(outGrid, xy, 3, select(vec4f(0.0), unpack4x8unorm(map2[i]), (fu.mode & 2u) != 0u));
         for (var l = 0u; l < 7u; l++) {
@@ -241,6 +242,16 @@ fn gatherHeight(@builtin(global_invocation_id) id: vec3u) {
     if (a.z == 0) { return; }
     let si = u32(a.x); let di = u32(a.y); let sc = gu.spw * gu.sph; let dc = gu.dw * gu.dh;
     for (var p = 0u; p < 2u; p++) { gdW[p * dc + di] = gsW[p * sc + si]; }
+}
+
+@group(3) @binding(13) var<storage, read> gsFd: array<vec4f>;
+@group(3) @binding(14) var<storage, read_write> gdFd: array<vec4f>;
+
+@compute @workgroup_size(8, 8)
+fn gatherField(@builtin(global_invocation_id) id: vec3u) {
+    let a = gatherAt(id);
+    if (a.z == 0) { return; }
+    gdFd[u32(a.y)] = gsFd[u32(a.x)];
 }
 
 @compute @workgroup_size(8, 8)
