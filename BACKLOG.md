@@ -5686,37 +5686,175 @@ uses one of these options:
 - baseline `$R/repro-out/merge-h8b`;
 - guard `--worlds lava,crystal,ice`.
 
-### H12. One path — outline
+**Done (merged as eb99479; EXPERIMENTS row 155; notes in
+`$R/agent-H10/NOTES.md`).** Four agents in turn: the inventory and steps
+1-2; the coast field, layers and fingers; plates, columns, bergs, facets
+and the drops; the page ring and the 8×8 numbers.
+- **Finding 0.** `nodeSupport` refused the coast pass for every kind,
+  because Lava's defaults set it, but JS runs it only for water strokes.
+  Gating the refusal by kind freed every Lava hill and plateau with no
+  port. lava-1's shallow refusal was the default `bankPx` 60, not fingers.
+- **On the GPU now:**
+  - the dry bank (`bankPx`) in the stamp, its region included (a ring at
+    the region edge was 17.7 off before that fix);
+  - one coast distance field: jump flooding on crossing points, in world
+    px, kept in the existing `Sc` scratch (14 planes, only for node lists
+    with a coast node). Against the JS eikonal on one lake: max 2.2 px,
+    p95 1.8 px. The GPU distance is Euclidean; the JS one runs slightly
+    long;
+  - coast layers (steps and scallops) and coast fingers (thumbs). The
+    finger flood is replaced by a march back along the normal (decision
+    17). It cuts 44 more cells at finger tips on lava-fingers (0.02%); by
+    eye, no floating or cut-off fingers;
+  - shore plates (slabs and frost) on the same field;
+  - crystal columns (each cell reads its 3×3 lattice neighbours) and
+    bergs (a host-built plane list, as for pyramids);
+  - crater and mountain facets.
+- **`shapecheck`, GPU against JS:** layers max 2.1 (0.4% of cells over
+  .5); fingers and scallops max 58-119 on 0.03-0.6% of cells, in clusters
+  at finger and inlet edges (0.1% over 1 on a 4×4); plates 0.2-1.7% of
+  cells over .5, at the band edge; columns exact; bergs and facets max
+  .0004. Masks and marks: 0 cells.
+- **Drops (owner, decision 20):** dab fingers with the ribs path, plate
+  material 0, layer style 2 and hill facets. `fingerCoast` and
+  `fingerBlunt` are gone (fingers always join the coast), and
+  `plateMaterial` defaults to 1. The JS engine pins the old values until
+  H12 deletes it.
+- **The page ring.** The old rule summed each coast node's read radius
+  along overlapping nodes: 640-1024 cells for lava-1 on an 8×8.
+  - Forced rings on lava1-8: 1 plane differs at 64, none at 128-320.
+    Chains of 8 and 12 lakes behave the same.
+  - `ringNeed` now follows the engine's rectangles per page. A coast
+    node's reach counts once, and each further link adds the field's blur
+    margin. Layers never move a cell across sea (read from the shader).
+    The per-link margin is a supported inference: 0 planes differ at 128
+    where the rule picks 192.
+  - Paged = whole on 31 planes for lava1-8 (ring 192), lava2-8, ice1-8,
+    crystal1-8, crystal2-8 and green-2. `RINGS` stops at 320 (74 MB of
+    scratch a page).
+- **8×8 (`perf.mjs`):** load Lava 1.37 s, Crystal 1.12 s, Ice 2.13 s;
+  drag p95 16.7-16.8 ms; heap at most 149 MB, GPU at most 615 MB. Green
+  0.86 s against 0.84 s on main. On main the JS path never drew Lava,
+  Crystal or Ice at 8×8 (drags of 69-136 s, no picture).
+- **Coordinator's merge checks:**
+  - the 27 renders equal the agent's. Against `merge-h8b` only Lava,
+    Crystal and Ice move: mean |diff| .15-1.00, lava-1 4.7% of pixels,
+    ice-1 3.1%. The other six worlds are 0.00;
+  - by eye at 4×: the same coasts, fingers, slabs and floes. Lava's
+    terraces read a little softer, because JS blends the risers within a
+    cell. Accepted under decision 17 and shown to the owner;
+  - `stats.py` on Lava, Crystal and Ice: no metric newly outside its
+    retail range; ice-1's 0.30-0.50 slope share came back inside;
+  - `regional.mjs` finds 0 on all 27;
+  - the 4×4 green-2 export's TNT heights, tiles, features and indexed
+    picture are identical. lava-1, crystal-2 and ice-1 4×4 exports pass
+    their self-checks;
+  - the census: one refusal in the 27 scenes, lava-3's `hillLobes`.
+- **Tools.** `$R/agent-H4/mapcheck.mjs` draws a Green map whatever the
+  scene; `$R/agent-H4/mapcheck-biome.mjs` (H10's `mapcheck2`) takes the
+  scene's world. `$R/agent-H10/coastcheck.mjs` compares the coast field.
+  `render.mjs` attaches to the first page on its CDP port, so two runs
+  must never share one.
 
-After H10. The owner (decision 18): "delete all the CPU work and get on one
-single path ... I do not want to worry about back compat."
+**Still open:**
+- A chain that needs more than the top ring still hands the map to the JS
+  engine. Example: 16 overlapping 1200 px Smooth strokes, then a lake,
+  need 412 cells (`$R/agent-H10/pb/smooth16.json`). H12 clamps instead.
+- Lava's terraces at 4×: a half-cell riser blend would bring them closer
+  to the JS look, if the owner asks.
+- The material field on the fed and paged pass (from H8b): H12.
+- Desert's section cells and zhon-1's protection plane (from H8b) are as
+  they were.
 
-**Delete:**
-- engine 0: `sculpt-frag.wgsl`, `relief-bake.wgsl`, `sculpt-common.wgsl`,
-  `erosion.wgsl` and `material-model.wgsl`, and the renderer's engine-0
-  branches;
-- the JS shape engine in `sculpt.js` (`applyNode`, `dab`, the stamps, the
-  prefix snapshots) wherever the GPU covers it, which is everywhere after
-  H10;
-- the CPU workers: `sculpt-weathering.js`, `sculpt-tiled-weather.js`,
-  `sculpt-sand.js`, `sculpt-material-weathering.js` and
-  `sculpt-map-weather.js`;
-- the River and Source tools with the flow bake (`sculpt-flow.js`,
-  `sculpt-flow-ui.js`), and their strokes in zhon-1..3 (decision 19);
-- `hillLobes` and the URL-only experiments (decision 17);
-- the switches and their fallbacks: `engine`, `gpuShape`, `gpuFeed`,
-  `gpuPages`, `materialModel` and `quarterFirst`, and every knob only the
-  deleted code reads;
-- the checks against JS: `shapecheck.mjs`'s JS reference, and the
-  `gpuShape=0` and `engine=0` comparisons.
+### H12. One path
+
+> **Owner, 2026-10-30:** "Then ASAP I would like to have everything use
+> the GPU in the UI so we can delete all the CPU work and get on one
+> single path that we can then optimize and move forward with. I do not
+> want to worry about back compat or drag two render paths along with us.
+> This is still an early stage project."
+
+Read TERRAIN_ENGINE decisions 16-20, "Migration", "Combine or drop" and
+"Rules for the cards". Then read H8b's and H10's Done and Still open
+lists.
+
+**What is there today.** After H10, every stroke of the 27 scenes runs on
+the GPU shape; the census's one refusal is lava-3's `hillLobes`. Every
+world draws with engine 1 and runs the GPU Time pass, and maps over 1168
+samples page. The CPU paths are still in the tree, reached by switches,
+fallbacks and the checks against JS:
+- engine 0: `sculpt-frag.wgsl` (2,246 lines), `relief-bake.wgsl` (1,260),
+  `sculpt-common.wgsl` (715), `erosion.wgsl` (235) and
+  `material-model.wgsl` (123), and the renderer's engine-0 branches;
+- the JS shape engine in `sculpt.js` (4,382 lines in all): `applyNode`,
+  `dab`, the stamps, the coast pass, the prefix snapshots, and
+  `shapeDefaults` pinning the dropped finger options;
+- the CPU workers: `sculpt-weathering.js` (363), `sculpt-tiled-weather.js`
+  (318), `sculpt-sand.js` (150), `sculpt-material-weathering.js` (184) and
+  `sculpt-map-weather.js` (35);
+- the River and Source tools with the flow bake: `sculpt-flow.js` (350)
+  and `sculpt-flow-ui.js` (387), and their strokes in zhon-1..3;
+- the switches: `engine`, `gpuShape`, `gpuFeed`, `gpuPages`,
+  `materialModel` and `quarterFirst`;
+- the fallbacks: a refused node, a page chain over the top ring, and
+  Archipelago's unfed Time pass (the material field is not on the fed
+  pass).
+
+**Deliver,** one commit per group, in this order. Update NOTES.md after
+each commit, so that a successor can continue from it.
+
+1. **Inventory (written, not a stop point).** For each group: its files
+   and lines, every caller left after the deletion, and the knobs only it
+   reads. Stop and report only if something the editor needs exists only
+   on a CPU path, with no GPU twin.
+2. **The material field on the fed and paged pass:** a GPU-height form of
+   `materialField` (H8b's Still open), so that Archipelago takes the fed
+   pass. Archipelago's 4×4 drag p95 must reach the frame cap (167 ms
+   unfed). Judge the look against `merge-h10` (decision 17).
+3. **The page ring clamp.** A chain over the top ring clamps to 320 and
+   logs one console warning, with no JS fallback. Show it on
+   `$R/agent-H10/pb/smooth16.json`.
+4. **The switches and fallbacks.** The GPU path becomes unconditional;
+   remove the readers of the URL parameters.
+5. **Engine 0:** its shaders and the renderer's branches.
+6. **The JS shape engine,** `hillLobes`, the URL-only experiments
+   (decision 17), and every knob only they read. `shapecheck.mjs` loses
+   its JS reference: keep it as a GPU repeat and paged-against-whole
+   check, or delete it.
+7. **The CPU workers.**
+8. **The River and Source tools with the flow bake** (decision 19), and
+   their strokes in zhon-1..3. The Zhon scenes change: judge them by eye.
+   `$R/repro-out/merge-h12` becomes the baseline at merge.
+9. **The simplification report** against 467c744 and 843b7fc: shader
+   lines, uniforms, knobs, CPU worker lines, `sculpt.js` lines and the
+   files deleted.
+
+**Keep:** the TA output's packaging (TNT, tiles and the archive; decision
+18), the Python material preparation (until the Materials card), the
+bridge, `regional.mjs` and the export self-checks.
 
 **Acceptance:**
-- every scene the same look as `merge-h10`;
-- exports pass their self-checks;
-- `regional.mjs` finds 0;
-- the editor works with no CPU path;
-- the full simplification report against the 467c744 baseline: shader
-  lines, uniforms, knobs, CPU worker lines, and `sculpt.js` lines.
+- every scene the same as `merge-h10` (`compare.py` 0.00), except
+  zhon-1..3 without their rivers and Archipelago's material field (a
+  similar look, by eye at 1× and 2×);
+- `regional.mjs` finds 0 on all 27; paged = whole on 31 planes for
+  green-2 and lava1-8;
+- the 4×4 green-2 export identical to `merge-h10`'s; a 4×4 export of one
+  scene per world passes its self-checks (`mapcheck-biome.mjs`);
+- 8×8 Green, Red, Lava, Crystal and Ice load, drag and release no worse
+  than `merge-h10` beyond noise; Archipelago's 4×4 drag at the frame cap;
+- the editor works with no CPU path: load each world, paint with each
+  brush, undo, export and page an 8×8, with a clean console throughout;
+- `repro/gate.sh` passes, and no removed switch is read anywhere.
+
+**Budget:** if it runs short, stop at a finished group, with NOTES.md
+current; a successor continues.
+
+**Server and guard:**
+- port 8877, CDP 9677. Never share a CDP port between runs;
+- worktree `../terraform-wt-H12`, branch `H12-one-path`;
+- assets `$R/agent-H12`;
+- baseline `$R/repro-out/merge-h10`.
 
 ## After the cards
 

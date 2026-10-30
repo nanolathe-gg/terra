@@ -135,6 +135,12 @@ feature.
     feature for now, it's not used by any retail map biome."* The River
     and Source tools and the flow bake go in H12 instead of moving to the
     GPU.
+20. **Five unused shape options are dropped.** *"drop dab fingers with
+    their rib shapes, plain floe plates and mound coast layers, and keep
+    mountain facets"*; *"hill facets: sure drop it"*. No scene or preset
+    used them. Fingers always join the coast, plates are slabs or frost,
+    coast layers are steps or scallops, and facets apply to craters and
+    mountains. Their controls went in H10; their JS goes in H12.
 
 ## The Green slice
 
@@ -374,7 +380,7 @@ palette.
 
 ## Migration
 
-From decisions 13-19, in three phases.
+From decisions 13-20, in three phases.
 
 **Phase 1: one GPU path (decision 18).**
 1. **H8, merged:** every world draws with the engine and runs the GPU Time
@@ -382,9 +388,9 @@ From decisions 13-19, in three phases.
    its prepared images through the bridge until the Materials card.
 2. **H9, merged:** every shape option that is a pass of its own runs on
    the GPU.
-3. **H8b:** the GPU shape on in every world's preset, so every world's
+3. **H8b, merged:** the GPU shape on in every world's preset, so every world's
    maps are paged and fed.
-4. **H10, the last shapes on the GPU:** the coast pass, water fingers,
+4. **H10, merged:** the coast pass, water fingers,
    bank and shore plates, crystal columns and bergs, and mountain and
    crater facets. A similar look is enough (decision 17), so a GPU-shaped
    model may replace the JS algorithm: a coast distance field by jump
@@ -437,6 +443,10 @@ deleted before the owner rules.
 | The River and Source tools and the flow bake | owner | No retail world uses them. **Drop (owner, decision 19; H12)** |
 | URL-only shape experiments: edges not natural, forms not shouldered, `replay=full`, restrained coast | H9 | No world or scene reaches them. **Delete (owner, decision 17; H12)** |
 | `hillLobes` | H9 | Only one Lava scene uses it; the cross-section's terraces do the same. **Drop (owner, decision 17; H12)** |
+| Dab fingers and the ribs path | H10 | Unused; the coast fingers do the same. **Dropped (owner, decision 20; H10)** |
+| Plate material 0 (plain floes) | H10 | Unused; slabs and frost replaced it. **Dropped (owner, decision 20; H10)** |
+| Coast layer style 2 (mounds) | H10 | Unused. **Dropped (owner, decision 20; H10)** |
+| Hill facets | H10 | Unused; hills do not write the plane facets read. **Dropped (owner, decision 20; H10)** |
 | `moonLobes` with `baseVary` and `baseBump` | H9 | The same outline noise; one shared GPU function now. **Merge if the look allows (owner, decision 17; Shape)** |
 | Shape mask writes, and per-stroke water mask choices | H9 | Near-duplicates of the Paint tool and the World panel's water options |
 | Each kind's classic curve | decision 16 | Becomes a preset of the cross-section (Shape) |
@@ -562,8 +572,8 @@ Each is written in full when the one before it lands.
 | H7b | Quarter levels on the GPU-fed map canvas: a scaled bake, quarter while dragging and first on load, final unchanged | Merged 31e995e (latency p95 50 ms, target 30 missed) |
 | H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Merged 92c1b63 (GPU shape for the other eight is H8b) |
 | H8b | GPU shape for every world: why `gpuShape` moves zhon-1, archipelago-3 and red-1, and H9's map-canvas gaps; then on in every preset (pages, feed and the material field everywhere) | Merged 2be97b1 (the material field on the fed path open) |
-| H10 | The last shapes on the GPU: coast pass, fingers, bank and plates, crystal columns and bergs, facets (a similar look) | Running |
-| H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Outlined; after H10 |
+| H10 | The last shapes on the GPU: coast pass, fingers, bank and plates, crystal columns and bergs, facets (a similar look) | Merged eb99479 (Lava's terraces a little softer; the ring clamp is H12) |
+| H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Next |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Merged a7c2256 (deep cross-section and the map-canvas gaps are H8b; `hillLobes` on JS) |
 | Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path | Not yet written |
 | Combine or drop | Every remaining control against decision 16 and the impact rule, from the candidates list | After Retire |
