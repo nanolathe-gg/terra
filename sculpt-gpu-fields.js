@@ -1057,8 +1057,14 @@ export function createPagedFields(opts) {
     return 4 + deepest;
   }
   function setRing(need) {
-    const ring = RINGS.find(r => r >= need);
-    if (ring === undefined) return false;
+    let ring = RINGS.find(r => r >= need);
+    // A chain deeper than the top ring is clamped, not handed to another engine: the pages read what the top ring holds, so a seam may show
+    // between pages where the chain reaches further. One warning a time the chain crosses the top ring.
+    if (ring === undefined) {
+      ring = RINGS[RINGS.length - 1];
+      if (!ringClamped) console.warn(`nanolathe: the stroke chain needs a page ring of ${need} cells; clamped to ${ring}, so seams may show between pages`);
+      ringClamped = true;
+    } else ringClamped = false;
     if (ring !== RING) {
       RING = ring; SIDE = CORE + 2 * RING; SHAPE_BYTES = SIDE * SIDE * 52; ringChanges++;
       for (const pg of pagesMap.values()) dropShape(pg);
@@ -1066,12 +1072,12 @@ export function createPagedFields(opts) {
     }
     return true;
   }
-  let ringChanges = 0, lastNeed = 0;
+  let ringChanges = 0, lastNeed = 0, ringClamped = false;
   const check = () => {
     reason = null;
     for (const n of nodes()) { const r = nodeSupport(n, context()); if (r) { reason = r; return false; } }
     lastNeed = opts.forceRing || ringNeed();
-    if (!setRing(lastNeed)) { reason = `smooth chain too deep for the page ring (needs ${lastNeed} cells, the top ring is ${RINGS[RINGS.length - 1]})`; return false; }
+    setRing(lastNeed);
     return true;
   };
   const getEngine = () => enginePromise ??= (async () => {
