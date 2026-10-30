@@ -95,6 +95,7 @@ branches and the projection fix below, so re-render before judging.
    | H7 | 8867 | 9667 | `$R/agent-H7/out` | `--worlds none` |
    | H6 | 8868 | 9668 | `$R/agent-H6/out` | `--worlds none`, then `green` |
    | H6b | 8869 | 9669 | `$R/agent-H6b/out` | `--worlds none` |
+   | H7b | 8870 | 9670 | `$R/agent-H7b/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -4351,6 +4352,134 @@ outlines in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards).
   1168 samples (H5b; the remaining JS kinds).
 - **`gpuFeed=0`** now counts the GPU fields when it trims the chunk cache.
   Its images are unchanged.
+
+### H7b. Quarter levels on the map canvas (Green)
+
+> **Owner, 2026-10-29:** "Let's do h7 quarter levels, then the large map
+> support to prove it out end to end, then the remaining shapes on the
+> gpu." This is H7's item 3, which needed WGSL changes outside H7's files.
+
+Read H7's, H6's and H6b's Done and Still open lists above, and
+"Progressive rendering" in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md).
+
+**What is there today** (4×4 Green, after H6b):
+- **Every chunk is baked at final resolution:**
+  - the feed pass (`engine-feed.wgsl`, about 0.6 ms of GPU);
+  - the relief bake, into a fields texture of one texel per world pixel
+    (`chunkFieldsOrigin` and `chunkFieldsSize` in `engine-common.wgsl`),
+    about 10-16 ms of GPU a chunk;
+  - the terrain draw, about 5-7 ms.
+- **Load and release** are final in about 0.6 s. Drag rAF p95 is 16.7 ms.
+- **A drag move reaches the screen** in 49 / 53 ms (p50 / p95). Most of
+  it is waiting behind earlier bakes' relief and terrain passes; the shape
+  run is 3-4 ms. Each move rebakes its dirty chunk at final.
+- **The 2b hold.** While the Time pass is pending, the canvas paints
+  cached chunks and bakes none, for at most 8 s.
+- **`quality: 'preview'`** is a cheaper draw at full resolution, not a
+  level.
+
+**Scope.**
+- **The GPU-fed map canvas:** Green's engine, `gpuShape` 1, `gpuFeed` 1,
+  maps up to 1168 samples.
+- **Everything else still bakes final only, unchanged:** other worlds,
+  the CPU bake path, and the study.
+- **A query switch, `levels`** (default 1; 0 is today's final-only
+  canvas). No knob in `sculpt.py`.
+- **Final pixels are unchanged.** The shaders take a new scale; at final
+  it is 1, and every shader must give the same bytes as before.
+
+**Deliver.**
+
+1. **A quarter bake:** a chunk baked at half its width and height (a
+   quarter of the pixels) and drawn at 2×.
+   - **One scale.** The Green engine's shaders take world pixels per
+     output texel: 1 at final, 2 at quarter. The relief bake and the
+     fields texture run on that lattice, and the draw maps output texels
+     to world pixels with it.
+   - **State the resolution rule for each stage** at quarter:
+     - the feed lattice, which stays on the world grid;
+     - the relief bake;
+     - the material level, using H4's footprint mips;
+     - the shadows, and the 1-px marks.
+   - **Side by side.** Show one chunk at quarter and at final, at 2×, on
+     green-2's face and on a plain. It must be recognisably the same
+     picture. Report the mean and p95 luma difference against final
+     downsampled by 2.
+   - This is its own commit, with the final-exactness checks below
+     passing at `levels` 0 and 1.
+2. **The schedule.**
+   - **Drag.** A dirty chunk rebakes at quarter during the gesture. On
+     release, the visible chunks bake final, then the margin.
+   - **Load and scroll.** The visible chunks bake at quarter first, then
+     final, in view order; then the margin; then the rest when idle.
+     Measure whether quarter-first helps the load at all. If it delays
+     final by more than 10%, keep final-only on load and say so.
+   - **No step back.** The canvas never replaces a final image with a
+     quarter image of the same revision.
+   - **Export and `sampleHeights`** use final only.
+   - **A debug overlay** marks each chunk's level (query
+     `levelsOverlay=1`).
+3. **Measure** with `perf.mjs map4`, and add what it lacks:
+   - the move-to-picture latency at any level, which `perf.mjs` reports
+     today;
+   - the time from release until the visible chunks are final;
+   - on load: when every visible chunk shows at least quarter, and when
+     they are all final;
+   - how the 2b hold interacts with quarter bakes.
+4. **Memory.** Report what the quarter images cost against the budgets.
+
+**Targets** (4×4 green-2, against H6b's 49 / 53 ms, 0.62 s and 0.61 s):
+- move-to-picture latency p95 at most 30 ms;
+- drag rAF p95 under 33 ms;
+- after release, the visible chunks are final in at most 0.67 s;
+- on load, the visible chunks are final in at most 0.68 s;
+- scroll p95 unchanged.
+
+**Exactness and acceptance:**
+- **The study is untouched.** `compare.py $R/repro-out/merge-h6b <yours>
+  --worlds none` is exact on all 27 scenes. If Green moves, run the
+  ground rules' `false` test (rule 3). Compiler-only drift is recorded,
+  not shipped silently; a real leak is gated.
+- **The 4×4 export** at `levels` 1 is byte-identical to
+  `$R/exports/H2Check8801x62959.ufo` (H6b's merge) apart from the name.
+- **The 1× view after settling** (mapcheck's `view.png`) at `levels` 1 is
+  identical to `levels=0`, apart from the status text.
+- **The minimap** at `levels` 1 equals `levels=0` after load, after a
+  stroke and after a node move: `$R/navcheck.mjs`, `$R/navedit.mjs` and
+  `$R/navmove.mjs` (usage in each first line; the extra query is
+  argv[6]).
+- **`regional.mjs`** finds 0 mismatches on all 27 scenes.
+- **Console:** no errors.
+
+**Done when** NOTES.md has:
+- the resolution rules and the side-by-side;
+- each item measured on its own;
+- the targets met, or by how much they were missed;
+- memory;
+- every exactness check above.
+
+**Files:**
+- `engine-common.wgsl`, `engine-bake.wgsl` and `engine-frag.wgsl`, only
+  for the scale;
+- in `sculpt-renderer.js`, only the bake and draw plumbing for the scale;
+- `sculpt-chunk-renderer.js` and `sculpt-canvas.js`;
+- `repro/perf.mjs`.
+- Not `sculpt.py`, not the other worlds' shaders (`sculpt-common.wgsl`,
+  `relief-bake.wgsl`, `sculpt-frag.wgsl`), not `sculpt.js`, and not the
+  fields or the Time pass.
+
+**Budget:**
+- No stop points: hand back when done.
+- Item 1 is its own commit, and so is item 2.
+- If quarter cannot be built with final exact, stop and report what moved
+  and why.
+
+**Server and guard:**
+- port 8870, CDP 9670;
+- worktree `../terraform-wt-H7b`;
+- assets `$R/agent-H7b`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h6b`;
+- guard `--worlds none`.
 
 ## After the cards
 

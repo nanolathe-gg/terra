@@ -389,6 +389,7 @@ Each is written in full when the one before it lands.
 | H6 | Green's shape on the GPU: whole-map fields by compute passes, behind `gpuShape`, read through a CPU copy | Merged 48818aa |
 | H6b | Chunks and the Time pass fed from the GPU fields: no CPU copy or per-chunk upload on the hot path | Merged 1fec3ce |
 | H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Merged 1fffe4f (quarter levels and drag p95 open) |
+| H7b | Quarter levels on the GPU-fed map canvas: a scaled bake, quarter while dragging and first on load, final unchanged | Written |
 | Ports | The other worlds, one card each, each deleting that world's branches | Not yet written |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
