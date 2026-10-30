@@ -236,7 +236,6 @@ export function nodeSupport(n, c) {
   if (kind === 'plateau' || kind === 'offset' || kind === 'crater') {
     if (kind === 'offset' && q.shorePlates > 0) return 'water fingers, bank or plates';
   }
-  if (q.profile >= .5 && !SECTION_KINDS.includes(kind)) return 'parametric cross-section';
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   if (q.fingerCoast >= .5 || Math.round(q.shoreLayers) >= 1) return 'coast pass';
   if (water && (q.fingers > 0 || (q.bankPx > 0 && !(q.profile >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
