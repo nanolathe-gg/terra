@@ -165,6 +165,59 @@ export class GpuErosion {
     return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu, tiles: null, gpuFed: true}};
   }
 
+  // H8 rule: the material field (engine-weather.wgsl mf*), the GPU form of sculpt-material-weathering.js's weatherMaterials. Reads the height the
+  // pass left; returns Float32Array(grid * grid * 4): arrival, soil, softened source, source (gridTexture layer 1).
+  async materialField({height, grid, size, seaLevel = 0, baseHeight = 24, seed = 1, depositSpread = .65, profile = {}}) {
+    await this.ready;
+    const {device} = this, n = grid * grid, spacing = (size - 1) / (grid - 1), spread = clamp(depositSpread, 0, 1);
+    if (!this.field) {
+      const module = device.createShaderModule({label: 'engine-weather material field', code: this.renderer.preprocessShader(await (await fetch('/engine-weather.wgsl')).text())});
+      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+      if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+      const entries = {source: 'mfSourceMain', drops: 'mfDropsMain', counts: 'mfCountsMain', blur: 'mfBlurMain', combine: 'mfCombineMain'};
+      this.field = {};
+      await Promise.all(Object.entries(entries).map(async ([k, entryPoint]) => { this.field[k] = await device.createComputePipelineAsync({label: entryPoint, layout: 'auto', compute: {module, entryPoint}}); }));
+    }
+    const P = this.field, S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, made = [];
+    const make = (bytes, usage = S) => { const b = device.createBuffer({size: Math.max(16, bytes), usage}); made.push(b); return b; };
+    const heightBuf = make(n * 4); device.queue.writeBuffer(heightBuf, 0, Float32Array.from(height));
+    const [source, gx, gy, basin, deposit, flow, a, b, c, soft, settled, broad, runoff] = Array.from({length: 13}, () => make(n * 4)), field = make(n * 16);
+    const mineral = profile.mineral === true, elevated = profile.elevatedCover || [0, 30, 0];
+    const uniform = (sigma, axis) => {
+      const buf = make(64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST), view = new DataView(new ArrayBuffer(64));
+      [grid, spacing, seaLevel, baseHeight, spread].forEach((v, i) => view.setFloat32(i * 4, v, true));
+      view.setUint32(20, seed >>> 0, true); view.setUint32(24, Math.round(n * .52), true);
+      [profile.rockyCoasts ? 1 : 0, mineral ? 1 : 0, elevated[0], elevated[1], elevated[2], profile.transportSlopeStart ?? (mineral ? .07 : .60), profile.transportSlopeFull ?? (mineral ? .55 : 1.35), sigma, axis]
+        .forEach((v, i) => view.setFloat32(28 + i * 4, v, true));
+      device.queue.writeBuffer(buf, 0, view.buffer); return buf;
+    };
+    const encoder = device.createCommandEncoder({label: 'material field'});
+    const run = (pipeline, ids, bufs, uni, groups) => {
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(2, device.createBindGroup({layout: pipeline.getBindGroupLayout(2), entries: [{binding: 0, resource: {buffer: uni}}, ...ids.map((binding, k) => ({binding, resource: {buffer: bufs[k]}}))]}));
+      pass.dispatchWorkgroups(...groups); pass.end();
+    };
+    const tiles = Math.ceil(grid / 8), u0 = uniform(0, 0);
+    run(P.source, [1, 2, 3, 4, 5], [heightBuf, source, gx, gy, basin], u0, [tiles, tiles]);
+    run(P.drops, [1, 2, 3, 4, 6, 7], [heightBuf, source, gx, gy, deposit, flow], u0, [Math.ceil(Math.round(n * .52) / 64)]);
+    const blur = (input, output, sigma) => {
+      run(P.blur, [8, 9], [input, c], uniform(sigma, 0), [tiles, tiles]);
+      run(P.blur, [8, 9], [c, output], uniform(sigma, 1), [tiles, tiles]);
+    };
+    run(P.counts, [6, 7, 9], [deposit, flow, a], uniform(0, 1), [tiles, tiles]);
+    run(P.counts, [6, 7, 9], [deposit, flow, b], uniform(0, 2), [tiles, tiles]);
+    blur(source, soft, 9 + spread * 17); blur(a, settled, 2.6); blur(a, broad, 9); blur(b, runoff, 3.5);
+    run(P.combine, [1, 2, 5, 10, 11, 12, 13, 14], [heightBuf, source, basin, field, settled, broad, runoff, soft], u0, [tiles, tiles]);
+    const read = make(n * 16, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+    encoder.copyBufferToBuffer(field, 0, read, 0, n * 16);
+    device.queue.submit([encoder.finish()]);
+    await read.mapAsync(GPUMapMode.READ);
+    const out = new Float32Array(read.getMappedRange().slice(0));
+    made.forEach(buf => buf.destroy());
+    return out;
+  }
+
   // request: {height, protect, grid, size, seaLevel, age, rain, talusAngle}. Returns the eroded height (rock + debris), the
   // water throughput scaled like the worker's flow, the material deposited, the loose debris and the milliseconds spent.
   async run(request) {

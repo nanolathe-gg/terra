@@ -83,3 +83,169 @@ fn mapsMain(@builtin(global_invocation_id) id: vec3u) {
     layer2[i] = pack4x8unorm(vec4f(wear, wet, hardness, smoothstep(0.0, 1.5, slope)));
     layer3[i] = pack4x8unorm(vec4f(fall * 0.5 + 0.5, channel, ridge));
 }
+
+// H8 rule: the material field. Sediment that exposed ground sheds and rain carries downhill, as four channels the draw's mineral margins
+// and transition read (gridTexture layer 1, via renderer.setMaterialField): arrival (how much carried material has come to rest here),
+// soil (fine ground between the ribs), softened source (the join's coordinate) and source (exposed material). It runs when
+// `materialWeathering` is above 0 and replaces the CPU worker's weatherMaterials (sculpt-material-weathering.js).
+// Every pass reads the height the Time pass left. The drops are one thread each with a per-drop generator and scatter into fixed-point
+// integer atomics, so the sums do not depend on thread order: the field is the same on every run. Group 2 is this rule's own.
+//
+//   mfSource    height -> source, gradient (x, y), basin
+//   mfDrops     one thread a drop: carries a tracer downhill, scatters deposits and flow
+//   mfCounts    the fixed-point deposit or flow counts as floats
+//   mfBlur      one separable Gaussian pass (axis 0 then 1) over a buffer
+//   mfCombine   the four channels
+struct MF {
+    grid: f32, spacing: f32, sea: f32, base: f32, spread: f32, seed: u32, count: u32, floorMode: f32,
+    mineral: f32, elevatedFrom: f32, elevatedTo: f32, elevatedMix: f32, slopeStart: f32, slopeFull: f32, sigma: f32, axis: f32,
+}
+@group(2) @binding(0) var<uniform> mf: MF;
+@group(2) @binding(1) var<storage, read> mfHeight: array<f32>;
+@group(2) @binding(2) var<storage, read_write> mfSource: array<f32>;
+@group(2) @binding(3) var<storage, read_write> mfGx: array<f32>;
+@group(2) @binding(4) var<storage, read_write> mfGy: array<f32>;
+@group(2) @binding(5) var<storage, read_write> mfBasin: array<f32>;
+@group(2) @binding(6) var<storage, read_write> mfDeposit: array<atomic<u32>>;
+@group(2) @binding(7) var<storage, read_write> mfFlow: array<atomic<u32>>;
+@group(2) @binding(8) var<storage, read> mfIn: array<f32>;
+@group(2) @binding(9) var<storage, read_write> mfOut: array<f32>;
+@group(2) @binding(10) var<storage, read_write> mfField: array<vec4f>;
+@group(2) @binding(11) var<storage, read> mfSettled: array<f32>;
+@group(2) @binding(12) var<storage, read> mfBroad: array<f32>;
+@group(2) @binding(13) var<storage, read> mfRunoff: array<f32>;
+@group(2) @binding(14) var<storage, read> mfSoft: array<f32>;
+
+const MF_FIXED = 4096.0;
+
+fn mfSmooth(a: f32, b: f32, x: f32) -> f32 { let t = clamp((x - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+fn mfHash(x: i32, y: i32, seed: u32) -> f32 {
+    var h = (bitcast<u32>(x) * 374761393u) ^ (bitcast<u32>(y) * 668265263u) ^ seed;
+    h = (h ^ (h >> 13u)) * 1274126177u;
+    return f32(h ^ (h >> 16u)) / 4294967295.0;
+}
+fn mfNoise(x: f32, y: f32, seed: u32) -> f32 {
+    let ix = floor(x); let iy = floor(y);
+    let fx = mfSmooth(0.0, 1.0, x - ix); let fy = mfSmooth(0.0, 1.0, y - iy);
+    let a = mfHash(i32(ix), i32(iy), seed); let b = mfHash(i32(ix) + 1, i32(iy), seed);
+    let c = mfHash(i32(ix), i32(iy) + 1, seed); let d = mfHash(i32(ix) + 1, i32(iy) + 1, seed);
+    return (a + (b - a) * fx) * (1.0 - fy) + (c + (d - c) * fx) * fy;
+}
+fn mfAt(x: i32, y: i32) -> i32 { let g = i32(mf.grid); return clamp(y, 0, g - 1) * g + clamp(x, 0, g - 1); }
+
+@compute @workgroup_size(8, 8)
+fn mfSourceMain(@builtin(global_invocation_id) id: vec3u) {
+    let g = i32(mf.grid);
+    if (i32(id.x) >= g || i32(id.y) >= g) { return; }
+    let x = i32(id.x); let y = i32(id.y); let i = y * g + x;
+    let h = mfHeight[i]; let l = mfHeight[mfAt(x - 1, y)]; let r = mfHeight[mfAt(x + 1, y)]; let u = mfHeight[mfAt(x, y - 1)]; let d = mfHeight[mfAt(x, y + 1)];
+    let gx = (r - l) / (2.0 * mf.spacing); let gy = (d - u) / (2.0 * mf.spacing);
+    mfGx[i] = gx; mfGy[i] = gy;
+    var cover = mfSmooth(mf.slopeStart, mf.slopeFull, length(vec2f(gx, gy)));
+    if (mf.mineral > 0.5) {
+        let raised = mfSmooth(mf.base + mf.elevatedFrom, mf.base + mf.elevatedTo, h);
+        cover = cover * (1.0 - mf.elevatedMix) + max(min(cover, 0.28), raised) * mf.elevatedMix;
+    }
+    // Ordinary low banks do not become sources of dry hill debris.
+    let floorH = select(mf.base, mf.sea, mf.floorMode > 0.5);
+    cover *= mfSmooth(floorH + 0.3, floorH + select(6.0, 3.0, mf.floorMode > 0.5), h);
+    mfSource[i] = cover;
+    // Concave resting places favour fine ground cover between exposed ribs.
+    mfBasin[i] = mfSmooth(0.005, 0.12, (l + r + u + d - 4.0 * h) / (mf.spacing * mf.spacing));
+}
+
+fn mfSampleH(x: f32, y: f32) -> f32 {
+    let g = mf.grid - 1.001; let xc = clamp(x, 0.0, g); let yc = clamp(y, 0.0, g);
+    let xx = i32(floor(xc)); let yy = i32(floor(yc)); let fx = xc - f32(xx); let fy = yc - f32(yy);
+    return (mfHeight[mfAt(xx, yy)] * (1.0 - fx) + mfHeight[mfAt(xx + 1, yy)] * fx) * (1.0 - fy) + (mfHeight[mfAt(xx, yy + 1)] * (1.0 - fx) + mfHeight[mfAt(xx + 1, yy + 1)] * fx) * fy;
+}
+fn mfSampleG(which: u32, x: f32, y: f32) -> f32 {
+    let g = mf.grid - 1.001; let xc = clamp(x, 0.0, g); let yc = clamp(y, 0.0, g);
+    let xx = i32(floor(xc)); let yy = i32(floor(yc)); let fx = xc - f32(xx); let fy = yc - f32(yy);
+    var a: array<f32, 4>;
+    for (var k = 0u; k < 4u; k++) {
+        let j = mfAt(xx + i32(k & 1u), yy + i32(k >> 1u));
+        a[k] = select(select(mfSource[j], mfGx[j], which == 1u), mfGy[j], which == 2u);
+    }
+    return (a[0] * (1.0 - fx) + a[1] * fx) * (1.0 - fy) + (a[2] * (1.0 - fx) + a[3] * fx) * fy;
+}
+fn mfScatter(isFlow: bool, x: f32, y: f32, value: f32) {
+    let xx = i32(floor(x)); let yy = i32(floor(y)); let fx = x - f32(xx); let fy = y - f32(yy);
+    for (var k = 0u; k < 4u; k++) {
+        let wx = select(1.0 - fx, fx, (k & 1u) == 1u); let wy = select(1.0 - fy, fy, (k >> 1u) == 1u);
+        let j = u32(mfAt(xx + i32(k & 1u), yy + i32(k >> 1u)));
+        let amount = u32(max(value * wx * wy, 0.0) * MF_FIXED + 0.5);
+        if (isFlow) { atomicAdd(&mfFlow[j], amount); } else { atomicAdd(&mfDeposit[j], amount); }
+    }
+}
+
+@compute @workgroup_size(64)
+fn mfDropsMain(@builtin(global_invocation_id) id: vec3u) {
+    if (id.x >= mf.count) { return; }
+    var rng = (mf.seed ^ 0x4e91ad7bu ^ (id.x * 2654435761u)); rng = (rng ^ (rng >> 15u)) * 2246822519u; rng |= 1u;
+    // xorshift32, as the worker's generator
+    var s = rng;
+    let g = mf.grid;
+    s ^= s << 13u; s ^= s >> 17u; s ^= s << 5u; let r0 = f32(s) / 4294967296.0;
+    s ^= s << 13u; s ^= s >> 17u; s ^= s << 5u; let r1 = f32(s) / 4294967296.0;
+    var x = r0 * (g - 2.0) + 0.5; var y = r1 * (g - 2.0) + 0.5;
+    let start = mfSampleG(0u, x, y); let sx = mfSampleG(1u, x, y); let sy = mfSampleG(2u, x, y); let slope = length(vec2f(sx, sy));
+    s ^= s << 13u; s ^= s >> 17u; s ^= s << 5u; let ticket = f32(s) / 4294967296.0;
+    if (start < 0.04 || slope < 0.04 || ticket > start) { return; }
+    var dx = -sx / slope; var dy = -sy / slope; var mass = 0.35 + start * 0.65; var travel = 0.0;
+    let step = 2.5 / mf.spacing; let reach = 28.0 + mf.spread * 85.0;
+    for (var life = 0; life < 90 && mass > 0.006; life++) {
+        let h = mfSampleH(x, y); let xx = mfSampleG(1u, x, y); let yy = mfSampleG(2u, x, y); let grade = length(vec2f(xx, yy));
+        if (h <= mf.sea + 0.2) { break; }
+        if (grade > 0.018) { dx = dx * 0.78 - xx / max(0.08, grade) * 0.22; dy = dy * 0.78 - yy / max(0.08, grade) * 0.22; }
+        let bend = (mfNoise(x * mf.spacing / 23.0, y * mf.spacing / 23.0, mf.seed ^ 0x6173u) - 0.5) * 0.20;
+        let vx = dx - dy * bend; let vy = dy + dx * bend; let norm = length(vec2f(vx, vy));
+        dx = vx / norm; dy = vy / norm;
+        let nx = x + dx * step; let ny = y + dy * step;
+        if (nx < 0.0 || ny < 0.0 || nx >= g - 1.0 || ny >= g - 1.0) { break; }
+        let rise = mfSampleH(nx, ny) - h;
+        if (rise > 0.65) { mfScatter(false, x, y, mass); break; }
+        mfScatter(true, x, y, start * 0.12);
+        let settling = 0.012 + 0.17 * (1.0 - mfSmooth(0.03, 0.55, grade)) + 0.06 * mfSmooth(reach * 0.4, reach, travel);
+        let put = mass * settling; mfScatter(false, x, y, put); mass -= put;
+        x = nx; y = ny; travel += 2.5;
+        if (travel > reach || life == 89) { mfScatter(false, x, y, mass); break; }
+    }
+}
+
+@compute @workgroup_size(8, 8)
+fn mfCountsMain(@builtin(global_invocation_id) id: vec3u) {
+    let g = i32(mf.grid);
+    if (i32(id.x) >= g || i32(id.y) >= g) { return; }
+    let i = i32(id.y) * g + i32(id.x);
+    mfOut[i] = f32(select(atomicLoad(&mfDeposit[i]), atomicLoad(&mfFlow[i]), mf.axis > 1.5)) / MF_FIXED;
+}
+
+// A blur reads mfIn (the host binds the source, the deposit or the flow) and writes mfOut.
+@compute @workgroup_size(8, 8)
+fn mfBlurMain(@builtin(global_invocation_id) id: vec3u) {
+    let g = i32(mf.grid);
+    if (i32(id.x) >= g || i32(id.y) >= g) { return; }
+    let x = i32(id.x); let y = i32(id.y);
+    let sigma = max(0.6, mf.sigma / mf.spacing); let radius = i32(ceil(sigma * 2.5));
+    var v = 0.0; var total = 0.0;
+    for (var k = -radius; k <= radius; k++) {
+        let w = exp(-0.5 * pow(f32(k) / sigma, 2.0));
+        let j = select(mfAt(x + k, y), mfAt(x, y + k), mf.axis > 0.5);
+        v += mfIn[j] * w; total += w;
+    }
+    mfOut[y * g + x] = v / total;
+}
+
+@compute @workgroup_size(8, 8)
+fn mfCombineMain(@builtin(global_invocation_id) id: vec3u) {
+    let g = i32(mf.grid);
+    if (i32(id.x) >= g || i32(id.y) >= g) { return; }
+    let i = i32(id.y) * g + i32(id.x);
+    if (mfHeight[i] <= mf.sea + 0.2) { mfField[i] = vec4f(0.0); return; }
+    let wx = f32(id.x) * mf.spacing; let wy = f32(id.y) * mf.spacing;
+    let clusters = 0.65 * mfNoise(wx / 31.0, wy / 31.0, mf.seed ^ 0x941au) + 0.35 * mfNoise(wx / 11.0, wy / 11.0, mf.seed ^ 0x4b79u);
+    let arrival = 1.0 - exp(-(mfSettled[i] * 0.75 + mfBroad[i] * 0.25) * 2.8);
+    let soil = (1.0 - mfSource[i]) * 0.22 + mfBasin[i] * 0.6 + mfRunoff[i] / (mfRunoff[i] + 3.0) * 0.26;
+    mfField[i] = vec4f(arrival, clamp(soil * (0.35 + clusters * 1.1), 0.0, 1.0), mfSoft[i], mfSource[i]);
+}
