@@ -97,6 +97,7 @@ branches and the projection fix below, so re-render before judging.
    | H6b | 8869 | 9669 | `$R/agent-H6b/out` | `--worlds none` |
    | H7b | 8870 | 9670 | `$R/agent-H7b/out` | `--worlds none` |
    | H5b | 8871 | 9671 | `$R/agent-H5b/out` | `--worlds none` |
+   | H6c | 8872 | 9672 | `$R/agent-H6c/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -4713,6 +4714,120 @@ header explains the CPU tile geometry) and `sculpt-map-weather.js`.
 - assets `$R/agent-H5b`, with `mapcheck.mjs` copied from `$R/agent-H4`
   (it opens 4×4; make an 8×8 copy for the 8×8 checks);
 - baseline `$R/repro-out/merge-h7b`;
+- guard `--worlds none`.
+
+### H6c. The remaining shapes on the GPU (Green)
+
+> **Owner, 2026-10-29:** "Let's do h7 quarter levels, then the large map
+> support to prove it out end to end, then the remaining shapes on the
+> gpu." After this card, a Green scene drawn with any tool in the palette
+> stays on the GPU path.
+
+Read H6's, H6b's and H5b's Done and Still open lists above, and the H6
+outline in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards).
+
+**What is there today.**
+- **On the GPU** (`engine-shape.wgsl`, `nodeSupport` and `prepareNode` in
+  `sculpt-gpu-fields.js`): paint, erase, deep, shallow, hill, mountain and
+  the ground node, with Green's default options.
+- **Anything else sends the whole scene back to the JS engine**, and with
+  it the map canvas back to the CPU path (no feed, no levels, no pages):
+  - the kinds plateau, ramp, smooth, offset (Raise / lower), lower,
+    crater, fissure, crystal, sand and grass. **Plateau is the palette's
+    default tool,** so a new user's first stroke falls back;
+  - options that `nodeSupport` refuses: ridge options (spurs, crest
+    jag/vary/taper), hill lobes, facets and base options, the coast pass,
+    water fingers, bank and plates, shape mask writes, water mask choices,
+    a parametric cross-section, a hill outside the shouldered form, and
+    paint or erase without natural edges.
+- **The flow kinds** (river, source) are skipped by the shape passes; the
+  flow bake owns them.
+- **Point reads.** Plateau, crater and ramp read the height of the prefix
+  (every node before them) at their points to set their level. On H5b's
+  pages, such a point can lie in another page. Even on the whole map, a
+  point outside the rectangle being re-evaluated holds the finished
+  fields, not the prefix. H5b's note (`$R/agent-H5b/NOTES.md`, "H6c
+  forward note") answers it by evaluation: run `nodes.slice(0, i)` in a
+  small window around the point, through `engine.submit(list, ctx, rect,
+  {target, prepare})`, and read the cell.
+- **The page ring** (H5b) is 4 cells: the hill blur is the widest shape
+  pass today. Kinds that reach further (smooth's radius, a crater's rim
+  and ejecta, a fissure's branches) need the ring to cover them.
+- **The study's Green scenes** use only GPU kinds (green-1: deep, hill,
+  paint; green-2: hill, erase, paint; green-3: hill, mountain, deep), so
+  porting more kinds moves no study render.
+
+**Scope.**
+- The palette's kinds, at their default options, on every surface the
+  GPU path serves: the study, the 4×4 whole-map canvas and H5b's pages.
+- The options `nodeSupport` refuses, where a pass is cheap; report the
+  rest.
+- The JS engine stays as the reference and the fallback (decision 10).
+
+**Deliver.**
+
+1. **Inventory (a stop point).** Hand back, for each kind and refused
+   option:
+   - its JS size (lines), and the passes it needs;
+   - what it reads: points of the prefix, a neighbourhood of the prefix
+     (smooth), or nothing;
+   - its reach in cells, for H5b's page apron (today 4 cells);
+   - its expected cost;
+   - a recommended order, and what should stay on JS.
+2. **Port the kinds,** in the order item 1 settles, starting with
+   plateau. Each kind is its own commit, with:
+   - a scene for it in `repro/shape-scenes/`;
+   - `shapecheck.mjs` against JS, on the study and on a 4×4 map
+     (`--map`): max |Δh| at most .001, masks at most one step on a few
+     cells (H6 got .0002-.0005).
+3. **Point reads** on the GPU: the prefix height at a node's points,
+   evaluated in a small window as H5b's note describes, on the whole map
+   and on pages alike. The passes read the result in the same submission;
+   there is no CPU round trip per node.
+4. **The page ring.** Grow H5b's ring to cover the reach of each kind you
+   port, or give a far-reaching kind (smooth) a wider window of its own.
+   The geometry still depends on the world and the node list alone. Report
+   the ring and its memory cost.
+5. **The refused options,** where cheap, after the kinds.
+6. **Measure** a plateau scene on the 4×4 and 8×8 canvases with
+   `perf.mjs` (`--scene` with a plateau stroke), against the same scene
+   today (the JS fallback): load, drag, release and export.
+
+**Exactness and acceptance:**
+- **The study:** `compare.py $R/repro-out/merge-h5b <yours> --worlds
+  none` is exact on all 27 scenes. Their kinds are already on the GPU.
+  `regional.mjs` finds 0 on all 27.
+- **Per kind:** `shapecheck.mjs` as in item 2, on the study and on 4×4.
+- **4×4 green-2 at the defaults:** the export is byte-identical to H5b's
+  merge export apart from the name, and the minimap checks pass.
+- **A plateau scene on 4×4:** TNT heights, features and tile indices
+  against `gpuShape=0` (JS), reported (identical is the goal); the view
+  at the noise floor, and by eye the same.
+- **A plateau scene on 8×8** (pages): the export passes its self-check,
+  and the view shows no seams at 2×.
+
+**Done when** NOTES.md has the inventory, each kind's check, the
+measurements and every exactness check above, plus what stays on JS and
+why.
+
+**Files:**
+- `engine-shape.wgsl` and `sculpt-gpu-fields.js`;
+- in `sculpt.js`, only `shapeContext` and the probe-stroke parameters;
+- `repro/shapecheck.mjs` and `repro/shape-scenes/`.
+- Not the draw, bake, feed or Time pass shaders, not `sculpt.py`, and not
+  the JS engine itself.
+
+**Budget:**
+- Item 1 is a stop point.
+- After it, each kind is its own commit.
+- If the budget runs short, stop after plateau, offset and lower (the
+  kinds a new user reaches first), with NOTES.md saying what remains.
+
+**Server and guard:**
+- port 8872, CDP 9672;
+- worktree `../terraform-wt-H6c`;
+- assets `$R/agent-H6c`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h5b`;
 - guard `--worlds none`.
 
 ## After the cards
