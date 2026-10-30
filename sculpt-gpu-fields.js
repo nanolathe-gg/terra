@@ -11,7 +11,7 @@
 // rectangle; read() waits (readAsync/ready) so a bake never sees a half-written copy and the frame never waits.
 
 const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x'];
-const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5};
+const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10};
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],
@@ -27,11 +27,11 @@ const WATER_KEYS = ['waterShore', 'waterDeep', 'waterBed'];
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct'].map(k => [k, 'u']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover'].map(k => [k, 'f'])];
+    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -87,6 +87,13 @@ export function nodeSupport(n, c) {
   if (kind === 'hill' && (!c.shouldered || c.replayFull)) return 'hill outside the shouldered form';
   if ((kind === 'paint' || kind === 'erase') && !c.edgesNatural) return `${kind} without natural edges`;
   if (kind === 'deep' && !c.natural) return 'restrained coast';
+  // H6c: plateau, offset, lower, sand, grass.
+  if (['plateau', 'offset', 'sand', 'grass'].includes(kind) && !c.edgesNatural) return `${kind} without natural edges`;
+  if (kind === 'plateau' || kind === 'offset') {
+    if (Math.round(q.maskChannel) !== 0 || STYLE_KEYS.some(k => Math.abs(clamp(q[k] || 0, -1, 1)) >= .005)) return 'shape mask writes';
+    if (q.baseVary > 0 || q.baseBump > 0) return 'hill lobes, facets or base options';
+    if (kind === 'offset' && q.shorePlates > 0) return 'water fingers, bank or plates';
+  }
   if (q.profile >= .5) return 'parametric cross-section';
   const ridge = (kind === 'hill' || kind === 'mountain') && (Math.round(q.spurCount) >= 1 || q.crestJag > 0 || q.crestVary > 0 || q.crestTaper > 0);
   if (ridge) return 'ridge options';
@@ -108,7 +115,7 @@ export function prepareNode(n, geom, c) {
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), pts = n.points, radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep' && c.natural;
-  const naturalPlateau = (kind === 'erase' || kind === 'paint') && c.edgesNatural, shouldered = kind === 'hill';
+  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, shouldered = kind === 'hill';
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
   const amp = q.rough * radius * (naturalWater ? 1.1 : naturalPlateau ? .95 : shouldered ? .85 : .2);
@@ -184,10 +191,10 @@ export function prepareNode(n, geom, c) {
   }
   // Mask writes: paint's channel, erase's clearing of planes 0..13; each [plane, target, gain, flat].
   const writes = kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : [];
-  return {op: 'stamp', kind: kcode, segs, region, settle, writes: writes.map(([p, t]) => [p, t, 1, 0]),
+  return {op: 'stamp', kind: kcode, segs, region, settle, entry: kcode >= 6 ? 'stampN' : 'stamp', reads: kind === 'plateau' ? [{x: pts[0].x, y: pts[0].y}] : [], writes: writes.map(([p, t]) => [p, t, 1, 0]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
-      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain') && q.cracks > 0 ? q.cracks : 0,
+      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
       backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: 3.5 * 2 ** ((.5 - q.softness) * 1.5)}};
@@ -211,17 +218,28 @@ export function preprocessShader(text, defines = []) {
 
 // ---- the GPU side ----
 // refSpacing: the final grid's spacing; the hill's blur is defined in world units (2 final cells), so a coarser level uses the whole number of its own cells nearest that distance (1 at double spacing).
+// The smooth radii (cells) of the nodes before ops[j]: how far a window must reach past the point it reads (their neighbourhood reads shrink the exact area).
+const windowMargin = (ops, j) => { let m = 0; for (let k = 0; k < j; k++) m += ops[k].p?.smoothR || 0; return m; };
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
-  const text = preprocessShader(await (await fetch('/engine-shape.wgsl')).text(), pages ? ['PAGES'] : []);
-  const source = text.replace('/*NODE_STRUCT*/', nodeStruct());
-  const module = device.createShaderModule({label: 'shape', code: source});
+  const raw = await (await fetch('/engine-shape.wgsl')).text();
   const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
   const layout = device.createBindGroupLayout({entries: [
     {binding: 0, visibility: S, buffer: {type: 'uniform', hasDynamicOffset: true}}, {binding: 1, visibility: S, buffer: rw}, {binding: 2, visibility: S, buffer: rw},
-    {binding: 3, visibility: S, buffer: rw}, {binding: 4, visibility: S, buffer: rw}, {binding: 5, visibility: S, buffer: ro}, {binding: 6, visibility: S, buffer: ro}, {binding: 7, visibility: S, buffer: rw}]});
+    {binding: 3, visibility: S, buffer: rw}, {binding: 4, visibility: S, buffer: rw}, {binding: 5, visibility: S, buffer: ro}, {binding: 6, visibility: S, buffer: ro}, {binding: 7, visibility: S, buffer: rw},
+    {binding: 8, visibility: S, buffer: rw}]});
   const pl = device.createPipelineLayout({bindGroupLayouts: [layout]});
-  const pipes = {};
-  for (const e of ['noise', 'stamp', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', ...(pages ? ['coarse'] : [])]) pipes[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
+  // The pipelines of one variant of the shader: the whole-map text, or the pages text (direct noise, a target's own origin).
+  const buildPipes = (paged, entries) => {
+    const source = preprocessShader(raw, paged ? ['PAGES'] : []).replace('/*NODE_STRUCT*/', nodeStruct());
+    const module = device.createShaderModule({label: paged ? 'shape (pages)' : 'shape', code: source}), out = {};
+    for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
+    return out;
+  };
+  const MAIN = ['noise', 'stamp', 'stampN', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack'];
+  const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
+  // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
+  let pipesW = null;
+  const windowPipes = () => pages ? pipes : pipesW ??= buildPipes(true, [...MAIN, 'pointRead']);
   const cells = pages ? 0 : grid * grid, buf = (size, usage, label) => device.createBuffer({size: Math.max(16, size), usage, label});
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const F = buf(6 * cells * 4, ST | CD | CS, 'shape planes'), Mk = buf(7 * cells * 4, ST | CD | CS, 'shape masks');
@@ -256,18 +274,21 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     if (target) { if (!readOnly && (!pageScratch || pageScratch.size < 3 * target.pw * target.ph * 4)) { pageScratch?.destroy(); pageScratch = buf(3 * target.pw * target.ph * 4, ST, 'page scratch'); } }
     else if (!readOnly) scratch();
     dummy ??= buf(16, ST, 'shape unused');
-    const geom = {grid, spacing};
-    const passes = [], segData = [], mwData = [];
-    let segCount = 0, mwCount = 0;
-    const base = {grid, spacing, baseH: baseHeight, sea, minH, maxH, blurR: Math.max(1, Math.round(2 * refSpacing / spacing)), ox: target ? target.ox : 0, oy: target ? target.oy : 0, pw: target ? target.pw : grid, ph: target ? target.ph : grid, direct: target ? 1 : 0};
     const expandIn = (r, m) => intersect({x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m}, whole);
-    const add = (entry, region, extra = {}) => passes.push({entry, region, u: {...base, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
+    const geom = {grid, spacing, refSpacing};
+    const passes = [], segData = [], mwData = [], ops = [];
+    let segCount = 0, mwCount = 0, nReads = 0;
+    const base = {grid, spacing, baseH: baseHeight, sea, minH, maxH, blurR: Math.max(1, Math.round(2 * refSpacing / spacing)), ox: target ? target.ox : 0, oy: target ? target.oy : 0, pw: target ? target.pw : grid, ph: target ? target.ph : grid, direct: target ? 1 : 0};
+    // cur: where the passes being recorded go: group 0 is the evaluation itself, group 1 a point-read window (a small target of its own, evaluated with the pages variant of the shader).
+    let cur = {b: base, grp: 0};
+    const windows = [];
+    const add = (entry, region, extra = {}) => passes.push({entry, region, grp: cur.grp, u: {...cur.b, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
     if (!readOnly) {
-    add('init', R);
+    // Phase 1: prepare every node (segment and mask-write lists are shared by the evaluation and its windows).
     for (const n of list) {
       const p = (prepare || prepareNode)(n, geom, ctx);
       if (p.skip) continue;
-      if (p.op === 'ground') { add('ground', R, {seed: p.seed, gAmp: p.amp, gWave: p.wave, gCover: p.cover}); continue; }
+      if (p.op === 'ground') { ops.push({ground: true, u: {seed: p.seed, gAmp: p.amp, gWave: p.wave, gCover: p.cover}}); continue; }
       if (!p.region) continue;
       const node = {...p.u, nseg: p.segs.length, kind: p.kind, segBase: segCount, mwBase: mwCount, nwrites: p.writes.length};
       for (const s of p.segs) {
@@ -276,15 +297,46 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       segCount += p.segs.length;
       for (const w of p.writes) mwData.push(...w);
       mwCount += p.writes.length;
-      const reg = p.settle ? expandIn(p.region, 4) : p.region, body = reg ? intersect(R, reg) : null;
-      if (!body) continue;
-      if (!target) add('noise', expandIn(p.region, 1), node);
-      if (!p.settle) { add('stamp', body, node); continue; }
-      const wide = expandIn(body, 4);
-      add('stamp', wide, node);
-      for (const [entry, bsrc, bdst] of [['blurH', 0, 1], ['blurV', 1, 2], ['blurH', 2, 1], ['blurV', 1, 2]]) add(entry, wide, {...node, bsrc, bdst});
-      add('compose', body, node);
+      const op = {p, node, reads: []};
+      for (const q of p.reads || []) op.reads.push({x: q.x, y: q.y, idx: nReads++});
+      if (op.reads.length) node.preIdx = op.reads[0].idx;
+      ops.push(op);
     }
+    // Phase 2: the passes of one node over the rectangle R (the evaluation's, or a window's), `ex` growing a rectangle inside what exists.
+    const emitOp = (op, R, ex, noise) => {
+      if (op.ground) { add('ground', R, op.u); return; }
+      const p = op.p, node = op.node;
+      const reg = p.settle ? ex(p.region, 4) : p.region, body = reg ? intersect(R, reg) : null;
+      if (!body) return;
+      if (noise) add('noise', ex(p.region, 1), node);
+      const entry = p.entry || 'stamp';
+      if (!p.settle) { add(entry, body, node); return; }
+      const wide = ex(body, 4);
+      add(entry, wide, node);
+      for (const [e, bsrc, bdst] of [['blurH', 0, 1], ['blurV', 1, 2], ['blurH', 2, 1], ['blurV', 1, 2]]) add(e, wide, {...node, bsrc, bdst});
+      add('compose', body, node);
+    };
+    const exMain = (r, m) => expandIn(r, m);
+    add('init', R);
+    ops.forEach((op, j) => {
+      if (op.reads.length && !op.ground) {
+        const reg = op.p.region, body = reg ? intersect(R, reg) : null;
+        if (body) for (const q of op.reads) {
+          // The prefix height at the point (the nodes before this one, evaluated in a window around the stencil, margin 4 for the hill's blur plus the
+          // smooth radii among them), read into PT. Position-based, so the window needs nothing of the neighbouring map.
+          const top = grid - 1, gx = clamp(q.x / spacing, 0, top), gy = clamp(q.y / spacing, 0, top), ix = Math.floor(gx), iy = Math.floor(gy);
+          const M = 4 + windowMargin(ops, j), W = {x0: Math.max(0, ix - M), y0: Math.max(0, iy - M), x1: Math.min(grid - 1, Math.min(ix + 1, top) + M), y1: Math.min(grid - 1, Math.min(iy + 1, top) + M)};
+          const wd = {pw: W.x1 - W.x0 + 1, ph: W.y1 - W.y0 + 1};
+          windows.push(wd.pw * wd.ph);
+          cur = {b: {...base, ox: W.x0, oy: W.y0, pw: wd.pw, ph: wd.ph, direct: 1}, grp: 1};
+          add('init', W);
+          for (let k = 0; k < j; k++) emitOp(ops[k], W, (r, m) => intersect({x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m}, W), false);
+          add('pointRead', W, {qx: q.x, qy: q.y, preIdx: q.idx});
+          cur = {b: base, grp: 0};
+        }
+      }
+      emitOp(op, R, exMain, !target);
+    });
     }
     // Pack the rectangle for readback.
     const rw0 = P ? P.x1 - P.x0 + 1 : 0, rh0 = P ? P.y1 - P.y0 + 1 : 0, rc = rw0 * rh0, q4 = Math.ceil(rc / 4), outWords = 6 * rc + 25 * q4;
@@ -307,15 +359,24 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const SegB = buf(sd.byteLength, ST | CD, 'shape segments'), MWB = buf(Math.max(16, mwCount * 16), ST | CD, 'shape mask writes');
     device.queue.writeBuffer(SegB, 0, sd);
     if (mwCount) device.queue.writeBuffer(MWB, 0, new Float32Array(mwData));
-    const OutB = buf(readback ? outWords * 4 : 16, ST | CS, 'shape out');
-    const bg = device.createBindGroup({layout, entries: [
-      {binding: 0, resource: {buffer: ub, size: NODE_BYTES}}, {binding: 1, resource: {buffer: TF}}, {binding: 2, resource: {buffer: TMk}}, {binding: 3, resource: {buffer: (target ? null : Nz) ?? dummy}},
-      {binding: 4, resource: {buffer: (target ? pageScratch : Sc) ?? dummy}}, {binding: 5, resource: {buffer: SegB}}, {binding: 6, resource: {buffer: MWB}}, {binding: 7, resource: {buffer: OutB}}]});
+    const OutB = buf(readback ? outWords * 4 : 16, ST | CS, 'shape out'), PTB = buf(nReads * 4, ST | CS, 'shape point reads');
+    const mkGroup = (F1, Mk1, Nz1, Sc1) => device.createBindGroup({layout, entries: [
+      {binding: 0, resource: {buffer: ub, size: NODE_BYTES}}, {binding: 1, resource: {buffer: F1}}, {binding: 2, resource: {buffer: Mk1}}, {binding: 3, resource: {buffer: Nz1}},
+      {binding: 4, resource: {buffer: Sc1}}, {binding: 5, resource: {buffer: SegB}}, {binding: 6, resource: {buffer: MWB}}, {binding: 7, resource: {buffer: OutB}}, {binding: 8, resource: {buffer: PTB}}]});
+    const bgs = [mkGroup(TF, TMk, (target ? null : Nz) ?? dummy, (target ? pageScratch : Sc) ?? dummy)];
+    let win = null;
+    if (windows.length) {
+      const cellsW = Math.max(...windows);
+      win = {F: buf(6 * cellsW * 4, ST, 'window planes'), Mk: buf(cellsW * 28, ST, 'window masks'), Sc: buf(3 * cellsW * 4, ST, 'window scratch')};
+      bgs.push(mkGroup(win.F, win.Mk, dummy, win.Sc));
+    }
+    const wpipes = windows.length ? windowPipes() : null;
     const enc = device.createCommandEncoder({label: 'shape'}), pass = enc.beginComputePass({label: 'shape passes'});
     passes.forEach((ps, k) => {
-      pass.setPipeline(pipes[ps.entry]); pass.setBindGroup(0, bg, [k * NODE_BYTES]);
+      pass.setPipeline((ps.grp ? wpipes : pipes)[ps.entry]); pass.setBindGroup(0, bgs[ps.grp], [k * NODE_BYTES]);
       const w = ps.region.x1 - ps.region.x0 + 1, h = ps.region.y1 - ps.region.y0 + 1;
       if (ps.entry === 'pack') { const g = Math.ceil(outWords / 256), gx = Math.min(g, 65535); pass.dispatchWorkgroups(gx, Math.ceil(g / gx)); }
+      else if (ps.entry === 'pointRead') pass.dispatchWorkgroups(1);
       else pass.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8));
     });
     pass.end();
@@ -334,7 +395,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     })();
     peak = Math.max(peak, bytes() + sd.byteLength + passes.length * NODE_BYTES + (readback ? 2 * outWords * 4 : 0));
     done.then(() => {
-      ub.destroy(); SegB.destroy(); MWB.destroy(); OutB.destroy();
+      ub.destroy(); SegB.destroy(); MWB.destroy(); OutB.destroy(); PTB.destroy(); if (win) { win.F.destroy(); win.Mk.destroy(); win.Sc.destroy(); }
       if (release && !target && Nz === nz) { nz.destroy(); sc.destroy(); Nz = Sc = null; }
       if (!readback) last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, prepareMs: tSubmit - t0, gpuMs: performance.now() - tSubmit, readbackMs: 0, cells: rc};
     });
@@ -352,16 +413,16 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const u = {grid, spacing, rx0: rect.x0, ry0: rect.y0, rx1: rect.x1, ry1: rect.y1, ox: target.ox, oy: target.oy, pw: target.pw, ph: target.ph, blurR: step};
     NODE_FIELDS.forEach(([name, type], j) => { const v = u[name] ?? 0; if (type === 'f') dv.setFloat32(j * 4, v, true); else if (type === 'u') dv.setUint32(j * 4, v >>> 0, true); else dv.setInt32(j * 4, v, true); });
     device.queue.writeBuffer(ub, 0, dv.buffer);
-    const d3 = buf(16, ST, 'coarse unused 3'), d4 = buf(16, ST, 'coarse unused 4'), d56 = buf(16, ST, 'coarse unused 56');
+    const d8 = buf(16, ST, 'coarse unused 8'), d3 = buf(16, ST, 'coarse unused 3'), d4 = buf(16, ST, 'coarse unused 4'), d56 = buf(16, ST, 'coarse unused 56');
     const out = buf(w * h * 4, ST | CS, 'coarse out'), stage = buf(w * h * 4, GPUBufferUsage.MAP_READ | CD, 'coarse read');
     const bg = device.createBindGroup({layout, entries: [{binding: 0, resource: {buffer: ub, size: NODE_BYTES}}, {binding: 1, resource: {buffer: target.F}}, {binding: 2, resource: {buffer: target.Mk}}, {binding: 3, resource: {buffer: d3}},
-      {binding: 4, resource: {buffer: d4}}, {binding: 5, resource: {buffer: d56}}, {binding: 6, resource: {buffer: d56}}, {binding: 7, resource: {buffer: out}}]});
+      {binding: 4, resource: {buffer: d4}}, {binding: 5, resource: {buffer: d56}}, {binding: 6, resource: {buffer: d56}}, {binding: 7, resource: {buffer: out}}, {binding: 8, resource: {buffer: d8}}]});
     const enc = device.createCommandEncoder({label: 'coarse'}), pass = enc.beginComputePass({label: 'coarse'});
     pass.setPipeline(pipes.coarse); pass.setBindGroup(0, bg, [0]);
     const g = Math.ceil(w * h / 256), gx = Math.min(g, 65535); pass.dispatchWorkgroups(gx, Math.ceil(g / gx)); pass.end();
     enc.copyBufferToBuffer(out, 0, stage, 0, w * h * 4); device.queue.submit([enc.finish()]);
     await stage.mapAsync(GPUMapMode.READ); const values = new Float32Array(stage.getMappedRange().slice(0)); stage.unmap();
-    stage.destroy(); out.destroy(); ub.destroy(); d3.destroy(); d4.destroy(); d56.destroy();
+    stage.destroy(); out.destroy(); ub.destroy(); d3.destroy(); d4.destroy(); d56.destroy(); d8.destroy();
     return {w, h, values};
   }
   return {run, submit, copyOut, bytes, makeTarget, decimate, planes: F, masks: Mk, stats: () => ({gpuBytes: bytes(), peakGpuBytes: peak, planeBytes: F.size, maskBytes: Mk.size, noiseBytes: Nz?.size || 0, scratchBytes: Sc?.size || 0, last}),

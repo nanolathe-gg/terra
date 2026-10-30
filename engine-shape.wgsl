@@ -19,6 +19,8 @@
 @group(0) @binding(5) var<storage, read> Seg: array<vec4f>;
 @group(0) @binding(6) var<storage, read> MW: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> Out: array<u32>;
+// H6c: point reads (the prefix height a node reads at its points), one f32 each, written by pointRead and read by stampN (PT: PR is the routes plane).
+@group(0) @binding(8) var<storage, read_write> PT: array<f32>;
 
 const PH = 0u; const PP = 1u; const PR = 2u; const PC = 3u; const PV = 4u; const PX = 5u;
 
@@ -448,4 +450,108 @@ fn coarse(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: 
   Out[j] = bitcast<u32>(F[PH * pcells() + lidx(cx, cy)]);
 }
 
+#endif
+// ---- H6c: the remaining shapes. New entry points only; the entries above are untouched. ----
+// Kinds: 6 plateau, 7 offset, 8 lower, 9 sand, 10 grass, 11 smooth. Same capsule loop as `stamp` (the host passes the same segments); the rules for
+// value, protection, routes, cover and cracks follow dab() and applyCracks() in sculpt.js.
+@compute @workgroup_size(8, 8)
+fn stampN(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let n = u.grid; let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let kind = u.kind;
+  let natural = kind == 6u || kind == 7u || kind == 9u || kind == 10u;
+  let fxF = select(0u, 3u, natural); let fyF = select(1u, 4u, natural);
+#ifdef PAGES
+  let nzx = nzCell(fxF, x, y, i, cells); let nzy = nzCell(fyF, x, y, i, cells);
+  let nCW = nzCell(5u, x, y, i, cells); let nDet = nzCell(2u, x, y, i, cells);
+#else
+  let nzx = Nz[fxF * cells + i]; let nzy = Nz[fyF * cells + i];
+  let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i];
+#endif
+  let radius = u.radius;
+  var best = 0.0; var visited = false;
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let px = s0.x; let py = s0.y;
+    let sx = s0.z - px; let sy = s0.w - py;
+    let span2 = sx * sx + sy * sy;
+    var t = 0.0;
+    if (span2 > 0.0) { t = clamp(((wx - px) * sx + (wy - py) * sy) / span2, 0.0, 1.0); }
+    let cx = px + sx * t; let cy = py + sy * t;
+    var ex = nzx; var ey = nzy;
+    if (span2 > 0.0) { ex = nzx - sampleN(fxF, cx, cy); ey = nzy - sampleN(fyF, cx, cy); }
+    else { ex = nzx - s2.x; ey = nzy - s2.y; }
+    let dx = wx - cx + u.amp * (u.rotX * ex - u.rotY * ey);
+    let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
+    var width = 1.0;
+    if (natural) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
+    let r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    if (r >= 1.0) { continue; }
+    var w = 0.0;
+    if (natural) {
+      let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
+      let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
+      var north = 0.0;
+      if (u.northWiden > 0.0) { north = max(0.0, -(wy - cy)) / max(1e-3, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy))); }
+      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.northWiden * 0.32 * north * north, 0.12, 0.90);
+      w = 1.0 - sm(shoulder, 1.0, r);
+      if (kind == 6u && u.mesaFlank > 0.0) {
+        let cap = shoulder * (1.0 - 0.45 * u.mesaFlank); let tt = clamp((r - cap) / (1.0 - cap), 0.0, 1.0);
+        w = w + ((1.0 - tt) * (1.0 - tt) + (1.0 - sm(0.0, 1.0, tt)) * tt - w) * u.mesaFlank;
+      }
+    } else {
+      w = 1.0 - sm(0.0, 1.0, r);
+      if (kind == 8u) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
+    }
+    if (w <= best) { continue; }
+    best = w; visited = true;
+  }
+  if (!visited) { return; }
+  let w = best;
+  let base = F[PH * cells + i];
+  let pbase = F[PP * cells + i];
+  var value = base;
+  if (kind == 6u) { value = base + (PT[u.preIdx] + u.amount + u.rough * 3.0 * nDet - base) * w; }
+  else if (kind == 7u) { value = base + u.amount * w; }
+  else if (kind == 8u) { value = base - u.amount * w; }
+  else if (kind == 9u || kind == 10u) {
+    let tv = select(-1.0, 1.0, kind == 9u); let vb = F[PV * cells + i];
+    F[PV * cells + i] = vb + (tv - vb) * w * u.amountPct;
+  }
+  else if (kind == 11u) { value = base + (Sc[2u * cells + i] - base) * w * u.amountPct; }
+  F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  if (kind != 11u && value != base) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
+  if (kind == 6u) { F[PP * cells + i] = max(pbase * (1.0 - w), sm(0.65, 0.95, w)); }
+  else if (kind == 7u) { F[PP * cells + i] = pbase * (1.0 - 4.0 * w * (1.0 - w)); }
+  else if (kind == 8u) { F[PP * cells + i] = pbase * (1.0 - w); }
+  if ((kind == 6u || kind == 7u) && u.crackAmt > 0.0) {
+    F[PC * cells + i] = max(F[PC * cells + i], min(1.0, w * 1.6) * u.crackAmt);
+  }
+}
+
+#ifdef PAGES
+// The prefix height at the world point (qx, qy), bilinear as sample() of sculpt.js, from the window the host just evaluated (a target whose cells include the
+// 2 x 2 stencil); the value goes to PT[preIdx] for the node that reads it.
+@compute @workgroup_size(1)
+fn pointRead() {
+  let top = f32(u.grid - 1u);
+  let gx = clamp(u.qx / u.spacing, 0.0, top); let gy = clamp(u.qy / u.spacing, 0.0, top);
+  let ix = i32(floor(gx)); let iy = i32(floor(gy));
+  let jx = min(ix + 1, i32(u.grid) - 1); let jy = min(iy + 1, i32(u.grid) - 1);
+  let fx = gx - f32(ix); let fy = gy - f32(iy);
+  let c = pcells();
+  let a = F[PH * c + lidx(ix, iy)]; let b = F[PH * c + lidx(jx, iy)];
+  let d = F[PH * c + lidx(ix, jy)]; let e = F[PH * c + lidx(jx, jy)];
+  PT[u.preIdx] = (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (d * (1.0 - fx) + e * fx) * fy;
+}
 #endif
