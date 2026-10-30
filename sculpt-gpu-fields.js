@@ -336,19 +336,24 @@ export function createGpuFields(opts) {
   const subscribeFallback = fallback?.subscribe(ev => { if (!gpuMode()) for (const fn of listeners) fn(ev); });
   let mode = true;
   const gpuMode = () => mode;
-  function evaluate(rect) {
+  // Listeners hear of a change only once the CPU copy holds it: the canvas samples its overview (and rebakes) when told, and a copy
+  // still holding the earlier fields would leave the overview one edit behind, or flat on a fresh load. The first whole copy is
+  // announced too, since readers that sampled before it read the base height.
+  function evaluate(rect, event = null) {
     pendingRuns++; allocate();
-    const whole = !valid || !rect, r = whole ? null : clip({x0: rect.x0 - 6, y0: rect.y0 - 6, x1: rect.x1 + 6, y1: rect.y1 + 6});
+    const whole = !valid || !rect, r = whole ? null : clip({x0: rect.x0 - 6, y0: rect.y0 - 6, x1: rect.x1 + 6, y1: rect.y1 + 6}), wasValid = valid;
     const t0 = performance.now(), list = nodes();
     settled = (async () => {
+      let landed = false;
       try {
         const e = await getEngine();
         const out = await e.run(list, context(), r, {release: whole});
-        if (out) { e.copyOut(out, planes); if (whole) valid = true; }
+        if (out) { e.copyOut(out, planes); if (whole) valid = true; landed = true; }
         lastEval = {ms: performance.now() - t0, whole, ...e.stats().last};
         firstReady ||= performance.now();
       } catch (err) { error = err; console.error(err); }
       finally { pendingRuns--; }
+      if (landed && (event || !wasValid)) { const ev = {revision: event?.revision ?? revision, rect: whole ? null : event.rect}; for (const fn of listeners) fn(ev); }
     })();
     return settled;
   }
@@ -357,10 +362,8 @@ export function createGpuFields(opts) {
     mode = check();
     const fb = fallback.changed(rect, keepPrefix);   // always, so the JS fields never hold a stale compiled list
     if (!mode) { valid = false; return fb; }
-    const cr = rect ? clip(rect) : null;
-    evaluate(cr);
-    const event = {revision, rect: cr ? worldRect(cr) : null};
-    for (const fn of listeners) fn(event);
+    const cr = rect ? clip(rect) : null, event = {revision, rect: cr ? worldRect(cr) : null};
+    evaluate(cr, event);   // the listeners hear of it when the copy lands
     return event;
   }
   // A copy that was never filled (no evaluation ran, or the last one failed) is started here, so a reader that waits cannot wait forever.
