@@ -3133,7 +3133,9 @@ async function bootMap() {
 async function boot() {
   try {
     const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
-    if (experiment.has('mapX') || experiment.has('mapY')) {
+    // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
+    if (!experiment.has('mapX') && !experiment.has('mapY')) { experiment.set('mapX','4'); experiment.set('mapY','4'); }
+    {
       const response=await fetch('/map-catalog.json'),data=await response.json(); if (!response.ok) throw new Error(data.error||'Could not read map defaults from the installed content.');
       config.exportCatalog=data; config.defaultSeaLevel=config.exportCatalog.worlds[config.biomeId]?.defaultSeaLevel;
     }
@@ -3171,38 +3173,7 @@ async function boot() {
     $('ring-variation').value=Math.round((config.material?.ringVariation??.7)*100);
     // The address may set the three ring sliders (a world's own fringe settings, 0..1).
     for (const [key,id] of [['ringAmount','mineral-ring'],['ringSpread','ring-spread'],['ringVariation','ring-variation']]) if (experiment.has(key)) $(id).value=Math.round(Number(experiment.get(key))*100);
-    if (config.map) { await bootMap(); return; }
-    size=config.size; grid=config.grid; spacing=(size-1)/(grid-1); heights=new Float32Array(grid*grid); protection=new Float32Array(grid*grid); routes=new Float32Array(grid*grid); cracks=new Float32Array(grid*grid); cover=new Float32Array(grid*grid); crystal=new Float32Array(grid*grid); maskPlanes=MASK_KEYS.map(() => new Int8Array(grid*grid)); heights.fill(config.baseHeight);
-    canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
-    renderer=await TerrainRenderer.create(canvas,config);
-    // H5: Green's engine has no apron (the Time pass's debris is in the height), so the Scree slider reads nothing there.
-    $('scree').closest('.control').hidden=true;
-    renderer.onerror=message => error(message);
-    renderer.setColors(worldColors());
-    buildKnobs(); buildWorldPanel();
-    // The fracture texture only applies to the lab surface; the fall-line
-    // surface draws its cracks in the bake (Cracks knobs).
-    $('fracture-control').hidden=true;
-    $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100);
-    $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
-    mapMetadata=mountMapExport({config,canvas,ready:canExport,revision:() => revision+':'+weatherJob+':'+mapRevision,mapData,features:() => mapFeatures,change:mapChanged,samples:() => { const display=renderer.height; return (x,y) => sample(display,x,y); },render:renderExportView,restore:() => { if (exportSurface) { renderer.setHeight(exportSurface,grid); exportSurface=null; } schedule(); },onUpdate:fn => { mapUpdate=fn; },busy:on => { loading=on; $('editor').disabled=on; $('world-editor').disabled=on; for (const id of ['weather','clay','light']) $(id).disabled=on; overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on; }});
-    mapFeatures=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,pick:(cx,cy) => renderer.pick(cx,cy),sample:(x,z) => sample(renderer.height,x,z),change:mapChanged,schedule:() => schedule(false),enabled:() => ready&&!loading});
-    let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
-    if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved terrain.'); } catch (err) { mixedScene(); error('Saved sculpt sketch could not be loaded: '+err.message+' The saved copy is retained until you edit.'); status('Mixed example shown.'); } }
-    else if (config.map) { scriptedScene([]); status('Blank map ready · draw terrain with the existing tools.'); }
-    else { mixedScene(); status('Mixed scene ready · paint any continuous shape.'); }
-    ready=true; $('editor').disabled=false; $('world-editor').disabled=false; history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
-    // A sketch loaded in another world was handed to this page before the
-    // reload; play it now that this world's renderer and fields exist.
-    const pending=await takePendingSketch(experiment.get('pendingSketch'));
-    if (pending) {
-      try {
-        if (pending.biome!==config.biomeId) throw new Error(`it belongs to the ${pending.biome} world but ${config.biomeId} opened`);
-        loadSketch(pending); checkpoint(); status('Loaded the saved terrain.');
-      } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); }
-    }
-    $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
-    updateControls(); resize(); schedule(); queueWeather();
+    await bootMap();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
 // Read-only hook for capture tools: the displayed (refined) heights.
