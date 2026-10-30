@@ -228,8 +228,8 @@ export function prepareNode(n, geom, c) {
   const q = c.params(n), kind = n.kind, kcode = KIND[kind];
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), pts = n.points, radius = q.radius;
-  const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep' && c.natural;
-  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
+  const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
+  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
@@ -385,7 +385,7 @@ export function prepareNode(n, geom, c) {
   const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
-      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
+      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
       ...outlineUniforms(kind, q, radius), ...sectionUniforms(kind, q, c), bankFlat: (kind === 'deep' || kind === 'shallow') && !(q.profile >= .5) ? Math.max(0, q.bankPx || 0) : 0, bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
