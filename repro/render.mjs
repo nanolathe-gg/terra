@@ -2,8 +2,9 @@
 //   node render.mjs <scene.json> <out-dir> [--server http://127.0.0.1:8801] [--port 9450] [--query 'sun=90,45&cavity=.5'] [--clay]
 // --query appends page parameters after the scene's own (review sun, knob trials); --clay ticks the Clay box.
 // The scene is {"biome": "green", "query": "", "ground": true, "strokes": [[kind, [[x,y],...], options], ...]}
-// (sculpt.js scriptedScene). Writes <out-dir>/ours.png and ours-heights.json
-// (the displayed heights, grid x grid over the 1024-px map).
+// (sculpt.js scriptedScene). H12b: the scene is played on a 4x4 map with every stroke shifted by (OX, OY), so the
+// 1024-px window sits clear of the map edges, and the window is captured at 1x. Writes <out-dir>/ours.png (the
+// window) and ours-heights.json (the displayed heights over the window, 512 x 512 samples at 2 px).
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 
@@ -11,9 +12,8 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450));
 const extraQuery = opt('--query', '');
-const timeOn = args.includes('--time') && args.splice(args.indexOf('--time'), 1).length > 0;
+const MAPX = 4, MAPY = 4, OX = 528, OY = 528, WINDOW = 1024;
 const clayOn = args.includes('--clay') && args.splice(args.indexOf('--clay'), 1).length > 0;
-const erosionOn = args.includes('--erosion') && args.splice(args.indexOf('--erosion'), 1).length > 0;
 const [sceneFile, out] = args;
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
@@ -30,7 +30,7 @@ if (sceneConfig.biomeId !== scene.biome) {
   console.error(`render.mjs: ${sceneFile}: asked for world ${scene.biome}, the server returned ${sceneConfig.biomeId}`);
   process.exit(1);
 }
-const url = `${server}/sculpt?biome=${scene.biome}&scratch=1${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
+const url = `${server}/sculpt?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
   `--remote-debugging-port=${port}`, `--user-data-dir=${out}/.profile-${port}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -50,7 +50,8 @@ try {
   };
   const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
   const ev = async expr => { const r = await send('Runtime.evaluate', {expression: expr, returnByValue: true, awaitPromise: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
-  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev(`!document.getElementById('export')?.disabled`)) return true; } return false; };
+  // A Zhon map cannot export (by design), so its export button never enables: its editor being enabled and the canvas idle stand in.
+  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev(`!!window.sculptCanvas && (!document.getElementById('map-export')?.disabled || (${scene.biome === 'zhon'} && !document.getElementById('editor')?.disabled && sculptCanvas.idle().then(() => true)))`)) { if (scene.biome === 'zhon') await sleep(2500); return true; } } return false; };
   await send('Runtime.enable'); await send('Page.enable');
   await send('Page.navigate', {url});
   if (!await ready()) throw new Error('editor never became ready: ' + await ev(`document.getElementById('error').textContent`));
@@ -58,27 +59,20 @@ try {
   if (loadedBiome !== scene.biome) throw new Error(`page loaded world ${loadedBiome}, scene asks for ${scene.biome}`);
   if (clayOn) await ev(`(() => { const c = document.getElementById('clay'); c.checked = true; c.dispatchEvent(new Event('change', {bubbles: true})); })()`);
   const t0 = Date.now();
-  const count = await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)}, {ground: ${scene.ground !== false}})`);
+  const count = await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes.map(([kind, points, options]) => [kind, points.map(([x, y]) => [x + OX, y + OY]), options]))}, {ground: ${scene.ground !== false}})`);
   if (!await ready()) throw new Error('scene never finished: ' + await ev(`document.getElementById('error').textContent`));
-  const png = await ev(`document.getElementById('terrain').toDataURL('image/png')`);
+  // The window at 1x: scroll the viewport to (OX, OY), wait for the chunks, crop the displayed canvas.
+  await send('Emulation.setDeviceMetricsOverride', {width: 1700, height: 1300, deviceScaleFactor: 1, mobile: false});
+  const view = await ev(`(async () => { sculptCanvas.resize(); sculptCanvas.zoom(1); const v = document.getElementById('viewport'); v.scrollLeft = ${OX}; v.scrollTop = ${OY}; await new Promise(r => requestAnimationFrame(r)); await sculptCanvas.idle(); const s = sculptCanvas.view(); const c = document.getElementById('terrain'); return {x: s.x, y: s.y, scale: s.scale, w: c.width, h: c.height}; })()`);
+  if (view.x !== OX || view.y !== OY || view.scale !== 1 || view.w < WINDOW || view.h < WINDOW) throw new Error('the 1x window did not fit the viewport: ' + JSON.stringify(view));
+  const png = await ev(`(() => { const c = document.getElementById('terrain'), o = new OffscreenCanvas(${WINDOW}, ${WINDOW}); o.getContext('2d').drawImage(c, 0, 0, ${WINDOW}, ${WINDOW}, 0, 0, ${WINDOW}, ${WINDOW}); return o.convertToBlob({type: 'image/png'}).then(b => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); })); })()`);
   writeFileSync(`${out}/ours.png`, Buffer.from(png.split(',')[1], 'base64'));
-  writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: await ev('sculptDebug.grid'), sea: await ev('sculptDebug.sea'), heights: await ev('sculptDebug.heights()')}));
-  // H2: the erosion pass's input, output and column offsets, when it ran (--erosion).
-  if (erosionOn) {
-    const e = await ev(`(() => { const e = window.lastErosion; return e && {grid: e.grid, size: e.size, authored: Array.from(e.authored), height: Array.from(e.height), debris: Array.from(e.debris), offset: Array.from(e.offset), protect: e.protect ? Array.from(e.protect) : null, seaLevel: e.seaLevel}; })()`);
-    if (e) writeFileSync(`${out}/ours-erosion.json`, JSON.stringify(e));
-    // H5: the Time pass's packed maps (layer 0, 2, 3 of gridTexture), as raw rgba8, grid x grid each.
-    const m = await ev(`(() => { const m = window.lastErosion?.maps; return m && m.map(a => btoa(String.fromCharCode(...a.subarray(0, 65536))) + '|' + Array.from({length: Math.ceil(a.length / 65536) - 1}, (_, k) => btoa(String.fromCharCode(...a.subarray(65536 * (k + 1), 65536 * (k + 2))))).join('|')); })()`);
-    if (m) m.forEach((text, k) => writeFileSync(`${out}/ours-map${k}.bin`, Buffer.concat(text.split('|').map(t => Buffer.from(t, 'base64')))));
-  }
-  // H5: --time prints the median of 7 draws and 7 bakes (sculptDebug.drawMs / bakeMs, submit to GPU completion).
-  let timing;
-  if (timeOn) {
-    const median = a => a.sort((x, y) => x - y)[a.length >> 1];
-    const draws = [], bakes = [];
-    for (let i = 0; i < 7; i++) { draws.push(await ev('sculptDebug.drawMs()')); bakes.push(await ev('sculptDebug.bakeMs()')); }
-    timing = {draw: median(draws), bake: median(bakes)};
-  }
-  console.log(JSON.stringify({timing, nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
+  // The displayed heights over the window, 2 px apart: the editor's own sampler (the Time pass's height). Its first
+  // call starts the CPU copy of the Time pass, so sample once, wait for the copy, then sample for real.
+  const sampleWindow = `(() => { const out = new Array(512 * 512); for (let j = 0; j < 512; j++) for (let i = 0; i < 512; i++) out[j * 512 + i] = sculptDebug.corner(${OX} + 2 * i, ${OY} + 2 * j).eroded; return out; })()`;
+  await ev(sampleWindow); await sleep(1500); await ev('sculptCanvas.idle()');
+  const hs = {out: await ev(sampleWindow)};
+  writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: 512, sea: await ev('sculptDebug.sea'), heights: hs.out}));
+  console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
   ws.close();
 } finally { chrome.kill(); }
