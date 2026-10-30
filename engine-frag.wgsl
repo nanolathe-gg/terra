@@ -19,11 +19,12 @@
 // texture(t, pixel / D) had implicit derivatives of exactly 1 / D per
 // pixel. Explicit gradients select the same level and filter, and are legal
 // in non-uniform control flow, where WGSL's textureSample is not.
+// H7b: a drawn pixel covers materialFoot final pixels (1 at final), so the gradients pick the coarser level of a quarter draw.
 fn pixelSample(t: texture_2d<f32>, s: sampler, pixel: vec2f, scale: vec2f) -> vec4f {
-    return textureSampleGrad(t, s, pixel / scale, vec2f(1.0 / scale.x, 0.0), vec2f(0.0, 1.0 / scale.y));
+    return textureSampleGrad(t, s, pixel / scale, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
 }
 fn pixelSampleLayer(t: texture_2d_array<f32>, s: sampler, pixel: vec2f, scale: vec2f, layer: i32) -> vec4f {
-    return textureSampleGrad(t, s, pixel / scale, layer, vec2f(1.0 / scale.x, 0.0), vec2f(0.0, 1.0 / scale.y));
+    return textureSampleGrad(t, s, pixel / scale, layer, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
 }
 
 // Move a texture to a new base colour, keeping its grain.
@@ -245,7 +246,16 @@ fn genColor(layer: i32, pixel: vec2f) -> vec3f {
     return textureLoad(generatedTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, layer, level).rgb;
 }
 // The plain keeps its 16 tiles, now built at startup from materials/green.json's `ground` data (sculpt-renderer.js), not an image file.
-fn groundSource(pixel: vec2f) -> vec3f { return groundTile(pixel); }
+// H7b: at a footprint above 1 the plain's tiles are averaged over the final pixels the drawn one covers (2 x 2 at quarter), as the mip does
+// for the generated materials; at final (the study included) the branch is not taken and the lookup is the one it was.
+fn groundSource(pixel: vec2f) -> vec3f {
+#ifdef CHUNK
+    if (u.materialFoot > 1.5) {
+        return 0.25 * (groundTile(pixel + vec2f(-0.5, -0.5)) + groundTile(pixel + vec2f(0.5, -0.5)) + groundTile(pixel + vec2f(-0.5, 0.5)) + groundTile(pixel + vec2f(0.5, 0.5)));
+    }
+#endif
+    return groundTile(pixel);
+}
 fn grassImage(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
@@ -1230,7 +1240,8 @@ fn flowBank(color: vec3f, p: vec2f) -> vec3f {
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
 #ifdef CHUNK
-    let fragCoord = vec2f(v.position.x + u.chunkScreenOrigin.x, u.size - (v.position.y + u.chunkScreenOrigin.y));
+    // H7b: an output texel covers chunkScale final pixels, so its screen position is scaled back (x * 1 at final).
+    let fragCoord = vec2f(v.position.x * u.chunkScale + u.chunkScreenOrigin.x, u.size - (v.position.y * u.chunkScale + u.chunkScreenOrigin.y));
 #else
     let fragCoord = vec2f(v.position.x, u.size - v.position.y);
 #endif
