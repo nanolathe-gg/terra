@@ -12,8 +12,8 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
-    'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'engine-erosion.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
+    'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl',
+    'engine-erosion.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',

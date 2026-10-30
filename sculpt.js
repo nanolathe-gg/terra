@@ -1,10 +1,8 @@
 import {TerrainRenderer} from './sculpt-renderer.js';
-import {quickMaterialField} from './sculpt-material-weathering.js';
 import {configureMap,resizeMap,drawMapBounds,exportMapField,mountMapCanvas} from './sculpt-map.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer} from './sculpt-gpu-fields.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
-import {mountMapWeather} from './sculpt-map-weather.js';
 import {FLOW_FIRST,isFlowKind,flowParams,applyResult,encodeResult,decodeResult,savedResultBytes,mountFlow} from './sculpt-flow-ui.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
@@ -41,12 +39,12 @@ function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.loa
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
 let flow=null;   // card F1: the flow bake's driver and panel (sculpt-flow-ui.js)
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
-let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null, mapWeather=null;
+let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
 let regionalPrefixSample=null,regionalNoiseMeta=new WeakMap(),regionalConnects=null,regionalCoastCandidate=false,regionalCoastRaw=null,regionalCoastBounds=null,regionalBoundsOnly=false,regionalBodyWeights=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
 const gridX=x => (x+originCellX)*spacing, gridY=y => (y+originCellY)*spacing;
-let gpuWeather=null, gpuErosionMs=null, weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
+let gpuWeather=null, gpuErosionMs=null, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
 let history=[], historyIndex=-1, historySerial=0, framePending=false, heightDirty=true, needsDraw=true;
 let revision=0, renderedRevision=-1, fitView=true, autosaveTimer, ready=false;
@@ -2814,7 +2812,6 @@ function regionalHeightCell(x,y) {
 function sampleRegional(x,y) {
   if (pagedOn()) return regionalFields.sampleEroded(x,y);
   if (gpuWeather && !gpuWeather.cpuHeight && !stroke && !moving && $('weather').checked) gpuWeatherCpu(false).catch(() => {});   // H6b: the first CPU reader asks for the Time pass's height
-  if(mapWeather?.usesTiles())return mapWeather.sample(x,y)??mapCanvas?.heightSample(x,y)??regionalFields.sample(x,y);
   if (!refined || !refinedBase || !$('weather').checked) return regionalFields.sample(x,y);
   const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
   return (regionalHeightCell(ix,iy)*(1-fx)+regionalHeightCell(jx,iy)*fx)*(1-fy)+(regionalHeightCell(ix,jy)*(1-fx)+regionalHeightCell(jx,jy)*fx)*fy;
@@ -2823,6 +2820,8 @@ function sampleRegional(x,y) {
 // fields' buffers and leaves its result in two GPU buffers (gpuWeather: weather = authored then eroded height, maps = the three packed layers); a chunk
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
+// Erosion 0 (a world that runs no Time pass) is Weathering off.
+const weatherOn=() => $('weather').checked && renderer.variantNumber?.('erosion',0)>0;
 const feedWeatherOk=() => Boolean(gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
 const gpuFeedEligible=() => Boolean(regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
 // A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
@@ -2854,8 +2853,7 @@ async function gpuWeatherCpu(withMaps) {
 // Weathering is on and a GPU pass produced them. Weather that came from a CPU pass keeps the CPU read, so the picture stays exactly the CPU path's.
 // H5b: the Time pass in pages: the knobs the pass reads (all of them in the key, so a change drops every page's weather), and the runner a page's window goes through.
 function configurePagedTime(fields=regionalFields) {
-  const on=$('weather').checked && renderer.variantNumber?.('erosion',0)>0;
-  if (!on) return fields.setTime(null);
+  if (!weatherOn()) return fields.setTime(null);
   const p={age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),columnContrast:renderer.variantNumber('columnContrast',1),
     envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
   const material=materialKnobs();
@@ -2954,7 +2952,7 @@ function regionalStats() {
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
-  fitGpuBudget:() => regionalFields?.refit?.(),setBudget:() => {},evict:() => {},   // nothing budgets CPU field planes now; the tiled-weather wrapper (deleted with the CPU workers) still wraps these two
+  fitGpuBudget:() => regionalFields?.refit?.(),
   workingBytes:()=>flow?.stats().inflightBytes??0,read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },checkGraphMemory:preflightNodeBakes,
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); flow?.reset();cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
@@ -3077,24 +3075,9 @@ function moveHistory(delta) {
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
-// While a shape is edited the material transport is too slow to rerun, so a
-// quick approximation stands in: biomes whose colours come from it (the
-// Archipelago's dark hills) keep roughly their final look instead of
-// turning pale until refinement finishes.
-// H3: with the material model the draw reads no material field, so the worker and the quick preview skip it.
-const materialPreview=() => false;   // the engine draws no quick material field; deleted with the CPU workers
 function clearRendererWeather() { if (regionalFields) { regionalWeather=null; if (gpuWeather) gpuWeather.mapsOn=false; } else renderer?.setWeather(); }
-function quickMaterials() {
-  if (regionalFields) return;
-  if (!renderer || !materialPreview()) { renderer?.setMaterialField(); return; }
-  renderer.setMaterialField(quickMaterialField({height:heights,grid,size,seed:refinementSeed,baseHeight:config.baseHeight,seaLevel:config.seaLevel,
-    depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}}));
-}
 function cancelWeather() {
-  mapWeather?.cancel();
   weatherJob++; weatherBase=null;
-  quickMaterials();
-  weatherWorker?.postMessage({cancel:true,job:weatherJob});
   weatherState=$('weather').checked?'pending':'disabled';
   $('weather-state').textContent=$('weather').checked?'Refinement paused while editing.':'Weathering off · authored surface';
   updateControls();
@@ -3129,39 +3112,27 @@ function queueWeather() {
   // H6b: a fed Time pass needs the GPU planes current, not the CPU copy; the copy a gesture left out is read in the background from here.
   if (feedWeatherOk() && regionalFields?.gpuReady) { regionalFields.settle(); if (regionalFields.gpuPending()) { regionalFields.gpuReady().then(queueWeather); return; } }
   else if (regionalFields?.pending?.()) { regionalFields.ready().then(queueWeather); return; }   // H6: the map's GPU fields are still being copied
-  if (!$('weather').checked) {
-    mapWeather?.queue();
+  if (!weatherOn()) {
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;
   }
-  if(mapWeather?.queue()) { if(!stroke&&!moving)weatherState='ready';updateControls();return; }
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
-    if (!weatherWorker && !((!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
     const job=++weatherJob;
     // H6b: on a map canvas whose fields are on the GPU the Time pass reads the fields' buffers and leaves its result in GPU buffers (below).
     const fed=Boolean(feedWeatherOk() && regionalFields.gpuBuffers());
     const authored=regionalFields&&!fed?globalWeatherInput():null;
     weatherBase=fed?null:authored?authored.h:heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
-    const profile=experiment.get('weather')==='broad'?'broad':undefined;
-    // H2: erosion 1 (Green) runs the GPU pass first and hands its height to the worker, which skips the droplets.
-    // H5: Green's engine also runs the GPU pass over a whole map canvas up to 1168 samples a side (larger maps keep the tiled worker, H5b).
-    const gpu=(!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0;
-    gpuErosionMs=null;
-    let eroded=null;
-    const post=() => weatherWorker.postMessage({job,height:weatherBase,...eroded,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
-      sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
-    if (!gpu) { post(); return; }
     if (fed) { runFedWeather(job); return; }
-    // H5: Green's engine (engine 1) takes the height and the data maps from the GPU pass alone; no worker runs (engine-weather.wgsl).
-    const own=true;
+    gpuErosionMs=null;
+    // The Time pass takes the height and the data maps from the GPU pass alone (engine-weather.wgsl).
     const erodeRequest={height:weatherBase,protect:authored?.p??protection,rate:authored?authored.e:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
-      ...(own?{maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)}:{})};
+      maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
     window.erodeAgain=() => renderer.erode(erodeRequest).then(r => ({ms:r.milliseconds,parts:r.parts}));   // dev hook: time the pass alone
     renderer.erode(erodeRequest)
       .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,protect:protection,seaLevel:config.seaLevel,maps:result.maps,grid,size};
-        if (own && regionalFields) {
+        if (regionalFields) {
           // A map canvas: the chunk renderer reads the maps as the worker's arrays (flow, deposit, talus, sand and the Time pass's eight).
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           // The maps stay packed (three rgba8 arrays, 4 bytes a sample); the chunk crop unpacks only the samples a chunk needs.
@@ -3171,7 +3142,7 @@ function queueWeather() {
             weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; markViewChanged(); updateControls(); schedule(); });
           return;
         }
-        if (own) {
+        {
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);
           heightDirty=false;
@@ -3179,7 +3150,7 @@ function queueWeather() {
             weatherState='ready'; renderedRevision=-1; updateControls(); $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); });
           return;
         }
-        eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
+        })
       .catch(err => { if (job===weatherJob) failWeather(err.message); });
   } catch (err) { failWeather(err.message); }
 }
@@ -3222,34 +3193,12 @@ async function runFedWeather(job) {
   } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message); }
 }
 function failWeather(message) {
-  weatherJob++; weatherBase=null; weatherWorker?.terminate(); weatherWorker=null;
+  weatherJob++; weatherBase=null;
   weatherState=$('weather').checked?'failed':'disabled';
   $('weather-state').textContent=$('weather').checked
     ?`Weathering failed: ${message}. Turn Weathering off to export the authored surface, then on to retry.`
     :'Weathering off · authored surface';
   updateControls();
-}
-function startWeatherWorker() {
-  const worker=new Worker('/sculpt-weathering.js',{type:'module'}); weatherWorker=worker;
-  worker.onmessage=event => {
-    const data=event.data;
-    if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
-    if (data.error) { failWeather(data.error); return; }
-    dropGpuWeather(); refined=data.height; refinedBase=weatherBase;
-    if (regionalFields) {
-      regionalWeather={flow:data.flow,deposit:data.deposit,talus:data.talus,sand:data.sand,materialField:data.materialField};
-      if (data.done) weatherState='ready';
-      $('weather-state').textContent=data.done?`Weathered edges · ${Math.round(data.milliseconds)} ms`:`Refining exposed slopes · ${Math.round(data.progress*100)}%`;
-      markViewChanged(); updateControls(); schedule(); return;
-    }
-    renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
-    if (data.materialField) renderer.setMaterialField(data.materialField);
-    heightDirty=false;
-    if (data.done) { weatherState='ready'; renderedRevision=-1; updateControls(); }
-    $('weather-state').textContent=data.done?`Weathered edges · ${gpuErosionMs===null?'':`GPU erosion ${Math.round(gpuErosionMs)} ms + rest `}${Math.round(data.milliseconds)} ms`:data.progress>=.93?'Settling surface materials…':`Refining exposed slopes · ${Math.round(data.progress*100)}%`;
-    schedule();
-  };
-  worker.onerror=event => { if (worker===weatherWorker) failWeather(event.message || 'worker unavailable'); };
 }
 function schedule(draw=true) { if (draw) needsDraw=true; if (mapCanvas) { flushEval(); mapCanvas.schedule(); return; } if (!framePending) { framePending=true; requestAnimationFrame(frame); } }
 function drawTiming(stats,elapsed,quality) {
@@ -3265,7 +3214,7 @@ function frame(timestamp) {
   else lastPaintingRAF=null;
   try {
     flushEval();
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); if ((stroke || moving) && materialPreview()) quickMaterials(); heightDirty=false; }
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); heightDirty=false; }
     if (needsDraw || (stroke && !stroke.flow) || moving) {
       const quality=stroke||moving?'preview':'full',start=performance.now();
       const stats=renderer.draw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
@@ -4081,11 +4030,6 @@ async function bootMap() {
   heights=new Float32Array(0); protection=new Float32Array(0); routes=new Float32Array(0); cracks=new Float32Array(0); cover=new Float32Array(0); crystal=new Float32Array(0); maskPlanes=MASK_KEYS.map(() => new Int8Array(0));
   seed=Number($('seed').value); refinementSeed=seed; regionalFields=makeRegionalFields();
   addGroundNode();
-  mapWeather=mountMapWeather({api:sculptRegion,config,enabled:()=>$('weather').checked && !pagedOn(),active:()=>Boolean(stroke||moving),forceTiled:experiment.get('weatherTiles')==='1',
-    params:()=>({seed:refinementSeed,strength:.35,profile:experiment.get('weather')==='broad'?'broad':undefined,baseHeight:config.baseHeight,seaLevel:config.seaLevel,talus:Number($('scree').value)/100,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer?.variant.get('transition')==='mineral'},sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)}),
-    onReady:rect=>{weatherState='ready';$('weather-state').textContent='Overlapping weather tiles · fixed seeds · ready on demand';mapCanvas?.invalidate(rect);},
-    onProgress:p=>{$('weather-state').textContent=`Weathering overlapping tiles · ${Math.round(p.progress*100)}% of this region`;}
-  });
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';

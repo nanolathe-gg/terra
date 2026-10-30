@@ -2,8 +2,7 @@
 // A tile is active when any sample in it, or in a tile beside it, can move (mobility above 0). Samples of inactive tiles are never
 // written: the host seeds all three state buffers with the authored height, so they keep it, hold no water and act as a sink for water
 // that runs onto them (flat plain and sea). The arithmetic of every step is erosion.wgsl's own. Engine 0 keeps erosion.wgsl.
-// H2: grid erosion for the 1024-px study (Green), a compute pass beside the droplet
-// worker (sculpt-weathering.js). Virtual-pipe shallow water after Mei, Decaudin and Hu
+// H2: grid erosion for the 1024-px study (Green), a compute pass. Virtual-pipe shallow water after Mei, Decaudin and Hu
 // (2007): per cell rock R, loose debris D, water W and suspended sediment S; water moves
 // through four pipes to its neighbours, the flow gives a velocity, the velocity and the
 // slope give a carrying capacity, and the cell dissolves rock or deposits debris to meet

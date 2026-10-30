@@ -1,6 +1,5 @@
 // H2: the GPU erosion pass (erosion.wgsl) for the 1024-px study, run on the renderer's
-// device in place of the droplet loop of sculpt-weathering.js (knob erosion 1). It keeps
-// that worker's contract: the same mobility and lower/upper bounds (derived below from the
+// device (knob erosion 1; 0 is Weathering off). Its contract: the same mobility and lower/upper bounds (derived below from the
 // same slope rules, at the worker's own largest budget), no change to submerged samples
 // or to protected ones, and a height between sea -90 and sea +300. The worker then runs
 // with the height this returns, so the apron, sand and material field are as before.

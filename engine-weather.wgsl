@@ -87,7 +87,7 @@ fn mapsMain(@builtin(global_invocation_id) id: vec3u) {
 // H8 rule: the material field. Sediment that exposed ground sheds and rain carries downhill, as four channels the draw's mineral margins
 // and transition read (gridTexture layer 1, via renderer.setMaterialField): arrival (how much carried material has come to rest here),
 // soil (fine ground between the ribs), softened source (the join's coordinate) and source (exposed material). It runs when
-// `materialWeathering` is above 0 and replaces the CPU worker's weatherMaterials (sculpt-material-weathering.js).
+// `materialWeathering` is above 0.
 // Every pass reads the height the Time pass left. The drops are one thread each with a per-drop generator and scatter into fixed-point
 // integer atomics, so the sums do not depend on thread order: the field is the same on every run. Group 2 is this rule's own.
 //
