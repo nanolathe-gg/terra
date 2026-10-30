@@ -694,3 +694,80 @@ fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
   F[PR * cells + i] = F[PR * cells + i] * (1.0 - sw);
   if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, best * 1.6) * u.crackAmt); }
 }
+
+// H6c fissure: fissureCell() of sculpt.js over the pieces the host lists (a = s0.xy, b = s0.zw; width multipliers r0 r1 in s1.xy, depth multipliers h0 h1 in s1.zw).
+// Every piece raises the crack field beside its cut; the deepest cut (the first on a tie) sets height, protection, routes and the wet-mask write.
+fn fissureProfile(d: f32, hw: f32, cellPx: f32) -> f32 {
+  let lo = 0.75 * cellPx; let q = (d - lo) / max(hw - lo, 0.35 * cellPx);
+  if (q <= 0.0) { return 1.0; }
+  if (q >= 1.0) { return 0.0; }
+  return (1.0 - q) * sqrt(1.0 - q);
+}
+@compute @workgroup_size(8, 8)
+fn stampFissure(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let seed = u.seed; let jag = u.fJag; let net = u.fNet != 0.0;
+  var bestG = 0.0; var crackV = 0.0;
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let px = s0.x; let py = s0.y; let sx = s0.z - px; let sy = s0.w - py; let span2 = sx * sx + sy * sy;
+    var t = 0.0;
+    if (span2 > 0.0) { t = clamp(((wx - px) * sx + (wy - py) * sy) / span2, 0.0, 1.0); }
+    let cx = px + sx * t; let cy = py + sy * t;
+    var gv = 0.0; var near = 0.0;
+    if (net) {
+      let C = u.fCell;
+      let wxp = lx + C * 0.14 * vnoise(lx / (C * 0.9), ly / (C * 0.9), seed ^ 0x2e1u);
+      let wyp = ly + C * 0.14 * vnoise(lx / (C * 0.9), ly / (C * 0.9), seed ^ 0x4d7u);
+      let ix = i32(floor(wxp / C)); let iy = i32(floor(wyp / C));
+      var d1 = 1.0e30; var d2 = 1.0e30; var x1 = 0.0; var y1 = 0.0; var x2 = 0.0; var y2 = 0.0;
+      for (var j = -1; j <= 1; j++) { for (var m = -1; m <= 1; m++) {
+        let cxs = ix + m; let cys = iy + j;
+        let qx = (f32(cxs) + 0.5 + 0.42 * hashi(cxs, cys, seed ^ 0x61u)) * C; let qy = (f32(cys) + 0.5 + 0.42 * hashi(cxs, cys, seed ^ 0x93u)) * C;
+        let dd = (wxp - qx) * (wxp - qx) + (wyp - qy) * (wyp - qy);
+        if (dd < d1) { d2 = d1; x2 = x1; y2 = y1; d1 = dd; x1 = qx; y1 = qy; } else if (dd < d2) { d2 = dd; x2 = qx; y2 = qy; }
+      } }
+      let e = (d2 - d1) / (2.0 * max(sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)), 1e-3));
+      let hw = u.fHw; let reg = 1.0 - sm(0.55, 1.0, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / u.radius);
+      let vary = 0.65 + 0.35 * vnoise(lx / (C * 0.5), ly / (C * 0.5), seed ^ 0x7a9u);
+      let wob = 1.0 + jag * 0.5 * vnoise(lx / 9.0, ly / 9.0, seed ^ 0x1f3u);
+      gv = fissureProfile(e, hw * wob, u.spacing) * vary * reg; near = (1.0 - sm(0.0, 1.0, e / (hw * 3.0 + 3.0))) * reg;
+    } else {
+      let rm = s1.x + (s1.y - s1.x) * t; let hm = s1.z + (s1.w - s1.z) * t; let hw = u.fHw * u.fKf * rm;
+      var dx = wx - cx; var dy = wy - cy;
+      if (jag > 0.0) {
+        dx = dx + u.fAmp * (0.7 * vnoise(lx / 23.0, ly / 23.0, seed ^ 0x5a1u) + 0.5 * vnoise(lx / 9.0, ly / 9.0, seed ^ 0x3c7u));
+        dy = dy + u.fAmp * (0.7 * vnoise(lx / 23.0, ly / 23.0, seed ^ 0x6b5u) + 0.5 * vnoise(lx / 9.0, ly / 9.0, seed ^ 0x2d3u));
+      }
+      let d = sqrt(dx * dx + dy * dy);
+      gv = fissureProfile(d, hw, u.spacing) * hm * (1.0 - 0.5 * jag * (0.5 - 0.5 * vnoise(lx / 17.0, ly / 17.0, seed ^ 0x7e1u)));
+      near = 1.0 - sm(0.0, 1.0, d / (hw * 3.0 + 3.0));
+    }
+    if (near > 0.0 && u.fCrack > 0.0) { crackV = max(crackV, u.fCrack * near); }
+    if (gv <= bestG) { continue; }
+    bestG = gv;
+  }
+  if (crackV > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], crackV); }
+  if (bestG <= 0.0) { return; }
+  let base = F[PH * cells + i];
+  let cut = base - u.amount * bestG;
+  F[PH * cells + i] = clamp(select(cut, max(cut, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
+  let sw = sm(0.0, 0.3, bestG);
+  F[PP * cells + i] = F[PP * cells + i] * (1.0 - sw);
+  F[PR * cells + i] = F[PR * cells + i] * (1.0 - sw);
+  for (var m = 0u; m < u.nwrites; m++) {
+    let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
+    maskSet(i, pl, i32(floor(b + (mw.y - b) * (sw * u.fDark) * mw.z + 0.5)));
+  }
+}
