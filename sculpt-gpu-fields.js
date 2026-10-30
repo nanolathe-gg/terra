@@ -27,7 +27,7 @@ const WATER_KEYS = ['waterShore', 'waterDeep', 'waterBed'];
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst'].map(k => [k, 'u']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
@@ -197,7 +197,8 @@ const expand = (r, m, grid) => ({x0: Math.max(0, r.x0 - m), y0: Math.max(0, r.y0
 const intersect = (a, b) => { const r = {x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1)}; return r.x0 > r.x1 || r.y0 > r.y1 ? null : r; };
 
 // ---- the GPU side ----
-export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH}) {
+// refSpacing: the final grid's spacing; the hill's blur is defined in world units (2 final cells), so a coarser level uses the whole number of its own cells nearest that distance (1 at double spacing).
+export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing}) {
   const source = (await (await fetch('/engine-shape.wgsl')).text()).replace('/*NODE_STRUCT*/', nodeStruct());
   const module = device.createShaderModule({label: 'shape', code: source});
   const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
@@ -228,7 +229,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const geom = {grid, spacing};
     const passes = [], segData = [], mwData = [];
     let segCount = 0, mwCount = 0;
-    const base = {grid, spacing, baseH: baseHeight, sea, minH, maxH};
+    const base = {grid, spacing, baseH: baseHeight, sea, minH, maxH, blurR: Math.max(1, Math.round(2 * refSpacing / spacing))};
     const add = (entry, region, extra = {}) => passes.push({entry, region, u: {...base, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
     add('init', R);
     for (const n of list) {
@@ -289,8 +290,9 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     if (readback) { stage = buf(outWords * 4, GPUBufferUsage.MAP_READ | CD, 'shape readback'); enc.copyBufferToBuffer(OutB, 0, stage, 0, outWords * 4); }
     device.queue.submit([enc.finish()]);
     const tSubmit = performance.now();
-    let out = null;
+    let out = null, tGpu = 0;
     if (readback) {
+      await device.queue.onSubmittedWorkDone(); tGpu = performance.now();
       await stage.mapAsync(GPUMapMode.READ);
       const raw = stage.getMappedRange().slice(0); stage.unmap(); stage.destroy();
       out = {rect: R, width: rw0, height: rh0, floats: FIELD_KEYS_FLOAT.map((_, k) => new Float32Array(raw, k * rc * 4, rc)), masks: Array.from({length: 25}, (_, m) => new Int8Array(raw, (6 * rc + m * q4) * 4, rc))};
@@ -298,7 +300,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     peak = Math.max(peak, bytes() + sd.byteLength + passes.length * NODE_BYTES + (readback ? 2 * outWords * 4 : 0));
     ub.destroy(); SegB.destroy(); MWB.destroy(); OutB.destroy();
     if (release) { Nz.destroy(); Sc.destroy(); Nz = Sc = null; }
-    last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, submitToReadMs: performance.now() - tSubmit, cells: rc};
+    last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, prepareMs: tSubmit - t0, gpuMs: readback ? tGpu - tSubmit : performance.now() - tSubmit, readbackMs: readback ? performance.now() - tGpu : 0, cells: rc};
     return out;
   }
   // Copy a readback rectangle into row-major CPU planes of the given row stride (the planes are `grid` wide).

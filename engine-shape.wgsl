@@ -241,24 +241,24 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   }
 }
 
-// settleHill's blur: a 5-tap box (radius 2), clamped at the map edge, from scratch plane bsrc to bdst.
+// settleHill's blur: a box of blurR cells either side (2 at the final grid; the host scales it with the spacing), clamped at the map edge, from scratch plane bsrc to bdst.
 @compute @workgroup_size(8, 8)
 fn blurH(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
   let n = u.grid; let cells = n * n; let hi = i32(n) - 1;
-  var sum = 0.0;
-  for (var k = -2; k <= 2; k++) { sum = sum + Sc[u.bsrc * cells + u32(y) * n + u32(clamp(x + k, 0, hi))]; }
-  Sc[u.bdst * cells + u32(y) * n + u32(x)] = sum / 5.0;
+  var sum = 0.0; let rr = i32(u.blurR);
+  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + u32(y) * n + u32(clamp(x + k, 0, hi))]; }
+  Sc[u.bdst * cells + u32(y) * n + u32(x)] = sum / f32(2 * rr + 1);
 }
 @compute @workgroup_size(8, 8)
 fn blurV(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
   let n = u.grid; let cells = n * n; let hi = i32(n) - 1;
-  var sum = 0.0;
-  for (var k = -2; k <= 2; k++) { sum = sum + Sc[u.bsrc * cells + u32(clamp(y + k, 0, hi)) * n + u32(x)]; }
-  Sc[u.bdst * cells + u32(y) * n + u32(x)] = sum / 5.0;
+  var sum = 0.0; let rr = i32(u.blurR);
+  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + u32(clamp(y + k, 0, hi)) * n + u32(x)]; }
+  Sc[u.bdst * cells + u32(y) * n + u32(x)] = sum / f32(2 * rr + 1);
 }
 
 // The settled hill: height, protection and routes from the joined (blurred) weights; cracks from the raw weights.

@@ -4093,10 +4093,46 @@ async function shapeCompare() {
   evaluate(0); await idle(); const b=copy(live());
   return {grid,jsEvalMs:jsMs,vsJs:comparePlanes(a,ref,grid,MASK_KEYS),repeat:comparePlanes(a,b,grid,MASK_KEYS)};
 }
+// H6: under gpuShape 1 regional replay is replaced by one whole-map evaluation, so the regional check asks two other things: a fresh whole-map
+// evaluation read back equals the CPU copy, and a window evaluated alone (the four quadrants) equals the same crop of the whole.
+async function gpuRegionalCheck() {
+  flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
+  if (!shapeStudy.used) throw new Error('gpuShape is off or the scene fell back to the JS engine: '+(shapeStudy.reason||'knob 0'));
+  const engine=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT}),ctx=shapeContext();
+  const whole=live(),planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
+  let mismatches=0;
+  const compare=(out,tag) => {
+    const part={h:new Float32Array(grid*grid),p:new Float32Array(grid*grid),r:new Float32Array(grid*grid),c:new Float32Array(grid*grid),v:new Float32Array(grid*grid),x:new Float32Array(grid*grid),masks:MASK_KEYS.map(() => new Int8Array(grid*grid))};
+    engine.copyOut(out,part);
+    const {x0,y0,x1,y1}=out.rect;
+    for (const key of FIELD_KEYS) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+      const j=MASK_KEYS.indexOf(key),expected=whole[key][y*grid+x],actual=j>=0?part.masks[j][y*grid+x]:part[key][y*grid+x];
+      if (expected===actual && Number.isFinite(actual)) continue;
+      const p=planes[key]; p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity); p.firstMismatch??={x,y,whole:expected,gpu:actual,run:tag};
+    }
+  };
+  try {
+    compare(await engine.run(nodes.slice(),ctx,null),'whole');
+    const middle=Math.floor(grid/2);
+    for (const [y0,y1] of [[0,middle-1],[middle,grid-1]]) for (const [x0,x1] of [[0,middle-1],[middle,grid-1]]) compare(await engine.run(nodes.slice(),ctx,{x0,y0,x1,y1}),'window '+x0+','+y0);
+    return {grid,planes,mismatches,gpuShape:true};
+  } finally { engine.destroy(); }
+}
+// H6 check: the heights of the current node list evaluated at 1/factor of the final grid in each direction (factor 2 is a quarter of the cells), as base64 Float32.
+async function shapeLevel(factor=2) {
+  flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
+  const g=Math.round((grid-1)/factor)+1,sp=(size-1)/(g-1),engine=await createShapeEngine({device:renderer.device,grid:g,spacing:sp,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,refSpacing:spacing});
+  try {
+    const out=await engine.run(nodes.slice(),shapeContext(),null),bytes=new Uint8Array(out.floats[0].buffer,out.floats[0].byteOffset,out.floats[0].byteLength);
+    let s=''; for (let i=0;i<bytes.length;i+=8192) s+=String.fromCharCode(...bytes.subarray(i,i+8192));
+    return {grid:g,spacing:sp,blurCells:Math.max(1,Math.round(2*spacing/sp)),h:btoa(s)};
+  } finally { engine.destroy(); }
+}
 // Reproduction-only authored-field check. The study scene is the whole replay;
 // the map engine independently replays its graph through four regional reads.
 // Weather and GPU pixels have separate guards: this checks every brush plane.
 function checkRegionalFields() {
+  if(!config.map && gpuShapeOn())return gpuRegionalCheck();
   if(config.map)throw new Error('Run the regional field check on a 1024px study scene.');
   if(!canExport())throw new Error('Wait for the scene and its flow bake before checking regional fields.');
   flushEval();
@@ -4119,7 +4155,7 @@ function checkRegionalFields() {
     regionalFields?.clear();({regionalFields,worldSize,worldGrid}=saved);
   }
 }
-window.sculptDebug = {shapeCompare,shape:() => ({pending:shapePending,reason:shapeStudy.reason,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
+window.sculptDebug = {shapeCompare,shapeLevel,shape:() => ({pending:shapePending,reason:shapeStudy.reason,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),
