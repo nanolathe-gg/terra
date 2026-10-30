@@ -1,0 +1,12 @@
+{"biome": "red", "source": {"note": "authored for shapecheck (H9): Paint inside the shape (maskChannel, maskAmount, style writes) on every landform kind, and a water stroke's edge and bed choices (waterShore, waterDeep, waterBed 1-3)"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["plateau", [[250,250],[360,300]], {"card": {"diameter": 240, "amount": 40, "roughness": 30, "maskChannel": 1, "maskAmount": 70}}],
+  ["offset", [[600,250]], {"card": {"diameter": 200, "amount": 25, "roughness": 30, "maskChannel": 3, "styleRelief": 50, "styleCracks": -40}}],
+  ["crater", [[800,300]], {"card": {"diameter": 200, "amount": 35, "roughness": 40, "craterlets": 3, "maskChannel": 2, "maskAmount": 80}}],
+  ["mountain", [[250,650]], {"card": {"diameter": 220, "amount": 60, "roughness": 30, "maskChannel": 4, "styleBanding": 60}}],
+  ["hill", [[600,650]], {"card": {"diameter": 240, "amount": 50, "roughness": 30, "maskChannel": 1, "maskAmount": 80}}],
+  ["hill", [[800,650],[880,700],[950,640],[900,560]], {"card": {"diameter": 200, "amount": 50, "roughness": 30, "maskChannel": 2}}],
+  ["deep", [[80,480],[300,520],[500,480]], {"card": {"diameter": 200, "roughness": 35, "waterShore": 2, "waterDeep": 1, "waterBed": 3}}],
+  ["shallow", [[450,500],[700,520]], {"card": {"diameter": 120, "roughness": 30, "waterShore": 1, "waterBed": 1, "maskChannel": 2}}]
+ ]}

@@ -158,6 +158,169 @@ fn hillSection(t: f32) -> f32 {
 
 // One thread per cell: every capsule of the node in order. Kinds: 0 paint 1 erase 2 deep 3 shallow 4 mountain 5 hill.
 // A hill with settle != 0 only writes its raw weights (Sc plane 0); blur and compose passes finish it.
+// H9 parametric cross-section (card C1: sectionSetup, crossSection, landSection, waterSection, faceRise, terrace in sculpt.js). u.s* hold the stroke's section
+// constants; the per-cell inputs are the noise tables kw/ka (coast width, shelf) and nj/nA/nB (coast x, coast y, x). sLift carries the lip back to the caller.
+var<private> sLift: f32 = 0.0;
+fn terraceLevel(m: u32, n: u32, nA: f32, nB: f32) -> f32 {
+  let fm = f32(m); let fnn = f32(n);
+  var j = 0.0;
+  if (m > 0u && m < n) { j = u.sJit * 0.3 / fnn * (nA * cos(2.4 * fm + 1.0) + nB * sin(2.4 * fm + 1.0)); }
+  return fm / fnn + j;
+}
+fn terrace(g: f32, n: u32, nj: f32, nA: f32, nB: f32) -> f32 {
+  let fnn = f32(n);
+  let a = clamp(u.sJit * nj, -0.22 * fnn, 0.22 * fnn);
+  let q = g * fnn + a * 4.0 * g * (1.0 - g);
+  let k = u32(max(0.0, min(floor(q), fnn - 1.0)));
+  let lo = terraceLevel(k, n, nA, nB); let hi = terraceLevel(k + 1u, n, nA, nB);
+  return lo + (hi - lo) * sm(u.sFlat, 1.0, q - f32(k));
+}
+fn faceRise(d: f32, A: f32, F: f32, pt: f32, n: u32, nj: f32, nA: f32, nB: f32) -> f32 {
+  if (d <= 0.0) { return 0.0; }
+  var ah = 0.0;
+  if (A > 0.0) { ah = min(u.sApronH, 0.9 * pt); }
+  if (d < A) { return ah * pow(d / A, 1.5); }
+  if (d >= A + F) { return pt; }
+  let t = (d - A) / F; let k = abs(u.sCurve);
+  var g = sm(0.0, 1.0, t);
+  if (k > 0.0) {
+    var c = pow(t, 2.4);
+    if (u.sCurve > 0.0) { c = 1.0 - pow(1.0 - t, 2.4); }
+    g = g + (c - g) * k;
+  }
+  var lev = g;
+  if (n > 0u) { lev = terrace(g, n, nj, nA, nB); }
+  return ah + (pt - ah) * lev;
+}
+fn lipRim(t: f32, F: f32) -> f32 {
+  if (t >= 0.0) { return 1.0 - sm(0.0, 0.45 * F, t); }
+  return 1.0 - sm(0.0, clamp(0.4 * F, 5.0, 30.0), -t);
+}
+fn landSection(d: f32, reach: f32, kw: f32, ka: f32, nj: f32, nA: f32, nB: f32) -> f32 {
+  var A = u.sApron * ka;
+  var Fw = u.sShare * reach;
+  if (u.sFace > 0.0) { Fw = u.sFace; } else if (u.sDome != 0u) { Fw = max((1.0 - u.sCapW) * reach - u.sApron, 0.1 * reach); }
+  Fw = Fw * kw;
+  if (A + Fw > 0.98 * reach) { let k = 0.98 * reach / (A + Fw); A = A * k; Fw = Fw * k; }
+  let top = A + Fw; let pt = 1.0 - u.sCapRise;
+  var p = 1.0;
+  if (d < top) { p = faceRise(d, A, Fw, pt, u.sSteps, nj, nA, nB); }
+  else if (u.sCapRise > 0.0) { p = pt + u.sCapRise * (1.0 - pow(1.0 - min((d - top) / max(reach - top, 1e-3), 1.0), u.sCapExp)); }
+  sLift = 0.0;
+  if (u.sLip != 0.0) { sLift = u.sLip * lipRim(top - d, Fw); }
+  return p;
+}
+fn waterSection(d: f32, reach: f32, base: f32, kw: f32, ka: f32, nj: f32, nA: f32, nB: f32) -> f32 {
+  let sea = u.sea;
+  var A = u.sApron * ka;
+  var Fw = 0.0;
+  if (u.sFace > 0.0) { Fw = u.sFace; } else if (u.sBank > 0.0) { Fw = max(u.sBank - u.sApron, 6.0); } else { Fw = 0.4 * reach; }
+  Fw = Fw * kw;
+  var S = 0.0;
+  if (u.sShelf > 0.0 && u.sShelfD > 0.0) { S = u.sShelf * ka; }
+  var I = 0.0;
+  if (u.sLip != 0.0) { I = clamp(0.4 * Fw, 5.0, 30.0); }
+  let total = I + A + Fw + S;
+  if (total > 0.92 * reach) { let k = 0.92 * reach / total; I = I * k; A = A * k; Fw = Fw * k; S = S * k; }
+  let B = A + Fw; let rest = I + B + S; let depth = min(u.sShelfD, 0.7 * (sea - u.sBed));
+  var v = 0.0;
+  if (d < I) { v = base; }
+  else if (d < I + B) { let p = faceRise(B - (d - I), A, Fw, 1.0, u.sSteps, nj, nA, nB); if (base > sea) { v = sea + (base - sea) * p; } else { v = base; } }
+  else if (d < rest) {
+    let t = (d - I - B) / S;
+    var drop = sm(0.0, 0.35, t);
+    if (u.sShelfSteps > 0u) { drop = 1.0 - terrace(1.0 - t, u.sShelfSteps, nj, nA, nB); }
+    v = min(base, sea - depth * drop);
+  } else {
+    var top = sea; if (S > 0.0) { top = sea - depth; }
+    v = min(base, top + (u.sBed - top) * sm(0.0, 1.0, (d - rest) / (0.7 * (reach - rest))));
+  }
+  sLift = 0.0;
+  if (u.sLip != 0.0) { sLift = u.sLip * lipRim(d - I, Fw); }
+  return v;
+}
+// The one call the stamps make: the weight w for the cell whose outline reaches `reach` px, r of the way out; the lip is left in sLift.
+fn crossSection(r: f32, reach: f32, base: f32, nCW: f32, nShelf: f32, nj: f32, nA: f32, nB: f32) -> f32 {
+  sLift = 0.0;
+  let d = (1.0 - r) * reach;
+  if (d <= 0.0) { return 0.0; }
+  let kw = clamp(1.0 + u.sVary * nCW, 0.4, 1.8); let ka = clamp(1.0 + u.sVary * nShelf, 0.4, 1.8);
+  if (u.sWater == 0u) { return landSection(d, reach, kw, ka, nj, nA, nB); }
+  if (base - u.sBed < 0.5) { return 0.0; }
+  return clamp((base - waterSection(d, reach, base, kw, ka, nj, nA, nB)) / (base - u.sBed), 0.0, 1.0);
+}
+
+// H9: a landform's or water stroke's mask writes, once the node is settled: plane, target, gain, flat per write (maskSetup/paintCell of sculpt.js).
+fn shapeMasks(i: u32, f: f32) {
+  for (var m = 0u; m < u.nwrites; m++) {
+    let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
+    var k = f * mw.z; if (mw.w != 0.0) { k = 1.0; }
+    maskSet(i, pl, i32(floor(b + (mw.y - b) * k + 0.5)));
+  }
+}
+// H9 ridge piece: the height multiplier at t along a piece (h0 -> h1), then the jagged crest (ridgeRise in sculpt.js).
+fn craterLobe(R: f32, rough: f32, seed: u32, lx: f32, ly: f32) -> f32 {
+  let sc = max(R * 0.55, 8.0);
+  return 1.0 + rough * (0.38 * vnoise(lx / (R * 0.95), ly / (R * 0.95), seed ^ 0x4a7u) + 0.22 * vnoise(lx / sc, ly / sc, seed ^ 0x1c3u) + 0.1 * vnoise(lx / (sc * 0.6), ly / (sc * 0.6), seed ^ 0x2d9u));
+}
+fn ridgeRise(h0: f32, h1: f32, jag: f32, t: f32, lx: f32, ly: f32, wx: f32, wy: f32) -> f32 {
+  var h = h0 + (h1 - h0) * t;
+  // A crater's spurs fade out toward the bowl: none start inside the rim (u.hole: the crater's centre, radius, roughness and seed).
+  if (u.hole != 0u) { let rr = sqrt((wx - u.hx) * (wx - u.hx) + (wy - u.hy) * (wy - u.hy)) / (u.hR * craterLobe(u.hR, u.hRough, u.hSeed, lx, ly)); h = h * sm(0.92, 1.2, rr); }
+  if (jag > 0.0) {
+    let R = u.radius;
+    let n = 0.6 * vnoise(lx / (R * 0.28), ly / (R * 0.28), u.seed ^ 0x6b1u) + 0.4 * vnoise(lx / (R * 0.11), ly / (R * 0.11), u.seed ^ 0x1d7u);
+    h = h * (1.0 - jag * 0.6 * (0.5 - 0.5 * n));
+  }
+  return h;
+}
+// H9 crater rim sectors and gaps (rimSetup/rimFactors in sculpt.js): the sectors' [angle, height, width, angle relative to the first] and the gaps' angles
+// are in MW after the node's mask writes; returns (height factor, width factor) at the angle `ang` round the ring.
+fn rimFactors(ang: f32) -> vec2f {
+  let tau = 6.283185307179586; let n = u.nSect; let base = u.mwBase + u.nwrites;
+  var h = 1.0; var w = 1.0;
+  if (n > 1u) {
+    let a0 = MW[base].x;
+    let d = ((ang - a0) % tau + tau) % tau;
+    var i = 0u; while (i < n - 1u && MW[base + i + 1u].w <= d) { i = i + 1u; }
+    let j = (i + 1u) % n;
+    var nextRel = tau; if (i < n - 1u) { nextRel = MW[base + i + 1u].w; }
+    let span = nextRel - MW[base + i].w; let t = sm(0.0, 1.0, (d - MW[base + i].w) / max(span, 1e-6));
+    h = MW[base + i].y + (MW[base + j].y - MW[base + i].y) * t; w = MW[base + i].z + (MW[base + j].z - MW[base + i].z) * t;
+  }
+  for (var g = 0u; g < u.nGap; g++) {
+    let ga = MW[base + n + g].x;
+    let dist = abs((((ang - ga + 3.141592653589793) % tau) + tau) % tau - 3.141592653589793);
+    h = h * (0.08 + 0.92 * sm(0.5 * u.gapHw, u.gapHw, dist));
+  }
+  return vec2f(h, w);
+}
+fn nzF(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
+#ifdef PAGES
+  return nzCell(f, x, y, i, cells);
+#else
+  return Nz[f * cells + i];
+#endif
+}
+
+// H9 outline displacement: baseVary (Desert's ragged feet) and moonLobes (Moon's folded outline) are one function with two parameter sets (u.ol*).
+// It returns the shift of r in radius units; the caller divides by width * bankScale. Window: smoothstep(olLo, olHi, r), or 1 for an offset (olFlat).
+fn outlineShift(r: f32, lx: f32, ly: f32) -> f32 {
+  if (u.olAmp <= 0.0) { return 0.0; }
+  var win = 1.0;
+  if (u.olFlat == 0u) { win = sm(u.olLo, u.olHi, r); }
+  var n = u.olW0 * vnoise(lx / u.olL0, ly / u.olL0, u.seed ^ u.olS0) + u.olW1 * vnoise(lx / u.olL1, ly / u.olL1, u.seed ^ u.olS1);
+  if (u.olW2 > 0.0) { n = n + u.olW2 * vnoise(lx / u.olL2, ly / u.olL2, u.seed ^ u.olS2); }
+  return u.olAmp * win * n;
+}
+// baseBump: lumps on the apron and lower face, added to the value of a plateau, offset, hill or mountain (baseBumps in sculpt.js).
+fn baseBump(lx: f32, ly: f32, w: f32) -> f32 {
+  if (u.bpAmp <= 0.0) { return 0.0; }
+  let off = u.bpOffset != 0u;
+  return u.bpAmp * sm(0.03, select(0.12, 0.2, off), w) * select(1.0 - sm(0.12, 0.3, w), 1.0, off)
+    * (0.55 * vnoise(lx / 30.0, ly / 30.0, u.seed ^ 0x4c91u) + 0.3 * vnoise(lx / 13.0, ly / 13.0, u.seed ^ 0x1a77u) + 0.25 * vnoise(lx / 6.5, ly / 6.5, u.seed ^ 0x63d9u));
+}
+
 @compute @workgroup_size(8, 8)
 fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -171,7 +334,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
   let kind = u.kind;
-  let shouldered = kind == 5u;
+  let shouldered = kind == 5u && u.plain == 0u;   // H9: a hill with a cross-section or ridge options is the plain swept hill, like the mountain (startStroke)
   let coastal = kind == 0u || kind == 1u || (kind == 2u && u.natural != 0u);
   let fxF = select(0u, 3u, coastal); let fyF = select(1u, 4u, coastal);
 #ifdef PAGES
@@ -182,7 +345,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i]; let nShelf = Nz[6u * cells + i];
 #endif
   let radius = u.radius;
-  var best = 0.0; var bw = 0.0; var br = 0.0; var bcore = 0.0; var dist = 3.0e38; var visited = false;
+  var best = 0.0; var bw = 0.0; var br = 0.0; var bcore = 0.0; var dist = 3.0e38; var visited = false; var blift = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -206,7 +369,10 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var width = 1.0;
     if (kind == 2u && u.natural != 0u) { width = clamp(1.0 + u.rough * 1.6 * nCW, 0.45, 1.9); }
     else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
-    let r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    var r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    if (u.ridge != 0u) { r = r / (s1.x + (s1.y - s1.x) * t); }
+    var lobe = 0.0;
+    if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
     var core = 0.0;
     if (kind == 2u && u.natural != 0u) { core = 1.0 - sm(0.20, u.coreEdge, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / radius); }
     if (r >= 1.0 && core == 0.0 && !shouldered) { continue; }
@@ -221,7 +387,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       w = 1.0 - sm(shoulder, 1.0, r);
     } else if (kind == 2u || kind == 3u) {
       w = 1.0 - sm(0.10, 1.0, r);
-    } else if (kind == 5u) {
+    } else if (kind == 5u && shouldered) {
       var face = vec2f(u.faceX, u.faceY);
       if (span2 > 0.0) { let len = sqrt(span2); face = vec2f(-sy / len * u.faceSide, sx / len * u.faceSide); }
       var fx = face.x; var fy = face.y;
@@ -230,7 +396,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
         let len = sqrt(fx * fx + fy * fy);
         if (len > 1e-5) { fx = fx / len; fy = fy / len; } else { fx = face.x; fy = face.y; }
       }
-      let localRadius = radius * (1.0 + u.rough * 0.75 * nShelf);
+      let localRadius = radius * (1.0 + u.rough * 0.75 * nShelf + lobe);
       let uu = (dx * fx + dy * fy) / localRadius;
       let vv = (-dx * fy + dy * fx) / localRadius;
       let cross = uu - u.rough * 0.18 * nDet;
@@ -244,10 +410,16 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     } else {
       w = pow(1.0 - r * r, u.mexp);
     }
-    if (kind == 4u) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
+    var lift = 0.0;
+    if (u.sOn != 0u) {
+      w = crossSection(r, radius * width * u.bankScale, F[PH * cells + i], nCW, nShelf, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells));
+      lift = sLift;
+    }
+    if (u.ridge != 0u) { w = w * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
+    if (kind == 4u || (kind == 5u && !shouldered)) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
     let influence = max(w, core);
     if (!shouldered && influence <= best) { continue; }
-    best = influence; bw = w; br = r; bcore = core; visited = true;
+    best = influence; bw = w; br = r; bcore = core; blift = lift; visited = true;
   }
   if (!visited) {
     if (u.settle != 0u) { Sc[i] = 0.0; }
@@ -275,20 +447,25 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     }
   } else if (kind == 4u) {
     value = base + u.amount * w;
+    value = value + baseBump(lx, ly, w);
   } else if (kind == 5u) {
-    value = base + u.amount * w * (1.0 + u.rough * (0.75 * nCW + 0.30 * nDet));
+    value = base + u.amount * w;
+    if (u.plain == 0u) { value = base + u.amount * w * (1.0 + u.rough * (0.75 * nCW + 0.30 * nDet)); }
+    value = value + baseBump(lx, ly, w);
   } else {
     var bed = u.sea + select(-7.0, -55.0, kind == 2u);
     if (kind == 2u && u.natural != 0u) { bed = bed + 42.0 * (sm(-0.15, 0.55, nShelf) * sm(0.08, 0.50, br)) * u.shelves; }
     value = base + (bed - base) * w;
     if (kind == 2u && u.natural != 0u && bcore != 0.0) { value = min(value, base + (u.sea - 55.0 - base) * bcore); }
-    if (u.beachFlat != 0.5 && base > u.sea && base <= u.baseH + 1.0 && value > u.sea) {
+    if (u.sOn == 0u && u.beachFlat != 0.5 && base > u.sea && base <= u.baseH + 1.0 && value > u.sea) {
       let above = (value - u.sea) / (base - u.sea);
       value = u.sea + (base - u.sea) * pow(above, exp2((u.beachFlat - 0.5) * 2.4));
     }
     if (kind == 3u && u.passage != 0u) { value = max(base, value); }
   }
+  if (u.sOn != 0u) { value = value + blift; }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  if (kind >= 2u && u.nwrites > 0u && influence > 0.0) { shapeMasks(i, influence); }
   // Routes open where the height changed; protection follows the kind (a cover brush leaves it alone).
   if (kind != 0u && influence > 0.0) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - influence); }
   if (kind == 3u && u.passage != 0u && value == base) { }
@@ -355,6 +532,7 @@ fn compose(@builtin(global_invocation_id) g: vec3u) {
   let lift = 1.0 + u.rough * (0.75 * Nz[5u * cells + i] + 0.30 * Nz[2u * cells + i]);
 #endif
   F[PH * cells + i] = clamp(F[PH * cells + i] + u.amount * joined * lift, u.minH, u.maxH);
+  if (u.nwrites > 0u && raw > 0.0) { shapeMasks(i, raw); }
   F[PP * cells + i] = F[PP * cells + i] * (1.0 - joined);
   F[PR * cells + i] = F[PR * cells + i] * (1.0 - joined);
   if (u.crackAmt > 0.0 && raw > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, raw * 1.6) * u.crackAmt); }
@@ -477,7 +655,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
   let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i];
 #endif
   let radius = u.radius;
-  var best = 0.0; var visited = false;
+  var best = 0.0; var visited = false; var blift = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let s0 = Seg[(u.segBase + k) * 4u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -495,9 +673,10 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (natural) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
-    let r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    var r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / (width * u.bankScale); }
     if (r >= 1.0) { continue; }
-    var w = 0.0;
+    var w = 0.0; var lift = 0.0;
     if (natural) {
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
@@ -513,8 +692,12 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
       w = 1.0 - sm(0.0, 1.0, r);
       if (kind == 8u) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
     }
+    if (u.sOn != 0u) {
+      w = crossSection(r, radius * width * u.bankScale, F[PH * cells + i], nCW, nzF(6u, x, y, i, cells), nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells));
+      lift = sLift;
+    }
     if (w <= best) { continue; }
-    best = w; visited = true;
+    best = w; blift = lift; visited = true;
   }
   if (!visited) { return; }
   let w = best;
@@ -529,7 +712,10 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     F[PV * cells + i] = vb + (tv - vb) * w * u.amountPct;
   }
   else if (kind == 11u) { value = base + (Sc[2u * cells + i] - base) * w * u.amountPct; }
+  value = value + baseBump(lx, ly, w);
+  if (u.sOn != 0u) { value = value + blift; }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  if (u.nwrites > 0u && (kind == 6u || kind == 7u) && w > 0.0) { shapeMasks(i, w); }
   if (kind != 11u && value != base) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
   if (kind == 6u) { F[PP * cells + i] = max(pbase * (1.0 - w), sm(0.65, 0.95, w)); }
   else if (kind == 7u) { F[PP * cells + i] = pbase * (1.0 - 4.0 * w * (1.0 - w)); }
@@ -657,14 +843,16 @@ fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
     best = influence; visited = true;
     let floorEdge = 0.25 + 0.45 * (1.0 - soft);
     let rimNoise = vnoise(lx / (sc * 0.8), ly / (sc * 0.8), seed ^ 0x3e1u);
-    let rimHeight = amount * u.rimH * clamp(1.1 * (rimNoise * 0.5 + 0.5) + 0.5 * n0 * rough - 0.15 * rough, 0.0, 1.5);
-    let rimWidth = (0.16 + 0.2 * soft) * (1.0 + 0.35 * n2);
+    var rimHeight = amount * u.rimH * clamp(1.1 * (rimNoise * 0.5 + 0.5) + 0.5 * n0 * rough - 0.15 * rough, 0.0, 1.5);
+    let rimWidth0 = (0.16 + 0.2 * soft) * (1.0 + 0.35 * n2);
+    var rimWidth = rimWidth0; var outerK = 2.4;
+    if (u.nSect > 1u || u.nGap > 0u) { let rf = rimFactors(atan2(wy - cy, wx - cx) - atan2(u.rotY, u.rotX)); rimHeight = rimHeight * rf.x; rimWidth = rimWidth * rf.y; outerK = 1.4; }
     var bowl = 0.0;
     if (rb < 1.0) { bowl = 1.0 - sm(floorEdge, 1.0, rb); }
     let apronReach = 1.0 - sm(1.15 + 0.35 * n1, 1.85, rr);
     var rim = 0.0;
     if (rr < 1.0) { let q = (rr - 1.0) / rimWidth; rim = exp(-(q * q)); }
-    else { let q = (rr - 1.0) / (rimWidth * 2.4); rim = exp(-(q * q)) * apronReach; }
+    else { let q = (rr - 1.0) / (rimWidth0 * outerK); rim = exp(-(q * q)) * apronReach; }
     var lumpGate = 0.0;
     if (rr < 1.3) { lumpGate = 1.0; }
     let lumps = rough * (6.0 * n2 + 3.0 * n1 + 2.0 * nDet) * lumpGate;
@@ -689,6 +877,7 @@ fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
   }
   if (!visited) { return; }
   F[PH * cells + i] = bestValue;
+  if (u.nwrites > 0u) { shapeMasks(i, best); }
   let sw = sm(0.0, 0.3, best);
   F[PP * cells + i] = F[PP * cells + i] * (1.0 - sw);
   F[PR * cells + i] = F[PR * cells + i] * (1.0 - sw);

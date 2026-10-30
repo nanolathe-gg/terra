@@ -24,14 +24,29 @@ const MASK_WRITES = [null, [[0, 127], [1, 0], [3, 0]], [[1, 127], [0, 0], [3, 0]
   [[14, 127]], [[14, -127]], [[15, 127]], [[15, -127]], [[16, 127]], [[16, -127]], [[17, 127]], [[17, -127]]];
 const STYLE_KEYS = ['styleRelief', 'styleCracks', 'styleBanding', 'styleFace', 'styleErosion', 'styleDeposits', 'styleVegetation', 'styleExposure'];
 const WATER_KEYS = ['waterShore', 'waterDeep', 'waterBed'];
+const STYLE_PLANES = [5, 6, 7, 8, 14, 15, 16, 17], MASK_SHAPES = ['plateau', 'offset', 'hill', 'mountain', 'crater', 'deep', 'shallow'];
+// H9: maskSetup() of sculpt.js for a landform or water stroke: its Paint-inside choice, style writes (target already carries the amount) and a water
+// stroke's edge and bed flags (written at full strength, `flat`). Each entry is [plane, target, gain, flat].
+function shapeMaskWrites(kind, q, sat) {
+  if (!MASK_SHAPES.includes(kind) || sat) return [];
+  const gain = clamp(q.maskAmount, 0, 1), out = (MASK_WRITES[Math.round(q.maskChannel)] || []).map(([p, t]) => [p, t, gain, 0]);
+  STYLE_KEYS.forEach((k, j) => { const v = clamp(q[k] || 0, -1, 1); if (Math.abs(v) >= .005) out.push([STYLE_PLANES[j], Math.round(127 * v), 1, 0]); });
+  if (kind === 'deep' || kind === 'shallow') WATER_KEYS.forEach((k, j) => {
+    const c = Math.round(q[k] || 0);
+    if (c < 1 || c > (k === 'waterBed' ? 3 : 2)) return;
+    out.push([9 + j, c === 2 ? -127 : 127, 1, 1]);
+    if (k === 'waterBed') out.push([13, c === 3 ? 127 : 0, 1, 1]);
+  });
+  return out;
+}
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx'].map(k => [k, 'u']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'sOn', 'sWater', 'sDome', 'sSteps', 'sShelfSteps'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop'].map(k => [k, 'f'])];
+    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -68,7 +83,7 @@ function simplifyPath(points, tolerance) {
 }
 // fissurePieces() of sculpt.js: the main cut cut into short pieces, and branches (each forking once) grown from roots along it. f: fissureSetup's values.
 const rand01 = (seed, a, b) => hash(a, b, seed) * .5 + .5;
-const mkPiece = (a, b, r0, r1, h0, h1) => ({a, b, r0, r1, h0, h1});
+const mkPiece = (a, b, r0, r1, h0, h1, jag = 0) => ({a, b, r0, r1, h0, h1, jag, reach: Math.max(r0, r1)});
 function fissurePieces(f, path, s, seed, radius) {
   const out = [], taper = s.fissureTaper, cum = [0];
   for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
@@ -112,6 +127,93 @@ const hillTangents = hillKnots.map((_, i) => {
   return a * b > 0 ? 2 * a * b / (a + b) : 0;
 });
 
+const BASE_KINDS = ['plateau', 'offset', 'hill', 'mountain'], SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
+// sectionSetup(): the cross-section's constants for a stroke, as shader uniforms (the per-step wobble weights are computed in the shader).
+function sectionUniforms(kind, q, c) {
+  if (!(q.profile >= .5) || !SECTION_KINDS.includes(kind)) return {};
+  const water = kind === 'deep' || kind === 'shallow', dome = kind === 'hill' || kind === 'mountain', crown = dome ? q.crown : 0;
+  return {sOn: 1, sWater: water ? 1 : 0, sDome: dome ? 1 : 0, sBed: c.sea + (kind === 'deep' ? -55 : -7), sApron: q.apronPx, sApronH: q.apronHeight, sFace: q.facePx, sShare: clamp(.38 + (q.softness - .5) * .6, .1, .88),
+    sCurve: q.faceCurve, sSteps: Math.round(clamp(q.terraces, 0, 8)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter, sLip: q.lip, sCapW: .55 * crown, sCapRise: .45 * crown, sCapExp: 1 + 2 * crown,
+    sBank: q.bankPx, sShelf: q.shelfPx, sShelfD: q.shelfDepth, sShelfSteps: Math.round(clamp(q.shelfSteps, 0, 6)), sVary: (q.faceVariation ?? .8) * .5};
+}
+// H9: the outline displacement of baseOutline (Desert's baseVary, px) and moonOutline (Moon's moonLobes, a share of the radius) as the parameters of
+// one shader function: amplitude in radius units, the smoothstep window on r (none for an offset), and up to three noise terms (weight, wavelength px, salt).
+function outlineUniforms(kind, q, radius) {
+  if (BASE_KINDS.includes(kind) && q.baseVary > 0) {
+    return {olAmp: Math.min(q.baseVary, .15 * radius) / radius, olFlat: kind === 'offset' ? 1 : 0, olLo: .5, olHi: .95, olMoon: 0, olW0: .6, olL0: 55, olS0: 0x2e83, olW1: .4, olL1: 21, olS1: 0x71d5, olW2: 0, olL2: 1, olS2: 0};
+  }
+  if ((kind === 'hill' || kind === 'mountain') && q.moonLobes > 0) {
+    return {olAmp: q.moonLobes, olFlat: 0, olLo: .25, olHi: .8, olMoon: 1, olW0: .55, olL0: radius * .5, olS0: 0x5a31, olW1: .3, olL1: radius * .18, olS1: 0x2c47, olW2: .15, olL2: radius * .07, olS2: 0x7d13};
+  }
+  return {};
+}
+// H9: line features (card C4): lineMultipliers, spurPieces, ridgePieces of sculpt.js, the seeded arithmetic that lays out a ridge's crest and spurs as short pieces.
+const ridgeOn = (kind, o) => (kind === 'hill' || kind === 'mountain') && (Math.round(o.spurCount) >= 1 || o.crestJag > 0 || o.crestVary > 0 || o.crestTaper > 0);
+function lineMultipliers(s, a, len, salt, taper, ends) {
+  const R = s.radius, f = len > 0 ? clamp(a / len, 0, 1) : 0, u = ends ? 1 - smooth(0, .4, Math.min(f, 1 - f)) : smooth(0, 1, f), n = valueNoise(a / (R * 2.2), .37, s.seed ^ salt), m = valueNoise(a / (R * 1.6), 2.9, s.seed ^ (salt + 0x55));
+  return [clamp(1 + .45 * s.crestVary * n, .6, 1.4) * (1 - .62 * taper * u) * (ends ? 1 : 1 + .5 * (1 - smooth(0, .4, f))), (1 - .45 * s.crestVary * (.5 - .5 * m)) * (1 - .7 * taper * u)];
+}
+function spurPieces(s, roots, fade, jag) {
+  const kf = s.inv ? 1 / Math.hypot(s.inv[0], s.inv[1]) : 1, spread = s.spurSpread, bulb = s.spurBulb, out = [];
+  const grow = (x, y, heading, len, rootR, rootH, k, level, rootFade) => {
+    const step = len / 3, curl = (.1 + .3 * spread) * Math.PI, salt = 0x300 + k * 97;
+    let h = heading;
+    for (let j = 0; j < 3; j++) {
+      h += (rand01(s.seed, k, 20 + j) - .5) * curl;
+      const nx = x + Math.cos(h) * step, ny = y + Math.sin(h) * step, m0 = lineMultipliers(s, step * j, len, salt, s.spurTaper, false), m1 = lineMultipliers(s, step * (j + 1), len, salt, s.spurTaper, false);
+      let r0 = m0[0], r1 = m1[0], e0 = m0[1], e1 = m1[1];
+      if (bulb > 0) { const b0 = bulb * smooth(.5, 1, j / 3), b1 = bulb * smooth(.5, 1, (j + 1) / 3); r0 += b0 * .7; r1 += b1 * .7; e0 += (1 - e0) * b0; e1 += (1 - e1) * b1; }
+      out.push(mkPiece({x, y}, {x: nx, y: ny}, rootR * r0, rootR * r1, rootH * e0 * (j ? 1 : rootFade), rootH * e1, jag));
+      if (j === 1 && level === 0 && s.spurForks > 0 && rand01(s.seed, k, 50) < s.spurForks)
+        grow(nx, ny, h + (rand01(s.seed, k, 51) < .5 ? -1 : 1) * (.5 + .6 * rand01(s.seed, k, 52)), len * .5, rootR * r1 * .85, rootH * e1 * .85, k + 100, 1, 1);
+      x = nx; y = ny;
+    }
+  };
+  for (const root of roots) {
+    const k = root.k;
+    grow(root.x, root.y, root.heading, s.spurLength * kf * (.55 + .9 * rand01(s.seed, k, 14)), s.spurWidth * (.85 + .3 * rand01(s.seed, k, 15)), s.spurHeight, k, 0, fade);
+  }
+  return out;
+}
+function ridgePieces(s, path) {
+  const cum = [0], longest = Math.max(16, s.radius * 1.5), out = [];
+  for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
+  const L = cum[cum.length - 1], jag = s.crestJag;
+  if (path.length < 2) out.push(mkPiece(path[0], null, 1, 1, 1, 1, jag));
+  for (let k = 1; k < path.length; k++) {
+    const a = path[k - 1], b = path[k], len = cum[k] - cum[k - 1], n = Math.max(1, Math.ceil(len / longest));
+    for (let j = 0; j < n; j++) {
+      const f0 = j / n, f1 = (j + 1) / n, m0 = lineMultipliers(s, cum[k - 1] + len * f0, L, 0x71d, s.crestTaper, true), m1 = lineMultipliers(s, cum[k - 1] + len * f1, L, 0x71d, s.crestTaper, true);
+      out.push(mkPiece({x: a.x + (b.x - a.x) * f0, y: a.y + (b.y - a.y) * f0}, {x: a.x + (b.x - a.x) * f1, y: a.y + (b.y - a.y) * f1}, m0[0], m1[0], m0[1], m1[1], jag));
+    }
+  }
+  const N = Math.round(clamp(s.spurCount, 0, 12));
+  if (N < 1) return out;
+  const roots = [], spread = s.spurSpread, phase = rand01(s.seed, 7, 0x4b1) * Math.PI * 2;
+  for (let k = 0; k < N; k++) {
+    if (L <= 0) { roots.push({x: path[0].x, y: path[0].y, heading: phase + Math.atan2(s.rot[1], s.rot[0]) + Math.PI * 2 * (k + (rand01(s.seed, k, 11) - .5) * .5) / N, k}); continue; }
+    const at = L * (.08 + .84 * (k + .2 + .6 * rand01(s.seed, k, 11)) / N), side = ((k + (rand01(s.seed, k, 12) < .25 ? 1 : 0)) & 1) ? 1 : -1;
+    let i = 1; while (i < cum.length - 1 && cum[i] < at) i++;
+    const a = path[i - 1], b = path[i], f = (at - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-6);
+    roots.push({x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, heading: Math.atan2(b.y - a.y, b.x - a.x) + side * (.7 + .95 * spread) * (.75 + .5 * rand01(s.seed, k, 13)), k});
+  }
+  return out.concat(spurPieces(s, roots, 1, jag));
+}
+// The crater's lobed outline at an authoring-frame position (craterLobe in sculpt.js).
+function craterLobe(s, lx, ly) {
+  const R = s.radius, sc = Math.max(R * .55, 8);
+  return 1 + s.rough * (.38 * valueNoise(lx / (R * .95), ly / (R * .95), s.seed ^ 0x4a7) + .22 * valueNoise(lx / sc, ly / sc, s.seed ^ 0x1c3) + .1 * valueNoise(lx / (sc * .6), ly / (sc * .6), s.seed ^ 0x2d9));
+}
+// rimSetup(): a crater's rim sectors and gaps, or null when both are off.
+function craterRim(q, seed) {
+  const N = Math.round(clamp(q.rimSectors, 0, 8)), G = Math.round(clamp(q.rimGaps, 0, 4));
+  if (N < 2 && G < 1) return null;
+  const rnd = (a, b) => rand01(seed, a, b + 0x3c5), un = clamp(q.rimUnequal, 0, 1), tau = Math.PI * 2, phase = rnd(0, 1) * tau, sect = [], gaps = [];
+  if (N >= 2) for (let k = 0; k < N; k++) { const r = rnd(k, 2); sect.push({a: phase + tau * (k + (rnd(k, 3) - .5) * .5) / N, h: 1 - .85 * un * (1 - r), w: 1 + un * (1.8 * r * (.6 + .4 * rnd(k, 4)) - .4)}); }
+  const gphase = rnd(9, 9) * tau;
+  for (let k = 0; k < G; k++) gaps.push(gphase + tau * (k + (rnd(k, 5) - .5) * .4) / G);
+  return {sect: sect.map(c => ({...c, rel: c.a - sect[0].a})), gaps, hw: clamp(q.rimGapWidth, 10, 180) * Math.PI / 360};
+}
 // ---- node preparation ----
 // Returns {reason} when the passes do not take the node (the scene then runs on the JS engine), or {skip:true} for a node that
 // writes nothing, else {op:'ground'|'stamp', ...}. `c` is the host's context (see makeShapeContext in sculpt.js).
@@ -125,29 +227,20 @@ export function nodeSupport(n, c) {
   if (kind === 'hill' && (!c.shouldered || c.replayFull)) return 'hill outside the shouldered form';
   if ((kind === 'paint' || kind === 'erase') && !c.edgesNatural) return `${kind} without natural edges`;
   if (kind === 'deep' && !c.natural) return 'restrained coast';
+  // H9: a deep stroke with a cross-section is exact on the study but 4.0 off on about 120 cells of a 4x4 map; JS until H8b finds why.
+  if (kind === 'deep' && q.profile >= .5) return 'deep cross-section';
   // H6c: plateau, offset, lower, sand, grass.
   if (['plateau', 'offset', 'sand', 'grass'].includes(kind) && !c.edgesNatural) return `${kind} without natural edges`;
   if (kind === 'crystal' && q.crystalForm >= .5) return 'crystal columns or bergs';
   if (kind === 'crater') {
-    if (Math.round(q.spurCount) >= 1) return 'crater rim spurs';
-    if (Math.round(q.rimSectors) >= 2 || Math.round(q.rimGaps) >= 1) return 'crater rim sectors or gaps';
     if (q.craterFacets > 0) return 'crater facets';
   }
   if (kind === 'plateau' || kind === 'offset' || kind === 'crater') {
-    if (Math.round(q.maskChannel) !== 0 || STYLE_KEYS.some(k => Math.abs(clamp(q[k] || 0, -1, 1)) >= .005)) return 'shape mask writes';
-    if (q.baseVary > 0 || q.baseBump > 0) return 'hill lobes, facets or base options';
     if (kind === 'offset' && q.shorePlates > 0) return 'water fingers, bank or plates';
   }
-  if (q.profile >= .5) return 'parametric cross-section';
-  const ridge = (kind === 'hill' || kind === 'mountain') && (Math.round(q.spurCount) >= 1 || q.crestJag > 0 || q.crestVary > 0 || q.crestTaper > 0);
-  if (ridge) return 'ridge options';
-  if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || q.moonLobes > 0 || q.baseVary > 0 || q.baseBump > 0)) return 'hill lobes, facets or base options';
+  if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   if (q.fingerCoast >= .5 || Math.round(q.shoreLayers) >= 1) return 'coast pass';
-  if (water && (q.fingers > 0 || q.bankPx > 0 || q.shorePlates > 0)) return 'water fingers, bank or plates';
-  if (kind === 'hill' || kind === 'mountain' || water) {
-    if (Math.round(q.maskChannel) !== 0 || STYLE_KEYS.some(k => Math.abs(clamp(q[k] || 0, -1, 1)) >= .005)) return 'shape mask writes';
-    if (water && WATER_KEYS.some(k => { const v = Math.round(q[k] || 0); return v >= 1 && v <= (k === 'waterBed' ? 3 : 2); })) return 'water mask choices';
-  }
+  if (water && (q.fingers > 0 || (q.bankPx > 0 && !(q.profile >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
   return null;
 }
 
@@ -161,7 +254,7 @@ export function prepareNode(n, geom, c) {
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), pts = n.points, radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep' && c.natural;
-  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, shouldered = kind === 'hill';
+  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
@@ -170,7 +263,7 @@ export function prepareNode(n, geom, c) {
     return {kf, hw0, hw, net, jag, amp: famp, reach: net ? radius * 1.05 + hw + 8 : hw * 3.5 + famp + 6};
   })() : null;
   const amp = kind === 'crater' ? q.rough * radius * .45 : kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * (naturalWater ? 1.1 : naturalPlateau ? .95 : shouldered ? .85 : .2);
-  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp;
+  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
@@ -271,6 +364,14 @@ export function prepareNode(n, geom, c) {
     }
     for (const e of list) segs.push({px: e.a.x, py: e.a.y, ex: e.b.x, ey: e.b.y, f0: [e.cum, e.len], f1: [total, 0], nx: 0, ny: 0});
     if (total > 0) reads = [{x: first.x, y: first.y}, {x: last.x, y: last.y}];
+  } else if (ridgeOn(kind, q) || n.pieces) {
+    // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
+    const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
+    for (const pc of n.pieces ?? ridgePieces(rs, simplifyPath(pts, Math.max(1, radius * .04)))) {
+      const at = segs.length, ex = radius * pc.reach * (1) + 2 * amp + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0), e = pc.b || pc.a;
+      dab(pc.a, pc.b, [pc.r0, pc.r1], [pc.h0, pc.h1]); segs[at].jag = pc.jag;
+      segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
+    }
   } else {
     const path = simplifyPath(pts, Math.max(1, radius * .04)), longest = Math.max(16, radius * 1.5);
     dab(path[0]);
@@ -287,14 +388,19 @@ export function prepareNode(n, geom, c) {
     region = !region ? {x0: s.box[0], y0: s.box[1], x1: s.box[2], y1: s.box[3]} : {x0: Math.min(region.x0, s.box[0]), y0: Math.min(region.y0, s.box[1]), x1: Math.max(region.x1, s.box[2]), y1: Math.max(region.y1, s.box[3])};
   }
   // Mask writes: paint's channel, erase's clearing of planes 0..13; each [plane, target, gain, flat].
-  const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : [];
-  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? 'stampCrystal' : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t]) => [p, t, 1, 0]),
+  const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : shapeMaskWrites(kind, q, n.satellite);
+  const rim = kind === 'crater' ? craterRim(q, seed) : null;
+  if (rim) { for (const c of rim.sect) extra.push([c.a, c.h, c.w, c.rel]); for (const g of rim.gaps) extra.push([g, 0, 0, 0]); }
+  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? 'stampCrystal' : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
       shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
+      ...outlineUniforms(kind, q, radius), ...sectionUniforms(kind, q, c), bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
-      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: 3.5 * 2 ** ((.5 - q.softness) * 1.5)}};
+      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,
+      hole: n.hole ? 1 : 0, hx: n.hole?.x ?? 0, hy: n.hole?.y ?? 0, hR: n.hole?.R ?? 0, hRough: n.hole?.rough ?? 0, hSeed: n.hole?.seed ?? 0,
+      nSect: rim ? rim.sect.length : 0, nGap: rim ? rim.gaps.length : 0, gapHw: rim?.hw ?? 0}};
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
   const count = Math.round(q.craterlets || 0), centre = pts[pts.length >> 1], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };
@@ -304,6 +410,18 @@ export function prepareNode(n, geom, c) {
     const spot = {x: clamp(centre.x + Math.cos(angle) * dist, 0, world - 1), y: clamp(centre.y + Math.sin(angle) * dist, 0, world - 1)};
     out.push(prepareNode({kind: 'crater', satellite: true, points: [spot], frame: n.frame, seed: (seed + k * 2654435761) >>> 0,
       params: {...n.params, rimHeight: q.rimHeight, radius: small, amount: q.amount * (.25 + .3 * rnd(k, 4)), craterlets: 0, cracks: 0}}, geom, c));
+  }
+  if (Math.round(q.spurCount) >= 1) {
+    // addRimSpurs(): spurs rooted round the rim crest, grown as a child mountain stroke over the finished crater; they fade out toward the bowl (the hole).
+    const count = Math.round(clamp(q.spurCount, 0, 12)), rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv}, phase = rand01(seed, 7, 0x4b1) * Math.PI * 2, roots = [];
+    for (let k = 0; k < count; k++) {
+      const ang = phase + Math.PI * 2 * (k + (rand01(seed, k, 0x4b2) - .5) * .6) / count + turn, dx = Math.cos(ang), dy = Math.sin(ang), wx = centre.x + dx * radius, wy = centre.y + dy * radius;
+      const lx = inv ? inv[0] * wx + inv[2] * wy + inv[4] : wx, ly = inv ? inv[1] * wx + inv[3] * wy + inv[5] : wy, lobe = craterLobe(rs, lx, ly);
+      roots.push({x: centre.x + dx * radius * lobe * 1.02, y: centre.y + dy * radius * lobe * 1.02, heading: ang + (rand01(seed, k, 0x4b3) - .5) * q.spurSpread * 1.2, k});
+    }
+    const pieces = spurPieces(rs, roots, .4, q.crestJag);
+    out.push(prepareNode({kind: 'mountain', satellite: true, points: [roots[0]], frame: n.frame, seed, pieces, hole: {x: centre.x, y: centre.y, R: radius, rough: q.rough, seed},
+      params: {...n.params, radius, amount: q.amount * q.rimHeight, rough: q.rough * .8, softness: .8, cracks: 0, craterlets: 0, craterEjecta: 0, spurCount: 0, rimSectors: 0, rimGaps: 0, crestJag: 0, crestVary: 0, crestTaper: 0, profile: 0}}, geom, c));
   }
   return {multi: out};
 }
@@ -401,7 +519,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (!p.region) continue;
       const node = {...p.u, nseg: p.segs.length, kind: p.kind, segBase: segCount, mwBase: mwCount, nwrites: p.writes.length};
       for (const s of p.segs) {
-        segData.push(s.px, s.py, s.ex, s.ey, s.f0?.[0] ?? 0, s.f0?.[1] ?? 0, s.f1?.[0] ?? 0, s.f1?.[1] ?? 0, s.nx, s.ny, s.frame ? 1 : 0, 0, {box: s.box});
+        segData.push(s.px, s.py, s.ex, s.ey, s.f0?.[0] ?? 0, s.f0?.[1] ?? 0, s.f1?.[0] ?? 0, s.f1?.[1] ?? 0, s.nx, s.ny, s.frame ? 1 : 0, s.jag ?? 0, {box: s.box});
       }
       segCount += p.segs.length;
       for (const w of p.writes) mwData.push(...w);
@@ -447,7 +565,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       add('init', ops.length ? need : R);
     }
     ops.forEach((op, j) => {
-      if (op.reads.length && !op.ground) {
+      if (op.reads?.length && !op.ground) {
         const reg = op.p.region, body = reg ? intersect(rects[j], reg) : null;
         if (body) for (const q of op.reads) {
           // The prefix height at the point (the nodes before this one, evaluated in a window around the stencil, margin 4 for the hill's blur plus the

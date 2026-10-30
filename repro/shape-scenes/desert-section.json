@@ -1,0 +1,9 @@
+{"biome": "desert", "source": {"note": "authored for shapecheck (H9): Desert's parametric cross-section (profile 1 from the world) on plateaus with aprons, curved faces, terraces and a lip, beside a hill and an offset"},
+ "ground": false, "query": "",
+ "strokes": [
+  ["plateau", [[250,300],[360,330]], {"card": {"diameter": 280, "amount": 90, "roughness": 26, "softness": 30, "apronPx": 55, "apronHeight": 20, "facePx": 62, "faceCurve": 20}}],
+  ["plateau", [[650,300],[760,360]], {"card": {"diameter": 270, "amount": 115, "roughness": 26, "softness": 40, "apronPx": 55, "apronHeight": 20, "facePx": 90, "faceCurve": -35, "terraces": 4, "ledge": 40, "terraceJitter": 50, "lip": 6}}],
+  ["plateau", [[300,700]], {"card": {"diameter": 320, "amount": 40, "roughness": 25, "softness": 70}}],
+  ["hill", [[700,700]], {"card": {"diameter": 240, "amount": 60, "roughness": 30, "crown": 60, "terraces": 3, "ledge": 30}}],
+  ["offset", [[480,520],[560,560]], {"card": {"diameter": 200, "amount": -25, "roughness": 30, "apronPx": 30, "apronHeight": 10, "facePx": 60}}]
+ ]}

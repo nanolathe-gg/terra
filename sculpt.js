@@ -2507,6 +2507,9 @@ function snapshot() { const f=live(); return Object.fromEntries(FIELD_KEYS.map(k
 function addNode(n) {
   if (regionalFields && !regionalReplay) { nodes.push(n); regionalFields.changed(nodeBounds(n)); return; }
   if (!regionalFields && gpuShapeOn() && (shapePending || !nodeSupport(n,shapeContext()))) { nodes.push(n); pendingEval=0; pendingRect=null; return; }   // H6: the GPU replays the whole list at the next flush
+  // H9: a node the passes refuse is applied by the JS engine at once and never reaches studyShape, so record its reason here (a scene whose
+  // every stroke is refused, Desert's, would otherwise show no reason and the stale `used` of the page load).
+  if (!regionalFields && gpuShapeOn()) { const why=nodeSupport(n,shapeContext()); if (why) { shapeStudy.reason=why; shapeStudy.used=false; shapeStudy.valid=false; } }
   prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n);
 }
 let lastEvalMs=0;

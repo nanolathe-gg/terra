@@ -1,0 +1,8 @@
+{"biome": "moon", "source": {"note": "authored for shapecheck (H9): crater rim spurs (with forks, bulbs and crest jag), rim sectors and gaps, with craterlets and ejecta; moonLobes from the world"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["crater", [[300,300]], {"card": {"diameter": 260, "amount": 40, "roughness": 40, "spurCount": 7, "spurLength": 140, "crestJag": 60, "crestVary": 50}}],
+  ["crater", [[720,300]], {"card": {"diameter": 240, "amount": 40, "roughness": 35, "rimSectors": 5, "rimGaps": 2, "rimUnequal": 80, "craterEjecta": 40}}],
+  ["crater", [[300,700]], {"card": {"diameter": 240, "amount": 45, "roughness": 30, "spurCount": 5, "spurForks": 60, "spurBulb": 50, "rimSectors": 3, "rimGaps": 1}}],
+  ["crater", [[720,700]], {"card": {"diameter": 200, "amount": 35, "roughness": 30, "craterlets": 0, "rimGaps": 3, "rimGapWidth": 100}}]
+ ]}
