@@ -423,6 +423,7 @@ export function createGpuFields(opts) {
     evaluate(r, event);
     return event;
   }
+  const quiet = async () => { while (queued || starting || outstanding > 0) await new Promise(r => waiters.push(r)); };
   const settled = async () => { while (queued || starting) await new Promise(r => waiters.push(r)); };
   // The GPU buffers are current once every requested run has been submitted (the queue is in order on one device, so a bake that records its own
   // work next sees them): it does not wait for the work to finish.
@@ -499,7 +500,7 @@ export function createGpuFields(opts) {
     // H6b: the engine's whole-map buffers (the h p r c v x planes, the packed masks) for the passes that read them in place. Await ready() first.
     gpuBuffers: () => !front() && gpuValid && engine ? {planes: engine.planes, masks: engine.masks, grid: worldGrid, spacing, revision: submittedRevision} : null,
     subscribeSubmit(fn) { submitListeners.add(fn); return () => submitListeners.delete(fn); },
-    gpuReady: () => front() ? Promise.resolve() : gpuReady(), gpuPending: () => !front() && (queued !== null || starting !== null || !gpuValid),
+    gpuReady: () => front() ? Promise.resolve() : gpuReady(), gpuQuiet: () => front() ? Promise.resolve() : quiet(), gpuPending: () => !front() && (queued !== null || starting !== null || !gpuValid),
     // Start the read of what a gesture left out, once the gesture is over (the weather glue calls this on release).
     settle: () => { flushIfDue(); },
   };

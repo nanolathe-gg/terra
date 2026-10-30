@@ -2844,7 +2844,13 @@ function sampleRegional(x,y) {
 const gpuFeedOn=() => new URLSearchParams(location.search).get('gpuFeed')!=='0';
 const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && grid<=1168 && renderer.variantNumber?.('erosion',0)>0);
 const gpuFeedEligible=() => Boolean(gpuFeedOn() && renderer?.engine && regionalFields?.gpuBuffers && worldGrid<=1168 && regionalFields.active?.());
-function retireGpuWeather(w) { setTimeout(() => { w.weather.destroy(); w.maps.forEach(m => m.destroy()); },3000); }   // a bake that already took the buffers may still be recording
+// A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
+// keeps its buffers), so a retired result is destroyed at that moment and not on a timer. gpuBytes() is what the canvas counts against its budget.
+const retiredWeather=new Set(); let gpuPassBytes=0;
+function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retiredWeather.delete(w); w.weather.destroy(); w.maps.forEach(m => m.destroy()); }
+function leaseGpuWeather(w) { w.leases=(w.leases||0)+1; let given=false; return () => { if (given) return; given=true; w.leases--; if (w.retired && w.leases<=0) destroyGpuWeather(w); }; }
+function retireGpuWeather(w) { w.retired=true; if (w.leases>0) retiredWeather.add(w); else destroyGpuWeather(w); }
+const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+[...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes;
 function dropGpuWeather() { if (gpuWeather) { retireGpuWeather(gpuWeather); gpuWeather=null; } }
 async function gpuWeatherCpu(withMaps) {
   const w=gpuWeather; if (!w) return;
@@ -2852,6 +2858,7 @@ async function gpuWeatherCpu(withMaps) {
   while (need() && gpuWeather===w) {
     if (w.loading) { await w.loading; continue; }
     w.loading=(async () => {
+      if (gpuWeather!==w || w.destroyed) return;
       if (!w.cpuHeight) { const raw=await readBuffer(renderer.device,w.weather,0,n*8); if (gpuWeather===w) { refinedBase=new Float32Array(raw,0,n); refined=new Float32Array(raw,n*4,n); w.cpuHeight=true; } }
       else if (w.mapsOn && !w.cpuMaps) {
         const [a,b,c]=await Promise.all(w.maps.map(m => readBuffer(renderer.device,m,0,n*4)));
@@ -2871,7 +2878,7 @@ async function gpuFeedSource(signal) {
   const on=$('weather').checked;
   if (on && refined && !gpuWeather) return null;
   const w=on?gpuWeather:null;
-  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null};
+  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,release:w?leaseGpuWeather(w):() => {}};
 }
 function readRegional(request) {
   if (regionalFields.pending?.()) return regionalFields.ready().then(() => readRegional(request));
@@ -2937,7 +2944,7 @@ const sculptRegion={
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); flow?.reset();cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
-  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuFeedActive:() => gpuFeedEligible(),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
@@ -3159,18 +3166,22 @@ function queueWeather() {
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
 async function runFedWeather(job) {
   try {
-    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer),b=regionalFields.gpuBuffers();
+    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
+    await regionalFields.gpuQuiet();   // the shape runs' own scratch (whole-map noise: peak 259 MB) is gone before the pass allocates its 120 B a cell
+    const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
+    gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
     const result=await erosion.runGpu({planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
       envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)});
+    gpuPassBytes=0;
     if (job!==weatherJob || stroke) { retireGpuWeather(result); return; }
     dropGpuWeather();
-    gpuWeather={weather:result.weather,maps:result.maps,mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
+    gpuWeather={weather:result.weather,maps:result.maps,bytes:result.bytes,mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
     markViewChanged(); updateControls(); schedule();
-  } catch (err) { if (job===weatherJob) failWeather(err.message); }
+  } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message); }
 }
 function failWeather(message) {
   weatherJob++; weatherBase=null; weatherWorker?.terminate(); weatherWorker=null;

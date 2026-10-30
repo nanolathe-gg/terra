@@ -33,7 +33,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function heightSample(x,y){for(const e of cache.values()){const r=e.heightPatch;if(r&&x>=r.gridOrigin[0]&&y>=r.gridOrigin[1]&&x<=r.gridOrigin[0]+(r.gridWidth-1)*r.gridSpacing&&y<=r.gridOrigin[1]+(r.gridHeight-1)*r.gridSpacing)return sampleField(r,x,y);}return null;}
   function visibleSample(x,y){return heightSample(x,y)??sourceSample(x,y);}
   function keepHeight(r){return {fields:{h:r.fields.h},gridWidth:r.gridWidth,gridHeight:r.gridHeight,gridSpacing:r.gridSpacing,gridOrigin:r.gridOrigin,bytes:r.fields.h.byteLength};}
-  function fixedGPU() { return (canvas.width*canvas.height+overlay.width*overlay.height+coarse.width*coarse.height+navigatorCanvas.width*navigatorCanvas.height)*4+(features?.stats?.().imageBytes||0); }
+  function fixedGPU(external=true) { return (external?(api.gpuBytes?.()??0):0)+(canvas.width*canvas.height+overlay.width*overlay.height+coarse.width*coarse.height+navigatorCanvas.width*navigatorCanvas.height)*4+(features?.stats?.().imageBytes||0); }
   function gpuResident() { return renderer.stats().residentBytes+cacheBytes+fixedGPU(); }
   const originalKnobs=renderer.applyKnobs.bind(renderer),originalColors=renderer.setColors.bind(renderer);
   renderer.applyKnobs=(...args)=>{const r=originalKnobs(...args);configureChunks();clear();return r;};
@@ -61,7 +61,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     try {
       // Every selected budget uses the same bake lattice. Budget changes evict
       // images, rather than change GPU interpolation and palette decisions.
-      const reserve=fixedGPU()+512*512*8;
+      const reserve=fixedGPU(false)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
       renderer.setBudget(128*MB,reserve);const next=Math.min(512,renderer.recommendedChunkSize);
       if(next!==canonicalSize){for(const key of cache.keys())remove(key);canonicalSize=next;}
       trimTo(gpuBudget-fixedGPU()-renderer.stats().retainedBytes-32*MB);
@@ -85,7 +85,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
     const feed=await api.gpuFeedSource?.(signal);
-    if(feed){
+    if(feed)try{
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
       const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount),copyBytes=rect.width*rect.height*8;
@@ -94,7 +94,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed});bakes++;
       const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
-    }
+    }finally{feed.release?.();}
     const fields=await region(request,options,signal);
     // H7 2b: the scene changed while this bake waited for its fields; its image would be dropped, so it never reaches the GPU.
     if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');

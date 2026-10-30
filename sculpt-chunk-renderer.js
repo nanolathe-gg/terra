@@ -263,7 +263,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const encoder=device.createCommandEncoder({label:'chunk feed'}),pass=encoder.beginComputePass({label:'chunk feed'});
     pass.setPipeline(passes.pipes.feedMain);for(const [g,bg] of passes.groups('feedMain',res))pass.setBindGroup(g,bg);
     pass.dispatchWorkgroups(Math.ceil(gw/8),Math.ceil(gh/8));pass.end();
-    encoder.copyBufferToBuffer(painted,0,stage,0,16);device.queue.submit([encoder.finish()]);
+    encoder.copyBufferToBuffer(painted,0,stage,0,16);device.queue.submit([encoder.finish()]);feed.release?.();   // submitted: the buffers it reads may be destroyed now
     this.uploadBytes=0;this.cpuUploadBytes=0;
     await stage.mapAsync(GPUMapMode.READ);const word=new Uint32Array(stage.getMappedRange().slice(0))[0];stage.unmap();stage.destroy();painted.destroy();uniform.destroy();
     const on=k=>(word>>>k)&1,any=(a,b)=>{for(let k=a;k<b;k++)if(on(k))return 1;return 0;};
