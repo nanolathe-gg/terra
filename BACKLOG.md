@@ -93,6 +93,7 @@ branches and the projection fix below, so re-render before judging.
    | H5 | 8865 | 9665 | `$R/agent-H5/out` | `--worlds green` |
    | H4b | 8866 | 9666 | `$R/agent-H4b/out` | `--worlds green` |
    | H7 | 8867 | 9667 | `$R/agent-H7/out` | `--worlds none` |
+   | H6 | 8868 | 9668 | `$R/agent-H6/out` | `--worlds none`, then `green` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -3788,10 +3789,213 @@ new `repro/perf.mjs`. Not any `.wgsl` file, and not `sculpt.py`.
 - **Memory.** Peak heap on 4×4 rose from 508 to 558 MB because of the
   sample memo, which is capped at 200k entries. GPU memory is unchanged.
 
-H6 (shape on the GPU) is outlined in
-[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards), with the rules every
-card from H3 on follows. It is written here in full when the owner asks
-for it.
+### H6. Shape on the GPU (Green)
+
+> **Owner, 2026-10-29:** "Okay do H6 next." It serves decision 4
+> (everything on the GPU) and removes two costs H7 left. A 4×4 scene
+> replays its shapes for 4.3 s on load. Each drag move spends about 160 ms
+> replaying the dirty chunk.
+
+Read [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) "The Green slice",
+"Rules for the cards" and the H6 outline under Cards. Then read H7's Done
+and Still open lists above.
+
+**What is there today.**
+- **The shape engine** is JS in `sculpt.js`. `replayNode` and
+  `replayShape` apply each node in order to the fields the nodes before
+  it left, through `dab`, `sweep`, `settleHill`, the sections,
+  `applyCracks`, mask painting, and `groundHeight` for the ground node.
+- **It writes 31 planes** (`FIELD_KEYS`): `h`, `p`, `r`, `c`, `v`, `x` and
+  the 25 mask planes.
+- **The study** (1024 px) replays the whole grid into `heights`, the masks
+  and the rest, then uploads them.
+- **Maps** use `createRegionalFields` (`sculpt-fields.js`):
+  - 256-cell prefix tiles, each node replayed over its apron on the
+    tiles before it, and cached;
+  - `read()` crops a window;
+  - `sample()` reads a point, through H7's memo.
+- **Green's windows** (green-1..3, 23 strokes) use hill ×6, mountain ×1,
+  deep ×4, erase ×1 and paint ×11, plus the ground node. With Green's
+  knobs, `fingerCoast`, `shoreLayers`, `shorePlates`, `hillLobes` and
+  `iceFacets` are 0. So the coast pass and its connectivity flood should
+  not run; item 1 confirms it.
+
+**Scope.**
+- **Green's kinds as compute passes** in a new `engine-shape.wgsl`,
+  beside the JS engine.
+- **Behind a new knob,** `gpuShape`: 0 is JS, 1 is GPU. It is separate
+  from `engine`, so the two can be compared on engine 1.
+- **Whole-map fields on the GPU** for the study, and for maps up to 1168
+  samples (H5's bound). Larger maps keep the JS engine until H5b.
+- **Fallback.** A scene with any node kind the GPU does not take falls
+  back to the JS engine as a whole, and the status line says so.
+- **Not this card (H6b):** feeding chunk bakes and the Time pass straight
+  from the GPU fields, without the CPU copy and the per-chunk upload.
+  Here the existing consumers read a CPU copy.
+
+**Deliver.**
+
+1. **The inventory. This is a stop point.** Instrument `replayShape` and
+   `replayNode` on green-1..3 (the study) and on mapcheck's 4×4 scene.
+   Hand back:
+   - **Per kind, what actually runs** with Green's knobs and the `evad`
+     variant:
+     - confirm that the coast pass, shore plates, hill lobes and ice
+       facets are off;
+     - say whether hills and mountains take `settleHill` or `sweep`;
+     - say whether `ridgeOn` is true (`spurCount`, `crestJag`,
+       `crestVary`, `crestTaper`).
+   - **Every non-local step:**
+     - the radius of each `blurred` and `blurredBox`;
+     - `sweepDistance`;
+     - point reads of earlier shapes (`prefixPoint`);
+     - global bounds;
+     - anything else that reads beyond its own cell.
+   - **The noise and precision:**
+     - the noise each kind uses (`NOISE_FIELDS`, `makeNoise`,
+       `framedNoise`, `hash` and `valueNoise`);
+     - every spot sensitive to float precision: `Math.hypot`, long sums,
+       a `floor` of a scaled coordinate.
+
+     The fields are already stored as `Float32Array`, and the regional
+     paths already `Math.fround`.
+   - **Which planes each kind writes.**
+   - **Cost and size:** the JS lines to port per kind, and the time each
+     kind costs today, on the study, on the 4×4 load and on one drag move.
+   - **A flag on hill and mountain.** Say so explicitly if their path
+     (`settleHill`, the ridge pieces) is several hundred lines of
+     data-dependent path walking. Hill and mountain may then become a card
+     of their own.
+   - **The proposed passes per kind:** the dispatch shape, what each reads
+     and writes, and the resolution each runs at.
+
+2. **The GPU fields, and the simplest kinds.**
+   - **One interface.** A new `sculpt-gpu-fields.js` returns the same
+     object as `createRegionalFields`: `read`, `readCells`, `sample`,
+     `changed`, `clear`, `revision`, and the stats the canvas reads. Then
+     `sculpt-canvas.js`, export, features and H7's memo work unchanged.
+     The switch is the one call in `makeRegionalFields`, plus its
+     equivalent for the study.
+   - **The live stroke.**
+     - A committed prefix holds the fields after nodes 0..N-1, and the
+       live node renders into a working copy on each move.
+     - `changed(rect, keepPrefix)` maps onto it. An append, or a preview
+       of the last node, re-runs only that node over its bounds.
+     - An edit re-runs that node and every later node over the dirty
+       rectangle, with each node's apron.
+   - **The CPU copy never blocks a frame.**
+     - During a gesture, only the dirty rectangle is read back,
+       asynchronously. A bake that needs it waits for it; the frame does
+       not.
+     - The whole copy refreshes on release, and before export, regional
+       checks and anything else that must be final.
+     - During a gesture, `sample()` may return the value from before the
+       stroke, as H7's overview already does.
+   - **Kinds:** paint and erase first (they are stamps), then the ground
+     node. One commit each.
+   - **A check tool,** `repro/shapecheck.mjs`, compares JS with GPU per
+     scene and per plane:
+     - the max |Δ|;
+     - the share of cells over 0.01, 0.5 and 1 height unit (for masks,
+       over 0 and over 1 step);
+     - the GPU run twice on one machine, which must be identical.
+
+3. **Deep, then hill and mountain.** One commit each, in the order the
+   inventory finds simplest.
+
+4. **Measure** with `repro/perf.mjs` on the 4×4 map and the study. The
+   8×8 map is over 1168 samples, so it stays on JS.
+   - Scene replay on load: from 4.3 s to well under 1 s on 4×4.
+   - The shape share of one drag move: from about 160 ms to under 10 ms.
+   - The study: load, and drag frame times.
+   - **Drag p95 will still miss 33 ms.** The per-chunk upload (about
+     150 ms) stays until H6b, and the outline needs the cheap fix in H7's
+     Still open. Report what remains.
+
+5. **Resolution** (the card rule). Each pass states its sample spacing.
+   Show green-2 evaluated at a quarter of the grid and at final, side by
+   side. They must be recognisably the same picture.
+
+**Acceptance.**
+- **Heights:** `shapecheck.mjs` on green-1..3 and the 4×4 scene. The
+  numbers are reported, not required to be zero: expect f32 differences.
+  List each cluster over 0.5 unit and its cause.
+- **Renders:**
+  - compare green-1..3 at `gpuShape` 1 with `merge-h7` using
+    `measure/impact.py <name> $R/repro-out/merge-h7 <yours>`. Changed
+    blocks must be at or under the shift floor in every class;
+  - by eye at 1× and 2×, using the crop sheets, it is the same picture.
+- **Retail:** `measure/material_lab.py` no worse than `merge-h7` on any
+  window or class:
+
+  | Class | green-1 | green-2 | green-3 |
+  | --- | --- | --- | --- |
+  | Flat | .007 | .017 | .010 |
+  | Grass slope | .069 | .033 | .087 |
+  | Rock face | .053 | .046 | .084 |
+- **Everything else stays exact,** at `gpuShape` 0:
+  - `compare.py $R/repro-out/merge-h7 <yours> --worlds none`: all 27
+    scenes exact;
+  - the 4×4 export is identical to `$R/exports/H2Check8801x77804*` apart
+    from the name;
+  - `regional.mjs` finds 0 mismatches on all 27 scenes.
+- **Regional exactness for Green under the GPU shape is dropped, and
+  recorded as dropped.**
+  - Whole-map evaluation replaces regional replay, and a window is a crop
+    of the whole map.
+  - Under `gpuShape` 1, `regionalCheck()` checks instead that a fresh
+    whole-map GPU evaluation, read back, equals the CPU copy, and that
+    windows equal crops.
+  - Say what `render.mjs`'s `mismatch` field means for those scenes.
+- **The 4×4 export at `gpuShape` 1:**
+  - its self-check passes;
+  - its TNT heights are compared with the JS export: the max difference,
+    and the share over 1 unit;
+  - two exports are identical.
+- **At acceptance,** Green's `gpuShape` default becomes 1 in
+  `ENGINE_KNOBS`. The guard for that run is `--worlds green` against
+  `merge-h7`, and the other 24 scenes stay exact.
+- **The retire rule is suspended** for the slice (decision 10), so the JS
+  engine stays. Report the size of what the GPU path would replace (JS
+  lines per kind) beside the new WGSL and JS.
+
+**Done when** NOTES.md has:
+- the inventory;
+- per kind, the `shapecheck.mjs` numbers;
+- the block comparison and the crop sheets;
+- Lab;
+- the performance numbers against H7's;
+- the quarter and final side by side;
+- the exactness checks;
+- memory: the GPU bytes for the whole-map fields at 1168 samples.
+
+**Files:**
+- New: `engine-shape.wgsl`, `sculpt-gpu-fields.js` and
+  `repro/shapecheck.mjs`.
+- `sculpt.js`, only at the seam: `makeRegionalFields`, the study's replay
+  entry, reading the knob, the status line, and `regionalCheck`.
+- `sculpt.py`, for the knob: default 0, and Green 1 at acceptance.
+- Not the chunk renderer, the Time pass (`sculpt-erosion.js`,
+  `sculpt-map-weather.js`), `sculpt-canvas.js`, or any draw or bake
+  shader.
+
+**Budget:**
+- Item 1 is a stop point.
+- After it, each kind is its own commit.
+- If the budget runs short, stop after the kinds that are done. NOTES.md
+  then says which scenes still fall back.
+
+**Server and guard:**
+- port 8868, CDP 9668;
+- worktree `../terraform-wt-H6`;
+- assets `$R/agent-H6`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h7`;
+- guard `--worlds none` at `gpuShape` 0 until acceptance, then
+  `--worlds green`.
+
+H6b (chunks and the Time pass fed from the GPU fields) is outlined in
+[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards). It is written here
+in full when H6 lands.
 
 ## After the cards
 
