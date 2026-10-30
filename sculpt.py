@@ -230,7 +230,7 @@ KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0,
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
 # Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
 # scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
-LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)   # gpuShape stays 0: the GPU shape moves these worlds' pictures (NOTES H8 item 2)
+LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12, gpuShape=1)   # a shape the passes refuse (Lava, Crystal, Ice) falls back to the JS engine as a whole
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,

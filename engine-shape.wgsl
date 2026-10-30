@@ -161,6 +161,7 @@ fn hillSection(t: f32) -> f32 {
 // H9 parametric cross-section (card C1: sectionSetup, crossSection, landSection, waterSection, faceRise, terrace in sculpt.js). u.s* hold the stroke's section
 // constants; the per-cell inputs are the noise tables kw/ka (coast width, shelf) and nj/nA/nB (coast x, coast y, x). sLift carries the lip back to the caller.
 var<private> sLift: f32 = 0.0;
+var<private> sLipI: f32 = 0.0;   // the lip's inset on a water stroke (waterSection), for the zero test in crossSection
 fn terraceLevel(m: u32, n: u32, nA: f32, nB: f32) -> f32 {
   let fm = f32(m); let fnn = f32(n);
   var j = 0.0;
@@ -223,6 +224,7 @@ fn waterSection(d: f32, reach: f32, base: f32, kw: f32, ka: f32, nj: f32, nA: f3
   let total = I + A + Fw + S;
   if (total > 0.92 * reach) { let k = 0.92 * reach / total; I = I * k; A = A * k; Fw = Fw * k; S = S * k; }
   let B = A + Fw; let rest = I + B + S; let depth = min(u.sShelfD, 0.7 * (sea - u.sBed));
+  sLipI = I;
   var v = 0.0;
   if (d < I) { v = base; }
   else if (d < I + B) { let p = faceRise(B - (d - I), A, Fw, 1.0, u.sSteps, nj, nA, nB); if (base > sea) { v = sea + (base - sea) * p; } else { v = base; } }
@@ -247,7 +249,11 @@ fn crossSection(r: f32, reach: f32, base: f32, nCW: f32, nShelf: f32, nj: f32, n
   let kw = clamp(1.0 + u.sVary * nCW, 0.4, 1.8); let ka = clamp(1.0 + u.sVary * nShelf, 0.4, 1.8);
   if (u.sWater == 0u) { return landSection(d, reach, kw, ka, nj, nA, nB); }
   if (base - u.sBed < 0.5) { return 0.0; }
-  return clamp((base - waterSection(d, reach, base, kw, ka, nj, nA, nB)) / (base - u.sBed), 0.0, 1.0);
+  let w = clamp((base - waterSection(d, reach, base, kw, ka, nj, nA, nB)) / (base - u.sBed), 0.0, 1.0);
+  // Past the lip's inset on dry ground the profile is strictly below the ground, so w is positive in the JS engine's doubles and the lip lands there; in f32
+  // base - v can round to exactly 0 at the first cells past the inset, and the stamp would skip them and lose the lip. Keep them in with a vanishing weight.
+  if (u.sLip != 0.0 && w <= 0.0 && d >= sLipI && base > u.sea) { return 1e-30; }
+  return w;
 }
 
 // H9: a landform's or water stroke's mask writes, once the node is settled: plane, target, gain, flat per write (maskSetup/paintCell of sculpt.js).
@@ -364,8 +370,10 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var ex = nzx; var ey = nzy;
     if (span2 > 0.0) { ex = nzx - sampleN(fxF, cx, cy); ey = nzy - sampleN(fyF, cx, cy); }
     else { ex = nzx - s2.x; ey = nzy - s2.y; }
-    let dx = wx - cx + u.amp * (u.rotX * ex - u.rotY * ey);
-    let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
+    // A ridge piece scales the outline wobble by its mean width (dab(): amp * pc.mean).
+    var ampK = u.amp; if (u.ridge != 0u) { ampK = u.amp * (s1.x + s1.y) * 0.5; }
+    let dx = wx - cx + ampK * (u.rotX * ex - u.rotY * ey);
+    let dy = wy - cy + ampK * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (kind == 2u && u.natural != 0u) { width = clamp(1.0 + u.rough * 1.6 * nCW, 0.45, 1.9); }
     else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }

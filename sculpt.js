@@ -2699,10 +2699,15 @@ const gpuShapeOn=() => {
   const engine=Number(url.get('engine')??config?.defaults?.engine??0)===1,own=Number(config?.engineDefaults?.gpuShape);
   return (engine && Number.isFinite(own)?own:worldDefault('gpuShape'))>0;
 };
-const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:isFlowKind,seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
+// A flow bake writes nothing the shape passes make: its stored planes are copied in after the result (applyBakes).
+const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:k => isFlowKind(k) || k==='flowbake',seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
   shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full'});
 // The study (1024 px): the whole grid is evaluated by the passes and the rectangle read back into the live planes. The result arrives asynchronously;
 // canExport() and the weather wait for it (shapePending), and the frame never does.
+// The GPU result carries zeros in the flow planes, so the stored bake planes go back in over it (what applyNode does for a flowbake node on the JS path).
+function applyBakes(list) { for (const n of list) if (n.kind==='flowbake' && !n.hidden && n.result) { renderer?.setSediment(n.result.colors); applyResult(n.result,maskPlanes,{x0:0,y0:0,x1:grid-1,y1:grid-1},grid,[originCellX,originCellY]); } }
+// Settled shape: null when no GPU shape result is outstanding, else a promise for it. A bake reads the heights, so it waits for them.
+function shapeSettled() { if (pendingEval>=0) flushEval(); return shapePending?new Promise(res => shapeAfter.push(res)):null; }
 let shapePending=0, shapeStudy={engine:null,valid:false,reason:null,used:false}, shapeAfter=[];
 function studyShape(rect) {
   const ctx=shapeContext(); let reason=null;
@@ -2719,7 +2724,7 @@ function studyShape(rect) {
     try {
       shapeStudy.engine??=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
       const started=performance.now(),out=await shapeStudy.engine.run(list,ctx,r,{release:whole});
-      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); if (whole) shapeStudy.valid=true; }
+      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); applyBakes(list); if (whole) shapeStudy.valid=true; }
       shapeStudy.last={ms:performance.now()-started,whole,...shapeStudy.engine.stats().last};
     } catch (err) { error('Shape on the GPU failed: '+err.message); shapeStudy.valid=false; }
     finally { shapePending--; if (!shapePending) { heightDirty=true; markChanged(); for (const fn of shapeAfter.splice(0)) fn(); } }
@@ -2850,7 +2855,8 @@ function sampleRegional(x,y) {
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
 const gpuFeedOn=() => new URLSearchParams(location.search).get('gpuFeed')!=='0';
-const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
+// H8b: the fed pass leaves its result in GPU buffers, where the material field (a CPU array from the height) cannot join it yet, so a world that asks for the field takes the unfed pass.
+const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0 && !(Number($('material-weathering')?.value)>0));
 const gpuFeedEligible=() => Boolean(gpuFeedOn() && renderer?.engine && regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
 // A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
 // keeps its buffers), so a retired result is destroyed at that moment and not on a timer. gpuBytes() is what the canvas counts against its budget.
@@ -3757,6 +3763,7 @@ function placeBake(result) {
   else old=nodes[i].result?.rect;
   nodes[i]={...nodes[i],result};
   evaluate(i,unionRect(old,result.rect)); checkpoint(); schedule();
+  if (shapePending) queueWeather();   // H8b: the GPU result lands later and marks the weather pending; the pass runs again once it has
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; mapFeatures?.deactivate(); rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
@@ -4081,7 +4088,7 @@ function sampleFlow(x,y){
   return[0,0];
 }
 function mountCurrentFlow(){
-  flow=mountFlow({$,nodes:() => nodes,prefix:() => prefix,heights:() => heights,grid:() => grid,size:() => size,spacing:() => spacing,sea:() => config.seaLevel,nodeBounds,place:placeBake,...(regionalFields?{readBefore:readFlowBefore,revision:()=>revision,reserve:bytes=>sculptRegion.checkMemory?.(bytes),view:()=>mapCanvas?.view(),flowAt:sampleFlow}:{}),
+  flow=mountFlow({$,settled:shapeSettled,nodes:() => nodes,prefix:() => prefix,heights:() => heights,grid:() => grid,size:() => size,spacing:() => spacing,sea:() => config.seaLevel,nodeBounds,place:placeBake,...(regionalFields?{readBefore:readFlowBefore,revision:()=>revision,reserve:bytes=>sculptRegion.checkMemory?.(bytes),view:()=>mapCanvas?.view(),flowAt:sampleFlow}:{}),
       world:activeWorld,saveWorlds,suggestions:flowSuggestions,status,error,schedule:() => schedule(false),updateControls,persist:persistLater,editing:() => Boolean(stroke||moving||loading),
       relabel:renderLayers,lift:(x,y)=>regionalFields?(Math.max(config.seaLevel,sampleRegional(x,y))-config.baseHeight)*.5:liftAt(x,y),planes:() => maskPlanes,mountPanel:el => { const panels=$('editor').querySelectorAll(':scope > section.panel'); $('editor').insertBefore(el,panels[panels.length-1]); },
       recolourSelected:color => { if (nodes[selected]?.kind==='source') changeSelected(n => { n.params={...n.params,color}; }); }});
@@ -4218,7 +4225,9 @@ async function shapeCompare() {
   flushEval(); await idle();
   if (!shapeStudy.used) return {error:'gpuShape is off or the scene fell back: '+(shapeStudy.reason||'knob 0')};
   const a=copy(live()),saved=experiment.get('gpuShape');
-  experiment.set('gpuShape','0'); const t0=performance.now(); prefix=[]; evaluate(0); const jsMs=performance.now()-t0; const ref=copy(live()); experiment.set('gpuShape',saved??'1');
+  // gpuShapeOn reads the address first, so the JS reference has to change the address (H8b: the experiment value alone left the GPU running both sides).
+  const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0');
+  experiment.set('gpuShape','0'); window.history.replaceState(null,'',off); const t0=performance.now(); prefix=[]; evaluate(0); const jsMs=performance.now()-t0; const ref=copy(live()); experiment.set('gpuShape',saved??'1'); window.history.replaceState(null,'',href);
   evaluate(0); await idle(); const b=copy(live());
   return {grid,jsEvalMs:jsMs,vsJs:comparePlanes(a,ref,grid,MASK_KEYS),repeat:comparePlanes(a,b,grid,MASK_KEYS)};
 }
@@ -4234,7 +4243,8 @@ async function gpuRegionalCheck() {
     const part={h:new Float32Array(grid*grid),p:new Float32Array(grid*grid),r:new Float32Array(grid*grid),c:new Float32Array(grid*grid),v:new Float32Array(grid*grid),x:new Float32Array(grid*grid),masks:MASK_KEYS.map(() => new Int8Array(grid*grid))};
     engine.copyOut(out,part);
     const {x0,y0,x1,y1}=out.rect;
-    for (const key of FIELD_KEYS) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+    // The flow planes (mask planes 20-24) come from the stored bake, which the passes skip and applyBakes copies in, so they are not the pass's to compare.
+    for (const key of FIELD_KEYS) if (!(MASK_KEYS.indexOf(key)>=FLOW_FIRST)) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
       const j=MASK_KEYS.indexOf(key),expected=whole[key][y*grid+x],actual=j>=0?part.masks[j][y*grid+x]:part[key][y*grid+x];
       if (expected===actual && Number.isFinite(actual)) continue;
       const p=planes[key]; p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity); p.firstMismatch??={x,y,whole:expected,gpu:actual,run:tag};
@@ -4261,14 +4271,17 @@ async function shapeLevel(factor=2) {
 // the map engine independently replays its graph through four regional reads.
 // Weather and GPU pixels have separate guards: this checks every brush plane.
 function checkRegionalFields() {
-  if(!config.map && gpuShapeOn())return gpuRegionalCheck();
+  // A scene the passes refuse ran on the JS engine, so its regional check is the JS one below.
+  if(!config.map && gpuShapeOn() && (shapePending || shapeStudy.used))return gpuRegionalCheck();
   if(config.map)throw new Error('Run the regional field check on a 1024px study scene.');
   if(!canExport())throw new Error('Wait for the scene and its flow bake before checking regional fields.');
   flushEval();
   const whole=live(),saved={regionalFields,worldSize,worldGrid},planes=Object.fromEntries(FIELD_KEYS.map(k=>[k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
   let mismatches=0;
   try {
-    worldSize=size;worldGrid=grid;regionalFields=makeRegionalFields();
+    // The JS regional engine is what this checks: take the address's gpuShape away while the fields are made (gpuShapeOn reads it first).
+    const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0'); window.history.replaceState(null,'',off);
+    worldSize=size;worldGrid=grid;try { regionalFields=makeRegionalFields(); } finally { window.history.replaceState(null,'',href); }
     const middle=Math.floor(grid/2),cuts=[[0,middle-1],[middle,grid-1]];
     for(const [y0,y1]of cuts)for(const [x0,x1]of cuts){
       const part=regionalFields.readCells({x0,y0,x1,y1});

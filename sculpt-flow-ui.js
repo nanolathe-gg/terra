@@ -251,6 +251,8 @@ export function mountFlow(host) {
   // Start a bake of the current inputs; resolves when it is placed (or fails).
   function bake(overrides) {
     if (running) { cancel(); return; }
+    // H8b: the bake reads the finished heights; with the shape on the GPU they arrive after the strokes are added.
+    const wait = host.settled?.(); if (wait) { wait.then(() => bake(overrides)); return; }
     if (overrides) { settings = {...settings, ...overrides}; syncSliders(); }
     try {
       const inp = inputs(); if (!inp) return;
