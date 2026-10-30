@@ -4259,6 +4259,99 @@ outlines in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#cards).
 - baseline `$R/repro-out/merge-h6`;
 - guard `--worlds none`.
 
+**Done (merged as 1fec3ce; EXPERIMENTS row 148; notes in
+`$R/agent-H6b/NOTES.md`).**
+- **The Time pass on GPU buffers (item 1).**
+  - `GpuErosion.runGpu` reads h, p and the erosion override straight from
+    the GPU fields' buffers. Passes in `engine-feed.wgsl` build the erosion
+    state, the fixed field and the active-tile list, with atomics and an
+    indirect dispatch.
+  - The result stays in two GPU buffers: the authored and eroded height,
+    and the three packed maps.
+  - The height is read back once when a result lands outside a gesture,
+    because picking and the cursor read heights at once. The maps are read
+    only when a CPU reader asks: export, or the CPU bake path.
+- **Chunk bakes from GPU buffers (item 2).**
+  - `feedMain` builds a chunk's height, route, grid-layer and mask
+    textures in about 0.6 ms of GPU time. The painted flags come from one
+    OR-reduced word.
+  - A chunk costs 37 ms on load, from 185 ms.
+  - Fed cache entries keep no height patch.
+- **The drag path (item 3).**
+  - **Two readinesses.** `gpuReady` means every requested run has been
+    submitted, and fed bakes wait on it. `ready` still means the CPU copy
+    has landed; CPU readers, the overview, the minimap and saving wait on
+    that, as in 1a1a85f.
+  - **No shape readback during a gesture.** One read of everything the
+    gesture changed runs on release.
+  - **Coalescing.** At most two runs are unfinished. Later requests merge
+    into one waiting run with the union rectangle.
+  - **The canvas keeps** a bake whose input no later change touched. It
+    shows a finished bake that a later move touched, but does not cache
+    it.
+  - **`perf.mjs` drag** reports the latency from a move to the first
+    presented chunk carrying it.
+  - **The prefix was not built.** The shape run's GPU time is 2.6-3.6 ms
+    of about 50 ms latency; most of the rest is waiting behind earlier
+    bakes in the queue. A prefix would cost 70.9 MB at 1168².
+- **Memory (item 4).**
+  - `fixedGPU()` counts the GPU fields, the live weather buffers, retired
+    ones still leased by a bake, and 120 B a cell while the Time pass
+    runs.
+  - The Time pass waits for the shape runs' GPU work before it allocates.
+  - A bake leases the weather buffers until its feed pass is submitted, so
+    a replaced result is destroyed then, not on a timer.
+- **Review fixes.**
+  - A CPU Time pass now drops the GPU result. Before, a fallback scene
+    (adding a plateau) could read back the stale pre-plateau weather. That
+    sequence, then undo, exports the same TNT as at `gpuFeed=0`.
+  - The eager height readback above.
+- **Exactness** (my merge checks, on 8801):
+  - the 27 study scenes are exact against `merge-h6` and equal the
+    agent's renders; Lab identical; `regional.mjs` 0 on all 27;
+  - the 4×4 exports at `gpuFeed=0` and `gpuShape=0` are byte-identical to
+    `H2Check8801x23093` and `H2Check8801x40251` apart from the name;
+  - at `gpuFeed` 1, TNT heights, features and tile indices are identical,
+    and 23 of 4.5M tile pixels differ (the f32 Time pass);
+  - the 1× view differs only in the status text's timing;
+  - the minimap equals `gpuFeed` 0 after load, after a stroke and after a
+    node move (0 of 40,000 pixels), and both edits changed it.
+- **Performance** (4×4 green-2, `perf.mjs`; the agent's item 4 runs and
+  mine on 8801 at load 7.8):
+
+  | | H6 | H6b (agent) | H6b (mine) |
+  | --- | --- | --- | --- |
+  | Load, visible chunks final | 2.6 s | 584-615 ms | 620 ms |
+  | Drag rAF p95 | 167-183 ms | 16.8 ms | 16.7 ms |
+  | Move to chunk final, p50 / p95 | — | 49-84 / 56-122 ms | 49 / 53 ms |
+  | After release, chunks final | 2.2 s | 592-599 ms | 614 ms |
+  | Scroll p95 | 16.8 ms | 16.8 ms | 16.7 ms |
+  | Export | 4.6 s | 1.55-1.59 s | 1.61 s |
+  | JS heap peak | 408 MB | 162-167 MB | 197 MB |
+  | Counted GPU, steady / peak | 52 MB / — | 205 / 374 MB | 205 / 374 MB |
+
+  The agent saw one release of 1.14 s at host load 7; reruns gave 599 and
+  592 ms.
+
+**Still open:**
+- **Drag latency is about 50 ms,** mostly waiting behind earlier bakes'
+  relief and terrain passes (about 15 and 7 ms of GPU a chunk). Cheaper
+  bakes during a drag, such as H7's quarter levels, would cut it; the
+  prefix would not.
+- **The outline is still sampled every move** (`drawMapBounds`, about
+  325,000 samples in a 3.5 s drag, about 100 ms in all). It is cheap now;
+  H7's skip-during-gesture idea stays open.
+- **Mid-gesture CPU readers** (cursor height, picking) see the copy as it
+  was when the gesture began.
+- **23 tile pixels** differ from the CPU path's export, from the f32 Time
+  pass input.
+- **The Time pass's 164 MB** is counted from a formula, not read from the
+  device.
+- **Still on the CPU path:** fallback scenes, the study, and maps over
+  1168 samples (H5b; the remaining JS kinds).
+- **`gpuFeed=0`** now counts the GPU fields when it trims the chunk cache.
+  Its images are unchanged.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
