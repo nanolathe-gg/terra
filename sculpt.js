@@ -2690,7 +2690,12 @@ function regionalDirtyRect(from,rect) {
 }
 // H6: shape on the GPU (Green). gpuShape 0 is the JS engine; 1 evaluates paint, erase, deep, shallow, hill, mountain and the ground node with the compute passes
 // of engine-shape.wgsl (sculpt-gpu-fields.js). A scene with any other node, or an exotic option, runs on the JS engine as a whole and the status line says why.
-const gpuShapeOn=() => { const q=experiment.get('gpuShape'); return q!==null?Number(q)>0:worldDefault('gpuShape')>0; };
+// Green's engine (engine 1) sets gpuShape in ENGINE_KNOBS, which the renderer reads later than the fields are made, so the engine's default is read here from the config.
+const gpuShapeOn=() => {
+  const url=new URLSearchParams(location.search),q=url.get('gpuShape'); if (q!==null) return Number(q)>0;   // `experiment` already holds every knob default, so only the address says the user asked
+  const engine=Number(url.get('engine')??config?.defaults?.engine??0)===1,own=Number(config?.engineDefaults?.gpuShape);
+  return (engine && Number.isFinite(own)?own:worldDefault('gpuShape'))>0;
+};
 const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:isFlowKind,seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
   shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full'});
 // The study (1024 px): the whole grid is evaluated by the passes and the rectangle read back into the live planes. The result arrives asynchronously;

@@ -230,7 +230,7 @@ KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0,
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
-                  rockMoss=.4, hillBlocks=.5,
+                  rockMoss=.4, hillBlocks=.5, gpuShape=1,
                   terraceBreak=1.4, terraceCalm=0, wetSwath=.35, outcrop=0),
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
