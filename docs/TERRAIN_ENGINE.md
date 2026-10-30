@@ -514,7 +514,8 @@ Each is written in full when the one before it lands.
 | H6c | The remaining shapes on the GPU: plateau first, then every palette kind; point reads by evaluation | Merged b6dc0a1 (cheap options still on JS) |
 | H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Merged 1fffe4f (quarter levels and drag p95 open) |
 | H7b | Quarter levels on the GPU-fed map canvas: a scaled bake, quarter while dragging and first on load, final unchanged | Merged 31e995e (latency p95 50 ms, target 30 missed) |
-| H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Written |
+| H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Merged 92c1b63 (GPU shape for the other eight is H8b) |
+| H8b | GPU shape for every world: why `gpuShape` moves zhon-1, archipelago-3 and red-1, then on in every preset (pages, feed and the material field everywhere) | Outlined; after H9 |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Written |
 | Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts, Rivers: one card each, for every world that uses it | Not yet written |
 | Retire | Delete engine 0: the shared shaders, CPU workers, Python preparation, JS shape engine, and the knobs only they read | After the features |

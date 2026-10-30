@@ -5163,6 +5163,110 @@ counts table.
 - guard `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice`
   (Green stays exact).
 
+**Done (merged as 92c1b63; EXPERIMENTS row 152; notes in
+`$R/agent-H8/NOTES.md`).**
+- **Every world draws on the engine.** `engine` 1 is the default. With
+  `?engine=0` the 24 non-Green scenes are exact against `merge-h6c`, and
+  Green is exact against `merge-h3`, its engine-0 picture.
+- **Presets.** `ENGINE_KNOBS` holds each world's engine preset. The other
+  eight run the Time pass with rain off and the worker's envelope:
+  `erosion` 1, `erosionRain` 0, `erosionEnvelope` .12 (`LIGHT_PASS` in
+  `sculpt.py`). Rain off was nearer the worker's picture than rain 1 on
+  the three scenes tried.
+- **Materials by data.** A world names its table in its config
+  (`materialTable`); only Green has one. The others bridge:
+  - their prepared images fill the generated array, with 256 px images
+    tiled 2×2 and mips made from the images;
+  - their placement rows are built from their knobs. `greenPlace` is now
+    `landPlace`, the one placement function.
+- **The bridge,** `engine-bridge.wgsl` (192 lines), is gated by the
+  uniforms the code already had. Each block names the card that replaces
+  it:
+  - quilted ground, beach and sand bars: Shores;
+  - slate faces: Bodies;
+  - mineral margins, fringe, ring veins and the sediment transition:
+    Geology or Materials.
+- **A new shared Time-pass rule:** the material field (`engine-weather.wgsl`
+  `mf*`, 166 lines, and `materialField` in `sculpt-erosion.js`). It writes
+  grid layer 1 when Material weathering is above 0 (Archipelago), in place
+  of the worker's `weatherMaterials`. By eye, Archipelago's ring contours
+  are the worker's.
+- **No CPU worker** runs on the study or on maps up to 1168 samples, for
+  any world. The CPU sand model has no user (TERRAIN_ENGINE "Combine or
+  drop").
+- **Fixed on the way:** engine-0 map canvases, broken since H7b (the chunk
+  scale was set on shaders without it), and `perf.mjs`, which opened Green
+  for every scene. `repro/all.sh` takes `REPRO_QUERY`, and
+  `repro/gate.sh` runs the world-name gate.
+- **Study against `merge-h6c`, at the defaults:**
+  - Green is exact.
+  - Mean |diff| per scene: Archipelago .70 / 2.71 / 2.93, Crystal .88 /
+    .68 / .52, Desert 6.69 / 2.33 / 4.77, Ice 4.63 / 1.53 / 1.80, Lava .84
+    / 2.01 / 2.58, Moon 4.94 / 2.52 / 3.66, Red .96 / .75 / .42, Zhon 1.27
+    / .72 / .53.
+  - By eye: the same looks. Desert's and Moon's faces are a little
+    softer.
+  - `stats.py`: no `height.*` metric left its retail range. Newly outside:
+    red-2's thin dark density (by rounding) and zhon-1's edge orientation.
+- **4×4 exports** (each world's preset against the engine with `erosion`
+  0): self-checks pass, no nearest pixels, clean console, no seams at 2×
+  (eight worlds, by eye). Zhon cannot export, by design.
+
+  | World | Corners changed by more than .5 | Largest change |
+  | --- | --- | --- |
+  | Archipelago | 0% | 0 |
+  | Red | 0.3% | 2.2 |
+  | Moon | 0.9% | 5.2 |
+  | Crystal | 0.8% | 5.6 |
+  | Lava | 1.6% | 4.2 |
+  | Desert | 1.2% | 4.5 |
+  | Ice | 2.3% | 4.9 |
+- **8×8 Archipelago through pages** (`gpuShape=1`) passes its self-check.
+- **Coordinator's merge checks:** the 27 renders equal the agent's; all
+  27 have replay mismatch 0 and a clean console; `regional.mjs` finds 0 on
+  all 27; with `engine=0` all 27 are exact against the agent's `engine=0`
+  renders; the 4×4 green-2 export's TNT heights, features, tiles and
+  indexed picture are identical to H6c's; the gate passes.
+- **The engine's counts** (3faedcd → H8):
+
+  | The engine path | Before | After |
+  | --- | --- | --- |
+  | Engine shader lines: frag, bake, common | 1,963, 1,439, 769 | 1,975, 1,439, 770 |
+  | Bridge lines, and bridged images | none | 192, and 28 |
+  | GPU pass lines: weather | 85 | 251 (the material field) |
+  | Uniforms | 375 | 376 |
+  | World-named identifiers | 78 | 77 |
+  | Worlds on the engine | 1 of 9 | 9 of 9 |
+  | Worlds that run a CPU worker on the engine path | none | none up to 1168 samples; the eight others over it (H8b) |
+
+**Still open:**
+- **GPU shape is off for the other eight worlds** (H8b). With `gpuShape=1`
+  the study picture moves: zhon-1 by mean |diff| 28.6 with replay
+  mismatch 63, archipelago-3 by 13.1 (2.9 with it off), red-1 by 5.0 (1.0
+  off). The shape planes pass `shapecheck`, so the cause is elsewhere.
+  - For zhon-1 the likely cause is that the GPU path skips `flowbake`
+    nodes, whose stored planes the JS replay copies back (`applyResult`).
+    This is the coordinator's reading, not yet checked.
+  - Until it is on, those worlds' maps over 1168 samples are not paged
+    and run the tiled CPU worker, and the fed path carries no material
+    field.
+- **Dragging on the other worlds' maps** takes 250-333 ms a frame at
+  p95, against Green's 16.7: the GPU feed needs `gpuShape`.
+- **Archipelago's chunk bake** costs about seven times Green's (8×8 load
+  15.1 s).
+
+### H8b. GPU shape for every world — outline
+
+After H9. Find why `gpuShape=1` moves zhon-1, archipelago-3 and red-1
+(H8's Still open), and fix it on the GPU path. Then set `gpuShape` 1 in
+every world's preset, so that:
+- every world's maps over 1168 samples run pages;
+- the fed path carries the material field;
+- no world runs a CPU worker anywhere on the engine.
+
+Judge by H8's acceptance, plus `perf.mjs` on one other world at 4×4 and
+8×8 against H8.
+
 ### H9. Every shape option on the GPU
 
 > **Owner, 2026-10-30:** as H8. After this card, the only shapes that
