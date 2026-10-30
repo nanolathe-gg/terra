@@ -233,7 +233,7 @@ export function nodeSupport(n, c) {
   if (['plateau', 'offset', 'sand', 'grass'].includes(kind) && !c.edgesNatural) return `${kind} without natural edges`;
   if (kind === 'plateau' || kind === 'offset' || kind === 'crater') {
   }
-  if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || (kind === 'hill' && q.iceFacets > 0) || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
+  if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes or base options';
   // The coast pass runs for water strokes only (hasCoastPass in sculpt.js); a world default must not refuse its hills and plateaus.
   // H10: the coast pass (fingers on the joined coast as thumbs, layers in styles 0 and 1). Ribs fingers and the mounds style wait for the owner's ruling.
   return null;

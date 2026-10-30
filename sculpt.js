@@ -237,7 +237,7 @@ const SHAPE_FIELDS=[
   ['crystalShoreScale','crystal-shore-scale','Rock slab size (share of Plate size, crystal shores)',['deep','shallow','offset'],10,100,5,100,'Rock slabs (Plate material 1): scales Plate size down, so a preset or an old stroke asks for large plates and the shore draws finer ones (never under 8 px). 100 keeps Plate size as given.'],
   ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['deep','shallow','offset'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
   // G6 (Ice): angular facets that belong to the mountain.
-  ['iceFacets','ice-facets','Angular facets',['hill','mountain'],0,100,5,100,'Ice: breaks part of the mountain into angular facets: tilted planes fitted to the mountain\'s own surface, a little steeper, stepped a few units off their neighbours and partly buried where the ground rises past them. They share the mountain\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth mountain.'],
+  ['iceFacets','ice-facets','Angular facets',['mountain'],0,100,5,100,'Ice: breaks part of the mountain into angular facets: tilted planes fitted to the mountain\'s own surface, a little steeper, stepped a few units off their neighbours and partly buried where the ground rises past them. They share the mountain\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth mountain.'],
   ['iceFacetSize','ice-facet-size','Facet size (px)',['hill','mountain'],16,96,2,1,'Ice facets: the typical width of one facet.'],
   // G8 (Moon): lumpy, folded outlines.
   ['moonLobes','moon-lobes','Outline lobes (share of radius)',['hill','mountain'],0,60,2,100,'How far the hill\'s whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline.'],
@@ -2358,7 +2358,7 @@ function replayShape(n,work) {
     if (path.length>=3) {
       const sx=path[1].x-path[0].x,sy=path[1].y-path[0].y;
       s.faceSide=(-sy*s.face[0]+sx*s.face[1])<0?-1:1; s.path=path; s.last=s.end=path[path.length-1];
-      settleHill(s); if (s.hillLobes>=.5) stampHillLobes(s); if (s.iceFacets>0) facetMountain(s); applyCracks(s); return;
+      settleHill(s); if (s.hillLobes>=.5) stampHillLobes(s); applyCracks(s); return;
     }
   }
   if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
@@ -2367,7 +2367,7 @@ function replayShape(n,work) {
   if (hasCoastPass(n.kind,s)) stampCoastShore(s);
   if (regionalCoastCandidate) return;
   if ((n.kind==='hill' || n.kind==='mountain') && s.hillLobes>=.5) stampHillLobes(s);
-  if ((n.kind==='hill' || n.kind==='mountain') && s.iceFacets>0) facetMountain(s);
+  if (n.kind==='mountain' && s.iceFacets>0) facetMountain(s);
   if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
   if (n.kind==='crater' && !n.regionalChild) facetCrater(s);
   if (n.kind==='crater' && !n.regionalBody && !n.regionalChild) addCraterlets(n,s);
@@ -2672,7 +2672,7 @@ function regionalReadApron(n) {
   if(BASE_KINDS.includes(n.kind))cells+=Math.ceil(Math.max(0,q.baseVary||0)/spacing);
   if(['hill','mountain'].includes(n.kind))cells+=Math.ceil(Math.max(0,q.moonLobes||0)*(q.radius||40)/spacing);
   // G6: a facet plane is fitted at its centre, up to half a facet away and three cells either side of it, in the stroke's frame.
-  if((n.kind==='hill'||n.kind==='mountain')&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
+  if(n.kind==='mountain'&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
   if(n.kind==='crater'&&q.craterFacets>0){const f=n.frame??IDENTITY,L=craterFacetWidth(q);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+3;}
   if (['deep','shallow','offset'].includes(n.kind) && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
   return cells;
