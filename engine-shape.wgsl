@@ -50,13 +50,46 @@ fn noiseValue(f: u32, s: u32, x: f32, y: f32) -> f32 {
 
 fn gcells() -> u32 { return u.grid * u.grid; }
 
+#ifdef PAGES
+// H5b: the planes may be a page: a pw x ph block of the map whose first cell is (ox, oy) in the world lattice (a whole map: ox = oy = 0, pw = ph = grid, so
+// every index below is the old y * grid + x). x, y stay world lattice coordinates; u.grid stays the whole map's size, which clamps and bounds the lattice.
+fn lidx(x: i32, y: i32) -> u32 { return u32(y - u.oy) * u.pw + u32(x - u.ox); }
+fn pcells() -> u32 { return u.pw * u.ph; }
+
+// H5b (direct != 0): the node's noise at a lattice cell, evaluated where the table would have stored it (the `noise` pass's own arithmetic), so a page
+// holds no tables: stamp reads them at the nearest point of each capsule, which is as far away as the node's extent.
+fn noiseCell(f: u32, ix: i32, iy: i32) -> f32 {
+    let n = u.grid;
+    var px = f32(ix) * u.spacing; var py = f32(iy) * u.spacing;
+    if (u.framed != 0u) {
+        let lx = u.inv0 * px + u.inv2 * py + u.inv4; let ly = u.inv1 * px + u.inv3 * py + u.inv5;
+        let gx = floor(lx / u.spacing + 0.5); let gy = floor(ly / u.spacing + 0.5);
+        let inside = gx >= 0.0 && gy >= 0.0 && gx < f32(n) && gy < f32(n);
+        px = select(lx, gx * u.spacing, inside); py = select(ly, gy * u.spacing, inside);
+    }
+    return noiseValue(f, u.seed, px, py);
+}
+fn nzCell(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
+  if (u.direct != 0u) { return noiseCell(f, x, y); }
+  return Nz[f * cells + i];
+}
+fn nzAt(f: u32, ix: i32, iy: i32, cells: u32) -> f32 {
+    if (u.direct != 0u) { return noiseCell(f, ix, iy); }
+    return Nz[f * cells + u32(iy) * u.grid + u32(ix)];
+}
+
+#endif
 // The node's noise tables over the rectangle: a framed node reads the world lattice through the inverse frame, quantised to the
 // nearest cell (Math.round: half up) and evaluated directly off the map, as framedNoise does; an unframed one is the world field.
 @compute @workgroup_size(8, 8)
 fn noise(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let n = u.grid; let i = lidx(x, y);
+#else
   let n = u.grid; let i = u32(y) * n + u32(x);
+#endif
   var px = f32(x) * u.spacing; var py = f32(y) * u.spacing;
   if (u.framed != 0u) {
     let lx = u.inv0 * px + u.inv2 * py + u.inv4; let ly = u.inv1 * px + u.inv3 * py + u.inv5;
@@ -64,20 +97,35 @@ fn noise(@builtin(global_invocation_id) g: vec3u) {
     let inside = gx >= 0.0 && gy >= 0.0 && gx < f32(n) && gy < f32(n);
     px = select(lx, gx * u.spacing, inside); py = select(ly, gy * u.spacing, inside);
   }
+#ifdef PAGES
+  let cells = pcells();
+#else
   let cells = n * n;
+#endif
   for (var f = 0u; f < 7u; f++) { Nz[f * cells + i] = noiseValue(f, u.seed, px, py); }
 }
 
 // sample() of the JS engine: a bilinear read of one noise table, clamped to the lattice.
 fn sampleN(f: u32, x: f32, y: f32) -> f32 {
+#ifdef PAGES
+  let n = u.grid; let top = f32(n - 1u);
+#else
   let n = u.grid; let cells = n * n; let top = f32(n - 1u);
+#endif
   let gx = clamp(x / u.spacing, 0.0, top); let gy = clamp(y / u.spacing, 0.0, top);
   let ix = u32(floor(gx)); let iy = u32(floor(gy));
   let jx = min(ix + 1u, n - 1u); let jy = min(iy + 1u, n - 1u);
   let fx = gx - f32(ix); let fy = gy - f32(iy);
+#ifdef PAGES
+  let cells = n * n;   // the table's plane size (a whole map only; a page evaluates directly)
+  let a = nzAt(f, i32(ix), i32(iy), cells); let b = nzAt(f, i32(jx), i32(iy), cells);
+  let c = nzAt(f, i32(ix), i32(jy), cells); let d = nzAt(f, i32(jx), i32(jy), cells);
+  return (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (c * (1.0 - fx) + d * fx) * fy;
+#else
   let o = f * cells;
   return (Nz[o + iy * n + ix] * (1.0 - fx) + Nz[o + iy * n + jx] * fx) * (1.0 - fy)
        + (Nz[o + jy * n + ix] * (1.0 - fx) + Nz[o + jy * n + jx] * fx) * fy;
+#endif
 }
 
 fn maskGet(i: u32, p: u32) -> i32 {
@@ -112,7 +160,11 @@ fn hillSection(t: f32) -> f32 {
 fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let n = u.grid; let cells = pcells(); let i = lidx(x, y);
+#else
   let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
@@ -120,8 +172,13 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let shouldered = kind == 5u;
   let coastal = kind == 0u || kind == 1u || (kind == 2u && u.natural != 0u);
   let fxF = select(0u, 3u, coastal); let fyF = select(1u, 4u, coastal);
+#ifdef PAGES
+  let nzx = nzCell(fxF, x, y, i, cells); let nzy = nzCell(fyF, x, y, i, cells);
+  let nCW = nzCell(5u, x, y, i, cells); let nDet = nzCell(2u, x, y, i, cells); let nShelf = nzCell(6u, x, y, i, cells);
+#else
   let nzx = Nz[fxF * cells + i]; let nzy = Nz[fyF * cells + i];
   let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i]; let nShelf = Nz[6u * cells + i];
+#endif
   let radius = u.radius;
   var best = 0.0; var bw = 0.0; var br = 0.0; var bcore = 0.0; var dist = 3.0e38; var visited = false;
   for (var k = 0u; k < u.nseg; k++) {
@@ -246,19 +303,37 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
 fn blurH(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let n = u.grid; let cells = pcells(); let lo = max(0, u.ox); let hi = min(i32(n) - 1, u.ox + i32(u.pw) - 1);   // a page clamps at the map edge, or at its own edge (outside what its core reads)
+#else
   let n = u.grid; let cells = n * n; let hi = i32(n) - 1;
+#endif
   var sum = 0.0; let rr = i32(u.blurR);
+#ifdef PAGES
+  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + lidx(clamp(x + k, lo, hi), y)]; }
+  Sc[u.bdst * cells + lidx(x, y)] = sum / f32(2 * rr + 1);
+#else
   for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + u32(y) * n + u32(clamp(x + k, 0, hi))]; }
   Sc[u.bdst * cells + u32(y) * n + u32(x)] = sum / f32(2 * rr + 1);
+#endif
 }
 @compute @workgroup_size(8, 8)
 fn blurV(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let n = u.grid; let cells = pcells(); let lo = max(0, u.oy); let hi = min(i32(n) - 1, u.oy + i32(u.ph) - 1);
+#else
   let n = u.grid; let cells = n * n; let hi = i32(n) - 1;
+#endif
   var sum = 0.0; let rr = i32(u.blurR);
+#ifdef PAGES
+  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + lidx(x, clamp(y + k, lo, hi))]; }
+  Sc[u.bdst * cells + lidx(x, y)] = sum / f32(2 * rr + 1);
+#else
   for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + u32(clamp(y + k, 0, hi)) * n + u32(x)]; }
   Sc[u.bdst * cells + u32(y) * n + u32(x)] = sum / f32(2 * rr + 1);
+#endif
 }
 
 // The settled hill: height, protection and routes from the joined (blurred) weights; cracks from the raw weights.
@@ -266,9 +341,17 @@ fn blurV(@builtin(global_invocation_id) g: vec3u) {
 fn compose(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
   let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
   let joined = Sc[2u * cells + i]; let raw = Sc[i];
+#ifdef PAGES
+  let lift = 1.0 + u.rough * (0.75 * nzCell(5u, x, y, i, cells) + 0.30 * nzCell(2u, x, y, i, cells));
+#else
   let lift = 1.0 + u.rough * (0.75 * Nz[5u * cells + i] + 0.30 * Nz[2u * cells + i]);
+#endif
   F[PH * cells + i] = clamp(F[PH * cells + i] + u.amount * joined * lift, u.minH, u.maxH);
   F[PP * cells + i] = F[PP * cells + i] * (1.0 - joined);
   F[PR * cells + i] = F[PR * cells + i] * (1.0 - joined);
@@ -280,7 +363,11 @@ fn compose(@builtin(global_invocation_id) g: vec3u) {
 fn ground(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
   let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
   let h = F[PH * cells + i];
   if (h <= u.sea + 1.0) { return; }
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
@@ -298,7 +385,11 @@ fn ground(@builtin(global_invocation_id) g: vec3u) {
 fn init(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
   let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
   F[PH * cells + i] = u.baseH;
   for (var p = 1u; p < 6u; p++) { F[p * cells + i] = 0.0; }
   for (var w = 0u; w < 7u; w++) { Mk[i * 7u + w] = 0u; }
@@ -311,11 +402,19 @@ fn pack(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: ve
   let j = g.y * (ng.x * 256u) + g.x;
   let w = u32(u.rx1 - u.rx0 + 1); let h = u32(u.ry1 - u.ry0 + 1); let rc = w * h;
   let q = (rc + 3u) / 4u;
+#ifdef PAGES
+  let cells = pcells();
+#else
   let n = u.grid; let cells = n * n;
+#endif
   if (j < 6u * rc) {
     let pl = j / rc; let k = j % rc;
     let cx = u32(u.rx0) + k % w; let cy = u32(u.ry0) + k / w;
+#ifdef PAGES
+    Out[j] = bitcast<u32>(F[pl * cells + lidx(i32(cx), i32(cy))]);
+#else
     Out[j] = bitcast<u32>(F[pl * cells + cy * n + cx]);
+#endif
     return;
   }
   let m = j - 6u * rc;
@@ -326,8 +425,27 @@ fn pack(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: ve
     let k = qq * 4u + b;
     if (k < rc) {
       let cx = u32(u.rx0) + k % w; let cy = u32(u.ry0) + k / w;
+#ifdef PAGES
+      word = word | ((bitcast<u32>(maskGet(lidx(i32(cx), i32(cy)), mp)) & 255u) << (b * 8u));
+#else
       word = word | ((bitcast<u32>(maskGet(cy * n + cx, mp)) & 255u) << (b * 8u));
+#endif
     }
   }
   Out[j] = word;
 }
+
+#ifdef PAGES
+// H5b: the authored height at every `blurR`-th cell of the rectangle (the coarse lattice the overview reads): thread j is lattice point (j % w, j / w),
+// w = (rx1 - rx0) / step + 1, at cell (rx0 + step * (j % w), ry0 + step * (j / w)).
+@compute @workgroup_size(256)
+fn coarse(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: vec3u) {
+  let j = g.y * (ng.x * 256u) + g.x;
+  let step = u.blurR;
+  let w = u32(u.rx1 - u.rx0) / step + 1u; let h = u32(u.ry1 - u.ry0) / step + 1u;
+  if (j >= w * h) { return; }
+  let cx = u.rx0 + i32((j % w) * step); let cy = u.ry0 + i32((j / w) * step);
+  Out[j] = bitcast<u32>(F[PH * pcells() + lidx(cx, cy)]);
+}
+
+#endif

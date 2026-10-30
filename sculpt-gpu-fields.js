@@ -196,117 +196,23 @@ export function prepareNode(n, geom, c) {
 const expand = (r, m, grid) => ({x0: Math.max(0, r.x0 - m), y0: Math.max(0, r.y0 - m), x1: Math.min(grid - 1, r.x1 + m), y1: Math.min(grid - 1, r.y1 + m)});
 const intersect = (a, b) => { const r = {x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1)}; return r.x0 > r.x1 || r.y0 > r.y1 ? null : r; };
 
-// H5b: the page variant of engine-shape.wgsl, as line edits against it (a page indexes its planes through lidx and evaluates noise directly). The whole-map
-// engine compiles the shader file as it is, so its arithmetic and its results stay what they were; the paged engine compiles the edited text.
-const PAGE_EDITS = [
-[
-52,
-52,
-"// H5b: the planes may be a page: a pw x ph block of the map whose first cell is (ox, oy) in the world lattice (a whole map: ox = oy = 0, pw = ph = grid, so\n// every index below is the old y * grid + x). x, y stay world lattice coordinates; u.grid stays the whole map's size, which clamps and bounds the lattice.\nfn lidx(x: i32, y: i32) -> u32 { return u32(y - u.oy) * u.pw + u32(x - u.ox); }\nfn pcells() -> u32 { return u.pw * u.ph; }\n\n// H5b (direct != 0): the node's noise at a lattice cell, evaluated where the table would have stored it (the `noise` pass's own arithmetic), so a page\n// holds no tables: stamp reads them at the nearest point of each capsule, which is as far away as the node's extent.\nfn noiseCell(f: u32, ix: i32, iy: i32) -> f32 {\n    let n = u.grid;\n    var px = f32(ix) * u.spacing; var py = f32(iy) * u.spacing;\n    if (u.framed != 0u) {\n        let lx = u.inv0 * px + u.inv2 * py + u.inv4; let ly = u.inv1 * px + u.inv3 * py + u.inv5;\n        let gx = floor(lx / u.spacing + 0.5); let gy = floor(ly / u.spacing + 0.5);\n        let inside = gx >= 0.0 && gy >= 0.0 && gx < f32(n) && gy < f32(n);\n        px = select(lx, gx * u.spacing, inside); py = select(ly, gy * u.spacing, inside);\n    }\n    return noiseValue(f, u.seed, px, py);\n}\nfn nzCell(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {\n  if (u.direct != 0u) { return noiseCell(f, x, y); }\n  return Nz[f * cells + i];\n}\nfn nzAt(f: u32, ix: i32, iy: i32, cells: u32) -> f32 {\n    if (u.direct != 0u) { return noiseCell(f, ix, iy); }\n    return Nz[f * cells + u32(iy) * u.grid + u32(ix)];\n}\n"
-],
-[
-58,
-59,
-"  let n = u.grid; let i = lidx(x, y);"
-],
-[
-66,
-67,
-"  let cells = pcells();"
-],
-[
-72,
-73,
-"  let n = u.grid; let top = f32(n - 1u);"
-],
-[
-77,
-80,
-"  let cells = n * n;   // the table's plane size (a whole map only; a page evaluates directly)\n  let a = nzAt(f, i32(ix), i32(iy), cells); let b = nzAt(f, i32(jx), i32(iy), cells);\n  let c = nzAt(f, i32(ix), i32(jy), cells); let d = nzAt(f, i32(jx), i32(jy), cells);\n  return (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (c * (1.0 - fx) + d * fx) * fy;"
-],
-[
-114,
-115,
-"  let n = u.grid; let cells = pcells(); let i = lidx(x, y);"
-],
-[
-122,
-124,
-"  let nzx = nzCell(fxF, x, y, i, cells); let nzy = nzCell(fyF, x, y, i, cells);\n  let nCW = nzCell(5u, x, y, i, cells); let nDet = nzCell(2u, x, y, i, cells); let nShelf = nzCell(6u, x, y, i, cells);"
-],
-[
-248,
-249,
-"  let n = u.grid; let cells = pcells(); let lo = max(0, u.ox); let hi = min(i32(n) - 1, u.ox + i32(u.pw) - 1);   // a page clamps at the map edge, or at its own edge (outside what its core reads)"
-],
-[
-250,
-252,
-"  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + lidx(clamp(x + k, lo, hi), y)]; }\n  Sc[u.bdst * cells + lidx(x, y)] = sum / f32(2 * rr + 1);"
-],
-[
-257,
-258,
-"  let n = u.grid; let cells = pcells(); let lo = max(0, u.oy); let hi = min(i32(n) - 1, u.oy + i32(u.ph) - 1);"
-],
-[
-259,
-261,
-"  for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + lidx(x, clamp(y + k, lo, hi))]; }\n  Sc[u.bdst * cells + lidx(x, y)] = sum / f32(2 * rr + 1);"
-],
-[
-268,
-269,
-"  let cells = pcells(); let i = lidx(x, y);"
-],
-[
-270,
-271,
-"  let lift = 1.0 + u.rough * (0.75 * nzCell(5u, x, y, i, cells) + 0.30 * nzCell(2u, x, y, i, cells));"
-],
-[
-282,
-283,
-"  let cells = pcells(); let i = lidx(x, y);"
-],
-[
-300,
-301,
-"  let cells = pcells(); let i = lidx(x, y);"
-],
-[
-313,
-314,
-"  let cells = pcells();"
-],
-[
-317,
-318,
-"    Out[j] = bitcast<u32>(F[pl * cells + lidx(i32(cx), i32(cy))]);"
-],
-[
-328,
-329,
-"      word = word | ((bitcast<u32>(maskGet(lidx(i32(cx), i32(cy)), mp)) & 255u) << (b * 8u));"
-],
-[
-334,
-334,
-"// H5b: the authored height at every `blurR`-th cell of the rectangle (the coarse lattice the overview reads): thread j is lattice point (j % w, j / w),\n// w = (rx1 - rx0) / step + 1, at cell (rx0 + step * (j % w), ry0 + step * (j / w)).\n@compute @workgroup_size(256)\nfn coarse(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: vec3u) {\n  let j = g.y * (ng.x * 256u) + g.x;\n  let step = u.blurR;\n  let w = u32(u.rx1 - u.rx0) / step + 1u; let h = u32(u.ry1 - u.ry0) / step + 1u;\n  if (j >= w * h) { return; }\n  let cx = u.rx0 + i32((j % w) * step); let cy = u.ry0 + i32((j / w) * step);\n  Out[j] = bitcast<u32>(F[PH * pcells() + lidx(cx, cy)]);\n}\n"
-]
-];
-const PAGE_BASE_LINES = 334;
+// H5b: `#ifdef NAME` / `#else` / `#endif` lines in a shader (no nesting): the branch the defines select stays, the directive lines go, every other character is untouched,
+// so a variant compiles to the text its author wrote (the whole-map variant of engine-shape.wgsl is its `#else` side, byte for byte what it was before pages).
+export function preprocessShader(text, defines = []) {
+  const out = []; let on = true, inIf = false;
+  for (const line of text.split('\n')) {
+    const d = line.match(/^#(ifdef|else|endif)(?:\s+(\w+))?\s*$/);
+    if (!d) { if (on) out.push(line); continue; }
+    if (d[1] === 'ifdef') { inIf = true; on = defines.includes(d[2]); } else if (d[1] === 'else') on = !on; else { inIf = false; on = true; }
+  }
+  if (inIf) throw new Error('nanolathe: unterminated #ifdef in a shader');
+  return out.join('\n');
+}
 
 // ---- the GPU side ----
 // refSpacing: the final grid's spacing; the hill's blur is defined in world units (2 final cells), so a coarser level uses the whole number of its own cells nearest that distance (1 at double spacing).
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
-  let text = await (await fetch('/engine-shape.wgsl')).text();
-  if (pages) {
-    const lines = text.split('\n');
-    if (lines.length !== PAGE_BASE_LINES) throw new Error('nanolathe: engine-shape.wgsl changed under the page edits of sculpt-gpu-fields.js');
-    for (const [from, to, edit] of [...PAGE_EDITS].reverse()) lines.splice(from, to - from, ...edit.split('\n'));
-    text = lines.join('\n');
-  }
+  const text = preprocessShader(await (await fetch('/engine-shape.wgsl')).text(), pages ? ['PAGES'] : []);
   const source = text.replace('/*NODE_STRUCT*/', nodeStruct());
   const module = device.createShaderModule({label: 'shape', code: source});
   const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
@@ -995,7 +901,7 @@ export function createPagedFields(opts) {
     async feedSource(rect, wantWeather) {
       const lease = await prepareRect(rect, wantWeather && Boolean(time));
       const weather = wantWeather && Boolean(time);
-      return {paged: true, weather, release: () => lease.release(), maskCount: maskKeys.length,
+      return {paged: true, weather, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
         gather(enc, passes) {
           const gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, set = stagingFor(gw * gh), tmp = encodeGather(enc, passes, rect, set, weather);
           return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, grid: gw, cells: gw * gh, tmp};
