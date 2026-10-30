@@ -2877,12 +2877,12 @@ async function gpuWeatherCpu(withMaps) {
 // What the canvas bakes from, or null for the CPU read: the fields' buffers once their CPU copy holds the latest evaluation, and the Time pass's buffers when
 // Weathering is on and a GPU pass produced them. Weather that came from a CPU pass keeps the CPU read, so the picture stays exactly the CPU path's.
 // H5b: the Time pass in pages: the knobs the pass reads (all of them in the key, so a change drops every page's weather), and the runner a page's window goes through.
-function configurePagedTime() {
+function configurePagedTime(fields=regionalFields) {
   const on=$('weather').checked && renderer.variantNumber?.('erosion',0)>0;
-  if (!on) return regionalFields.setTime(null);
+  if (!on) return fields.setTime(null);
   const p={age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),columnContrast:renderer.variantNumber('columnContrast',1),
     envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
-  return regionalFields.setTime({key:JSON.stringify(p),run:async win => {
+  return fields.setTime({key:JSON.stringify(p),run:async win => {
     const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
     return erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy});
   }});
@@ -4331,5 +4331,20 @@ window.sculptDebug.pagedWeatherCompare=async () => {
   for (let y=0;y<600;y++) for (let x=0;x<600;x++) { const i=(rect.y0+y)*G+rect.x0+x,j=y*gw+x; gMax=Math.max(gMax,Math.abs(g.W[g.n+j]-we[i])); for (let k=0;k<3;k++) for (let c=0;c<4;c++) if (Math.abs(g.maps[k][j*4+c]-wm[k][i*4+c])>8) gBad[k]++; }
   eng.destroy(); whole.weather.destroy(); whole.maps.forEach(b => b.destroy());
   return {gather:{maxE:gMax,mapBad:gBad},pages,maxErodedDiff:maxE,at,over001:nE,maxAuthoredDiff:maxA,mapBytesOver8:mapBad,mapMax};
+};
+// H5b: the Time pass at two window aprons over the same shape (8x8, say): a second paged object at `other` cells of apron against the live one; max and count of the eroded height differences and the maps.
+window.sculptDebug.apronCompare=async other => {
+  const B=createPagedFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:regionalFields.reference(),device:() => renderer?.device,context:shapeContext,gesture:() => false,apron:other});
+  configurePagedTime(B); const A=regionalFields,np=A.pageInfo().np,C=A.core; let maxE=0,over001=0,over01=0,mapBad=0,cells=0,at=null;
+  const rd=(b,bytes) => readBuffer(renderer.device,b,0,bytes);
+  for (let py=0;py<np;py++) for (let px=0;px<np;px++) {
+    const rect={x0:px*C,y0:py*C,x1:Math.min(worldGrid,px*C+C)-1,y1:Math.min(worldGrid,py*C+C)-1};
+    await A.readRect(rect,{weather:true}); await B.readRect(rect,{weather:true});
+    const pa=A.debugPages().find(q => q.x0===rect.x0&&q.y0===rect.y0),pb=B.debugPages().find(q => q.x0===rect.x0&&q.y0===rect.y0);
+    const wa=new Float32Array(await rd(pa.weather,2*C*C*4)),wb=new Float32Array(await rd(pb.weather,2*C*C*4)),ma=await Promise.all(pa.maps.map(b => rd(b,C*C*4).then(x => new Uint8Array(x)))),mb=await Promise.all(pb.maps.map(b => rd(b,C*C*4).then(x => new Uint8Array(x))));
+    for (let y=0;y<pa.ch;y++) for (let x=0;x<pa.cw;x++) { const j=y*C+x,d=Math.abs(wa[C*C+j]-wb[C*C+j]); cells++; if (d>maxE) { maxE=d; at=[rect.x0+x,rect.y0+y]; } if (d>.001) over001++; if (d>.01) over01++; for (let k=0;k<3;k++) for (let c=0;c<4;c++) if (Math.abs(ma[k][j*4+c]-mb[k][j*4+c])>8) mapBad++; }
+  }
+  const gb=B.stats().gpuShape; B.destroy();
+  return {apronA:A.apron,apronB:other,cells,maxErodedDiff:maxE,at,over0_001:over001,over0_01:over01,mapBytesOver8:mapBad,pagedMsA:A.stats().gpuShape.weatherMsTotal,pagedMsB:gb.weatherMsTotal,runsA:A.stats().gpuShape.weatherRuns,runsB:gb.weatherRuns};
 };
 boot();

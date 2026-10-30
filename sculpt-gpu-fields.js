@@ -699,7 +699,9 @@ export function createPagedFields(opts) {
   const stagingBytes = () => (staging?.bytes || 0) + (scratchT?.bytes || 0);
   const cpuBytes = () => { let n = 0; for (const pg of pagesMap.values()) n += (pg.cpu ? 8 * SIDE * SIDE : 0) + (pg.cpuW ? 8 * CORE * CORE : 0); return n; };
   const gpuBytes = () => shapeBytes() + weatherBytes() + stagingBytes() + (engine?.bytes() || 0);
-  function dropShape(pg) { pg.target?.destroy(); pg.target = null; pg.cpu = null; pg.cpuRev = -1; }
+  // A page that is read or gathered right now (pinned) keeps its buffers until the last reader lets go.
+  function dropShape(pg) { if (pg.target) { if (pg.pins) (pg.zombies ??= []).push(pg.target); else pg.target.destroy(); } pg.target = null; pg.cpu = null; pg.cpuRev = -1; }
+  function unpin(pg) { pg.pins--; if (!pg.pins && pg.zombies?.length) { for (const t of pg.zombies) t.destroy(); pg.zombies = []; } }
   function dropWeather(pg) { if (pg.weather) { pg.weather.weather.destroy(); pg.weather.maps.forEach(b => b.destroy()); pg.weather = null; pg.cpuW = null; } }
   function trim() {
     const lru = (has, free, budget, size) => {
@@ -741,7 +743,7 @@ export function createPagedFields(opts) {
           const w = pg.weather, raw = await readBuffer(device(), w.weather, 0, 2 * CORE * CORE * 4);
           if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE)};
         }
-      } catch (err) { error = err; } finally { pg.pins--; }
+      } catch (err) { error = err; } finally { unpin(pg); }
     }
     trim();
   }
@@ -834,7 +836,7 @@ export function createPagedFields(opts) {
     if (!engine) await getEngine();
     const need = overlapping(rect); for (const pg of need) pg.pins++;
     let released = false;
-    const lease = {pages: need, release() { if (released) return; released = true; for (const pg of need) pg.pins--; trim(); }};
+    const lease = {pages: need, release() { if (released) return; released = true; for (const pg of need) unpin(pg); trim(); }};
     try {
       for (const pg of need) ensureShape(pg);
       if (wantWeather && time) for (const pg of need) { if (!pg.weather || (pg.stale && !gesture())) await ensureWeather(pg); touch(pg); }
