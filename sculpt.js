@@ -3171,8 +3171,10 @@ async function runFedWeather(job) {
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
-    const result=await erosion.runGpu({planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
-      envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)});
+    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
+      envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
+    const proto=new URLSearchParams(location.search).get('pagesProto')?.split(',').map(Number);   // H5b prototype: core,apron in samples
+    const result=proto?await erosion.runGpuPaged(request,{core:proto[0],apron:proto[1]}):await erosion.runGpu(request);
     gpuPassBytes=0;
     if (job!==weatherJob || stroke) { retireGpuWeather(result); return; }
     dropGpuWeather();
@@ -4238,4 +4240,27 @@ window.sculptDebug = {shapeCompare,shapeLevel,shape:() => ({pending:shapePending
   replayDetail,
   // masks: per plane [sum, non-zero cells], to compare channels across a save and load; sketch and loadSketch round-trip a recipe.
   masks: () => maskPlanes.map(a => { let sum=0,count=0; for (let i=0;i<a.length;i++) if (a[i]) { sum+=a[i]; count++; } return [sum,count]; }), sketch: () => JSON.parse(JSON.stringify(sketch())), loadSketch: s => { loadSketch(s); }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get biome() { return config.biomeId; }, get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
+// H5b prototype: compare the Time pass in windows with the whole-map pass on the current fields. Returns the differences of the eroded height and of the maps.
+window.sculptDebug.pagedCompare=async (core,apron) => {
+  const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
+  await regionalFields.gpuQuiet(); const b=regionalFields.gpuBuffers(),n=grid*grid;
+  const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
+    envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
+  const whole=await erosion.runGpu(request),t0=performance.now(),paged=await erosion.runGpuPaged(request,{core,apron}),pagedMs=performance.now()-t0;
+  const read=async (buf,bytes,off=0) => readBuffer(renderer.device,buf,off,bytes);
+  const [wa,wb,pb]=[new Float32Array(await read(whole.weather,n*4)),new Float32Array(await read(whole.weather,n*4,n*4)),new Float32Array(await read(paged.weather,n*4,n*4))];
+  const diffs=[],changed=[]; let max=0,sum=0,sumErode=0,over05=0,over1=0,over2=0,at=-1;
+  for (let i=0;i<n;i++) { const d=Math.abs(wb[i]-pb[i]); if (wb[i]!==wa[i]||pb[i]!==wa[i]) { changed.push(d); sumErode+=Math.abs(wb[i]-wa[i]); } if (d>max) { max=d; at=i; } sum+=d; if (d>.5) over05++; if (d>1) over1++; if (d>2) over2++; }
+  const sorted=Float32Array.from(changed).sort(),q=p => sorted.length?sorted[Math.min(sorted.length-1,Math.floor(p*sorted.length))]:0;
+  const maps=[];
+  for (let k=0;k<3;k++) {
+    const x=new Uint8Array(await read(whole.maps[k],n*4)),y=new Uint8Array(await read(paged.maps[k],n*4)),per=[0,0,0,0],big=[0,0,0,0],mx=[0,0,0,0];
+    for (let i=0;i<n*4;i++) { const d=Math.abs(x[i]-y[i]),c=i&3; if (d) per[c]++; if (d>8) big[c]++; if (d>mx[c]) mx[c]=d; }
+    maps.push({differ:per,over8:big,max:mx});
+  }
+  const out={core,apron,windows:paged.parts.windows.length,side:paged.parts.windows[0].side,cells:n,changedCells:changed.length,meanErosion:sumErode/Math.max(1,changed.length),max,maxAt:[at%grid,Math.floor(at/grid)],mean:sum/n,
+    p50:q(.5),p95:q(.95),p99:q(.99),over05,over1,over2,wholeGpuMs:whole.parts.gpu,pagedGpuMs:paged.parts.gpu,pagedWallMs:pagedMs,windowMs:paged.parts.windows.map(w => [w.core.join('x'),Math.round(w.gpu)]),maps};
+  paged.weather.destroy(); paged.maps.forEach(m => m.destroy()); whole.weather.destroy(); whole.maps.forEach(m => m.destroy());
+  return out;
+};
 boot();

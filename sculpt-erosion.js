@@ -104,17 +104,17 @@ export class GpuErosion {
     await this.ready;
     window.erodeRuns = (window.erodeRuns || 0) + 1;
     const feed = await feedPasses(this.device), mp = await this.mapsPipeline();
-    const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = (size - 1) / (grid - 1);
+    const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = request.spacing ?? (size - 1) / (grid - 1);   // H5b: a window of a larger map passes the map's spacing and its own origin
     const age = Math.max(1, Math.round(request.age)), rain = BASE_RAIN * request.rain, started = performance.now();
     const talus = Math.tan(request.talusAngle * Math.PI / 180);
     const params = new Float32Array([grid, spacing, rain, K_FLUX, DAMP, K_CAP, K_DISSOLVE, K_DEPOSIT, EVAPORATION, WET_FULL,
-      this.renderer.variantNumber('columnContrast', 1), ROCK_WEAR, talus, Math.min(request.talusAngle + SOFT_EXTRA, 85) * Math.PI / 180, HARD_ANGLE * Math.PI / 180, THERMAL]);
+      this.renderer.variantNumber('columnContrast', 1), ROCK_WEAR, talus, Math.min(request.talusAngle + SOFT_EXTRA, 85) * Math.PI / 180, HARD_ANGLE * Math.PI / 180, THERMAL, request.ox ?? 0, request.oy ?? 0]);
     const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     const make = (label, bytes, usage = S) => device.createBuffer({label, size: Math.max(16, bytes), usage});
     const tw = Math.ceil(grid / 8);
     const state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
     const fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
-    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
     const tileFlag = make('erosion tile flags', tw * tw * 4), tileList = make('erosion tiles', tw * tw * 8), tileCount = make('erosion tile count', 4);
     const tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
     const weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
@@ -165,6 +165,38 @@ export class GpuErosion {
     return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu, tiles: null, gpuFed: true}};
   }
 
+  // H5b prototype: the Time pass in windows. The map is cut into cores of `core` samples; each core is run alone in a square window of
+  // core + 2 * apron samples (moved inward at the map edge, so a window never leaves the map and the map edge is the window edge there),
+  // and only the core of each result is kept. The kept cores are stitched into whole-map buffers with runGpu's layout, so the chunk feed
+  // reads them as it reads a whole-map result. `onWindow` hears each window's rectangle and milliseconds.
+  async runGpuPaged(request, {core, apron, onWindow = null}) {
+    const {device} = this, {grid, size} = request, n = grid * grid, spacing = (size - 1) / (grid - 1), side = Math.min(grid, core + 2 * apron), started = performance.now();
+    const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const make = (label, bytes) => device.createBuffer({label, size: Math.max(16, bytes), usage: S});
+    const weather = make('paged time pass height', n * 8), maps = [0, 1, 2].map(k => make('paged time pass map ' + k, n * 4));
+    const wn = side * side, windows = [];
+    for (let cy = 0; cy < grid; cy += core) for (let cx = 0; cx < grid; cx += core) {
+      const cw = Math.min(core, grid - cx), ch = Math.min(core, grid - cy), ox = Math.max(0, Math.min(grid - side, cx - apron)), oy = Math.max(0, Math.min(grid - side, cy - apron));
+      const planes = make('window planes', 6 * wn * 4), masks = make('window masks', wn * 28), t0 = performance.now();
+      const enc = device.createCommandEncoder({label: 'window copy'});
+      for (let p = 0; p < 6; p++) for (let r = 0; r < side; r++) enc.copyBufferToBuffer(request.planes, ((p * n) + (oy + r) * grid + ox) * 4, planes, ((p * wn) + r * side) * 4, side * 4);
+      for (let r = 0; r < side; r++) enc.copyBufferToBuffer(request.masks, ((oy + r) * grid + ox) * 28, masks, r * side * 28, side * 28);
+      device.queue.submit([enc.finish()]);
+      const result = await this.runGpu({...request, planes, masks, grid: side, spacing, ox, oy});
+      const out = device.createCommandEncoder({label: 'window stitch'});
+      for (let r = 0; r < ch; r++) {
+        const from = (cy - oy + r) * side + (cx - ox), to = (cy + r) * grid + cx;
+        for (let p = 0; p < 2; p++) out.copyBufferToBuffer(result.weather, (p * wn + from) * 4, weather, (p * n + to) * 4, cw * 4);
+        for (let k = 0; k < 3; k++) out.copyBufferToBuffer(result.maps[k], from * 4, maps[k], to * 4, cw * 4);
+      }
+      device.queue.submit([out.finish()]);
+      await device.queue.onSubmittedWorkDone();
+      result.weather.destroy(); result.maps.forEach(b => b.destroy()); planes.destroy(); masks.destroy();
+      windows.push({core: [cx, cy, cw, ch], origin: [ox, oy], side, ms: performance.now() - t0, gpu: result.parts.gpu}); onWindow?.(windows.at(-1));
+    }
+    return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu: windows.reduce((a, w) => a + w.gpu, 0), tiles: null, gpuFed: true, windows}};
+  }
+
   // request: {height, protect, grid, size, seaLevel, age, rain, talusAngle}. Returns the eroded height (rock + debris), the
   // water throughput scaled like the worker's flow, the material deposited, the loose debris and the milliseconds spent.
   async run(request) {
@@ -183,7 +215,7 @@ export class GpuErosion {
     const make = (label, bytes, usage = S) => device.createBuffer({label, size: bytes, usage});
     const state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
     const fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
-    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
     const initial = new Float32Array(n * 4);
     for (let i = 0; i < n; i++) initial[i * 4] = request.height[i];
     device.queue.writeBuffer(state[0], 0, initial);
