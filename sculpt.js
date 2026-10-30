@@ -4243,7 +4243,8 @@ async function gpuRegionalCheck() {
     const part={h:new Float32Array(grid*grid),p:new Float32Array(grid*grid),r:new Float32Array(grid*grid),c:new Float32Array(grid*grid),v:new Float32Array(grid*grid),x:new Float32Array(grid*grid),masks:MASK_KEYS.map(() => new Int8Array(grid*grid))};
     engine.copyOut(out,part);
     const {x0,y0,x1,y1}=out.rect;
-    for (const key of FIELD_KEYS) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+    // The flow planes (mask planes 20-24) come from the stored bake, which the passes skip and applyBakes copies in, so they are not the pass's to compare.
+    for (const key of FIELD_KEYS) if (!(MASK_KEYS.indexOf(key)>=FLOW_FIRST)) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
       const j=MASK_KEYS.indexOf(key),expected=whole[key][y*grid+x],actual=j>=0?part.masks[j][y*grid+x]:part[key][y*grid+x];
       if (expected===actual && Number.isFinite(actual)) continue;
       const p=planes[key]; p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity); p.firstMismatch??={x,y,whole:expected,gpu:actual,run:tag};
@@ -4270,14 +4271,17 @@ async function shapeLevel(factor=2) {
 // the map engine independently replays its graph through four regional reads.
 // Weather and GPU pixels have separate guards: this checks every brush plane.
 function checkRegionalFields() {
-  if(!config.map && gpuShapeOn())return gpuRegionalCheck();
+  // A scene the passes refuse ran on the JS engine, so its regional check is the JS one below.
+  if(!config.map && gpuShapeOn() && (shapePending || shapeStudy.used))return gpuRegionalCheck();
   if(config.map)throw new Error('Run the regional field check on a 1024px study scene.');
   if(!canExport())throw new Error('Wait for the scene and its flow bake before checking regional fields.');
   flushEval();
   const whole=live(),saved={regionalFields,worldSize,worldGrid},planes=Object.fromEntries(FIELD_KEYS.map(k=>[k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
   let mismatches=0;
   try {
-    worldSize=size;worldGrid=grid;regionalFields=makeRegionalFields();
+    // The JS regional engine is what this checks: take the address's gpuShape away while the fields are made (gpuShapeOn reads it first).
+    const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0'); window.history.replaceState(null,'',off);
+    worldSize=size;worldGrid=grid;try { regionalFields=makeRegionalFields(); } finally { window.history.replaceState(null,'',href); }
     const middle=Math.floor(grid/2),cuts=[[0,middle-1],[middle,grid-1]];
     for(const [y0,y1]of cuts)for(const [x0,x1]of cuts){
       const part=regionalFields.readCells({x0,y0,x1,y1});
