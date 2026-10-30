@@ -138,7 +138,7 @@ async function main() {
     const ready = async label => {
       for (let i = 0; i < 480; i++) {
         checkErrors();
-        const state = await evaluate(`(() => { const button=document.getElementById('export'), ready=Boolean(button&&!button.disabled&&window.sculptDebug); return {ready,running:ready&&Boolean(sculptDebug.flow().running),error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
+        const state = await evaluate(`(() => { const button=document.getElementById('export'), ready=Boolean(button&&!button.disabled&&window.sculptDebug); return {ready,running:false,error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
         if (state.error) throw new Error(`Editor error: ${state.error}`);
         if (state.ready && !state.running) { checkErrors(); return; }
         await sleep(250);
@@ -150,7 +150,7 @@ async function main() {
     const loadedBiome = await evaluate('sculptDebug.biome');
     if (loadedBiome !== scene.biome) throw new Error(`Page loaded world ${loadedBiome}, scene asks for ${scene.biome}.`);
     const nodes = await evaluate(`sculptDebug.scene(${JSON.stringify(scene.strokes)}, {ground:${scene.ground !== false}})`);
-    await ready('Scene and flow bake');
+    await ready('Scene');
     const result = await evaluate(`(() => { if(typeof sculptDebug.regionalCheck!=='function')throw new Error('This editor does not expose sculptDebug.regionalCheck().'); return sculptDebug.regionalCheck(); })()`);
     checkResult(result); await sleep(0); checkErrors();
     console.log(JSON.stringify({scene: sceneFile, biome: scene.biome, nodes, ...result}));

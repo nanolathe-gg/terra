@@ -1,26 +1,21 @@
 import {TerrainRenderer} from './sculpt-renderer.js';
-import {quickMaterialField} from './sculpt-material-weathering.js';
 import {configureMap,resizeMap,drawMapBounds,exportMapField,mountMapCanvas} from './sculpt-map.js';
-import {createRegionalFields} from './sculpt-fields.js';
-import {createGpuFields,createPagedFields,createShapeEngine,nodeSupport,comparePlanes,readBuffer} from './sculpt-gpu-fields.js';
+import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer} from './sculpt-gpu-fields.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
-import {mountMapWeather} from './sculpt-map-weather.js';
-import {FLOW_FIRST,isFlowKind,flowParams,applyResult,encodeResult,decodeResult,savedResultBytes,mountFlow} from './sculpt-flow-ui.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
 const canvas = $('terrain'), overlay = $('overlay'), ink = overlay.getContext('2d');
 const experiment = new URLSearchParams(location.search);
 let LOCAL_KEY = 'nanolathe-terrain-sculpt-v3' + (experiment.has('scratch')?'-'+experiment.get('scratch'):'');
-const NATURAL_COAST = experiment.get('coast')!=='restrained';
 let MIN_HEIGHT = -90, MAX_HEIGHT = 300;
 const HELP = {
   plateau:'Paint a level crest above the height where this stroke begins. New strokes can build on top.',
   hill:'Paint a rounded ridge along any path. A later stroke adds more height to the existing ground.',
   mountain:'Paint a narrower, peaked ridge. New strokes add to the existing height, without a flat summit.',
   ramp:'Draw between terrain levels. A smooth centre joins the endpoint heights with rounded approaches; shoulder roughness stays outside the route. Longer paths make gentler grades.',
-  deep:NATURAL_COAST?'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The centre stays deep until you paint over it.':'Set the bed 55 below sea level. A whole stroke has one depth; holding still does not keep digging.',
+  deep:'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The centre stays deep until you paint over it.',
   shallow:'Set the bed 7 below sea level. Paint through deep water to make a shallow passage, or through land to make shallows.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
@@ -32,22 +27,19 @@ const HELP = {
   fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
-  river:'Drag along the current: the line sets the water\'s direction, Diameter its width and Amount its strength. It writes nothing until you Bake (Current and sediment panel).',
-  source:'Dab, or drag, where sediment enters the water: Diameter is the dab, Amount how much, and the colour is chosen in the Current and sediment panel. It writes nothing until you Bake.',
   move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
 };
 let mapUpdate=() => {},exportSurface=null,mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
-let flow=null;   // card F1: the flow bake's driver and panel (sculpt-flow-ui.js)
 let config, renderer, heights, protection, routes, cracks, cover, crystal, maskPlanes, grid, size, spacing, noise;
-let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null, mapWeather=null;
+let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, regionalReplay=false, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
 let regionalPrefixSample=null,regionalNoiseMeta=new WeakMap(),regionalConnects=null,regionalCoastCandidate=false,regionalCoastRaw=null,regionalCoastBounds=null,regionalBoundsOnly=false,regionalBodyWeights=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
 const gridX=x => (x+originCellX)*spacing, gridY=y => (y+originCellY)*spacing;
-let gpuWeather=null, gpuErosionMs=null, weatherWorker, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
+let gpuWeather=null, gpuErosionMs=null, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, cursor=null, space=false, pointerId=null, loading=false;
 let history=[], historyIndex=-1, historySerial=0, framePending=false, heightDirty=true, needsDraw=true;
 let revision=0, renderedRevision=-1, fitView=true, autosaveTimer, ready=false;
@@ -96,10 +88,8 @@ const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terr
 // Card E1 adds five more: the water choices of a deep or shallow stroke (shore
 // edge, shallow-to-deep edge, bed; +127 hard / lit bed, -127 faded / noise
 // water), painted ground lumps (+127 more, -127 fewer) and the cracked-bed flag.
-// Card F1 (flow bake): planes 20-24 hold the baked current (flow x and y, signed) and the concentration of up to
-// three sediments (sculpt-flow-ui.js). Planes 14-19 are free placeholders; 25 and above are not allocated.
+// Planes 14-24 are unused placeholders (the flow bake's planes 20-24 went with it); the layout stays as the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
-if (MASK_KEYS.indexOf('fu')!==FLOW_FIRST) throw new Error('The flow planes moved: update FLOW_FIRST in sculpt-flow-ui.js.');
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
 const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
@@ -113,9 +103,9 @@ const STYLE_PLANES=[5,6,7,8,14,15,16,17];
 // Coast options (card E4): joined-coast fingers and shore layers, applied by stampCoastShore once the stroke is swept.
 const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
   // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
-  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle','hillLobes','hillSteps',
+  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle',
   // G5 (Lava): the layers' two-dimensional wander and extra width spread; the circles' variety; the lobes' tread tilt (the hill-lobe option rides this list, as E10's).
-  'lavaMeander','lavaSpread','lavaCircleVary','lavaTread'];
+  'lavaMeander','lavaSpread','lavaCircleVary'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -227,8 +217,6 @@ const SHAPE_FIELDS=[
   ['fingerHeight','finger-height','Finger height (units; 0 the old tongue)',['deep','shallow'],0,120,5,10,'Fingers on the joined coast: a flat top this many units above the lava, with soft sides. 0 keeps the earlier tongue, as high as the lowest layer and lower at its tip.'],
   ['layerVary','layer-vary','Layer width variation',['deep','shallow'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
-  ['hillLobes','hill-lobes','Lobes (stacked round terraces)',['hill','mountain'],0,16,1,1,'Build the hill from this many round lobes, one stacked on another, each a flat tread and a short riser, as retail Lava\'s tall hills are, in place of a smooth cone. 0: the plain hill.'],
-  ['hillSteps','hill-steps','Lobe steps (terraces up the hill)',['hill','mountain'],2,24,1,1,'How many equal steps the hill\'s height is cut into where the lobes stack.'],
   // G7 (Crystal): craters with smaller, softer facets.
   ['crystalCraterPx','crystal-crater-px','Facet width (px, crystal craters)',['crater'],0,48,2,1,'Crater facets: the width of each polygonal facet. 0 sizes them by the crater\'s radius (about a third of it, 14-36 px); retail\'s crater walls break into cells of 12-20 px.'],
   ['crystalCraterStep','crystal-crater-step','Facet step (units, crystal craters)',['crater'],0,60,5,10,'Crater facets: how far each facet may stand above or below the crater\'s own surface, in height units either way (shown in tenths: 3 is the earlier ragged crater). Retail\'s crater walls are smooth planes broken by a thin web, so a small step keeps the sun\'s light running smoothly across the wall.'],
@@ -243,7 +231,6 @@ const SHAPE_FIELDS=[
   ['moonLobes','moon-lobes','Outline lobes (share of radius)',['hill','mountain'],0,60,2,100,'How far the hill\'s whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline.'],
   // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
   ['lavaMeander','lava-meander','Layer meander (layers of wander)',['deep','shallow'],0,300,5,100,'Contour layers: how far the layer lines wander across the bank in two dimensions, in layer widths. Past about 1 they pinch together, split and close into swirls, as retail lava-1\'s do. 0 keeps the layers that only follow the shore.'],
-  ['lavaTread','lava-tread','Lobe treads tilt (share of a step)',['hill','mountain'],0,100,5,100,'Stacked lobes: each flat tread rises toward the hill\'s crown by this share of a fifth of a step, so it is a tilted dome lit on the sunward side and dark on the far side, as retail Lava\'s lobes are. 0: flat treads.'],
   ['lavaCircleVary','lava-circle-vary','Circle variety (circular layers)',['deep','shallow'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
   ['lavaSpread','lava-spread','Layer width spread',['deep','shallow'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
@@ -301,12 +288,12 @@ const hillLift=(s,i) => 1+s.rough*(.75*s.noise.coastWidth[i]+.30*s.noise.detail[
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
-const amountRange=kind => isFlowKind(kind)?[5,100]:kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind==='offset'?[-80,80]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
+const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind==='offset'?[-80,80]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:kind==='source'?80:kind==='river'?160:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -328,20 +315,20 @@ function updateControls() {
   try {
   const fixed=['deep','shallow','ramp','erase'].includes(tool);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=tool==='river'?'Current strength':tool==='source'?'Sediment amount':tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
+  $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
   const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
-  $('amount-value').textContent=tool==='smooth' || isCover(tool) || isFlowKind(tool)?amountNow+'%':tool==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(tool==='lower'?'−':'+')+amountNow;
+  $('amount-value').textContent=tool==='smooth' || isCover(tool)?amountNow+'%':tool==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(tool==='lower'?'−':'+')+amountNow;
   $('diameter-value').textContent=$('diameter').value+' units';
   $('roughness-value').textContent=$('roughness').value+'%';
-  $('roughness-label').textContent=tool==='ramp'?'Shoulder freedom':tool==='deep' && NATURAL_COAST?'Coast freedom':['plateau','erase','sand','grass','paint'].includes(tool) && experiment.get('edges')==='natural'?'Edge freedom':'Roughness';
-  $('shelves-control').hidden=tool!=='deep' || !NATURAL_COAST;
+  $('roughness-label').textContent=tool==='ramp'?'Shoulder freedom':tool==='deep'?'Coast freedom':['plateau','erase','sand','grass','paint'].includes(tool)?'Edge freedom':'Roughness';
+  $('shelves-control').hidden=tool!=='deep';
   $('shallow-mode-control').hidden=tool!=='shallow';
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
-  $('roughness').closest('.control').hidden=tool==='fissure' || isFlowKind(tool);
+  $('roughness').closest('.control').hidden=tool==='fissure';
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(tool);
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
@@ -351,7 +338,7 @@ function updateControls() {
   // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
   const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',hillSteps:'hillLobes',iceFacetSize:'iceFacets',fingerAmount:'fingers',fingerSize:'fingers',fingerSpread:'fingers',fingerHeight:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers',lavaTread:'hillLobes'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerAmount:'fingers',fingerSize:'fingers',fingerSpread:'fingers',fingerHeight:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -397,8 +384,8 @@ function updateControls() {
 
 function canExport() {
   if (shapePending) return false;   // H6: the GPU shape result has not reached the CPU copy
-  if (regionalFields) return ready && !loading && !stroke && !moving && !mapFeatures?.busy && !flow?.busy() && (!$('weather').checked || weatherState==='ready');
-  return ready && !loading && !stroke && !mapFeatures?.busy && !flow?.busy() && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
+  if (regionalFields) return ready && !loading && !stroke && !moving && !mapFeatures?.busy && (!$('weather').checked || weatherState==='ready');
+  return ready && !loading && !stroke && !mapFeatures?.busy && renderedRevision===revision && (!$('weather').checked || weatherState==='ready');
 }
 
 function hash(x,y,s) {
@@ -532,7 +519,7 @@ function startStroke(kind,p,options={}) {
   const turn=frame?Math.atan2(frame[1],frame[0]):0;
   const faceAngle=Math.PI/2+sample(strokeNoise.coastX,p.x,p.y)*1.8+turn;
   // A hill with a parametric cross-section is the plain swept hill (like the mountain), not the shouldered ridge.
-  const sec=Object.fromEntries(SECTION_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge=Object.fromEntries(RIDGE_KEYS.map(k => [k,options[k]??shapeValue(k)])),shouldered=kind==='hill' && experiment.get('forms')==='shouldered' && !(sec.profile>=.5) && !ridgeOn(kind,ridge);
+  const sec=Object.fromEntries(SECTION_KEYS.map(k => [k,options[k]??shapeValue(k)])),ridge=Object.fromEntries(RIDGE_KEYS.map(k => [k,options[k]??shapeValue(k)])),shouldered=kind==='hill' && !(sec.profile>=.5) && !ridgeOn(kind,ridge);
   const made={kind,shouldered,base,protectBase:copy(protection,work?.protect),routeBase:copy(routes,work?.route),crackBase:copy(cracks,work?.crack),coverBase:copy(cover,work?.cover),crystalBase:copy(crystal,work?.crystal),node:options.node,cracks:options.cracks ?? Number($('cracks').value)/100,radius,amount:options.amount ?? Number($('amount').value),rough:options.rough ?? Number($('roughness').value)/100,
     bankWidth:options.bankWidth ?? Number($('bank-width').value)/100,softness:options.softness ?? Number($('softness').value)/100,
     beachFlatness:options.beachFlatness ?? Number($('beach-flatness').value)/100,
@@ -861,32 +848,6 @@ function spurPieces(s,roots,fade,jag) {
 // sweep() uses, then its spurs rooted along the path (alternating sides, angle
 // from the tangent by Spur angle spread). A single click grows spurs radiating
 // from the point.
-function ridgePieces(s,path) {
-  const cum=[0],longest=Math.max(16,s.radius*1.5),out=[];
-  for (let k=1;k<path.length;k++) cum.push(cum[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
-  const L=cum[cum.length-1],jag=s.crestJag;
-  if (path.length<2) out.push(mkPiece(path[0],null,1,1,1,1,jag));
-  for (let k=1;k<path.length;k++) {
-    const a=path[k-1],b=path[k],len=cum[k]-cum[k-1],n=Math.max(1,Math.ceil(len/longest));
-    for (let j=0;j<n;j++) {
-      const f0=j/n,f1=(j+1)/n,m0=lineMultipliers(s,cum[k-1]+len*f0,L,0x71d,s.crestTaper,true),m1=lineMultipliers(s,cum[k-1]+len*f1,L,0x71d,s.crestTaper,true);
-      out.push(mkPiece({x:a.x+(b.x-a.x)*f0,y:a.y+(b.y-a.y)*f0},{x:a.x+(b.x-a.x)*f1,y:a.y+(b.y-a.y)*f1},m0[0],m1[0],m0[1],m1[1],jag));
-    }
-  }
-  const N=Math.round(clamp(s.spurCount,0,12));
-  if (N<1) return out;
-  const roots=[],spread=s.spurSpread,phase=rand01(s.seed,7,0x4b1)*Math.PI*2;
-  for (let k=0;k<N;k++) {
-    if (L<=0) { roots.push({x:path[0].x,y:path[0].y,heading:phase+Math.atan2(s.rot[1],s.rot[0])+Math.PI*2*(k+(rand01(s.seed,k,11)-.5)*.5)/N,k}); continue; }
-    const at=L*(.08+.84*(k+.2+.6*rand01(s.seed,k,11))/N),side=((k+(rand01(s.seed,k,12)<.25?1:0))&1)?1:-1;
-    let i=1; while (i<cum.length-1 && cum[i]<at) i++;
-    const a=path[i-1],b=path[i],f=(at-cum[i-1])/Math.max(cum[i]-cum[i-1],1e-6);
-    roots.push({x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f,heading:Math.atan2(b.y-a.y,b.x-a.x)+side*(.7+.95*spread)*(.75+.5*rand01(s.seed,k,13)),k});
-  }
-  return out.concat(spurPieces(s,roots,1,jag));
-}
-// The crater's lobed outline at an authoring-frame position, as dab's crater
-// draws it (a spur must start at the rim crest, and stay out of the bowl).
 function craterLobe(s,lx,ly) {
   const R=s.radius,sc=Math.max(R*.55,8);
   return 1+s.rough*(.38*valueNoise(lx/(R*.95),ly/(R*.95),s.seed^0x4a7)+.22*valueNoise(lx/sc,ly/sc,s.seed^0x1c3)+.1*valueNoise(lx/(sc*.6),ly/(sc*.6),s.seed^0x2d9));
@@ -902,16 +863,6 @@ function ridgeRise(s,pc,t,lx,ly,wx,wy) {
   if (pc.jag>0) { const R=s.radius,n=.6*valueNoise(lx/(R*.28),ly/(R*.28),s.seed^0x6b1)+.4*valueNoise(lx/(R*.11),ly/(R*.11),s.seed^0x1d7); h*=1-pc.jag*.6*(.5-.5*n); }
   return h;
 }
-function sweepRidge(s,points) {
-  const path=simplifyPath(points,s.fis?Math.max(1.5,s.fis.hw):Math.max(1,s.radius*.04));
-  for (const pc of s.fis?fissurePieces(s,path):ridgePieces(s,path)) { s.piece=pc; dab(s,pc.a,pc.b); }
-  s.piece=null; s.path=points.slice(); s.last=s.end=points[points.length-1];
-}
-// Crater rim sectors and gaps. The rim is split into sectors, each with its
-// own height and width, blended smoothly from one to the next round the ring
-// (centres a little off even spacing); gaps sink the rim to a low saddle over
-// an angular window. Angles are in the shape's own frame, so turning the
-// shape turns its sectors. Returns null when both are off.
 function rimSetup(s) {
   if (s.kind!=='crater') return null;
   const N=Math.round(clamp(s.rimSectors,0,8)),G=Math.round(clamp(s.rimGaps,0,4));
@@ -991,46 +942,6 @@ function fissureSetup(s) {
 }
 // Branches (and a fork off each) grown from roots along the main cut. A line is
 // four points; width and depth fall from the root to the tip.
-function fissurePieces(s,path) {
-  const f=s.fis,out=[],seed=s.seed,taper=s.fissureTaper,cum=[0];
-  for (let k=1;k<path.length;k++) cum.push(cum[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
-  const L=cum[cum.length-1],longest=Math.max(16,Math.min(s.radius*1.5,60)),ends=(a,len) => { const e=len>0?Math.min(a/len,1-a/len):1; return 1-smooth(0,.3,e); };
-  const taperW=u => 1-.7*taper*u,taperD=u => 1-.55*taper*u;
-  if (path.length<2) out.push(mkPiece(path[0],null,1,1,1,1,0));
-  for (let k=1;k<path.length;k++) {
-    const a=path[k-1],b=path[k],len=cum[k]-cum[k-1],n=Math.max(1,Math.ceil(len/longest));
-    for (let j=0;j<n;j++) {
-      const f0=j/n,f1=(j+1)/n,e0=ends(cum[k-1]+len*f0,L),e1=ends(cum[k-1]+len*f1,L);
-      out.push(mkPiece({x:a.x+(b.x-a.x)*f0,y:a.y+(b.y-a.y)*f0},{x:a.x+(b.x-a.x)*f1,y:a.y+(b.y-a.y)*f1},taperW(e0),taperW(e1),taperD(e0),taperD(e1),0));
-    }
-  }
-  const N=Math.round(clamp(s.fissureBranches,0,12));
-  if (N<1 || L<=0 || f.net) return out;
-  const spread=s.fissureBranchSpread,rnd=(a,b) => rand01(seed,a,b+0x5f3);
-  // grow(x,y,heading,len,w0,d0,id,level): a four-point line that narrows and shallows to its tip, with one fork at its middle on level 0.
-  const grow=(x,y,heading,len,w0,d0,id,level) => {
-    const step=len/3;
-    let h=heading,px=x,py=y;
-    for (let j=0;j<3;j++) {
-      h+=(rnd(id,30+j)-.5)*.7;
-      const nx=px+Math.cos(h)*step,ny=py+Math.sin(h)*step,u0=j/3,u1=(j+1)/3;
-      out.push(mkPiece({x:px,y:py},{x:nx,y:ny},w0*(1-.75*taper*u0),w0*(1-.75*taper*u1),d0*(1-.7*taper*u0),d0*(1-.7*taper*u1),0));
-      if (level===0 && j===1 && rnd(id,40)<.7) grow(nx,ny,h+(rnd(id,41)<.5?-1:1)*(.5+.6*rnd(id,42)),len*.5,w0*.7,d0*.85,id+100,1);
-      px=nx; py=ny;
-    }
-  };
-  for (let k=0;k<N;k++) {
-    const at=L*(.08+.84*(k+.2+.6*rnd(k,11))/N),side=((k+(rnd(k,12)<.25?1:0))&1)?1:-1;
-    let i=1; while (i<cum.length-1 && cum[i]<at) i++;
-    const a=path[i-1],b=path[i],fr=(at-cum[i-1])/Math.max(cum[i]-cum[i-1],1e-6);
-    grow(a.x+(b.x-a.x)*fr,a.y+(b.y-a.y)*fr,Math.atan2(b.y-a.y,b.x-a.x)+side*(.45+.95*spread)*(.7+.6*rnd(k,13)),s.fissureBranchLen*f.kf*(.5+.9*rnd(k,14)),.75,.85,k,0);
-  }
-  return out;
-}
-// A trench's cut fraction at distance d from the cut, half-width hw: full depth
-// within three quarters of a cell of the cut (so a narrow or tapered cut still
-// reaches every cell it crosses: a pointwise V narrower than the 2 px grid broke
-// into dashes), then steep up to hw, and gone beyond.
 function fissureProfile(d,hw,cellPx) {
   const lo=.75*cellPx,u=(d-lo)/Math.max(hw-lo,.35*cellPx);
   return u<=0?1:u>=1?0:Math.pow(1-u,1.5);
@@ -1083,8 +994,8 @@ const baseOutline=(s,lx,ly,r,radius) => Math.min(s.baseVary,.15*radius)*(s.kind=
 const moonOutline=(s,lx,ly,r,radius) => s.moonLobes*smooth(.25,.8,r)*(.55*valueNoise(lx/(radius*.5),ly/(radius*.5),s.seed^0x5a31)+.3*valueNoise(lx/(radius*.18),ly/(radius*.18),s.seed^0x2c47)+.15*valueNoise(lx/(radius*.07),ly/(radius*.07),s.seed^0x7d13));
 const baseBumps=(s,lx,ly,w) => s.baseBump*smooth(.03,s.kind==='offset'?.2:.12,w)*(s.kind==='offset'?1:1-smooth(.12,.3,w))*(.55*valueNoise(lx/30,ly/30,s.seed^0x4c91)+.3*valueNoise(lx/13,ly/13,s.seed^0x1a77)+.25*valueNoise(lx/6.5,ly/6.5,s.seed^0x63d9));
 function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
-  const naturalWater=s.kind==='deep' && NATURAL_COAST;
-  const naturalPlateau=(s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind)) && experiment.get('edges')==='natural';
+  const naturalWater=s.kind==='deep';
+  const naturalPlateau=s.kind==='plateau' || s.kind==='offset' || s.kind==='erase' || isCover(s.kind);
   const shoulderedHill=s.shouldered;
   const waterTool=s.kind==='deep' || s.kind==='shallow';
   const bankScale=waterTool?2**((s.bankWidth-.5)*1.3):1;
@@ -1106,7 +1017,7 @@ function dab(s,p,spanEnd=null,frameStart=null,frameEnd=null) {
   const crater=s.kind==='crater';
   // URL knobs are read once per dab, never per cell (a lookup per cell was
   // half the cost of moving a lake).
-  const coreEdge=experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38;
+  const coreEdge=.38;
   const faceVariation=s.faceVariation??.8;
   const bumpy=['hill','mountain','lower'].includes(s.kind);
   // TA's view squashes faces that rise toward the camera; widen them (new shapes).
@@ -1350,432 +1261,16 @@ function simplifyPath(points,tolerance) {
   }
   return points.filter((_,k) => keep[k]);
 }
-function sweep(s,points) {
-  if (s.ridge || s.fis) { sweepRidge(s,points); return; }
-  const path=simplifyPath(points,Math.max(1,s.radius*.04)),longest=Math.max(16,s.radius*1.5);
-  dab(s,path[0]);
-  for (let k=1;k<path.length;k++) {
-    // Long diagonal pieces are split so each capsule's box stays tight.
-    const a=path[k-1],b=path[k],pieces=Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)/longest);
-    for (let j=0;j<pieces;j++) dab(s,{x:a.x+(b.x-a.x)*j/pieces,y:a.y+(b.y-a.y)*j/pieces},{x:a.x+(b.x-a.x)*(j+1)/pieces,y:a.y+(b.y-a.y)*(j+1)/pieces});
-  }
-  s.path=points.slice(); s.last=s.end=points[points.length-1];
-}
-// Seed only coast segments this stroke actually touched. Fractional edge
-// crossings keep the band in pixels, independent of the height range. Cells
-// away from the coast start at `far` (plus two cells) for the caller's passes.
-function coastSeeds(s,raw,sea,far,moved=false,box=null) {
-  const distance=new Float32Array(raw.length).fill(far+spacing*2),before=moved?s.base:null;
-  const seed=(i,j) => {
-    if ((s.weights[i]<=0 && s.weights[j]<=0) || (raw[i]>sea)===(raw[j]>sea)) return;
-    // moved: only a waterline this stroke made, where a cell changed side of the sea;
-    // an older lake's coast under this stroke's bank is that stroke's to shape.
-    if (before && (before[i]>sea)===(raw[i]>sea) && (before[j]>sea)===(raw[j]>sea)) return;
-    const d=Math.abs(raw[i]-sea)/Math.max(1e-6,Math.abs(raw[i]-raw[j]))*spacing;
-    distance[i]=Math.min(distance[i],d); distance[j]=Math.min(distance[j],spacing-d);
-  };
-  const x0=box?box.x0:0,x1=box?box.x1:grid-1,y0=box?box.y0:0,y1=box?box.y1:grid-1;
-  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
-    const i=y*grid+x;
-    if (x+1<grid) seed(i,i+1);
-    if (y+1<grid) seed(i,i+grid);
-  }
-  return distance;
-}
-// Shared shore plates: geometry belongs to the water stroke, so Crystal and
-// Red can reuse it with their own ground materials. Heights above sea are
-// explicit; no world-wide coast inference or material-tag channel is needed.
-function stampShorePlates(s) {
-  const water=Math.max(0,s.plateWaterPx),land=Math.max(0,s.plateLandPx),reach=Math.max(water,land);
-  if (!reach) return;
-  const raw=heights.slice(),sea=config.seaLevel,distance=coastSeeds(s,raw,sea,reach);
-  // Distance is approximate on the height grid, especially near diagonal
-  // coasts; two linear passes avoid a per-pixel coast search.
-  const diagonal=spacing*Math.SQRT2;
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
-    const i=y*grid+x; let d=distance[i];
-    if (x) d=Math.min(d,distance[i-1]+spacing);
-    if (y) { d=Math.min(d,distance[i-grid]+spacing); if (x) d=Math.min(d,distance[i-grid-1]+diagonal); if (x+1<grid) d=Math.min(d,distance[i-grid+1]+diagonal); }
-    distance[i]=d;
-  }
-  for (let y=grid-1;y>=0;y--) for (let x=grid-1;x>=0;x--) {
-    const i=y*grid+x; let d=distance[i];
-    if (x+1<grid) d=Math.min(d,distance[i+1]+spacing);
-    if (y+1<grid) { d=Math.min(d,distance[i+grid]+spacing); if (x) d=Math.min(d,distance[i+grid-1]+diagonal); if (x+1<grid) d=Math.min(d,distance[i+grid+1]+diagonal); }
-    distance[i]=d;
-  }
-  if (s.plateMaterial>=1.5) { stampShoreFrost(s,raw,distance,sea,water,land); return; }
-  if (s.plateMaterial>=.5) { stampShoreSlabs(s,raw,distance,sea,water,land); return; }
-  const L=Math.max(8,s.plateSize),gap=Math.max(0,s.plateGap)*.5,inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
-  const cells=new Map(),cell=(x,y) => {
-    const key=x+','+y; let c=cells.get(key);
-    if (!c) { c={x:(x+.5+hash(x,y,s.seed^0x481)*.38)*L,y:(y+.5+hash(x,y,s.seed^0x287)*.38)*L,keep:hash(x,y,s.seed^0x721)*.5+.5,ridge:hash(x,y,s.seed^0x51f)>.1}; cells.set(key,c); }
-    return c;
-  };
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
-    const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
-    if (!width || d>=width) continue;
-    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
-    let best=null,next=null,d1=Infinity,d2=Infinity;
-    for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) {
-      const c=cell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
-      if (q<d1) { d2=d1;next=best;d1=q;best=c; } else if (q<d2) { d2=q;next=c; }
-    }
-    const edge=(d2-d1)/(2*Math.max(1,Math.hypot(best.x-next.x,best.y-next.y)))*scale+valueNoise(lx/5,ly/5,s.seed^0x317)*1.2;
-    const support=1-smooth(.2,1,d/width),plate=smooth(gap,gap+spacing*.6,edge);
-    if (wet) {
-      // Offshore plate coverage thins; gaps keep the original bed and paint.
-      if (best.keep>support || plate<=0) continue;
-      heights[i]=clamp(raw[i]+(Math.max(raw[i],sea+s.plateHeight)-raw[i])*plate,MIN_HEIGHT,MAX_HEIGHT);
-      protection[i]=Math.max(protection[i],plate); routes[i]=Math.max(routes[i],plate); cover[i]=Math.min(cover[i],-plate);
-    } else if (best.ridge && next.ridge) {
-      // Sparse straight polygon edges make short raised pressure ridges;
-      // untouched land retains its original relief between them.
-      const ridge=Math.max(0,1-Math.abs(edge-gap-2)/2)*support;
-      if (ridge<=0) continue;
-      heights[i]=clamp(raw[i]+ridge*Math.min(3,s.plateHeight),MIN_HEIGHT,MAX_HEIGHT);
-      protection[i]=Math.max(protection[i],ridge); routes[i]=Math.max(routes[i],ridge); cover[i]=Math.min(cover[i],-ridge);
-    }
-  }
-  heightDirty=true;
-}
-
-// Rock slabs (card C2, Crystal): the same band, but a web of low flat slabs
-// that interlock along the waterline, as retail Crystal's shores do (census
-// crystal-low-shore-slabs: plates 12-80 px, bands 40-140 px, dark seams a few
-// px wide on the land rim and across the shallow shelf). Seams are the crystal
-// field's edge mark, which the shader inks black; slab interiors carry its
-// brightness mark. On land the slabs stand up to plateHeight above their
-// seams. Under water they are a shallow ledge (the bed lifted to 2.2-3.2 units
-// down, never above the waterline), and the water shader reads the same marks
-// (crystalSeam) to paint the seams and a paler slab fill over the ledge. Slabs
-// thin out with the distance from this stroke's own waterline and stop at the
-// band's width, so two shores join only where their bands meet; nothing here is
-// ever raised above the sea.
-function stampShoreSlabs(s,raw,distance,sea,water,land) {
-  const L=Math.max(8,s.plateSize*clamp(s.crystalShoreScale,.1,1)),seam=Math.max(spacing*.5,Math.max(0,s.plateGap)*.5),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1;
-  const cells=new Map(),cell=(x,y) => {
-    const key=x+','+y; let c=cells.get(key);
-    if (!c) { c={x:(x+.5+hash(x,y,s.seed^0x481)*.4)*L,y:(y+.5+hash(x,y,s.seed^0x287)*.4)*L,keep:hash(x,y,s.seed^0x721)*.5+.5,shade:.8+.2*(hash(x,y,s.seed^0x3b9)*.5+.5),lift:hash(x,y,s.seed^0x6d3)*.5+.5}; cells.set(key,c); }
-    return c;
-  };
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
-    const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
-    if (!width || d>=width) continue;
-    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
-    let best=null,next=null,d1=Infinity,d2=Infinity;
-    for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) {
-      const c=cell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
-      if (q<d1) { d2=d1;next=best;d1=q;best=c; } else if (q<d2) { d2=q;next=c; }
-    }
-    if (best.keep>1-smooth(.2,1,d/width)) continue;
-    const edge=(d2-d1)/(2*Math.max(1,Math.hypot(best.x-next.x,best.y-next.y)))*scale+valueNoise(lx/6,ly/6,s.seed^0x317)*.5,seamed=edge<seam;
-    crystal[i]=seamed?s.crystalShoreSeam:best.shade; protection[i]=1;
-    if (wet) heights[i]=clamp(Math.max(raw[i],sea-3.2+best.lift),MIN_HEIGHT,MAX_HEIGHT);
-    else if (!seamed) heights[i]=clamp(raw[i]+best.lift*s.plateHeight,MIN_HEIGHT,MAX_HEIGHT);
-  }
-  heightDirty=true;
-}
-
-// Frost crystals (card E5, Ice): retail's ice shore is a band of white frost in
-// which hundreds of thin straight needles lie in parallel runs, each patch of
-// the band in its own direction (three directions 60 degrees apart, as hexagonal
-// ice grows), cut by long straight seams that meet three ways, ragged where it
-// meets the water and thinning out toward deep water (retail Ice windows ice-1
-// and Ice Scream). Patches are Voronoi cells of Plate size; a patch survives
-// with a probability that falls with distance from this stroke's waterline, so
-// the band breaks up into separate flecks offshore. Inside a patch, needles run
-// every Plate gap px (their lengths and gaps are drawn per needle). In the water
-// a needle is a thin strip of ice stood Plate height above the sea; on land it
-// is a low ridge, and the seams between patches are shallow grooves. The needles
-// and seams are real height, lit by the ordinary light, so they read as bright
-// lines with a dark side, not ink.
-function stampShoreFrost(s,raw,distance,sea,water,land) {
-  const gapSize=Math.max(3,worldDefault('frostGapSize')),gapDepth=worldDefault('frostGapDepth'),L=Math.max(20,s.plateSize),spacing0=Math.max(3,s.plateGap),inv=s.inv,scale=inv?1/Math.hypot(inv[0],inv[1]):1,seed=s.seed,turn=Math.atan2(s.rot[1],s.rot[0]);
-  // Patches (size L) carry the needles; seams run between much larger cells (3 L),
-  // so a seam is long and meets two others, as retail's few long cracks do.
-  const patches=new Map(),seamCells=new Map(),SEAM=3;
-  const patch=(x,y) => {
-    const key=x+','+y; let c=patches.get(key);
-    if (!c) {
-      const k=Math.floor((hash(x,y,seed^0x5d1)*.5+.5)*3)%3;
-      c={x:(x+.5+hash(x,y,seed^0x481)*.4)*L,y:(y+.5+hash(x,y,seed^0x287)*.4)*L,keep:hash(x,y,seed^0x721)*.5+.5,
-         needles:hash(x,y,seed^0x9c5)*.5+.5<s.frostNeedles,
-         angle:turn+Math.PI/2+k*Math.PI/3+hash(x,y,seed^0x3c9)*.12,gap:spacing0*(.8+.5*(hash(x,y,seed^0x6b7)*.5+.5)),phase:hash(x,y,seed^0x1f3)*.5+.5,id:(x*73856093)^(y*19349663)};
-      patches.set(key,c);
-    }
-    return c;
-  };
-  const seamCell=(x,y) => {
-    const key=x+','+y; let c=seamCells.get(key);
-    if (!c) { c={x:(x+.5+hash(x,y,seed^0x6c1)*.42)*L*SEAM,y:(y+.5+hash(x,y,seed^0x7e9)*.42)*L*SEAM,keep:hash(x,y,seed^0x8d3)*.5+.5}; seamCells.set(key,c); }
-    return c;
-  };
-  for (let y=0;y<grid;y++) for (let x=0;x<grid;x++) {
-    const i=y*grid+x,wet=raw[i]<=sea,width=wet?water:land,d=distance[i];
-    if (!width || d>=width) continue;
-    // Every cell of the band carries a trace of protection: the shader's frostWet reads it to keep the band white.
-    protection[i]=Math.max(protection[i],.04);
-    // Card G6: the shader's route channel (routes, not protection) carries a trace for the band's cells too, 1/255 inland to
-    // 5/255 at the coast (all under frostWet's ramp, which starts at .02): the fine frost lines read it to find the band and thin out inland.
-    routes[i]=Math.max(routes[i],(1+4*(1-d/width))/255);
-    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy,ci=Math.floor(lx/L),cj=Math.floor(ly/L);
-    let best=null,d1=Infinity;
-    for (let v=cj-1;v<=cj+1;v++) for (let u=ci-1;u<=ci+1;u++) { const c=patch(u,v),q=(lx-c.x)**2+(ly-c.y)**2; if (q<d1) { d1=q;best=c; } }
-    const support=1-smooth(.1,1,d/width);
-    // The needle: its distance across, and whether this stretch of it exists.
-    const ca=Math.cos(best.angle),sa=Math.sin(best.angle),across=(lx*ca+ly*sa)/(best.gap*scale)+best.phase,along=(-lx*sa+ly*ca)/scale;
-    const index=Math.round(across),off=Math.abs(across-index)*best.gap;
-    const length=best.gap*(1.5+4*(hash(index,best.id,seed^0x2e7)*.5+.5)),stretch=Math.floor(along/length+hash(index,best.id,seed^0x4a9)*2);
-    const here=hash(index,stretch^best.id,seed^0x91d)*.5+.5,line=hash(index,best.id,seed^0x63d)*.5+.5;
-    let strip=!best.needles || best.keep>support || line<.45?0:smooth(1.5,.5,off)*smooth(.15,.5,here-(1-support)*.35);
-    if (wet) {
-      // Offshore the frost is also a feathered mass of slivers stretched along the patch's needles
-      // (retail's white fingers in the shallows), whose reach falls with the support.
-      const across2=(lx*ca+ly*sa)/scale,field=valueNoise(along/64,across2/20,seed^0x1a7)*.45+valueNoise(along/26,across2/6,seed^0x2b1)*.3+valueNoise(along/10,across2/3,seed^0x3d7)*.18+.5;
-      strip=Math.max(strip,smooth(0,.12,Math.pow(support,1.25)*.9-field));
-      // Ice strips over the water; the bed keeps its own height between them.
-      if (strip<=.05) continue;
-      const top=sea+s.plateHeight*(.6+.4*(hash(index,best.id,seed^0x7b3)*.5+.5));
-      heights[i]=clamp(raw[i]+(Math.max(raw[i],top)-raw[i])*strip,MIN_HEIGHT,MAX_HEIGHT);
-      protection[i]=Math.max(protection[i],strip); routes[i]=Math.max(routes[i],strip); cover[i]=Math.min(cover[i],-strip);
-    } else {
-      // Land: a low ridge along each needle, a groove along the seam between big cells.
-      const sci=Math.floor(lx/(L*SEAM)),scj=Math.floor(ly/(L*SEAM));
-      let sb=null,sn=null,s1=Infinity,s2=Infinity;
-      for (let v=scj-1;v<=scj+1;v++) for (let u=sci-1;u<=sci+1;u++) {
-        const c=seamCell(u,v),q=(lx-c.x)**2+(ly-c.y)**2;
-        if (q<s1) { s2=s1;sn=sb;s1=q;sb=c; } else if (q<s2) { s2=q;sn=c; }
-      }
-      const edge=(s2-s1)/(2*Math.max(1,Math.hypot(sb.x-sn.x,sb.y-sn.y)))*scale+valueNoise(lx/9,ly/9,seed^0x317)*1.2;
-      const seam=Math.max(sb.keep,sn.keep)>1-support*.9?smooth(1.6,.3,edge):0,lift=strip*Math.min(2.5,s.plateHeight*.7)-seam*2.5;
-      // Melt pockets: small blue gaps in the white, as retail's band has, fewer with distance inland
-      // (card E6: the world's frostGaps share of cells at the coast, fading out at frostGapReach of the reach).
-      const holeShare=worldDefault('frostGaps')*smooth(worldDefault('frostGapReach'),0,d/width),hole=holeShare>0?smooth(0,.1,valueNoise(lx/gapSize,ly/gapSize,seed^0x4e1)*.5+valueNoise(lx/(gapSize*.41),ly/(gapSize*.41),seed^0x5f3)*.22+.5-(1-holeShare)):0;
-      if (hole>.02) {
-        heights[i]=clamp(raw[i]+(Math.min(raw[i],sea-gapDepth)-raw[i])*hole,MIN_HEIGHT,MAX_HEIGHT);
-        protection[i]=Math.max(protection[i],hole); routes[i]=Math.max(routes[i],hole); cover[i]=Math.min(cover[i],-hole);
-        continue;
-      }
-      if (!lift) continue;
-      heights[i]=clamp(raw[i]+lift,MIN_HEIGHT,MAX_HEIGHT);
-      const keep=Math.max(strip,seam); protection[i]=Math.max(protection[i],keep); routes[i]=Math.max(routes[i],keep); cover[i]=Math.min(cover[i],-keep);
-    }
-  }
-  heightDirty=true;
-}
-
-// Coast pass (card E4, Lava). Retail's lava banks are wide flat layers stepping
-// down to the lava, each lit by the sun (a lit top, a shaded riser), and its
-// fingers are thin low tongues, not full-height wedges (the owner's review of
-// round 6; retail lava-1 and lava-2). Both are height geometry cut into the
-// waterline the stroke leaves once it is swept, so they follow the joined coast
-// of every earlier stroke and never fake a layer with a drawn line. They read
-// neighbouring heights, so evaluate() replays the full suffix when a node has
-// one (as it does for shore plates). 'far' below is the distance of cells no
-// touched coast reaches; the sweeps never lower it by more than the grid is wide.
 const hasCoastPass=(kind,p) => (kind==='deep' || kind==='shallow') && (true && (p?.fingers??worldDefault('fingers'))>0 || Math.round(p?.shoreLayers??worldDefault('shoreLayers'))>=1);
 // Distance to the nearest touched coast, in px, by fast sweeping the eikonal
 // equation (four sweep directions, twice): within about 1% of Euclidean, where
 // the two-pass chamfer of the shore plates is out by up to 8% and would show
 // as straight eight-way facets in a layer's edge.
-function sweepDistance(d,box=null) {
-  const h=spacing,bx0=box?box.x0:0,bx1=box?box.x1:grid-1,by0=box?box.y0:0,by1=box?box.y1:grid-1,wide=bx1-bx0+1,tall=by1-by0+1;
-  for (let pass=0;pass<2;pass++) for (let dir=0;dir<4;dir++) {
-    const x0=dir&1?bx1:bx0,xs=dir&1?-1:1,y0=dir&2?by1:by0,ys=dir&2?-1:1;
-    for (let k=0,y=y0;k<tall;k++,y+=ys) for (let m=0,x=x0;m<wide;m++,x+=xs) {
-      const i=y*grid+x,a=Math.min(x>bx0?d[i-1]:Infinity,x<bx1?d[i+1]:Infinity),b=Math.min(y>by0?d[i-grid]:Infinity,y<by1?d[i+grid]:Infinity),gap=Math.abs(a-b);
-      const v=gap>=h?Math.min(a,b)+h:(a+b+Math.sqrt(2*h*h-gap*gap))/2;
-      if (v<d[i]) d[i]=v;
-    }
-  }
-}
-// Distance (px) to the waterline this stroke made, on the heights now in force;
-// cells it cannot reach keep a large value.
-function coastField(s,raw,sea,box=null) { const d=coastSeeds(s,raw,sea,1e5,true,box); sweepDistance(d,box); return d; }
-function stampCoastShore(s) {
-  const sea=config.seaLevel,fingers=s.fingerCoast>=.5 && s.fingers>0,layers=Math.round(s.shoreLayers)>=1;
-  // Every touched coast segment has a cell of the stroke's footprint beside it, so the pass reads and
-  // writes only that footprint grown by the farthest it reaches: the fingers' limit, the layers' zone,
-  // and the cells the blur of the normals looks across. Outside it nothing here can change.
-  let reach=0;
-  if (fingers) reach=Math.max(reach,coastFingerLimit(s));
-  if (layers) reach=Math.max(reach,coastLayerReach(s));
-  let box=coastBox(s,reach);
-  if(regionalReplay&&regionalCoastBounds){
-    const q=regionalCoastBounds,m=Math.ceil(reach/spacing)+12;
-    s.coastWholeBox={x0:Math.max(0,q.x0-m),y0:Math.max(0,q.y0-m),x1:Math.min(worldGrid-1,q.x1+m),y1:Math.min(worldGrid-1,q.y1+m)};
-    const f=s.coastWholeBox;box={x0:Math.max(0,f.x0-originCellX),y0:Math.max(0,f.y0-originCellY),x1:Math.min(grid-1,f.x1-originCellX),y1:Math.min(grid-1,f.y1-originCellY)};
-    if(box.x1<box.x0||box.y1<box.y0)return;
-  }
-  if (!box) return;
-  fingerCells=null;
-  if (fingers) coastFingers(s,sea,box);
-  if (layers && !regionalCoastCandidate) coastLayers(s,sea,box);
-  heightDirty=true;
-}
-function coastBox(s,reach) {
-  const w=s.weights;
-  let x0=grid,y0=grid,x1=-1,y1=-1;
-  for (let y=0;y<grid;y++) for (let x=0,row=y*grid;x<grid;x++) if (w[row+x]>0) { if (x<x0) x0=x; if (x>x1) x1=x; if (y<y0) y0=y; y1=y; }
-  if (x1<0) return null;
-  const m=Math.ceil(reach/spacing)+12;
-  return {x0:Math.max(0,x0-m),y0:Math.max(0,y0-m),x1:Math.min(grid-1,x1+m),y1:Math.min(grid-1,y1+m)};
-}
-// A box blur of a field over the box only (clamped at its edges); where a cell's window lies inside
-// the box it is the blurred() of the whole grid.
-function blurredBox(field,radius,box) {
-  const {x0,y0,x1,y1}=box,tmp=new Float32Array(field.length),out=new Float32Array(field.length),width=2*radius+1;
-  for (let y=y0;y<=y1;y++) {
-    const row=y*grid; let sum=0;
-    for (let k=-radius;k<=radius;k++) sum+=field[row+clamp(x0+k,x0,x1)];
-    for (let x=x0;x<=x1;x++) { tmp[row+x]=sum/width; sum+=field[row+clamp(x+radius+1,x0,x1)]-field[row+clamp(x-radius,x0,x1)]; }
-  }
-  for (let x=x0;x<=x1;x++) {
-    let sum=0; for (let k=-radius;k<=radius;k++) sum+=tmp[clamp(y0+k,y0,y1)*grid+x];
-    for (let y=y0;y<=y1;y++) { out[y*grid+x]=sum/width; sum+=tmp[clamp(y+radius+1,y0,y1)*grid+x]-tmp[clamp(y-radius,y0,y1)*grid+x]; }
-  }
-  return out;
-}
-// Fingers on the joined coast. The lowest layer reaches into the lava as
-// tongues (a lava inlet cuts into the bank the same way): at each cell the
-// finger field of fingerShift is read at the nearest point of the coast and
-// moved along the coast's smoothed normal, so a finger is one prism from the
-// coast to its tip. Strokes that overlap have already flooded one another's
-// banks, so only the outline that survives is fingered. A tongue is as high as
-// the lowest layer and a little lower at its tip: the shading is the first
-// riser's, not a bank's wall.
-// Thumb fingers for the coast pass (retail lava-1: tendrils and stubs, 22-40 px across at
-// the root, 15-110 px long, in clusters with gaps between, tapering to a small round tip,
-// now and then forked). One finger per jittered lattice site in the shape's own frame; the
-// coast point at tangent offset tau from a site's axis reaches the finger's outline.
-// Everything about a finger comes from its site's hashes and a broad density noise, so no
-// two are alike and a moved lake carries its fingers along (position-only):
-// - spacing: the chance a site grows a finger follows a noise 130 px across, so stretches
-//   of coast are crowded and others bare, and sites jitter by almost half a cell;
-// - length: a power law, many stubs and a few long tendrils, and the longer the thinner (a little);
-// - taper: the half width falls linearly from the root to a tip just over half as wide, capped by
-//   a half circle;
-// - fork: a fifth of the middling fingers, made broader, split in two prongs by a V-notch
-//   that starts half way out.
-const THUMB_CELL=44;
-function thumbReach(s,wx,wy,nx,ny,amount) {
-  const inv=s.inv;
-  let lx=wx,ly=wy;
-  if (inv) {
-    lx=inv[0]*wx+inv[2]*wy+inv[4]; ly=inv[1]*wx+inv[3]*wy+inv[5];
-    const mx=inv[0]*nx+inv[2]*ny,my=inv[1]*nx+inv[3]*ny,ml=Math.hypot(mx,my)||1; nx=mx/ml; ny=my/ml;
-  }
-  // The lattice is turned off the axes (26 degrees): a coast running along a lattice row would see two
-  // rows of points where it should see one, and grow twice the fingers.
-  const ca=.8988,sa=.4384;
-  return thumbAt(s,ca*lx+sa*ly,-sa*lx+ca*ly,ca*nx+sa*ny,-sa*nx+ca*ny,amount);
-}
-function thumbAt(s,lx,ly,nx,ny,amount) {
-  const tx=-ny,ty=nx,salt=s.seed,ci=Math.floor(lx/THUMB_CELL),cj=Math.floor(ly/THUMB_CELL),unit=(i,j,k) => hash(i,j,salt^k)*.5+.5;
-  let best=0;
-  const fingerAmount=s.fingerAmount??1,spread=s.fingerSpread??.5,size=s.fingerSize??1;
-  for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
-    const ax=(i+.5+.45*hash(i,j,salt^0x5a7))*THUMB_CELL,ay=(j+.5+.45*hash(i,j,salt^0x1d3))*THUMB_CELL;
-    // E10: the chance is scaled by Finger amount, and Finger distribution sets how strongly the 130 px noise
-    // gathers sites into clusters (.5 and amount 1 are the first thumb fingers' own .7 + .75 * noise).
-    if (unit(i,j,0x31f)>=clamp((.7+1.5*spread*valueNoise(ax/130,ay/130,salt^0x1f3))*fingerAmount,.04*clamp(fingerAmount,0,1),.97)) continue;
-    // Only sites within half a cell of the coast along its normal grow a finger here.
-    if (Math.abs((lx-ax)*nx+(ly-ay)*ny)>=THUMB_CELL*.5) continue;
-    // Finger size scales the length, and the width a little less (so a small finger is still a blunt thumb).
-    const L=amount*52*(.3+2*unit(i,j,0x4e5)**2.4)*size,fork=L>40*amount*size && L<95*amount*size && unit(i,j,0x2c9)>.8;
-    // Retail lava-1: the long fingers of the south-east coast are the fat ones (35-45 px across, rounded
-    // ends), the small teeth of the north are 12-16 px: half the width grows with the length.
-    let h0=clamp(5+.15*L/Math.max(amount,.2)+(unit(i,j,0x6b1)-.5)*6,7,24)*Math.min(1,.4+amount*.6);
-    if (fork) h0=clamp(h0*1.3,16,26);
-    const tau=Math.abs((lx-ax)*tx+(ly-ay)*ty);
-    if (tau>=h0) continue;
-    const ht=Math.max(4.5,.8*h0),Ls=Math.max(L-ht,0);
-    // The outline: the half width tapers from h0 at the root to ht (.8 of it) at the tip, which is a half circle.
-    // (a rounded shoulder where it meets the root, so a blunt finger does not flare into square corners)
-    const sh=(tau-ht)/(h0-ht);
-    let r=tau>ht?Ls*(1-sh*sh):Ls+Math.sqrt(ht*ht-tau*tau);
-    if (fork && r>.5*L) { const wn=.42*h0; if (tau<wn) r=Math.min(r,.5*L+(r-.5*L)*tau/wn); }
-    best=Math.max(best,r);
-  }
-  return best+valueNoise(lx/12,ly/12,salt^0x5c1)*1.6;
-}
-// The farthest a finger reaches from the coast (px), and what its cells read beyond that.
-const coastFingerLimit=s => .5*s.radius*2**((s.bankWidth-.5)*1.3)+spacing*3;
-function coastFingers(s,sea,box) {
-  const raw=heights.slice(),dist=coastField(s,raw,sea,box),n=raw.length,sd=new Float32Array(n);
-  if (window.coastKeep) window.coastKeep.push({kind:'fingers',dist:dist.slice(),box:{...box},raw:raw.slice()});
-  const bankScale=2**((s.bankWidth-.5)*1.3),reach=.5*s.radius*bankScale,amount=s.fingers*clamp(s.radius*bankScale/140,.35,1);
-  // A finger stands as high as the lowest layer (LAYER_FOOT), a little lower at its tip; any lower and the
-  // shader's relief reads it as lava and shadow, a thin dark spike.
-  // E10: Finger height > 0 makes them flat-topped at that height (no lower tip), and marks their cells so the
-  // layers pass leaves them at it instead of raising them to the lowest layer's ledge.
-  const flat=s.fingerHeight>0,low=flat?Math.max(2.5,s.fingerHeight):Math.min(LAYER_FOOT,.3*(config.baseHeight-sea));
-  fingerCells=flat?new Float32Array(n):null;
-  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) sd[i]=raw[i]>sea?dist[i]:-dist[i];
-  const soft=blurredBox(sd,10,box),limit=reach+spacing*3,thumbs=s.fingerBlunt>=.5;
-  for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
-    const i=y*grid+x;
-    if (dist[i]>limit) continue;
-    const gx=soft[y*grid+Math.min(x+1,grid-1)]-soft[y*grid+Math.max(x-1,0)],gy=soft[Math.min(y+1,grid-1)*grid+x]-soft[Math.max(y-1,0)*grid+x],len=Math.hypot(gx,gy);
-    if (len<1e-3) continue;
-    // The unit normal points inland; the nearest coast point lies back along it.
-    const nx=gx/len,ny=gy/len,wx=gridX(x),wy=gridY(y),f=clamp(thumbs?thumbReach(s,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,s.fingers*clamp(s.radius*bankScale/140,.35,1)):fingerShift(s,-1,wx-sd[i]*nx,wy-sd[i]*ny,nx,ny,amount),-reach,reach);
-    if (sd[i]<0 && -sd[i]<f) {
-      const u=-sd[i]/f;
-      heights[i]=clamp(sea+low*(flat?1:.7+.3*(1-smooth(0,1,u))),MIN_HEIGHT,MAX_HEIGHT);
-      if (flat) fingerCells[i]=low;
-    } else if (sd[i]>0 && sd[i]<-f) heights[i]=clamp(sea-.5-2.5*(1-sd[i]/-f),MIN_HEIGHT,MAX_HEIGHT);
-  }
-  if (regionalCoastCandidate) { regionalCoastRaw=raw; return; }
-  // A tongue is land joined to land: flood out from the ground that was already dry, and
-  // give back any new land the flood does not reach (a tip read across a bend of the coast).
-  const seen=new Uint8Array(n),queue=new Int32Array((box.x1-box.x0+1)*(box.y1-box.y0+1));
-  let head=0,tail=0;
-  for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (raw[i]>sea) { seen[i]=1; queue[tail++]=i; }
-  const grow=j => { if (!seen[j] && heights[j]>sea) { seen[j]=1; queue[tail++]=j; } };
-  while (head<tail) {
-    const i=queue[head++],x=i%grid,y=(i-x)/grid;
-    if (x>box.x0) grow(i-1);
-    if (x<box.x1) grow(i+1);
-    if (y>box.y0) grow(i-grid);
-    if (y<box.y1) grow(i+grid);
-  }
-  if (regionalConnects) {
-    // A locally unseeded island may join the original land beyond this
-    // window. Follow just that candidate component through cached prefix
-    // tiles; a long coast never forces its bounding box into working memory.
-    const candidate=heights.slice(),local={h:candidate,raw,grid,x0:originCellX,y0:originCellY,x1:originCellX+grid-1,y1:originCellY+grid-1,sea};
-    for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
-      const first=y*grid+x; if (seen[first] || !(candidate[first]>sea)) continue;
-      head=0; tail=0; let boundary=false; seen[first]=2; queue[tail++]=first;
-      const visit=j => { if (!seen[j] && candidate[j]>sea) { seen[j]=2; queue[tail++]=j; } };
-      while (head<tail) {
-        const i=queue[head++],cx=i%grid,cy=(i-cx)/grid;
-        if (cx===box.x0 || cx===box.x1 || cy===box.y0 || cy===box.y1) boundary=true;
-        if (cx>box.x0) visit(i-1); if (cx<box.x1) visit(i+1); if (cy>box.y0) visit(i-grid); if (cy<box.y1) visit(i+grid);
-      }
-      const joined=boundary && regionalConnects(originCellX+x,originCellY+y,local);
-      for (let k=0;k<tail;k++) { const i=queue[k]; seen[i]=joined?1:3; if (!joined) { heights[i]=raw[i]; if(flat) fingerCells[i]=0; } }
-    }
-  } else for (let y=box.y0;y<=box.y1;y++) for (let i=y*grid+box.x0,end=y*grid+box.x1;i<=end;i++) if (!seen[i] && heights[i]>sea) { heights[i]=raw[i]; if(flat) fingerCells[i]=0; }
-}
-// Cells the fingers raised, with their flat height (units above sea): the layers pass caps them there.
 let fingerCells=null;
 // The lowest layer stands LAYER_FOOT units above the lava (retail's first shelf is
 // 6-10 above it) and is reached over LAYER_WALL px: a ledge nearer the water than
 // ~3 units dips under the sea in the shader's relief, and a 1-cell wall is a
 // black line. Both are the engine's own constants, not controls.
-const LAYER_FOOT=6,LAYER_WALL=5;
-// Shore layers: the land's height as a staircase in the distance from the
-// coast (contour layers), or in that distance plus a field of stepped round
-// mounds (circular layers, retail lava-2). Layer k tops out at sea + foot +
-// riser * k; the last riser meets the plain, and with riser 0 the bank's rise
-// above the foot is shared out evenly so it does. The rise is the world's own, from its sea to its dry base: ground an earlier stroke
-// already lowered or terraced is only ever cut further, never re-measured. Layer edges wander with position-only noise
-// in the shape's own frame, so no two run parallel for long.
-// How far the layers reach from the coast (px), the skip distance included. Circular layers also
-// reach as far inland as their circles (centred on the coast, up to 1.4 radii across).
 const coastLayerReach=s => {
   const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),style=Math.round(s.layerStyle);
   if (style===2) return 1.6*n*W+2*W;
@@ -1791,150 +1286,6 @@ const coastLayerReach=s => {
 // moved lake carries its circles along); a layer is counted from the nearest bite's edge, or the
 // waterline if that is nearer, so each riser is an arc round its bite, concentric with the bite's other
 // risers, meeting a neighbour's arcs at a cusp (the overlap of two discs).
-function circleSites(s,raw,dist,sea,box,Rc) {
-  const inv=s.inv,f=inv?invert(inv):null,salt=s.seed,C=Rc*1.3,out=[],cv=clamp(s.lavaCircleVary||0,0,1);
-  const corner=(x,y) => { const wx=gridX(x),wy=gridY(y); return inv?[inv[0]*wx+inv[2]*wy+inv[4],inv[1]*wx+inv[3]*wy+inv[5]]:[wx,wy]; };
-  const cs=[corner(box.x0,box.y0),corner(box.x1,box.y0),corner(box.x0,box.y1),corner(box.x1,box.y1)];
-  const i0=Math.floor(Math.min(...cs.map(c => c[0]))/C)-1,i1=Math.ceil(Math.max(...cs.map(c => c[0]))/C)+1;
-  const j0=Math.floor(Math.min(...cs.map(c => c[1]))/C)-1,j1=Math.ceil(Math.max(...cs.map(c => c[1]))/C)+1;
-  for (let j=j0;j<=j1;j++) for (let i=i0;i<=i1;i++) {
-    if (hash(i,j,salt^0x91d)<-.55+.45*cv) continue;
-    const lx=(i+.5+.4*hash(i,j,salt^0x13b))*C,ly=(j+.5+.4*hash(i,j,salt^0x5c9))*C;
-    const wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly,gx=Math.round(wx/spacing)-originCellX,gy=Math.round(wy/spacing)-originCellY;
-    if (gx<box.x0 || gx>box.x1 || gy<box.y0 || gy>box.y1) continue;
-    // G5: with variety a few circles are large among many small ones (radius .3 + 1.2 u^2, up to 1.5 Rc), and each spaces its rings
-    // by its own factor (.55-1.45 of the layer width); variety 0 is the earlier circle exactly.
-    const u0=hash(i,j,salt^0x77f)*.5+.5,k=gy*grid+gx,sd=raw[k]>sea?dist[k]:-dist[k],r=Rc*((.4+u0**1.3)*(1-cv)+(.3+1.2*u0*u0)*cv),sc=1-cv+cv*(.55+.9*(hash(i,j,salt^0x2c1)*.5+.5));
-    // Only bites that straddle the waterline: centred a little way into the lava or up to .8 radius inland.
-    if (sd<-.5*r || sd>.8*r) continue;
-    out.push({x:wx,y:wy,r,sc});
-  }
-  return out;
-}
-function coastLayers(s,sea,box) {
-  const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),ledge0=clamp(s.layerLedge,.4,.95),irr=clamp(s.layerRough,0,1),style=Math.round(s.layerStyle),mounded=style===2,scalloped=style===1,vary=clamp(s.layerVary,0,1);
-  const raw=heights.slice(),dist=coastField(s,raw,sea,box),inv=s.inv,salt=s.seed,meander=clamp(s.lavaMeander||0,0,3),spread=clamp(s.lavaSpread||0,0,2);
-  // Mounds (the first circular style): a low flat shelf carrying round stepped mounds (retail lava-2's overlapping
-  // pancakes: 3-5 rings 5-8 px apart, 20-35 px across, a unit or two a ring). One mound per
-  // jittered lattice cell in the shape's frame; where mounds overlap the higher ring wins.
-  // Shore layers is the rings a mound has, Layer width the ring spacing.
-  const rim=n*W,C=Math.max(24,1.7*rim),reach=mounded?1.6*rim:coastLayerReach(s)-2*W,ring=s.layerRiser>0?s.layerRiser:1.6;
-  const mounds=(lx,ly,ledge) => {
-    const ci=Math.floor(lx/C),cj=Math.floor(ly/C);
-    let best=0;
-    for (let j=cj-1;j<=cj+1;j++) for (let i=ci-1;i<=ci+1;i++) {
-      if (hash(i,j,salt^0x91d)<-.7) continue;
-      const cx=(i+.5+.4*hash(i,j,salt^0x13b))*C,cy=(j+.5+.4*hash(i,j,salt^0x5c9))*C,R=rim*(.9+.4*(hash(i,j,salt^0x77f)*.5+.5));
-      const q=(R-Math.hypot(lx-cx,ly-cy))/W+irr*.8*valueNoise(lx/9,ly/9,salt^0x4a1);
-      if (q<=0) continue;
-      const qc=Math.min(q,n),k=Math.min(Math.floor(qc),n-1);
-      best=Math.max(best,qc>=n?n:k+smooth(ledge,1,qc-k));
-    }
-    return best;
-  };
-  const rise=config.baseHeight-sea,foot=Math.min(LAYER_FOOT,.3*rise),riser=s.layerRiser>0?s.layerRiser:(rise-foot)/n;
-  // E10: layer width and riser height vary along the shore and from layer to layer. Each riser k has its
-  // own offset (a noise field of its own, 24-60 px across) and its own height weight, so neighbouring
-  // risers bunch, part and merge; the weights are normalised so the last riser still meets the plain.
-  const weight=new Float32Array(n),cum=new Float32Array(n+1);
-  if (vary>0) {
-    let total=0;
-    for (let k=0;k<n;k++) { weight[k]=1+.6*vary*hash(k,7,salt^0x2e9); total+=weight[k]; }
-    for (let k=0;k<n;k++) { weight[k]*=riser*n/total; cum[k+1]=cum[k]+weight[k]; }
-  }
-  if (window.coastKeep) window.coastKeep.push({kind:'layers',dist:dist.slice(),box:{...box},raw:raw.slice()});
-  const sites=scalloped?circleSites(s,raw,dist,sea,box,Math.max(8,s.layerCircle)):null;
-  // Sites by bucket, each covering a bite's whole influence (its radius plus the layers beyond it).
-  const bucketBox=s.coastWholeBox??box,bucketCells=scalloped?Math.ceil((1.4*Math.max(8,s.layerCircle)+clamp(s.lavaCircleVary||0,0,1)*.1*Math.max(8,s.layerCircle)+n*W*(1+.45*clamp(s.lavaCircleVary||0,0,1)))/spacing):1,bw=Math.floor((bucketBox.x1-bucketBox.x0)/bucketCells)+1,bh=Math.floor((bucketBox.y1-bucketBox.y0)/bucketCells)+1;
-  const buckets=scalloped?(regionalReplay?new Map():Array.from({length:bw*bh},() => [])):null;
-  const bucket=(i,create=false)=>{if(!regionalReplay)return buckets[i];if(create&&!buckets.has(i))buckets.set(i,[]);return buckets.get(i)??[];};
-  if (scalloped) for (const c of sites) {const i=Math.floor((c.y/spacing-bucketBox.y0)/bucketCells)*bw+Math.floor((c.x/spacing-bucketBox.x0)/bucketCells);if(i>=0&&i<bw*bh)bucket(i,true)?.push(c);}
-  const fingerFlat=fingerCells;
-  for (let y=box.y0;y<=box.y1;y++) for (let x=box.x0;x<=box.x1;x++) {
-    const i=y*grid+x;
-    if (!(raw[i]>sea)) continue;
-    const d=dist[i],base=s.base[i];
-    if (d>=reach+2*W) { if (s.weights[i]>0 && raw[i]<base) heights[i]=base; continue; }
-    const wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
-    const ledge=clamp(ledge0+irr*.3*valueNoise(lx/33,ly/33,salt^0x2b1),.3,.95);
-    let level;
-    if (mounded) {
-      const t=d/reach;
-      if (t>=1 && raw[i]<base) { heights[i]=base; continue; }
-      // The bank is a low flat shelf the mounds stand on, rising to the plain over its outer
-      // half, soft enough that its edge is scalloped by the mounds and is not one dark cliff.
-      level=foot+(rise-foot)*smooth(.55,1,t)+ring*mounds(lx,ly,ledge);
-    } else {
-      // The distance the layers are counted from: the waterline's, or (circular layers) the edge of
-      // the nearest bite if that is nearer.
-      let dd=d;
-      if (scalloped) {
-        const bx=Math.floor((x+originCellX-bucketBox.x0)/bucketCells),by=Math.floor((y+originCellY-bucketBox.y0)/bucketCells);
-        for (let ty=Math.max(0,by-1);ty<=Math.min(bh-1,by+1);ty++) for (let tx=Math.max(0,bx-1);tx<=Math.min(bw-1,bx+1);tx++) for (const c of bucket(ty*bw+tx)) dd=Math.min(dd,(Math.hypot(wx-c.x,wy-c.y)-c.r)/c.sc);
-        dd=Math.max(0,dd);
-      }
-      const wob=irr*(scalloped?.4:1)*(.55*valueNoise(lx/42,ly/42,salt^0x7a1)+.25*valueNoise(lx/14,ly/14,salt^0x3c5)+.12*valueNoise(lx/6,ly/6,salt^0x5e3));
-      // Width varies along the shore: layers are W px wide times a factor between about .6 and 1.65.
-      // G5 (Lava): extra width spread, and a two-dimensional meander in layers: a noise of 3.6, 1.6 and .7 layer widths added to the
-      // layer coordinate itself, so lines pinch together, part and (past about one layer of wander) close into swirls.
-      const Wl=vary>0||spread>0?W*Math.exp((.5*vary+.5*spread)*valueNoise(lx/75,ly/75,salt^0x91f)):W;
-      const meanderQ=meander>0 && !scalloped?meander*(.55*valueNoise(lx/(3.6*W),ly/(3.6*W),salt^0x1d7)+.35*valueNoise(lx/(1.6*W),ly/(1.6*W),salt^0x4c3)+.2*valueNoise(lx/(.7*W),ly/(.7*W),salt^0x2f9)):0;
-      const q=Math.max(0,dd/Wl+wob+meanderQ+(vary>0?vary*(.4*valueNoise(lx/17,ly/17,salt^0x6d3)+.2*valueNoise(lx/8,ly/8,salt^0x4e1)):0));
-      if (q>=n+(vary>0?1:0)) { if (raw[i]<base) heights[i]=base; continue; }
-      if (vary>0) {
-        // Riser k climbs between k + ledge and k + 1 (in layers), moved by its own offset.
-        const k0=Math.max(0,Math.floor(q)-2),k1=Math.min(n-1,Math.floor(q)+1);
-        level=foot+cum[k0];
-        for (let k=k0;k<=k1;k++) { const off=vary*.45*valueNoise(lx/(24+9*(k%4)),ly/(24+9*(k%4)),salt^(0x3a7+k*977)); level+=weight[k]*smooth(k+ledge+off,k+1+off,q); }
-      } else {
-        const k=Math.floor(q);
-        level=foot+riser*(k+smooth(ledge,1,q-k));
-      }
-    }
-    // Fingers stay as flat as they were laid (E10 Finger height), under the ledge they would be raised to.
-    if (fingerFlat && fingerFlat[i]>0) level=Math.min(level,fingerFlat[i]);
-    heights[i]=clamp(Math.min(Math.min(base,config.baseHeight),sea+level*smooth(0,LAYER_WALL,d))+Math.max(0,base-config.baseHeight),MIN_HEIGHT,MAX_HEIGHT);
-  }
-}
-
-// E10 (Lava): a hill of stacked round lobes (retail lava-3's tall hill: pancake mounds one on another,
-// each a flat tread and a short riser), where the plain hill is a smooth cone. After the hill is built
-// its elevation e above the ground it stands on is cut into terraces of equal height, but counted from
-// e plus a lobe field: a few round bumps (centres along the stroke and out to half its radius), each
-// adding up to about two steps inside its edge. A riser follows a level of that sum, so it runs round a
-// lobe as an arc, and neighbouring lobes' arcs meet at cusps. Steps are the hill's height over Lobe steps.
-function stampHillLobes(s) {
-  const lobes=Math.round(s.hillLobes);
-  if (lobes<1 || s.amount<4 || !s.path?.length) return;
-  const c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},salt=s.seed,R=s.radius;
-  // The step is the stroke's own height over the number of steps (never the clip's peak, so a region replay cuts the same terraces).
-  const step=s.amount/Math.max(2,Math.round(s.hillSteps)),path=s.path,sites=[],tread=clamp(s.lavaTread||0,0,1);
-  const h=(k,a) => hash(k,a,salt^0x7e3)*.5+.5;
-  for (let k=0;k<lobes;k++) {
-    const along=h(k,1)*(path.length-1),j=Math.min(path.length-2,Math.floor(along)),f=along-j;
-    const a=path[Math.max(0,j)],b=path[Math.min(path.length-1,j+1)]||a,angle=h(k,2)*Math.PI*2,reach=R*.55*Math.sqrt(h(k,3));
-    sites.push({x:a.x+(b.x-a.x)*f+Math.cos(angle)*reach,y:a.y+(b.y-a.y)*f+Math.sin(angle)*reach,r:R*(.28+.27*h(k,4)),up:.8+.9*h(k,5)});
-  }
-  for (let y=c.y0;y<=c.y1;y++) for (let x=c.x0;x<=c.x1;x++) {
-    const i=y*grid+x,e=heights[i]-s.base[i];
-    if (e<=.3) continue;
-    const wx=gridX(x),wy=gridY(y);
-    let L=0;
-    for (const o of sites) { const d=Math.hypot(wx-o.x,wy-o.y); if (d<o.r) L=Math.max(L,o.up*smooth(o.r,.45*o.r,d)); }
-    // G5: a tilted tread rises a fifth of a step toward the crown (lavaTread 1) before the riser; 0 is the flat tread.
-    const phase=e/step+L,k=Math.floor(phase),fr=phase-k,cut=step*(k+.2*tread*smooth(0,.55,fr)+(1-.2*tread)*smooth(.55,1,fr));
-    // The lower flank keeps the hill's own slope; the stack of lobes forms only on the upper part.
-    heights[i]=clamp(s.base[i]+e+(cut-e)*smooth(.2*s.amount,.45*s.amount,e),MIN_HEIGHT,MAX_HEIGHT);
-  }
-}
-
-// Crystals: clusters of faceted crystals. Each is a pyramid over a polygon
-// of n sides whose apex may lean off centre; its surface is the lowest of its
-// face planes, so faces are flat and meet at sharp edges. Flat tops cut it
-// level (0 pointed, near 1 a flat-topped prism). Crystals in a cluster join
-// by the highest; cells they cover are marked so the bake keeps faces clean.
-// Placement, sizes and sides come from the shape's seed.
-const crystalRnd=s => (k,a) => { let x=Math.imul((s.seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
 function crystalList(s) {
   const rnd=crystalRnd(s),berg=s.crystalForm>=1.5;
   const path=simplifyPath(s.path,Math.max(1,s.radius*.05)),lengths=[0];
@@ -2308,71 +1659,10 @@ function markChanged() { markViewChanged(false); heightDirty=true; error(); }
 let nodes=[], prefix=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const noiseCache=new Map();
 function noiseFor(s) { if (regionalReplay && !noiseCache.has(s)) noiseCache.clear(); if (!noiseCache.has(s)) { noiseCache.set(s,makeNoise(s)); if (noiseCache.size>16) noiseCache.delete(noiseCache.keys().next().value); } return noiseCache.get(s); }
-const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',river:'River (current)',source:'Sediment source',flowbake:'Flow bake'};
+const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
 function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
-function groundHeight(n,h,protect,wx,wy) {
-  if (h<=config.seaLevel+1) return h;
-  const amp=n.amplitude??8,wave=n.wavelength??160,cover=n.coverage??.5,s=n.seed??1;
-  const v=.6*valueNoise(wx/wave,wy/wave,s^0x51a3)+.3*valueNoise(wx*2.1/wave,wy*2.1/wave,s^0x2b7d)+.1*valueNoise(wx*4.3/wave,wy*4.3/wave,s^0x6c11);
-  const threshold=(.5-cover)*1.2,patch=smooth(threshold-.15,threshold+.15,valueNoise(wx/(wave*3.2),wy/(wave*3.2),s^0x7f4b));
-  const next=h+amp*v*patch*(1-protect)*smooth(config.seaLevel+1,config.seaLevel+8,h);
-  return clamp(Math.max(next,Math.min(h,config.seaLevel+1.5)),MIN_HEIGHT,MAX_HEIGHT);
-}
-function applyNode(n) {
-  if (n.hidden) return;
-  // Card F1: rivers and sources are inputs of the bake and write nothing; the bake node copies its stored planes.
-  if (isFlowKind(n.kind)) return;
-  if (n.kind==='flowbake') { renderer?.setSediment(n.result?.colors); applyResult(n.result,maskPlanes,clip||{x0:0,y0:0,x1:grid-1,y1:grid-1},grid,[originCellX,originCellY]); return; }
-  if (n.kind==='raster') { for (const i of clipCells()) { heights[i]=n.heights[i]; protection[i]=n.protection[i]; routes[i]=n.routes[i]; } return; }
-  if (n.kind==='ground') {
-    // Broad, low undulation of dry ground, as retail maps have: about half of
-    // retail dry land is gently sloped rather than dead level. Protected
-    // crests, ramps and passages keep their authored surface.
-    for (const i of clipCells()) {
-      const x=i%grid,y=(i-x)/grid,h=heights[i];
-      // Retail dry land is bimodal: about half dead level, half rolling. A
-      // broad mask confines the undulation to patches.
-      // Dry ground stays dry: undulation never opens new ponds.
-      heights[i]=groundHeight(n,h,protection[i],gridX(x),gridY(y));
-    }
-    return;
-  }
-  if (n.kind==='compact') { for (const i of clipCells()) if (heights[i]>config.baseHeight) heights[i]=config.baseHeight+(heights[i]-config.baseHeight)*n.factor; return; }
-  const work=borrowWork();
-  try { replayShape(n,work); } finally { workDepth--; }
-}
-function replayShape(n,work) {
-  const pts=n.points,b=nodeBounds(n),c=clip||{x0:0,y0:0,x1:grid-1,y1:grid-1};
-  const s=startStroke(n.kind,pts[0],{...shapeDefaults(),...n.params,seed:n.seed,frame:n.frame,node:n,work,pre:regionPre?.h,
-    rect:{x0:Math.max(b.x0,c.x0),y0:Math.max(b.y0,c.y0),x1:Math.min(b.x1,c.x1),y1:Math.min(b.y1,c.y1)}});
-  if (n.regionalSpurs) { addRimSpurs(n,s); return; }
-  if (n.kind==='crystal') { s.path=pts.slice(); stampCrystals(s); return; }
-  if (n.kind==='ramp') { for (const p of pts.slice(1)) ramp(s,p); settleRamp(s); if (regionalReplay) gradeRamp(s); return; }
-  if (s.shouldered && experiment.get('replay')!=='full') {
-    // The settled ridge replaces every live dab, so replay goes straight to
-    // it: the same accepted path and face side, without the discarded pass.
-    const path=[pts[0]];
-    for (const p of pts.slice(1)) if (Math.hypot(p.x-path[path.length-1].x,p.y-path[path.length-1].y)>=.2) path.push(p);
-    if (path.length>=3) {
-      const sx=path[1].x-path[0].x,sy=path[1].y-path[0].y;
-      s.faceSide=(-sy*s.face[0]+sx*s.face[1])<0?-1:1; s.path=path; s.last=s.end=path[path.length-1];
-      settleHill(s); if (s.hillLobes>=.5) stampHillLobes(s); applyCracks(s); return;
-    }
-  }
-  if (s.shouldered) { dab(s,pts[0]); for (const p of pts.slice(1)) extendStroke(s,p); settleHill(s); }
-  else sweep(s,pts);
-  if(regionalBoundsOnly){regionalBodyWeights=s.weights;return;}
-  if (hasCoastPass(n.kind,s)) stampCoastShore(s);
-  if (regionalCoastCandidate) return;
-  if ((n.kind==='hill' || n.kind==='mountain') && s.hillLobes>=.5) stampHillLobes(s);
-  if (n.kind==='mountain' && s.iceFacets>0) facetMountain(s);
-  if (['deep','shallow','offset'].includes(n.kind) && s.shorePlates>0) stampShorePlates(s);
-  if (n.kind==='crater' && !n.regionalChild) facetCrater(s);
-  if (n.kind==='crater' && !n.regionalBody && !n.regionalChild) addCraterlets(n,s);
-  if (!n.regionalChild) applyCracks(s);
-}
 function applyCracks(s) {
   applyShapeMask(s);
   // A shape marks where cracks may open: its own influence times its Cracks
@@ -2435,38 +1725,6 @@ function facetCrater(s) {
 // ground the mountain stands on leaves the ground (the facet is buried there); one above it stands out of the
 // slope. The foot blends back to the smooth mountain over the first few units, and the shapes carry no crystal
 // mark, so the bake, the slate and the sun treat them as the mountain's own faces.
-function facetMountain(s) {
-  const amount=clamp(s.iceFacets,0,1); if (!(amount>0) || !(s.amount>=8)) return;
-  const L=clamp(s.iceFacetSize,16,96),share=.2+.5*amount,inv=s.inv,f=inv?invert(inv):null,snap=heights.slice();
-  const rnd=(i,j,a) => { let x=Math.imul(i*73856093^j*19349663^((s.seed>>>0)+a*83492791),2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
-  // Seed planes read the mountain's own cells and the stroke's starting ground elsewhere, never the live field (as facetCrater does).
-  const at=(gx,gy) => { const k=clamp(gy,0,grid-1)*grid+clamp(gx,0,grid-1); return s.weights[k]>0?snap[k]:s.base[k]; };
-  const seeds=new Map(),seed=(i,j) => {
-    const key=i*65536+j; let k=seeds.get(key);
-    if (!k) {
-      const lx=(i+.5+(rnd(i,j,1)-.5)*1.0)*L,ly=(j+.5+(rnd(i,j,2)-.5)*1.0)*L,wx=f?f[0]*lx+f[2]*ly+f[4]:lx,wy=f?f[1]*lx+f[3]*ly+f[5]:ly;
-      const gx=Math.round(wx/spacing)-originCellX,gy=Math.round(wy/spacing)-originCellY,e=3;
-      // Each facet tilts on its own (up to .35 units a px either way) so neighbours catch the sun differently.
-      k={lx,ly,wx,wy,on:rnd(i,j,4)<share,h:at(gx,gy),dx:(at(gx+e,gy)-at(gx-e,gy))/(2*e*spacing)+(rnd(i,j,6)-.5)*.7,dy:(at(gx,gy+e)-at(gx,gy-e))/(2*e*spacing)+(rnd(i,j,7)-.5)*.7,steep:1.1+.3*rnd(i,j,5),step:(rnd(i,j,3)-.2)*10};
-      seeds.set(key,k);
-    }
-    return k;
-  };
-  for (const i of clipCells()) {
-    if (!(s.weights[i]>0)) continue;
-    const relief=snap[i]-s.base[i]; if (relief<2) continue;
-    const x=i%grid,y=(i-x)/grid,wx=gridX(x),wy=gridY(y),lx=inv?inv[0]*wx+inv[2]*wy+inv[4]:wx,ly=inv?inv[1]*wx+inv[3]*wy+inv[5]:wy;
-    const ci=Math.floor(lx/L),cj=Math.floor(ly/L);
-    let best=null,d1=Infinity;
-    for (let j=cj-1;j<=cj+1;j++) for (let u=ci-1;u<=ci+1;u++) { const k=seed(u,j),d=Math.hypot(lx-k.lx,ly-k.ly); if (d<d1) { d1=d; best=k; } }
-    if (!best.on) continue;
-    // The plane through the seed's surface point, steeper about that point by its own factor.
-    const plane=best.h+(best.dx*(wx-best.wx)+best.dy*(wy-best.wy))*best.steep+best.step*smooth(0,10,relief);
-    const value=Math.max(plane,s.base[i]),fade=smooth(2,10,relief);
-    heights[i]=clamp(snap[i]+(value-snap[i])*fade,MIN_HEIGHT,MAX_HEIGHT);
-  }
-  heightDirty=true;
-}
 const craterletKeys=new WeakMap();
 const craterletRand=(seed,k,a) => { let x=Math.imul((seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
 // Craterlet k of crater node n: centre and radius, from the crater's seed
@@ -2503,16 +1761,9 @@ function addCraterlets(n,s) {
 // and the painted masks (card C5), keyed by MASK_KEYS.
 const live=() => ({h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,...Object.fromEntries(MASK_KEYS.map((k,j) => [k,maskPlanes[j]]))});
 const FIELD_KEYS=['h','p','r','c','v','x',...MASK_KEYS];
-function copyFields(src,dst,rect) { for (const k of FIELD_KEYS) copyRect(src[k],dst[k],rect); }
-function resetFields() { heights.fill(config.baseHeight); for (const a of [protection,routes,cracks,cover,crystal]) a.fill(0); clearMasks(); }
-function snapshot() { const f=live(); return Object.fromEntries(FIELD_KEYS.map(k => [k,f[k].slice()])); }
 function addNode(n) {
   if (regionalFields && !regionalReplay) { nodes.push(n); regionalFields.changed(nodeBounds(n)); return; }
-  if (!regionalFields && gpuShapeOn() && (shapePending || !nodeSupport(n,shapeContext()))) { nodes.push(n); pendingEval=0; pendingRect=null; return; }   // H6: the GPU replays the whole list at the next flush
-  // H9: a node the passes refuse is applied by the JS engine at once and never reaches studyShape, so record its reason here (a scene whose
-  // every stroke is refused, Desert's, would otherwise show no reason and the stale `used` of the page load).
-  if (!regionalFields && gpuShapeOn()) { const why=nodeSupport(n,shapeContext()); if (why) { shapeStudy.reason=why; shapeStudy.used=false; shapeStudy.valid=false; } }
-  prefix[nodes.length]=snapshot(); nodes.push(n); applyNode(n);
+  nodes.push(n); pendingEval=0; pendingRect=null;   // the GPU replays the whole list at the next flush
 }
 let lastEvalMs=0;
 // Region-limited replay. clip is the rectangle (grid cells, inclusive) that
@@ -2528,7 +1779,6 @@ function* clipCells() {
 function nodeBounds(n) {
   // World-space reach of a shape, from the same extents its brush uses,
   // plus a few cells for the hill's softening blur.
-  if (n.kind==='flowbake' && n.result) return n.result.rect;
   if (!n.points) return {x0:0,y0:0,x1:grid-1,y1:grid-1};
   const q={...shapeDefaults(),...n.params},radius=q.radius||40,rough=q.rough??.35,soft=q.softness??.5;
   const bank=['deep','shallow'].includes(n.kind)?2**(((q.bankWidth??.5)-.5)*1.3):1;
@@ -2550,82 +1800,9 @@ function nodeBounds(n) {
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
-function copyRect(src,dst,r) { for (let y=r.y0;y<=r.y1;y++) dst.set(src.subarray(y*grid+r.x0,y*grid+r.x1+1),y*grid+r.x0); }
-// Dragging a shape costs 13-40 ms a frame for 300-400 px shapes (swept
-// capsules on a simplified path, draft cells, cached finger fringe).
-// TODO(perf): move node replay to a worker so the view never waits on it;
-// framed noise is still gathered per frame (~5 ms) while a shape moves.
-// A region replay is exact only if no node reads the heights outside the region
-// or lets the edit change them there. Found with sculptDebug.replayDetail, three
-// nodes sample the height at a point of their own: a plateau's or crater's
-// baseline at its first point, a ramp's grade between its end points, and a
-// craterlet's baseline at its centre after the main crater.
-// - A point outside the region is read from the node's own prefix snapshot
-//   (regionPre, the state a full replay reads), except a craterlet's, which only
-//   a replay of the crater can produce: the region grows to contain every
-//   craterlet of a crater it touches (centre and footprint).
-// - A point inside the region changes with the edit, and with it the node's
-//   whole shape: the region grows to the node's bounds.
-// The growth repeats until nothing else is pulled in.
-function regionClosure(from,inner,margin) {
-  const expand=r => ({x0:Math.max(0,r.x0-margin),y0:Math.max(0,r.y0-margin),x1:Math.min(grid-1,r.x1+margin),y1:Math.min(grid-1,r.y1+margin)});
-  const cellOf=q => ({x:Math.floor(q.x/spacing-originCellX),y:Math.floor(q.y/spacing-originCellY)});
-  const inside=(r,c) => c.x>=r.x0 && c.x+1<=r.x1 && c.y>=r.y0 && c.y+1<=r.y1;
-  for (let grown=true;grown;) {
-    grown=false;
-    const outer=expand(inner);
-    for (let i=from;i<nodes.length;i++) {
-      const n=nodes[i];
-      if (n.hidden || !n.points || !overlaps(nodeBounds(n),outer)) continue;
-      const pull=r => { const u=unionRect(inner,r); if (u.x0!==inner.x0 || u.y0!==inner.y0 || u.x1!==inner.x1 || u.y1!==inner.y1) { inner=u; grown=true; } };
-      const reads=n.kind==='plateau' || n.kind==='crater'?[n.points[0]]:n.kind==='ramp'?[n.points[0],n.points[n.points.length-1]]:[];
-      if (reads.some(q => inside(inner,cellOf(q)))) pull(nodeBounds(n));
-      if (n.kind!=='crater' || !n.params) continue;
-      const count=Math.round(n.params.craterlets??worldDefault('craterlets'));
-      for (let k=0;k<count;k++) {
-        const {p,small}=craterletSpot(n,n.seed??seed,n.params.radius,k),c=cellOf(p),reach=Math.ceil((small*4+12*spacing)/spacing);
-        pull({x0:Math.max(0,c.x-reach),y0:Math.max(0,c.y-reach),x1:Math.min(grid-1,c.x+reach+1),y1:Math.min(grid-1,c.y+reach+1)});
-      }
-    }
-  }
-  return inner;
-}
-function evaluateRegion(from,rect) {
-  // Replays nodes from 'from' inside rect only. Each node is computed over a
-  // margin (for neighbourhood steps such as the hill's softening blur) and
-  // the margin is put back, so nothing outside rect changes.
-  const margin=6,inner=regionClosure(from,rect,margin);
-  const outer={x0:Math.max(0,inner.x0-margin),y0:Math.max(0,inner.y0-margin),x1:Math.min(grid-1,inner.x1+margin),y1:Math.min(grid-1,inner.y1+margin)};
-  const now=live(),save=Object.fromEntries(FIELD_KEYS.map(k => [k,new now[k].constructor(heights.length)]));
-  copyFields(prefix[from],now,inner);
-  for (let i=from;i<nodes.length;i++) {
-    if (!prefix[i]) prefix[i]=snapshot(); else copyFields(now,prefix[i],inner);
-    if (!overlaps(nodeBounds(nodes[i]),outer)) continue;
-    copyFields(now,save,outer);
-    clip=outer; regionPre=prefix[i]; try { applyNode(nodes[i]); } finally { clip=null; regionPre=null; }
-    for (const band of [{x0:outer.x0,y0:outer.y0,x1:outer.x1,y1:inner.y0-1},{x0:outer.x0,y0:inner.y1+1,x1:outer.x1,y1:outer.y1},
-                        {x0:outer.x0,y0:inner.y0,x1:inner.x0-1,y1:inner.y1},{x0:inner.x1+1,y0:inner.y0,x1:outer.x1,y1:inner.y1}]) {
-      if (band.x0>band.x1 || band.y0>band.y1) continue;
-      copyFields(save,now,band);
-    }
-  }
-  prefix.length=nodes.length; heightDirty=true; markChanged();
-}
 function evaluate(from=0,rect=null) {
-  if (regionalFields && !regionalReplay) { prefix=[]; regionalFields.changed(regionalDirtyRect(from,rect),regionalStages(nodes.slice(0,from)).length); heightDirty=true; markChanged(); return; }
-  if (gpuShapeOn() && studyShape(rect)) return;
-  const evalStart=performance.now();
-  // Shore distance depends on neighbouring heights; replay the full suffix
-  // when it contains a plate band or a coast pass (joined-coast fingers, shore
-  // layers) so changes outside a small edit stay exact.
-  if (rect && nodes.slice(from).some(n => (['deep','shallow','offset'].includes(n.kind) && n.params?.shorePlates>0) || hasCoastPass(n.kind,n.params))) rect=null;
-  if (rect && from>0 && prefix[from] && prefix.length>=nodes.length) { evaluateRegion(from,rect); lastEvalMs=performance.now()-evalStart; return; }
-  from=Math.max(0,Math.min(from,nodes.length));
-  if (from>0 && prefix[from]) { const now=live(); for (const k of FIELD_KEYS) now[k].set(prefix[from][k]); }
-  else { from=0; resetFields(); }
-  for (let i=from;i<nodes.length;i++) { prefix[i]=snapshot(); applyNode(nodes[i]); }
-  prefix.length=nodes.length; heightDirty=true; markChanged();
-  lastEvalMs=performance.now()-evalStart;
+  if (regionalFields) { prefix=[]; regionalFields.changed(regionalDirtyRect(from,rect),regionalStages(nodes.slice(0,from)).length); heightDirty=true; markChanged(); return; }
+  studyShape(rect);
 }
 
 // Satellite crater baselines see the completed bowl and preceding satellites.
@@ -2650,7 +1827,7 @@ function regionalStages(list=nodes) {
 function regionalReadApron(n) {
   if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
   const q={...shapeDefaults(),...n.params},bank=2**(((q.bankWidth??.5)-.5)*1.3);
-  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):n.kind==='hill' && experiment.get('forms')==='shouldered' && !(q.profile>=.5) && !ridgeOn(n.kind,q)?4:0;
+  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):n.kind==='hill' && !(q.profile>=.5) && !ridgeOn(n.kind,q)?4:0;
   // A framed finger cache is keyed on authoring cells; include every world
   // cell that can share that key. Radial thumbs can share a coastal key from
   // both sides of the radial band, so their first-call order needs that band.
@@ -2693,83 +1870,45 @@ function regionalDirtyRect(from,rect) {
   }
   return dirty;
 }
-// H6: shape on the GPU (Green). gpuShape 0 is the JS engine; 1 evaluates paint, erase, deep, shallow, hill, mountain and the ground node with the compute passes
-// of engine-shape.wgsl (sculpt-gpu-fields.js). A scene with any other node, or an exotic option, runs on the JS engine as a whole and the status line says why.
-// Green's engine (engine 1) sets gpuShape in ENGINE_KNOBS, which the renderer reads later than the fields are made, so the engine's default is read here from the config.
-const gpuShapeOn=() => {
-  const url=new URLSearchParams(location.search),q=url.get('gpuShape'); if (q!==null) return Number(q)>0;   // `experiment` already holds every knob default, so only the address says the user asked
-  const engine=Number(url.get('engine')??config?.defaults?.engine??0)===1,own=Number(config?.engineDefaults?.gpuShape);
-  return (engine && Number.isFinite(own)?own:worldDefault('gpuShape'))>0;
-};
-// A flow bake writes nothing the shape passes make: its stored planes are copied in after the result (applyBakes).
-const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:k => isFlowKind(k) || k==='flowbake',seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
-  shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full',
-  frost:{gapSize:worldDefault('frostGapSize'),gapDepth:worldDefault('frostGapDepth'),gaps:worldDefault('frostGaps'),gapReach:worldDefault('frostGapReach')}});
+// Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
+const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
+    frost:{gapSize:worldDefault('frostGapSize'),gapDepth:worldDefault('frostGapDepth'),gaps:worldDefault('frostGaps'),gapReach:worldDefault('frostGapReach')}});
 // The study (1024 px): the whole grid is evaluated by the passes and the rectangle read back into the live planes. The result arrives asynchronously;
 // canExport() and the weather wait for it (shapePending), and the frame never does.
-// The GPU result carries zeros in the flow planes, so the stored bake planes go back in over it (what applyNode does for a flowbake node on the JS path).
-function applyBakes(list) { for (const n of list) if (n.kind==='flowbake' && !n.hidden && n.result) { renderer?.setSediment(n.result.colors); applyResult(n.result,maskPlanes,{x0:0,y0:0,x1:grid-1,y1:grid-1},grid,[originCellX,originCellY]); } }
-// Settled shape: null when no GPU shape result is outstanding, else a promise for it. A bake reads the heights, so it waits for them.
-function shapeSettled() { if (pendingEval>=0) flushEval(); return shapePending?new Promise(res => shapeAfter.push(res)):null; }
-let shapePending=0, shapeStudy={engine:null,valid:false,reason:null,used:false}, shapeAfter=[];
+let shapePending=0, shapeStudy={engine:null,valid:false,used:false}, shapeAfter=[];
 function studyShape(rect) {
-  const ctx=shapeContext(); let reason=null;
-  for (const n of nodes) { reason=nodeSupport(n,ctx); if (reason) break; }
-  if (reason || !renderer?.device) {
-    if (reason!==shapeStudy.reason || shapeStudy.used) status(reason?'Shape on the GPU: '+reason+'; this scene runs on the JS engine.':'Shape on the GPU waits for the renderer.');
-    shapeStudy.reason=reason; shapeStudy.used=false; shapeStudy.valid=false; return false;
-  }
+  const ctx=shapeContext();
+  if (!renderer?.device) { status('Shape on the GPU waits for the renderer.'); shapeStudy.used=false; shapeStudy.valid=false; return false; }
   if (!shapeStudy.used) status('Shape evaluated on the GPU.');
-  shapeStudy.reason=null; shapeStudy.used=true; prefix=[];
+  shapeStudy.used=true; prefix=[];
   const whole=!rect || !shapeStudy.valid, r=whole?null:{x0:Math.max(0,rect.x0-6),y0:Math.max(0,rect.y0-6),x1:Math.min(grid-1,rect.x1+6),y1:Math.min(grid-1,rect.y1+6)}, list=nodes.slice();
   shapePending++;
   (async () => {
     try {
       shapeStudy.engine??=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
       const started=performance.now(),out=await shapeStudy.engine.run(list,ctx,r,{release:whole});
-      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); applyBakes(list); if (whole) shapeStudy.valid=true; }
+      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); if (whole) shapeStudy.valid=true; }
       shapeStudy.last={ms:performance.now()-started,whole,...shapeStudy.engine.stats().last};
     } catch (err) { error('Shape on the GPU failed: '+err.message); shapeStudy.valid=false; }
     finally { shapePending--; if (!shapePending) { heightDirty=true; markChanged(); for (const fn of shapeAfter.splice(0)) fn(); } }
   })();
   return true;
 }
-// H5b: gpuPages (default 1 over 1168 samples a side, 0 the CPU path as before, force pages a 4x4 map too, for comparison): Green's fields and Time pass in pages.
-const gpuPages=() => { const q=new URLSearchParams(location.search).get('gpuPages'); return q==='force'?'force':q===null?1:Number(q); };
-const pagedWanted=() => gpuShapeOn() && (worldGrid>1168?gpuPages()!==0:gpuPages()==='force');
+// H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
+const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
+const pagedWanted=() => worldGrid>1168 || gpuPagesForced();
 const pagedOn=() => Boolean(regionalFields?.paged && regionalFields.active());
+// H12: the paged fields fit their ring and page caps to the terrain GPU budget the canvas holds (gpuMB, or its field), less the canvas's minimum.
+const gpuBudget=() => ({total:(Number(document.querySelector('[data-gpu]')?.value)||Number(new URLSearchParams(location.search).get('gpuMB'))||512)*1048576,minimum:mapCanvas?.minimumBytes?.()??96*1048576});
 function makeRegionalFields() {
-  const js=createRegionalFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,stages:regionalStages,bounds:nodeBounds,
-    reduceBounds:n=>{const q={...shapeDefaults(),...n.params};return ['deep','shallow'].includes(n.kind)&&Math.round(q.layerStyle)===1&&Math.round(q.shoreLayers)>=1;},readApron:regionalReadApron,pointReads:n => ['plateau','crater'].includes(n.kind)?[n.points[0]]:n.kind==='ramp'?[n.points[0],n.points[n.points.length-1]]:[],
-    baseCell:(x,y) => {
-      let h=Math.fround(config.baseHeight);
-      for (const n of nodes) if (!n.hidden) {
-        if (n.kind==='ground') h=Math.fround(groundHeight(n,h,0,x*spacing,y*spacing));
-        else if (n.kind==='compact' && h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor);
-      }
-      return h;
-    },workspaceBytesPerCell:FIELD_KEYS.reduce((v,k) => v+(MASK_KEYS.includes(k)?3:12),0)+Object.keys(NOISE_FIELDS).length*8+96,replay:replayWindow});
-  // H6: gpuShape 1 evaluates Green's brushes on the GPU over the whole map; a scene with any node the passes do not take is handed to the JS fields as a whole.
-  return pagedWanted()?createPagedFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:js,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving),apron:Number(new URLSearchParams(location.search).get('timeApron')||128),forceRing:Number(new URLSearchParams(location.search).get('pageRing')||0)}):gpuShapeOn() && worldGrid<=1168 && gpuPages()!=='force'?createGpuFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:js,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving)}):js;
+  const common={worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving)};
+  // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
+  const query=new URLSearchParams(location.search);
+  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
 // field snapshot or world-sized noise array in map mode.
-function replayWindow(rect,{node,fields,sample:prefixSample,connects,mode,globalBounds}) {
-  const saved={grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,regionalPrefixSample,regionalNoiseMeta,regionalConnects,regionalCoastCandidate,regionalCoastRaw,regionalCoastBounds,regionalBoundsOnly,regionalBodyWeights,fingerCells,workDepth,work:workPool.slice(),noises:Array.from(noiseCache),framedBuffers,fingerCaches};
-  const started=performance.now();
-  try {
-    grid=rect.x1-rect.x0+1; originCellX=rect.x0; originCellY=rect.y0; regionalReplay=true; regionalPrefixSample=prefixSample; regionalNoiseMeta=new WeakMap(); regionalConnects=connects; regionalCoastCandidate=mode==='coast'; regionalCoastRaw=null;regionalCoastBounds=globalBounds;regionalBoundsOnly=mode==='bounds';regionalBodyWeights=null;fingerCells=null;
-    ({h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal}=fields); maskPlanes=MASK_KEYS.map(k => fields[k]);
-    clip=null; regionPre=null; workDepth=0; workPool.length=0; noiseCache.clear(); framedBuffers=new WeakMap(); fingerCaches=new WeakMap();
-    applyNode(node);
-    return regionalBoundsOnly?{...live(),weights:regionalBodyWeights}:regionalCoastCandidate?{...live(),raw:regionalCoastRaw??heights}:live();
-  } finally {
-    ({grid,heights,protection,routes,cracks,cover,crystal,maskPlanes,noise,clip,regionPre,originCellX,originCellY,regionalReplay,regionalPrefixSample,regionalNoiseMeta,regionalConnects,regionalCoastCandidate,regionalCoastRaw,regionalCoastBounds,regionalBoundsOnly,regionalBodyWeights,fingerCells,workDepth,framedBuffers,fingerCaches}=saved);
-    workPool.splice(0,workPool.length,...saved.work); noiseCache.clear(); for (const [key,value] of saved.noises) noiseCache.set(key,value);
-    lastEvalMs=performance.now()-started;
-  }
-}
 function currentStrokeOptions() {
   applySeedControl();
   return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)]))};
@@ -2780,7 +1919,7 @@ function regionalPoints(points) {
 }
 function beginRegionalStroke(kind,point,options={}) {
   if (stroke || moving || !HELP[kind] || kind==='move') throw new Error('A terrain gesture is already active or the brush is invalid.');
-  const points=regionalPoints([point]),params=isFlowKind(kind)?flowParams(options.radius??Number($('diameter').value)/2,options.amount??Number($('amount').value),options.color??flow?.colour()??''):{...currentStrokeOptions(),...options},node={kind,points,params,seed:params.seed??seed};
+  const points=regionalPoints([point]),params={...currentStrokeOptions(),...options},node={kind,points,params,seed:params.seed??seed};
   delete params.seed; cancelWeather();
   const index=nodes.length,selectionBefore=selected;
   nodes.push(node); selected=-1; stroke={regional:true,kind,node,index,selectionBefore,path:points};
@@ -2798,7 +1937,7 @@ function endRegionalStroke(commit=true) {
   if (!stroke?.regional) return false;
   const gesture=stroke,node=gesture.node,rect=nodeBounds(node); stroke=null;
   if (!commit) { nodes.splice(gesture.index,1); selected=gesture.selectionBefore; evaluate(gesture.index,rect); }
-  else { if(node.kind==='source')flow?.remember(node.params.color);selected=-1; checkpoint(); }
+  else { selected=-1; checkpoint(); }
   renderLayers(); updateControls(); schedule(); queueWeather();
   return commit?gesture.index:false;
 }
@@ -2838,7 +1977,7 @@ function endRegionalMove(commit=true) {
   selectNode(gesture.index); updateControls(); schedule(); queueWeather(); return commit?gesture.index:false;
 }
 function currentDrawOptions() {
-  return {sedimentColors:[...nodes].reverse().find(n=>n.kind==='flowbake'&&!n.hidden)?.result?.colors??[],clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
+  return {clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
 }
 function regionalHeightCell(x,y) {
   const h=regionalFields.cell(x,y),i=y*worldGrid+x;
@@ -2848,23 +1987,22 @@ function regionalHeightCell(x,y) {
 function sampleRegional(x,y) {
   if (pagedOn()) return regionalFields.sampleEroded(x,y);
   if (gpuWeather && !gpuWeather.cpuHeight && !stroke && !moving && $('weather').checked) gpuWeatherCpu(false).catch(() => {});   // H6b: the first CPU reader asks for the Time pass's height
-  if(mapWeather?.usesTiles())return mapWeather.sample(x,y)??mapCanvas?.heightSample(x,y)??regionalFields.sample(x,y);
   if (!refined || !refinedBase || !$('weather').checked) return regionalFields.sample(x,y);
   const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
   return (regionalHeightCell(ix,iy)*(1-fx)+regionalHeightCell(jx,iy)*fx)*(1-fy)+(regionalHeightCell(ix,jy)*(1-fx)+regionalHeightCell(jx,jy)*fx)*fy;
 }
-// H6b: the map canvas fed from the GPU fields (Green's engine, maps up to 1168 samples a side, query gpuFeed=0 turns it off). The Time pass reads the
+// H6b: the map canvas fed from the GPU fields (Green's engine, maps up to 1168 samples a side). The Time pass reads the
 // fields' buffers and leaves its result in two GPU buffers (gpuWeather: weather = authored then eroded height, maps = the three packed layers); a chunk
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
-const gpuFeedOn=() => new URLSearchParams(location.search).get('gpuFeed')!=='0';
-// H8b: the fed pass leaves its result in GPU buffers, where the material field (a CPU array from the height) cannot join it yet, so a world that asks for the field takes the unfed pass.
-const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0 && !(Number($('material-weathering')?.value)>0));
-const gpuFeedEligible=() => Boolean(gpuFeedOn() && renderer?.engine && regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
+// Erosion 0 (a world that runs no Time pass) is Weathering off.
+const weatherOn=() => $('weather').checked && renderer.variantNumber?.('erosion',0)>0;
+const feedWeatherOk=() => Boolean(gpuFeedEligible() && (grid<=1168 || pagedOn()) && renderer.variantNumber?.('erosion',0)>0);
+const gpuFeedEligible=() => Boolean(regionalFields?.gpuBuffers && (worldGrid<=1168 || regionalFields.paged) && regionalFields.active?.());
 // A bake takes a lease on the Time pass's buffers when it asks for the feed and gives it back once its feed pass is submitted (work already submitted
 // keeps its buffers), so a retired result is destroyed at that moment and not on a timer. gpuBytes() is what the canvas counts against its budget.
 const retiredWeather=new Set(); let gpuPassBytes=0;
-function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retiredWeather.delete(w); w.weather.destroy(); w.maps.forEach(m => m.destroy()); }
+function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retiredWeather.delete(w); w.weather.destroy(); w.maps.forEach(m => m.destroy()); w.field?.destroy(); }
 function leaseGpuWeather(w) { w.leases=(w.leases||0)+1; let given=false; return () => { if (given) return; given=true; w.leases--; if (w.retired && w.leases<=0) destroyGpuWeather(w); }; }
 function retireGpuWeather(w) { w.retired=true; if (w.leases>0) retiredWeather.add(w); else destroyGpuWeather(w); }
 const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+[...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes;
@@ -2890,13 +2028,16 @@ async function gpuWeatherCpu(withMaps) {
 // Weathering is on and a GPU pass produced them. Weather that came from a CPU pass keeps the CPU read, so the picture stays exactly the CPU path's.
 // H5b: the Time pass in pages: the knobs the pass reads (all of them in the key, so a change drops every page's weather), and the runner a page's window goes through.
 function configurePagedTime(fields=regionalFields) {
-  const on=$('weather').checked && renderer.variantNumber?.('erosion',0)>0;
-  if (!on) return fields.setTime(null);
+  if (!weatherOn()) return fields.setTime(null);
   const p={age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),columnContrast:renderer.variantNumber('columnContrast',1),
     envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
-  return fields.setTime({key:JSON.stringify(p),run:async win => {
+  const material=materialKnobs();
+  return fields.setTime({key:JSON.stringify({...p,material}),material:Boolean(material),run:async win => {
     const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
-    return erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy});
+    const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy});
+    // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
+    if (material) r.field=await erosion.materialField({heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,ox:win.ox,oy:win.oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
+    return r;
   }});
 }
 function queuePagedWeather() {
@@ -2923,7 +2064,7 @@ async function gpuFeedSource(signal,regionFn) {
   const on=$('weather').checked;
   if (on && refined && !gpuWeather) return null;
   const w=on?gpuWeather:null;
-  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,release:w?leaseGpuWeather(w):() => {}};
+  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,release:w?leaseGpuWeather(w):() => {}};
 }
 function readRegional(request) {
   if (pagedOn()) return regionalFields.readAsync(request);
@@ -2953,7 +2094,6 @@ function readRegional(request) {
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
 function drawRegionalOverlay(ctx) {
-  flow?.draw(ctx,tool,selected);
   const n=nodes[selected]; if (!n?.points) return;
   ctx.strokeStyle='#f3d36b'; ctx.lineWidth=2; ctx.beginPath();
   for (const [i,p] of n.points.entries()) { const y=p.y-(Math.max(config.seaLevel,sampleRegional(p.x,p.y))-config.baseHeight)*.5; if (i) ctx.lineTo(p.x,y); else ctx.moveTo(p.x,y); }
@@ -2972,7 +2112,6 @@ function uniformAuthored({x=0,y=0,width=0,height=width,apron=0}={}) {
   let h=Math.fround(config.baseHeight);
   if (!Number.isFinite(h) || h<MIN_HEIGHT || h>MAX_HEIGHT) return null;
   for (const n of nodes) if (!n.hidden) {
-    if(isFlowKind(n.kind)||n.kind==='flowbake')continue;
     if (n.points?.length) { if (overlaps(nodeBounds(n),rect)) return null; continue; }
     if (n.kind==='ground') { if ((n.amplitude??8)!==0 || !Number.isFinite(n.wavelength??160) || (n.wavelength??160)<1 || !Number.isFinite(n.coverage??.5)) return null; }
     else if (n.kind==='compact') { if (h>config.baseHeight) h=Math.fround(config.baseHeight+(h-config.baseHeight)*n.factor); }
@@ -2986,11 +2125,12 @@ function regionalStats() {
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
-  workingBytes:()=>flow?.stats().inflightBytes??0,read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },checkGraphMemory:preflightNodeBakes,
-  loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); flow?.reset();cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
+  fitGpuBudget:() => regionalFields?.refit?.(),
+  read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },
+  loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
-  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
@@ -3051,7 +2191,6 @@ function selectNode(i) {
     $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='passage'?'passage':'area'; $('cracks').value=Math.round((p.cracks||0)*100);
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
   }
-  if (n?.kind==='source' && n.params?.color) flow?.setColour(n.params.color);
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Editing ${NODE_NAMES[n.kind]||n.kind} #${i+1}: sliders change this shape. Draw to start a new one.`);
 }
@@ -3069,13 +2208,12 @@ function renderLayers() {
   const list=$('layers'); if (!list) return;
   list.replaceChildren(...nodes.map((n,i) => {
     const item=document.createElement('li');
-    item.textContent=`${NODE_NAMES[n.kind]||n.kind}${n.hidden?' (hidden)':''}${n.kind==='flowbake' && flow?.stale()?' (stale)':''}`;
+    item.textContent=`${NODE_NAMES[n.kind]||n.kind}${n.hidden?' (hidden)':''}`;
     item.className=i===selected?'selected':'';
     item.addEventListener('click',() => selectNode(i===selected?-1:i));
     return item;
   }));
   for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0;
-  flow?.changed();
 }
 function nodeAction(kind) {
   const i=selected; if (i<0 || stroke) return;
@@ -3104,28 +2242,13 @@ function checkpoint(mapOnly=false) {
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
-  flow?.reset();lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
+  lastWaterStroke=null; cancelWeather(); nodes=cloneNodes(history[next].nodes); prefix=[]; selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
-// While a shape is edited the material transport is too slow to rerun, so a
-// quick approximation stands in: biomes whose colours come from it (the
-// Archipelago's dark hills) keep roughly their final look instead of
-// turning pale until refinement finishes.
-// H3: with the material model the draw reads no material field, so the worker and the quick preview skip it.
-const materialPreview=() => !renderer?.materialModel && !renderer?.engine && experiment.get('deposits')!=='off' && Number($('material-weathering').value)>0;
 function clearRendererWeather() { if (regionalFields) { regionalWeather=null; if (gpuWeather) gpuWeather.mapsOn=false; } else renderer?.setWeather(); }
-function quickMaterials() {
-  if (regionalFields) return;
-  if (!renderer || !materialPreview()) { renderer?.setMaterialField(); return; }
-  renderer.setMaterialField(quickMaterialField({height:heights,grid,size,seed:refinementSeed,baseHeight:config.baseHeight,seaLevel:config.seaLevel,
-    depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}}));
-}
 function cancelWeather() {
-  mapWeather?.cancel();
   weatherJob++; weatherBase=null;
-  quickMaterials();
-  weatherWorker?.postMessage({cancel:true,job:weatherJob});
   weatherState=$('weather').checked?'pending':'disabled';
   $('weather-state').textContent=$('weather').checked?'Refinement paused while editing.':'Weathering off · authored surface';
   updateControls();
@@ -3160,39 +2283,27 @@ function queueWeather() {
   // H6b: a fed Time pass needs the GPU planes current, not the CPU copy; the copy a gesture left out is read in the background from here.
   if (feedWeatherOk() && regionalFields?.gpuReady) { regionalFields.settle(); if (regionalFields.gpuPending()) { regionalFields.gpuReady().then(queueWeather); return; } }
   else if (regionalFields?.pending?.()) { regionalFields.ready().then(queueWeather); return; }   // H6: the map's GPU fields are still being copied
-  if (!$('weather').checked) {
-    mapWeather?.queue();
+  if (!weatherOn()) {
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;
   }
-  if(mapWeather?.queue()) { if(!stroke&&!moving)weatherState='ready';updateControls();return; }
   weatherState='pending'; renderedRevision=-1; updateControls();
   if (stroke) { $('weather-state').textContent='Refinement paused while editing.'; return; }
   try {
-    if (!weatherWorker && !(renderer.engine && (!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
     const job=++weatherJob;
     // H6b: on a map canvas whose fields are on the GPU the Time pass reads the fields' buffers and leaves its result in GPU buffers (below).
     const fed=Boolean(feedWeatherOk() && regionalFields.gpuBuffers());
     const authored=regionalFields&&!fed?globalWeatherInput():null;
     weatherBase=fed?null:authored?authored.h:heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
-    const profile=experiment.get('weather')==='broad'?'broad':undefined;
-    // H2: erosion 1 (Green) runs the GPU pass first and hands its height to the worker, which skips the droplets.
-    // H5: Green's engine also runs the GPU pass over a whole map canvas up to 1168 samples a side (larger maps keep the tiled worker, H5b).
-    const gpu=(!regionalFields || (renderer.engine && grid<=1168)) && renderer.variantNumber?.('erosion',0)>0;
-    gpuErosionMs=null;
-    let eroded=null;
-    const post=() => weatherWorker.postMessage({job,height:weatherBase,...eroded,protect:authored?.p??protection,grid,size,seed:refinementSeed,strength:0.35,profile,baseHeight:config.baseHeight,talus:Number($('scree').value)/100,seaLevel:config.seaLevel,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'},
-      sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)});
-    if (!gpu) { post(); return; }
     if (fed) { runFedWeather(job); return; }
-    // H5: Green's engine (engine 1) takes the height and the data maps from the GPU pass alone; no worker runs (engine-weather.wgsl).
-    const own=renderer.engine;
+    gpuErosionMs=null;
+    // The Time pass takes the height and the data maps from the GPU pass alone (engine-weather.wgsl).
     const erodeRequest={height:weatherBase,protect:authored?.p??protection,rate:authored?authored.e:erosionRate(),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
-      ...(own?{maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)}:{})};
+      maps:true,envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
     window.erodeAgain=() => renderer.erode(erodeRequest).then(r => ({ms:r.milliseconds,parts:r.parts}));   // dev hook: time the pass alone
     renderer.erode(erodeRequest)
       .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,protect:protection,seaLevel:config.seaLevel,maps:result.maps,grid,size};
-        if (own && regionalFields) {
+        if (regionalFields) {
           // A map canvas: the chunk renderer reads the maps as the worker's arrays (flow, deposit, talus, sand and the Time pass's eight).
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           // The maps stay packed (three rgba8 arrays, 4 bytes a sample); the chunk crop unpacks only the samples a chunk needs.
@@ -3202,7 +2313,7 @@ function queueWeather() {
             weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; markViewChanged(); updateControls(); schedule(); });
           return;
         }
-        if (own) {
+        {
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);
           heightDirty=false;
@@ -3210,18 +2321,24 @@ function queueWeather() {
             weatherState='ready'; renderedRevision=-1; updateControls(); $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); });
           return;
         }
-        eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
+        })
       .catch(err => { if (job===weatherJob) failWeather(err.message); });
   } catch (err) { failWeather(err.message); }
 }
-// H8: the Time pass's material field (sediment arrival, soil, softened source), when the Material weathering control is above 0. It replaces the
-// worker's weatherMaterials on the engine path; null when the control is 0 or deposits are off.
+// H12: the material field's knobs, or null when the Material weathering control is 0. The field comes from the Time pass's eroded height on the GPU
+// (engine-weather.wgsl mf*) and joins the chunk feed in gridTexture layer 1; a change of any of these drops the weather like a change of the pass's own knobs.
+const materialKnobs=() => { const amount=Number($('material-weathering')?.value)/100; return amount>0?{depositSpread:Number($('deposit-spread').value)/100,seed:refinementSeed,mineral:renderer.variant.get('transition')==='mineral'}:null; };
+// The 1024-px study reads the Time pass back into CPU arrays, so it takes the material field from the eroded height the same way: the GPU field
+// (engine-weather.wgsl mf*) from a height uploaded for it, read back as the Float32Array the whole-image draw wants. Null when the control is 0.
 async function materialRule(height) {
-  const amount=Number($('material-weathering').value)/100;
-  if (!(amount>0) || experiment.get('deposits')==='off') return null;
+  const material=materialKnobs(); if (!material) return null;
   try {
-    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
-    return await erosion.materialField({height,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:refinementSeed,depositSpread:Number($('deposit-spread').value)/100,profile:{...config.material,mineral:renderer.variant.get('transition')==='mineral'}});
+    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer),device=renderer.device;
+    const heightBuffer=device.createBuffer({size:height.length*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(heightBuffer,0,Float32Array.from(height));
+    const field=await erosion.materialField({heightBuffer,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
+    const out=new Float32Array(await readBuffer(device,field,0,grid*grid*16)); field.destroy(); heightBuffer.destroy();
+    return out;
   } catch (err) { console.error(err); return null; }
 }
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
@@ -3234,11 +2351,12 @@ async function runFedWeather(job) {
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
     const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
       envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
-    const result=await erosion.runGpu(request);
+    const result=await erosion.runGpu(request),material=materialKnobs();
+    if (material && job===weatherJob && !stroke) result.field=await erosion.materialField({heightBuffer:result.weather,heightOffset:grid*grid,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
     gpuPassBytes=0;
     if (job!==weatherJob || stroke) { retireGpuWeather(result); return; }
     dropGpuWeather();
-    gpuWeather={weather:result.weather,maps:result.maps,bytes:result.bytes,mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
+    gpuWeather={weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
@@ -3246,34 +2364,12 @@ async function runFedWeather(job) {
   } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message); }
 }
 function failWeather(message) {
-  weatherJob++; weatherBase=null; weatherWorker?.terminate(); weatherWorker=null;
+  weatherJob++; weatherBase=null;
   weatherState=$('weather').checked?'failed':'disabled';
   $('weather-state').textContent=$('weather').checked
     ?`Weathering failed: ${message}. Turn Weathering off to export the authored surface, then on to retry.`
     :'Weathering off · authored surface';
   updateControls();
-}
-function startWeatherWorker() {
-  const worker=new Worker('/sculpt-weathering.js',{type:'module'}); weatherWorker=worker;
-  worker.onmessage=event => {
-    const data=event.data;
-    if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
-    if (data.error) { failWeather(data.error); return; }
-    dropGpuWeather(); refined=data.height; refinedBase=weatherBase;
-    if (regionalFields) {
-      regionalWeather={flow:data.flow,deposit:data.deposit,talus:data.talus,sand:data.sand,materialField:data.materialField};
-      if (data.done) weatherState='ready';
-      $('weather-state').textContent=data.done?`Weathered edges · ${Math.round(data.milliseconds)} ms`:`Refining exposed slopes · ${Math.round(data.progress*100)}%`;
-      markViewChanged(); updateControls(); schedule(); return;
-    }
-    renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeather(data.flow,data.deposit,data.talus,data.sand);
-    if (data.materialField) renderer.setMaterialField(data.materialField);
-    heightDirty=false;
-    if (data.done) { weatherState='ready'; renderedRevision=-1; updateControls(); }
-    $('weather-state').textContent=data.done?`Weathered edges · ${gpuErosionMs===null?'':`GPU erosion ${Math.round(gpuErosionMs)} ms + rest `}${Math.round(data.milliseconds)} ms`:data.progress>=.93?'Settling surface materials…':`Refining exposed slopes · ${Math.round(data.progress*100)}%`;
-    schedule();
-  };
-  worker.onerror=event => { if (worker===weatherWorker) failWeather(event.message || 'worker unavailable'); };
 }
 function schedule(draw=true) { if (draw) needsDraw=true; if (mapCanvas) { flushEval(); mapCanvas.schedule(); return; } if (!framePending) { framePending=true; requestAnimationFrame(frame); } }
 function drawTiming(stats,elapsed,quality) {
@@ -3289,8 +2385,8 @@ function frame(timestamp) {
   else lastPaintingRAF=null;
   try {
     flushEval();
-    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); if ((stroke || moving) && materialPreview()) quickMaterials(); heightDirty=false; }
-    if (needsDraw || (stroke && !stroke.flow) || moving) {
+    if (heightDirty) { renderer.setHeight(previewHeight(),grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); heightDirty=false; }
+    if (needsDraw || stroke || moving) {
       const quality=stroke||moving?'preview':'full',start=performance.now();
       const stats=renderer.draw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100});
       drawTiming(stats,performance.now()-start,quality);
@@ -3301,18 +2397,11 @@ function frame(timestamp) {
   } catch (err) { error(err.message); status('Rendering failed. Your heightfield remains available to save.'); return; }
   if (stroke || moving) schedule();
 }
-const liftAt=(x,y) => (Math.max(config.seaLevel,sample(heights,x,y))-config.baseHeight)*.5;
 function drawOverlay() {
   ink.clearRect(0,0,size,size);
   if (config.map) { const display=previewHeight(); drawMapBounds(ink,config.map,config,(x,y) => sample(display,x,y)); }
   mapFeatures?.draw(ink);
   if (mapFeatures?.active && !pan && !space) { overlay.style.cursor='crosshair'; return; }
-  flow?.draw(ink,tool,selected);
-  if (stroke?.flow) {
-    ink.strokeStyle=stroke.kind==='river'?'#7fe3ff':stroke.color||'#b8eef3'; ink.lineWidth=3; ink.beginPath();
-    stroke.path.forEach((p,i) => { const y=p.y-liftAt(p.x,p.y); if (i) ink.lineTo(p.x,y); else ink.moveTo(p.x,y); });
-    ink.stroke();
-  }
   if (cursor && !pan && !space && tool!=='move') {
     ink.strokeStyle='#b8eef3'; ink.fillStyle='#a7e6f00c'; ink.lineWidth=1.5;
     ink.beginPath(); ink.arc(cursor.cx,cursor.cy,stroke?.radius ?? Number($('diameter').value)/2,0,Math.PI*2); ink.fill(); ink.stroke();
@@ -3389,11 +2478,6 @@ overlay.addEventListener('pointerdown',event => {
       pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule(); return;
     }
     if (selected>=0) { selected=-1; renderLayers(); }
-    // Card F1: a river or source stroke only collects points (no field changes, so the weathering keeps running).
-    if (isFlowKind(tool)) {
-      stroke={kind:tool,flow:true,path:[p],radius:Number($('diameter').value)/2,amount:Number($('amount').value),color:flow?.colour()||'',screenStart:cursor};
-      status(tool==='river'?'Drag along the current, then release.':'Drag to lay a line of sediment, or just click.'); updateControls(); pointerId=event.pointerId; overlay.setPointerCapture(event.pointerId); schedule(false); return;
-    }
     cancelWeather();
     stroke=startStroke(tool,p); stroke.screenStart=cursor; paintingIntervals=[]; lastPaintingRAF=null; markChanged();
     if (tool==='crystal') stampCrystals(stroke); else if (tool!=='ramp') dab(stroke,p);
@@ -3422,23 +2506,9 @@ overlay.addEventListener('pointermove',event => {
     pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?moving.index:Math.min(pendingEval,moving.index);
     moving.rect=unionRect(moving.rect,pendingRect);
   }
-  else if (stroke?.flow) { const p=picked(cursor),q=stroke.path[stroke.path.length-1]; if (p && Math.hypot(p.x-q.x,p.y-q.y)>=6) stroke.path.push(p); }
   else if (stroke) { const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
-  schedule(Boolean(stroke) && !stroke.flow);
+  schedule(Boolean(stroke));
 });
-// A river or source stroke becomes a node; the bake reads it when asked.
-function finishFlowStroke(event) {
-  if (event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor),q=stroke.path[stroke.path.length-1]; if (p && Math.hypot(p.x-q.x,p.y-q.y)>=2) stroke.path.push(p); }
-  const s=stroke; stroke=null; pan=null; pointerId=null;
-  if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId);
-  if (s.kind==='river' && s.path.length<2) status('A river needs a direction: drag along the current.');
-  else {
-    addNode({kind:s.kind,points:s.path.map(p => ({x:p.x,y:p.y})),params:flowParams(s.radius,s.amount,s.kind==='source'?s.color:''),seed});
-    if (s.kind==='source') flow?.remember(s.color);
-    checkpoint(); status(`${NODE_NAMES[s.kind]} added. Bake to see its effect.`);
-  }
-  updateControls(); schedule(false);
-}
 function endPointer(event) {
   if (regionalFields) return;
   if (pointerId!==event.pointerId) return;
@@ -3446,7 +2516,6 @@ function endPointer(event) {
     flushEval();
     if (moving.rect) { pendingRect=moving.rect; pendingEval=moving.index; }
     moving=null; pointerId=null; if (overlay.hasPointerCapture(event.pointerId)) overlay.releasePointerCapture(event.pointerId); flushEval(); markViewChanged(); checkpoint(); queueWeather(); updateControls(); schedule(); return; }
-  if (stroke?.flow) { finishFlowStroke(event); return; }
   if (stroke && event.type==='pointerup') { cursor=screenPoint(event); const p=picked(cursor); if (p) { if (stroke.kind==='ramp') ramp(stroke,p); else extendStroke(stroke,p); } }
   const hadStroke=Boolean(stroke);
   const rawPath=stroke?stroke.path.map(p => ({...p})):null;
@@ -3491,15 +2560,7 @@ function scriptedScene(list,{ground=true}={}) {
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
   nodes=[]; prefix=[]; selected=-1;
   if (ground) addGroundNode();
-  // Card F1: river and source strokes, and one flowbake entry that bakes them once the scene is built.
-  let bakeRequest=null; flow?.load(null);
   list.forEach(([kind,points,options={}],i) => {
-    if (kind==='flowbake') { bakeRequest=options; return; }
-    if (isFlowKind(kind)) {
-      const card=options.card||{};
-      addNode({kind,points:points.map(([x,y]) => ({x,y})),params:flowParams((card.diameter??(kind==='source'?80:160))/2,card.amount??70,kind==='source'?options.color||'':''),seed:(seed+i*7919)>>>0});
-      return;
-    }
     const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
       ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),seed:(seed+i*7919)>>>0};
@@ -3508,12 +2569,11 @@ function scriptedScene(list,{ground=true}={}) {
   });
   if (regionalFields) regionalFields.changed();
   markChanged(); checkpoint();
-  if (bakeRequest) flow.bake(bakeRequest);
   updateControls(); schedule(); queueWeather();
   return nodes.length;
 }
 function mixedScene() {
-  flow?.reset();
+  
   applySeedControl(); refinementSeed=seed;
   lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks();
   nodes=[]; prefix=[]; selected=-1;
@@ -3608,7 +2668,7 @@ function encodedHeights(field=heights) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:regionalFields?5:4,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,flow:flow?.serialize(),
+  return {format:'nanolathe-terrain-sculpt',version:regionalFields?5:4,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -3640,7 +2700,7 @@ function loadSketch(s) {
     const values=new DataView(Uint8Array.from(raw,c=>c.charCodeAt(0)).buffer);
     for (let i=0;i<next.length;i++) { const v=values.getFloat32(i*4,true); if (!Number.isFinite(v)||v<0||v>1) throw new Error('Invalid ramp surface value.'); nextRoutes[i]=v; }
   }
-  flow?.reset();lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather();
+  lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather();
   heights.set(next); protection.set(nextProtect); routes.set(nextRoutes); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; $('seed').value=seed; noise=makeNoise(seed);
   refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
@@ -3677,13 +2737,13 @@ function loadSketch(s) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   // A v4 recipe rebuilds from its nodes; a v3 sketch becomes one raster node.
   nodes=s.version===4 && Array.isArray(s.nodes)?deserializeNodes(s.nodes):[{kind:'raster',heights:heights.slice(),protection:protection.slice(),routes:routes.slice()}];
-  prefix=[]; selected=-1; evaluate(0); flow?.load(s.flow); renderLayers();
+  prefix=[]; selected=-1; evaluate(0); renderLayers();
   restoreMapData(s.mapData); markChanged(); updateControls();
 }
 function loadRegionalSketch(s) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const next=deserializeNodes(s.nodes);
-  flow?.reset();cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather(); lastWaterStroke=null;
+  cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather(); lastWaterStroke=null;
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
   for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(s.toolSettings?.[kind]||{})};
@@ -3695,7 +2755,7 @@ function loadRegionalSketch(s) {
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   if (['rings','veins'].includes(s.fringeStyle)) $('fringe-style').value=s.fringeStyle;
-  nodes=next; prefix=[]; selected=-1; evaluate(0); restoreMapData(s.mapData);flow?.load(s.flow); renderLayers(); updateControls(); queueWeather();
+  nodes=next; prefix=[]; selected=-1; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -3743,30 +2803,11 @@ function addGroundNode() {
   if (amplitude>0) addNode({kind:'ground',amplitude,wavelength:experiment.has('undulationScale')?Number(experiment.get('undulationScale')):200,coverage:experiment.has('undulationCover')?Number(experiment.get('undulationCover')):.45,seed:seed^0x9e37});
 }
 function serializeNodes() {
-  return nodes.map(n => n.kind==='raster'?{kind:'raster',hidden:n.hidden,heights:encodedHeights(n.heights),protection:encodedHeights(n.protection),routes:encodedHeights(n.routes)}:n.kind==='flowbake'?{kind:'flowbake',hidden:n.hidden,result:encodeResult(n.result)}:{...n,points:n.points?.map(p => ({x:p.x,y:p.y}))});
-}
-// Admission precedes decoding or editor mutation, including server documents
-// whose compressed zero runs can describe a very large stored bake.
-function preflightNodeBakes(list) {
-  let bytes=0;
-  for (const n of list) if(n?.kind==='flowbake'&&n.result) bytes+=savedResultBytes(n.result,grid);
-  if(bytes)sculptRegion.checkMemory?.(bytes);
-  return bytes;
+  return nodes.map(n => n.kind==='raster'?{kind:'raster',hidden:n.hidden,heights:encodedHeights(n.heights),protection:encodedHeights(n.protection),routes:encodedHeights(n.routes)}:{...n,points:n.points?.map(p => ({x:p.x,y:p.y}))});
 }
 function deserializeNodes(list) {
-  preflightNodeBakes(list);
   const decode=text => { const raw=atob(text),view=new DataView(Uint8Array.from(raw,c => c.charCodeAt(0)).buffer),out=new Float32Array(raw.length/4); for (let i=0;i<out.length;i++) out[i]=view.getFloat32(i*4,true); return out; };
-  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:n.kind==='flowbake'?{kind:'flowbake',hidden:Boolean(n.hidden),result:n.result?decodeResult(n.result,grid):undefined}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined});
-}
-// Card F1: a finished bake. The first one is appended as a node; later ones replace the node's stored result in place, so its place in the
-// list (and with it the heights it read) stays. Replay copies the planes: only the old and new rects are redrawn.
-function placeBake(result) {
-  let i=nodes.findIndex(n => n.kind==='flowbake'),old=null;
-  if (i<0) { prefix[nodes.length]=snapshot(); nodes.push({kind:'flowbake'}); i=nodes.length-1; prefix.length=nodes.length; }
-  else old=nodes[i].result?.rect;
-  nodes[i]={...nodes[i],result};
-  evaluate(i,unionRect(old,result.rect)); checkpoint(); schedule();
-  if (shapePending) queueWeather();   // H8b: the GPU result lands later and marks the weather pending; the pass runs again once it has
+  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => n.kind==='raster'?{kind:'raster',hidden:Boolean(n.hidden),heights:decode(n.heights),protection:decode(n.protection),routes:decode(n.routes)}:{kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined});
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; mapFeatures?.deactivate(); rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
@@ -3801,7 +2842,7 @@ $('demo').addEventListener('click',() => {
   experiment.set('example',$('example').value); mixedScene(); checkpoint();
   status('Example loaded · sculpt across the joins.'); schedule(); queueWeather();
 });
-$('blank').addEventListener('click',() => { if (stroke) return;flow?.reset(); applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); nodes=[]; prefix=[]; selected=-1; addGroundNode(); if (regionalFields) regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
+$('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; lastWaterStroke=null; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); heights.fill(config.baseHeight); protection.fill(0); routes.fill(0); cracks.fill(0); cover.fill(0); crystal.fill(0); clearMasks(); nodes=[]; prefix=[]; selected=-1; addGroundNode(); if (regionalFields) regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
 $('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),'terrain-sculpt-v3.json'); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
@@ -3896,8 +2937,6 @@ const KNOBS = [
   ['Fringe lines (Archipelago)', [['bandFoot','Band lines start above the base (units)',0,30,1,0],['ringContrast','Fringe contour lines: contrast',0,1,.05,0],['ringCount','Fringe contour lines: count',1,30,1,7],['ringSize','Fringe contour lines: reach',.1,2,.05,1]]],
   // G3
   ['Fringe copies (Archipelago)', [['ringShift','Offset between copies (px; 0: concentric lines)',0,30,.5,0],['ringShiftDir','Drift direction (deg clockwise from east)',0,360,5,315],['ringScatter','Direction wander (share of a half turn)',0,1,.05,.5],['ringWobble','Outline waver (px)',0,10,.5,3],['ringLobe','Lobe size (px)',8,60,1,22],['ringTaper','Outer lines fainter by',0,1,.05,0],['ringFill','Pale tint where copies overlap',0,1,.05,0],['ringPatch','Reach varies along the outline',0,1,.05,0],['ringPatchSize','Reach variation size (px)',30,400,5,120],['ringTone','Retail rose, paler outward',0,1,.05,0]]],
-  // F1: drawn only where a flow bake exists.
-  ['Current and sediment', [['flowTint','Sediment tint strength',0,1,.05,1],['flowShallow','Tint kept in the shallows',0,1,.05,.85],['flowStreak','Streak contrast',0,1,.05,.5],['flowStreakLen','Streak length (px)',8,160,4,140],['flowBank','Bank tint strength',0,1.5,.05,.9]]],
   // E10 (Lava)
   ['Lava hill rock', [['lavaCrust','Crust: pillows, chips and creases on hills',0,1,.05,0],['lavaPillow','Pillow size (px)',16,80,1,34],['lavaChip','Chip size (px)',3,12,.5,5.5],['lavaVeins','Veins hanging down the slope',0,1,.05,0],['lavaCalm','Fall-line relief replaced by the crust',0,1,.05,.6],['lavaDusk','Dusk on rock turned from the sun',0,2,.05,0]]],
   ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['lavaCreaseVary','Crease breaks into dashes of varying darkness',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
@@ -3935,13 +2974,6 @@ function defaultColor(key) {
   const strata=(config.strataColors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
-}
-// Suggested sediment colours: the world's own materials (what the World panel's Colours edit).
-function flowSuggestions() {
-  const out=[];
-  for (const [key,label] of COLOR_KEYS.slice(0,7)) { if (key==='beach' && !config.textures.beach) continue; out.push([label,mergedColors()[key]||hexColor(defaultColor(key))]); }
-  if (config.water?.midRGB) out.push(['Mid water',hexColor(config.water.midRGB.map(v => v/255))]);
-  return out;
 }
 function goToWorld(base,id,extra) {
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
@@ -4029,7 +3061,6 @@ function buildKnobs() {
     box.addEventListener('change', () => setKnob(key, box.checked ? on : off));
     row.append(box, label); render.append(row);
   };
-  toggle('detail', 'Fall-line surface (off: lab look)', 'fall', 'lab', params.get('detail') !== 'lab');
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
   toggle('ground', 'Procedural ground tiles (off: lab texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
   // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
@@ -4066,7 +3097,6 @@ function setKnob(key, value) {
   // Textures are chosen when the renderer starts, so this switch reloads.
   if (key === 'ground' || key === 'groundPattern') { location.reload(); return; }
   renderer.variant.set(key, value); renderer.applyKnobs(); markViewChanged(); schedule();
-  if (key==='detail') $('fracture-control').hidden=!config.textures.fractures || value!=='lab';
   if (key==='undulation' || key==='undulationScale' || key==='undulationCover') {
     const i=nodes.findIndex(n => n.kind==='ground');
     if (i>=0) { nodes[i][{undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage'}[key]]=Number(value); cancelWeather(); evaluate(i); checkpoint(); queueWeather(); }
@@ -4076,27 +3106,6 @@ function setKnob(key, value) {
   // Transport knobs change where sand is carried, so the worker re-runs.
   if (['sand','sandReach','windStrength','wind','sandPatchy','sandTail'].includes(key)) { cancelWeather(); queueWeather(); }
 }
-// A flow bake hashes every authored input cell, including off-screen cells.
-// Its height prefix is collected in bounded reads, never a world of mask planes.
-function readFlowBefore(rect,index){
-  const w=rect.x1-rect.x0+1,h=rect.y1-rect.y0+1,out=new Float32Array(w*h),prefixCount=regionalStages(index<0?nodes:nodes.slice(0,index)).length;
-  for(let y=rect.y0;y<=rect.y1;y+=256)for(let x=rect.x0;x<=rect.x1;x+=256){
-    const q={x0:x,y0:y,x1:Math.min(x+255,rect.x1),y1:Math.min(y+255,rect.y1)},part=regionalFields.readCells(q,{prefixCount});
-    for(let yy=q.y0;yy<=q.y1;yy++)out.set(part.fields.h.subarray((yy-q.y0)*part.gridWidth,(yy-q.y0+1)*part.gridWidth),(yy-rect.y0)*w+q.x0-rect.x0);
-  }return out;
-}
-function sampleFlow(x,y){
-  const gx=Math.round(x/spacing),gy=Math.round(y/spacing);
-  for(let i=nodes.length-1;i>=0;i--){const n=nodes[i],r=n.result?.rect;if(n.hidden||n.kind!=='flowbake'||!r||gx<r.x0||gx>r.x1||gy<r.y0||gy>r.y1)continue;const k=(gy-r.y0)*(r.x1-r.x0+1)+gx-r.x0;return[n.result.planes[0][k],n.result.planes[1][k]];}
-  return[0,0];
-}
-function mountCurrentFlow(){
-  flow=mountFlow({$,settled:shapeSettled,nodes:() => nodes,prefix:() => prefix,heights:() => heights,grid:() => grid,size:() => size,spacing:() => spacing,sea:() => config.seaLevel,nodeBounds,place:placeBake,...(regionalFields?{readBefore:readFlowBefore,revision:()=>revision,reserve:bytes=>sculptRegion.checkMemory?.(bytes),view:()=>mapCanvas?.view(),flowAt:sampleFlow}:{}),
-      world:activeWorld,saveWorlds,suggestions:flowSuggestions,status,error,schedule:() => schedule(false),updateControls,persist:persistLater,editing:() => Boolean(stroke||moving||loading),
-      relabel:renderLayers,lift:(x,y)=>regionalFields?(Math.max(config.seaLevel,sampleRegional(x,y))-config.baseHeight)*.5:liftAt(x,y),planes:() => maskPlanes,mountPanel:el => { const panels=$('editor').querySelectorAll(':scope > section.panel'); $('editor').insertBefore(el,panels[panels.length-1]); },
-      recolourSelected:color => { if (nodes[selected]?.kind==='source') changeSelected(n => { n.params={...n.params,color}; }); }});
-
-}
 async function bootMap() {
   worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
   size=worldSize; grid=worldGrid; spacing=(worldSize-1)/(worldGrid-1);
@@ -4105,16 +3114,11 @@ async function bootMap() {
   heights=new Float32Array(0); protection=new Float32Array(0); routes=new Float32Array(0); cracks=new Float32Array(0); cover=new Float32Array(0); crystal=new Float32Array(0); maskPlanes=MASK_KEYS.map(() => new Int8Array(0));
   seed=Number($('seed').value); refinementSeed=seed; regionalFields=makeRegionalFields();
   addGroundNode();
-  mapWeather=mountMapWeather({api:sculptRegion,config,enabled:()=>$('weather').checked && !pagedOn(),active:()=>Boolean(stroke||moving),forceTiled:experiment.get('weatherTiles')==='1',
-    params:()=>({seed:refinementSeed,strength:.35,profile:experiment.get('weather')==='broad'?'broad':undefined,baseHeight:config.baseHeight,seaLevel:config.seaLevel,talus:Number($('scree').value)/100,materialWeathering:experiment.get('deposits')==='off'||renderer?.materialModel?0:Number($('material-weathering').value)/100,depositSpread:Number($('deposit-spread').value)/100,materialProfile:{...config.material,mineral:renderer?.variant.get('transition')==='mineral'},sand:Number(experiment.get('sand')||0),sandReach:Number(experiment.get('sandReach')??.6),sandPatchy:Number(experiment.get('sandPatchy')??.7),sandTail:Number(experiment.get('sandTail')??.6),windStrength:Number(experiment.get('windStrength')??.5),windAngle:Number(experiment.get('wind')??20)}),
-    onReady:rect=>{weatherState='ready';$('weather-state').textContent='Overlapping weather tiles · fixed seeds · ready on demand';mapCanvas?.invalidate(rect);},
-    onProgress:p=>{$('weather-state').textContent=`Weathering overlapping tiles · ${Math.round(p.progress*100)}% of this region`;}
-  });
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
-  buildKnobs(); buildWorldPanel();mountCurrentFlow();
-  $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
+  buildKnobs(); buildWorldPanel();
+  $('fracture-control').hidden=true;
   $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100); $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
   let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
   if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved map recipe.'); } catch (err) { error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); } }
@@ -4172,14 +3176,13 @@ async function boot() {
     canvas.width=canvas.height=overlay.width=overlay.height=size; seed=Number($('seed').value); refinementSeed=seed; noise=makeNoise(seed);
     renderer=await TerrainRenderer.create(canvas,config);
     // H5: Green's engine has no apron (the Time pass's debris is in the height), so the Scree slider reads nothing there.
-    if (renderer.engine) $('scree').closest('.control').hidden=true;
+    $('scree').closest('.control').hidden=true;
     renderer.onerror=message => error(message);
     renderer.setColors(worldColors());
     buildKnobs(); buildWorldPanel();
-    mountCurrentFlow();
     // The fracture texture only applies to the lab surface; the fall-line
     // surface draws its cracks in the bake (Cracks knobs).
-    $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';
+    $('fracture-control').hidden=true;
     $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100);
     $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
     mapMetadata=mountMapExport({config,canvas,ready:canExport,revision:() => revision+':'+weatherJob+':'+mapRevision,mapData,features:() => mapFeatures,change:mapChanged,samples:() => { const display=renderer.height; return (x,y) => sample(display,x,y); },render:renderExportView,restore:() => { if (exportSurface) { renderer.setHeight(exportSurface,grid); exportSurface=null; } schedule(); },onUpdate:fn => { mapUpdate=fn; },busy:on => { loading=on; $('editor').disabled=on; $('world-editor').disabled=on; for (const id of ['weather','clay','light']) $(id).disabled=on; overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on; }});
@@ -4213,55 +3216,27 @@ function replayDetail() {
   keys.forEach((k,j) => { let w=0; for (let i=0;i<before[j].length;i++) w=Math.max(w,Math.abs(before[j][i]-now[k][i])); worst[k]=w; });
   return worst;
 }
-// H6 check tool (repro/shapecheck.mjs): the GPU shape result against the JS engine's and against a second GPU run, on this page's scene.
-// H10: the coast distance field on the GPU (scratch plane 9 after the node list) against the JS engine's coastField for the same node, the last one of the list.
-async function coastCheck(which='layers') {
-  flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
-  const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0');
-  window.coastKeep=[]; experiment.set('gpuShape','0'); window.history.replaceState(null,'',off); prefix=[]; evaluate(0);
-  const keep=window.coastKeep.filter(k => k.kind===which); window.coastKeep=null; window.history.replaceState(null,'',href); experiment.set('gpuShape','1');
-  if (!keep.length) return {error:'the JS engine ran no '+which+' pass'};
-  const js=keep[keep.length-1];
-  const engine=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
-  try {
-    const out=await engine.run(nodes.slice(),shapeContext(),null,{plane:9}), g=out.plane, b=js.box;
-    const diffs=[], far=1e4; let farOnly=0, gpuOnly=0, worst=null;
-    for (let y=b.y0;y<=b.y1;y++) for (let x=b.x0;x<=b.x1;x++) {
-      const i=y*grid+x, a=g[i], r=js.dist[i];
-      if (a>=far && r>=far) continue;
-      if (a>=far) { farOnly++; continue; } if (r>=far) { gpuOnly++; continue; }
-      const d=Math.abs(a-r); diffs.push(d); if (!worst || d>worst.d) worst={d,x,y,gpu:a,js:r};
-    }
-    diffs.sort((p,q) => p-q);
-    const at=f => diffs[Math.min(diffs.length-1,Math.floor(f*diffs.length))];
-    return {spacing,cells:diffs.length,max:diffs[diffs.length-1],p95:at(.95),p50:at(.5),worst,jsFarGpuNear:gpuOnly,gpuFarJsNear:farOnly,box:b};
-  } finally { engine.destroy(); }
-}
+// Repeat check (repro/shapecheck.mjs): two GPU evaluations of this page's scene give identical planes.
 async function shapeCompare() {
   const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
   const idle=async () => { for (let i=0;i<4000 && (shapePending || regionalFields?.pending?.());i++) await new Promise(r => setTimeout(r,10)); };
   if (regionalFields) {
-    const js=regionalFields.reference?.(); if (!js) return {error:'gpuShape is off or the scene fell back: '+(regionalFields.reason?.()||'knob 0')};
     const all={x0:0,y0:0,x1:worldGrid-1,y1:worldGrid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,masks:MASK_KEYS.map(k => r.fields[k])});
-    await idle(); const t0=performance.now(); const a=copy(grab(regionalFields.readCells(all))); const copyMs=performance.now()-t0;
-    const t1=performance.now(); const ref=copy(grab(js.readCells(all,{cacheResult:false}))); const jsMs=performance.now()-t1;
+    await idle(); const a=copy(grab(regionalFields.readCells(all)));
     regionalFields.changed(); await idle(); const b=copy(grab(regionalFields.readCells(all)));
-    return {grid:worldGrid,jsReadMs:jsMs,vsJs:comparePlanes(a,ref,worldGrid,MASK_KEYS),repeat:comparePlanes(a,b,worldGrid,MASK_KEYS)};
+    return {grid:worldGrid,repeat:comparePlanes(a,b,worldGrid,MASK_KEYS)};
   }
   flushEval(); await idle();
-  if (!shapeStudy.used) return {error:'gpuShape is off or the scene fell back: '+(shapeStudy.reason||'knob 0')};
-  const a=copy(live()),saved=experiment.get('gpuShape');
-  // gpuShapeOn reads the address first, so the JS reference has to change the address (H8b: the experiment value alone left the GPU running both sides).
-  const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0');
-  experiment.set('gpuShape','0'); window.history.replaceState(null,'',off); const t0=performance.now(); prefix=[]; evaluate(0); const jsMs=performance.now()-t0; const ref=copy(live()); experiment.set('gpuShape',saved??'1'); window.history.replaceState(null,'',href);
+  if (!shapeStudy.used) return {error:'the study scene has no GPU shape result'};
+  const a=copy(live());
   evaluate(0); await idle(); const b=copy(live());
-  return {grid,jsEvalMs:jsMs,vsJs:comparePlanes(a,ref,grid,MASK_KEYS),repeat:comparePlanes(a,b,grid,MASK_KEYS)};
+  return {grid,repeat:comparePlanes(a,b,grid,MASK_KEYS)};
 }
-// H6: under gpuShape 1 regional replay is replaced by one whole-map evaluation, so the regional check asks two other things: a fresh whole-map
+// Regional replay is one whole-map evaluation, so the regional check asks two other things: a fresh whole-map
 // evaluation read back equals the CPU copy, and a window evaluated alone (the four quadrants) equals the same crop of the whole.
 async function gpuRegionalCheck() {
   flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
-  if (!shapeStudy.used) throw new Error('gpuShape is off or the scene fell back to the JS engine: '+(shapeStudy.reason||'knob 0'));
+  if (!shapeStudy.used) throw new Error('the study scene has no GPU shape result yet');
   const engine=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT}),ctx=shapeContext();
   const whole=live(),planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
   let mismatches=0;
@@ -4269,8 +3244,7 @@ async function gpuRegionalCheck() {
     const part={h:new Float32Array(grid*grid),p:new Float32Array(grid*grid),r:new Float32Array(grid*grid),c:new Float32Array(grid*grid),v:new Float32Array(grid*grid),x:new Float32Array(grid*grid),masks:MASK_KEYS.map(() => new Int8Array(grid*grid))};
     engine.copyOut(out,part);
     const {x0,y0,x1,y1}=out.rect;
-    // The flow planes (mask planes 20-24) come from the stored bake, which the passes skip and applyBakes copies in, so they are not the pass's to compare.
-    for (const key of FIELD_KEYS) if (!(MASK_KEYS.indexOf(key)>=FLOW_FIRST)) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+    for (const key of FIELD_KEYS) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
       const j=MASK_KEYS.indexOf(key),expected=whole[key][y*grid+x],actual=j>=0?part.masks[j][y*grid+x]:part[key][y*grid+x];
       if (expected===actual && Number.isFinite(actual)) continue;
       const p=planes[key]; p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity); p.firstMismatch??={x,y,whole:expected,gpu:actual,run:tag};
@@ -4297,33 +3271,10 @@ async function shapeLevel(factor=2) {
 // the map engine independently replays its graph through four regional reads.
 // Weather and GPU pixels have separate guards: this checks every brush plane.
 function checkRegionalFields() {
-  // A scene the passes refuse ran on the JS engine, so its regional check is the JS one below.
-  if(!config.map && gpuShapeOn() && (shapePending || shapeStudy.used))return gpuRegionalCheck();
   if(config.map)throw new Error('Run the regional field check on a 1024px study scene.');
-  if(!canExport())throw new Error('Wait for the scene and its flow bake before checking regional fields.');
-  flushEval();
-  const whole=live(),saved={regionalFields,worldSize,worldGrid},planes=Object.fromEntries(FIELD_KEYS.map(k=>[k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
-  let mismatches=0;
-  try {
-    // The JS regional engine is what this checks: take the address's gpuShape away while the fields are made (gpuShapeOn reads it first).
-    const href=location.href,off=new URL(href); off.searchParams.set('gpuShape','0'); window.history.replaceState(null,'',off);
-    worldSize=size;worldGrid=grid;try { regionalFields=makeRegionalFields(); } finally { window.history.replaceState(null,'',href); }
-    const middle=Math.floor(grid/2),cuts=[[0,middle-1],[middle,grid-1]];
-    for(const [y0,y1]of cuts)for(const [x0,x1]of cuts){
-      const part=regionalFields.readCells({x0,y0,x1,y1});
-      for(const key of FIELD_KEYS)for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
-        const expected=whole[key][y*grid+x],actual=part.fields[key][(y-y0)*part.gridWidth+x-x0];
-        if(expected===actual&&Number.isFinite(actual))continue;
-        const p=planes[key];p.mismatches++;mismatches++;p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity);
-        p.firstMismatch??={x,y,whole:expected,regional:actual};
-      }
-    }
-    return {grid,planes,mismatches};
-  } finally {
-    regionalFields?.clear();({regionalFields,worldSize,worldGrid}=saved);
-  }
+  return gpuRegionalCheck();
 }
-window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,coastCheck,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,reason:shapeStudy.reason,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,placeBake,bake:options => flow.bake(options),flow:() => flow.debug(),capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
+window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, heights: () => Array.from(previewHeight()), authored: () => Array.from(heights), // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),
@@ -4367,7 +3318,7 @@ window.sculptDebug.pagedWeatherCompare=async () => {
 };
 // H5b: the Time pass at two window aprons over the same shape (8x8, say): a second paged object at `other` cells of apron against the live one; max and count of the eroded height differences and the maps.
 window.sculptDebug.apronCompare=async other => {
-  const B=createPagedFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:regionalFields.reference(),device:() => renderer?.device,context:shapeContext,gesture:() => false,apron:other});
+  const B=createPagedFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => false,apron:other});
   configurePagedTime(B); const A=regionalFields,np=A.pageInfo().np,C=A.core; let maxE=0,over001=0,over01=0,mapBad=0,cells=0,at=null;
   const rd=(b,bytes) => readBuffer(renderer.device,b,0,bytes);
   for (let py=0;py<np;py++) for (let px=0;px<np;px++) {

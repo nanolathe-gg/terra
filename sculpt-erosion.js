@@ -1,6 +1,5 @@
 // H2: the GPU erosion pass (erosion.wgsl) for the 1024-px study, run on the renderer's
-// device in place of the droplet loop of sculpt-weathering.js (knob erosion 1). It keeps
-// that worker's contract: the same mobility and lower/upper bounds (derived below from the
+// device (knob erosion 1; 0 is Weathering off). Its contract: the same mobility and lower/upper bounds (derived below from the
 // same slope rules, at the worker's own largest budget), no change to submerged samples
 // or to protected ones, and a height between sea -90 and sea +300. The worker then runs
 // with the height this returns, so the apron, sand and material field are as before.
@@ -63,17 +62,17 @@ function fixedField({height, protect, rate, grid, size, seaLevel, envelope = 1})
 }
 
 export class GpuErosion {
-  constructor(renderer, source, tiled = false) {
-    this.renderer = renderer; this.tiled = tiled;
+  constructor(renderer, source) {
+    this.renderer = renderer;
     const device = this.device = renderer.device;
     const module = device.createShaderModule({label: 'erosion', code: source});
     this.ready = module.getCompilationInfo().then(info => {
       const errors = info.messages.filter(m => m.type === 'error');
-      if (errors.length) throw new Error('nanolathe: erosion.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+      if (errors.length) throw new Error('nanolathe: engine-erosion.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
       const C = GPUShaderStage.COMPUTE;
       const buffer = type => ({visibility: C, buffer: {type}});
       this.layout1 = device.createBindGroupLayout({label: 'erosion', entries: [{binding: 0, ...buffer('uniform')}, {binding: 1, ...buffer('read-only-storage')}, {binding: 2, ...buffer('storage')},
-        {binding: 3, ...buffer('read-only-storage')}, {binding: 4, ...buffer('storage')}, {binding: 5, ...buffer('storage')}, {binding: 6, ...buffer('storage')}, {binding: 7, ...buffer('storage')}, ...(tiled ? [{binding: 8, ...buffer('read-only-storage')}] : [])]});
+        {binding: 3, ...buffer('read-only-storage')}, {binding: 4, ...buffer('storage')}, {binding: 5, ...buffer('storage')}, {binding: 6, ...buffer('storage')}, {binding: 7, ...buffer('storage')}, {binding: 8, ...buffer('read-only-storage')}]});
       this.layout0 = device.createBindGroupLayout({label: 'erosion u', entries: [{binding: 0, ...buffer('uniform')}]});
       const layout = device.createPipelineLayout({bindGroupLayouts: [this.layout0, this.layout1]});
       this.pipelines = {};
@@ -165,9 +164,10 @@ export class GpuErosion {
     return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu, tiles: null, gpuFed: true}};
   }
 
-  // H8 rule: the material field (engine-weather.wgsl mf*), the GPU form of sculpt-material-weathering.js's weatherMaterials. Reads the height the
-  // pass left; returns Float32Array(grid * grid * 4): arrival, soil, softened source, source (gridTexture layer 1).
-  async materialField({height, grid, size, seaLevel = 0, baseHeight = 24, seed = 1, depositSpread = .65, profile = {}}) {
+  // The material field (engine-weather.wgsl mf*): arrival, soil, softened source and source a cell, as a GPU buffer of vec4f that the chunk feed
+  // writes into gridTexture layer 1. It reads a height already on the GPU (the Time pass's eroded plane: `heightBuffer`, `heightOffset` cells in)
+  // and never comes back to the CPU. {ox, oy} is the window's first lattice cell, so that pages of one map join. The caller owns the buffer.
+  async materialField({heightBuffer, heightOffset = 0, grid, size, ox = 0, oy = 0, seaLevel = 0, baseHeight = 24, seed = 1, depositSpread = .65, profile = {}}) {
     await this.ready;
     const {device} = this, n = grid * grid, spacing = (size - 1) / (grid - 1), spread = clamp(depositSpread, 0, 1);
     if (!this.field) {
@@ -180,18 +180,19 @@ export class GpuErosion {
     }
     const P = this.field, S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, made = [];
     const make = (bytes, usage = S) => { const b = device.createBuffer({size: Math.max(16, bytes), usage}); made.push(b); return b; };
-    const heightBuf = make(n * 4); device.queue.writeBuffer(heightBuf, 0, Float32Array.from(height));
-    const [source, gx, gy, basin, deposit, flow, a, b, c, soft, settled, broad, runoff] = Array.from({length: 13}, () => make(n * 4)), field = make(n * 16);
+    const heightBuf = make(n * 4);
+    const [source, gx, gy, basin, deposit, flow, a, b, c, soft, settled, broad, runoff] = Array.from({length: 13}, () => make(n * 4)), field = device.createBuffer({label: 'material field', size: n * 16, usage: S});
     const mineral = profile.mineral === true, elevated = profile.elevatedCover || [0, 30, 0];
     const uniform = (sigma, axis) => {
-      const buf = make(64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST), view = new DataView(new ArrayBuffer(64));
+      const buf = make(80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST), view = new DataView(new ArrayBuffer(80));
       [grid, spacing, seaLevel, baseHeight, spread].forEach((v, i) => view.setFloat32(i * 4, v, true));
-      view.setUint32(20, seed >>> 0, true); view.setUint32(24, Math.round(n * .52), true);
-      [profile.rockyCoasts ? 1 : 0, mineral ? 1 : 0, elevated[0], elevated[1], elevated[2], profile.transportSlopeStart ?? (mineral ? .07 : .60), profile.transportSlopeFull ?? (mineral ? .55 : 1.35), sigma, axis]
+      view.setUint32(20, seed >>> 0, true); view.setUint32(24, n, true);
+      [profile.rockyCoasts ? 1 : 0, mineral ? 1 : 0, elevated[0], elevated[1], elevated[2], profile.transportSlopeStart ?? (mineral ? .07 : .60), profile.transportSlopeFull ?? (mineral ? .55 : 1.35), sigma, axis, ox, oy]
         .forEach((v, i) => view.setFloat32(28 + i * 4, v, true));
       device.queue.writeBuffer(buf, 0, view.buffer); return buf;
     };
     const encoder = device.createCommandEncoder({label: 'material field'});
+    encoder.copyBufferToBuffer(heightBuffer, heightOffset * 4, heightBuf, 0, n * 4);
     const run = (pipeline, ids, bufs, uni, groups) => {
       const pass = encoder.beginComputePass();
       pass.setPipeline(pipeline);
@@ -200,7 +201,7 @@ export class GpuErosion {
     };
     const tiles = Math.ceil(grid / 8), u0 = uniform(0, 0);
     run(P.source, [1, 2, 3, 4, 5], [heightBuf, source, gx, gy, basin], u0, [tiles, tiles]);
-    run(P.drops, [1, 2, 3, 4, 6, 7], [heightBuf, source, gx, gy, deposit, flow], u0, [Math.ceil(Math.round(n * .52) / 64)]);
+    run(P.drops, [1, 2, 3, 4, 6, 7], [heightBuf, source, gx, gy, deposit, flow], u0, [Math.ceil(n / 64)]);
     const blur = (input, output, sigma) => {
       run(P.blur, [8, 9], [input, c], uniform(sigma, 0), [tiles, tiles]);
       run(P.blur, [8, 9], [c, output], uniform(sigma, 1), [tiles, tiles]);
@@ -209,13 +210,9 @@ export class GpuErosion {
     run(P.counts, [6, 7, 9], [deposit, flow, b], uniform(0, 2), [tiles, tiles]);
     blur(source, soft, 9 + spread * 17); blur(a, settled, 2.6); blur(a, broad, 9); blur(b, runoff, 3.5);
     run(P.combine, [1, 2, 5, 10, 11, 12, 13, 14], [heightBuf, source, basin, field, settled, broad, runoff, soft], u0, [tiles, tiles]);
-    const read = make(n * 16, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
-    encoder.copyBufferToBuffer(field, 0, read, 0, n * 16);
     device.queue.submit([encoder.finish()]);
-    await read.mapAsync(GPUMapMode.READ);
-    const out = new Float32Array(read.getMappedRange().slice(0));
-    made.forEach(buf => buf.destroy());
-    return out;
+    made.forEach(buf => buf.destroy());   // destroyed buffers wait for the submitted work
+    return field;
   }
 
   // request: {height, protect, grid, size, seaLevel, age, rain, talusAngle}. Returns the eroded height (rock + debris), the
@@ -243,7 +240,7 @@ export class GpuErosion {
     // H5 (engine-erosion.wgsl): the steps run over the active 8 x 8 tiles only. A tile is active when it or a tile beside it holds a sample
     // that can move (mobility above 0); the rest never change, so every state buffer starts with the authored height.
     let tileCount = 0, tileBuffer = null;
-    if (this.tiled) {
+    {
       const tw = Math.ceil(grid / 8), flag = new Uint8Array(tw * tw), list = [];
       for (let y = 0; y < grid; y++) for (let x = 0; x < grid; x++) if (fixed[(y * grid + x) * 4 + 2] > 0) flag[(y >> 3) * tw + (x >> 3)] = 1;
       for (let ty = 0; ty < tw; ty++) for (let tx = 0; tx < tw; tx++) {
@@ -258,18 +255,18 @@ export class GpuErosion {
     }
     device.queue.writeBuffer(fixedBuffer, 0, fixed);
     device.queue.writeBuffer(paramBuffer, 0, params);
-    for (const b of [...(this.tiled ? [] : [state[1], state[2]]), fluxA, fluxB, vel, acc]) device.queue.writeBuffer(b, 0, new Float32Array(b.size / 4));
+    for (const b of [fluxA, fluxB, vel, acc]) device.queue.writeBuffer(b, 0, new Float32Array(b.size / 4));
     this.renderer.setColumn();
     this.renderer.flushUniforms();
     const group1 = (src, dst, fIn, fOut) => device.createBindGroup({layout: this.layout1, entries: [{binding: 0, resource: {buffer: paramBuffer}},
       {binding: 1, resource: {buffer: src}}, {binding: 2, resource: {buffer: dst}}, {binding: 3, resource: {buffer: fIn}}, {binding: 4, resource: {buffer: fOut}},
-      {binding: 5, resource: {buffer: vel}}, {binding: 6, resource: {buffer: acc}}, {binding: 7, resource: {buffer: fixedBuffer}}, ...(tileBuffer ? [{binding: 8, resource: {buffer: tileBuffer}}] : [])]});
+      {binding: 5, resource: {buffer: vel}}, {binding: 6, resource: {buffer: acc}}, {binding: 7, resource: {buffer: fixedBuffer}}, {binding: 8, resource: {buffer: tileBuffer}}]});
     const group0 = device.createBindGroup({layout: this.layout0, entries: [{binding: 0, resource: {buffer: this.renderer.uniformBuffer}}]});
     const [s0, s1, s2] = state;
     const flux = group1(s0, s1, fluxA, fluxB), water = group1(s0, s2, fluxB, fluxA), exchange = group1(s2, s1, fluxA, fluxB), carry = group1(s1, s0, fluxA, fluxB);
     const thermalA = group1(s0, s1, fluxA, fluxB), thermalB = group1(s1, s0, fluxA, fluxB);
     const groups = Math.ceil(grid / 8), encoder = device.createCommandEncoder({label: 'erosion'}), pass = encoder.beginComputePass({label: 'erosion'});
-    const step = (entry, group) => { pass.setPipeline(this.pipelines[entry]); pass.setBindGroup(0, group0); pass.setBindGroup(1, group); if (this.tiled && entry !== 'offsetMain') { if (tileCount) pass.dispatchWorkgroups(tileCount); } else pass.dispatchWorkgroups(groups, groups); };
+    const step = (entry, group) => { pass.setPipeline(this.pipelines[entry]); pass.setBindGroup(0, group0); pass.setBindGroup(1, group); if (entry !== 'offsetMain') { if (tileCount) pass.dispatchWorkgroups(tileCount); } else pass.dispatchWorkgroups(groups, groups); };
     step('offsetMain', flux);
     for (let it = 0; it < age; it++) {
       step('fluxMain', flux); step('waterMain', water); step('exchangeMain', exchange); step('carryMain', carry);

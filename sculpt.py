@@ -12,8 +12,8 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
-    'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.wgsl', 'erosion.wgsl', 'engine-erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
+    'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl',
+    'engine-erosion.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -83,9 +83,6 @@ KNOB_DEFAULTS = dict(
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
-    # F1 (flow bake): how the baked current and sediment are drawn. Nothing reads them in a scene with no bake, so no world's
-    # render changes; they are tuned on Zhon's rivers.
-    flowTint=1, flowShallow=.85, flowStreak=.5, flowStreakLen=140, flowBank=.9,
 )
 # Shine and roughness (card E2): per material (ground, slope cover, rock, sand,
 # crystal) a gloss (highlight strength), a sharpness (Blinn exponent), a roughness
@@ -140,13 +137,12 @@ KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, bedMot
 # (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
 KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight=0, layerVary=0, layerCircle=26)
 # E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
-KNOB_DEFAULTS.update(hillLobes=0, hillSteps=8)
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
 KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
 # G5 (Lava): contour layers wander in two dimensions (layers of amplitude; 0 follows the shore only) and spread in width (0 none).
 KNOB_DEFAULTS.update(lavaMeander=0, lavaSpread=0, lavaCircleVary=0)
 # G5 (Lava), shader knob: the bank crease breaks into dashes of varying darkness (0: unbroken).
-KNOB_DEFAULTS.update(lavaCreaseVary=0, lavaTread=0)
+KNOB_DEFAULTS.update(lavaCreaseVary=0)
 # G5 (Lava), hill rock: crust strength (0: none), pillow and chip size in px, hanging veins, the share of the fall-line relief it replaces, and the dusk on shaded rock.
 KNOB_DEFAULTS.update(lavaCrust=0, lavaPillow=34, lavaChip=5.5, lavaVeins=0, lavaCalm=.6, lavaDusk=0)
 # E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
@@ -209,11 +205,6 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # eight, repeating upward) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). erosion 1 runs the GPU shallow-water pass in place of the droplet worker for the 1024-px study:
 # erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
-# H3 (Green): materialModel 1 draws the land materials from materials/green.json through material-model.wgsl,
-# with no prepared image (0: the images, as before).
-KNOB_DEFAULTS.update(materialModel=0)
-# H4 (Green): engine 1 draws and bakes with engine-frag/engine-bake/engine-common, Green's own copies (0: the shared shaders, as merge-h3).
-KNOB_DEFAULTS.update(engine=1)   # H8: every world draws on the engine; ?engine=0 is the shared draw (merge-h6c)
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
 KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
@@ -221,8 +212,6 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
-# H6 (Green): gpuShape 1 evaluates the brushes Green's windows use on the GPU (engine-shape.wgsl); 0 is the JS engine.
-KNOB_DEFAULTS.update(gpuShape=0)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
@@ -230,11 +219,11 @@ KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0,
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
 # Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
 # scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
-LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12, gpuShape=1)   # a shape the passes refuse (Lava, Crystal, Ice) falls back to the JS engine as a whole
+LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
-                  rockMoss=.4, hillBlocks=.5, gpuShape=1,
+                  rockMoss=.4, hillBlocks=.5,
                   terraceBreak=1.4, terraceCalm=0, wetSwath=.35, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
 }
@@ -244,7 +233,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(materialModel=1, banding=.8, bandLine=.84, crackDark=.4,
+    'green': dict(banding=.8, bandLine=.84, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -532,7 +521,7 @@ WORLD_KNOBS = {
                  lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.2,
                  # G5: hill rock as retail's crust, pillows and chips with creases and hanging veins, the fall-line relief it
                  # replaces, treads tilted toward the crown, and the tall hills' far sides near black.
-                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8, lavaTread=.6,
+                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8,
                  shineSlopeGate=.7, shineWhite=.3, shineStretch=3,
                  shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
                  shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),
@@ -866,8 +855,8 @@ def biome_config(biome, assets, prepared=False):
     # Accepted Green Planet authoring profile. Explicit query values still
     # select older comparisons; plain /sculpt opens the reviewed treatment.
     config['defaults'] = dict(noise='ridged', coverage='form', rock='hill',
-        lighting='front', forms='shouldered', surface='slopes', scene='compact',
-        weather='broad', transition='soil', material='varied', edges='natural',
+        lighting='front', surface='slopes', scene='compact',
+        transition='soil', material='varied',
         fractures='40', scree='70', shade='separate')
     config['material'].update(materialWeathering=0.0, depositSpread=.65)
     if biome == 'green':

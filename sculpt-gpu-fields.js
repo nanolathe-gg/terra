@@ -4,8 +4,7 @@
 //   createShapeEngine   the GPU side: node preparation (path simplification, frames, boxes: the JS engine's own arithmetic), the
 //                       passes, and the readback of a rectangle.
 //   createGpuFields     the same object as createRegionalFields (read, readCells, sample, cell, changed, clear, revision, stats...)
-//                       for a map, over one whole-map evaluation; a scene with any node the passes do not take is handed to the JS
-//                       fields as a whole (`fallback`), and the status line says so.
+//                       for a map, over one whole-map evaluation; a node the passes do not draw draws nothing.
 //
 // The CPU copy is refreshed asynchronously: changed() starts a GPU evaluation of the dirty rectangle and a readback of just that
 // rectangle; read() waits (readAsync/ready) so a bake never sees a half-written copy and the frame never waits.
@@ -217,39 +216,20 @@ function craterRim(q, seed) {
   return {sect: sect.map(c => ({...c, rel: c.a - sect[0].a})), gaps, hw: clamp(q.rimGapWidth, 10, 180) * Math.PI / 360};
 }
 // ---- node preparation ----
-// Returns {reason} when the passes do not take the node (the scene then runs on the JS engine), or {skip:true} for a node that
-// writes nothing, else {op:'ground'|'stamp', ...}. `c` is the host's context (see makeShapeContext in sculpt.js).
-export function nodeSupport(n, c) {
-  if (n.hidden) return null;
-  if (c.skipKind(n.kind)) return null;
-  if (n.kind === 'ground') return null;
-  if (!(n.kind in KIND)) return `${n.kind} is not on the GPU path`;
-  const q = c.params(n), kind = n.kind, water = kind === 'deep' || kind === 'shallow';
-  if (!n.points?.length) return `${kind} without points`;
-  if (kind === 'hill' && (!c.shouldered || c.replayFull)) return 'hill outside the shouldered form';
-  if ((kind === 'paint' || kind === 'erase') && !c.edgesNatural) return `${kind} without natural edges`;
-  if (kind === 'deep' && !c.natural) return 'restrained coast';
-  // H6c: plateau, offset, lower, sand, grass.
-  if (['plateau', 'offset', 'sand', 'grass'].includes(kind) && !c.edgesNatural) return `${kind} without natural edges`;
-  if (kind === 'plateau' || kind === 'offset' || kind === 'crater') {
-  }
-  if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes or base options';
-  // The coast pass runs for water strokes only (hasCoastPass in sculpt.js); a world default must not refuse its hills and plateaus.
-  // H10: the coast pass (fingers on the joined coast as thumbs, layers in styles 0 and 1). Ribs fingers and the mounds style wait for the owner's ruling.
-  return null;
-}
+// What the passes draw: every kind in KIND with at least one point (and the ground node). prepareNode returns {skip:true} for any other node,
+// which draws nothing, and for a node that writes nothing, else {op:'ground'|'stamp', ...}. `c` is the host's context (see shapeContext in sculpt.js).
 
 // The smooth brush's box blur radius in cells: sculpt.js's clamp(round(radius / (7 spacing)), 1, 24) at the final grid, scaled to this level's spacing.
 export const smoothRadius = (radius, {spacing, refSpacing = spacing}) => Math.max(1, Math.round(clamp(Math.round(radius / (refSpacing * 7)), 1, 24) * refSpacing / spacing));
 export function prepareNode(n, geom, c) {
-  if (n.hidden || c.skipKind(n.kind)) return {skip: true};
+  if (n.hidden || (n.kind !== 'ground' && (!(n.kind in KIND) || !n.points?.length))) return {skip: true};
   const {grid, spacing} = geom;
   if (n.kind === 'ground') return {op: 'ground', seed: (n.seed ?? 1) >>> 0, amp: n.amplitude ?? 8, wave: n.wavelength ?? 160, cover: n.coverage ?? .5};
   const q = c.params(n), kind = n.kind, kcode = KIND[kind];
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), pts = n.points, radius = q.radius;
-  const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep' && c.natural;
-  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
+  const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
+  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
@@ -405,7 +385,7 @@ export function prepareNode(n, geom, c) {
   const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
-      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
+      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
       ...outlineUniforms(kind, q, radius), ...sectionUniforms(kind, q, c), bankFlat: (kind === 'deep' || kind === 'shallow') && !(q.profile >= .5) ? Math.max(0, q.bankPx || 0) : 0, bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
@@ -791,13 +771,13 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
 
 // ---- the fields object ----
 // opts: the createRegionalFields options (worldSize, worldGrid, baseHeight, keys, maskKeys, nodes), plus device() (the GPU device, or null
-// until the renderer exists), context() (the host context for prepareNode) and fallback (a createRegionalFields instance).
+// until the renderer exists), context() (the host context for prepareNode).
 export function createGpuFields(opts) {
-  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, fallback, device, context} = opts;   // opts.forceRing (page parameter pageRing=N): a ring chosen by hand, for checking the ring rule against the whole-map engine
+  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, device, context} = opts;   // opts.forceRing (page parameter pageRing=N): a ring chosen by hand, for checking the ring rule against the whole-map engine
   const spacing = (worldSize - 1) / (worldGrid - 1), cells = worldGrid * worldGrid, listeners = new Set();
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
-  let revision = 0, planes = null, engine = null, enginePromise = null, valid = false, gpuValid = false, reason = null, error = null;
+  let revision = 0, planes = null, engine = null, enginePromise = null, valid = false, gpuValid = false, error = null;
   let lastEval = {}, firstReady = 0;
   // H6b: a change is requested (queued), submitted to the GPU at once unless two runs are still unfinished, and its rectangle read
   // back into the CPU copy only when nothing is being edited: during a gesture (opts.gesture) the copy is left, and one read of everything changed
@@ -811,7 +791,6 @@ export function createGpuFields(opts) {
   const joinWorld = (a, b) => !a || !b ? null : (() => { const x0 = Math.min(a.x, b.x), y0 = Math.min(a.y, b.y); return {x: x0, y: y0, width: Math.max(a.x + a.width, b.x + b.width) - x0, height: Math.max(a.y + a.height, b.y + b.height) - y0}; })();
   const joinEvent = (a, b) => !a ? b : !b ? a : {revision: Math.max(a.revision, b.revision), rect: joinWorld(a.rect, b.rect)};
   const allocate = () => { planes ??= {h: new Float32Array(cells), p: new Float32Array(cells), r: new Float32Array(cells), c: new Float32Array(cells), v: new Float32Array(cells), x: new Float32Array(cells), masks: maskKeys.map(() => new Int8Array(cells))}; };
-  const check = () => { reason = null; for (const n of nodes()) { const r = nodeSupport(n, context()); if (r) { reason = r; return false; } } return true; };
   const getEngine = () => enginePromise ??= (async () => {
     let d = device();
     for (let i = 0; !d && i < 600; i++) { await new Promise(r => setTimeout(r, 50)); d = device(); }   // the renderer is created after the fields
@@ -819,9 +798,6 @@ export function createGpuFields(opts) {
     const c = context();
     return engine = await createShapeEngine({device: d, grid: worldGrid, spacing, baseHeight, sea: c.sea, minH: c.minH, maxH: c.maxH});
   })();
-  const subscribeFallback = fallback?.subscribe(ev => { if (!gpuMode()) for (const fn of listeners) fn(ev); });
-  let mode = true;
-  const gpuMode = () => mode;
   // Land a read: copy the rectangle into the CPU planes, in order, then tell the listeners (the first whole copy is announced too, since readers that
   // sampled before it read the base height).
   function land(h, whole, report, wasValid, gen) {
@@ -879,9 +855,6 @@ export function createGpuFields(opts) {
   }
   function changed(rect = null, keepPrefix = 0) {
     revision++;
-    mode = check();
-    const fb = fallback.changed(rect, keepPrefix);   // always, so the JS fields never hold a stale compiled list
-    if (!mode) { valid = false; gpuValid = false; queued = null; copyDirty = false; reported = null; generation++; return fb; }
     const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
     evaluate(r, event);
     return event;
@@ -890,10 +863,9 @@ export function createGpuFields(opts) {
   const settled = async () => { while (queued || starting) await new Promise(r => waiters.push(r)); };
   // The GPU buffers are current once every requested run has been submitted (the queue is in order on one device, so a bake that records its own
   // work next sees them): it does not wait for the work to finish.
-  const gpuReady = async () => { if (!mode) return; if (!gpuValid && !queued && !starting) evaluate(null); await settled(); };
+  const gpuReady = async () => { if (!gpuValid && !queued && !starting) evaluate(null); await settled(); };
   // The CPU copy is current: also waits for the reads. A CPU reader forces the read that a gesture left out.
   const whenReady = async () => {
-    if (!mode) return;
     if (!valid && !queued && !starting && landing === 0) evaluate(null);
     for (;;) {
       if (queued || starting) { await settled(); continue; }
@@ -902,7 +874,6 @@ export function createGpuFields(opts) {
       break;
     }
   };
-  const front = () => mode ? null : fallback;
   function crop(request) {
     const rect = clip({x0: Math.floor(request.x0), y0: Math.floor(request.y0), x1: Math.ceil(request.x1), y1: Math.ceil(request.y1)});
     const w = rect.x1 - rect.x0 + 1, h = rect.y1 - rect.y0 + 1, fields = {};
@@ -913,42 +884,35 @@ export function createGpuFields(opts) {
       bytes: w * h * (24 + maskKeys.length), rect: worldRect(rect)};
   }
   function readCells(request, o) {
-    if (front()) return fallback.readCells(request, o);
     if (!planes || !valid) throw new Error('nanolathe: the GPU shape fields are not ready; await ready() or readAsync() first');
     return crop(request);
   }
   const read = ({x = 0, y = 0, width = 0, height = width, apron = 0}, o) => readCells({x0: Math.floor((x - apron) / spacing), y0: Math.floor((y - apron) / spacing), x1: Math.ceil((x + width + apron) / spacing), y1: Math.ceil((y + height + apron) / spacing)}, o);
   const cell = (ix, iy, key = 'h') => {
-    if (front()) return fallback.cell(ix, iy, key);
     ix = clamp(Math.round(ix), 0, worldGrid - 1); iy = clamp(Math.round(iy), 0, worldGrid - 1);
     if (!planes || !valid) return key === 'h' ? baseHeight : 0;
     const j = maskKeys.indexOf(key);
     return j >= 0 ? planes.masks[j][iy * worldGrid + ix] : planes[key][iy * worldGrid + ix];
   };
   const sample = (x, y, key = 'h') => {
-    if (front()) return fallback.sample(x, y, key);
     const gx = clamp(x / spacing, 0, worldGrid - 1), gy = clamp(y / spacing, 0, worldGrid - 1), ix = Math.floor(gx), iy = Math.floor(gy);
     const jx = Math.min(ix + 1, worldGrid - 1), jy = Math.min(iy + 1, worldGrid - 1), fx = gx - ix, fy = gy - iy;
     return (cell(ix, iy, key) * (1 - fx) + cell(jx, iy, key) * fx) * (1 - fy) + (cell(ix, jy, key) * (1 - fx) + cell(jx, jy, key) * fx) * fy;
   };
   const stats = () => {
-    if (front()) return fallback.stats();
     const g = engine?.stats() || {}, cpu = planes ? cells * (24 + maskKeys.length) : 0;
     return {revision, residentBytes: cpu, cacheBytes: cpu, cacheEntries: planes ? 1 : 0, lastWorkingBytes: 0, peakBytes: cpu, budget: cpu, hits: 0, misses: 0, replays: 0, evictions: 0,
       chunkCells: worldGrid, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: 24 + maskKeys.length, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0,
       connectionTiles: 0, connectionCells: 0, gpuShape: {...g, cpuCopyBytes: cpu, pending: outstanding + (queued ? 1 : 0) + landing, runLog: runLog.slice(-120), lastEval, error: error?.message || null}};
   };
   return {
-    buffers: () => front() ? fallback.buffers() : planes ? [...FIELD_KEYS_FLOAT.map(k => planes[k].buffer), ...planes.masks.map(a => a.buffer)] : [],
-    read, readCells, sample, cell, changed, ready: () => front() ? Promise.resolve() : whenReady(), pending: () => !front() && (queued !== null || starting !== null || landing > 0 || copyDirty || !valid),
-    readAsync: async (request, o) => { await (front() ? null : whenReady()); return read(request, o); },
-    replayDetail: () => front() ? fallback.replayDetail() : Object.fromEntries(keys.map(k => [k, 0])),
+    buffers: () => planes ? [...FIELD_KEYS_FLOAT.map(k => planes[k].buffer), ...planes.masks.map(a => a.buffer)] : [],
+    read, readCells, sample, cell, changed, ready: () => whenReady(), pending: () => (queued !== null || starting !== null || landing > 0 || copyDirty || !valid),
+    readAsync: async (request, o) => { await whenReady(); return read(request, o); },
+    replayDetail: () => Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    setBudget: bytes => fallback.setBudget(bytes),
-    clear: () => { fallback.clear(); },
-    stats, reason: () => reason, active: () => mode, reference: () => mode ? fallback : null,
+    stats, active: () => true,
     maskChunks: () => {
-      if (front()) return fallback.maskChunks();
       if (!planes || !valid) return [];
       const out = [], T = 256;
       for (let ty = 0; ty < worldGrid; ty += T) for (let tx = 0; tx < worldGrid; tx += T) {
@@ -961,9 +925,9 @@ export function createGpuFields(opts) {
     },
     planes: () => planes, engine: () => engine,
     // H6b: the engine's whole-map buffers (the h p r c v x planes, the packed masks) for the passes that read them in place. Await ready() first.
-    gpuBuffers: () => !front() && gpuValid && engine ? {planes: engine.planes, masks: engine.masks, grid: worldGrid, spacing, revision: submittedRevision} : null,
+    gpuBuffers: () => gpuValid && engine ? {planes: engine.planes, masks: engine.masks, grid: worldGrid, spacing, revision: submittedRevision} : null,
     subscribeSubmit(fn) { submitListeners.add(fn); return () => submitListeners.delete(fn); },
-    gpuReady: () => front() ? Promise.resolve() : gpuReady(), gpuQuiet: () => front() ? Promise.resolve() : quiet(), gpuPending: () => !front() && (queued !== null || starting !== null || !gpuValid),
+    gpuReady: () => gpuReady(), gpuQuiet: () => quiet(), gpuPending: () => (queued !== null || starting !== null || !gpuValid),
     // Start the read of what a gesture left out, once the gesture is over (the weather glue calls this on release).
     settle: () => { flushIfDue(); },
   };
@@ -980,19 +944,21 @@ export function createGpuFields(opts) {
 // (an LRU by bytes); a CPU copy exists only for resident pages, and a coarse lattice of authored heights (every COARSE-th cell, filled in the background,
 // view first) answers everything else.
 export function createPagedFields(opts) {
-  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, fallback, device, context} = opts;
+  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, device, context} = opts;
   const CORE = opts.core ?? 512, APRON = opts.apron ?? 128, COARSE = 8, SHIFT = Math.log2(CORE);
   const spacing = (worldSize - 1) / (worldGrid - 1), np = Math.ceil(worldGrid / CORE), gesture = opts.gesture || (() => false);
   // H6c: the ring is 4 cells (the hill's blur) plus the longest chain of overlapping smooth radii among the nodes, bucketed to RINGS; it follows the node list.
   const RINGS = [4, 16, 32, 64, 128, 192, 320];
   let RING = 4, SIDE = CORE + 2 * RING, SHAPE_BYTES = SIDE * SIDE * 52;
   const WEATHER_BYTES = CORE * CORE * 20, CPU_PAGES = 16;
-  const shapeBudget = () => opts.shapeBudget ?? 9 * SHAPE_BYTES, weatherBudget = opts.weatherBudget ?? 24 * WEATHER_BYTES;
+  // Page caps: 9 shape pages and 24 weather pages when the GPU budget allows; fewer (never under the 6 a chunk's feed gathers at once) when it does not.
+  let SHAPE_PAGES = 9, WEATHER_PAGES = 24;
+  const shapeBudget = () => opts.shapeBudget ?? SHAPE_PAGES * SHAPE_BYTES, weatherBudget = opts.weatherBudget ?? WEATHER_PAGES * WEATHER_BYTES;
   const listeners = new Set(), submitListeners = new Set(), pagesMap = new Map();
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
   const hits = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
-  let revision = 0, mode = true, reason = null, engine = null, enginePromise = null, error = null, tick = 0, prep = new Map(), time = null, timeKey = '', staging = null, scratchT = null, firstError = null;
+  let revision = 0, engine = null, enginePromise = null, error = null, tick = 0, prep = new Map(), time = null, timeKey = '', staging = null, scratchT = null, firstError = null;
   let pendingStale = null, coarseDone = 0, coarseStart = 0, coarseFirstView = 0, focus = null;
   const coarseW = Math.floor((worldGrid - 1) / COARSE) + 1, coarse = new Float32Array(coarseW * coarseW).fill(baseHeight), coarseHave = new Uint8Array(coarseW * coarseW);
   const coarseQueue = new Map();   // page key -> the world rect to announce when it is done
@@ -1029,7 +995,6 @@ export function createPagedFields(opts) {
   function ringNeed() {
     const geom = {grid: worldGrid, spacing, refSpacing: spacing}, c = context(), ns = [];
     for (const n of nodes()) {
-      if (nodeSupport(n, c)) continue;
       const p = prepare(n, geom, c);
       if (p.smoothR && p.region) ns.push({smooth: true, read: p.smoothR, reg: p.region});
       else if (p.coast) ns.push({smooth: false, read: p.coast.readR, side: p.coast.sideR, local: p.coast.blurR + 2, reg: p.region, box: p.coast.box});
@@ -1056,24 +1021,41 @@ export function createPagedFields(opts) {
     }
     return 4 + deepest;
   }
+  // H12: the budget the pages may use: the GPU budget less what the renderer needs at least (materials and one chunk), or null when no budget is given.
+  // The resident set of a ring is the 2 x 3 pages a chunk's feed gathers at once (shape and weather, with the material field), the feed's staging set and the
+  // shape engine's scratch (about 16 MB and 44 bytes a cell of a page's side); a ring is allowed when that set fits.
+  const STAGING_BYTES = 700 * 850 * 88, FEED_PAGES = 6, PAGE_FIELD = CORE * CORE * 36;
+  const engineEstimate = ring => 16e6 + (CORE + 2 * ring) ** 2 * 44;
+  const available = () => { const b = opts.budget?.(); return b ? b.total - b.minimum : Infinity; };
+  const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * 52 + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
+  function fitCaps() {
+    const room = 0.92 * available() - STAGING_BYTES - engineEstimate(RING);
+    SHAPE_PAGES = clamp(Math.floor(0.8 * room / SHAPE_BYTES), FEED_PAGES, 9);
+    WEATHER_PAGES = clamp(Math.floor((room - SHAPE_PAGES * SHAPE_BYTES) / PAGE_FIELD), FEED_PAGES, 24);
+    if (!(room > 0)) SHAPE_PAGES = WEATHER_PAGES = FEED_PAGES;
+  }
   function setRing(need) {
-    const ring = RINGS.find(r => r >= need);
-    if (ring === undefined) return false;
+    // The ring is the first step that holds the chain; a chain deeper than the top ring, or than the budget's largest ring, is clamped to that ring
+    // (never refused): the pages read what the ring holds, so a seam may show between pages where the chain reaches further. One warning a time the
+    // chain crosses the limit.
+    const room = available();
+    let top = RINGS.length - 1; while (top > 0 && residentSet(RINGS[top]) > room) top--;
+    let ring = RINGS.find(r => r >= need);
+    if (ring === undefined || ring > RINGS[top]) {
+      ring = RINGS[top];
+      if (!ringClamped) console.warn(`nanolathe: the stroke chain needs a page ring of ${need} cells; clamped to ${ring}${ring < RINGS[RINGS.length - 1] ? ' by the GPU memory budget' : ''}, so seams may show between pages`);
+      ringClamped = true;
+    } else ringClamped = false;
     if (ring !== RING) {
       RING = ring; SIDE = CORE + 2 * RING; SHAPE_BYTES = SIDE * SIDE * 52; ringChanges++;
       for (const pg of pagesMap.values()) dropShape(pg);
       scratchT?.destroy(); scratchT = null;
     }
+    fitCaps(); trim();
     return true;
   }
-  let ringChanges = 0, lastNeed = 0;
-  const check = () => {
-    reason = null;
-    for (const n of nodes()) { const r = nodeSupport(n, context()); if (r) { reason = r; return false; } }
-    lastNeed = opts.forceRing || ringNeed();
-    if (!setRing(lastNeed)) { reason = `smooth chain too deep for the page ring (needs ${lastNeed} cells, the top ring is ${RINGS[RINGS.length - 1]})`; return false; }
-    return true;
-  };
+  let ringChanges = 0, lastNeed = 0, ringClamped = false;
+  const check = () => { lastNeed = opts.forceRing || ringNeed(); setRing(lastNeed); };
   const getEngine = () => enginePromise ??= (async () => {
     let d = device();
     for (let i = 0; !d && i < 600; i++) { await new Promise(r => setTimeout(r, 50)); d = device(); }
@@ -1082,18 +1064,17 @@ export function createPagedFields(opts) {
     return engine = await createShapeEngine({device: d, grid: worldGrid, spacing, baseHeight, sea: c.sea, minH: c.minH, maxH: c.maxH, pages: true});
   })();
   const prepare = (n, geom, c) => { let p = prep.get(n); if (!p) { p = prepareNode(n, geom, c); prep.set(n, p); } return p; };
-  const subscribeFallback = fallback?.subscribe(ev => { if (!mode) for (const fn of listeners) fn(ev); });
 
   // ---- resources
   const shapeBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.target) n += pg.target.bytes; return n; };
-  const weatherBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.weather) n += WEATHER_BYTES; return n; };
+  const weatherBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.weather) n += WEATHER_BYTES + (pg.weather.field ? CORE * CORE * 16 : 0); return n; };
   const stagingBytes = () => (staging?.bytes || 0) + (scratchT?.bytes || 0);
   const cpuBytes = () => { let n = 0; for (const pg of pagesMap.values()) n += (pg.cpu ? 8 * SIDE * SIDE : 0) + (pg.cpuW ? 8 * CORE * CORE : 0); return n; };
   const gpuBytes = () => shapeBytes() + weatherBytes() + stagingBytes() + (engine?.bytes() || 0);
   // A page that is read or gathered right now (pinned) keeps its buffers until the last reader lets go.
   function dropShape(pg) { if (pg.target) { if (pg.pins) (pg.zombies ??= []).push(pg.target); else pg.target.destroy(); } pg.target = null; pg.cpu = null; pg.cpuRev = -1; }
   function unpin(pg) { pg.pins--; if (!pg.pins && pg.zombies?.length) { for (const t of pg.zombies) t.destroy(); pg.zombies = []; } }
-  function dropWeather(pg) { if (pg.weather) { pg.weather.weather.destroy(); pg.weather.maps.forEach(b => b.destroy()); pg.weather = null; pg.cpuW = null; } }
+  function dropWeather(pg) { if (pg.weather) { pg.weather.weather.destroy(); pg.weather.maps.forEach(b => b.destroy()); pg.weather.field?.destroy(); pg.weather = null; pg.cpuW = null; } }
   function trim() {
     const lru = (has, free, budget, size) => {
       let total = 0; for (const pg of pagesMap.values()) if (has(pg)) total += size;
@@ -1204,18 +1185,20 @@ export function createPagedFields(opts) {
     try {
       engine.submit(nodes(), context(), null, {readback: false, target: T, prepare});
       const r = await tm.run({planes: T.F, masks: T.Mk, grid: side, ox: wx0, oy: wy0});
-      if (time !== tm) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); return; }
+      if (time !== tm) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy(); return; }
       const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-      const w = {weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S}))};
+      const w = {weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S})),
+        field: r.field ? d.createBuffer({label: 'page material field', size: CORE * CORE * 16, usage: S}) : null};
       const enc = d.createCommandEncoder({label: 'page weather crop'}), wn = side * side;
       for (let row = 0; row < pg.ch; row++) {
         const from = (pg.y0 - wy0 + row) * side + (pg.x0 - wx0), to = row * CORE;
         for (let p = 0; p < 2; p++) enc.copyBufferToBuffer(r.weather, (p * wn + from) * 4, w.weather, (p * CORE * CORE + to) * 4, pg.cw * 4);
         for (let k = 0; k < 3; k++) enc.copyBufferToBuffer(r.maps[k], from * 4, w.maps[k], to * 4, pg.cw * 4);
+        if (r.field) enc.copyBufferToBuffer(r.field, from * 16, w.field, to * 16, pg.cw * 16);
       }
       d.queue.submit([enc.finish()]);
       await d.queue.onSubmittedWorkDone();
-      r.weather.destroy(); r.maps.forEach(b => b.destroy());
+      r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy();
       dropWeather(pg); pg.weather = w; if (pg.staleSeq === seq) pg.stale = false;
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
@@ -1257,6 +1240,7 @@ export function createPagedFields(opts) {
       if (wantWeather && pg.weather) {
         const src = {ox: pg.x0, oy: pg.y0, pw: CORE, ph: CORE};
         dispatch('gatherHeight', src, core, {'3.5': {buffer: pg.weather.weather}, '3.6': {buffer: dst.W}});
+        if (pg.weather.field) dispatch('gatherField', src, core, {'3.13': {buffer: pg.weather.field}, '3.14': {buffer: dst.Fd}});
         dispatch('gatherMaps', src, core, {'3.7': {buffer: pg.weather.maps[0]}, '3.8': {buffer: pg.weather.maps[1]}, '3.9': {buffer: pg.weather.maps[2]}, '3.10': {buffer: dst.M[0]}, '3.11': {buffer: dst.M[1]}, '3.12': {buffer: dst.M[2]}});
       }
     }
@@ -1264,8 +1248,8 @@ export function createPagedFields(opts) {
   }
   function makeSet(cells, label) {
     const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, mk = (n, l) => d.createBuffer({label: label + ' ' + l, size: Math.max(16, n), usage: S});
-    const set = {cells, F: mk(cells * 24, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k))};
-    set.bytes = cells * 72; set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); };
+    const set = {cells, F: mk(cells * 24, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k)), Fd: mk(cells * 16, 'material field')};
+    set.bytes = cells * 88; set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); set.Fd.destroy(); };
     return set;
   }
   // The staging set the chunk bake reads, reused (grown, never shrunk): the queue is in order, so a later gather runs after an earlier bake's feed pass.
@@ -1298,7 +1282,6 @@ export function createPagedFields(opts) {
       return cropFrom(rect, planes, masks, blend);
     } finally { lease.release(); }
   }
-  const asRect = request => clip({x0: Math.floor(request.x0), y0: Math.floor(request.y0), x1: Math.ceil(request.x1), y1: Math.ceil(request.y1)});
   const toCells = ({x = 0, y = 0, width = 0, height = width, apron = 0}) => ({x0: Math.floor((x - apron) / spacing), y0: Math.floor((y - apron) / spacing), x1: Math.ceil((x + width + apron) / spacing), y1: Math.ceil((y + height + apron) / spacing)});
 
   // ---- sync reads
@@ -1325,9 +1308,7 @@ export function createPagedFields(opts) {
   // ---- changes
   function changed(rect = null, keepPrefix = 0) {
     revision++; prep = new Map();
-    mode = check();
-    const fb = fallback.changed(rect, keepPrefix);
-    if (!mode) { for (const pg of pagesMap.values()) { dropShape(pg); dropWeather(pg); } coarseQueue.clear(); return fb; }
+    check();
     const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
     const announce = event.rect;
     for (const pg of pagesMap.values()) {
@@ -1360,17 +1341,15 @@ export function createPagedFields(opts) {
     paged: true, core: CORE, apron: APRON, ring: RING,
     buffers: () => [],
     read: () => { throw new Error('nanolathe: a paged map is read with readAsync'); }, readCells: () => { throw new Error('nanolathe: a paged map is read with readAsync'); },
-    sample: (x, y, k = 'h') => mode ? bilinear(x, y, (ix, iy) => cell(ix, iy, k)) : fallback.sample(x, y, k), cell: (ix, iy, k) => mode ? cell(ix, iy, k) : fallback.cell(ix, iy, k),
-    sampleEroded: (x, y) => mode ? bilinear(x, y, erodedCell) : fallback.sample(x, y),
-    changed, ready: () => Promise.resolve(), pending: () => false,
-    readAsync: async (request, o) => mode ? readRect(toCells(request), o) : fallback.readCells(asRect({x0: Math.floor(request.x / spacing), y0: Math.floor(request.y / spacing), x1: Math.ceil((request.x + request.width) / spacing), y1: Math.ceil((request.y + (request.height ?? request.width)) / spacing)})),
+    sample: (x, y, k = 'h') => bilinear(x, y, (ix, iy) => cell(ix, iy, k)), cell: (ix, iy, k) => cell(ix, iy, k),
+    sampleEroded: (x, y) => bilinear(x, y, erodedCell),
+    changed, refit: () => { const before = RING; check(); if (RING !== before) changed(); }, ready: () => Promise.resolve(), pending: () => false,
+    readAsync: async (request, o) => readRect(toCells(request), o),
     readRect: (rect, o) => readRect(clip(rect), o),
     replayDetail: () => Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }, subscribeSubmit(fn) { submitListeners.add(fn); return () => submitListeners.delete(fn); },
-    setBudget: bytes => fallback.setBudget(bytes), clear: () => { fallback.clear(); },
-    stats, reason: () => reason, active: () => mode, reference: () => mode ? fallback : null,
+    stats, active: () => true,
     maskChunks: async () => {
-      if (!mode) return fallback.maskChunks();
       const out = [], T = 256;
       for (let ty = 0; ty < worldGrid; ty += T) for (let tx = 0; tx < worldGrid; tx += T) {
         const r = {x0: tx, y0: ty, x1: Math.min(tx + T, worldGrid) - 1, y1: Math.min(ty + T, worldGrid) - 1}, c = await readRect(r, {weather: false});
@@ -1389,7 +1368,7 @@ export function createPagedFields(opts) {
       return {paged: true, weather, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
         gather(enc, passes) {
           const gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, set = stagingFor(gw * gh), tmp = encodeGather(enc, passes, rect, set, weather);
-          return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, grid: gw, cells: gw * gh, tmp};
+          return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, field: weather && time.material ? set.Fd : null, grid: gw, cells: gw * gh, tmp};
         }};
     },
     setTime, timeOn: () => Boolean(time),
@@ -1413,9 +1392,9 @@ export function createPagedFields(opts) {
 const FEED_USES = {
   seedMain: ['0.0', '0.1', '0.2', '1.0', '1.1', '1.2', '1.3'], tileFlagMain: ['0.0', '1.3', '1.4'], tileListMain: ['0.0', '1.4', '1.5', '1.6'],
   tileArgsMain: ['1.6', '1.7'], refinedMain: ['0.0', '1.8', '1.9'],
-  feedMain: ['0.0', '0.1', '0.2', '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8'],
+  feedMain: ['0.0', '0.1', '0.2', '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8', '2.9'],
   // H5b: the gather from pages
-  gatherShape: ['3.0', '3.1', '3.2', '3.3', '3.4'], gatherHeight: ['3.0', '3.5', '3.6'], gatherMaps: ['3.0', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12']};
+  gatherShape: ['3.0', '3.1', '3.2', '3.3', '3.4'], gatherHeight: ['3.0', '3.5', '3.6'], gatherMaps: ['3.0', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12'], gatherField: ['3.0', '3.13', '3.14']};
 const feedCache = new WeakMap();
 // {pipes, groups(entry, resources)}: resources maps 'group.binding' to a binding resource; groups() returns [[index, bindGroup]...].
 export function feedPasses(device) {

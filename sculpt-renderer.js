@@ -156,28 +156,22 @@ export class TerrainRenderer {
     this.context.configure({device, format: this.format, alphaMode: 'opaque',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
 
-    // H3: Green's land materials from numbers (materialModel 1, the world's default, or ?materialModel=1|0 on the page).
-    const query = new URLSearchParams(location.search);
-    // H4: engine 1 draws with engine-frag / engine-bake / engine-common (Green's own shaders); 0 is the shared set, as merge-h3 draws.
-    this.engine = Number(query.get('engine') ?? this.config.defaults?.engine ?? 0) === 1;
-    const modelQuery = query.get('materialModel');
+    // The engine's shaders (engine-frag / engine-bake / engine-common) draw every world.
     // H8: a world whose materials are numbers names its table in the config (config.materialTable); the others bridge their prepared images.
     const tableUrl = this.config.materialTable;
-    this.materialModel = this.engine ? Boolean(tableUrl) : Number(modelQuery ?? this.config.defaults?.materialModel ?? 0) === 1;
-    this.bridge = this.engine && !tableUrl;
+    this.materialModel = Boolean(tableUrl);
+    this.bridge = !tableUrl;
     this.materialData = null;
-    const names = this.engine ? ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', ...(tableUrl ? [tableUrl.replace(/^\//, '')] : [])]
-      : ['sculpt-vert.wgsl', 'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'relief-bake.wgsl', ...(this.materialModel ? ['material-model.wgsl', 'materials/green.json'] : [])];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', ...(tableUrl ? [tableUrl.replace(/^\//, '')] : [])];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelSource = this.engine ? null : extra[0], modelTable = this.engine ? extra[2] : extra[1];
-    this.materialsSource = this.engine ? extra[0] : null;
+    const modelTable = extra[2];
+    this.materialsSource = extra[0];
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
-    if (this.materialModel && !this.engine) defines.add('MATERIAL_MODEL');
     this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -195,8 +189,8 @@ export class TerrainRenderer {
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile(this.engine ? 'engine-frag.wgsl' : 'sculpt-frag.wgsl', preprocess(this.engine ? frag + '\n' + extra[1] : modelSource ? frag + '\n' + modelSource : frag, common, defines)),
-      compile(this.engine ? 'engine-bake.wgsl' : 'relief-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
+      compile('engine-frag.wgsl', preprocess(frag + '\n' + extra[1], common, defines)),
+      compile('engine-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
     // bake (binding 6 is the fields for the draw, the routes for the bake).
@@ -211,12 +205,9 @@ export class TerrainRenderer {
     const F = GPUShaderStage.FRAGMENT;
     // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
-    this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: this.engine ? [
+    this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(0, F), sampler(1, F),
-      texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F), texture(19, F, 'float', '2d-array')] : [
-      texture(0, F), sampler(1, F), texture(2, F), sampler(3, F), texture(4, F, 'float', '2d-array'), sampler(5, F),
-      texture(6, F), sampler(7, F), texture(8, F), sampler(9, F), texture(10, F), sampler(11, F), texture(12, F), sampler(13, F),
-      texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F)]});
+      texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F), texture(19, F, 'float', '2d-array')]});
     // GL drew with LESS against a cleared depth of 1; the vertex shader maps
     // GL's clip depth onto WebGPU's 0..1 range.
     [this.drawPipeline, this.bakePipeline] = await Promise.all([
@@ -246,14 +237,14 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     if (modelTable) { this.materialData = JSON.parse(modelTable); this.set('uMaterialTable', materialRows(this.materialData)); }
-    if (this.engine) { if (this.materialData) await this.makeMaterials(); else this.makeBridgeTexture(); }
+    if (this.materialData) await this.makeMaterials(); else this.makeBridgeTexture();
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
     this.setRoutes(new Float32Array(this.grid * this.grid));
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
-    if (this.engine) for (const [key, value] of Object.entries(this.config.engineDefaults || {})) if (!variant.has(key)) variant.set(key, value);
+    for (const [key, value] of Object.entries(this.config.engineDefaults || {})) if (!variant.has(key)) variant.set(key, value);
     for (const [key, value] of Object.entries(this.config.defaults || {}))
       if (!variant.has(key)) variant.set(key, value);
     this.variant = variant;
@@ -272,7 +263,7 @@ export class TerrainRenderer {
       // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
       if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured.slopeGrass.meanRGB.map(v => v / 255); continue; }
       // H4: the engine makes the rocks from numbers too (item 3), so no rock image is fetched; its mean colour is the table's.
-      if (this.materialData && this.engine && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured.rock.meanRGB.map(v => v / 255); continue; }
+      if (this.materialData && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured.rock.meanRGB.map(v => v / 255); continue; }
       if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
       if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
       let url = this.config.textures[key];
@@ -316,8 +307,8 @@ export class TerrainRenderer {
     // layers resident makes the weathering-strength control continuous.
     // H4: the engine draw has no fringe, ring or slope-grass images (Green has no mineral margins or beach).
     this.transitionBody=false;
-    if(!this.engine || this.bridge){
-    const fringeURL=this.config.textures.slopeFringe||(this.materialModel?null:this.config.textures.slopeGrass)||this.config.textures.grass;
+    if(this.bridge){
+    const fringeURL=this.config.textures.slopeFringe||this.config.textures.slopeGrass||this.config.textures.grass;
     const loadFringe=async url=>{
       const response=await fetch(url);
       if(!response.ok) throw new Error('Cannot load transition material');
@@ -343,7 +334,7 @@ export class TerrainRenderer {
     if(body!==fringe)body.close();fringe.close();
     }
     this.i('uBeach',Boolean(this.config.textures.beach));
-    if(this.engine)this.i('uBridged',this.bridge);
+    this.i('uBridged',this.bridge);
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
@@ -664,18 +655,10 @@ export class TerrainRenderer {
   // Group 1. The mineral-ring binding takes the chosen fringe texture, or
   // whatever its GLSL sampler pointed at (the ground) when there is none.
   materialBindGroup(fringe) {
-    if (this.engine) return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
+    return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
       ...[this.textures.grass, this.textures[this.bound.uWater], this.textures[this.bound.uWaterShallow]].flatMap((t, i) => [
         {binding: [0, 14, 16][i], resource: t.view}, {binding: [1, 15, 17][i], resource: t.sampler}]),
       {binding: 18, resource: this.textures[this.bound.uPalette].view}, {binding: 19, resource: this.generated.view}]});
-    const ring = fringe || this.textures[this.bound.uMineralRing];
-    const key = 'materials:' + (fringe ? Object.keys(this.fringeTextures).find(k => this.fringeTextures[k] === fringe) : '');
-    return this.bindGroups[key] ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
-      ...[this.textures[this.bound.uGrass], this.textures[this.bound.uSlopeGrass], this.textures[this.bound.uSlopeFringe], ring,
-        this.textures[this.bound.uRock], this.textures[this.bound.uRockWeathered], this.textures[this.bound.uRockFractured],
-        this.textures[this.bound.uWater], this.textures[this.bound.uWaterShallow]].flatMap((t, i) => [
-        {binding: i * 2, resource: t.view}, {binding: i * 2 + 1, resource: t.sampler}]),
-      {binding: 18, resource: this.textures[this.bound.uPalette].view}]});
   }
 
   // H8 bridge: the generated array for a world with no materials table. Its layers hold the world's own prepared images (bridgeCopy),
@@ -873,7 +856,7 @@ export class TerrainRenderer {
   // Surface knobs read from the variant; callable again after a change.
   applyKnobs() {
     const variant = this.variant;
-    this.i('uReliefMode', variant.get('detail') === 'lab' ? 0 : 1);
+    this.i('uReliefMode', 1);   // the fall-line surface; the lab look (detail=lab) is gone, its shader branches remain to be cut
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
@@ -1054,10 +1037,10 @@ export class TerrainRenderer {
   // H2: the GPU erosion pass (sculpt-erosion.js, erosion.wgsl), built on first use.
   async erode(request) {
     if (!this.erosion) {
-      // H5: Green's engine steps over the active tiles only (engine-erosion.wgsl); engine 0 keeps erosion.wgsl whole.
-      const source = await (await fetch(this.engine ? '/engine-erosion.wgsl' : '/erosion.wgsl')).text();
+      // The steps run over the active tiles only (engine-erosion.wgsl).
+      const source = await (await fetch('/engine-erosion.wgsl')).text();
       const {GpuErosion} = await import('./sculpt-erosion.js');
-      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])), Boolean(this.engine));
+      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])));
     }
     return this.erosion.run(request);
   }
@@ -1082,7 +1065,7 @@ export class TerrainRenderer {
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const set = (name, value) => this.set(name, Number(value));
     set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
-    if (this.engine) {
+    {
       set('uWeatherMaps', this.weatherMaps ? 1 : 0);
       for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8], ['stoneDensity', 0], ['stoneSize', 5]])
         set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
@@ -1199,8 +1182,7 @@ export class TerrainRenderer {
     set('uCliffStagger', number('cliffStagger', 0));
     set('uCliffFine', number('cliffFine', 0));
     set('uCliffDomain', number('cliffDomain', 90));
-    // H4 item 4 (engine 1 only: the shared bake has no block uniforms).
-    if (this.engine) {
+    {
       set('uBlocks', number('blocks', 0)); set('uBlockRow', number('blockRow', 4.5)); set('uBlockWidth', number('blockWidth', 9)); set('uBlockTilt', number('blockTilt', .5));
       set('uBlockStep', number('blockStep', .8)); set('uBlockSeam', number('blockSeam', .5)); set('uBlockChip', number('blockChip', 1.2));
       set('uBlockGrit', number('blockGrit', .25)); set('uHillBlocks', number('hillBlocks', 0));

@@ -1,4 +1,3 @@
-import {storeDocumentBakes,loadDocumentBakes} from './sculpt-document.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
@@ -19,7 +18,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
-  const levels=query.get('levels')!=='0',quarterFirst=query.get('quarterFirst')==='1',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
+  const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
   const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
   let afterGesture=false,lastViewEpoch=-1,heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
@@ -184,14 +183,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         for(const rect of jobs){const e=cache.get(rect.x+','+rect.y+','+size);if(e&&intersects(rect,v))paint(e,v);}overlays();
         // H7b: the plan. `want` 2 is a quarter image, 1 final. During a gesture every chunk without an image gets a quarter one and nothing
         // is refined; once it ends, a quarter image is replaced by a final one (visible chunks first, then the margin), and a chunk
-        // that already shows final is never replaced by a quarter one. On a load or a scroll the visible chunks come at quarter first when quarterFirst is on.
+        // that already shows final is never replaced by a quarter one. 
         const plan=[];
         if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
         else{
           if(gesture)for(const rect of jobs)plan.push({rect,want:2});
           else{
             if(viewEpoch!==lastViewEpoch){afterGesture=false;lastViewEpoch=viewEpoch;}   // a new view (a scroll or a zoom) starts afresh; a release goes straight to final
-            if(quarterFirst&&!afterGesture)for(const rect of jobs)if(intersects(rect,v))plan.push({rect,want:2});
             for(const rect of jobs)plan.push({rect,want:1});
           }
         }
@@ -278,7 +276,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
   document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture)end({pointerId:gesture.id,type:'pointercancel'});});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
   window.addEventListener('blur',()=>{space=false;pan=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});});
-  function budgets(){gpuBudget=clamp(Number(find('[data-gpu]').value)||512,128,4096)*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;api.setBudget?.(heapBudget*.65);configureChunks();metrics();schedule();}
+  function budgets(){gpuBudget=clamp(Number(find('[data-gpu]').value)||512,128,4096)*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
   function sampleField(r,x,y){const a=r.fields.h,w=r.gridWidth,h=r.gridHeight,step=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/step),oy=Math.round(r.gridOrigin[1]/step),gx=clamp(x/step-ox,0,w-1),gy=clamp(y/step-oy,0,h-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,w-1),jy=Math.min(iy+1,h-1),fx=gx-ix,fy=gy-iy;return(a[iy*w+ix]*(1-fx)+a[iy*w+jx]*fx)*(1-fy)+(a[jy*w+ix]*(1-fx)+a[jy*w+jx]*fx)*fy;}
   async function idle(){while(drawing||pending||renderer.busy)await tick();}
@@ -301,7 +299,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     try {
       const id=find('[data-document]').value.trim();if(!/^[A-Za-z0-9_-]{1,100}$/.test(id))throw new Error('Use letters, numbers, hyphens and underscores for the document name.');if(id!==docId){docId=id;maskVersions.clear();lastMetadata='';}
       const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('/map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
-      const sketch=await storeDocumentBakes(api.sketch(),writeChunk),body={format:'nanolathe-map-document',version:1,sketch,mapData:api.mapData(),map,biome:config.biomeId,seaLevel:config.seaLevel};
+      const sketch=api.sketch(),body={format:'nanolathe-map-document',version:1,sketch,mapData:api.mapData(),map,biome:config.biomeId,seaLevel:config.seaLevel};
       const chunks=(await api.maskChunks?.())||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('/map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
       const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('/map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
       find('[data-save-state]').textContent='Saved to server · '+id;
@@ -312,8 +310,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const id=find('[data-document]').value.trim(),data=await json('/map-document?'+new URLSearchParams({id}));
     const documentData=data.document??data.metadata??data;
     if(documentData.biome!==config.biomeId||documentData.map?.unitsX!==map.unitsX||documentData.map?.unitsY!==map.unitsY||documentData.seaLevel!==config.seaLevel)throw new Error('Open a canvas with the document’s world, dimensions and sea level before loading it.');
-    const storedBytes=api.checkGraphMemory?.(documentData.sketch.nodes??[])??0;let encodedBytes=0;
-    const sketch=await loadDocumentBakes(documentData.sketch,async key=>{const r=await fetch('/map-document/chunk?'+new URLSearchParams({id,key}));if(!r.ok)throw new Error('Could not read saved flow plane '+key);const rawLength=r.headers.get('Content-Length'),length=Number(rawLength);if(!/^\d+$/.test(rawLength??'')||!Number.isSafeInteger(length))throw new Error('The saved flow chunk has no valid byte length.');encodedBytes+=length;api.checkMemory?.(storedBytes+6*encodedBytes);return r.text();});
+    const sketch=documentData.sketch;
     await api.loadSketch(sketch);api.restoreMapData(documentData.mapData);docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
   }
   function queueSave(){clearTimeout(saveTimer);if(gesture||busy)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
@@ -325,6 +322,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function setBusy(on){busy=on;api.setBusy(on);find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on||saving;if(!on){if(resizePending)resize();else schedule();}}
   features=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();queueSave();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
-  const result={renderer,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];}};
+  // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
+  function minimumBytes(){const e=renderer.estimate(renderer.requiredRegion({x:Math.floor(renderer.size/2),y:Math.floor(renderer.size/2),width:32,height:32}),32,32);return fixedGPU(false)+512*512*8+e.retainedBytes+e.workingBytes+8*MB;}
+  const result={renderer,minimumBytes,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];}};
   window.sculptCanvas=result;resize();budgets();return result;
 }

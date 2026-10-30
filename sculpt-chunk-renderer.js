@@ -187,7 +187,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.depthTexture=this.texture('chunk depth',width,height,1,'depth32float',4,T.RENDER_ATTACHMENT);this.depthView=this.depthTexture.createView();
     this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
-    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);if(this.engine)this.f('uChunkScale',scale);   // H8: the shared shaders (engine 0) have no chunk scale; its map draws are final-resolution
+    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',scale);   // H8: the shared shaders (engine 0) have no chunk scale; its map draws are final-resolution
     // H7b: a drawn texel covers scale x scale final pixels, so the generated materials read their mip for that footprint (the variant's own foot, times the scale).
     this.f('uMaterialFoot',(this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1)*scale);
     this.meshes=[this.regionMesh(region.mesh),null];this.meshes[1]=this.meshes[0];
@@ -295,12 +295,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // H5b: a paged map gathers the chunk's lattice from the pages into a staging set laid out as a small whole map (origin 0, stride = the lattice's width).
     const src=feed.gather?feed.gather(encoder,passes):feed,gathered=Boolean(feed.gather);
     const uniform=feedUniform(device,{grid:gathered?src.grid:feed.grid,cells:gathered?src.cells:feed.grid*feed.grid,ox:gathered?0:ox,oy:gathered?0:oy,gw,gh,cw:region.gridWidth,ch:region.gridHeight,sea:this.config.seaLevel,
-      mode:(src.weather?1:0)|(src.maps?2:0)|(request.exportArt?4:0)});
+      mode:(src.weather?1:0)|(src.maps?2:0)|(request.exportArt?4:0)|(src.field?8:0)});
     this.feedDummy??=device.createBuffer({label:'feed absent',size:16,usage:GPUBufferUsage.STORAGE});
     const S=GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST,painted=device.createBuffer({label:'feed painted',size:16,usage:S}),stage=device.createBuffer({label:'feed painted read',size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
     const none={buffer:this.feedDummy},res={'0.0':{buffer:uniform},'0.1':{buffer:src.planes},'0.2':{buffer:src.masks},'2.0':src.weather?{buffer:src.weather}:none,
       '2.1':src.maps?{buffer:src.maps[0]}:none,'2.2':src.maps?{buffer:src.maps[1]}:none,'2.3':src.maps?{buffer:src.maps[2]}:none,'2.4':{buffer:painted},
-      '2.5':this.heightTexture.createView(),'2.6':this.routeTexture.createView(),'2.7':this.gridTexture.createView({dimension:'2d-array'}),'2.8':this.maskTexture.createView({dimension:'2d-array'})};
+      '2.5':this.heightTexture.createView(),'2.6':this.routeTexture.createView(),'2.7':this.gridTexture.createView({dimension:'2d-array'}),'2.8':this.maskTexture.createView({dimension:'2d-array'}),'2.9':src.field?{buffer:src.field}:none};
     const pass=encoder.beginComputePass({label:'chunk feed'});
     pass.setPipeline(passes.pipes.feedMain);for(const [g,bg] of passes.groups('feedMain',res))pass.setBindGroup(g,bg);
     pass.dispatchWorkgroups(Math.ceil(gw/8),Math.ceil(gh/8));pass.end();
@@ -320,7 +320,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,12)||on(13),lumpOn:on(12),flowOn:any(20,25),...request.maskFlags};
       for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     }
-    this.materialReady=false;this.weatherMaps=Boolean(src.maps);
+    this.materialReady=Boolean(src.field);this.weatherMaps=Boolean(src.maps);   // the material field rides in layer 1 when the Time pass made one
   }
   // A reusable canvas is returned. Copy it before the next renderChunk; the
   // caller must count its retained bitmap/canvas bytes separately from stats.
