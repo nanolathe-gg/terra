@@ -104,17 +104,17 @@ export class GpuErosion {
     await this.ready;
     window.erodeRuns = (window.erodeRuns || 0) + 1;
     const feed = await feedPasses(this.device), mp = await this.mapsPipeline();
-    const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = (size - 1) / (grid - 1);
+    const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = request.spacing ?? (size - 1) / (grid - 1);   // H5b: a window of a larger map passes the map's spacing and its own origin
     const age = Math.max(1, Math.round(request.age)), rain = BASE_RAIN * request.rain, started = performance.now();
     const talus = Math.tan(request.talusAngle * Math.PI / 180);
     const params = new Float32Array([grid, spacing, rain, K_FLUX, DAMP, K_CAP, K_DISSOLVE, K_DEPOSIT, EVAPORATION, WET_FULL,
-      this.renderer.variantNumber('columnContrast', 1), ROCK_WEAR, talus, Math.min(request.talusAngle + SOFT_EXTRA, 85) * Math.PI / 180, HARD_ANGLE * Math.PI / 180, THERMAL]);
+      this.renderer.variantNumber('columnContrast', 1), ROCK_WEAR, talus, Math.min(request.talusAngle + SOFT_EXTRA, 85) * Math.PI / 180, HARD_ANGLE * Math.PI / 180, THERMAL, request.ox ?? 0, request.oy ?? 0]);
     const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     const make = (label, bytes, usage = S) => device.createBuffer({label, size: Math.max(16, bytes), usage});
     const tw = Math.ceil(grid / 8);
     const state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
     const fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
-    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
     const tileFlag = make('erosion tile flags', tw * tw * 4), tileList = make('erosion tiles', tw * tw * 8), tileCount = make('erosion tile count', 4);
     const tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
     const weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
@@ -183,7 +183,7 @@ export class GpuErosion {
     const make = (label, bytes, usage = S) => device.createBuffer({label, size: bytes, usage});
     const state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
     const fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
-    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+    const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
     const initial = new Float32Array(n * 4);
     for (let i = 0; i < n; i++) initial[i * 4] = request.height[i];
     device.queue.writeBuffer(state[0], 0, initial);

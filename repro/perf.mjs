@@ -1,5 +1,5 @@
 // Card H7 item 1: where the time goes between an edit or a load and the final picture.
-//   node repro/perf.mjs <map4|map8|study> --scene repro/scenes/green-2.json --out <dir>
+//   node repro/perf.mjs <map4|map8|map16|map40|study> --scene repro/scenes/green-2.json --out <dir>
 //        [--server http://127.0.0.1:8867] [--port 9667] [--no-export] [--label name]
 // Opens a fresh headless Chrome, installs timing hooks before the page runs (no page source is edited), then scripts:
 //   load      scene applied, zoomed to 1x: first picture, weather ready, every visible chunk at final
@@ -23,7 +23,7 @@ const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return 
 const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
 const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
 const [mode] = args;
-if (!['map4', 'map8', 'study'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|study> --scene <scene.json> --out <dir>'); process.exit(1); }
+if (!['map4', 'map8', 'map16', 'map40', 'study'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|map16|map40|study> --scene <scene.json> --out <dir>'); process.exit(1); }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -179,7 +179,7 @@ const ev = async expression => { const r = await Promise.race([send('Runtime.eva
 const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
 
 const isMap = mode !== 'study';
-const url = isMap ? `${server}/sculpt?biome=green&mapX=${mode === 'map4' ? 4 : 8}&mapY=${mode === 'map4' ? 4 : 8}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`
+const url = isMap ? `${server}/sculpt?biome=green&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`
   : `${server}/sculpt?biome=green&scratch=1${scene.query ? '&' + scene.query : ''}`;
 const result = {mode, label, query: extraQuery, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
 const stable = async (quietMs = 1500, limitMs = 120000) => {   // wait for no bake/erode/read event for quietMs

@@ -34,6 +34,8 @@ struct EP {
     softAngle: f32,   // repose angle of the softest rock, radians
     hardAngle: f32,   // repose angle of the hardest rock, radians
     thermal: f32,     // share of a pair's excess slope moved per thermal step
+    ox: f32,          // H5b: the first column and row of this window in the world lattice (0 for a whole map), so the bed column reads world positions
+    oy: f32,
 }
 
 @group(1) @binding(0) var<uniform> ep: EP;
@@ -63,7 +65,7 @@ fn offsetMain(@builtin(global_invocation_id) id: vec3u) {
     if (!inside(x, y)) { return; }
     let i = at(x, y);
     var f = fixedField[i];
-    f.w = columnOffset(vec2f(f32(x), f32(y)) * ep.spacing);
+    f.w = columnOffset((vec2f(f32(x), f32(y)) + vec2f(ep.ox, ep.oy)) * ep.spacing);
     fixedField[i] = f;
 }
 
