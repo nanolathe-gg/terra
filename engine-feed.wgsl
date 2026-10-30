@@ -181,3 +181,72 @@ fn feedMain(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_
     workgroupBarrier();
     if (li == 0u) { let g = atomicLoad(&groupPainted); if (g != 0u) { atomicOr(&painted, g); } }
 }
+
+// ---------------------------------------------------------------- H5b: gather a rectangle of the map from pages
+// A page is a block of the map in its own buffers (sculpt-gpu-fields.js createPagedFields). A chunk's lattice spans a few of them, so each source page
+// copies the part of the rectangle it holds into one staging set laid out as a small whole map (stride dw, plane size dw * dh); feedMain then runs on
+// the staging set unchanged. x, y are world lattice cells. Three entry points keep each pass to at most seven storage buffers: the shape planes and masks,
+// the Time pass's height planes, its three packed maps.
+
+struct GU {
+    sox: i32,           // the source buffer's first cell and size (a shape page: its ring included; a weather page: its core)
+    soy: i32,
+    spw: u32,
+    sph: u32,
+    x0: i32,            // the cells to copy (inclusive), inside the source
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    dox: i32,           // the staging set's first cell and size
+    doy: i32,
+    dw: u32,
+    dh: u32,
+    pad0: u32,
+    pad1: u32,
+    pad2: u32,
+    pad3: u32,
+}
+@group(3) @binding(0) var<uniform> gu: GU;
+@group(3) @binding(1) var<storage, read> gsF: array<f32>;
+@group(3) @binding(2) var<storage, read> gsMk: array<u32>;
+@group(3) @binding(3) var<storage, read_write> gdF: array<f32>;
+@group(3) @binding(4) var<storage, read_write> gdMk: array<u32>;
+@group(3) @binding(5) var<storage, read> gsW: array<f32>;
+@group(3) @binding(6) var<storage, read_write> gdW: array<f32>;
+@group(3) @binding(7) var<storage, read> gsM0: array<u32>;
+@group(3) @binding(8) var<storage, read> gsM1: array<u32>;
+@group(3) @binding(9) var<storage, read> gsM2: array<u32>;
+@group(3) @binding(10) var<storage, read_write> gdM0: array<u32>;
+@group(3) @binding(11) var<storage, read_write> gdM1: array<u32>;
+@group(3) @binding(12) var<storage, read_write> gdM2: array<u32>;
+
+fn gatherAt(id: vec3u) -> vec3i {   // (source index, destination index, valid)
+    let x = gu.x0 + i32(id.x); let y = gu.y0 + i32(id.y);
+    if (x > gu.x1 || y > gu.y1) { return vec3i(0, 0, 0); }
+    return vec3i(i32(u32(y - gu.soy) * gu.spw + u32(x - gu.sox)), i32(u32(y - gu.doy) * gu.dw + u32(x - gu.dox)), 1);
+}
+
+@compute @workgroup_size(8, 8)
+fn gatherShape(@builtin(global_invocation_id) id: vec3u) {
+    let a = gatherAt(id);
+    if (a.z == 0) { return; }
+    let si = u32(a.x); let di = u32(a.y); let sc = gu.spw * gu.sph; let dc = gu.dw * gu.dh;
+    for (var p = 0u; p < 6u; p++) { gdF[p * dc + di] = gsF[p * sc + si]; }
+    for (var w = 0u; w < 7u; w++) { gdMk[di * 7u + w] = gsMk[si * 7u + w]; }
+}
+
+@compute @workgroup_size(8, 8)
+fn gatherHeight(@builtin(global_invocation_id) id: vec3u) {
+    let a = gatherAt(id);
+    if (a.z == 0) { return; }
+    let si = u32(a.x); let di = u32(a.y); let sc = gu.spw * gu.sph; let dc = gu.dw * gu.dh;
+    for (var p = 0u; p < 2u; p++) { gdW[p * dc + di] = gsW[p * sc + si]; }
+}
+
+@compute @workgroup_size(8, 8)
+fn gatherMaps(@builtin(global_invocation_id) id: vec3u) {
+    let a = gatherAt(id);
+    if (a.z == 0) { return; }
+    let si = u32(a.x); let di = u32(a.y);
+    gdM0[di] = gsM0[si]; gdM1[di] = gsM1[si]; gdM2[di] = gsM2[si];
+}
