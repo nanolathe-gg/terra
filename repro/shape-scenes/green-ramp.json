@@ -1,0 +1,10 @@
+{"biome": "green", "source": {"note": "authored for shapecheck (H6c): ramps from flat ground up a hill (curved, many points), a two-point ramp, one across a plateau edge"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["plateau", [[200,620],[330,660]], {"card": {"diameter": 200, "amount": 40, "roughness": 30}}],
+  ["ramp", [[120,420],[180,380],[260,350],[330,330],[400,320],[470,330]], {"card": {"diameter": 70, "roughness": 30}}],
+  ["ramp", [[500,500],[560,560]], {"card": {"diameter": 60, "roughness": 20}}],
+  ["ramp", [[100,640],[160,650],[220,640],[300,630],[380,640]], {"card": {"diameter": 80, "roughness": 40}}],
+  ["ramp", [[700,200],[700,200.00001]], {"card": {"diameter": 60, "roughness": 20}}]
+ ]}

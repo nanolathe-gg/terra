@@ -568,3 +568,49 @@ fn smoothCopy(@builtin(global_invocation_id) g: vec3u) {
 #endif
   Sc[i] = F[PH * cells + i];
 }
+
+// H6c ramp: the grade along a path between its end points' prefix heights (PT[preIdx], PT[preIdx + 1]). The host passes the settled path's segments (a, b in s0;
+// the length before the segment, its length and the whole path's length in s1); a cell takes its nearest segment (the first on a tie), as rampSegment() and gradeRamp().
+@compute @workgroup_size(8, 8)
+fn stampRamp(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let n = u.grid; let cells = pcells(); let i = lidx(x, y);
+  let nzx = nzCell(0u, x, y, i, cells); let nzy = nzCell(1u, x, y, i, cells);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+  let nzx = Nz[i]; let nzy = Nz[cells + i];
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  let radius = u.radius;
+  var bestD = 3.0e38; var along = 0.0; var total = 1.0; var hit = false;
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len2 = dx * dx + dy * dy;
+    let t = clamp(((wx - s0.x) * dx + (wy - s0.y) * dy) / len2, 0.0, 1.0);
+    let cx = s0.x + dx * t; let cy = s0.y + dy * t;
+    let plain = sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy));
+    let edge = sm(0.55, 1.0, plain / radius) * u.amp;
+    let ex = nzx - sampleN(0u, cx, cy); let ey = nzy - sampleN(1u, cx, cy);
+    let ax = wx - cx + edge * (u.rotX * ex - u.rotY * ey); let ay = wy - cy + edge * (u.rotY * ex + u.rotX * ey);
+    let dist = sqrt(ax * ax + ay * ay);
+    if (dist >= radius || dist >= bestD) { continue; }
+    bestD = dist; along = s1.x + t * s1.y; total = s1.z; hit = true;
+  }
+  if (!hit) { return; }
+  let w = 1.0 - sm(0.55, 1.0, bestD / radius);
+  let tt = clamp(along / total, 0.0, 1.0);
+  let ease = min(0.18, radius / total);
+  var grade = (tt - ease * 0.5) / (1.0 - ease);
+  if (tt < ease) { grade = tt * tt / (2.0 * ease * (1.0 - ease)); }
+  else if (tt > 1.0 - ease) { grade = 1.0 - (1.0 - tt) * (1.0 - tt) / (2.0 * ease * (1.0 - ease)); }
+  let ah = PT[u.preIdx]; let bh = PT[u.preIdx + 1u];
+  let level = ah + (bh - ah) * grade;
+  let base = F[PH * cells + i];
+  F[PH * cells + i] = clamp(base + (level - base) * w, u.minH, u.maxH);
+  F[PP * cells + i] = max(F[PP * cells + i], sm(0.55, 0.92, w));
+  F[PR * cells + i] = max(F[PR * cells + i], sm(0.30, 0.92, w));
+}

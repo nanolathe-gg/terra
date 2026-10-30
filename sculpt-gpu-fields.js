@@ -11,7 +11,7 @@
 // rectangle; read() waits (readAsync/ready) so a bake never sees a half-written copy and the frame never waits.
 
 const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x'];
-const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10, smooth: 11};
+const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10, smooth: 11, ramp: 12};
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],
@@ -120,7 +120,7 @@ export function prepareNode(n, geom, c) {
   const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, shouldered = kind === 'hill';
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
-  const amp = q.rough * radius * (naturalWater ? 1.1 : naturalPlateau ? .95 : shouldered ? .85 : .2);
+  const amp = kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * (naturalWater ? 1.1 : naturalPlateau ? .95 : shouldered ? .85 : .2);
   const extent = radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp;
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
@@ -137,6 +137,7 @@ export function prepareNode(n, geom, c) {
   };
   const macro = naturalWater || naturalPlateau, fx = macro ? F_COAST_X : F_X, fy = macro ? F_COAST_Y : F_Y;
   const segs = [];
+  let reads = kind === 'plateau' ? [{x: pts[0].x, y: pts[0].y}] : [];
   const dab = (p, e, f0, f1) => segs.push({px: p.x, py: p.y, ex: (e || p).x, ey: (e || p).y, f0, f1, nx: sampleNoise(fx, p.x, p.y), ny: sampleNoise(fy, p.x, p.y)});
   let settle = false, faceSide = 1, face = [1, 0];
   if (shouldered) {
@@ -176,6 +177,29 @@ export function prepareNode(n, geom, c) {
       faceSide = (-sy * face[0] + sx * face[1]) < 0 ? -1 : 1;
       dab(path[0], path[1]);
     } else dab(path[0]);
+  } else if (kind === 'ramp') {
+    // ramp()/settleRamp(): drop repeats, then (from three points) thin the path and round its corners twice; the grade runs between the first and last point.
+    let path = [pts[0]];
+    for (const p of pts.slice(1)) if (Math.hypot(p.x - path[path.length - 1].x, p.y - path[path.length - 1].y) >= 1e-4) path.push(p);
+    const first = path[0], last = path[path.length - 1];
+    if (path.length >= 3) {
+      const thin = [path[0]];
+      for (const p of path.slice(1, -1)) if (Math.hypot(p.x - thin[thin.length - 1].x, p.y - thin[thin.length - 1].y) > radius * .12) thin.push(p);
+      thin.push(path[path.length - 1]); path = thin;
+      for (let pass = 0; pass < 2; pass++) {
+        const next = [path[0]];
+        for (let i = 0; i < path.length - 1; i++) { const a = path[i], b = path[i + 1]; next.push({x: .75 * a.x + .25 * b.x, y: .75 * a.y + .25 * b.y}, {x: .25 * a.x + .75 * b.x, y: .25 * a.y + .75 * b.y}); }
+        next.push(path[path.length - 1]); path = next;
+      }
+    }
+    let total = 0; const list = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i], b = path[i + 1], l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+      if (l2 < 1e-8) continue;
+      const len = Math.sqrt(l2); list.push({a, b, cum: total, len}); total += len;
+    }
+    for (const e of list) segs.push({px: e.a.x, py: e.a.y, ex: e.b.x, ey: e.b.y, f0: [e.cum, e.len], f1: [total, 0], nx: 0, ny: 0});
+    if (total > 0) reads = [{x: first.x, y: first.y}, {x: last.x, y: last.y}];
   } else {
     const path = simplifyPath(pts, Math.max(1, radius * .04)), longest = Math.max(16, radius * 1.5);
     dab(path[0]);
@@ -193,7 +217,7 @@ export function prepareNode(n, geom, c) {
   }
   // Mask writes: paint's channel, erase's clearing of planes 0..13; each [plane, target, gain, flat].
   const writes = kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : [];
-  return {op: 'stamp', kind: kcode, segs, region, settle, entry: kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads: kind === 'plateau' ? [{x: pts[0].x, y: pts[0].y}] : [], writes: writes.map(([p, t]) => [p, t, 1, 0]),
+  return {op: 'stamp', kind: kcode, segs, region, settle, entry: kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t]) => [p, t, 1, 0]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
       shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0,
@@ -237,7 +261,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;
