@@ -235,16 +235,10 @@ export function nodeSupport(n, c) {
     if (q.craterFacets > 0) return 'crater facets';
   }
   if (kind === 'plateau' || kind === 'offset' || kind === 'crater') {
-    if (kind === 'offset' && q.shorePlates > 0 && !(q.plateMaterial >= .5)) return 'shore plates, material 0';
   }
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   // The coast pass runs for water strokes only (hasCoastPass in sculpt.js); a world default must not refuse its hills and plateaus.
   // H10: the coast pass (fingers on the joined coast as thumbs, layers in styles 0 and 1). Ribs fingers and the mounds style wait for the owner's ruling.
-  if (water && q.fingerCoast >= .5 && q.fingers > 0 && !(q.fingerBlunt >= .5)) return 'coast fingers without thumbs';
-  if (water && Math.round(q.shoreLayers) >= 1 && Math.round(q.layerStyle) === 2) return 'layer style 2 (mounds)';
-  if (water && q.fingers > 0 && !(q.fingerCoast >= .5)) return 'water fingers, bank or plates';
-  // H10: shore plates in materials 1 (slabs) and 2 (frost); material 0 (plain floes) waits for the owner's ruling.
-  if ((water || kind === 'offset') && q.shorePlates > 0 && !(q.plateMaterial >= .5)) return 'shore plates, material 0';
   return null;
 }
 
@@ -465,8 +459,8 @@ const coastLayerReach = q => {
 // beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
 // size of the circular bites' lattice.
 function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c) {
-  const fingers = water && q.fingerCoast >= .5 && q.fingers > 0, layers = water && Math.round(q.shoreLayers) >= 1;
-  const plWater = Math.max(0, q.plateWaterPx || 0), plLand = Math.max(0, q.plateLandPx || 0), plates = q.shorePlates > 0 && Math.max(plWater, plLand) > 0 && q.plateMaterial >= .5;
+  const fingers = water && q.fingers > 0, layers = water && Math.round(q.shoreLayers) >= 1;
+  const plWater = Math.max(0, q.plateWaterPx || 0), plLand = Math.max(0, q.plateLandPx || 0), plates = q.shorePlates > 0 && Math.max(plWater, plLand) > 0;
   if (!fingers && !layers && !plates) return null;
   const {grid, spacing, refSpacing = spacing} = geom;
   const fReach = .5 * radius * bankScale, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
@@ -489,7 +483,7 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c) {
   return {
     box, readR: m + (fingers ? blurR : 0) + 2, fingers, layers, plates, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, extra,
     u: {
-      plMat: plates ? Math.round(q.plateMaterial) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plScale: q.crystalShoreScale ?? 1, plSeam: q.crystalShoreSeam ?? .5, plNeedles: q.frostNeedles ?? 0,
+      plMat: plates ? (q.plateMaterial >= 1.5 ? 2 : 1) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plScale: q.crystalShoreScale ?? 1, plSeam: q.crystalShoreSeam ?? .5, plNeedles: q.frostNeedles ?? 0,
       frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
       coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius * bankScale / 140, .35, 1), coFLow: q.fingerHeight, coFlatOn: flat ? 1 : 0,
       cfAmount: q.fingerAmount ?? 1, cfSpread: q.fingerSpread ?? .5, cfSize: q.fingerSize ?? 1,
