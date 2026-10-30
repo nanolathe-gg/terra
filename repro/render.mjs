@@ -2,8 +2,8 @@
 //   node render.mjs <scene.json> <out-dir> [--server http://127.0.0.1:8801] [--port 9450] [--query 'sun=90,45&cavity=.5'] [--clay]
 // --query appends page parameters after the scene's own (review sun, knob trials); --clay ticks the Clay box.
 // The scene is {"biome": "green", "query": "", "ground": true, "strokes": [[kind, [[x,y],...], options], ...]}
-// (sculpt.js scriptedScene). H12b: the scene is played on a 4x4 map with every stroke shifted by (OX, OY), so the
-// 1024-px window sits clear of the map edges, and the window is captured at 1x. Writes <out-dir>/ours.png (the
+// (sculpt.js scriptedScene). H12b: the scene is played on a 4x4 map with every stroke shifted by --offset (default 0:
+// the window is the map's top-left 1024 px; --sea N sets the sea, default the map's), and the window is captured at 1x. Writes <out-dir>/ours.png (the
 // window) and ours-heights.json (the displayed heights over the window, 512 x 512 samples at 2 px).
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -14,7 +14,7 @@ const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--po
 const extraQuery = opt('--query', '');
 const MAPX = 4, MAPY = 4, WINDOW = 1024;
 const clayOn = args.includes('--clay') && args.splice(args.indexOf('--clay'), 1).length > 0;
-const OX = Number(opt('--offset', 528)), OY = OX, seaArg = opt('--sea', '');
+const OX = Number(opt('--offset', 0)), OY = OX, seaArg = opt('--sea', '');
 const [sceneFile, out] = args;
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});

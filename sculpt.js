@@ -3234,27 +3234,29 @@ async function shapeCompare() {
 }
 // Regional replay is one whole-map evaluation, so the regional check asks two other things: a fresh whole-map
 // evaluation read back equals the CPU copy, and a window evaluated alone (the four quadrants) equals the same crop of the whole.
+// H12b: the regional check on the map. The map's paged fields (gpuPages=force) read each quadrant of the map; the same
+// shape engine runs the same window directly; every authored plane must match exactly. Quadrant windows, so each window
+// is a regional run on its own.
 async function gpuRegionalCheck() {
-  flushEval(); for (let i=0;i<4000 && shapePending;i++) await new Promise(r => setTimeout(r,10));
-  if (!shapeStudy.used) throw new Error('the study scene has no GPU shape result yet');
-  const engine=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT}),ctx=shapeContext();
-  const whole=live(),planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
+  if (!regionalFields?.readRect) throw new Error('the regional check needs the paged fields: open the map with gpuPages=force');
+  await regionalFields.ready?.();
+  const G=worldGrid,engine=await createShapeEngine({device:renderer.device,grid:G,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT}),ctx=shapeContext();
+  const planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
   let mismatches=0;
-  const compare=(out,tag) => {
-    const part={h:new Float32Array(grid*grid),p:new Float32Array(grid*grid),r:new Float32Array(grid*grid),c:new Float32Array(grid*grid),v:new Float32Array(grid*grid),x:new Float32Array(grid*grid),masks:MASK_KEYS.map(() => new Int8Array(grid*grid))};
-    engine.copyOut(out,part);
-    const {x0,y0,x1,y1}=out.rect;
-    for (const key of FIELD_KEYS) for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
-      const j=MASK_KEYS.indexOf(key),expected=whole[key][y*grid+x],actual=j>=0?part.masks[j][y*grid+x]:part[key][y*grid+x];
-      if (expected===actual && Number.isFinite(actual)) continue;
-      const p=planes[key]; p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(actual-expected)||Infinity); p.firstMismatch??={x,y,whole:expected,gpu:actual,run:tag};
-    }
-  };
   try {
-    compare(await engine.run(nodes.slice(),ctx,null),'whole');
-    const middle=Math.floor(grid/2);
-    for (const [y0,y1] of [[0,middle-1],[middle,grid-1]]) for (const [x0,x1] of [[0,middle-1],[middle,grid-1]]) compare(await engine.run(nodes.slice(),ctx,{x0,y0,x1,y1}),'window '+x0+','+y0);
-    return {grid,planes,mismatches,gpuShape:true};
+    const middle=Math.floor(G/2);
+    for (const [y0,y1] of [[0,middle-1],[middle,G-1]]) for (const [x0,x1] of [[0,middle-1],[middle,G-1]]) {
+      const rect={x0,y0,x1,y1},W=x1-x0+1,out=await engine.run(nodes.slice(),ctx,rect),rp=await regionalFields.readRect(rect,{weather:false});
+      const expected={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5]};
+      for (const key of FIELD_KEYS) {
+        const j=MASK_KEYS.indexOf(key),want=j>=0?out.masks[j]:expected[key],got=rp.fields[key],p=planes[key];
+        for (let i=0;i<W*W;i++) {
+          const a=want[i],b=got[i]; if (a===b && Number.isFinite(b)) continue;
+          p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(b-a)||Infinity); p.firstMismatch??={x:x0+i%W,y:y0+Math.floor(i/W),engine:a,paged:b};
+        }
+      }
+    }
+    return {grid:G,planes,mismatches,gpuShape:true};
   } finally { engine.destroy(); }
 }
 // H6 check: the heights of the current node list evaluated at 1/factor of the final grid in each direction (factor 2 is a quarter of the cells), as base64 Float32.
@@ -3271,7 +3273,6 @@ async function shapeLevel(factor=2) {
 // the map engine independently replays its graph through four regional reads.
 // Weather and GPU pixels have separate guards: this checks every brush plane.
 function checkRegionalFields() {
-  if(config.map)throw new Error('Run the regional field check on a 1024px study scene.');
   return gpuRegionalCheck();
 }
 window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shapeLevel,shape:() => ({pending:shapePending,used:shapeStudy.used,last:shapeStudy.last,fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:checkRegionalFields,capturePNG:() => { renderExportView(); return canvas.toDataURL('image/png'); },state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
