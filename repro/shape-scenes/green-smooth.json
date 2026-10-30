@@ -1,0 +1,12 @@
+{"biome": "green", "source": {"note": "authored for shapecheck (H6c): Smooth over a hill, a plateau edge and water; a large brush (long blur), and a smooth over an earlier smooth"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["plateau", [[200,560],[330,600]], {"card": {"diameter": 200, "amount": 40, "roughness": 30}}],
+  ["deep", [[80,760],[300,820],[520,880]], {"card": {"diameter": 260, "roughness": 35, "shelves": 60}}],
+  ["smooth", [[400,330],[520,380]], {"card": {"diameter": 200, "amount": 80, "roughness": 30}}],
+  ["smooth", [[200,560],[330,600]], {"card": {"diameter": 240, "amount": 100, "roughness": 20}}],
+  ["smooth", [[300,800],[420,840]], {"card": {"diameter": 700, "amount": 70, "roughness": 20}}],
+  ["smooth", [[450,350],[560,420]], {"card": {"diameter": 160, "amount": 60, "roughness": 40}}],
+  ["plateau", [[430,360]], {"card": {"diameter": 100, "amount": 20, "roughness": 10}}]
+ ]}

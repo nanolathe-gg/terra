@@ -555,3 +555,16 @@ fn pointRead() {
   PT[u.preIdx] = (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (d * (1.0 - fx) + e * fx) * fy;
 }
 #endif
+
+// H6c smooth: the prefix height of the cells the box blur will read, copied to scratch plane 0 (blurH and blurV then run on it with blurR = the node's radius).
+@compute @workgroup_size(8, 8)
+fn smoothCopy(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  Sc[i] = F[PH * cells + i];
+}
