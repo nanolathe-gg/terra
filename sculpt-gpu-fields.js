@@ -237,7 +237,8 @@ export function nodeSupport(n, c) {
     if (kind === 'offset' && q.shorePlates > 0) return 'water fingers, bank or plates';
   }
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
-  if (q.fingerCoast >= .5 || Math.round(q.shoreLayers) >= 1) return 'coast pass';
+  // The coast pass runs for water strokes only (hasCoastPass in sculpt.js); a world default must not refuse its hills and plateaus.
+  if (water && ((q.fingerCoast >= .5 && q.fingers > 0) || Math.round(q.shoreLayers) >= 1)) return 'coast pass';
   if (water && (q.fingers > 0 || (q.bankPx > 0 && !(q.profile >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
   return null;
 }
