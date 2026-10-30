@@ -258,6 +258,16 @@ fn shapeMasks(i: u32, f: f32) {
     maskSet(i, pl, i32(floor(b + (mw.y - b) * k + 0.5)));
   }
 }
+// H9 ridge piece: the height multiplier at t along a piece (h0 -> h1), then the jagged crest (ridgeRise in sculpt.js).
+fn ridgeRise(h0: f32, h1: f32, jag: f32, t: f32, lx: f32, ly: f32) -> f32 {
+  var h = h0 + (h1 - h0) * t;
+  if (jag > 0.0) {
+    let R = u.radius;
+    let n = 0.6 * vnoise(lx / (R * 0.28), ly / (R * 0.28), u.seed ^ 0x6b1u) + 0.4 * vnoise(lx / (R * 0.11), ly / (R * 0.11), u.seed ^ 0x1d7u);
+    h = h * (1.0 - jag * 0.6 * (0.5 - 0.5 * n));
+  }
+  return h;
+}
 fn nzF(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
 #ifdef PAGES
   return nzCell(f, x, y, i, cells);
@@ -333,6 +343,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     if (kind == 2u && u.natural != 0u) { width = clamp(1.0 + u.rough * 1.6 * nCW, 0.45, 1.9); }
     else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
     var r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    if (u.ridge != 0u) { r = r / (s1.x + (s1.y - s1.x) * t); }
     var lobe = 0.0;
     if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
     var core = 0.0;
@@ -377,6 +388,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       w = crossSection(r, radius * width * u.bankScale, F[PH * cells + i], nCW, nShelf, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells));
       lift = sLift;
     }
+    if (u.ridge != 0u) { w = w * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly); }
     if (kind == 4u || (kind == 5u && !shouldered)) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
     let influence = max(w, core);
     if (!shouldered && influence <= best) { continue; }

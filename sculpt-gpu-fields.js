@@ -42,7 +42,7 @@ function shapeMaskWrites(kind, q, sat) {
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'sOn', 'sWater', 'sDome', 'sSteps', 'sShelfSteps'].map(k => [k, 'u']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'sOn', 'sWater', 'sDome', 'sSteps', 'sShelfSteps'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
@@ -83,7 +83,7 @@ function simplifyPath(points, tolerance) {
 }
 // fissurePieces() of sculpt.js: the main cut cut into short pieces, and branches (each forking once) grown from roots along it. f: fissureSetup's values.
 const rand01 = (seed, a, b) => hash(a, b, seed) * .5 + .5;
-const mkPiece = (a, b, r0, r1, h0, h1) => ({a, b, r0, r1, h0, h1});
+const mkPiece = (a, b, r0, r1, h0, h1, jag = 0) => ({a, b, r0, r1, h0, h1, jag, reach: Math.max(r0, r1)});
 function fissurePieces(f, path, s, seed, radius) {
   const out = [], taper = s.fissureTaper, cum = [0];
   for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
@@ -147,6 +147,58 @@ function outlineUniforms(kind, q, radius) {
   }
   return {};
 }
+// H9: line features (card C4): lineMultipliers, spurPieces, ridgePieces of sculpt.js, the seeded arithmetic that lays out a ridge's crest and spurs as short pieces.
+const ridgeOn = (kind, o) => (kind === 'hill' || kind === 'mountain') && (Math.round(o.spurCount) >= 1 || o.crestJag > 0 || o.crestVary > 0 || o.crestTaper > 0);
+function lineMultipliers(s, a, len, salt, taper, ends) {
+  const R = s.radius, f = len > 0 ? clamp(a / len, 0, 1) : 0, u = ends ? 1 - smooth(0, .4, Math.min(f, 1 - f)) : smooth(0, 1, f), n = valueNoise(a / (R * 2.2), .37, s.seed ^ salt), m = valueNoise(a / (R * 1.6), 2.9, s.seed ^ (salt + 0x55));
+  return [clamp(1 + .45 * s.crestVary * n, .6, 1.4) * (1 - .62 * taper * u) * (ends ? 1 : 1 + .5 * (1 - smooth(0, .4, f))), (1 - .45 * s.crestVary * (.5 - .5 * m)) * (1 - .7 * taper * u)];
+}
+function spurPieces(s, roots, fade, jag) {
+  const kf = s.inv ? 1 / Math.hypot(s.inv[0], s.inv[1]) : 1, spread = s.spurSpread, bulb = s.spurBulb, out = [];
+  const grow = (x, y, heading, len, rootR, rootH, k, level, rootFade) => {
+    const step = len / 3, curl = (.1 + .3 * spread) * Math.PI, salt = 0x300 + k * 97;
+    let h = heading;
+    for (let j = 0; j < 3; j++) {
+      h += (rand01(s.seed, k, 20 + j) - .5) * curl;
+      const nx = x + Math.cos(h) * step, ny = y + Math.sin(h) * step, m0 = lineMultipliers(s, step * j, len, salt, s.spurTaper, false), m1 = lineMultipliers(s, step * (j + 1), len, salt, s.spurTaper, false);
+      let r0 = m0[0], r1 = m1[0], e0 = m0[1], e1 = m1[1];
+      if (bulb > 0) { const b0 = bulb * smooth(.5, 1, j / 3), b1 = bulb * smooth(.5, 1, (j + 1) / 3); r0 += b0 * .7; r1 += b1 * .7; e0 += (1 - e0) * b0; e1 += (1 - e1) * b1; }
+      out.push(mkPiece({x, y}, {x: nx, y: ny}, rootR * r0, rootR * r1, rootH * e0 * (j ? 1 : rootFade), rootH * e1, jag));
+      if (j === 1 && level === 0 && s.spurForks > 0 && rand01(s.seed, k, 50) < s.spurForks)
+        grow(nx, ny, h + (rand01(s.seed, k, 51) < .5 ? -1 : 1) * (.5 + .6 * rand01(s.seed, k, 52)), len * .5, rootR * r1 * .85, rootH * e1 * .85, k + 100, 1, 1);
+      x = nx; y = ny;
+    }
+  };
+  for (const root of roots) {
+    const k = root.k;
+    grow(root.x, root.y, root.heading, s.spurLength * kf * (.55 + .9 * rand01(s.seed, k, 14)), s.spurWidth * (.85 + .3 * rand01(s.seed, k, 15)), s.spurHeight, k, 0, fade);
+  }
+  return out;
+}
+function ridgePieces(s, path) {
+  const cum = [0], longest = Math.max(16, s.radius * 1.5), out = [];
+  for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
+  const L = cum[cum.length - 1], jag = s.crestJag;
+  if (path.length < 2) out.push(mkPiece(path[0], null, 1, 1, 1, 1, jag));
+  for (let k = 1; k < path.length; k++) {
+    const a = path[k - 1], b = path[k], len = cum[k] - cum[k - 1], n = Math.max(1, Math.ceil(len / longest));
+    for (let j = 0; j < n; j++) {
+      const f0 = j / n, f1 = (j + 1) / n, m0 = lineMultipliers(s, cum[k - 1] + len * f0, L, 0x71d, s.crestTaper, true), m1 = lineMultipliers(s, cum[k - 1] + len * f1, L, 0x71d, s.crestTaper, true);
+      out.push(mkPiece({x: a.x + (b.x - a.x) * f0, y: a.y + (b.y - a.y) * f0}, {x: a.x + (b.x - a.x) * f1, y: a.y + (b.y - a.y) * f1}, m0[0], m1[0], m0[1], m1[1], jag));
+    }
+  }
+  const N = Math.round(clamp(s.spurCount, 0, 12));
+  if (N < 1) return out;
+  const roots = [], spread = s.spurSpread, phase = rand01(s.seed, 7, 0x4b1) * Math.PI * 2;
+  for (let k = 0; k < N; k++) {
+    if (L <= 0) { roots.push({x: path[0].x, y: path[0].y, heading: phase + Math.atan2(s.rot[1], s.rot[0]) + Math.PI * 2 * (k + (rand01(s.seed, k, 11) - .5) * .5) / N, k}); continue; }
+    const at = L * (.08 + .84 * (k + .2 + .6 * rand01(s.seed, k, 11)) / N), side = ((k + (rand01(s.seed, k, 12) < .25 ? 1 : 0)) & 1) ? 1 : -1;
+    let i = 1; while (i < cum.length - 1 && cum[i] < at) i++;
+    const a = path[i - 1], b = path[i], f = (at - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-6);
+    roots.push({x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, heading: Math.atan2(b.y - a.y, b.x - a.x) + side * (.7 + .95 * spread) * (.75 + .5 * rand01(s.seed, k, 13)), k});
+  }
+  return out.concat(spurPieces(s, roots, 1, jag));
+}
 // ---- node preparation ----
 // Returns {reason} when the passes do not take the node (the scene then runs on the JS engine), or {skip:true} for a node that
 // writes nothing, else {op:'ground'|'stamp', ...}. `c` is the host's context (see makeShapeContext in sculpt.js).
@@ -172,8 +224,6 @@ export function nodeSupport(n, c) {
     if (kind === 'offset' && q.shorePlates > 0) return 'water fingers, bank or plates';
   }
   if (q.profile >= .5 && !SECTION_KINDS.includes(kind)) return 'parametric cross-section';
-  const ridge = (kind === 'hill' || kind === 'mountain') && (Math.round(q.spurCount) >= 1 || q.crestJag > 0 || q.crestVary > 0 || q.crestTaper > 0);
-  if (ridge) return 'ridge options';
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   if (q.fingerCoast >= .5 || Math.round(q.shoreLayers) >= 1) return 'coast pass';
   if (water && (q.fingers > 0 || (q.bankPx > 0 && !(q.profile >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
@@ -190,7 +240,7 @@ export function prepareNode(n, geom, c) {
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), pts = n.points, radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep' && c.natural;
-  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, plainHill = kind === 'hill' && q.profile >= .5, shouldered = kind === 'hill' && !plainHill;
+  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind) && c.edgesNatural, plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
@@ -300,6 +350,14 @@ export function prepareNode(n, geom, c) {
     }
     for (const e of list) segs.push({px: e.a.x, py: e.a.y, ex: e.b.x, ey: e.b.y, f0: [e.cum, e.len], f1: [total, 0], nx: 0, ny: 0});
     if (total > 0) reads = [{x: first.x, y: first.y}, {x: last.x, y: last.y}];
+  } else if (ridgeOn(kind, q)) {
+    // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
+    const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
+    for (const pc of ridgePieces(rs, simplifyPath(pts, Math.max(1, radius * .04)))) {
+      const at = segs.length, ex = radius * pc.reach * (1) + 2 * amp + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0), e = pc.b || pc.a;
+      dab(pc.a, pc.b, [pc.r0, pc.r1], [pc.h0, pc.h1]); segs[at].jag = pc.jag;
+      segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
+    }
   } else {
     const path = simplifyPath(pts, Math.max(1, radius * .04)), longest = Math.max(16, radius * 1.5);
     dab(path[0]);
@@ -324,7 +382,7 @@ export function prepareNode(n, geom, c) {
       ...outlineUniforms(kind, q, radius), ...sectionUniforms(kind, q, c), bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
-      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0}};
+      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) ? 1 : 0}};
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
   const count = Math.round(q.craterlets || 0), centre = pts[pts.length >> 1], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };
@@ -431,7 +489,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (!p.region) continue;
       const node = {...p.u, nseg: p.segs.length, kind: p.kind, segBase: segCount, mwBase: mwCount, nwrites: p.writes.length};
       for (const s of p.segs) {
-        segData.push(s.px, s.py, s.ex, s.ey, s.f0?.[0] ?? 0, s.f0?.[1] ?? 0, s.f1?.[0] ?? 0, s.f1?.[1] ?? 0, s.nx, s.ny, s.frame ? 1 : 0, 0, {box: s.box});
+        segData.push(s.px, s.py, s.ex, s.ey, s.f0?.[0] ?? 0, s.f0?.[1] ?? 0, s.f1?.[0] ?? 0, s.f1?.[1] ?? 0, s.nx, s.ny, s.frame ? 1 : 0, s.jag ?? 0, {box: s.box});
       }
       segCount += p.segs.length;
       for (const w of p.writes) mwData.push(...w);

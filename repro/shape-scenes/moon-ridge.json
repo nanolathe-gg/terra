@@ -1,0 +1,8 @@
+{"biome": "moon", "source": {"note": "authored for shapecheck (H9): ridge options (crest jag, variation, taper, spurs with forks and bulbs) on swept hills and mountains, a single-click spur star, and a ridge with a cross-section; moonLobes from the world"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[200,300],[320,260],[450,300],[560,380]], {"card": {"diameter": 120, "amount": 60, "roughness": 35, "crestJag": 40, "crestVary": 80, "crestTaper": 50}}],
+  ["mountain", [[200,650],[330,700],[470,640],[600,690]], {"card": {"diameter": 140, "amount": 70, "roughness": 30, "spurCount": 5, "spurLength": 160, "spurForks": 50, "spurBulb": 40, "crestJag": 30}}],
+  ["hill", [[780,260]], {"card": {"diameter": 120, "amount": 50, "roughness": 30, "spurCount": 6, "spurLength": 140}}],
+  ["hill", [[700,600],[820,680],[930,620]], {"card": {"diameter": 110, "amount": 55, "roughness": 30, "spurCount": 3, "crestTaper": 60, "profile": 1, "facePx": 50, "apronPx": 15, "apronHeight": 8}}]
+ ]}
