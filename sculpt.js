@@ -2699,10 +2699,15 @@ const gpuShapeOn=() => {
   const engine=Number(url.get('engine')??config?.defaults?.engine??0)===1,own=Number(config?.engineDefaults?.gpuShape);
   return (engine && Number.isFinite(own)?own:worldDefault('gpuShape'))>0;
 };
-const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:isFlowKind,seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
+// A flow bake writes nothing the shape passes make: its stored planes are copied in after the result (applyBakes).
+const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),skipKind:k => isFlowKind(k) || k==='flowbake',seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
   shouldered:experiment.get('forms')==='shouldered',natural:NATURAL_COAST,edgesNatural:experiment.get('edges')==='natural',coreEdge:experiment.has('coreEdge')?Number(experiment.get('coreEdge')):.38,replayFull:experiment.get('replay')==='full'});
 // The study (1024 px): the whole grid is evaluated by the passes and the rectangle read back into the live planes. The result arrives asynchronously;
 // canExport() and the weather wait for it (shapePending), and the frame never does.
+// The GPU result carries zeros in the flow planes, so the stored bake planes go back in over it (what applyNode does for a flowbake node on the JS path).
+function applyBakes(list) { for (const n of list) if (n.kind==='flowbake' && !n.hidden && n.result) { renderer?.setSediment(n.result.colors); applyResult(n.result,maskPlanes,{x0:0,y0:0,x1:grid-1,y1:grid-1},grid,[originCellX,originCellY]); } }
+// Settled shape: null when no GPU shape result is outstanding, else a promise for it. A bake reads the heights, so it waits for them.
+function shapeSettled() { if (pendingEval>=0) flushEval(); return shapePending?new Promise(res => shapeAfter.push(res)):null; }
 let shapePending=0, shapeStudy={engine:null,valid:false,reason:null,used:false}, shapeAfter=[];
 function studyShape(rect) {
   const ctx=shapeContext(); let reason=null;
@@ -2719,7 +2724,7 @@ function studyShape(rect) {
     try {
       shapeStudy.engine??=await createShapeEngine({device:renderer.device,grid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
       const started=performance.now(),out=await shapeStudy.engine.run(list,ctx,r,{release:whole});
-      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); if (whole) shapeStudy.valid=true; }
+      if (out && !stroke) { shapeStudy.engine.copyOut(out,{h:heights,p:protection,r:routes,c:cracks,v:cover,x:crystal,masks:maskPlanes}); applyBakes(list); if (whole) shapeStudy.valid=true; }
       shapeStudy.last={ms:performance.now()-started,whole,...shapeStudy.engine.stats().last};
     } catch (err) { error('Shape on the GPU failed: '+err.message); shapeStudy.valid=false; }
     finally { shapePending--; if (!shapePending) { heightDirty=true; markChanged(); for (const fn of shapeAfter.splice(0)) fn(); } }
@@ -3757,6 +3762,7 @@ function placeBake(result) {
   else old=nodes[i].result?.rect;
   nodes[i]={...nodes[i],result};
   evaluate(i,unionRect(old,result.rect)); checkpoint(); schedule();
+  if (shapePending) queueWeather();   // H8b: the GPU result lands later and marks the weather pending; the pass runs again once it has
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; mapFeatures?.deactivate(); rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
@@ -4081,7 +4087,7 @@ function sampleFlow(x,y){
   return[0,0];
 }
 function mountCurrentFlow(){
-  flow=mountFlow({$,nodes:() => nodes,prefix:() => prefix,heights:() => heights,grid:() => grid,size:() => size,spacing:() => spacing,sea:() => config.seaLevel,nodeBounds,place:placeBake,...(regionalFields?{readBefore:readFlowBefore,revision:()=>revision,reserve:bytes=>sculptRegion.checkMemory?.(bytes),view:()=>mapCanvas?.view(),flowAt:sampleFlow}:{}),
+  flow=mountFlow({$,settled:shapeSettled,nodes:() => nodes,prefix:() => prefix,heights:() => heights,grid:() => grid,size:() => size,spacing:() => spacing,sea:() => config.seaLevel,nodeBounds,place:placeBake,...(regionalFields?{readBefore:readFlowBefore,revision:()=>revision,reserve:bytes=>sculptRegion.checkMemory?.(bytes),view:()=>mapCanvas?.view(),flowAt:sampleFlow}:{}),
       world:activeWorld,saveWorlds,suggestions:flowSuggestions,status,error,schedule:() => schedule(false),updateControls,persist:persistLater,editing:() => Boolean(stroke||moving||loading),
       relabel:renderLayers,lift:(x,y)=>regionalFields?(Math.max(config.seaLevel,sampleRegional(x,y))-config.baseHeight)*.5:liftAt(x,y),planes:() => maskPlanes,mountPanel:el => { const panels=$('editor').querySelectorAll(':scope > section.panel'); $('editor').insertBefore(el,panels[panels.length-1]); },
       recolourSelected:color => { if (nodes[selected]?.kind==='source') changeSelected(n => { n.params={...n.params,color}; }); }});
