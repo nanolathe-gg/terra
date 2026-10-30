@@ -3137,14 +3137,14 @@ function queueWeather() {
       .then(result => { if (job!==weatherJob || stroke) return; gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts; window.lastErosion={authored:weatherBase,height:result.height,debris:result.debris,offset:result.offset,protect:protection,seaLevel:config.seaLevel,maps:result.maps,grid,size};
         if (own && regionalFields) {
           // A map canvas: the chunk renderer reads the maps as the worker's arrays (flow, deposit, talus, sand and the Time pass's eight).
-          refined=result.height; refinedBase=weatherBase;
+          dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           // The maps stay packed (three rgba8 arrays, 4 bytes a sample); the chunk crop unpacks only the samples a chunk needs.
           regionalWeather={p0:result.maps[0],p1:result.maps[1],p2:result.maps[2]};
           weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
           markViewChanged(); updateControls(); schedule(); return;
         }
         if (own) {
-          refined=result.height; refinedBase=weatherBase;
+          dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);
           heightDirty=false; weatherState='ready'; renderedRevision=-1; updateControls();
           $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); return;
@@ -3165,6 +3165,7 @@ async function runFedWeather(job) {
     gpuWeather={weather:result.weather,maps:result.maps,mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
+    if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
     markViewChanged(); updateControls(); schedule();
   } catch (err) { if (job===weatherJob) failWeather(err.message); }
 }
@@ -3182,7 +3183,7 @@ function startWeatherWorker() {
     const data=event.data;
     if (worker!==weatherWorker || data.job!==weatherJob || stroke || !$('weather').checked) return;
     if (data.error) { failWeather(data.error); return; }
-    refined=data.height; refinedBase=weatherBase;
+    dropGpuWeather(); refined=data.height; refinedBase=weatherBase;
     if (regionalFields) {
       regionalWeather={flow:data.flow,deposit:data.deposit,talus:data.talus,sand:data.sand,materialField:data.materialField};
       if (data.done) weatherState='ready';
@@ -3606,7 +3607,7 @@ function loadSketch(s) {
 function loadRegionalSketch(s) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const next=deserializeNodes(s.nodes);
-  flow?.reset();cancelWeather(); refined=refinedBase=regionalWeather=null; lastWaterStroke=null;
+  flow?.reset();cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather(); lastWaterStroke=null;
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
   for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(s.toolSettings?.[kind]||{})};
