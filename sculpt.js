@@ -4085,6 +4085,7 @@ async function bootMap() {
     onProgress:p=>{$('weather-state').textContent=`Weathering overlapping tiles · ${Math.round(p.progress*100)}% of this region`;}
   });
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
+  if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();mountCurrentFlow();
   $('fracture-control').hidden=!config.textures.fractures || experiment.get('detail')!=='lab';

@@ -731,6 +731,7 @@ export function createPagedFields(opts) {
     for (const k of [...cpuWanted]) {
       if (gesture()) { cpuTimer = setTimeout(pumpCpu, 100); return; }
       cpuWanted.delete(k); const pg = pagesMap.get(k); if (!pg) continue;
+      pg.pins++;   // not evicted while its buffers are read
       try {
         if (pg.target) {
           const rev = pg.rev, t = pg.target, n = SIDE * SIDE, d = device(), h = new Float32Array(await readBuffer(d, t.F, 0, n * 4)), r = new Float32Array(await readBuffer(d, t.F, 2 * n * 4, n * 4));
@@ -740,7 +741,7 @@ export function createPagedFields(opts) {
           const w = pg.weather, raw = await readBuffer(device(), w.weather, 0, 2 * CORE * CORE * 4);
           if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE)};
         }
-      } catch (err) { error = err; }
+      } catch (err) { error = err; } finally { pg.pins--; }
     }
     trim();
   }
@@ -911,7 +912,7 @@ export function createPagedFields(opts) {
   const cell = (ix, iy, k = 'h') => {
     ix = clamp(Math.round(ix), 0, worldGrid - 1); iy = clamp(Math.round(iy), 0, worldGrid - 1);
     const pg = pageAt(ix, iy);
-    if (pg?.cpu) { const i = (iy - pg.y0 + RING) * SIDE + ix - pg.x0 + RING; return k === 'h' ? pg.cpu.h[i] : k === 'r' ? pg.cpu.r[i] : 0; }
+    if (pg?.cpu && pg.cpuRev === pg.rev) { const i = (iy - pg.y0 + RING) * SIDE + ix - pg.x0 + RING; return k === 'h' ? pg.cpu.h[i] : k === 'r' ? pg.cpu.r[i] : 0; }
     return k === 'h' ? coarseAt(ix, iy) : 0;
   };
   const bilinear = (x, y, at) => {
@@ -920,7 +921,7 @@ export function createPagedFields(opts) {
   };
   const erodedCell = (ix, iy) => {
     const pg = pageAt(ix, iy);
-    if (!pg?.cpu) return coarseAt(ix, iy);
+    if (!pg?.cpu || pg.cpuRev !== pg.rev) return coarseAt(ix, iy);
     const i = (iy - pg.y0 + RING) * SIDE + ix - pg.x0 + RING, h = pg.cpu.h[i];
     if (!time || !pg.cpuW) return h;
     const j = (iy - pg.y0) * CORE + ix - pg.x0, base = pg.cpuW.base[j];
@@ -940,7 +941,7 @@ export function createPagedFields(opts) {
       if (pg.weather && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
       if (pg.target && engine && hits(bufRect(pg), r)) { evalPage(pg, r); wantCpu(pg); }
     }
-    if (!r) { pendingStale = null; for (const pg of pagesMap.values()) coarseAdd(pg, null); }
+    if (!r) { pendingStale = null; for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }
     else for (const pg of overlapping(r)) coarseAdd(pg, announce);
     for (const fn of submitListeners) fn(event);
     return event;
