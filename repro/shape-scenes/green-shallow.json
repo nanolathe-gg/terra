@@ -1,0 +1,10 @@
+{"biome": "green", "source": {"note": "authored for shapecheck: shallow water beside deep water and a hill, no retail window"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["deep", [[80,700],[300,760],[520,820]], {"card": {"diameter": 260, "roughness": 35, "shelves": 60}}],
+  ["shallow", [[480,780],[700,700],[900,760]], {"card": {"diameter": 200, "roughness": 30}}],
+  ["shallow", [[150,200],[260,140]], {"card": {"diameter": 120, "roughness": 20, "shallowMode": "passage"}}],
+  ["mountain", [[760,300],[840,360]], {"card": {"diameter": 160, "amount": 60, "roughness": 40}}],
+  ["erase", [[620,560],[700,600]], {"card": {"diameter": 160, "roughness": 30}}]
+ ]}

@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'sculpt-frag.wgsl', 'sculpt-common.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-weather.wgsl', 'sculpt-weathering.js', 'sculpt-material-weathering.js',
-    'relief-bake.wgsl', 'erosion.wgsl', 'engine-erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
+    'relief-bake.wgsl', 'erosion.wgsl', 'engine-erosion.wgsl', 'material-model.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'sculpt-gpu-fields.js', 'sculpt-sand.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-fields.js', 'sculpt-chunk-renderer.js', 'sculpt-tiled-weather.js', 'sculpt-map-weather.js', 'sculpt-flow.js', 'sculpt-flow-ui.js', 'sculpt-document.js')}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -221,6 +221,8 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
+# H6 (Green): gpuShape 1 evaluates the brushes Green's windows use on the GPU (engine-shape.wgsl); 0 is the JS engine.
+KNOB_DEFAULTS.update(gpuShape=0)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
 # Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
@@ -228,7 +230,7 @@ KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0,
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
-                  rockMoss=.4, hillBlocks=.5,
+                  rockMoss=.4, hillBlocks=.5, gpuShape=1,
                   terraceBreak=1.4, terraceCalm=0, wetSwath=.35, outcrop=0),
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
