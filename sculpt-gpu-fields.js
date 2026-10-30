@@ -211,26 +211,34 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   const cells = grid * grid, buf = (size, usage, label) => device.createBuffer({size: Math.max(16, size), usage, label});
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const F = buf(6 * cells * 4, ST | CD | CS, 'shape planes'), Mk = buf(7 * cells * 4, ST | CD | CS, 'shape masks');
-  let Nz = null, Sc = null, queue = Promise.resolve(), peak = 0, last = {};
+  let Nz = null, Sc = null, dummy = null, queue = Promise.resolve(), peak = 0, last = {};
   const scratch = () => { Nz ??= buf(7 * cells * 4, ST, 'shape noise'); Sc ??= buf(3 * cells * 4, ST, 'shape scratch'); };
   const bytes = () => F.size + Mk.size + (Nz?.size || 0) + (Sc?.size || 0);
 
-  // Evaluate `list` over `rect` (cells, inclusive; null = the whole map) and read the rectangle back.
+  // Evaluate `list` over `rect` (cells, inclusive; null = the whole map) and read the rectangle back. One at a time, in order (the study).
   function run(list, ctx, rect, {readback = true, release = false} = {}) {
-    const job = queue.then(() => runNow(list, ctx, rect, readback, release));
+    const job = queue.then(async () => { const h = submit(list, ctx, rect, {readback, release}); await h.done; return h.land ? await h.land : null; });
     queue = job.catch(() => {});
     return job;
   }
-  async function runNow(list, ctx, rect, readback, release) {
+  // H6b: record the passes and submit them now; nothing here waits. Returns {done, land, rect}: done resolves when the GPU has finished, land
+  // (only with readback) resolves to the rectangle's planes. The queue is in order on one device, so a later submit sees this one's writes.
+  // readRect: the rectangle to read back when it is not the one evaluated (the cells changed since the last read); readOnly: no shape passes,
+  // only the read of readRect.
+  function submit(list, ctx, rect, {readback = true, release = false, readRect = null, readOnly = false} = {}) {
     const t0 = performance.now();
-    const R = rect ? intersect(rect, {x0: 0, y0: 0, x1: grid - 1, y1: grid - 1}) : {x0: 0, y0: 0, x1: grid - 1, y1: grid - 1};
-    if (!R) return null;
-    scratch();
+    const whole = {x0: 0, y0: 0, x1: grid - 1, y1: grid - 1};
+    const R = rect ? intersect(rect, whole) : whole;
+    const P = readRect ? intersect(readRect, whole) : R;
+    if (!R || (readback && !P)) return {done: Promise.resolve(), land: null, rect: null};
+    if (!readOnly) scratch();
+    dummy ??= buf(16, ST, 'shape unused');
     const geom = {grid, spacing};
     const passes = [], segData = [], mwData = [];
     let segCount = 0, mwCount = 0;
     const base = {grid, spacing, baseH: baseHeight, sea, minH, maxH, blurR: Math.max(1, Math.round(2 * refSpacing / spacing))};
     const add = (entry, region, extra = {}) => passes.push({entry, region, u: {...base, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
+    if (!readOnly) {
     add('init', R);
     for (const n of list) {
       const p = prepareNode(n, geom, ctx);
@@ -253,9 +261,10 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       for (const [entry, bsrc, bdst] of [['blurH', 0, 1], ['blurV', 1, 2], ['blurH', 2, 1], ['blurV', 1, 2]]) add(entry, wide, {...node, bsrc, bdst});
       add('compose', body, node);
     }
+    }
     // Pack the rectangle for readback.
-    const rw0 = R.x1 - R.x0 + 1, rh0 = R.y1 - R.y0 + 1, rc = rw0 * rh0, q4 = Math.ceil(rc / 4), outWords = 6 * rc + 25 * q4;
-    if (readback) add('pack', R);
+    const rw0 = P ? P.x1 - P.x0 + 1 : 0, rh0 = P ? P.y1 - P.y0 + 1 : 0, rc = rw0 * rh0, q4 = Math.ceil(rc / 4), outWords = 6 * rc + 25 * q4;
+    if (readback) add('pack', P);
     const ub = buf(passes.length * NODE_BYTES, GPUBufferUsage.UNIFORM | CD, 'shape uniforms'), udata = new ArrayBuffer(passes.length * NODE_BYTES), dv = new DataView(udata);
     passes.forEach((pass, k) => {
       NODE_FIELDS.forEach(([name, type], j) => {
@@ -276,8 +285,8 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     if (mwCount) device.queue.writeBuffer(MWB, 0, new Float32Array(mwData));
     const OutB = buf(readback ? outWords * 4 : 16, ST | CS, 'shape out');
     const bg = device.createBindGroup({layout, entries: [
-      {binding: 0, resource: {buffer: ub, size: NODE_BYTES}}, {binding: 1, resource: {buffer: F}}, {binding: 2, resource: {buffer: Mk}}, {binding: 3, resource: {buffer: Nz}},
-      {binding: 4, resource: {buffer: Sc}}, {binding: 5, resource: {buffer: SegB}}, {binding: 6, resource: {buffer: MWB}}, {binding: 7, resource: {buffer: OutB}}]});
+      {binding: 0, resource: {buffer: ub, size: NODE_BYTES}}, {binding: 1, resource: {buffer: F}}, {binding: 2, resource: {buffer: Mk}}, {binding: 3, resource: {buffer: Nz ?? dummy}},
+      {binding: 4, resource: {buffer: Sc ?? dummy}}, {binding: 5, resource: {buffer: SegB}}, {binding: 6, resource: {buffer: MWB}}, {binding: 7, resource: {buffer: OutB}}]});
     const enc = device.createCommandEncoder({label: 'shape'}), pass = enc.beginComputePass({label: 'shape passes'});
     passes.forEach((ps, k) => {
       pass.setPipeline(pipes[ps.entry]); pass.setBindGroup(0, bg, [k * NODE_BYTES]);
@@ -289,19 +298,23 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     let stage = null;
     if (readback) { stage = buf(outWords * 4, GPUBufferUsage.MAP_READ | CD, 'shape readback'); enc.copyBufferToBuffer(OutB, 0, stage, 0, outWords * 4); }
     device.queue.submit([enc.finish()]);
-    const tSubmit = performance.now();
-    let out = null, tGpu = 0;
-    if (readback) {
-      await device.queue.onSubmittedWorkDone(); tGpu = performance.now();
+    const tSubmit = performance.now(), nz = Nz, sc = Sc;
+    const done = device.queue.onSubmittedWorkDone();
+    let land = null;
+    if (readback) land = (async () => {
+      await done; const tGpu = performance.now();
       await stage.mapAsync(GPUMapMode.READ);
       const raw = stage.getMappedRange().slice(0); stage.unmap(); stage.destroy();
-      out = {rect: R, width: rw0, height: rh0, floats: FIELD_KEYS_FLOAT.map((_, k) => new Float32Array(raw, k * rc * 4, rc)), masks: Array.from({length: 25}, (_, m) => new Int8Array(raw, (6 * rc + m * q4) * 4, rc))};
-    } else await device.queue.onSubmittedWorkDone();
+      last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, prepareMs: tSubmit - t0, gpuMs: tGpu - tSubmit, readbackMs: performance.now() - tGpu, cells: rc};
+      return {rect: P, width: rw0, height: rh0, floats: FIELD_KEYS_FLOAT.map((_, k) => new Float32Array(raw, k * rc * 4, rc)), masks: Array.from({length: 25}, (_, m) => new Int8Array(raw, (6 * rc + m * q4) * 4, rc))};
+    })();
     peak = Math.max(peak, bytes() + sd.byteLength + passes.length * NODE_BYTES + (readback ? 2 * outWords * 4 : 0));
-    ub.destroy(); SegB.destroy(); MWB.destroy(); OutB.destroy();
-    if (release) { Nz.destroy(); Sc.destroy(); Nz = Sc = null; }
-    last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, prepareMs: tSubmit - t0, gpuMs: readback ? tGpu - tSubmit : performance.now() - tSubmit, readbackMs: readback ? performance.now() - tGpu : 0, cells: rc};
-    return out;
+    done.then(() => {
+      ub.destroy(); SegB.destroy(); MWB.destroy(); OutB.destroy();
+      if (release && Nz === nz) { nz.destroy(); sc.destroy(); Nz = Sc = null; }
+      if (!readback) last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, prepareMs: tSubmit - t0, gpuMs: performance.now() - tSubmit, readbackMs: 0, cells: rc};
+    });
+    return {done, land, rect: R};
   }
   // Copy a readback rectangle into row-major CPU planes of the given row stride (the planes are `grid` wide).
   function copyOut(out, planes) {
@@ -309,7 +322,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (let k = 0; k < 6; k++) { const dst = planes[FIELD_KEYS_FLOAT[k]]; for (let y = 0; y < height; y++) dst.set(out.floats[k].subarray(y * width, (y + 1) * width), (rect.y0 + y) * grid + rect.x0); }
     for (let m = 0; m < 25; m++) { const dst = planes.masks[m]; for (let y = 0; y < height; y++) dst.set(out.masks[m].subarray(y * width, (y + 1) * width), (rect.y0 + y) * grid + rect.x0); }
   }
-  return {run, copyOut, bytes, stats: () => ({gpuBytes: bytes(), peakGpuBytes: peak, planeBytes: F.size, maskBytes: Mk.size, noiseBytes: Nz?.size || 0, scratchBytes: Sc?.size || 0, last}),
+  return {run, submit, copyOut, bytes, planes: F, masks: Mk, stats: () => ({gpuBytes: bytes(), peakGpuBytes: peak, planeBytes: F.size, maskBytes: Mk.size, noiseBytes: Nz?.size || 0, scratchBytes: Sc?.size || 0, last}),
     destroy() { F.destroy(); Mk.destroy(); Nz?.destroy(); Sc?.destroy(); Nz = Sc = null; }, grid, spacing};
 }
 
@@ -321,10 +334,20 @@ export function createGpuFields(opts) {
   const spacing = (worldSize - 1) / (worldGrid - 1), cells = worldGrid * worldGrid, listeners = new Set();
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
-  let revision = 0, planes = null, engine = null, enginePromise = null, valid = false, pendingRuns = 0, settled = Promise.resolve(), reason = null, error = null;
+  let revision = 0, planes = null, engine = null, enginePromise = null, valid = false, gpuValid = false, reason = null, error = null;
   let lastEval = {}, firstReady = 0;
+  // H6b: a change is requested (queued), submitted to the GPU at once unless two runs are still unfinished, and its rectangle read
+  // back into the CPU copy only when nothing is being edited: during a gesture (opts.gesture) the copy is left, and one read of everything changed
+  // since covers the release. A request that arrives while a run is in flight merges into the one waiting (union rectangle; the newest node list is
+  // read when it starts). Two kinds of listener: submit listeners (the canvas rebakes from the GPU buffers) hear of a change as it is submitted;
+  // the others (overview sampling, saving, the CPU readers) only once the CPU copy holds it, as before (1a1a85f).
+  const gesture = opts.gesture || (() => false);
+  let submittedRevision = 0, outstanding = 0, starting = null, waiters = [], queued = null, copyDirty = false, copyRect = null, landing = 0, landChain = Promise.resolve(), reported = null, generation = 0, flushWanted = false;
+  const submitListeners = new Set(), runLog = [];
+  const joinRect = (a, b) => !a || !b ? null : {x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1)};
+  const joinWorld = (a, b) => !a || !b ? null : (() => { const x0 = Math.min(a.x, b.x), y0 = Math.min(a.y, b.y); return {x: x0, y: y0, width: Math.max(a.x + a.width, b.x + b.width) - x0, height: Math.max(a.y + a.height, b.y + b.height) - y0}; })();
+  const joinEvent = (a, b) => !a ? b : !b ? a : {revision: Math.max(a.revision, b.revision), rect: joinWorld(a.rect, b.rect)};
   const allocate = () => { planes ??= {h: new Float32Array(cells), p: new Float32Array(cells), r: new Float32Array(cells), c: new Float32Array(cells), v: new Float32Array(cells), x: new Float32Array(cells), masks: maskKeys.map(() => new Int8Array(cells))}; };
-  const live = () => nodes().filter(n => !n.hidden);
   const check = () => { reason = null; for (const n of nodes()) { const r = nodeSupport(n, context()); if (r) { reason = r; return false; } } return true; };
   const getEngine = () => enginePromise ??= (async () => {
     let d = device();
@@ -336,38 +359,86 @@ export function createGpuFields(opts) {
   const subscribeFallback = fallback?.subscribe(ev => { if (!gpuMode()) for (const fn of listeners) fn(ev); });
   let mode = true;
   const gpuMode = () => mode;
-  // Listeners hear of a change only once the CPU copy holds it: the canvas samples its overview (and rebakes) when told, and a copy
-  // still holding the earlier fields would leave the overview one edit behind, or flat on a fresh load. The first whole copy is
-  // announced too, since readers that sampled before it read the base height.
-  function evaluate(rect, event = null) {
-    pendingRuns++; allocate();
-    const whole = !valid || !rect, r = whole ? null : clip({x0: rect.x0 - 6, y0: rect.y0 - 6, x1: rect.x1 + 6, y1: rect.y1 + 6}), wasValid = valid;
-    const t0 = performance.now(), list = nodes();
-    settled = (async () => {
-      let landed = false;
+  // Land a read: copy the rectangle into the CPU planes, in order, then tell the listeners (the first whole copy is announced too, since readers that
+  // sampled before it read the base height).
+  function land(h, whole, report, wasValid, gen) {
+    landing++;
+    const t0 = performance.now();
+    landChain = landChain.then(async () => {
       try {
-        const e = await getEngine();
-        const out = await e.run(list, context(), r, {release: whole});
-        if (out) { e.copyOut(out, planes); if (whole) valid = true; landed = true; }
-        lastEval = {ms: performance.now() - t0, whole, ...e.stats().last};
+        const out = await h.land;
+        if (gen !== generation) return;
+        if (out) { engine.copyOut(out, planes); if (whole) valid = true; }
+        lastEval = {...lastEval, copyMs: performance.now() - t0, whole, ...engine.stats().last};
         firstReady ||= performance.now();
+        if (out && (report || !wasValid)) { const ev = {revision: report?.revision ?? revision, rect: whole ? null : report.rect}; for (const fn of listeners) fn(ev); }
       } catch (err) { error = err; console.error(err); }
-      finally { pendingRuns--; }
-      if (landed && (event || !wasValid)) { const ev = {revision: event?.revision ?? revision, rect: whole ? null : event.rect}; for (const fn of listeners) fn(ev); }
-    })();
-    return settled;
+      finally { landing--; }
+    });
+  }
+  const MAX_OUTSTANDING = 2;   // runs submitted whose GPU work is not finished; more wait in `queued` and merge
+  const progress = () => { const w = waiters; waiters = []; for (const fn of w) fn(); };
+  function pump() {
+    if (!queued) { progress(); return; }
+    if (!engine) {
+      if (!starting) starting = getEngine().catch(err => { error = err; console.error(err); queued = null; }).then(() => { starting = null; pump(); });
+      return;
+    }
+    while (queued && outstanding < MAX_OUTSTANDING) {
+      const q = queued; queued = null;
+      const whole = !gpuValid || !q.rect, wasValid = valid, wasGpu = gpuValid, gen = generation;
+      const nextCopyRect = copyDirty ? joinRect(copyRect, whole ? null : q.rect) : (whole ? null : q.rect);
+      const readNow = !gesture() || !valid || whole;
+      let h;
+      try { h = engine.submit(nodes(), context(), whole ? null : q.rect, {readback: readNow, readRect: nextCopyRect, release: whole}); }
+      catch (err) { error = err; console.error(err); continue; }
+      reported = joinEvent(reported, q.event); copyRect = nextCopyRect; copyDirty = true;
+      const entry = {t: performance.now(), whole, readNow}; runLog.push(entry); if (runLog.length > 400) runLog.shift();
+      submittedRevision = Math.max(submittedRevision, q.event?.revision ?? 0); gpuValid = true;
+      if (q.event || !wasGpu) { const ev = {revision: q.event?.revision ?? revision, rect: whole ? null : q.event?.rect ?? null}; for (const fn of submitListeners) fn(ev); }
+      if (readNow) { const report = reported; reported = null; copyDirty = false; copyRect = null; land(h, whole, report, wasValid, gen); }
+      outstanding++;
+      h.done.catch(() => {}).then(() => { entry.doneAt = performance.now(); outstanding--; pump(); if (!outstanding && !queued) flushIfDue(); });
+    }
+    progress();
+  }
+  // The copy of what changed during a gesture: one read-only submit. Forced (a CPU reader is waiting) or once the gesture is over.
+  function flushIfDue(force = false) {
+    if (!copyDirty || queued || !engine || (!force && gesture())) return;
+    const report = reported; reported = null; const rect = copyRect; copyDirty = false; copyRect = null;
+    land(engine.submit([], context(), null, {readback: true, readRect: rect, readOnly: true}), false, report, valid, generation);
+  }
+  function evaluate(rect, event = null) {
+    allocate();
+    const e = event ? {revision: event.revision, rect: event.rect} : null;
+    queued = queued ? {rect: joinRect(queued.rect, rect), event: joinEvent(queued.event, e)} : {rect, event: e};
+    pump();
   }
   function changed(rect = null, keepPrefix = 0) {
     revision++;
     mode = check();
     const fb = fallback.changed(rect, keepPrefix);   // always, so the JS fields never hold a stale compiled list
-    if (!mode) { valid = false; return fb; }
-    const cr = rect ? clip(rect) : null, event = {revision, rect: cr ? worldRect(cr) : null};
-    evaluate(cr, event);   // the listeners hear of it when the copy lands
+    if (!mode) { valid = false; gpuValid = false; queued = null; copyDirty = false; reported = null; generation++; return fb; }
+    const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
+    evaluate(r, event);
     return event;
   }
-  // A copy that was never filled (no evaluation ran, or the last one failed) is started here, so a reader that waits cannot wait forever.
-  const whenReady = async () => { if (mode && !valid && pendingRuns === 0) evaluate(null); while (pendingRuns > 0) await settled; };
+  const quiet = async () => { while (queued || starting || outstanding > 0) await new Promise(r => waiters.push(r)); };
+  const settled = async () => { while (queued || starting) await new Promise(r => waiters.push(r)); };
+  // The GPU buffers are current once every requested run has been submitted (the queue is in order on one device, so a bake that records its own
+  // work next sees them): it does not wait for the work to finish.
+  const gpuReady = async () => { if (!mode) return; if (!gpuValid && !queued && !starting) evaluate(null); await settled(); };
+  // The CPU copy is current: also waits for the reads. A CPU reader forces the read that a gesture left out.
+  const whenReady = async () => {
+    if (!mode) return;
+    if (!valid && !queued && !starting && landing === 0) evaluate(null);
+    for (;;) {
+      if (queued || starting) { await settled(); continue; }
+      flushIfDue(true);
+      if (landing > 0) { await landChain; continue; }
+      break;
+    }
+  };
   const front = () => mode ? null : fallback;
   function crop(request) {
     const rect = clip({x0: Math.floor(request.x0), y0: Math.floor(request.y0), x1: Math.ceil(request.x1), y1: Math.ceil(request.y1)});
@@ -402,11 +473,11 @@ export function createGpuFields(opts) {
     const g = engine?.stats() || {}, cpu = planes ? cells * (24 + maskKeys.length) : 0;
     return {revision, residentBytes: cpu, cacheBytes: cpu, cacheEntries: planes ? 1 : 0, lastWorkingBytes: 0, peakBytes: cpu, budget: cpu, hits: 0, misses: 0, replays: 0, evictions: 0,
       chunkCells: worldGrid, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: 24 + maskKeys.length, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0,
-      connectionTiles: 0, connectionCells: 0, gpuShape: {...g, cpuCopyBytes: cpu, pending: pendingRuns, lastEval, error: error?.message || null}};
+      connectionTiles: 0, connectionCells: 0, gpuShape: {...g, cpuCopyBytes: cpu, pending: outstanding + (queued ? 1 : 0) + landing, runLog: runLog.slice(-120), lastEval, error: error?.message || null}};
   };
   return {
     buffers: () => front() ? fallback.buffers() : planes ? [...FIELD_KEYS_FLOAT.map(k => planes[k].buffer), ...planes.masks.map(a => a.buffer)] : [],
-    read, readCells, sample, cell, changed, ready: () => front() ? Promise.resolve() : whenReady(), pending: () => !front() && (pendingRuns > 0 || !valid),
+    read, readCells, sample, cell, changed, ready: () => front() ? Promise.resolve() : whenReady(), pending: () => !front() && (queued !== null || starting !== null || landing > 0 || copyDirty || !valid),
     readAsync: async (request, o) => { await (front() ? null : whenReady()); return read(request, o); },
     replayDetail: () => front() ? fallback.replayDetail() : Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
@@ -426,7 +497,66 @@ export function createGpuFields(opts) {
       return out;
     },
     planes: () => planes, engine: () => engine,
+    // H6b: the engine's whole-map buffers (the h p r c v x planes, the packed masks) for the passes that read them in place. Await ready() first.
+    gpuBuffers: () => !front() && gpuValid && engine ? {planes: engine.planes, masks: engine.masks, grid: worldGrid, spacing, revision: submittedRevision} : null,
+    subscribeSubmit(fn) { submitListeners.add(fn); return () => submitListeners.delete(fn); },
+    gpuReady: () => front() ? Promise.resolve() : gpuReady(), gpuQuiet: () => front() ? Promise.resolve() : quiet(), gpuPending: () => !front() && (queued !== null || starting !== null || !gpuValid),
+    // Start the read of what a gesture left out, once the gesture is over (the weather glue calls this on release).
+    settle: () => { flushIfDue(); },
   };
+}
+
+// ---- H6b: the feed passes (engine-feed.wgsl) ----
+// Which bindings (group.binding) each entry point reads or writes: the pipelines take their layouts from the shader ('auto'), which holds only
+// the bindings an entry point uses, so a bind group must carry exactly these.
+const FEED_USES = {
+  seedMain: ['0.0', '0.1', '0.2', '1.0', '1.1', '1.2', '1.3'], tileFlagMain: ['0.0', '1.3', '1.4'], tileListMain: ['0.0', '1.4', '1.5', '1.6'],
+  tileArgsMain: ['1.6', '1.7'], refinedMain: ['0.0', '1.8', '1.9'],
+  feedMain: ['0.0', '0.1', '0.2', '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8']};
+const feedCache = new WeakMap();
+// {pipes, groups(entry, resources)}: resources maps 'group.binding' to a binding resource; groups() returns [[index, bindGroup]...].
+export function feedPasses(device) {
+  let cached = feedCache.get(device);
+  if (cached) return cached;
+  cached = (async () => {
+    const module = device.createShaderModule({label: 'engine-feed', code: await (await fetch('/engine-feed.wgsl')).text()});
+    const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
+    if (errors.length) throw new Error('nanolathe: engine-feed.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+    const pipes = {};
+    await Promise.all(Object.keys(FEED_USES).map(async entry => { pipes[entry] = await device.createComputePipelineAsync({label: entry, layout: 'auto', compute: {module, entryPoint: entry}}); }));
+    const groups = (entry, resources) => {
+      const byGroup = new Map();
+      for (const key of FEED_USES[entry]) {
+        const [g, b] = key.split('.').map(Number);
+        if (!resources[key]) throw new Error(`nanolathe: feed pass ${entry} needs binding ${key}`);
+        if (!byGroup.has(g)) byGroup.set(g, []);
+        byGroup.get(g).push({binding: b, resource: resources[key]});
+      }
+      return [...byGroup].map(([g, entries]) => [g, device.createBindGroup({label: entry, layout: pipes[entry].getBindGroupLayout(g), entries})]);
+    };
+    return {pipes, groups};
+  })();
+  feedCache.set(device, cached);
+  return cached;
+}
+// The feed passes' uniform (struct FU of engine-feed.wgsl): 16 words.
+export function feedUniform(device, f) {
+  const buffer = device.createBuffer({label: 'feed uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(64));
+  const u = ['grid', 'cells', 'ox', 'oy', 'gw', 'gh', 'cw', 'ch', 'mode', 'rateMask'], fl = ['sea', 'spacing', 'envelope'];
+  u.forEach((k, i) => { if (['ox', 'oy'].includes(k)) dv.setInt32(i * 4, f[k] ?? 0, true); else dv.setUint32(i * 4, (f[k] ?? 0) >>> 0, true); });
+  fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
+  dv.setUint32(13 * 4, f.tilesWide ?? 0, true);
+  device.queue.writeBuffer(buffer, 0, dv.buffer);
+  return buffer;
+}
+// Read `bytes` of a buffer (which needs COPY_SRC) from `offset`, through a staging buffer.
+export async function readBuffer(device, buffer, offset, bytes) {
+  const stage = device.createBuffer({label: 'feed readback', size: Math.max(4, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}), enc = device.createCommandEncoder({label: 'feed readback'});
+  enc.copyBufferToBuffer(buffer, offset, stage, 0, bytes);
+  device.queue.submit([enc.finish()]);
+  await stage.mapAsync(GPUMapMode.READ);
+  const out = stage.getMappedRange().slice(0, bytes); stage.unmap(); stage.destroy();
+  return out;
 }
 
 // ---- the check tool's comparison (repro/shapecheck.mjs reads it through sculptDebug.shapeCompare) ----

@@ -1,6 +1,7 @@
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
+import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
 const MB=1024*1024, pow2=n=>2**Math.ceil(Math.log2(Math.max(1,n)));
@@ -160,13 +161,13 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   texture(label,width,height,layers,format,bytes,usage,kind='working') {
     return this.track(this.device.createTexture({label,size:[width,height,layers],format,usage}),label,width*height*layers*bytes,kind);
   }
-  allocate(region,gridWidth,gridHeight,width,height) {
+  allocate(region,gridWidth,gridHeight,width,height,fed=false) {
     this.evict();
     const fw=pow2(region.fieldsWidth),fh=pow2(region.fieldsHeight),gw=pow2(gridWidth),gh=pow2(gridHeight);
     const e=this.estimate({...region,gridWidth,gridHeight},width,height),required=e.gpuBytes;
     if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes)
       throw new Error(`nanolathe: chunk needs ${Math.ceil(required/MB)} MB of GPU memory; use chunks of ${this.chunkSize()} px or smaller`);
-    const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST;
+    const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);   // H6b: the feed pass writes these four
     this.heightTexture=this.texture('chunk height',gw,gh,1,'r32float',4,read);
     this.routeTexture=this.texture('chunk routes',gw,gh,1,'rgba8unorm',4,read);
     this.gridTexture=this.texture('chunk weather and material',gw,gh,4,'rgba8unorm',4,read);   // H5: layers 2 and 3 hold Green's Time maps
@@ -246,19 +247,47 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     this.materialReady=Boolean(material);this.weatherMaps=Boolean(weather?.wear);this.cpuWorkingBytes=0;
   }
+  // H6b: engine-feed.wgsl's feedMain makes the chunk's height, route, weather and mask textures from the whole-map buffers: the same
+  // arithmetic as the CPU read (the weather blend) and `upload` (the export clamp, the byte conversions, the edge repeat), in f32. The
+  // painted flags come back as a 25-bit word (one small mapped read), then set the same uniforms `upload` does.
+  async feedFromGpu(request,region,{gw,gh},feed,passes) {
+    const device=this.device,spacing=region.gridSpacing,ox=Math.round(region.gridOrigin[0]/spacing),oy=Math.round(region.gridOrigin[1]/spacing);
+    this.f('uChunkGridOrigin',[ox,oy]);
+    const uniform=feedUniform(device,{grid:feed.grid,cells:feed.grid*feed.grid,ox,oy,gw,gh,cw:region.gridWidth,ch:region.gridHeight,sea:this.config.seaLevel,
+      mode:(feed.weather?1:0)|(feed.maps?2:0)|(request.exportArt?4:0)});
+    this.feedDummy??=device.createBuffer({label:'feed absent',size:16,usage:GPUBufferUsage.STORAGE});
+    const S=GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST,painted=device.createBuffer({label:'feed painted',size:16,usage:S}),stage=device.createBuffer({label:'feed painted read',size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+    const none={buffer:this.feedDummy},res={'0.0':{buffer:uniform},'0.1':{buffer:feed.planes},'0.2':{buffer:feed.masks},'2.0':feed.weather?{buffer:feed.weather}:none,
+      '2.1':feed.maps?{buffer:feed.maps[0]}:none,'2.2':feed.maps?{buffer:feed.maps[1]}:none,'2.3':feed.maps?{buffer:feed.maps[2]}:none,'2.4':{buffer:painted},
+      '2.5':this.heightTexture.createView(),'2.6':this.routeTexture.createView(),'2.7':this.gridTexture.createView({dimension:'2d-array'}),'2.8':this.maskTexture.createView({dimension:'2d-array'})};
+    const encoder=device.createCommandEncoder({label:'chunk feed'}),pass=encoder.beginComputePass({label:'chunk feed'});
+    pass.setPipeline(passes.pipes.feedMain);for(const [g,bg] of passes.groups('feedMain',res))pass.setBindGroup(g,bg);
+    pass.dispatchWorkgroups(Math.ceil(gw/8),Math.ceil(gh/8));pass.end();
+    encoder.copyBufferToBuffer(painted,0,stage,0,16);device.queue.submit([encoder.finish()]);feed.release?.();   // submitted: the buffers it reads may be destroyed now
+    this.uploadBytes=0;this.cpuUploadBytes=0;
+    await stage.mapAsync(GPUMapMode.READ);const word=new Uint32Array(stage.getMappedRange().slice(0))[0];stage.unmap();stage.destroy();painted.destroy();uniform.destroy();
+    const on=k=>(word>>>k)&1,any=(a,b)=>{for(let k=a;k<b;k++)if(on(k))return 1;return 0;};
+    const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,12)||on(13),lumpOn:on(12),flowOn:any(20,25),...request.maskFlags};
+    for(const k of ['paintOn','scatterOn','styleOn','waterOn','lumpOn','flowOn'])this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
+    this.materialReady=false;this.weatherMaps=Boolean(feed.maps);
+  }
   // A reusable canvas is returned. Copy it before the next renderChunk; the
   // caller must count its retained bitmap/canvas bytes separately from stats.
-  async renderChunk(request,options={}) {
+  // H6b: options.feed (the GPU shape fields' buffers and the Time pass's, see sculpt.js gpuFeedSource) makes the chunk's textures by a compute pass
+  // in place of the CPU read and `upload`; the request then carries no fields, only the chunk's rectangle.
+  async renderChunk(request,{feed=null,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
     if(this.disposed)throw new Error('nanolathe: chunk renderer is disposed');
     if(this.busy)throw new Error('nanolathe: chunk renderer is already rendering');
     this._busy=true;
     try {
+      const passes=feed?await feedPasses(this.device):null;   // nothing awaits between here and the feed pass's submit: the buffers it reads stay current
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
       const region=this.requiredRegion(request,options),w=request.gridWidth??region.gridWidth,h=request.gridHeight??w;
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
-      const planes=this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
+      const planes=feed?new Array(feed.maskCount).fill(null):this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
       this.recommendedChunkSize=this.chunkSize();
-      const dimensions=this.allocate(region,w,h,request.width,request.height);this.upload(request,region,dimensions,planes);
+      const dimensions=this.allocate(region,w,h,request.width,request.height,Boolean(feed));
+      if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;
       if(options.sedimentColors!==undefined)this.setSediment(options.sedimentColors);
       const result=super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)});
@@ -275,7 +304,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.bindGroups={};this.meshes=[];this.canvas.width=1;this.canvas.height=1;if(this.outputCanvas){this.outputCanvas.width=1;this.outputCanvas.height=1;}this.outputBytes=8;this.evictions++;
   }
   dispose() {
-    if(this.disposed)return;this.disposed=true;for(const resource of [...this.resources.keys()])this.release(resource);
+    if(this.disposed)return;this.disposed=true;for(const resource of [...this.resources.keys()])this.release(resource);this.feedDummy?.destroy();
     this.context?.unconfigure();this.device?.destroy();if(this.outputCanvas){this.outputCanvas.width=0;this.outputCanvas.height=0;}
     this.outputBytes=0;this.fixedBytes=0;this.cpuWorkingBytes=0;this.uniformData=null;this.uniformView=null;this.height=null;this.maskBytes=null;
   }
