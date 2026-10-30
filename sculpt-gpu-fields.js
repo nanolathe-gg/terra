@@ -951,7 +951,9 @@ export function createPagedFields(opts) {
   const RINGS = [4, 16, 32, 64, 128, 192, 320];
   let RING = 4, SIDE = CORE + 2 * RING, SHAPE_BYTES = SIDE * SIDE * 52;
   const WEATHER_BYTES = CORE * CORE * 20, CPU_PAGES = 16;
-  const shapeBudget = () => opts.shapeBudget ?? 9 * SHAPE_BYTES, weatherBudget = opts.weatherBudget ?? 24 * WEATHER_BYTES;
+  // Page caps: 9 shape pages and 24 weather pages when the GPU budget allows; fewer (never under the 6 a chunk's feed gathers at once) when it does not.
+  let SHAPE_PAGES = 9, WEATHER_PAGES = 24;
+  const shapeBudget = () => opts.shapeBudget ?? SHAPE_PAGES * SHAPE_BYTES, weatherBudget = opts.weatherBudget ?? WEATHER_PAGES * WEATHER_BYTES;
   const listeners = new Set(), submitListeners = new Set(), pagesMap = new Map();
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
@@ -1019,13 +1021,29 @@ export function createPagedFields(opts) {
     }
     return 4 + deepest;
   }
+  // H12: the budget the pages may use: the GPU budget less what the renderer needs at least (materials and one chunk), or null when no budget is given.
+  // The resident set of a ring is the 2 x 3 pages a chunk's feed gathers at once (shape and weather, with the material field), the feed's staging set and the
+  // shape engine's scratch (about 16 MB and 44 bytes a cell of a page's side); a ring is allowed when that set fits.
+  const STAGING_BYTES = 700 * 850 * 88, FEED_PAGES = 6, PAGE_FIELD = CORE * CORE * 36;
+  const engineEstimate = ring => 16e6 + (CORE + 2 * ring) ** 2 * 44;
+  const available = () => { const b = opts.budget?.(); return b ? b.total - b.minimum : Infinity; };
+  const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * 52 + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
+  function fitCaps() {
+    const room = 0.92 * available() - STAGING_BYTES - engineEstimate(RING);
+    SHAPE_PAGES = clamp(Math.floor(0.8 * room / SHAPE_BYTES), FEED_PAGES, 9);
+    WEATHER_PAGES = clamp(Math.floor((room - SHAPE_PAGES * SHAPE_BYTES) / PAGE_FIELD), FEED_PAGES, 24);
+    if (!(room > 0)) SHAPE_PAGES = WEATHER_PAGES = FEED_PAGES;
+  }
   function setRing(need) {
+    // The ring is the first step that holds the chain; a chain deeper than the top ring, or than the budget's largest ring, is clamped to that ring
+    // (never refused): the pages read what the ring holds, so a seam may show between pages where the chain reaches further. One warning a time the
+    // chain crosses the limit.
+    const room = available();
+    let top = RINGS.length - 1; while (top > 0 && residentSet(RINGS[top]) > room) top--;
     let ring = RINGS.find(r => r >= need);
-    // A chain deeper than the top ring is clamped, not handed to another engine: the pages read what the top ring holds, so a seam may show
-    // between pages where the chain reaches further. One warning a time the chain crosses the top ring.
-    if (ring === undefined) {
-      ring = RINGS[RINGS.length - 1];
-      if (!ringClamped) console.warn(`nanolathe: the stroke chain needs a page ring of ${need} cells; clamped to ${ring}, so seams may show between pages`);
+    if (ring === undefined || ring > RINGS[top]) {
+      ring = RINGS[top];
+      if (!ringClamped) console.warn(`nanolathe: the stroke chain needs a page ring of ${need} cells; clamped to ${ring}${ring < RINGS[RINGS.length - 1] ? ' by the GPU memory budget' : ''}, so seams may show between pages`);
       ringClamped = true;
     } else ringClamped = false;
     if (ring !== RING) {
@@ -1033,6 +1051,7 @@ export function createPagedFields(opts) {
       for (const pg of pagesMap.values()) dropShape(pg);
       scratchT?.destroy(); scratchT = null;
     }
+    fitCaps(); trim();
     return true;
   }
   let ringChanges = 0, lastNeed = 0, ringClamped = false;
@@ -1324,7 +1343,7 @@ export function createPagedFields(opts) {
     read: () => { throw new Error('nanolathe: a paged map is read with readAsync'); }, readCells: () => { throw new Error('nanolathe: a paged map is read with readAsync'); },
     sample: (x, y, k = 'h') => bilinear(x, y, (ix, iy) => cell(ix, iy, k)), cell: (ix, iy, k) => cell(ix, iy, k),
     sampleEroded: (x, y) => bilinear(x, y, erodedCell),
-    changed, ready: () => Promise.resolve(), pending: () => false,
+    changed, refit: () => { const before = RING; check(); if (RING !== before) changed(); }, ready: () => Promise.resolve(), pending: () => false,
     readAsync: async (request, o) => readRect(toCells(request), o),
     readRect: (rect, o) => readRect(clip(rect), o),
     replayDetail: () => Object.fromEntries(keys.map(k => [k, 0])),

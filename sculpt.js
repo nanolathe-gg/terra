@@ -2710,11 +2710,13 @@ function studyShape(rect) {
 const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
 const pagedWanted=() => worldGrid>1168 || gpuPagesForced();
 const pagedOn=() => Boolean(regionalFields?.paged && regionalFields.active());
+// H12: the paged fields fit their ring and page caps to the terrain GPU budget the canvas holds (gpuMB, or its field), less the canvas's minimum.
+const gpuBudget=() => ({total:(Number(document.querySelector('[data-gpu]')?.value)||Number(new URLSearchParams(location.search).get('gpuMB'))||512)*1048576,minimum:mapCanvas?.minimumBytes?.()??96*1048576});
 function makeRegionalFields() {
   const common={worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving)};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
-  return pagedWanted()?createPagedFields({...common,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
+  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
@@ -2952,7 +2954,7 @@ function regionalStats() {
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
-  setBudget:() => {},evict:() => {},   // nothing budgets CPU field planes now; the tiled-weather wrapper (deleted with the CPU workers) still wraps these two
+  fitGpuBudget:() => regionalFields?.refit?.(),setBudget:() => {},evict:() => {},   // nothing budgets CPU field planes now; the tiled-weather wrapper (deleted with the CPU workers) still wraps these two
   workingBytes:()=>flow?.stats().inflightBytes??0,read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },checkGraphMemory:preflightNodeBakes,
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); flow?.reset();cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
