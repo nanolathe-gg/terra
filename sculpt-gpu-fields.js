@@ -24,6 +24,21 @@ const MASK_WRITES = [null, [[0, 127], [1, 0], [3, 0]], [[1, 127], [0, 0], [3, 0]
   [[14, 127]], [[14, -127]], [[15, 127]], [[15, -127]], [[16, 127]], [[16, -127]], [[17, 127]], [[17, -127]]];
 const STYLE_KEYS = ['styleRelief', 'styleCracks', 'styleBanding', 'styleFace', 'styleErosion', 'styleDeposits', 'styleVegetation', 'styleExposure'];
 const WATER_KEYS = ['waterShore', 'waterDeep', 'waterBed'];
+const STYLE_PLANES = [5, 6, 7, 8, 14, 15, 16, 17], MASK_SHAPES = ['plateau', 'offset', 'hill', 'mountain', 'crater', 'deep', 'shallow'];
+// H9: maskSetup() of sculpt.js for a landform or water stroke: its Paint-inside choice, style writes (target already carries the amount) and a water
+// stroke's edge and bed flags (written at full strength, `flat`). Each entry is [plane, target, gain, flat].
+function shapeMaskWrites(kind, q, sat) {
+  if (!MASK_SHAPES.includes(kind) || sat) return [];
+  const gain = clamp(q.maskAmount, 0, 1), out = (MASK_WRITES[Math.round(q.maskChannel)] || []).map(([p, t]) => [p, t, gain, 0]);
+  STYLE_KEYS.forEach((k, j) => { const v = clamp(q[k] || 0, -1, 1); if (Math.abs(v) >= .005) out.push([STYLE_PLANES[j], Math.round(127 * v), 1, 0]); });
+  if (kind === 'deep' || kind === 'shallow') WATER_KEYS.forEach((k, j) => {
+    const c = Math.round(q[k] || 0);
+    if (c < 1 || c > (k === 'waterBed' ? 3 : 2)) return;
+    out.push([9 + j, c === 2 ? -127 : 127, 1, 1]);
+    if (k === 'waterBed') out.push([13, c === 3 ? 127 : 0, 1, 1]);
+  });
+  return out;
+}
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
@@ -154,7 +169,6 @@ export function nodeSupport(n, c) {
     if (q.craterFacets > 0) return 'crater facets';
   }
   if (kind === 'plateau' || kind === 'offset' || kind === 'crater') {
-    if (Math.round(q.maskChannel) !== 0 || STYLE_KEYS.some(k => Math.abs(clamp(q[k] || 0, -1, 1)) >= .005)) return 'shape mask writes';
     if (kind === 'offset' && q.shorePlates > 0) return 'water fingers, bank or plates';
   }
   if (q.profile >= .5 && !SECTION_KINDS.includes(kind)) return 'parametric cross-section';
@@ -163,10 +177,6 @@ export function nodeSupport(n, c) {
   if ((kind === 'hill' || kind === 'mountain') && (q.hillLobes >= .5 || q.iceFacets > 0 || (q.moonLobes > 0 && q.baseVary > 0))) return 'hill lobes, facets or base options';
   if (q.fingerCoast >= .5 || Math.round(q.shoreLayers) >= 1) return 'coast pass';
   if (water && (q.fingers > 0 || (q.bankPx > 0 && !(q.profile >= .5)) || q.shorePlates > 0)) return 'water fingers, bank or plates';
-  if (kind === 'hill' || kind === 'mountain' || water) {
-    if (Math.round(q.maskChannel) !== 0 || STYLE_KEYS.some(k => Math.abs(clamp(q[k] || 0, -1, 1)) >= .005)) return 'shape mask writes';
-    if (water && WATER_KEYS.some(k => { const v = Math.round(q[k] || 0); return v >= 1 && v <= (k === 'waterBed' ? 3 : 2); })) return 'water mask choices';
-  }
   return null;
 }
 
@@ -306,8 +316,8 @@ export function prepareNode(n, geom, c) {
     region = !region ? {x0: s.box[0], y0: s.box[1], x1: s.box[2], y1: s.box[3]} : {x0: Math.min(region.x0, s.box[0]), y0: Math.min(region.y0, s.box[1]), x1: Math.max(region.x1, s.box[2]), y1: Math.max(region.y1, s.box[3])};
   }
   // Mask writes: paint's channel, erase's clearing of planes 0..13; each [plane, target, gain, flat].
-  const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : [];
-  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? 'stampCrystal' : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t]) => [p, t, 1, 0]),
+  const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : shapeMaskWrites(kind, q, n.satellite);
+  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? 'stampCrystal' : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
       shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,

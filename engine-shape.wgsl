@@ -250,6 +250,14 @@ fn crossSection(r: f32, reach: f32, base: f32, nCW: f32, nShelf: f32, nj: f32, n
   return clamp((base - waterSection(d, reach, base, kw, ka, nj, nA, nB)) / (base - u.sBed), 0.0, 1.0);
 }
 
+// H9: a landform's or water stroke's mask writes, once the node is settled: plane, target, gain, flat per write (maskSetup/paintCell of sculpt.js).
+fn shapeMasks(i: u32, f: f32) {
+  for (var m = 0u; m < u.nwrites; m++) {
+    let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
+    var k = f * mw.z; if (mw.w != 0.0) { k = 1.0; }
+    maskSet(i, pl, i32(floor(b + (mw.y - b) * k + 0.5)));
+  }
+}
 fn nzF(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
 #ifdef PAGES
   return nzCell(f, x, y, i, cells);
@@ -418,6 +426,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   }
   if (u.sOn != 0u) { value = value + blift; }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  if (kind >= 2u && u.nwrites > 0u && influence > 0.0) { shapeMasks(i, influence); }
   // Routes open where the height changed; protection follows the kind (a cover brush leaves it alone).
   if (kind != 0u && influence > 0.0) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - influence); }
   if (kind == 3u && u.passage != 0u && value == base) { }
@@ -484,6 +493,7 @@ fn compose(@builtin(global_invocation_id) g: vec3u) {
   let lift = 1.0 + u.rough * (0.75 * Nz[5u * cells + i] + 0.30 * Nz[2u * cells + i]);
 #endif
   F[PH * cells + i] = clamp(F[PH * cells + i] + u.amount * joined * lift, u.minH, u.maxH);
+  if (u.nwrites > 0u && raw > 0.0) { shapeMasks(i, raw); }
   F[PP * cells + i] = F[PP * cells + i] * (1.0 - joined);
   F[PR * cells + i] = F[PR * cells + i] * (1.0 - joined);
   if (u.crackAmt > 0.0 && raw > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, raw * 1.6) * u.crackAmt); }
@@ -666,6 +676,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
   value = value + baseBump(lx, ly, w);
   if (u.sOn != 0u) { value = value + blift; }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  if (u.nwrites > 0u && (kind == 6u || kind == 7u) && w > 0.0) { shapeMasks(i, w); }
   if (kind != 11u && value != base) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
   if (kind == 6u) { F[PP * cells + i] = max(pbase * (1.0 - w), sm(0.65, 0.95, w)); }
   else if (kind == 7u) { F[PP * cells + i] = pbase * (1.0 - 4.0 * w * (1.0 - w)); }
@@ -825,6 +836,7 @@ fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
   }
   if (!visited) { return; }
   F[PH * cells + i] = bestValue;
+  if (u.nwrites > 0u) { shapeMasks(i, best); }
   let sw = sm(0.0, 0.3, best);
   F[PP * cells + i] = F[PP * cells + i] * (1.0 - sw);
   F[PR * cells + i] = F[PR * cells + i] * (1.0 - sw);
