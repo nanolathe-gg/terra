@@ -894,6 +894,7 @@ fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
     bestValue = clamp(select(value, max(value, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
   }
   if (!visited) { return; }
+  if (u.coPutW != 0u) { Sc[4u * cells + i] = best; }   // H10: the footprint the crater facets are limited to
   F[PH * cells + i] = bestValue;
   if (u.nwrites > 0u) { shapeMasks(i, best); }
   let sw = sm(0.0, 0.3, best);
@@ -1604,4 +1605,82 @@ fn stampBerg(@builtin(global_invocation_id) g: vec3u) {
   }
   if (best <= 0.0) { return; }
   F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
+}
+
+// ---- H10: crater and mountain facets, a pass over the node's own result ----
+// facetSnap copies the node's result to plane R; facetApply then re-tiles the cells the node touched (footprint plane W > 0) with Voronoi facets, each the plane through the
+// result at the facet's seed (height and slope over 3 cells, read from R inside the footprint and from the prefix B elsewhere). Every read is of R, B or W, which no
+// thread of the pass writes, so a repeat run is identical. Reads clamp to the node's box (the host grows it by the seeds' reach).
+@compute @workgroup_size(8, 8)
+fn facetSnap(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  Sc[CRR * cells + i] = F[PH * cells + i];
+}
+fn fcAt(gx: i32, gy: i32, cells: u32) -> f32 {
+  let j = cIdx(clamp(gx, max(u.coBx0, 0), min(u.coBx1, i32(u.grid) - 1)), clamp(gy, max(u.coBy0, 0), min(u.coBy1, i32(u.grid) - 1)));
+  return select(Sc[CB * cells + j], Sc[CRR * cells + j], Sc[CW * cells + j] > 0.0);
+}
+struct FcSeed { l: vec2f, w: vec2f, h: f32, dx: f32, dy: f32, step: f32, shade: f32, steep: f32, on: bool }
+fn fcSeed(i: i32, j: i32, cells: u32) -> FcSeed {
+  let L = u.fcL; let crater = u.fcMode == 1u;
+  let jit = select(1.0, 0.9, crater);
+  let lx = (f32(i) + 0.5 + (cgRnd(i, j, 1u) - 0.5) * jit) * L; let ly = (f32(j) + 0.5 + (cgRnd(i, j, 2u) - 0.5) * jit) * L;
+  var wx = lx; var wy = ly;
+  if (u.framed != 0u) {
+    let det = u.inv0 * u.inv3 - u.inv1 * u.inv2;
+    let a = u.inv3 / det; let b = -u.inv1 / det; let c = -u.inv2 / det; let d = u.inv0 / det;
+    let e = -(a * u.inv4 + c * u.inv5); let f = -(b * u.inv4 + d * u.inv5);
+    wx = a * lx + c * ly + e; wy = b * lx + d * ly + f;
+  }
+  let gx = i32(floor(wx / u.spacing + 0.5)); let gy = i32(floor(wy / u.spacing + 0.5)); let e3 = 3;
+  var s: FcSeed; s.l = vec2f(lx, ly); s.w = vec2f(wx, wy);
+  s.h = fcAt(gx, gy, cells);
+  s.dx = (fcAt(gx + e3, gy, cells) - fcAt(gx - e3, gy, cells)) / (2.0 * 3.0 * u.spacing);
+  s.dy = (fcAt(gx, gy + e3, cells) - fcAt(gx, gy - e3, cells)) / (2.0 * 3.0 * u.spacing);
+  s.step = 0.0; s.shade = 0.0; s.steep = 1.0; s.on = true;
+  if (crater) { s.step = (cgRnd(i, j, 3u) - 0.5) * 2.0 * u.fcStep; s.shade = 0.7 + 0.17 * cgRnd(i, j, 5u); }
+  else {
+    s.on = cgRnd(i, j, 4u) < u.fcShare;
+    s.dx = s.dx + (cgRnd(i, j, 6u) - 0.5) * 0.7; s.dy = s.dy + (cgRnd(i, j, 7u) - 0.5) * 0.7;
+    s.steep = 1.1 + 0.3 * cgRnd(i, j, 5u); s.step = (cgRnd(i, j, 3u) - 0.2) * 10.0;
+  }
+  return s;
+}
+@compute @workgroup_size(8, 8)
+fn facetApply(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  if (!(Sc[CW * cells + i] > 0.0)) { return; }
+  let snap = Sc[CRR * cells + i]; let base = Sc[CB * cells + i]; let relief = snap - base;
+  let crater = u.fcMode == 1u;
+  if (crater) { if (abs(relief) < 0.6) { return; } } else { if (relief < 2.0) { return; } }
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let L = u.fcL; let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
+  var d1 = 3.0e38; var d2 = 3.0e38; var bi = 0; var bj = 0;
+  for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
+    let jit = select(1.0, 0.9, crater);
+    let sx = (f32(ii) + 0.5 + (cgRnd(ii, j, 1u) - 0.5) * jit) * L; let sy = (f32(j) + 0.5 + (cgRnd(ii, j, 2u) - 0.5) * jit) * L;
+    let d = length(vec2f(lx - sx, ly - sy));
+    if (d < d1) { d2 = d1; d1 = d; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
+  } }
+  let s = fcSeed(bi, bj, cells);
+  if (crater) {
+    let facet = s.h + s.dx * (wx - s.w.x) + s.dy * (wy - s.w.y) + s.step * sm(0.0, 4.0, abs(relief));
+    let value = snap + (facet - snap) * u.fcStrength;
+    F[PH * cells + i] = clamp(select(value, max(value, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
+    if (abs(relief) >= 2.0) {
+      F[PP * cells + i] = 1.0;
+      if (u.fcSkin != 0u) { F[PX * cells + i] = 0.74; } else { F[PX * cells + i] = select(s.shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6)); }
+    }
+    return;
+  }
+  if (!s.on) { return; }
+  let plane = s.h + (s.dx * (wx - s.w.x) + s.dy * (wy - s.w.y)) * s.steep + s.step * sm(0.0, 10.0, relief);
+  let value = max(plane, base); let fade = sm(2.0, 10.0, relief);
+  F[PH * cells + i] = clamp(snap + (value - snap) * fade, u.minH, u.maxH);
 }

@@ -1,0 +1,52 @@
+{
+ "biome": "ice",
+ "source": {
+  "map": "study",
+  "x": 0,
+  "y": 0
+ },
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "mountain",
+   [
+    [
+     300,
+     500
+    ],
+    [
+     520,
+     520
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 320,
+     "amount": 150,
+     "roughness": 40,
+     "iceFacets": 80,
+     "iceFacetSize": 40
+    }
+   }
+  ],
+  [
+   "mountain",
+   [
+    [
+     760,
+     300
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 200,
+     "amount": 90,
+     "roughness": 30,
+     "iceFacets": 50,
+     "iceFacetSize": 24
+    }
+   }
+  ]
+ ]
+}
