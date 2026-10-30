@@ -4716,6 +4716,103 @@ header explains the CPU tile geometry) and `sculpt-map-weather.js`.
 - baseline `$R/repro-out/merge-h7b`;
 - guard `--worlds none`.
 
+**Done (merged as af9207e; EXPERIMENTS row 150; notes in
+`$R/agent-H5b/NOTES.md`).**
+- **Pages** (`createPagedFields` in `sculpt-gpu-fields.js`).
+  - **Core** 512 cells, aligned to multiples of 512 and depending on the
+    world alone: 8×8 is 5×5 pages, 16×16 is 9×9 and 40×40 is 21×21.
+  - **Shape pages** keep a 4-cell ring, because the hill blur is the widest
+    shape pass. Noise is evaluated directly at the capsule points instead
+    of from whole-map tables. That is exact: on 4×4 at `gpuPages=force`,
+    all 31 planes equal the whole-map planes.
+  - **The page variant of `engine-shape.wgsl`** sits behind `#ifdef PAGES`.
+    Both preprocessed texts equal the texts before the change, character
+    for character, so the whole-map program is unchanged.
+  - **Two LRUs, by bytes:** 9 shape pages (14.1 MB each) and 24 weather
+    pages (5.2 MB each).
+- **The Time pass on pages.**
+  - It runs per page in a window of core + 128 and keeps only the core.
+    The window's input is evaluated afresh from the node list.
+  - There is no coarse drainage pass.
+  - **On 4×4, paged against whole-map:**
+    - max |Δh| .0005;
+    - the export's TNT heights, features and tile indices are identical;
+    - the 1× view changes 3 of 6,900 blocks;
+    - no seam at 2×.
+  - **On 8×8, apron 128 against 192:** max |Δh| .00056 over 4.8M cells,
+    with identical TNT heights, so 128 stays.
+  - `engine-erosion.wgsl` takes a window origin (`ox`, `oy`; 0 for a whole
+    map), in its own commit outside the card's files.
+- **Chunks: a gather, not one-page containment** (a departure from the
+  card, ruled at the design stop).
+  - A 512-px chunk's lattice reaches 202-342 cells past it, so holding it
+    in one page would cost 8× the core's area.
+  - Instead each bake gathers its lattice from at most 2×3 page cores into
+    a reused staging set (43 MB, counted), and `feedMain` runs unchanged.
+- **CPU readers.**
+  - **The overview and outline** read a coarse lattice (every 8th cell),
+    filled in the background, view pages first.
+  - **Picking and the cursor** read CPU copies of resident pages.
+  - **Export heights** use `readAsync`, by gather.
+  - `maskChunks` is async.
+- **Switch:** `gpuPages` (default on over 1168; 0 is the CPU path;
+  `force` pages a 4×4).
+- **Performance** (green-2; the agent's runs, and mine on 8801 at load 4.7-5.5):
+
+  | 8×8 | before (H7 / agent's `before`) | H5b (agent) | H5b (mine) | Target |
+  | --- | --- | --- | --- | --- |
+  | Load, visible chunks final | 16.2 / 19.0 s | 0.78 s | 0.80 s | ≤ 2 s |
+  | After release, chunks final | 7.5 / 8.8 s | 0.73 s | 0.70 s | ≤ 1 s |
+  | Drag rAF p95 | 283 ms | 16.7 ms | 16.8 ms | < 33 ms |
+  | Move to first picture, p50 / p95 | — | 49 / 61 ms | 52 / 103 ms | — |
+  | Scroll p95 | — | 16.8 ms | 16.7 ms | — |
+  | Export | 16.0 / 15.9 s | 6.3 s | 6.55 s | ≤ 8 s |
+
+  - **16×16** (no export): load 0.80 s, release 0.79 s, drag p95 16.8 ms,
+    GPU 386 MB.
+  - **40×40:** the page opens in 0.5 s and the view is drawn in 1.0-1.25 s.
+    The full overview (441 pages) takes 8.0 s. A hill stroke takes, with
+    no console errors.
+  - **4×4 at the defaults** is unchanged: mine load 0.60 s, release 0.52 s, drag p95 16.8 ms, latency 45 / 59 ms, export 1.52 s.
+- **Memory (8×8).** GPU 371 MB at the end, with a peak of 461-475 MB of 512.
+  The JS heap peaks at 167 MB.
+- **My merge checks:**
+  - the 27 study scenes are exact against `merge-h7b` and equal the
+    agent's renders; `regional.mjs` 0 on all 27;
+  - **the 4×4 default export:** its TNT section and everything after it
+    are byte-identical to H7b's, and the indexed PNG is identical. Only
+    the archive header differs, because the export name is one character
+    shorter;
+  - the 4×4 view differs only in the status text, and the three minimap
+    checks are 0 pixels from H7b's;
+  - **8×8 at `gpuPages=0`:** the export is byte-identical to the agent's
+    `before` export (`H2Check8871x77791`) apart from the name;
+  - **8×8 paged:**
+    - the export passes its self-check (tnt, ota, archive), with 1,072
+      unique tiles of 17,028 slots;
+    - against the CPU path, TNT heights differ on 590 of 68,112 cells
+      (max 4), as expected: Green's Time pass replaces the old tiled
+      worker;
+    - by eye the view matches the 4×4 GPU look, where the CPU path shows
+      the old gullies;
+    - an edit changes 405 minimap pixels.
+
+**Still open:**
+- **Plateau and the other fallback kinds** still send a scene to the JS
+  fields on every size; on 40×40 a plateau stroke took 13 s. That is H6c.
+- **The Time pass is demand-driven.** A view that needs 6-9 uncomputed
+  pages pays about 30 ms each before its first picture (included in the
+  0.78 s).
+- **The overview and outline interpolate the coarse lattice,** so the
+  minimap is up to 3 levels from the exact one.
+- **Apron 128** is measured on green-2 only.
+- **16×16 export** is not run: its 66,820 tile slots exceed the TNT's
+  65,536.
+- **While dragging on 8×8,** every rebaking chunk shows a move at p50 186
+  and p95 383 ms. The first chunk is at 49 / 61 ms.
+- **GPU peak** is 461 MB of 512; 7 shape pages would give back about
+  28 MB.
+
 ### H6c. The remaining shapes on the GPU (Green)
 
 > **Owner, 2026-10-29:** "Let's do h7 quarter levels, then the large map

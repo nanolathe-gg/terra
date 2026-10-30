@@ -384,7 +384,7 @@ Each is written in full when the one before it lands.
 | H3 | One material model on the GPU (Green), with override fields | Merged 1c7f10d |
 | H4 | The Green engine: its own shaders, startup material textures, rocks from numbers, rock blocks (absorbs H3b) | Merged 494bcf1 |
 | H5 | Green's weather on the GPU at TA's scale: data maps, marks at 1 px, controls that matter (study and maps up to 1168 samples) | Merged ca0c310 |
-| H5b | Large maps on the GPU, end to end: shape fields, Time pass and chunk feed in pages over 1168 samples, export on 8×8 | Written |
+| H5b | Large maps on the GPU, end to end: shape fields, Time pass and chunk feed in pages over 1168 samples, export on 8×8 | Merged af9207e |
 | H4b | Rock blocks on hill rock (Green), judged with H5's outcrops | Merged cb57320 |
 | H6 | Green's shape on the GPU: whole-map fields by compute passes, behind `gpuShape`, read through a CPU copy | Merged 48818aa |
 | H6b | Chunks and the Time pass fed from the GPU fields: no CPU copy or per-chunk upload on the hot path | Merged 1fec3ce |
