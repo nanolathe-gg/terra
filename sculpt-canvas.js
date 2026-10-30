@@ -50,7 +50,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,evictions,bakes,hits,rebakes,canonicalChunkSize:canonicalSize,field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
-  function clear(rect=null) { epoch++;for(const [key,e] of cache)if(!rect||intersects(rect,e.input??e))remove(key);coarseColour=true;schedule(); }
+  // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
+  // its input (an edit elsewhere on the map, or a later move of the same stroke over other chunks, does not throw it away).
+  let changeSeq=0;const changeLog=[];
+  function changedSince(seq,input){return changeLog.length>=256&&changeLog[0].seq>seq+1||changeLog.some(c=>c.seq>seq&&(!c.rect||intersects(c.rect,input)));}
+  function clear(rect=null) { epoch++;changeLog.push({seq:++changeSeq,rect});if(changeLog.length>256)changeLog.shift();for(const [key,e] of cache)if(!rect||intersects(rect,e.input??e))remove(key);coarseColour=true;schedule(); }
   function trimTo(limit){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
   function configureChunks() {
     if(budgetUpdating)return;budgetUpdating=true;
@@ -87,8 +91,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount),copyBytes=rect.width*rect.height*8;
       trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
       renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
-      const result=await renderer.renderChunk(request,{...options,quality:'full',feed});bakes++;
-      const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,fed:true,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed});bakes++;
+      const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }
     const fields=await region(request,options,signal);
@@ -175,7 +179,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(token!==epoch||viewToken!==viewEpoch||busy)break;
           const key=rect.x+','+rect.y+','+size;let e=cache.get(key);
           if(!e&&holding)continue;
-          if(!e){e=await bake(rect,false,undefined,()=>token!==epoch||false);if(token!==epoch){e.bitmap.close?.();break;}cache.set(key,e);cacheBytes+=e.bytes;}
+          if(!e){e=await bake(rect,false,undefined,()=>token!==epoch||false);if(token!==epoch){
+            // H6b: a finished fed bake is shown even when a later change touched it (the picture is at most one move old), but not kept: the chunk bakes again.
+            if(e.fed&&changedSince(e.seq,e.input)){if(intersects(rect,v)){paint(e,v);overlays();presented();}e.bitmap.close?.();break;}
+            if(!e.fed){e.bitmap.close?.();break;}
+          }cache.set(key,e);cacheBytes+=e.bytes;}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch&&!e.fed){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{});checkHeap(input);e.heightPatch=keepHeight(input);}}
           if(token!==epoch||cache.get(key)!==e)break;
           if(viewToken!==viewEpoch){rerun=true;break;}
@@ -283,7 +291,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function queueSave(){clearTimeout(saveTimer);if(gesture||busy)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
   find('[data-save]').onclick=()=>saveDocument().catch(()=>{});find('[data-load]').onclick=()=>loadDocument().catch(err=>{find('[data-save-state]').textContent=err.message;});
-  api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);queueSave();});
+  // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
+  const invalidate=change=>clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);
+  api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
+  api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);queueSave();});
   function setBusy(on){busy=on;api.setBusy(on);find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on||saving;if(!on){if(resizePending)resize();else schedule();}}
   features=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();queueSave();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);

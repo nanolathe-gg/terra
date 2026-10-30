@@ -2735,7 +2735,7 @@ function makeRegionalFields() {
       return h;
     },workspaceBytesPerCell:FIELD_KEYS.reduce((v,k) => v+(MASK_KEYS.includes(k)?3:12),0)+Object.keys(NOISE_FIELDS).length*8+96,replay:replayWindow});
   // H6: gpuShape 1 evaluates Green's brushes on the GPU over the whole map; a scene with any node the passes do not take is handed to the JS fields as a whole.
-  return gpuShapeOn() && worldGrid<=1168?createGpuFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:js,device:() => renderer?.device,context:shapeContext}):js;
+  return gpuShapeOn() && worldGrid<=1168?createGpuFields({worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,fallback:js,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving)}):js;
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
@@ -2842,6 +2842,7 @@ function sampleRegional(x,y) {
 // bake reads the fields and those buffers in place (sculpt-chunk-renderer.js feedFromGpu). The CPU arrays (refined, refinedBase, regionalWeather) are
 // read back only when a CPU reader asks: sampleRegional (picking, features), readRegional (export heights, the CPU bake path).
 const gpuFeedOn=() => new URLSearchParams(location.search).get('gpuFeed')!=='0';
+const feedWeatherOk=() => Boolean(renderer?.engine && gpuFeedEligible() && grid<=1168 && renderer.variantNumber?.('erosion',0)>0);
 const gpuFeedEligible=() => Boolean(gpuFeedOn() && renderer?.engine && regionalFields?.gpuBuffers && worldGrid<=1168 && regionalFields.active?.());
 function retireGpuWeather(w) { setTimeout(() => { w.weather.destroy(); w.maps.forEach(m => m.destroy()); },3000); }   // a bake that already took the buffers may still be recording
 function dropGpuWeather() { if (gpuWeather) { retireGpuWeather(gpuWeather); gpuWeather=null; } }
@@ -2865,7 +2866,7 @@ async function gpuWeatherCpu(withMaps) {
 // Weathering is on and a GPU pass produced them. Weather that came from a CPU pass keeps the CPU read, so the picture stays exactly the CPU path's.
 async function gpuFeedSource(signal) {
   if (!gpuFeedEligible()) return null;
-  await regionalFields.ready(); signal?.throwIfAborted();
+  await regionalFields.gpuReady(); signal?.throwIfAborted();
   const buffers=regionalFields.gpuBuffers(); if (!buffers) return null;
   const on=$('weather').checked;
   if (on && refined && !gpuWeather) return null;
@@ -2936,7 +2937,7 @@ const sculptRegion={
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); flow?.reset();cancelWeather(); nodes=next; prefix=[]; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
-  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
+  residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...(flow?.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuFeedActive:() => gpuFeedEligible(),setBudget:bytes => regionalFields.setBudget(bytes),evict:() => regionalFields.clear(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
@@ -3102,7 +3103,9 @@ function globalWeatherInput() {
 function queueWeather() {
   flushEval();
   if (shapePending) { shapeAfter.push(queueWeather); return; }
-  if (regionalFields?.pending?.()) { regionalFields.ready().then(queueWeather); return; }   // H6: the map's GPU fields are still being copied
+  // H6b: a fed Time pass needs the GPU planes current, not the CPU copy; the copy a gesture left out is read in the background from here.
+  if (feedWeatherOk() && regionalFields?.gpuReady) { regionalFields.settle(); if (regionalFields.gpuPending()) { regionalFields.gpuReady().then(queueWeather); return; } }
+  else if (regionalFields?.pending?.()) { regionalFields.ready().then(queueWeather); return; }   // H6: the map's GPU fields are still being copied
   if (!$('weather').checked) {
     mapWeather?.queue();
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;
@@ -3114,7 +3117,7 @@ function queueWeather() {
     if (!weatherWorker && !(renderer.engine && (!regionalFields || grid<=1168) && renderer.variantNumber?.('erosion',0)>0)) startWeatherWorker();   // H5: Green's engine runs no worker
     const job=++weatherJob;
     // H6b: on a map canvas whose fields are on the GPU the Time pass reads the fields' buffers and leaves its result in GPU buffers (below).
-    const fed=Boolean(renderer.engine && gpuFeedEligible() && grid<=1168 && regionalFields.gpuBuffers() && renderer.variantNumber?.('erosion',0)>0);
+    const fed=Boolean(feedWeatherOk() && regionalFields.gpuBuffers());
     const authored=regionalFields&&!fed?globalWeatherInput():null;
     weatherBase=fed?null:authored?authored.h:heights.slice();
     $('weather-state').textContent='Refining exposed slopes…';
