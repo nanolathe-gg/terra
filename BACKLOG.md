@@ -96,6 +96,7 @@ branches and the projection fix below, so re-render before judging.
    | H6 | 8868 | 9668 | `$R/agent-H6/out` | `--worlds none`, then `green` |
    | H6b | 8869 | 9669 | `$R/agent-H6b/out` | `--worlds none` |
    | H7b | 8870 | 9670 | `$R/agent-H7b/out` | `--worlds none` |
+   | H5b | 8871 | 9671 | `$R/agent-H5b/out` | `--worlds none` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -3471,6 +3472,8 @@ supersede round 1).**
 
 ### H5b. Weather on large map canvases — outline
 
+Superseded by the full card "H5b. Large maps on the GPU, end to end" below.
+
 - **Coverage.** For maps over 1168 samples: a coarse pass over the whole
   map for drainage, then fine tiles with aprons, so drainage reaches
   across tiles.
@@ -4479,6 +4482,154 @@ Read H7's, H6's and H6b's Done and Still open lists above, and
 - worktree `../terraform-wt-H7b`;
 - assets `$R/agent-H7b`, with `mapcheck.mjs` copied from `$R/agent-H4`;
 - baseline `$R/repro-out/merge-h6b`;
+- guard `--worlds none`.
+
+### H5b. Large maps on the GPU, end to end (Green)
+
+> **Owner, 2026-10-29:** "Let's do h7 quarter levels, then the large map
+> support to prove it out end to end, then the remaining shapes on the
+> gpu." This replaces the H5b outline above. It takes Green's whole GPU
+> pipeline (shape, Time pass, chunk feed, levels) to maps over 1168
+> samples, from load to export.
+
+Read H5's, H6's, H6b's, H7's and H7b's Done and Still open lists above,
+and the H5b and H2b outlines. Then read `sculpt-tiled-weather.js` (its
+header explains the CPU tile geometry) and `sculpt-map-weather.js`.
+
+**What is there today.**
+- **Map sizes** (`configureMap` in `sculpt-map.js`; grid = size / 2):
+
+  | Map | World size | Grid | Cells |
+  | --- | --- | --- | --- |
+  | 4×4 | 2336 | 1168 | 1.4M |
+  | 8×8 | 4384 | 2192 | 4.8M |
+  | 16×16 | 8480 | 4240 | 18M |
+  | 40×40 | 20768 | 10384 | 108M |
+
+- **Up to 1168 samples** (4×4), Green runs on the GPU from end to end.
+  Whole-map buffers hold 31 B of shape fields a cell, and the Time pass
+  needs 120 B a cell while it runs.
+- **Over 1168, everything is still on the CPU:**
+  - the JS regional fields replay windows;
+  - weather comes from the old tiled CPU worker (`sculpt-tiled-weather.js`:
+    256-interval cores, a 64-interval blend, a 128-interval apron), not
+    Green's Time pass, so an 8×8 map does not show H5's look;
+  - every chunk is read on the CPU and uploaded.
+
+  H7 measured 8×8 at: load 16.2 s, release 7.5 s, drag p95 283 ms, export
+  16.0 s.
+- **Why whole-map buffers stop at 1168.** At 8×8 the masks alone are
+  134 MB, over the 128 MB default storage-binding limit. The fields plus
+  the Time pass would need about 830 MB, over the canvas's 512 MB budget.
+  So large maps need the map in pages.
+
+**Scope.**
+- Green's engine on map canvases over 1168 samples: 8×8 is the proof,
+  16×16 the stretch, and 40×40 must open and draw its view.
+- **A query switch, `gpuPages`** (default 1 over 1168; 0 is today's CPU
+  path). `gpuPages=force` pages a 4×4 map too, for comparison.
+- **4×4 at the defaults is unchanged**, byte for byte.
+- **Fallback scenes** (plateau, offset, lower, crater) keep the CPU path.
+  The next card puts them on the GPU.
+
+**Deliver.**
+
+1. **Design (a stop point).** Hand back a short plan, with numbers,
+   before building:
+   - **The page geometry.** A page is a fixed core plus an apron. Its
+     geometry depends on nothing but the world: not chunks, requests or
+     budgets. State the core and apron in cells, and why the apron covers
+     the reach of each shape pass (blur radii, hill sections, framed
+     noise), of the Time pass, and of the chunk feed.
+   - **How a chunk finds its page.** A chunk's lattice and apron must lie
+     inside one page.
+   - **Memory** per page (fields, Time pass, CPU copy), and how many
+     pages fit in 512 MB with the chunk cache.
+   - **The Time pass on pages.** Fine pages with aprons, with or without a
+     coarse whole-map drainage pass first. Settle it by measuring on a 4×4
+     map: paged (`gpuPages=force`) against whole-map, as max and p95 |Δh|,
+     and changed 16-px blocks in the 1× view. Seams must not show at 2×.
+   - **CPU readers** (overview, outline, picking, features, export
+     heights): what they read on a large map.
+   - **The device limits** you need, if any (`requiredLimits`), and what
+     the adapter offers.
+2. **Shape fields in pages.**
+   - The shape passes evaluate a page's core and apron. Pages live in an
+     LRU, counted by `fixedGPU()`.
+   - An edit dirties the pages its reach touches. During a gesture only
+     the dirty pages in view re-run, and nothing is read back (H6b's
+     rules).
+   - **Exactness:** on 4×4 at `gpuPages=force`, the paged planes equal
+     the whole-map planes (report max |Δ| and mask steps; H6's quadrant
+     check found 0).
+3. **The Time pass on pages,** as item 1 settled. A page's weather is
+   kept with the page, and redone only when its shape (or a neighbour
+   within the apron) changed.
+4. **Chunks fed from pages** (`engine-feed.wgsl`), with H7b's levels.
+5. **Export on 8×8,** end to end from pages. Peak GPU and JS memory stay
+   within the budgets; pages are evicted as the export walks the map.
+6. **Measure** with `perf.mjs map8` (and a 16×16 run: add `map16`):
+   load, drag, release, scroll, export, memory.
+
+**Targets** (8×8 green-2, against H7's 16.2 s, 7.5 s, 283 ms and 16.0 s):
+- load, visible chunks final: at most 2 s;
+- after release, visible chunks final: at most 1 s;
+- drag rAF p95: under 33 ms;
+- export: at most 8 s;
+- 16×16: report the same figures, with no target;
+- 40×40: opens, draws its view, takes a stroke, with no console errors.
+
+**Exactness and acceptance:**
+- **The study is untouched:** `compare.py $R/repro-out/merge-h7b <yours>
+  --worlds none` is exact on all 27 scenes, and `regional.mjs` finds 0 on
+  all 27.
+- **4×4 at the defaults:** the export is byte-identical to H7b's merge
+  export apart from the name. The minimap (`$R/navcheck.mjs`,
+  `navedit.mjs`, `navmove.mjs`) and the 1× view are unchanged.
+- **4×4 at `gpuPages=force`,** against the whole-map path:
+  - shape planes as item 2 says;
+  - TNT heights, features and tile indices, reported (identical is the
+    goal);
+  - the view's changed blocks at the noise floor, and by eye the same;
+  - no seam at 2× at page boundaries.
+- **8×8 at `gpuPages` 1:**
+  - the export passes its self-check;
+  - the view shows Green's H5 look (compare a 4×4 crop of the same
+    scene, by eye);
+  - the minimap updates after an edit.
+- **8×8 at `gpuPages=0`** is unchanged from H7b's merge (its export, byte
+  for byte apart from the name).
+
+**Done when** NOTES.md has:
+- the design with its numbers;
+- each item measured on its own;
+- the targets met, or by how much they were missed;
+- memory;
+- every exactness check above.
+
+**Files:**
+- `sculpt-gpu-fields.js` and `engine-shape.wgsl`, for pages;
+- `engine-feed.wgsl` and `sculpt-erosion.js`;
+- `sculpt-canvas.js` and `sculpt-chunk-renderer.js`;
+- in `sculpt.js`, only the seams (`makeRegionalFields`, the weather glue,
+  `gpuFeedSource`, `readRegional`, `sampleRegional`);
+- `sculpt-map-weather.js`;
+- `repro/perf.mjs`.
+- Not the draw or bake shaders (`engine-frag`, `engine-bake`,
+  `engine-common`), not `sculpt.py`, and not the study path.
+
+**Budget:**
+- Item 1 is a stop point.
+- After it, items 2-5 are each their own commit.
+- If the budget runs short, stop after item 4 with NOTES.md saying what
+  remains.
+
+**Server and guard:**
+- port 8871, CDP 9671;
+- worktree `../terraform-wt-H5b`;
+- assets `$R/agent-H5b`, with `mapcheck.mjs` copied from `$R/agent-H4`
+  (it opens 4×4; make an 8×8 copy for the 8×8 checks);
+- baseline `$R/repro-out/merge-h7b`;
 - guard `--worlds none`.
 
 ## After the cards
