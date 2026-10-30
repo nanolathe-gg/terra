@@ -561,8 +561,8 @@ Each is written in full when the one before it lands.
 | H7 | Progressive rendering on the Green slice: measure, order the work, quarter and final levels, final pixels unchanged | Merged 1fffe4f (quarter levels and drag p95 open) |
 | H7b | Quarter levels on the GPU-fed map canvas: a scaled bake, quarter while dragging and first on load, final unchanged | Merged 31e995e (latency p95 50 ms, target 30 missed) |
 | H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Merged 92c1b63 (GPU shape for the other eight is H8b) |
-| H8b | GPU shape for every world: why `gpuShape` moves zhon-1, archipelago-3 and red-1, and H9's map-canvas gaps; then on in every preset (pages, feed and the material field everywhere) | Running |
-| H10 | The last shapes on the GPU: coast pass, fingers, bank and plates, crystal columns and bergs, facets (a similar look) | Written; after H8b |
+| H8b | GPU shape for every world: why `gpuShape` moves zhon-1, archipelago-3 and red-1, and H9's map-canvas gaps; then on in every preset (pages, feed and the material field everywhere) | Merged 2be97b1 (the material field on the fed path open) |
+| H10 | The last shapes on the GPU: coast pass, fingers, bank and plates, crystal columns and bergs, facets (a similar look) | Running |
 | H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Outlined; after H10 |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Merged a7c2256 (deep cross-section and the map-canvas gaps are H8b; `hillLobes` on JS) |
 | Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path | Not yet written |

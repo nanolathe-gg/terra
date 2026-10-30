@@ -5536,6 +5536,68 @@ before and after, and what stays on JS and why.
   bergs, fingers, bank and plates, and crater facets; Ice's plates,
   fingers and columns. Shores and Bodies rebuild them.
 
+**Done (merged as 2be97b1; EXPERIMENTS row 154; notes in
+`$R/agent-H8b/NOTES.md`).**
+- **The JS reference in `shapecheck` is real** (084609c). H9's study
+  figures were void.
+- **Ridge pieces** now scale the outline wobble and reach box by the
+  piece's mean width, as `dab()` does in JS. Study max |Δh|:
+  - crest vary .67 → .0003;
+  - crest taper .67 → .0002;
+  - spurs 1.36 → .0002;
+  - moon-ridge 1.07 → .0010 (.0009 on 4×4);
+  - crater rim .42 → .0002.
+- **The deep lip.** In f32, `base − v` rounded to 0 at the first dry cells
+  past the lip inset, so the stamp skipped them and lost the lip. Those
+  cells now keep a vanishing weight, and the deep cross-section runs on
+  the GPU.
+  - red-section: 45 clusters → 3 isolated cells.
+  - 4×4: about 120 cells → 4 isolated cells in 1.4M.
+- **The flow bake** waits for the GPU heights (`shapeSettled`).
+  `flowbake` nodes are skipped by the passes, and their stored planes are
+  copied back in (`applyBakes`). Zhon keeps its rivers, with plane sums
+  equal to JS.
+- **`gpuShape` 1 in every preset** (`LIGHT_PASS`). A world with Material
+  weathering above 0 (Archipelago) takes the unfed Time pass.
+- **The regional check** uses the JS check for scenes the passes refuse,
+  and skips the flow planes in the GPU check.
+- **Study at the new defaults, against `merge-h9`:**
+  - mean |diff| at most .0010 (desert-1 and desert-3: 43 and 45 single
+    pixels);
+  - Green exact; replay mismatch 0 and `regional.mjs` 0 on all 27;
+  - with `engine=0`, exact against `merge-h8-e0`.
+- **Maps.**
+  - 4×4 exports of scene 2 of Red, Moon, Archipelago, Desert, Lava,
+    Crystal and Ice pass their self-checks.
+  - 8×8 Moon through pages exports in 7.8 s.
+- **Speed** (`perf.mjs`, `gpuShape` 1 against 0):
+
+  | Map | Load to final | Drag p95 | Release |
+  | --- | --- | --- | --- |
+  | Red 4×4 | 771 against 3,547 ms | 16.8 against 383 ms | 652 against 2,722 ms |
+  | Red 8×8 | 1,502 ms | 16.8 ms | 1,002 ms |
+  | Moon 8×8 | 685 ms | 16.8 ms | 584 ms |
+  | Archipelago 4×4 (unfed, for the material field) | 2,238 against 3,793 ms | 167 against 333 ms | 2,503 against 2,253 ms |
+- **Coordinator's merge checks:**
+  - the 27 renders round to 0.00 against `merge-h9`. The largest changes
+    are single pixels, invisible at 4× (red-3 33 pixels, desert-1 43);
+  - `regional.mjs` finds 0 on all 27;
+  - the 4×4 green-2 export's TNT heights, features, tiles and indexed
+    picture are identical;
+  - the census: the only reasons left are H10's (the coast pass, water
+    fingers, bank and plates, crystal columns and bergs, crater facets)
+    and the dropped `hillLobes`.
+
+**Still open:**
+- **The material field on the fed and paged pass** is not wired. It needs
+  a GPU-height form of `materialField`. Archipelago's maps take the unfed
+  pass (drag 167 ms), and its maps over 1168 samples carry no field.
+- **Shape card:** Desert's section keeps 5 cells about .84 off, and the
+  deep section 4 isolated cells.
+- **zhon-1's protection plane** is .035 from JS in `shapecheck`. It was
+  not looked into; the river tools go in H12.
+- The counts table was not produced; H12 reports the full one.
+
 ### H10. The last shapes on the GPU
 
 > **Owner, 2026-10-30:** "Then ASAP I would like to have everything use
