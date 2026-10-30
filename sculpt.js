@@ -3185,17 +3185,17 @@ function queueWeather() {
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           // The maps stay packed (three rgba8 arrays, 4 bytes a sample); the chunk crop unpacks only the samples a chunk needs.
           regionalWeather={p0:result.maps[0],p1:result.maps[1],p2:result.maps[2]};
-          weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
-          markViewChanged(); updateControls(); schedule();
-          materialRule(result.height).then(field => { if (field && job===weatherJob && !stroke && regionalWeather) { regionalWeather.materialField=field; markViewChanged(); schedule(); } });
+          // H8: the terrain is final once the material field (when the world asks for one) is in.
+          materialRule(result.height).then(field => { if (job!==weatherJob || stroke || !regionalWeather) return; if (field) regionalWeather.materialField=field;
+            weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; markViewChanged(); updateControls(); schedule(); });
           return;
         }
         if (own) {
           dropGpuWeather(); refined=result.height; refinedBase=weatherBase;
           renderer.setHeight(refined,grid); renderer.setRoutes(routes,cracks,cover,crystal,maskPlanes); renderer.setWeatherMaps(result.maps);
-          heightDirty=false; weatherState='ready'; renderedRevision=-1; updateControls();
-          $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule();
-          materialRule(refined).then(field => { if (field && job===weatherJob && !stroke) { renderer.setMaterialField(field); schedule(); } });
+          heightDirty=false;
+          materialRule(refined).then(field => { if (job!==weatherJob || stroke) return; if (field) renderer.setMaterialField(field);
+            weatherState='ready'; renderedRevision=-1; updateControls(); $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`; schedule(); });
           return;
         }
         eroded={eroded:result.height,erodedFlow:result.flow,erodedDeposit:result.deposit}; post(); })
