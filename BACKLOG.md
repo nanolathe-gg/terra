@@ -100,6 +100,7 @@ branches and the projection fix below, so re-render before judging.
    | H6c | 8872 | 9672 | `$R/agent-H6c/out` | `--worlds none` |
    | H8 | 8873 | 9673 | `$R/agent-H8/out` | `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice` |
    | H9 | 8874 | 9674 | `$R/agent-H9/out` | `--worlds none` |
+   | H8b | 8875 | 9675 | `$R/agent-H8b/out` | `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice` |
 
    Before the baseline, check that every world is really served (until
    card A lands, an unavailable world answers as Green):
@@ -5255,20 +5256,121 @@ counts table.
 - **Archipelago's chunk bake** costs about seven times Green's (8×8 load
   15.1 s).
 
-### H8b. GPU shape for every world — outline
+### H8b. GPU shape for every world
 
-After H9. Find why `gpuShape=1` moves zhon-1, archipelago-3 and red-1
-(H8's Still open), and fix it on the GPU path. Also find H9's map-canvas
-gaps: a deep stroke with a cross-section (4.0 on about 120 cells of a 4×4
-map; it stays on JS until then), and ridge options, crater rims and
-Desert's section (.41-1.15). Then set `gpuShape` 1 in every world's
-preset, so that:
-- every world's maps over 1168 samples run pages;
-- the fed path carries the material field;
-- no world runs a CPU worker anywhere on the engine.
+> **Owner, 2026-10-30:** "Let's continue porting the other worlds to the
+> GPU before we retire things." "I prefer a single workflow, branching
+> based on features not worlds/biomes ... Whatever can be shared should
+> be." "The end goal is still simplification."
 
-Judge by H8's acceptance, plus `perf.mjs` on one other world at 4×4 and
-8×8 against H8.
+Read H8's and H9's Done and Still open lists above, and in
+[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) decisions 12-16 and
+"Rules for the cards".
+
+**What is there today.**
+- **Every world draws on the engine** (H8), but the GPU shape
+  (`gpuShape`) is on only for Green (`ENGINE_KNOBS`). The other eight
+  worlds' presets are `LIGHT_PASS` without it.
+- **Turning it on moves pictures.** H8 measured this before H9, with
+  `gpuShape=1` against the defaults: zhon-1 by mean |diff| 28.6 with
+  replay mismatch 63, archipelago-3 by 13.1, red-1 by 5.0. The shape
+  planes pass `shapecheck`, so the cause lies outside them.
+  - zhon-1 is the only scene with a flow bake (a `flowbake` stroke). The
+    GPU path's `KIND` has no `flowbake`, while the JS replay copies the
+    bake's stored planes back (`applyResult`, called from `applyNode`).
+    This is the coordinator's reading, not yet checked.
+- **H9's gaps on map canvases (4×4):**
+  - a deep stroke with a cross-section is 4.0 off on about 120 cells.
+    `nodeSupport` refuses it for now ('deep cross-section');
+  - ridge options are up to 1.15 off on 0.6-1.2% of cells;
+  - crater rims are .41 off;
+  - Desert's section is .84 off on 0.003% of cells.
+
+  The study is exact for all of them. The JS engine's own entry paths
+  disagree by about .16 for ridges and spurs.
+- **The census after H9** (`$R/agent-H9/refusals.mjs`; output in
+  `$R/repro-out/merge-h9-census.log`):
+  - every stroke of Green, Archipelago, Zhon, Desert and Moon runs on the
+    GPU, and all of Red's except red-3's deep cross-section;
+  - Lava, Crystal and Ice keep options that the Shores and Bodies cards
+    rebuild.
+- **Without the GPU shape,** a world's maps over 1168 samples are not
+  paged and run the tiled CPU worker. The GPU feed is off, so a drag on
+  those maps takes 250-333 ms a frame at p95, against Green's 16.7. The fed
+  path also carries no material field.
+
+**Scope.**
+- Make `gpuShape=1` correct for every world, and turn it on in every
+  preset.
+- Not the options the Shores and Bodies cards own. A scene that uses one
+  falls back to JS as it does today.
+
+**Deliver.**
+
+1. **Diagnosis (a stop point).** Hand back:
+   - all 27 scenes with `gpuShape=1` against `merge-h9`: mean |diff| and
+     replay mismatch for each;
+   - for each scene that moves, its cause (file and function) and the
+     fix you propose;
+   - the cause of each map-canvas gap above;
+   - where JS itself disagrees, what the 4×4 tolerance should be, with
+     the evidence.
+2. **Fix the causes,** one commit each.
+3. **The deep cross-section on maps.** Remove its refusal once it passes.
+4. **`gpuShape` 1 in every preset** (`LIGHT_PASS`).
+5. **The material field on fed and paged canvases,** when Material
+   weathering is above 0 (Archipelago).
+6. **Maps.**
+   - 4×4 for every world: the export's self-check, and TNT heights
+     against `gpuShape=0` (the share that changes, and the largest
+     change).
+   - 8×8 through pages for Red and Moon: pages used, self-check, no seams
+     at 2×.
+   - `perf.mjs` on Red at 4×4 and 8×8 (load, drag, release, export),
+     against `merge-h9`. The target is a drag p95 near Green's.
+7. **Counts:** the engine's counts table, before and after.
+
+**Exactness and acceptance.**
+- **The study at the defaults:**
+  - every scene within mean |diff| 0.1 of `merge-h9`, or explained in
+    NOTES.md with its cause and why the new picture is right;
+  - replay mismatch 0;
+  - `regional.mjs` 0 on all 27.
+- **Green** exact against `merge-h9`, on the study and in the 4×4
+  green-2 export.
+- **Engine 0:** with `REPRO_QUERY=engine=0`, all 27 exact against
+  `merge-h8-e0`.
+- **`shapecheck`** on each world's scenes: max |Δh| at most .001 on the
+  study. On 4×4 the same, wherever the JS paths agree with each other.
+- **The gate** (`repro/gate.sh`) passes.
+
+**Done when** NOTES.md has the diagnosis, each fix with its check, the
+map checks, the measurements and the counts table.
+
+**Files:**
+- `sculpt-gpu-fields.js` and `engine-shape.wgsl`;
+- in `sculpt.js`: the shape, flow-bake, feed and paged-weather code;
+- `sculpt.py`: `LIGHT_PASS` only;
+- `sculpt-erosion.js` and `engine-weather.wgsl`, for the material field
+  on the fed path;
+- `sculpt-flow-ui.js`, only if the flow bake's planes need a hook;
+- `repro/` tools.
+- Not the draw, bake or bridge shaders, the shared shaders, the CPU
+  workers, or the JS shape engine.
+
+**Budget:**
+- Item 1 is a stop point.
+- If the budget runs short, stop once Zhon, Archipelago and Red are
+  correct with `gpuShape` on, with their presets on, and NOTES.md saying
+  what remains.
+
+**Server and guard:**
+- port 8875, CDP 9675;
+- worktree `../terraform-wt-H8b`, branch `H8b-gpu-shape`;
+- assets `$R/agent-H8b`, with `mapcheck.mjs` copied from `$R/agent-H4`;
+- baseline `$R/repro-out/merge-h9` (`merge-h8-e0` for engine 0);
+- guard `--worlds red,desert,archipelago,moon,zhon,lava,crystal,ice`,
+  with the 0.1 target above.
 
 ### H9. Every shape option on the GPU
 
