@@ -85,6 +85,29 @@ feature.
     per-world numbers. It must hold or lower the engine's counts
     ([Rules](#rules-for-the-cards)), even while the old path waits for the
     retire card.
+16. **Everything parametric; presets are only numbers.** *"I want to keep
+    the parametric and procedural controls for shape, adjustments,
+    weathering, etc and ideally every preset is just using those, so we no
+    longer pick between the preset or parametric shape, everything is just
+    parametric with modifiers like lobes, distortion, base enhancements,
+    etc. One engine, one main geology control with options, slope and
+    shape controls, etc."*
+    - **Shape:** one parametric cross-section for every kind. Each kind's
+      own curve (today's "classic", `profile` 0) becomes a preset of it,
+      and the classic-or-parametric choice goes. Modifiers apply on top:
+      outline (lobes, distortion), crest (jag, vary, taper, spurs), base
+      (bumps, apron) and surface marks.
+    - **Geology:** one main control, the rock column, with options (beds,
+      hardness, dip, folds). Every world's bands, strata, rings and layers
+      are settings of it.
+    - **Slope and weathering:** the Surface and Time controls, parametric.
+    - **A preset** (a world's or a tool's) is only values for these
+      controls. Pick-one variants (the `experiment` and `variant` settings:
+      forms, edges, surface, transition, material and others) become
+      parameters or go.
+    - **When:** during the GPU move where that is easier (Shape after H9,
+      Geology in place of the layered-rock card); the rest in the
+      [combine-or-drop pass](#combine-or-drop) after the retire card.
 
 ## The Green slice
 
@@ -339,15 +362,16 @@ From decisions 13-15:
    | Feature | What it makes | Worlds | Separate versions today |
    | --- | --- | --- | --- |
    | Materials | each material's colour, grain, relief and shine as numbers; no run-time images | all but Green | the Python preparation per world; `shine*` |
-   | Layered rock | beds, strata, bands, rings and lava layers, from the rock column | Green, Red, Desert, Archipelago, Lava | `bed*`, `band*`, `strata*`, `ring*`, `layer*`, `shelf*`, `step*` |
+   | Shape | one parametric cross-section for every kind, each kind's curve a preset of it, with outline, crest, base and surface modifiers (decision 16) | all | each kind's classic curve; `profile` 0 or 1; `hillLobes`, `moonLobes`, `baseVary` |
+   | Geology | one main control, the rock column with options: beds, strata, bands, rings and lava layers as its settings (decision 16) | Green, Red, Desert, Archipelago, Lava | `bed*`, `band*`, `strata*`, `ring*`, `layer*`, `shelf*`, `step*` |
    | Fractures | cracks, joints, facets, blocks, gullies and scratches | all | `crack*`, `joint*`, `facet*`, `block*`, `gully*`, `scratch*` |
    | Shores | shallows, shoals, beaches, banks, coast fingers and shore plates, from one coast distance field on the GPU | Green, Red, Archipelago, Lava, Crystal, Ice, Zhon | `shoal*`, `plate*`, `shore*`, `beach*`, `finger*`, `bank*`; the JS coast pass |
    | Bodies | painted bodies of one material: crystal mounds and columns, ice slabs and shelves, lava flows | Crystal, Ice, Lava | `crystal*`, `ice*`, `frost*`, `lava*` |
    | Impacts | craters, cups, ribs, folds and pockmarks in regolith | Moon; craters in Red and Crystal | `moon*`, `crater*`, `pock*` |
    | Rivers | the flow bake on the GPU | all | `sculpt-flow.js` |
 
-   Materials comes first, since every other feature draws with them. The
-   rest follow by how many worlds they serve. Two features may share a
+   Materials comes first, since every other feature draws with them, and
+   Shape follows H9. The rest follow by how many worlds they serve. Two features may share a
    card when they share most of their code.
 4. **Retire, the last card.** Delete engine 0: `sculpt-frag.wgsl`,
    `relief-bake.wgsl` and `sculpt-common.wgsl`, the CPU workers, the Python
@@ -360,6 +384,24 @@ From decisions 13-15:
 - **Mask planes.** There are 25 planes in 7 RGBA layers today; 14-19 and
   25+ are free. The data maps need more. Growing the layer count is a
   bounded change, but it costs memory per chunk on 40×40 maps.
+
+## Combine or drop
+
+After the retire card, one pass goes through every control that is left
+and combines or drops what decision 16 and the impact rule leave
+redundant. The cards add candidates here as they find them; nothing is
+deleted before the owner rules.
+
+| Candidate | Found by | Why |
+| --- | --- | --- |
+| The CPU sand model (`sculpt-sand.js`) | H8 | No world uses it |
+| URL-only shape experiments: edges not natural, forms not shouldered, `replay=full`, restrained coast | H9 | No world or scene reaches them |
+| `hillLobes` | H9 | Only one Lava scene uses it; the cross-section's terraces do the same |
+| `moonLobes` with `baseVary` and `baseBump` | H9 | The same outline noise; one shared GPU function now, one control after re-tuning Moon and Desert |
+| Shape mask writes, and per-stroke water mask choices | H9 | Near-duplicates of the Paint tool and the World panel's water options |
+| Each kind's classic curve | decision 16 | Becomes a preset of the cross-section (Shape) |
+| Pick-one variants (`experiment`, `variant`) | decision 16 | Each becomes a parameter or goes |
+| `talusAngle` (Green), `columnContrast` (green-3) | H5 | Under 5% of their class at the defaults |
 
 ## Rules for the cards
 
@@ -474,8 +516,9 @@ Each is written in full when the one before it lands.
 | H7b | Quarter levels on the GPU-fed map canvas: a scaled bake, quarter while dragging and first on load, final unchanged | Merged 31e995e (latency p95 50 ms, target 30 missed) |
 | H8 | One engine for every world: presets as data; the Time pass, feed, levels and pages for all; images bridged until Materials | Written |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Written |
-| Features | Materials, Layered rock, Fractures, Shores, Bodies, Impacts, Rivers: one card each, for every world that uses it | Not yet written |
+| Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts, Rivers: one card each, for every world that uses it | Not yet written |
 | Retire | Delete engine 0: the shared shaders, CPU workers, Python preparation, JS shape engine, and the knobs only they read | After the features |
+| Combine or drop | Every remaining control against decision 16 and the impact rule, from the candidates list | After Retire |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
 **H3, one material model (Green):**
