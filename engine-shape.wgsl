@@ -771,3 +771,38 @@ fn stampFissure(@builtin(global_invocation_id) g: vec3u) {
     maskSet(i, pl, i32(floor(b + (mw.y - b) * (sw * u.fDark) * mw.z + 0.5)));
   }
 }
+
+// H6c crystals (the pyramid form): stampCrystals(). A crystal is a segment of the host's list: centre in s0.xy, R and height in s0.zw, lean in s1.xy, its side count and
+// where its edges start (vec4 nx, ny, d per edge, after the node's mask writes) in s1.zw. Each crystal's square box limits the cells it reaches.
+@compute @workgroup_size(8, 8)
+fn stampCrystal(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var best = 0.0;
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let qx = wx - s0.x; let qy = wy - s0.y;
+    var m = 3.0e38;
+    let sides = u32(s1.z); let at = u.mwBase + u.nwrites + u32(s1.w);
+    for (var e = 0u; e < sides; e++) {
+      let ed = MW[at + e];
+      let rise = ed.z - (s1.x * ed.x + s1.y * ed.y);
+      m = min(m, (ed.z - (qx * ed.x + qy * ed.y)) / max(rise, ed.z * 0.2));
+    }
+    if (m <= 0.0) { continue; }
+    let h = min(s0.w, s0.w / (1.0 - u.cTop) * m);
+    if (h > best) { best = h; }
+  }
+  if (best <= 0.0) { return; }
+  F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
+  F[PP * cells + i] = 1.0;
+  F[PX * cells + i] = max(F[PX * cells + i], sm(0.2, 1.5, best));
+}

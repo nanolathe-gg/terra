@@ -11,7 +11,7 @@
 // rectangle; read() waits (readAsync/ready) so a bake never sees a half-written copy and the frame never waits.
 
 const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x'];
-const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10, smooth: 11, ramp: 12, crater: 13, fissure: 14};
+const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10, smooth: 11, ramp: 12, crater: 13, fissure: 14, crystal: 15};
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],
@@ -31,7 +31,7 @@ const NODE_FIELDS = [
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark'].map(k => [k, 'f'])];
+    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -127,6 +127,7 @@ export function nodeSupport(n, c) {
   if (kind === 'deep' && !c.natural) return 'restrained coast';
   // H6c: plateau, offset, lower, sand, grass.
   if (['plateau', 'offset', 'sand', 'grass'].includes(kind) && !c.edgesNatural) return `${kind} without natural edges`;
+  if (kind === 'crystal' && q.crystalForm >= .5) return 'crystal columns or bergs';
   if (kind === 'crater') {
     if (Math.round(q.spurCount) >= 1) return 'crater rim spurs';
     if (Math.round(q.rimSectors) >= 2 || Math.round(q.rimGaps) >= 1) return 'crater rim sectors or gaps';
@@ -184,7 +185,7 @@ export function prepareNode(n, geom, c) {
     return (cellNoise(f, ix, iy) * (1 - fx) + cellNoise(f, jx, iy) * fx) * (1 - fy) + (cellNoise(f, ix, jy) * (1 - fx) + cellNoise(f, jx, jy) * fx) * fy;
   };
   const macro = naturalWater || naturalPlateau, fx = macro ? F_COAST_X : F_X, fy = macro ? F_COAST_Y : F_Y;
-  const segs = [];
+  const segs = [], extra = [];
   let reads = kind === 'plateau' || kind === 'crater' ? [{x: pts[0].x, y: pts[0].y}] : [];
   const dab = (p, e, f0, f1) => segs.push({px: p.x, py: p.y, ex: (e || p).x, ey: (e || p).y, f0, f1, nx: sampleNoise(fx, p.x, p.y), ny: sampleNoise(fy, p.x, p.y)});
   let settle = false, faceSide = 1, face = [1, 0];
@@ -225,6 +226,26 @@ export function prepareNode(n, geom, c) {
       faceSide = (-sy * face[0] + sx * face[1]) < 0 ? -1 : 1;
       dab(path[0], path[1]);
     } else dab(path[0]);
+  } else if (kind === 'crystal') {
+    // crystalList() (the pyramid form): crystals scattered along the path and within the brush, each a polygon of planes that meets at the apex.
+    const rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return (x >>> 0) / 4294967296; };
+    const path = simplifyPath(pts, Math.max(1, radius * .05)), lengths = [0];
+    for (let k = 1; k < path.length; k++) lengths.push(lengths[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
+    const total = lengths[lengths.length - 1], count = Math.max(1, Math.round(q.crystalCount * (1 + total / Math.max(8, radius * 1.2))));
+    const variation = q.crystalVariation, scale = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1, crystalSize = q.crystalSize * scale;
+    for (let k = 0; k < count; k++) {
+      const along = rnd(k, 1) * total; let j = 1; while (j < path.length - 1 && lengths[j] < along) j++;
+      const a = path[j - 1], b = path[j] || a, f = lengths[j] > lengths[j - 1] ? (along - lengths[j - 1]) / (lengths[j] - lengths[j - 1]) : 0;
+      const spread = Math.pow(rnd(k, 2), .8), angle = rnd(k, 3) * Math.PI * 2 + turn;
+      const cx = a.x + (b.x - a.x) * f + Math.cos(angle) * spread * radius, cy = a.y + (b.y - a.y) * f + Math.sin(angle) * spread * radius;
+      const width = crystalSize * (1 + variation * (rnd(k, 4) - .5) * 1.2) * (1 - .4 * spread);
+      const height = q.amount * (1 - .45 * spread) * (1 + variation * (rnd(k, 5) - .5)) * Math.min(1.3, width / (Math.max(4, q.crystalSize) * scale));
+      const sides = clamp(Math.round(q.crystalSides + variation * (rnd(k, 6) - .5) * 2.4), 3, 12), R = width / 2, lean = q.crystalLean * R * .75 * rnd(k, 7), leanAngle = rnd(k, 8) * Math.PI * 2 + turn;
+      const edgeBase = extra.length;
+      for (let e = 0; e < sides; e++) { const t = turn + rnd(k, 9) * Math.PI * 2 + (e + .5) * Math.PI * 2 / sides; extra.push([Math.cos(t), Math.sin(t), R * Math.cos(Math.PI / sides) * (1 + q.rough * .35 * (rnd(k, 20 + e) - .5)), 0]); }
+      const box = [Math.max(0, Math.floor((cx - R) / spacing)), Math.max(0, Math.floor((cy - R) / spacing)), Math.min(grid - 1, Math.ceil((cx + R) / spacing)), Math.min(grid - 1, Math.ceil((cy + R) / spacing))];
+      segs.push({px: cx, py: cy, ex: R, ey: Math.max(1, height), f0: [Math.cos(leanAngle) * lean, Math.sin(leanAngle) * lean], f1: [sides, edgeBase], nx: 0, ny: 0, box});
+    }
   } else if (kind === 'fissure') {
     for (const pc of fissurePieces(fis, simplifyPath(pts, Math.max(1.5, fis.hw)), q, seed, radius)) segs.push({px: pc.a.x, py: pc.a.y, ex: (pc.b || pc.a).x, ey: (pc.b || pc.a).y, f0: [pc.r0, pc.r1], f1: [pc.h0, pc.h1], nx: 0, ny: 0});
   } else if (kind === 'ramp') {
@@ -261,19 +282,19 @@ export function prepareNode(n, geom, c) {
   // The integer box of every capsule, as dab() clamps it; the union is the node's region.
   let region = null;
   for (const s of segs) {
-    s.box = [clamp(Math.floor((Math.min(s.px, s.ex) - extent) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(s.py, s.ey) - extent) / spacing), 0, grid - 1),
+    s.box ??= [clamp(Math.floor((Math.min(s.px, s.ex) - extent) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(s.py, s.ey) - extent) / spacing), 0, grid - 1),
       clamp(Math.ceil((Math.max(s.px, s.ex) + extent) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(s.py, s.ey) + extent) / spacing), 0, grid - 1)];
     region = !region ? {x0: s.box[0], y0: s.box[1], x1: s.box[2], y1: s.box[3]} : {x0: Math.min(region.x0, s.box[0]), y0: Math.min(region.y0, s.box[1]), x1: Math.max(region.x1, s.box[2]), y1: Math.max(region.y1, s.box[3])};
   }
   // Mask writes: paint's channel, erase's clearing of planes 0..13; each [plane, target, gain, flat].
   const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : [];
-  const main = {op: 'stamp', kind: kcode, segs, region, settle, entry: kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t]) => [p, t, 1, 0]),
+  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? 'stampCrystal' : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t]) => [p, t, 1, 0]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
       shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: c.coreEdge, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
-      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: 3.5 * 2 ** ((.5 - q.softness) * 1.5)}};
+      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: 3.5 * 2 ** ((.5 - q.softness) * 1.5)}};
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
   const count = Math.round(q.craterlets || 0), centre = pts[pts.length >> 1], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };
@@ -322,7 +343,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;
@@ -385,6 +406,8 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       segCount += p.segs.length;
       for (const w of p.writes) mwData.push(...w);
       mwCount += p.writes.length;
+      for (const e of p.extra || []) mwData.push(...e);
+      mwCount += (p.extra || []).length;
       const op = {p, node, reads: []};
       for (const q of p.reads || []) op.reads.push({x: q.x, y: q.y, idx: nReads++});
       if (op.reads.length) node.preIdx = op.reads[0].idx;

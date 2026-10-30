@@ -1,0 +1,10 @@
+{"biome": "green", "source": {"note": "authored for shapecheck (H6c): crystal clusters (pyramid form) on flat ground, on a hill and over water, a one-point and a long stroke"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,300],[420,260],[560,330],[600,430]], {"card": {"diameter": 380, "amount": 70, "roughness": 25}}],
+  ["deep", [[80,760],[300,820],[520,880]], {"card": {"diameter": 260, "roughness": 35, "shelves": 60}}],
+  ["crystal", [[420,330]], {"card": {"diameter": 200, "amount": 40}}],
+  ["crystal", [[150,500],[260,540],[380,520],[480,560]], {"card": {"diameter": 160, "amount": 30}}],
+  ["crystal", [[300,780],[420,800]], {"card": {"diameter": 140, "amount": 25}}],
+  ["crystal", [[800,300]], {"card": {"diameter": 90, "amount": 20, "roughness": 60}}]
+ ]}
