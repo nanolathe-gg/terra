@@ -4484,6 +4484,89 @@ Read H7's, H6's and H6b's Done and Still open lists above, and
 - baseline `$R/repro-out/merge-h6b`;
 - guard `--worlds none`.
 
+**Done (merged as 31e995e; EXPERIMENTS row 149; notes in
+`$R/agent-H7b/NOTES.md`).** No final pixel changed.
+- **The quarter bake (item 1).**
+  - **One new uniform,** `chunkScale` (world pixels per output texel),
+    in `engine-common.wgsl`. At 1 every term reduces to the old lookup.
+  - **Relief bake:** fields texel j is the bake at
+    `origin + 2j + 0.5`, the centre of its 2×2 block; `bakedFields`
+    reads it with the same mapping.
+  - **Draw:** the viewport is halved, clip space stays in world units,
+    and the fragment scales its screen position back.
+  - **What stays at final:** the shadow, occlusion and cavity taps stay
+    in world units, and the mesh is the final mesh.
+  - **Materials:** `uMaterialFoot` is multiplied by the scale, so H4's
+    footprint mip 1 is used, and the plain's 16 tiles average 2×2.
+  - **1-px marks** are sampled once per 2×2 block, not averaged, so they
+    sparkle.
+  - **The feed lattice and the Time pass** are unchanged.
+  - **Quarter against final downsampled 2×2,** mean / p95 luma
+    difference: face 9.9 / 35.6, plain 3.7 / 9.8, hills 5.5 / 16.7.
+    By eye it is the same picture, blockier. The sheets are
+    `$R/agent-H7b/out/lv2/{face,plain,hills}-side.png`.
+  - **GPU cost per chunk,** quarter against final: relief bake 4.7
+    against 15.6 ms, draw 3.2 against 7.6 ms.
+- **The schedule (item 2).**
+  - **During a drag,** dirty chunks rebake at quarter. On release, the
+    visible chunks bake final, then the margin.
+  - **Query switches:** `levels` (default 1), `quarterFirst` (off) and
+    `levelsOverlay=1`, which marks each chunk Q or F.
+  - **The painted-mask flags** are expanded on the GPU and copied into
+    the uniforms in the same submission. This removes a mapped read from
+    every fed bake, about 2 ms.
+  - **Quarter-first on load** shows every visible chunk in about 470 ms
+    against 630 ms, but puts final 15% later (759 / 722 / 727 against
+    658 / 621 / 634 ms). That is past the card's 10%, so load and scroll
+    stay final-first.
+  - **During the 2b hold,** quarter images stay on screen where
+    `levels=0` shows overview holes.
+- **Performance** (4×4 green-2; the agent's alternating runs at load
+  6.6-8.9, and mine on 8801 at load 9.6):
+
+  | | H6b | H7b `levels=0` | H7b `levels=1` | mine | Target |
+  | --- | --- | --- | --- | --- | --- |
+  | Load, visible final | 620 ms | 621-643 | 569-585 | 660 | ≤ 680 |
+  | After release, visible final | 614 ms | 594-636 | 531-551 | 586 | ≤ 670 |
+  | Drag rAF p95 | 16.7 | 16.7-16.8 | 16.7 | 16.8 | < 33 |
+  | Move to first picture, p50 / p95 | 49 / 53 | 46-47 / 50-81 | 45 / 50-53 | 47 / 57 | p95 ≤ 30 |
+  | Scroll p95 | 16.7 | 16.7-16.8 | 16.7-16.8 | 16.8 | unchanged |
+  | Export | 1.61 s | 1.58 s | 1.56-1.59 s | 1.60 s | no slower |
+
+  With `levels=1` every move updates all three of its dirty chunks,
+  where `levels=0` updates one: 2.7 times the chunk updates a second.
+- **Memory.**
+  - A cached image is 0.25 MiB at quarter, against 1.0 MiB at final.
+  - The fields texture is 4.2 against 16.8 MB.
+  - Counted GPU stays 205 MB steady, with a peak of 359-398 MB of 512.
+- **Exactness** (the agent's checks, then mine on 8801):
+  - the 27 study scenes are exact against `merge-h6b` and equal the
+    agent's renders;
+  - the 4×4 exports at `levels` 1 and 0 are byte-identical to
+    `H2Check8801x62959` apart from the name;
+  - the 1× view differs only in the status text;
+  - the minimap equals `levels=0` after load, after a stroke and after a
+    node move;
+  - `regional.mjs` finds 0 on all 27 scenes;
+  - there are no console errors.
+
+**Still open:**
+- **The latency target is missed: p95 50-53 ms against 30.** I accepted
+  this, a decision made without the owner. The test harness delivers a
+  move about 13-15 ms after its mark, and a quarter bake is about 16 ms
+  (3 ms of JS, then the GPU), so 30 ms would need a bake of about 6 ms.
+  Untried:
+  - a cheaper draw while dragging;
+  - a coarser mesh at quarter;
+  - reusing chunk textures between bakes;
+  - partial-chunk bakes, which the 204-px shadow apron limits.
+- **A gesture's first move rebakes every visible chunk** at quarter, not
+  only the dirty ones (`levels=0` does the same at final). This is not
+  traced. A guess: `cancelWeather` bumps `weatherJob`, which is part of
+  `api.revision()`.
+- **The rest of the map at quarter when idle** is not built.
+- **Quarter 1-px marks sparkle.**
+
 ### H5b. Large maps on the GPU, end to end (Green)
 
 > **Owner, 2026-10-29:** "Let's do h7 quarter levels, then the large map
