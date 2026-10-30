@@ -343,7 +343,7 @@ export class TerrainRenderer {
     if(body!==fringe)body.close();fringe.close();
     }
     this.i('uBeach',Boolean(this.config.textures.beach));
-    this.i('uBridged',this.bridge);
+    if(this.engine)this.i('uBridged',this.bridge);
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);

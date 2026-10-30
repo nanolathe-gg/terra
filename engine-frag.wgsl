@@ -283,7 +283,7 @@ fn fracturedSource(pixel: vec2f) -> vec3f { return genColor(3, pixel); }
 const MM_PLACE = 156u;
 fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
 struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32, deposits: f32, vegetation: f32 }
-fn greenPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32, painted: vec4f) -> Place {
+fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32, painted: vec4f) -> Place {
     var out: Place;
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
     let r6 = pr(6u); let r7 = pr(7u); let r8 = pr(8u); let r9 = pr(9u);
@@ -1396,8 +1396,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
         rock = rockFlat + (rock - rockFlat) * u.rockDetail;
     }
-    // H3 item 4: one placement function (greenPlace); its thresholds are rows of materials/green.json.
-    let place = greenPlace(p, h, g, broad, slope, n, weather, route, painted);
+    // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
+    let place = landPlace(p, h, g, broad, slope, n, weather, route, painted);
     var exposed = place.exposed;
     // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
     let timeMaps = timeMapsAt(p);
