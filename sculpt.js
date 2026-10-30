@@ -4332,11 +4332,12 @@ window.sculptDebug = {coastCheck,shapeCompare,shapeLevel,shape:() => ({pending:s
   // masks: per plane [sum, non-zero cells], to compare channels across a save and load; sketch and loadSketch round-trip a recipe.
   masks: () => maskPlanes.map(a => { let sum=0,count=0; for (let i=0;i<a.length;i++) if (a[i]) { sum+=a[i]; count++; } return [sum,count]; }), sketch: () => JSON.parse(JSON.stringify(sketch())), loadSketch: s => { loadSketch(s); }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get biome() { return config.biomeId; }, get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 // H5b: the paged shape planes against the whole-map engine's, over the whole map (4x4 with gpuPages=force): max |d| per plane and the mask steps.
-window.sculptDebug.pagedShapeCompare=async () => {
+// H10: an optional square rect compares a window (a whole 8x8 map is too large for one readback); the pages are read over the same rect.
+window.sculptDebug.pagedShapeCompare=async rect => {
   const eng=await createShapeEngine({device:renderer.device,grid:worldGrid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
-  const out=await eng.run(nodes.slice(),shapeContext(),null),G=worldGrid;
+  const out=await eng.run(nodes.slice(),shapeContext(),rect||null),G=rect?rect.x1-rect.x0+1:worldGrid;
   const a={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5],masks:out.masks};
-  const rp=await regionalFields.readRect({x0:0,y0:0,x1:G-1,y1:G-1},{weather:false});
+  const rp=await regionalFields.readRect(rect||{x0:0,y0:0,x1:G-1,y1:G-1},{weather:false});
   const b={h:rp.fields.h,p:rp.fields.p,r:rp.fields.r,c:rp.fields.c,v:rp.fields.v,x:rp.fields.x,masks:MASK_KEYS.map(k => rp.fields[k])};
   eng.destroy();
   const cmp=comparePlanes(a,b,G,MASK_KEYS);
