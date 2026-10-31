@@ -440,7 +440,8 @@ From decisions 13-21, in three phases.
 After the retire card, one pass goes through every control that is left
 and combines or drops what decision 16 and the impact rule leave
 redundant. The cards add candidates here as they find them; nothing is
-deleted before the owner rules.
+deleted before the owner rules. `docs/audit/controls.csv` is the evidence
+for each control as of c4b1b80; it goes stale as cards delete knobs.
 
 | Candidate | Found by | Why |
 | --- | --- | --- |
@@ -448,6 +449,7 @@ deleted before the owner rules.
 | The River and Source tools and the flow bake | owner | No retail world uses them. **Drop (owner, decision 19; H12)** |
 | URL-only shape experiments: edges not natural, forms not shouldered, `replay=full`, restrained coast | H9 | No world or scene reaches them. **Delete (owner, decision 17; H12)** |
 | `hillLobes` | H9 | Only one Lava scene uses it; the cross-section's terraces do the same. **Drop (owner, decision 17; H12)** |
+| `sandReach`, `windStrength`, `sandPatchy`, `sandTail`; the fringe texture selector; broad crevice darkening | audit (`docs/audit/TOOL_AUDIT.md`) | Disconnected or ineffective, or left off since experiment 4. Hidden from the UI. **Owner merged the audit, 2026-10-31.** Their keys go in the pass below, with no compatibility reading (decision 18) |
 | Dab fingers and the ribs path | H10 | Unused; the coast fingers do the same. **Dropped (owner, decision 20; H10)** |
 | Plate material 0 (plain floes) | H10 | Unused; slabs and frost replaced it. **Dropped (owner, decision 20; H10)** |
 | Coast layer style 2 (mounds) | H10 | Unused. **Dropped (owner, decision 20; H10)** |
@@ -581,8 +583,10 @@ Each is written in full when the one before it lands.
 | H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Merged bfabbab (groups 2-8) and e08ebd7 (H12b) |
 | H12b | Retire the study (decision 21): scenes render on a map, `/sculpt` opens a map; delete the study, the JS shape engine and the CPU draw; errors surface; the simplification report | Merged e08ebd7 (Lava and Ice 8×8 over the 512 MB GPU budget open) |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Merged a7c2256 (deep cross-section and the map-canvas gaps are H8b; `hillLobes` on JS) |
-| Features | Materials, Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path | Not yet written |
+| Features | Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path. Materials is H14 | Not yet written |
 | Combine or drop | Every remaining control against decision 16 and the impact rule, from the candidates list | After Retire |
+| H13 | GPU memory on 8×8 maps: Lava and Ice within the default budget | Next |
+| H14 | Materials: every world's images become numbers, with water, noise and the palette; the Python preparation goes | Next |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
 **H3, one material model (Green):**

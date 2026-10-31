@@ -5993,6 +5993,112 @@ GPU.
   the study (about lines 206, 312 and 455); `perf.mjs` keeps dead `isMap`
   branches.
 
+### H13. GPU memory on 8×8 maps
+
+> **Owner, 2026-10-31:** go, as the small card before phase 2.
+
+Lava and Ice 8×8 at the default `gpuMB` 512 raise "chunk needs 537 MB (Ice
+545 MB) of GPU memory; use chunks of 256 px or smaller". The picture
+finishes, and the 8×8 GPU peak is 540-615 MB. Raising the default is not
+the fix.
+
+**A lead, to verify first.** `sculpt-canvas.js` fixes the chunk size once,
+while `recommendedChunkSize` is recomputed on every `setBudget` as the
+reserve (cache and copies) grows. `allocate()` compares `required`, which
+includes `reservedBytes`, with the whole budget and throws when the
+canonical chunk no longer fits. That the picture finishes suggests the next
+round evicts and retries.
+
+**Deliver,** one commit each:
+1. Log `estimate()`'s parts at the throw (fixed, reserved, field, input,
+   mesh, output). Say why Lava and Ice cross and Green does not.
+2. Make the first allocation do what the recovery does: reserve the
+   canonical chunk's working set in the eviction threshold, or evict before
+   allocating. No hardcoded layer counts; Materials will change them.
+3. `smoke.mjs --page8` takes a world list, so it can run Lava and Ice.
+
+**Acceptance:** 8×8 Lava and Ice at the default budget with a clean console
+and a GPU peak within the budget; Green 8×8 unchanged; the 27 scenes 0.00
+against `main-ab9a80f`; `smoke.mjs --page8` clean.
+
+**Server and guard:** port 8879, CDP 9679; worktree `../terraform-wt-H13`,
+branch `H13-gpu-budget`; assets `$R/agent-H13`. Files:
+`sculpt-canvas.js`, `sculpt-chunk-renderer.js`, `repro/smoke.mjs`.
+
+### H14. Materials: every world from numbers
+
+> **Owner, 2026-10-29:** "we should codify the retail information in some
+> way that no longer requires it when running to keep things simple and
+> allow for easy cloud development."
+>
+> **Owner, 2026-10-31:** go, Materials first of the phase 2 cards.
+
+**The rule.** Every image the engine reads becomes a generated layer or a
+uniform, made at startup from committed numbers. The bridge's *logic*
+stays, gated as now, and reads `genColor` layers that are now made from
+numbers: margins, beach, slate, transition. Shores, Bodies and Geology
+delete that logic later. This card does not touch placement or knobs,
+except where a knob only described an image.
+
+**What is there today.**
+- `materials/green.json` holds Green's four land materials (ramp, bands,
+  tint, zq), its `ground` tile data and its placement rows.
+  `engine-materials.wgsl` makes them at startup, 512 px and periodic with
+  seven mip levels, in about 10 ms.
+- The other eight bridge 28 prepared images into the same array
+  (`bridgeCopy`, `BRIDGE_LAYERS`): 0 slope grass, 1 rock, 2 weathered,
+  3 fractured, 4 fringe, 5 transition body, 6 beach, 7 mineral ring. Their
+  placement rows are built from their knobs.
+- All nine still read images for water (`water`, `waterMid`,
+  `waterShallow`), `noise*`, `fractures` and `palette`. Six read
+  `groundTiles`.
+- `config.json` in each `assets-*` holds measured numbers (`material`,
+  `water`) that are in no committed file.
+
+**Deliver,** one commit per step and per world:
+1. **Inventory.** For each world and each image: its role, whether the
+   engine path reads it at all, and what replaces it. Images nothing reads
+   go at once.
+2. **The pipeline, Moon as the pilot.** `measure/material_numbers.py`
+   writes `materials/<world>.json` in `green.json`'s layout, with the extra
+   entries a world needs (fringe, body, beach, ring, ground tiles, the
+   `material` and `water` numbers from `config.json`). `makeMaterials` makes
+   N layers in table order for any world, and `MATERIAL_TABLES` lists the
+   world. Moon's three windows are judged, and the card **stops for the
+   coordinator's review** of the look.
+3. **The section worlds:** Crystal, Ice, Lava, Zhon. One preparation made
+   them, so one model should cover them.
+4. **Red and Desert** (the structured family), **then Archipelago** (fringe,
+   ring, body). H4 found that the noise model speckles where art has
+   facets; use what H4 built for rock.
+5. **Water** as numbers, colour by depth (`measure/water_fit.py`), Green
+   too. **Noise** made at startup. **The palette** as a table with its
+   lookup built at startup. `fractures.png` is ours, not retail: move it to
+   startup if that is cheap, otherwise list it for the Fractures card.
+6. **Delete:** `bridgeCopy`, `uBridged`, `BRIDGE_LAYERS`, the image URLs in
+   the config, the Python material preparation, and the `shine*` keys that
+   move into the tables. Update `sculpt-control-schema.js`, which is now
+   the knob registry the UI reads. A server with no `assets-*` world images
+   still draws every world.
+
+**Where a material can't be made from numbers,** say which, measure the
+gap, show it side by side and keep its image until the coordinator rules.
+The gaps are counted in the Done list.
+
+**Acceptance:**
+- Each world on its three retail windows, by eye at 1× and 2× and by
+  `stats.py` (rule 5). Zhon's reference is third-party, so it is judged by
+  eye. A similar look is enough (decision 17). A mark newly outside retail
+  by a boundary is reported, not chased.
+- `regional.mjs` 0 on all 27; `smoke.mjs` clean; exports work.
+- Load time and memory reported per world against `main-ab9a80f`.
+- Counts: bridged images 28 → 0, Python preparation 3,044 lines → 0, or the
+  listed gaps.
+
+**Server and guard:** port 8880, CDP 9680; worktree `../terraform-wt-H14`,
+branch `H14-materials`; assets `$R/agent-H14`. H13 merges first; merge main
+before landing.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
