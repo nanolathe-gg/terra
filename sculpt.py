@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
+    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -789,6 +789,7 @@ def lighten_red_shallows(config, assets):
 # H8, H14: the worlds whose land materials are numbers. The engine makes their layers from the table; every other world bridges its
 # prepared images. A table also holds the world's `material` and `water` blocks, which the config no longer carries.
 MATERIAL_TABLES = {'green': '/materials/green.json'}
+SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
 # The images a table replaces: the page never fetches them, so the config does not name them.
 TABLE_IMAGES = ('grass', 'groundTiles', 'slopeGrass', 'rock', 'hillRock', 'rockWeathered', 'rockFractured')
 

@@ -15,6 +15,9 @@ stay outside Git.
 | `slope_texture.py` | Slope luminance, dark share, band-pass energy, dark-mark sizes and edge crispness, relative to level ground |
 | `crack_sweep.py` | Renders example scenes under knob overrides (URL parameters) and runs both metrics |
 | `crack_sheet.py` | Same-window crop sheets across renders, optionally with detected lines overlaid |
+| `material_numbers.py` | A world's prepared images as `materials/<world>.json`: per-material ramp, tint and octave bands, the plain's tiles, and the world's `material` and `water` numbers (cards H3, H14) |
+| `material_fit.py` | Fits the table's `model` (band amplitudes, rank quantiles) to the measured bands by rendering swatches of the engine's own startup pass (`swatch.mjs`) |
+| `material_swatches.py` | Each prepared image beside the engine's generated layer, at 1x, 2x and quarter resolution, with the numbers |
 
 Renders with heights come from `capture/capture.mjs` scenes that set
 `"heights": true`. Pass `ours <label> <stem>...` (stems without `.png`),

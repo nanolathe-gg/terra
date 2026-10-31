@@ -1,12 +1,12 @@
-"""Fit the band amplitudes of Green's material model to the measured bands (card H3, item 3).
+"""Fit the band amplitudes of a world's material model to the measured bands (cards H3 and H14).
 
-A dev tool. It renders swatches from material-model.wgsl (measure/swatch.mjs, headless Chrome),
+A dev tool. It renders swatches from engine-materials.wgsl (measure/swatch.mjs, headless Chrome),
 measures their luma bands as material_numbers.py measures the prepared images, and moves each
 band's amplitude by the ratio of the measured band to the swatch's, then rescales z to unit
 variance (the ramp supplies the histogram only when z is a unit normal). It writes the `model`
-rows of materials/green.json.
+rows of materials/<world>.json (the materials named in its `order`, once each).
 
-  material_fit.py <materials/green.json> <work-dir> [--rounds 6] [--cdp 9663]
+  material_fit.py <materials/<world>.json> <work-dir> [--rounds 6] [--cdp 9663]
 """
 import json
 import subprocess
@@ -19,7 +19,8 @@ from scipy import ndimage as ndi
 HERE = Path(__file__).resolve().parent
 SIGMAS = [0.0] + [0.7 * 2 ** k for k in range(7)]
 LUMA = np.array([.299, .587, .114])
-ORDER = ['slopeGrass', 'rock', 'weathered', 'fractured']
+ORDER = []          # the table's materials, each once, in first-layer order (set in main)
+LAYER = {}          # a material's first layer, whose noise salt the engine used
 
 
 def lattice_variance(cell_x, cell_y):
@@ -49,7 +50,7 @@ def u32(x):
 
 
 def hash2(ix, iy, salt):
-    # mmHash of material-model.wgsl, in 32-bit arithmetic
+    # mmHash of engine-materials.wgsl, in 32-bit arithmetic
     n = u32(u32(ix) * np.uint64(374761393) + u32(iy) * np.uint64(668265263) + np.uint64(salt) * np.uint64(2246822519))
     n = u32(u32(n ^ (n >> np.uint64(13))) * np.uint64(1274126177))
     n = u32(u32(n ^ (n >> np.uint64(16))) * np.uint64(2246822519))
@@ -58,8 +59,7 @@ def hash2(ix, iy, salt):
 
 def z_quantiles(m, size=1024):
     """The model's z over a size x size field (mirror of mmColor's noise sum at foot 1), at MM_P."""
-    mid = ORDER.index(next(k for k, v in TABLE_MODEL.items() if v is m))
-    salt = mid * 16 + 1
+    salt = LAYER[next(k for k, v in TABLE_MODEL.items() if v is m)] * 16 + 1
     y, x = np.mgrid[0:size, 0:size].astype(np.float64) + .5
     a = m['amps']
     z = a[0] * (hash2(np.floor(x).astype(np.int64), np.floor(y).astype(np.int64), salt) * 2 - 1)
@@ -101,7 +101,10 @@ def main():
             del args[args.index(flag):args.index(flag) + 2]
     path, work = Path(args[0]), Path(args[1])
     table = json.loads(path.read_text())
-    table['order'] = ORDER
+    for layer, name in enumerate(table['order']):
+        if name not in LAYER:
+            LAYER[name] = layer
+            ORDER.append(name)
     v_lat = lattice_variance(2, 2)
     var = np.array([1 / 3] + [v_lat] * 6)
     model = table.get('model', {})
