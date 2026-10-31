@@ -147,6 +147,19 @@ feature.
     always works on a map, `/sculpt` opens a default map, and the test
     scenes render as a window on a map. One stroke path, one draw path.
 
+22. **Retail is the gold standard.** *"remember the retail shots are the gold
+    standard, and if our noise or other things change before/after but don't
+    substantially move us away from retail then it's fine. We still have some
+    refinement to do to perfectly match retail. You have freedom to make some
+    changes and have the outputs change while still trying to work toward the
+    retail biome looks."* (2026-10-31)
+    - A card is judged against each world's retail windows. A difference from
+      the last merge says what moved, not whether it is acceptable.
+    - A card may change its output when that keeps or improves the match to
+      retail, without asking. Steps that only move code keep 0.00 as their check.
+    - The retail palette is fine in the repo as a table
+      (`materials/palette.json`).
+
 ## The Green slice
 
 Green gets its own engine: new shaders and GPU passes for every stage,
