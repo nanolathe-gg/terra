@@ -1033,10 +1033,10 @@ def main():
     biomes = [b for b in biomes if b in configs]
     # Any world may take another's ground pattern (World panel); the
     # pattern's mean is replaced by the world's ground colour.
-    # A quilted plain (a table without tile data, or the sampled image) is not a pattern to lend: only tiles move between worlds.
+    # A table world with no tile data (a quilted plain generated as a layer) has no pattern to lend; every other world does.
     patterns = {b: {'name': BIOME_NAMES[b], 'grass': configs[b]['textures'].get('grass'),
                     'groundTiles': configs[b]['textures'].get('groundTiles'), 'groundTable': configs[b].get('materialTable')} for b in biomes
-                if configs[b].get('materialTable') and 'ground' in json.loads((HERE / configs[b]['materialTable'].lstrip('/')).read_text()) or configs[b]['textures'].get('groundTiles')}
+                if not configs[b].get('materialTable') or 'ground' in json.loads((HERE / configs[b]['materialTable'].lstrip('/')).read_text())}
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns

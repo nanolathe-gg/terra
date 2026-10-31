@@ -19,7 +19,7 @@ if '--cdp' in args:
 path = Path(args[0])
 table = json.loads(path.read_text())
 # A fixed scratch folder per port (the swatch page's Chrome profile stays in it and is reused), not a folder removed afterwards.
-out = Path('/private/tmp/auto-zq-' + cdp)
+out = Path('/private/tmp/nanolathe-map-editor/agent-H14c/auto-zq-' + cdp)
 if True:
     r = subprocess.run(['node', str(HERE / 'swatch.mjs'), str(path), str(out), '--auto-zq', '--cdp', cdp], capture_output=True, text=True)
     if r.returncode:
