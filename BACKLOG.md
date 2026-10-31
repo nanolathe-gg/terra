@@ -6340,10 +6340,18 @@ dithered per pixel. A rank ramp ties hue to luma and cannot make that.
 - **Archipelago's plain is white noise,** so its failure is something else.
 
 **Deliver,** one commit each:
-1. **A dither step at the end of the generator.** The ramp stays a smooth
-   colour; a mask picks the final colour per pixel between palette colours.
-   A number at 0 leaves a material as it is. Two forms, in this order:
-   - **The mask first.** Each ramp bin holds two colours and a share,
+1. **One dither.** The ramp stays a smooth colour, and a threshold picks the
+   final colour per pixel between palette colours. A number at 0 leaves a
+   material as it is. Three forms, in this order, the first that reads right:
+   - **The draw's palette stage first.** `palettePair` in `engine-frag.wgsl`
+     already takes a smooth colour to two palette entries by a threshold
+     (experiment 62, on for Desert). It runs after the light, as the art's
+     reduction did, and it needs no generator step, so there is one dither
+     and not two. Try a smooth ramp with `paletteMix` on. Its threshold is an
+     ordered 4×4 in screen pixels, so check how it reads against the art's
+     signature and whether it stays on the map in a pan. Experiment 62 found
+     that a noise threshold clumped into speckles there.
+   - **The mask in the generator.** Each ramp bin holds two colours and a share,
      measured by splitting the bin along its chroma axis, and a tiled
      blue-noise threshold picks between them. It is parallel and cheap. It
      gets the even spread and misses the art's pixel texture (the table).
