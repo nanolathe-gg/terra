@@ -6379,6 +6379,109 @@ read true: a box mean of a dithered layer should now give the smooth colour.
 **Server and guard:** port 8883, CDP 9683; worktree `../terraform-wt-H14d`,
 branch `H14d-dither`; assets `$R/agent-H14d`.
 
+**Done (merged as b136359; EXPERIMENTS row 162; notes in
+`$R/agent-H14d/NOTES.md`).** All nine worlds draw from numbers, and nothing
+reads the image bridge.
+- **The dither is real error diffusion, in the generator.** A material with
+  `dither` above 0 keeps its ramp as the smooth colour, measured on bins of the
+  blurred image (`material_numbers.py --dither`). `makeDither` then reduces each
+  pixel to the nearest of the material's own colours, up to 16 (rows 46-61), by
+  serpentine Floyd-Steinberg on rgb. Levels above 0 are box means. Row 62 is a
+  lattice of dark dots, used by Red. A `dither` of 0 takes the old path.
+- **The other forms failed first.** The draw's palette stage, tried first on
+  Zhon, gives a regular checker of two entries (lag 1 -.66, (1,1) +.57 against
+  the art's +.25), and the beach is a mix of three or four colours. One colour
+  pair per ramp bin loses the pink and cream. The blue-noise tile was not built.
+- **Blocks.** One invocation runs each 32 px square, and error does not cross
+  its edge, so the layer wraps and blocks run in parallel. The edge is measurable:
+  the chroma step across it is .57 to .70 of the step elsewhere, about 1 in the
+  art. It is not visible, even low-passed and stretched fourfold
+  (`$R/agent-H14d/grid/grid-red.png`).
+- **Archipelago's cause was not the guess.** The transition-body flag was set
+  only in the image bridge, so a table world skipped the shared transition (ring,
+  body, contours) in `bridgeMargins`. It is a world flag now. Swapping each
+  generated layer into the bridge changed nothing structural.
+- **Coordinator's review.** The agent dithered Archipelago's slope and plain, but
+  no layer of that art has hue dither (chroma lag 1 +.01 to +.24), and the dither
+  took the plain's grain and the slope's flecks. They are undithered now, with
+  the lit slope from `measure/lit-tables/archipelago-slope.json`.
+- **A tool fault.** `material_numbers.py` wrote tile data for Crystal, and a table
+  with `ground` draws the tiles, so no quilt change showed. It now writes tiles
+  only when a world's default is not `ground=texture`.
+
+- **The worlds,** by eye at 1× and 2× against retail and by `stats.py`. Mean
+  |diff| is against `merge-h14c`, scenes 1, 2 and 3; dithered pixels never match
+  bits, so these are large by nature. No mark is newly outside retail:
+
+  | World | Mean \|diff\| | Marks outside | Reads |
+  | --- | --- | --- | --- |
+  | Zhon | 1.64, 1.05, 0.45 | 16 -> 16 | The beach's pink speckle is gone; the sand is yellower than the third-party reference |
+  | Red | 17.46, 16.63, 7.98 | 13 -> 10 | Dots, tone and dither as the old image; the speckle a little less contrasty |
+  | Crystal | 20.19, 11.09, 19.20 | 4 -> 2 | Direction, tone and contrast close |
+  | Archipelago | 7.13, 20.01, 20.23 | 22 -> 22 | Ring, outlines and plain right; the interior is olive as in retail, with lit flecks |
+
+- **Cost.** A default load now fetches 5 images on every world (noise, water,
+  shallow water, palette, fractures) and no land image; feature sprites come on
+  top. Final in view, ms, before and after: Red 667 -> 615, Crystal 557 -> 547,
+  Archipelago 314 -> 308, Zhon 664 -> 652, and Ice, which has no dither, 416 ->
+  405, so the second pipeline costs nothing measurable. A world's layers take 3.8
+  to 12.7 ms warm and 15 to 31 ms cold. By formula, not measured, the array is
+  1.4 MB a layer: 7 MB on Red and Crystal, 12.6 MB on Archipelago, against 11.2 on
+  the bridge.
+- **Lost:** the Ground pattern list goes from nine worlds to six. Red, Crystal
+  and Archipelago have no tile data to lend, because their plains are quilts.
+  A candidate for the combine-or-drop pass.
+- **Coordinator's merge checks:** only the four moved worlds changed against
+  `merge-h14c`, the other 15 scenes are 0.00, and all 27 consoles are clean;
+  `regional.mjs` 0 on zhon-1, red-1, crystal-1 and all three of Archipelago's;
+  smoke clean on nine worlds, exports included, and on 8×8 Green, Lava, Ice, Zhon,
+  Red and Archipelago; `ground=texture` and `tiles` render on Crystal and Red; 22
+  of 22 tests pass; the gate passes.
+
+**Still open:** Crystal's streaks are straighter than the art's, with no bright
+flecks. Red's slope facets are blocky. Zhon's raised dunes keep some pink, since
+only its beach is dithered.
+
+### H14e. Water, noise and the palette; the bridge goes
+
+H14's steps 5 and 6. Every world is on a table, so the image bridge is dead
+code. The deletions come first because they move no scene.
+
+**Deliver,** one commit each:
+1. **Delete the image bridge,** 27 scenes 0.00: `this.bridge`, `bridgeCopy`,
+   `uBridged`, `BRIDGE_LAYERS`, the fringe, body and beach fetches,
+   `bridgeGrassImage`. The logic in `engine-bridge.wgsl` (margins, beach, slate,
+   transition) stays for Shores, Bodies and Geology. What it reads from the
+   config's image names (`uBeach`, the transition flag, the fringe flag) comes
+   from the table's `order`.
+2. **Water** as numbers, Green too. Water and shallow water may simply be two
+   more materials in the table, which on Lava are the molten surface.
+   `measure/water_fit.py` is there for colour by depth.
+3. **Noise** made at startup.
+4. **The palette** as a table with its lookup built at startup. Only Desert has
+   real pair rows: other worlds' pair lookup spans the whole palette, and Zhon's
+   river variant names the 32-row image.
+5. **`fractures.png`:** ours, not retail. Move it to startup if that is cheap,
+   otherwise list it for the Fractures card.
+6. **The rest of the deletions:** the Python material preparation
+   (`sculpt_materials.py` and its neighbours), the `shine*` keys that move into
+   tables, the image URLs in the config. Update `sculpt-control-schema.js`. The
+   fitting hooks `makeZ` and `pad0` leave the engine; `measure/` still needs them,
+   so `swatch.mjs` adds them to its own copy of the shader.
+7. **A server with no `assets-*` folder draws every world.** Whatever the
+   prepared `config.json` still supplies moves to a committed file. Feature
+   sprites are retail art outside the repo; the owner has yet to rule on them,
+   so a world draws without them.
+
+**Acceptance:** as H14. Step 1 and step 6 are 0.00. The rest are judged on each
+world's three retail windows. `regional.mjs` 0 and `smoke.mjs` clean on nine
+worlds and on 8×8. Counts: images fetched at load, and lines of Python, before
+and after. Where water or the palette cannot reach a similar look, keep its
+image, show the sheet and go on.
+
+**Server and guard:** port 8884, CDP 9684; worktree `../terraform-wt-H14e`,
+branch `H14e-no-images`; assets `$R/agent-H14e`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
