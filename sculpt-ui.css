@@ -79,6 +79,10 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 #path-actions .row{display:grid;grid-template-columns:1fr 1fr}
 #path-actions .row button{padding:5px 2px;font-size:10px}
 .path-count{font-size:9px;color:var(--muted);white-space:nowrap}
+.seed-row{display:flex;gap:6px;align-items:center}
+.seed-row input{min-width:0;flex:1;width:0}
+.seed-row button{padding:5px 7px;font-size:11px}
+#seed-vary-control{justify-content:flex-start;gap:6px;margin-top:10px;font-size:11px}
 #selection-panel .row{flex-wrap:wrap}
 #selection-panel button{flex:1 0 auto}
 .workspace{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;background:#101719}

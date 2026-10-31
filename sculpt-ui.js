@@ -66,7 +66,7 @@ export function groupToolControls(fields){
  }
  const basicIds=['tool-style','diameter','amount','roughness','softness','bank-width','shallow-mode'];
  const basics=make('Brush settings',basicIds.map(id=>$(id).closest('.control')));basics.open=true;basics.classList.add('brush-basics');root.before(basics);
- root.after(make('Brush seed',[$('seed').closest('.control')]));
+ basics.after(make('Seed',[$('seed').closest('.control')]));
  for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));const controls=present.map(f=>$(f[1]+'-control'));if(key==='profile')controls.push($('section-preview-control'));root.append(make(label,controls,$(present.find(f=>f[0]===key)[1])));}
  for(const [key,id,label,,lo] of fields){if(claimed.has(key))continue;root.append(make(label.replace(/ \(.*$/,''),[$(id+'-control')],lo<=0&&!['crystalForm','bergTiltDir','bankPx'].includes(key)?$(id):null));}
  for(const [id,label] of [['cracks','Cracks'],['shelves','Automatic shallows'],['beach-flatness','Beach flatness']])root.prepend(make(label,[$(id).closest('.control')],$(id)));

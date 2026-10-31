@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Crater seed GPU checks</title>
+<style>body{background:#172127;color:#def;font:15px system-ui;margin:32px}button{padding:10px}pre{white-space:pre-wrap;line-height:1.6}</style>
+<h1>Crater seed GPU checks</h1><p>Serve the repository over localhost, then run in a WebGPU browser.</p>
+<button id="run">Run seed checks</button><pre id="results" role="status">Ready</pre>
+<script type="module">
+import {createShapeEngine} from '../sculpt-gpu-fields.js';
+const output=document.querySelector('#results'),button=document.querySelector('#run');
+const defaults={radius:24,amount:40,rough:.6,softness:.5,bankWidth:.5,beachFlatness:.5,rimHeight:.34,crestVary:0,crestJag:0,crestTaper:0,spurBulb:0,spurForks:0};
+const ctx={seed:2701,baseHeight:99,sea:75,params:n=>new Proxy({...defaults,...n.params},{get:(o,k)=>o[k]??0})};
+const assert=(v,msg)=>{if(!v)throw new Error(msg);};
+const delta=(a,b)=>{let max=0;for(const key of ['floats','masks'])for(let i=0;i<a[key].length;i++)for(let j=0;j<a[key][i].length;j++){const d=Math.abs(a[key][i][j]-b[key][i][j]);assert(Number.isFinite(d),'Non-finite output');max=Math.max(max,d);}return max;};
+button.onclick=async()=>{
+ button.disabled=true;output.textContent='Running…\n';let device;
+ try{
+  const adapter=await navigator.gpu.requestAdapter();assert(adapter,'WebGPU unavailable');device=await adapter.requestDevice();
+  for(const pages of [false,true]){
+   const engine=await createShapeEngine({device,grid:192,spacing:1,baseHeight:99,sea:75,minH:-100,maxH:500,pages});
+   const target=pages?engine.makeTarget(0,0,192,192):null;
+   const run=async node=>{device.pushErrorScope('validation');const h=engine.submit([node],ctx,null,{target});const out=await h.land;await h.done;const error=await device.popErrorScope();assert(!error,error?.message);return out;};
+   for(const [name,params] of [
+    ['basic',{}],
+    ['rim, ejecta and satellites',{rimSectors:4,rimUnequal:.8,rimGaps:1,rimGapWidth:35,craterEjecta:.7,craterlets:3}],
+    ['facets and spurs',{craterFacets:.6,crystalCraterPx:12,spurCount:3,spurLength:20,spurWidth:.8,spurHeight:.7,spurTaper:.8,spurSpread:.4,softness:.8}]
+   ])for(const scale of [1,1.5]){
+    const n={kind:'crater',seed:2701,points:[{x:96,y:96}],params:{...params,radius:defaults.radius*scale},frame:[scale,0,0,scale,96*(1-scale),96*(1-scale)]};
+    const a=await run(n),repeat=await run(JSON.parse(JSON.stringify(n))),other=await run({...n,seed:8173});
+    assert(delta(a,repeat)===0,`${name}: same seed changed after round-trip`);
+    const d=delta(a,other);assert(d>1,`${name}: changing the seed had no meaningful effect`);
+    assert(a.floats[0].some((v,i)=>Math.abs(v-other.floats[0][i])>1),'Only masks changed, not crater height');
+    output.textContent+=`${pages?'Paged':'Whole'} · ${name} · ${scale}×: repeat exact; new seed changes height (max plane difference ${d.toFixed(3)})\n`;
+   }
+   target?.destroy();engine.destroy();
+  }
+  output.textContent+='PASS: all crater seed checks completed';
+ }catch(e){output.textContent+='FAIL: '+e.stack;}finally{device?.destroy();button.disabled=false;}
+};
+</script></html>

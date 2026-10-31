@@ -41,7 +41,8 @@ let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
 let gpuWeather=null, gpuErosionMs=null, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
-let tool='plateau', seed=2701, refinementSeed=2701, stroke=null, pan=null, pointerId=null, loading=false;
+let tool='plateau', seed=2701, varySeed=true, refinementSeed=2701, stroke=null, pan=null, pointerId=null, loading=false;
+const randomSeed=current=>{const next=(Math.random()*4294967296)>>>0;return next===current?(next+1)>>>0:next;};
 let history=[], historyIndex=-1, historySerial=0;
 let revision=0, autosaveTimer, ready=false;
 // Biomes choose starting values for the same brushes. These presets can be
@@ -313,6 +314,12 @@ function updateControls() {
   for(const key of ['x','y','rotation','scale']){const input=$('selection-'+key);input.disabled=!hasSelection||loading||Boolean(stroke||moving);if(document.activeElement!==input)input.value=transform?String(Math.round(transform[key]*10)/10):'';}
   if(config?.map){$('selection-x').max=config.map.width-1;$('selection-y').max=config.map.height-1;}
   const paths=hasSelection?shapePaths(selectedNode):[],activePath=paths[pathIndex]||[],pointAt=activePath.indexOf(pathPoint),locked=loading||Boolean(stroke||moving);
+  const editingSeed=selectedNode?.seed!==undefined;
+  $('seed-label').textContent=editingSeed?'Shape seed':'Brush seed';
+  if(document.activeElement!==$('seed'))$('seed').value=editingSeed?selectedNode.seed:seed;
+  $('seed').disabled=$('seed-randomize').disabled=$('seed-vary').disabled=locked;
+  $('seed-vary').checked=varySeed;$('seed-vary-control').hidden=editingSeed;
+  $('seed-help').textContent=editingSeed?'Controls this shape’s outline and generated details. All its paths share this seed.':varySeed?'Used for the next shape, then a fresh seed is chosen.':'Reuses this seed for each new shape. Randomize chooses another variation.';
   $('draw-new').disabled=locked||!ready;
   $('draw-add').disabled=locked||!hasSelection||selectedNode?.hidden;
   $('draw-new').setAttribute('aria-pressed',String(tool!=='move'&&drawMode!=='add'));
@@ -685,7 +692,7 @@ function regionalPoints(points) {
   if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
   return points.map(p => ({x:clamp(p.x,0,(config.map?.width??size)-1),y:clamp(p.y,0,(config.map?.height??size)-1)}));
 }
-function beginRegionalStroke(kind,point,options={},attachment=-1,target=-1) {
+function beginRegionalStroke(kind,point,options={},attachment=-1,target=-1,advanceSeed=false) {
   if(stroke||moving||!HELP[kind]||kind==='move')throw new Error('A terrain gesture is already active or the brush is invalid.');
   const points=regionalPoints([point]),adding=target>=0&&nodes[target]?.points;
   const selectionBefore=selected,index=adding?target:nodes.length;
@@ -697,7 +704,7 @@ function beginRegionalStroke(kind,point,options={},attachment=-1,target=-1) {
   if(adding){path=appendPath(node,attachment>=0?[]:points,attachment);nodes[index]=node;}
   else nodes.push(node);
   const basePoints=adding?node.points.length-(attachment>=0?0:1):0;
-  stroke={regional:true,kind:node.kind,node,index,selectionBefore,original,pathIndex:path,attachment,basePoints};
+  stroke={regional:true,kind:node.kind,node,index,selectionBefore,original,pathIndex:path,attachment,basePoints,advanceSeed:advanceSeed&&!adding};
   selected=adding?index:-1;
   evaluate(index,nodeBounds(node));renderLayers();updateControls();schedule();return index;
 }
@@ -719,7 +726,7 @@ function endRegionalStroke(commit=true) {
   if(!commit||emptyBranch){
     if(gesture.original)nodes[gesture.index]=gesture.original;else nodes.splice(gesture.index,1);
     selected=gesture.selectionBefore;evaluate(gesture.index,unionRect(rect,gesture.original?nodeBounds(gesture.original):null));
-  }else{selected=gesture.index;pathPoint=-1;pathIndex=gesture.original?gesture.pathIndex:0;if(!gesture.original)pathEditing=false;checkpoint();}
+  }else{selected=gesture.index;pathPoint=-1;pathIndex=gesture.original?gesture.pathIndex:0;if(!gesture.original)pathEditing=false;if(gesture.advanceSeed)seed=randomSeed(gesture.node.seed);checkpoint();}
   if(selected>=0)selectNode(selected);
   if(commit&&!emptyBranch&&gesture.original){drawMode='add';pathIndex=gesture.pathIndex;}
   renderLayers();updateControls();schedule();queueWeather();return commit?gesture.index:false;
@@ -909,7 +916,7 @@ const sculptRegion={
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
-  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1),previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
+  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
   pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:tool,
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
@@ -1018,7 +1025,7 @@ function nodeAction(kind) {
   cancelWeather();
   if (kind==='delete') { nodes.splice(i,1); selected=-1; evaluate(i); }
   else if (kind==='hide') { nodes[i].hidden=!nodes[i].hidden; evaluate(i); }
-  else if (kind==='seed') { if (nodes[i].seed===undefined) return; nodes[i].seed=(Math.random()*4294967295)>>>0; evaluate(i); }
+  else if (kind==='seed') { if (nodes[i].seed===undefined) return; nodes[i].seed=randomSeed(nodes[i].seed); evaluate(i); }
   checkpoint(); selectNode(selected); schedule(); queueWeather();
 }
 // Apply a pending node edit now, so history and refinement see it.
@@ -1127,7 +1134,7 @@ function scriptedScene(list,{ground=true}={}) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -1145,7 +1152,7 @@ function loadSketch(s) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const next=deserializeNodes(s.nodes);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
-  seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
+  seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
   for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(s.toolSettings?.[kind]||{})};
   showTool(toolSettings[tool]);
@@ -1262,10 +1269,23 @@ $('shallow-mode').addEventListener('change',() => { rememberTool(true); updateCo
 $('scree').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); queueWeather(); persistLater(); });
 function applySeedControl() {
   const next=clamp(Math.trunc(Number($('seed').value) || 0),0,4294967295);
-  seed=next;
-  $('seed').value=seed;
+  // Saving or adding a path must never copy the selected shape's seed into
+  // the separate seed waiting for the next new shape.
+  if(nodes[selected]?.seed===undefined)seed=next;
+  $('seed').value=next;return next;
 }
-$('seed').addEventListener('change',() => { applySeedControl(); schedule(); persistLater(); });
+$('seed').addEventListener('change',() => {
+  if(stroke||moving||loading)return;
+  const next=applySeedControl();
+  if(nodes[selected]?.seed!==undefined&&nodes[selected].seed!==next)changeSelected(n=>{n.seed=next;});
+  updateControls();schedule();persistLater();
+});
+$('seed-randomize').onclick=()=>{
+  if(stroke||moving||loading)return;
+  if(nodes[selected]?.seed!==undefined)nodeAction('seed');
+  else{seed=randomSeed(seed);$('seed').value=seed;updateControls();persistLater();}
+};
+$('seed-vary').onchange=()=>{varySeed=$('seed-vary').checked;updateControls();persistLater();};
 for (const id of ['clay','light']) $(id).addEventListener('change',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 $('weather').addEventListener('change',() => {
   cancelWeather(); markViewChanged();
