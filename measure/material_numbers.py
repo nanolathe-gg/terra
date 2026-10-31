@@ -70,6 +70,11 @@ DRAWS = {'ground': 'plain ground (the 16 tiles, groundTile)', 'slopeGrass': 'cov
          'quilt': 'the plain as one quilted image (generated layer after the others)'}
 
 
+def letter(i):
+    """The entry's one-letter code: a..z, then A..Z (the draw's groundTileBitmap reads it back)."""
+    return chr(97 + i) if i < 26 else chr(65 + i - 26)
+
+
 def layer_plan(config):
     """The four rock-family layers of the bridge's rules as [(material name, image file name)] in layer order."""
     t, d = config['textures'], config['defaults']
@@ -194,11 +199,11 @@ def main():
     if tiles:
         strip = np.asarray(Image.open(assets / ground_file).convert('RGB'))[:32]
         entries = sorted({tuple(c) for c in strip.reshape(-1, 3)}, key=lambda c: float(np.dot(c, LUMA)))
-        if len(entries) > 26:
+        if len(entries) > 52:
             raise SystemExit(f'{world}: {len(entries)} ground colours do not fit the one-letter entry code')
         index = {c: i for i, c in enumerate(entries)}
         old['ground'] = {'entries': [list(map(int, c)) for c in entries],
-                         'tiles': [''.join(chr(97 + index[tuple(strip[y, 32 * t + x])]) for y in range(32) for x in range(32)) for t in range(16)]}
+                         'tiles': [''.join(letter(index[tuple(strip[y, 32 * t + x])]) for y in range(32) for x in range(32)) for t in range(16)]}
     # What config.json held that no committed file did: the world's material and water numbers (measured means, depths, authored
     # coverage and relief values). The server overlays them on the page's config (sculpt.py, world_knobs).
     old['material'] = config['material']

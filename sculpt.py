@@ -788,7 +788,7 @@ def lighten_red_shallows(config, assets):
 
 # H8, H14: the worlds whose land materials are numbers. The engine makes their layers from the table; every other world bridges its
 # prepared images. A table also holds the world's `material` and `water` blocks, which the config no longer carries.
-MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'zhon': '/materials/zhon.json', 'lava': '/materials/lava.json', 'ice': '/materials/ice.json'}
+MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'desert': '/materials/desert.json', 'zhon': '/materials/zhon.json', 'lava': '/materials/lava.json', 'ice': '/materials/ice.json'}
 SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
 # The images a table replaces: the page never fetches them, so the config does not name them.
 TABLE_IMAGES = ('grass', 'groundTiles', 'slopeGrass', 'rock', 'hillRock', 'rockWeathered', 'rockFractured')
@@ -1033,8 +1033,10 @@ def main():
     biomes = [b for b in biomes if b in configs]
     # Any world may take another's ground pattern (World panel); the
     # pattern's mean is replaced by the world's ground colour.
+    # A quilted plain (a table without tile data, or the sampled image) is not a pattern to lend: only tiles move between worlds.
     patterns = {b: {'name': BIOME_NAMES[b], 'grass': configs[b]['textures'].get('grass'),
-                    'groundTiles': configs[b]['textures'].get('groundTiles'), 'groundTable': configs[b].get('materialTable')} for b in biomes}
+                    'groundTiles': configs[b]['textures'].get('groundTiles'), 'groundTable': configs[b].get('materialTable')} for b in biomes
+                if configs[b].get('materialTable') and 'ground' in json.loads((HERE / configs[b]['materialTable'].lstrip('/')).read_text()) or configs[b]['textures'].get('groundTiles')}
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns
