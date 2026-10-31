@@ -196,8 +196,9 @@ def main():
     out = out or Path(__file__).resolve().parent.parent / 'materials' / f'{world}.json'
     config = json.loads((assets / 'config.json').read_text())
     plan = layer_plan(config)
-    tiles = 'groundTiles' in config['textures']
-    quilt = not tiles or config['defaults'].get('ground') == 'texture'
+    # A world whose default is the quilted image (ground=texture) takes it as the `quilt` layer and keeps no tile data: a table with tiles draws them.
+    tiles = 'groundTiles' in config['textures'] and config['defaults'].get('ground') != 'texture'
+    quilt = not tiles
     table = {}
     if tiles:
         ground_file = config['textures']['groundTiles'].rsplit('/', 1)[-1]
@@ -213,6 +214,7 @@ def main():
     old['order'] = [name for name, _ in plan] + (['quilt'] if quilt else [])
     # The plain is not modelled: its 16 tiles are kept as data: the colour entries in luma order and each tile as 1,024 entry letters
     # (a = first entry), rows top first. The draw builds them at startup (groundTileBitmap, sculpt-renderer.js).
+    old.pop('ground', None)
     if tiles:
         strip = np.asarray(Image.open(assets / ground_file).convert('RGB'))[:32]
         entries = sorted({tuple(c) for c in strip.reshape(-1, 3)}, key=lambda c: float(np.dot(c, LUMA)))
