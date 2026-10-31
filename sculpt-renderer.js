@@ -4,10 +4,19 @@
 // world-resolution fields bake, a compute pass).
 
 import {materialRows,tablePlacementRows,PLACEMENT_ROW,strataZoneWidths} from './sculpt-material-model.js';
+import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
 const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
+
+// sRGB 0..255 to OKLab (Ottosson 2020), as engine-palette.wgsl does on the GPU: the palette's colours are converted once here.
+function oklab(rgb) {
+  const lin = rgb.map(v => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const [l, m, s] = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]]
+    .map(r => Math.cbrt(r[0] * lin[0] + r[1] * lin[1] + r[2] * lin[2]));
+  return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+}
 
 // The plain's tiles as a 512 x 32 picture: tile t at x = 32 t, entry letters looked up in the colour list (H3).
 async function groundTileBitmap({entries, tiles}) {
@@ -157,13 +166,15 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', tableUrl.replace(/^\//, '')];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', tableUrl.replace(/^\//, ''), 'engine-palette.wgsl', 'materials/palette.json'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
     const modelTable = extra[2];
+    this.paletteSource = extra[3];
+    this.paletteColours = JSON.parse(extra[4]).colours;
     this.materialsSource = extra[0];
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
@@ -234,7 +245,13 @@ export class TerrainRenderer {
     this.materialData = JSON.parse(modelTable);
     // The water's grain is two more generated materials after the table's own, named by the config's water block (shared when the two are one).
     for (const name of [this.config.water.deep, this.config.water.shallow]) if (!this.materialData.order.includes(name)) this.materialData.order.push(name);
-    await this.makeMaterials();
+    // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
+    this.textures = {};
+    const generation = performance.now();
+    const gpu = Promise.all([this.makeMaterials(), this.paletteTexture()]);
+    this.textures.noise = this.noiseTexture();
+    this.textures.palette = (await gpu)[1];
+    this.generationMs = performance.now() - generation;
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -248,13 +265,11 @@ export class TerrainRenderer {
     const slopeMaterial = ['slopes', 'structured'].includes(variant.get('surface'));
     const rockLayers = variant.get('material') === 'varied';
     // The draw's own images: noise, fractures, the two waters and the palette, each bound by name (the land is generated).
-    this.textures = {};
     this.means = {};
     // The materials the table makes, by name: which optional stages the world has.
     this.layers = new Set(this.materialData.order);
-    for (const key of ['noise', 'grass', 'fractures', 'palette']) {
+    for (const key of ['grass', 'fractures']) {
       let url = this.config.textures[key];
-      if (key === 'noise') url = this.config.assetBase + 'noise-ridged-gaussian.png';
       // A world builds the plain's 16 tiles from its table's `ground` data, not from a file; a borrowed pattern (World panel) names the
       // table of the world it comes from. A table without `ground` data (a quilted plain: its generated `quilt` layer is the plain)
       // binds a one-texel stand-in, and the world's mean ground colour is the quilt's.
@@ -269,7 +284,7 @@ export class TerrainRenderer {
         bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
       }
       if (key === 'grass') this.means.ground = !this.groundTiled ? this.materialData.measured.quilt.meanRGB.map(v => v / 255) : meanColor(bitmap);
-      const numeric = key === 'noise' || key === 'fractures';
+      const numeric = key === 'fractures';
       this.textures[key] = this.materialTexture(key, [bitmap], {minFilter: numeric ? 'linear' : 'nearest', magFilter: numeric ? 'linear' : 'nearest', mipmaps: false});
       bitmap.close();
     }
@@ -352,6 +367,46 @@ export class TerrainRenderer {
     if (mipmaps) this.generateMipmaps(texture, layers, mipLevelCount);
     return {texture, view: texture.createView({dimension: layers > 1 ? '2d-array' : '2d'}),
       sampler: this.sampler({minFilter, magFilter, mipmapFilter: mipmaps ? 'linear' : 'nearest', addressModeU: 'repeat', addressModeV: 'repeat'})};
+  }
+
+  // The draw's noise (sculpt-noise.js): periodic RGBA8, linear filtering, repeating.
+  noiseTexture() {
+    const start = performance.now();
+    const texture = this.device.createTexture({label: 'noise', size: [NOISE_SIZE, NOISE_SIZE], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
+    this.device.queue.writeTexture({texture}, makeNoise(), {bytesPerRow: NOISE_SIZE * 4}, [NOISE_SIZE, NOISE_SIZE]);
+    this.noiseMs = performance.now() - start;
+    return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
+  }
+
+  // The palette lookup (engine-palette.wgsl): the table's colours, or the ones its `palette.entries` pick, as a 1024 x 96 RGBA8 texture.
+  async paletteTexture() {
+    const device = this.device, start = performance.now();
+    const colours = (this.materialData.palette?.entries ?? this.paletteColours.map((_, i) => i)).map(i => this.paletteColours[i]);
+    const rows = new Float32Array(colours.length * 8);
+    colours.forEach((c, i) => { rows.set([c[0], c[1], c[2], 0], i * 8); rows.set(oklab(c), i * 8 + 4); });
+    const buffer = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(buffer, 0, rows);
+    const count = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(count, 0, new Uint32Array([colours.length, 0, 0, 0]));
+    const texture = device.createTexture({label: 'palette lookup', size: [1024, 96], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
+    if (!this.palettePipeline) {
+      const module = device.createShaderModule({label: 'engine-palette.wgsl', code: this.paletteSource});
+      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+      if (errors.length) throw new Error('nanolathe: engine-palette.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+      this.palettePipeline = await device.createComputePipelineAsync({label: 'palette', layout: 'auto', compute: {module, entryPoint: 'paletteMain'}});
+    }
+    const encoder = device.createCommandEncoder({label: 'palette'});
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(this.palettePipeline);
+    pass.setBindGroup(0, device.createBindGroup({layout: this.palettePipeline.getBindGroupLayout(0), entries: [
+      {binding: 0, resource: {buffer}}, {binding: 1, resource: {buffer: count}}, {binding: 2, resource: texture.createView()}]}));
+    pass.dispatchWorkgroups(128, 4);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+    await device.queue.onSubmittedWorkDone();
+    buffer.destroy(); count.destroy();
+    this.paletteMs = performance.now() - start;
+    return {texture, view: texture.createView()};
   }
 
   generateMipmaps(texture, layers, levels) {
@@ -631,6 +686,29 @@ export class TerrainRenderer {
     for (let y = 0; y < size; y++) out.set(mapped.subarray(y * row, y * row + size * 4), y * size * 4);
     buffer.destroy();
     return {size, data: Array.from(out)};
+  }
+
+  // The world's whole startup generation, timed again without replacing anything: the noise (CPU), the palette lookup and the materials (GPU).
+  async timeStartup() {
+    let t = performance.now();
+    makeNoise();
+    const noise = performance.now() - t;
+    const palette = await this.paletteTexture().then(p => { p.texture.destroy(); return this.paletteMs; });
+    const materials = await this.makeMaterials();
+    return {noise, palette, materials, total: noise + palette + materials};
+  }
+  get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, materials: this.startupMs, total: this.generationMs}; }
+
+  // The palette lookup as RGBA bytes (a check against the lookup it replaced; not used by the draw).
+  async readPalette() {
+    const buffer = this.device.createBuffer({size: 4096 * 96, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyTextureToBuffer({texture: this.textures.palette.texture}, {buffer, bytesPerRow: 4096}, [1024, 96, 1]);
+    this.device.queue.submit([encoder.finish()]);
+    await buffer.mapAsync(GPUMapMode.READ);
+    const out = Array.from(new Uint8Array(buffer.getMappedRange()));
+    buffer.destroy();
+    return out;
   }
 
   // H4 item 2: the land materials of materials/green.json made on the GPU, once at startup and again when the table changes.
