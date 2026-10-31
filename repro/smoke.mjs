@@ -78,9 +78,10 @@ for (const world of worlds) {
       if (!noExport) {
         if (world === 'zhon') r.export = await ev(`document.getElementById('map-export').disabled ? 'disabled, by design' : 'enabled'`);
         else {
+          for (let i = 0; i < 400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);   // the Time pass after the last undo
           const name = `Smoke${world}${Date.now() % 100000}`;
           await ev(`window.smokeExport={done:false};sculptMap.export(${JSON.stringify(name)}).then(x=>window.smokeExport={done:true,x},e=>window.smokeExport={done:true,error:e.message});true`);
-          for (let i = 0; i < 1200; i++) { const q = await ev('window.smokeExport'); if (q?.done) { r.export = q.error ? 'FAILED: ' + q.error : 'ok'; r.exportResult = JSON.stringify(q.x).slice(0, 200); break; } await sleep(250); }
+          for (let i = 0; i < 1200; i++) { const q = await ev('window.smokeExport'); if (q?.done) { r.export = q.error ? 'FAILED: ' + q.error : 'ok'; r.exportResult = JSON.stringify(q.x ?? null).slice(0, 200); break; } await sleep(250); }
           r.export ??= 'FAILED: timed out';
           if (r.export !== 'ok') bad++;
         }
