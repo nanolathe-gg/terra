@@ -130,6 +130,7 @@ struct Uniforms {
     crispShore: f32,
     bankRock: f32,
     groundMode: i32,
+    groundLayer: i32,      // H14b: the generated layer that is the plain's quilted image, or -1 (the plain is the sampled image or the tiles)
     groundTiles: i32,
     sandGrain: f32,
     // Bake (relief-bake.wgsl).

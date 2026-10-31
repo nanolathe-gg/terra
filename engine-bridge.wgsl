@@ -16,11 +16,18 @@ var<private> bTransCore: f32;
 var<private> bTransShared: bool;
 
 // Replaced by: Materials (the plain's quilted ground becomes a generated material).
-// A world whose plain is one quilted image (ground texture mode) reads it directly; the 16-tile plain stays in groundTile.
-fn bridgeGround(pixel: vec2f) -> vec3f { return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb; }
+// A world whose plain is one quilted image (ground texture mode) reads it directly, or, once its table has a `quilt` material (H14b),
+// the generated layer made from it; the 16-tile plain stays in groundTile.
+fn bridgeGround(pixel: vec2f) -> vec3f {
+    if (u.groundLayer >= 0) { return genColor(u.groundLayer, pixel); }
+    return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb;
+}
 
 // Replaced by: Materials (the ground image becomes a generated material, as Green's slope grass already is).
-fn bridgeGrassImage(pixel: vec2f) -> vec3f { return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb; }
+fn bridgeGrassImage(pixel: vec2f) -> vec3f {
+    if (u.groundLayer >= 0) { return genColor(u.groundLayer, pixel); }
+    return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb;
+}
 
 // Replaced by: Shores (beach sand is a shore material). The lightest of the ground and the beach: snow takes the beach when it is lighter.
 fn bridgeSnow(pixel: vec2f, snow: ptr<function, vec3f>, mean: ptr<function, vec3f>) {

@@ -17,6 +17,9 @@ stay outside Git.
 | `crack_sheet.py` | Same-window crop sheets across renders, optionally with detected lines overlaid |
 | `material_numbers.py` | A world's prepared images as `materials/<world>.json`: per-material ramp, tint and octave bands, the plain's tiles, and the world's `material` and `water` numbers (cards H3, H14) |
 | `material_fit.py` | Fits the table's `model` (band amplitudes, rank quantiles) to the measured bands by rendering swatches of the engine's own startup pass (`swatch.mjs`) |
+| `material_lit.py` | (library) What a lit height field needs from a prepared image: light axis (west end), orientation, anisotropy, dark lines, cell size, veins; and the numbers a swatch is compared by (card H14b) |
+| `lit_lab.py` | Tries lit numbers on one prepared image: image beside the engine's swatch at 1x, 2x and the quarter level, with the numbers |
+| `lit_fit.py` | Pattern search for a lit material's numbers on swatches rendered in one Chrome session (`material_fit.py --lit` runs it) |
 | `material_swatches.py` | Each prepared image beside the engine's generated layer, at 1x, 2x and quarter resolution, with the numbers |
 
 Renders with heights come from `capture/capture.mjs` scenes that set
