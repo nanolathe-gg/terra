@@ -23,7 +23,7 @@ function litRows(lit) {
   const x = k => lit[k] ?? 0, rgb = lit.veinRGB ?? [0, 0, 0];
   return [[x('relief'), x('light') * 2 * Math.PI, x('shear'), x('heightShare')], [x('ridged'), x('cell'), x('tilt'), x('tone')],
     [x('seamWidth'), x('seamDepth'), x('veinWidth'), x('veinSpacing')], [rgb[0], rgb[1], rgb[2], x('veinShare')], [x('warp'), x('cone'), x('seamVary'), x('seamGap')],
-    [x('cellVary'), 0, 0, 0], [0, 0, 0, 0]];
+    [x('cellVary'), x('streakBand'), 0, 0], [0, 0, 0, 0]];
 }
 // A table with a `placement` block (Green's) gives the draw's ten placement rows; the shared artist controls override them, never the
 // measured material statistics. Without overrides this remains the original table.

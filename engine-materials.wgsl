@@ -23,7 +23,7 @@
 //   row 42  vein colour rgb, vein share of the plane (0 off)
 //   row 43  warp px (every lookup is displaced by noise of 32-px cells: no lattice line shows, facet edges curve), cone strength (round pits and bumps),
 //           seam variation 0..1 (the seam's width follows noise: broken, uneven seams), seam gap 0..1 (the share of the plane with no seams)
-//   row 44  cell weight 0..1 (cells of uneven size with curved outlines: slabs), 0, 0, 0
+//   row 44  cell weight 0..1 (cells of uneven size with curved outlines: slabs), streak band (the stretch and shear fade out above this band; 0 = all bands), 0, 0
 //   row 45  (reserved: zero)
 // Fixed seeds: the salt of each material is its index; every operation is integer hashing or a fixed float expression,
 // so the same table gives the same bits on a given GPU.
@@ -213,7 +213,12 @@ fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
     var g = vec2f(0.0);
     for (var k = 1u; k < 7u; k++) {
         let cell = f32(1u << k);
-        let n = mmLatticeG(at, mmCells(cell, stretch), shear, salt + k);
+        var n = mmLatticeG(at, mmCells(cell, stretch), shear, salt + k);
+        if (e.y > 0.0) {
+            // Streaks at fine scale only: band k keeps its stretch and shear down to band e.y and fades into an isotropic band over the next.
+            let wk = clamp(e.y + 1.0 - f32(k), 0.0, 1.0);
+            if (wk < 1.0) { n = mix(mmLatticeG(at, mmCells(cell, 1.0), 0.0, salt + k), n, wk); }
+        }
         let ridge = select(1.0, -1.0, n.x < 0.0);
         let t = mix(n.x, 1.0 - 2.0 * abs(n.x), b.x);
         let dt = mix(1.0, -2.0 * ridge, b.x);
