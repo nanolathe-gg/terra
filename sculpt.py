@@ -798,6 +798,7 @@ def apply_material_table(biome, config):
     """Point the config at the world's committed table and take its material and water numbers from it."""
     table = json.loads((Path(__file__).resolve().parent / MATERIAL_TABLES[biome].lstrip('/')).read_text())
     config['materialTable'] = MATERIAL_TABLES[biome]
+    config['layers'] = table['order']   # the materials the table makes: which optional stages (body, beach, ring) the world has
     config['material'] = table['material']
     config['water'] = table['water']
     for key in TABLE_IMAGES:

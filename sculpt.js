@@ -1467,7 +1467,7 @@ function buildWorldPanel() {
   variantSelect.onchange=() => goToWorld(config.biomeId,worldId===config.biomeId?null:worldId,{variant:variantSelect.value});
   const rows=$('world-colors'); rows.replaceChildren();
   for (const [key,label] of COLOR_KEYS) {
-    if (key==='beach' && !config.textures.beach) continue;
+    if (key==='beach' && !config.layers.includes('beach')) continue;
     if (key.startsWith('strata') && !(Number(experiment.get('strata'))>0)) continue;
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
@@ -1637,17 +1637,11 @@ async function boot() {
     $('material-weathering').value=Math.round((config.material?.materialWeathering??0)*100);
     $('deposit-spread').value=Math.round((config.material?.depositSpread??.65)*100);
     $('transition-detail').value=Math.round((config.material?.transitionDetail??.65)*100);
-    $('transition-detail-control').hidden=!config.textures.transitionBody;
-    $('ring-controls').hidden=!config.textures.mineralRing && !config.textures.mineralRings;
-    $('fringe-style').querySelector('[value="veins"]').disabled=!config.textures.mineralRing;
-    $('fringe-style').querySelector('[value="rings"]').disabled=!config.textures.mineralRings;
-    // The shared renderer currently has one bridged fringe layer. Switching
-    // this legacy texture selector never changes that layer; keep saved values
-    // readable, but do not offer an ineffective control.
+    $('transition-detail-control').hidden=!config.layers.includes('body');
+    $('ring-controls').hidden=!config.layers.includes('ring');
+    // The legacy fringe-style selector changes nothing in the shared renderer; it is not offered.
     $('fringe-style').closest('.control').hidden=true;
-    // The world's own choice (fringeStyle, a string knob): Archipelago's retail rings are
-    // curved contours, not veins.
-    $('fringe-style').value=config.textures.mineralRings&&(!config.textures.mineralRing||experiment.get('fringeStyle')==='rings')?'rings':'veins';
+    $('fringe-style').value='veins';
     $('mineral-ring').value=Math.round((config.material?.ringAmount??0)*100);
     $('ring-spread').value=Math.round((config.material?.ringSpread??.65)*100);
     $('ring-variation').value=Math.round((config.material?.ringVariation??.7)*100);

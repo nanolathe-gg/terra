@@ -257,7 +257,7 @@ fn groundSource(pixel: vec2f) -> vec3f {
 #endif
     return groundTile(pixel);
 }
-fn grassImage(pixel: vec2f) -> vec3f { if (u.bridged != 0) { return bridgeGrassImage(pixel); } return genColor(0, pixel); }
+fn grassImage(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
 // Lab histogram of the rock face is worse with it (.057/.076/.083 against .049/.067/.079 by class).
