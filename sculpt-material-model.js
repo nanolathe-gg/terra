@@ -1,5 +1,5 @@
 // Cards H3 and H14: materials/<world>.json as the rows engine-materials.wgsl reads (see its header for the layout).
-export const MM_ROWS = 62;
+export const MM_ROWS = 63;
 // The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): ten rows after it.
 export const PLACEMENT_ROW = 156;
 // The rows engine-materials.wgsl makes the layers from: MM_ROWS per layer, in the table's order. A material named twice in the order
@@ -15,6 +15,8 @@ export function materialRows(table) {
     rows.push(...litRows(f.lit));
     // H14d rows 46-61: the colours a dithered material reduces to (rgb, w = 1 in use); zeros when it is not dithered.
     for (let k = 0; k < 16; k++) rows.push(m.vocab?.[k] ? [...m.vocab[k], 1] : [0, 0, 0, 0]);
+    // Row 62: the dither's dot lattice (dotCell px, dotShare, dotRadius px, dotDepth z); all zero is none.
+    rows.push([f.dotCell ?? 0, f.dotShare ?? 0, f.dotRadius ?? 0, f.dotDepth ?? 0]);
   }
   return rows;
 }

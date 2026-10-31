@@ -37,7 +37,9 @@
 // The pass is makeDither (level 0 only): one invocation runs a serpentine error diffusion over a DITHER_BLOCK px square of the layer, the
 // error never crossing a block edge, so the layer still wraps and the blocks run in parallel. Levels above 0 of a dithered material are
 // 2 x 2 box means of the level above, as a lit material's are (the mean over an area is the smooth colour).
-const MM_ROWS = 62u;
+//   row 62    dots (dithered materials only): cell px (0 off), share of cells with a dot, radius px, depth in z units: a lattice of small dark
+//             dots (one jittered point per cell, a gaussian dip of that radius in z), as the art's plain carries.
+const MM_ROWS = 63u;
 const DITHER_BLOCK = 32u;
 @group(0) @binding(0) var<storage, read> table: array<vec4f>;
 @group(0) @binding(1) var out: texture_storage_2d_array<rgba8unorm, write>;
@@ -340,6 +342,24 @@ fn mmLit(id: u32, pixel: vec2f) -> vec3f {
 }
 
 // ---- H14d: the dither pass ------------------------------------------------------------------------------------------------------
+// The depth of the dot field at a pixel (row 62), periodic through mmWrapCell.
+fn mmDots(p: vec2f, f: vec4f, salt: u32) -> f32 {
+    let cells = mmCells(f.x, 1.0);
+    let cpx = params.size / cells.x;
+    let c = vec2i(floor(p / cpx));
+    var total = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let cc = mmWrapCell(c + vec2i(i, j), cells);
+            if (mmHash(cc, salt + 60u) > f.y) { continue; }
+            let ctr = (vec2f(c + vec2i(i, j)) + vec2f(0.15 + 0.7 * mmHash(cc, salt + 61u), 0.15 + 0.7 * mmHash(cc, salt + 62u))) * cpx;
+            let d = distance(p, ctr) / max(f.z, 0.1);
+            total = max(total, exp(-0.5 * d * d));
+        }
+    }
+    return total * f.w;
+}
+
 // One invocation per DITHER_BLOCK square of a dithered layer, level 0: serpentine Floyd-Steinberg on rgb. The field being reduced is the
 // layer's own smooth colour (z through the rank map and the ramp), reduced to the nearest of the material's colours.
 @compute @workgroup_size(8, 8, 1)
@@ -350,6 +370,7 @@ fn makeDither(@builtin(global_invocation_id) id: vec3u) {
     let r2 = matRow(base + 2u);
     if (r2.z <= 0.0) { return; }
     let lit = matRow(base + 39u).x > 0.0;
+    let dots = matRow(base + 62u);
     var rows: array<array<vec3f, 34>, 2>;
     for (var i = 0u; i < 34u; i++) { rows[0][i] = vec3f(0.0); rows[1][i] = vec3f(0.0); }
     let origin = vec2i(id.xy * DITHER_BLOCK);
@@ -372,6 +393,7 @@ fn makeDither(@builtin(global_invocation_id) id: vec3u) {
             } else {
                 z = mmUnlitZ(id.z, pixel, 1.0).x;
             }
+            if (dots.x > 0.0) { z -= mmDots(pixel, dots, mmSalt(id.z)); }
             let smoothRgb = mmRamp(base, mmU(base, z));
             let v = clamp(smoothRgb + rows[cur][x + 1u], vec3f(0.0), vec3f(255.0));
             var best = 1e30;
