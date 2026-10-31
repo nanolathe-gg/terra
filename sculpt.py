@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
-    'sculpt.html', 'sculpt.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
+    'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl',
     'engine-erosion.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
 
@@ -1074,6 +1074,7 @@ def main():
                 body = file.read_bytes()
                 if file.suffix == '.html': content_type = 'text/html; charset=utf-8'
                 if file.suffix == '.js': content_type = 'text/javascript; charset=utf-8'
+                if file.suffix == '.css': content_type = 'text/css; charset=utf-8'
                 if file.suffix == '.png': content_type = 'image/png'
             self.send_response(200)
             self.send_header('Content-Type', content_type)

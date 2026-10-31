@@ -1,5 +1,10 @@
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
+import {mountEditorUI,groupToolControls} from './sculpt-ui.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
+
+import {selectionTransform} from './sculpt-selection.js';
+const editorUI=mountEditorUI();
+let syncToolGroups=()=>{},pathEditing=false,pathPoint=-1;
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -24,7 +29,7 @@ const HELP = {
   fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
-  move:'Click a shape to select it; drag to move it, Shift+drag up or down to change its height. Drag the round handle to rotate and the square one to scale, or use , . and [ ]. Delete removes it.'
+  move:'Drag to move · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas'
 };
 let mapUpdate=() => {},mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
@@ -253,6 +258,7 @@ function buildShapeOptions() {
   // cancelled. Without this the page stays "paused while editing" and Export
   // never re-enables (review A1, 2026-10-27).
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
+  syncToolGroups=groupToolControls(SHAPE_FIELDS);
 }
 let toolSettings={};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -276,15 +282,45 @@ function rememberTool(custom=false) {
   if (custom) state.preset='custom';
   toolSettings[tool]=state;
 }
-function showTool(state) {
-  [$('amount').min,$('amount').max]=amountRange(tool).map(String);
+function showTool(state={},kind=tool) {
+  [$('amount').min,$('amount').max]=amountRange(kind).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
   $('shallow-mode').value=state.shallowMode==='passage'?'passage':'area';
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
-  for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(b.dataset.tool===tool));
-  // With Move active, show the selected shape's own controls.
+  const featureActive=Boolean(mapFeatures?.active);
+  for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&b.dataset.tool===tool));
+  $('feature-tool').setAttribute('aria-pressed',String(featureActive));
+  $('feature-tool-host').hidden=!featureActive;
+  $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params);
+  $('selection-panel').hidden=featureActive||tool!=='move';
+  $('edit-path').setAttribute('aria-pressed',String(pathEditing));
+  $('transform-mode').setAttribute('aria-pressed',String(!pathEditing));
+  $('selection-panel').classList.toggle('path-mode',pathEditing);
+  const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
+  $('selection-empty').hidden=hasSelection;
+  $('path-actions').hidden=!pathEditing||!hasSelection;
+  $('transform-controls').hidden=pathEditing||!hasSelection;
+  $('selection-hud').hidden=!selectionActive;
+  $('selection-hud').classList.toggle('path-mode',pathEditing);
+  $('selection-mode').textContent=selectionActive?`${pathEditing?'Edit path':'Transform'} · ${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
+  $('canvas-path-mode').textContent=pathEditing?'Transform':'Edit path';
+  for(const id of ['selection-clear','selection-delete','transform-mode','canvas-path-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
+  for(const id of ['toggle-tools','toggle-inspector','focus-canvas'])$(id).disabled=loading||Boolean(stroke||moving);
+  const transform=hasSelection?selectionTransform(selectedNode).values:null;
+  for(const key of ['x','y','rotation','scale']){const input=$('selection-'+key);input.disabled=!hasSelection||loading||Boolean(stroke||moving);if(document.activeElement!==input)input.value=transform?String(Math.round(transform[key]*10)/10):'';}
+  if(config?.map){$('selection-x').max=config.map.width-1;$('selection-y').max=config.map.height-1;}
+  $('edit-path').disabled=!nodes[selected]?.points;
+  $('path-add').disabled=!pathEditing||!nodes[selected]?.points;
+  $('path-delete').disabled=!pathEditing||pathPoint<0||(nodes[selected]?.points?.length??0)<=1;
+  for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points;
+  $('view-clay').setAttribute('aria-pressed',String($('clay').checked));
+  $('view-rendered').setAttribute('aria-pressed',String(!$('clay').checked));
+  for(const id of ['save','load','view-clay','view-rendered','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
+  const pointCount=nodes[selected]?.points?.length||0;
+  $('path-help').textContent=pathEditing?`${pointCount} path points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Drag a point, or insert and delete with the buttons above.`:'Drag to move · labelled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
+  // With Select active, show the selected shape's own controls.
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
   try {
@@ -342,8 +378,8 @@ function updateControls() {
   $('tool-help').textContent=tool==='shallow' && $('shallow-mode').value==='passage'
     ?'Raise the underwater bed to 7 below sea level for a shallow passage. Existing land and shallower banks keep their shape.'
     :HELP[tool];
-  $('undo').disabled=!ready || Boolean(stroke) || historyIndex<=0;
-  $('redo').disabled=!ready || Boolean(stroke) || historyIndex>=history.length-1;
+  $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
+  $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
   } finally { tool=activeTool; }
@@ -351,8 +387,10 @@ function updateControls() {
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
-  $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind} #${selected+1}`:tool==='move'?'Move':`Brush · new ${NODE_NAMES[tool]||tool}`;
-  $('brush-scope').textContent=editing?'These controls edit the selected shape. Choose a tool to draw a new one.':tool==='move'?'Click a shape to select and edit it.':'Settings for your next stroke.';
+  $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind} #${selected+1}`:tool==='move'?'Select':`Brush · new ${NODE_NAMES[tool]||tool}`;
+  $('brush-scope').textContent=editing?'Editing this layer. Choose a tool to draw a new stroke.':tool==='move'?'Click a shape to select and edit it.':'Settings for your next stroke.';
+  syncToolGroups(`${tool}:${selected}`);
+  if(featureActive)$('tool-help').textContent=mapFeatures.hint||'Place features and starts · Space + drag to pan';
 }
 
 function canExport() {
@@ -682,6 +720,7 @@ function previewRegionalMove(edit) {
     const q=Array.isArray(edit)?{matrix:edit}:edit||{},matrix=q.matrix??[1,0,0,1,q.dx??0,q.dy??0];
     if (!Array.isArray(matrix) || matrix.length!==6 || matrix.some(v => !Number.isFinite(v)) || Math.abs(matrix[0]*matrix[3]-matrix[1]*matrix[2])<1e-8) throw new Error('Invalid terrain transform.');
     transformNode(node,gesture.state,matrix);
+    if(q.point&&Number.isInteger(q.point.index)&&node.points[q.point.index])node.points[q.point.index]={x:clamp(q.point.x,0,config.map.width-1),y:clamp(q.point.y,0,config.map.height-1)};
     if (q.params) node.params={...node.params,...q.params};
     if (Number.isFinite(q.amount)) node.params={...node.params,amount:q.amount};
   }
@@ -812,17 +851,11 @@ function readRegional(request) {
   const materialField=crop(regionalWeather?.materialField,4),extra=[fields.h,...Object.values(weather),materialField].reduce((sum,a) => sum+(a?.byteLength??0),0);
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
-function drawRegionalOverlay(ctx) {
-  const n=nodes[selected]; if (!n?.points) return;
-  ctx.strokeStyle='#f3d36b'; ctx.lineWidth=2; ctx.beginPath();
-  for (const [i,p] of n.points.entries()) { const y=p.y-(Math.max(config.seaLevel,sampleRegional(p.x,p.y))-config.baseHeight)*.5; if (i) ctx.lineTo(p.x,y); else ctx.moveTo(p.x,y); }
-  ctx.stroke();
-  if (tool!=='move') return;
-  const hd=nodeHandles(n); ctx.fillStyle='#f3d36b'; ctx.beginPath(); ctx.arc(hd.rotate.cx,hd.rotate.cy,7,0,Math.PI*2); ctx.fill(); ctx.fillRect(hd.scale.cx-6,hd.scale.cy-6,12,12);
-}
 function setMapBusy(on) {
   loading=on; $('editor').disabled=on; $('world-editor').disabled=on;
-  for (const id of ['weather','clay','light']) $(id).disabled=on;
+  for (const id of ['weather','clay','light','feature-tool']) $(id).disabled=on;
+  for(const input of document.querySelectorAll('#rendering-host input'))input.disabled=on;
+  renderLayers();updateControls();
   overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on;
 }
 function uniformAuthored({x=0,y=0,width=0,height=width,apron=0}={}) {
@@ -851,7 +884,8 @@ const sculptRegion={
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
-  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,drawOverlay:drawRegionalOverlay,
+  pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,selectPathPoint:i=>{pathPoint=i;updateControls();},
+  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:i=>`${NODE_NAMES[nodes[i]?.kind]||nodes[i]?.kind} #${i+1}`,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
@@ -859,7 +893,7 @@ const sculptRegion={
 window.sculptRegion=sculptRegion;
 function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),frame:n.frame?.slice(),params:n.params?{...n.params}:undefined})); }
 function nodeDistance(n,p) {
-  if (!n.points) return Infinity;
+  if (!n.points || n.hidden) return Infinity;
   let best=Infinity;
   for (let i=0;i<n.points.length;i++) {
     const a=n.points[i],b=n.points[Math.min(i+1,n.points.length-1)],dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
@@ -872,7 +906,7 @@ function nodeDistance(n,p) {
 // the shape as it was when the gesture began, path and frame together.
 function nodeState(n) { return {points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
 function transformNode(n,start,m) {
-  n.points=start.points.map(q => { const r=applyFrame(m,q.x,q.y); return {x:clamp(r.x,0,size-1),y:clamp(r.y,0,size-1)}; });
+  n.points=start.points.map(q => { const r=applyFrame(m,q.x,q.y); return {x:clamp(r.x,0,(config.map?.width??size)-1),y:clamp(r.y,0,(config.map?.height??size)-1)}; });
   n.frame=compose(m,start.frame);
   if (n.params && start.radius) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
 }
@@ -881,28 +915,24 @@ function nodePivot(n) {
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   return {x:(ax+bx)/2,y:(ay+by)/2,reach:Math.hypot(bx-ax,by-ay)/2+(n.params?.radius||40)};
 }
-// Handle positions on the overlay: round rotates, square scales.
-function nodeHandles(n) {
-  const c=nodePivot(n),lift=(Math.max(config.seaLevel,sampleRegional(c.x,c.y))-config.baseHeight)*.5;
-  const r=Math.min(c.reach,size*.45),inside=v => clamp(v,12,size-12);
-  return {pivot:c,centre:{cx:c.x,cy:c.y-lift},rotate:{cx:inside(c.x),cy:inside(c.y-lift-r)},scale:{cx:inside(c.x+r*.707),cy:inside(c.y-lift+r*.707)},radius:r};
-}
 function changeSelected(edit) {
-  const n=nodes[selected]; if (!n?.points || stroke || moving) return;
+  const n=nodes[selected]; if (!n?.points || stroke || moving || loading || !ready) return;
   const before=nodeBounds(n); cancelWeather(); edit(n);
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected);
   flushEval(); markViewChanged(); checkpoint(); queueWeather(); selectNode(selected); schedule();
 }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
-  nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<bestScore) { bestScore=d/reach; best=i; } });
+  nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<=bestScore) { bestScore=d/reach; best=i; } });
   return best;
 }
 function selectNode(i) {
+  if(selected!==i)pathPoint=-1;
   selected=i;
   const n=nodes[i];
   if (n && n.params && HELP[n.kind]) {
-    if (tool!=='move') { rememberTool(); tool=n.kind; }
+    if (tool!=='move') { rememberTool(); tool='move'; }
+    mapFeatures?.deactivate();
     const p=n.params;
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
     $('diameter').value=clamp(p.radius*2,40,800); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
@@ -911,7 +941,7 @@ function selectNode(i) {
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
   }
   renderLayers(); updateControls(); schedule(false);
-  if (n) status(`Editing ${NODE_NAMES[n.kind]||n.kind} #${i+1}: sliders change this shape. Draw to start a new one.`);
+  if (n) status(`Selected ${NODE_NAMES[n.kind]||n.kind} #${i+1}. Drag to transform or edit its settings.`);
 }
 function editSelectedFromControls() {
   const n=nodes[selected]; if (!n || !n.params) return;
@@ -923,26 +953,44 @@ function editSelectedFromControls() {
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
+function reorderLayer(from,to) {
+  if(!ready||loading||stroke||moving||mapFeatures?.busy||from===to||!nodes[from]||!nodes[to])return;
+  cancelWeather();const [node]=nodes.splice(from,1);nodes.splice(to,0,node);selected=to;pathPoint=-1;
+  evaluate(Math.min(from,to));checkpoint();selectNode(to);schedule();queueWeather();
+}
 function renderLayers() {
   const list=$('layers'); if (!list) return;
+  $('layer-count').textContent=nodes.length;
   list.replaceChildren(...nodes.map((n,i) => {
-    const item=document.createElement('li');
-    item.textContent=`${NODE_NAMES[n.kind]||n.kind}${n.hidden?' (hidden)':''}`;
-    item.className=i===selected?'selected':'';
-    item.addEventListener('click',() => selectNode(i===selected?-1:i));
+    const item=document.createElement('li');item.draggable=true;item.dataset.index=i;
+    item.className=(i===selected?'selected ':'')+(n.hidden?'is-hidden':'');
+    const grip=document.createElement('span');grip.className='layer-grip';grip.textContent='⠿';grip.setAttribute('aria-hidden','true');
+    const name=document.createElement('button');name.className='layer-name';name.textContent=NODE_NAMES[n.kind]||n.kind;name.setAttribute('aria-pressed',String(i===selected));name.onclick=()=>selectNode(i===selected?-1:i);
+    const number=document.createElement('span');number.className='layer-index';number.textContent=String(i+1).padStart(2,'0');
+    const visibility=document.createElement('button');visibility.className='layer-visibility';visibility.textContent=n.hidden?'○':'◉';visibility.title=visibility.ariaLabel=`${n.hidden?'Show':'Hide'} ${name.textContent}`;visibility.setAttribute('aria-pressed',String(!n.hidden));visibility.onclick=()=>{selected=i;nodeAction('hide');};
+    name.disabled=visibility.disabled=loading||Boolean(stroke||moving);
+    item.append(grip,number,name,visibility);
+    item.ondragstart=e=>{if(stroke||moving||loading||mapFeatures?.busy){e.preventDefault();return;}e.dataTransfer.setData('application/x-terraform-layer',String(i));e.dataTransfer.effectAllowed='move';};
+    item.ondragover=e=>{if(e.dataTransfer.types.includes('application/x-terraform-layer')){e.preventDefault();e.dataTransfer.dropEffect='move';item.classList.add('drag-over');}};
+    item.ondragleave=()=>item.classList.remove('drag-over');
+    item.ondrop=e=>{e.preventDefault();item.classList.remove('drag-over');const raw=e.dataTransfer.getData('application/x-terraform-layer');if(raw!=='')reorderLayer(Number(raw),i);};
+    item.ondragend=()=>list.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
     return item;
-  }));
-  for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0;
+  }).reverse());
+  if(!nodes.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Draw a stroke to create a layer.';list.append(empty);}
+  for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0||loading||Boolean(stroke||moving);
+  $('node-up').disabled||=selected>=nodes.length-1;$('node-down').disabled||=selected<=0;
+  $('node-seed').disabled||=nodes[selected]?.seed===undefined;
+  $('node-hide').textContent=nodes[selected]?.hidden?'Show':'Hide';
 }
 function nodeAction(kind) {
-  const i=selected; if (i<0 || stroke) return;
+  const i=selected; if (i<0 || stroke || moving || loading || !ready) return;
+  if(kind==='up'||kind==='down'){reorderLayer(i,i+(kind==='up'?1:-1));return;}
   cancelWeather();
   if (kind==='delete') { nodes.splice(i,1); selected=-1; evaluate(i); }
   else if (kind==='hide') { nodes[i].hidden=!nodes[i].hidden; evaluate(i); }
   else if (kind==='seed') { if (nodes[i].seed===undefined) return; nodes[i].seed=(Math.random()*4294967295)>>>0; evaluate(i); }
-  else if (kind==='up' && i>0) { [nodes[i-1],nodes[i]]=[nodes[i],nodes[i-1]]; selected=i-1; evaluate(i-1); }
-  else if (kind==='down' && i<nodes.length-1) { [nodes[i+1],nodes[i]]=[nodes[i],nodes[i+1]]; selected=i+1; evaluate(i); }
-  checkpoint(); renderLayers(); schedule(); queueWeather();
+  checkpoint(); selectNode(selected); schedule(); queueWeather();
 }
 // Apply a pending node edit now, so history and refinement see it.
 function flushEval() {
@@ -1133,11 +1181,42 @@ function deserializeNodes(list) {
   return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => ({kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined}));
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
-for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => { if (stroke) return; mapFeatures?.deactivate(); rememberTool(); tool=b.dataset.tool; if (tool!=='move' && selected>=0) { selected=-1; renderLayers(); } showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
+for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => {
+  if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;
+  if(tool==='move'&&selected>=0)selectNode(selected);
+  else{selected=-1;pathPoint=-1;renderLayers();showTool(toolSettings[tool]);}
+  updateControls();schedule();persistLater();
+});
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
-$('tool-style').addEventListener('change',() => { const preset=$('tool-style').value; if (!Object.hasOwn(TOOL_PRESETS,preset)) return; toolSettings[tool]=toolDefaults(tool,preset); showTool(toolSettings[tool]); updateControls(); schedule(); persistLater(); });
+$('feature-tool').onclick=()=>{if(stroke||moving)return;selected=-1;mapFeatures?.activate('deposit');renderLayers();updateControls();};
+function setPathMode(on){if(stroke||moving||loading)return;pathEditing=on;pathPoint=-1;updateControls();schedule();}
+$('edit-path').onclick=()=>setPathMode(!pathEditing);$('transform-mode').onclick=()=>setPathMode(false);
+$('canvas-path-mode').onclick=()=>setPathMode(!pathEditing);
+$('selection-clear').onclick=$('canvas-deselect').onclick=()=>selectNode(-1);
+$('selection-delete').onclick=()=>nodeAction('delete');
+for(const key of ['x','y','rotation','scale']){
+  const input=$('selection-'+key);
+  input.addEventListener('change',()=>{
+    if(!input.reportValidity()||input.value.trim()===''){input.blur();updateControls();return;}
+    const value=Number(input.value),n=nodes[selected];if(!n?.points||!Number.isFinite(value))return;
+    if(Math.abs(value-selectionTransform(n).values[key])<.051){input.blur();updateControls();return;}
+    const matrix=selectionTransform(n,{[key]:value}).matrix;
+    changeSelected(node=>transformNode(node,nodeState(node),matrix));input.blur();updateControls();
+  });
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();input.value=String(Math.round(selectionTransform(nodes[selected]).values[key]*10)/10);input.blur();}});
+}
+$('path-add').onclick=()=>changeSelected(n=>{const i=pathPoint>=0?pathPoint:n.points.length-1,a=n.points[i],b=n.points[i+1]||{x:clamp(a.x+40,0,config.map.width-1),y:a.y};n.points.splice(i+1,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});pathPoint=i+1;});
+$('path-delete').onclick=()=>{if(pathPoint<0||nodes[selected]?.points?.length<=1)return;changeSelected(n=>{n.points.splice(pathPoint,1);pathPoint=Math.min(pathPoint,n.points.length-1);});};
+for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>changeSelected(n=>transformNode(n,nodeState(n),about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value))));
+document.addEventListener('terraform-feature-mode',()=>updateControls());
+$('tool-style').addEventListener('change',() => {
+  const preset=$('tool-style').value;if(!Object.hasOwn(TOOL_PRESETS,preset))return;
+  const kind=nodes[selected]?.kind||tool;toolSettings[tool]=toolDefaults(kind,preset);showTool(toolSettings[tool],kind);
+  if(selected>=0){editSelectedFromControls();checkpoint();queueWeather();}
+  updateControls();schedule();persistLater();
+});
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for (const id of ['mineral-ring','ring-spread','ring-variation']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for(const id of ['material-weathering','deposit-spread']) $(id).addEventListener('input',()=>{markViewChanged();updateControls();schedule();queueWeather();persistLater();});
@@ -1151,7 +1230,7 @@ function applySeedControl() {
   $('seed').value=seed;
 }
 $('seed').addEventListener('change',() => { applySeedControl(); schedule(); persistLater(); });
-for (const id of ['clay','light']) $(id).addEventListener('change',() => { markViewChanged(); schedule(); persistLater(); });
+for (const id of ['clay','light']) $(id).addEventListener('change',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 $('weather').addEventListener('change',() => {
   cancelWeather(); markViewChanged();
   if (!$('weather').checked) clearRendererWeather();
@@ -1174,9 +1253,24 @@ $('export').addEventListener('click',async () => {
 });
 const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName) || target.isContentEditable);
 window.addEventListener('keydown',event => {
+  if(event.defaultPrevented)return;
+  if(!typing(event.target)&&!loading&&!stroke&&!moving&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
+    if(event.code==='KeyF'&&event.shiftKey){event.preventDefault();editorUI.toggleFocus();return;}
+    if(event.key==='Escape'&&editorUI.exitFocus()){event.preventDefault();return;}
+    if(event.code==='KeyV'){event.preventDefault();if(tool==='move'&&!mapFeatures?.active)setPathMode(false);else document.querySelector('[data-tool="move"]').click();return;}
+  }
   if (mapFeatures?.active && event.code!=='Space' && !(event.ctrlKey||event.metaKey)) return;
-  if (typing(event.target) || loading) return;
+  if (event.defaultPrevented || typing(event.target) || loading) return;
+  if(event.code==='KeyP'&&tool==='move'&&selected>=0&&!event.ctrlKey&&!event.metaKey&&!stroke&&!moving){event.preventDefault();setPathMode(!pathEditing);return;}
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
+  if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint>=0 && selected>=0 && !stroke && !moving) {event.preventDefault();$('path-delete').click();return;}
+  if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
+  const arrow={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
+  if(arrow&&tool==='move'&&selected>=0&&event.target===overlay&&!event.metaKey&&!event.ctrlKey&&!stroke&&!moving){
+    if(pathEditing&&pathPoint<0){event.preventDefault();return;}
+    event.preventDefault();const step=event.shiftKey?10:1,dx=arrow[0]*step,dy=arrow[1]*step;
+    changeSelected(n=>{if(pathEditing&&pathPoint>=0){const p=n.points[pathPoint];p.x=clamp(p.x+dx,0,config.map.width-1);p.y=clamp(p.y+dy,0,config.map.height-1);}else transformNode(n,nodeState(n),[1,0,0,1,dx,dy]);});return;
+  }
   if ((event.key==='Delete' || event.key==='Backspace') && selected>=0 && !stroke && !moving) { event.preventDefault(); nodeAction('delete'); status('Deleted the selected shape.'); }
   // Rotate , . (15°), scale [ ] (10%), height PageUp / PageDown (5).
   const turn={',':-Math.PI/12,'.':Math.PI/12}[event.key],grow={'[':1/1.1,']':1.1}[event.key],lift={PageUp:5,PageDown:-5}[event.key];
@@ -1359,7 +1453,7 @@ const CRACK_STYLES={
 function buildKnobs() {
   const root = $('knobs'), params = experiment;
   const group = (title, open = false) => { const d = document.createElement('details'); d.className = 'knobs-group'; d.open = open; const t = document.createElement('summary'); t.textContent = title; d.append(t); root.append(d); return d; };
-  const render = group('Rendering');
+  const render = group('Rendering',true);$('rendering-host').append(render);
   const toggle = (key, label, on, off, isOn) => {
     const row = document.createElement('label'); row.className = 'small'; row.style.display = 'flex'; row.style.gap = '6px';
     const box = document.createElement('input'); box.type = 'checkbox'; box.checked = isOn;
@@ -1372,7 +1466,8 @@ function buildKnobs() {
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
   for (const [title, knobs] of KNOBS) {
-    const box = group(title, title === 'Cracks');
+    const box = group(title);
+    if(title==='Palette')$('rendering-host').append(box);
     if (title === 'Cracks') {
       const wrap = document.createElement('div'); wrap.className = 'control';
       wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks slider (Shape panel).</p>`;
@@ -1448,14 +1543,14 @@ async function boot() {
     if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
     if (config.variant) LOCAL_KEY+='-v-'+config.variant;
     if (config.map) LOCAL_KEY+=`-map-${config.map.unitsX}x${config.map.unitsY}-sea-${config.seaLevel}`;
-    document.querySelector('.topbar h2').textContent=(config.biome||'Green Planet')+' terrain';
+    document.querySelector('.canvas-caption h2').textContent=(config.biome||'Green Planet')+' terrain';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.
     loadWorlds();
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
     if (worldId!==config.biomeId) LOCAL_KEY+='-'+worldId;
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
-    if (worldId!==config.biomeId) document.querySelector('.topbar h2').textContent=worlds[worldId].name+' terrain';
+    if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
     buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);

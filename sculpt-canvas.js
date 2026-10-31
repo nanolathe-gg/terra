@@ -1,3 +1,4 @@
+import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
@@ -21,13 +22,18 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
   const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let afterGesture=false,lastViewEpoch=-1,heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let afterGesture=false,lastViewEpoch=-1,heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,documentLoading=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let hoveredNode=-1;
   let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(128,128),cg=coarse.getContext('2d');
   const panel=document.createElement('section'); panel.className='section files';
-  panel.innerHTML=`<h3>Map view and memory</h3><div class="row"><button data-half>0.5×</button><button data-overview>Overview</button></div><canvas data-nav width="200" height="200" aria-label="Map minimap navigator" style="width:100%;height:auto;margin-top:9px;cursor:crosshair;image-rendering:pixelated"></canvas><label class="control" style="display:block">Terrain GPU budget (MiB)<input data-gpu type="number" min="128" max="4096" step="128" value="${gpuBudget/MB}"></label><label class="control" style="display:block">Page heap budget (MiB)<input data-heap type="number" min="128" max="8192" step="128" value="${heapBudget/MB}"></label><p class="small" data-memory></p><label class="control" style="display:block">Server document<input data-document value="${docId}"></label><div class="row"><button data-save>Save to server</button><button data-load>Reload document</button></div><p class="small" data-save-state>Changes save incrementally on this local server.</p>`;
-  document.querySelector('aside').append(panel);
-  const find=s=>panel.querySelector(s),navigatorCanvas=find('[data-nav]'),ng=navigatorCanvas.getContext('2d');
+  panel.innerHTML=`<h3>Memory budgets</h3><label class="control" style="display:block">Terrain GPU budget (MiB)<input data-gpu type="number" min="128" max="4096" step="128" value="${gpuBudget/MB}"></label><label class="control" style="display:block">Page heap budget (MiB)<input data-heap type="number" min="128" max="8192" step="128" value="${heapBudget/MB}"></label><p class="small" data-memory></p>`;
+  $('graphics-host').append(panel);
+  $('minimap-host').innerHTML='<canvas data-nav width="200" height="200" tabindex="0" aria-label="Minimap: drag to pan, or use arrow keys"></canvas>';
+  const documentHost=$('document-controls');
+  documentHost.innerHTML='<label>Server document<input data-document aria-label="Server document name"></label><div class="row"><button data-save disabled>Save to server</button><button data-load disabled>Reload</button></div><p class="small" data-save-state>Changes save incrementally on this local server.</p>';
+  const find=s=>document.querySelector(s),navigatorCanvas=find('[data-nav]'),ng=navigatorCanvas.getContext('2d');
+  find('[data-document]').value=docId;
   function state() { return {x:viewport.scrollLeft/(scale||1),y:viewport.scrollTop/(scale||1),width:canvas.width/(scale||1),height:canvas.height/(scale||1),scale,overview}; }
   const sourceSample=api.sample;
   function heightSample(x,y){for(const e of cache.values()){const r=e.heightPatch;if(r&&x>=r.gridOrigin[0]&&y>=r.gridOrigin[1]&&x<=r.gridOrigin[0]+(r.gridWidth-1)*r.gridSpacing&&y<=r.gridOrigin[1]+(r.gridHeight-1)*r.gridSpacing)return sampleField(r,x,y);}return null;}
@@ -150,8 +156,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function overlays() {
     const v=state(); ink.setTransform(1,0,0,1,0,0); ink.clearRect(0,0,overlay.width,overlay.height); ink.save(); ink.scale(scale,scale); ink.translate(-v.x,-v.y);
-    drawMapBounds(ink,map,config,api.sampleAuthored??sourceSample); features?.draw(ink,v); api.drawOverlay?.(ink,v);
-    if (hover && !features?.active) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
+    drawMapBounds(ink,map,config,api.sampleAuthored??sourceSample); features?.draw(ink,v);
+    if(api.currentTool()==='move'&&!features?.active){
+      if(hoveredNode>=0&&hoveredNode!==api.selection())drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
+      drawSelection(ink,geometry(api.selection()),{label:api.selectionLabel(api.selection()),pathMode:api.pathEditing?.(),point:api.pathSelection?.()});
+    }
+    if (hover && !features?.active && api.currentTool()!=='move') { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
     // H7b: ?levelsOverlay=1 marks each shown chunk with its level: orange Q for a quarter image, green F for a final one.
     if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
     ink.restore();
@@ -162,7 +172,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(pendingStrokeTime){strokeTimes.push(now-pendingStrokeTime);if(strokeTimes.length>256)strokeTimes.shift();pendingStrokeTime=0;}
   }
   async function frame() {
-    pending=false;if(drawing){rerun=true;return;}drawing=true;
+    pending=false;if(drawing){rerun=true;return;}drawing=true;const renderStart=performance.now();
+    updateDocumentControls();
     try {
       const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
       drawCoarse();overlays();
@@ -213,7 +224,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(intersects(rect,v)){paint(e,v);overlays();presented();}await (levels&&(gesture||baked)?undefined:tick());
         }
       }else if(overview)presented();
-      const m=metrics();$('timing').textContent=`${bakes} bakes · ${(m.gpuBytes/MB).toFixed(1)} MiB terrain · ${evictions} evictions`;
+      const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name!=='AbortError'){console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
     finally{drawing=false;if(rerun){rerun=false;schedule();}}
   }
@@ -222,15 +233,21 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function schedule() { if (!pending) { pending=true; if(levels&&gesture&&!drawing)queueMicrotask(frame);else requestAnimationFrame(frame); } }
   function resize() {
     if(busy){resizePending=true;return;}resizePending=false;
+    const centre=state();centre.x+=centre.width/2;centre.y+=centre.height/2;
     if (overview) scale=Math.min((viewport.clientWidth-28)/map.width,(viewport.clientHeight-28)/map.height);
     stage.style.width=map.width*scale+'px'; stage.style.height=map.height*scale+'px'; stage.style.margin=overview?'auto':'0'; stage.style.overflow='visible';
     const width=Math.max(1,Math.min(viewport.clientWidth,Math.ceil(map.width*scale))),height=Math.max(1,Math.min(viewport.clientHeight,Math.ceil(map.height*scale)));
     for (const c of [canvas,overlay]) { c.width=width; c.height=height; c.style.width=width+'px'; c.style.height=height+'px'; c.style.inset='auto'; }
+    if(!overview){viewport.scrollLeft=centre.x*scale-canvas.width/2;viewport.scrollTop=centre.y*scale-canvas.height/2;}
     position();viewEpoch++;if(renderer&&!renderer.busy)configureChunks();schedule();
   }
   function position() { for (const c of [canvas,overlay]) { c.style.left=viewport.scrollLeft+'px'; c.style.top=viewport.scrollTop+'px'; } }
-  function zoom(next) { $('fit').setAttribute('aria-pressed',String(next==='overview'));$('one').setAttribute('aria-pressed',String(next===1));find('[data-half]').setAttribute('aria-pressed',String(next===.5));find('[data-overview]').setAttribute('aria-pressed',String(next==='overview'));const v=state(),cx=v.x+v.width/2,cy=v.y+v.height/2; overview=next==='overview'; if (!overview) scale=next; resize(); viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2); viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2); position(); schedule(); }
-  $('fit').onclick=()=>zoom('overview'); $('one').onclick=()=>zoom(1); find('[data-half]').onclick=()=>zoom(.5); find('[data-overview]').onclick=()=>zoom('overview');
+  function zoom(next) {
+    $('fit').setAttribute('aria-pressed',String(next==='overview'));$('one').setAttribute('aria-pressed',String(next===1));$('zoom').value=String(next);
+    const v=state(),cx=v.x+v.width/2,cy=v.y+v.height/2;overview=next==='overview';if(!overview)scale=clamp(Number(next)||1,.1,4);
+    resize();viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2);viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2);position();schedule();
+  }
+  $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
   viewport.addEventListener('scroll',()=>{position();viewEpoch++;lastScroll=performance.now();schedule();},{passive:true}); new ResizeObserver(resize).observe(viewport);
   function screen(event) { const r=overlay.getBoundingClientRect(),v=state(); return {x:v.x+(event.clientX-r.left)/scale,z:v.y+(event.clientY-r.top)/scale}; }
   function pick(cx,cy) {
@@ -240,18 +257,37 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return [x,clamp(sy,0,map.height-1)];
   }
   function pickWorld(p) { const v=state(); return pick((p.x-v.x)*scale,(p.z-v.y)*scale); }
-  navigatorCanvas.onpointerdown=event=>{const r=navigatorCanvas.getBoundingClientRect(); if (overview) zoom(1); viewport.scrollLeft=(event.clientX-r.left)/r.width*map.width*scale-canvas.width/2; viewport.scrollTop=(event.clientY-r.top)/r.height*map.height*scale-canvas.height/2;position();schedule();};
+  let navigationPointer=null;
+  function navigate(event){const r=navigatorCanvas.getBoundingClientRect();if(overview)zoom(1);viewport.scrollLeft=clamp((event.clientX-r.left)/r.width,0,1)*map.width*scale-canvas.width/2;viewport.scrollTop=clamp((event.clientY-r.top)/r.height,0,1)*map.height*scale-canvas.height/2;position();viewEpoch++;schedule();}
+  navigatorCanvas.onpointerdown=event=>{if(event.button!==0||busy||gesture||features?.busy)return;event.preventDefault();navigationPointer=event.pointerId;navigatorCanvas.setPointerCapture(event.pointerId);navigate(event);};
+  navigatorCanvas.onpointermove=event=>{if(navigationPointer===event.pointerId)navigate(event);};
+  const endNavigation=event=>{if(navigationPointer!==event.pointerId)return;navigationPointer=null;if(navigatorCanvas.hasPointerCapture(event.pointerId))navigatorCanvas.releasePointerCapture(event.pointerId);};
+  for(const name of ['pointerup','pointercancel','lostpointercapture'])navigatorCanvas.addEventListener(name,endNavigation);
+  navigatorCanvas.onkeydown=event=>{const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];if(!d||busy||gesture||features?.busy)return;event.preventDefault();event.stopPropagation();if(overview)zoom(1);viewport.scrollLeft+=d[0]*canvas.width*.2;viewport.scrollTop+=d[1]*canvas.height*.2;position();viewEpoch++;schedule();};
   function localPoint(event){const p=screen(event),q=pickWorld(p);return {x:q[0],y:q[1]};}
   function nodeMetadata(index){return api.nodeMetadata?api.nodeMetadata(index):api.graph()[index];}
-  function moveHandles(index){const n=nodeMetadata(index);if(!n?.points?.length)return null;let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;for(const p of n.points){ax=Math.min(ax,p.x);ay=Math.min(ay,p.y);bx=Math.max(bx,p.x);by=Math.max(by,p.y);}const x=(ax+bx)/2,y=(ay+by)/2,lift=(Math.max(config.seaLevel,visibleSample(x,y))-config.baseHeight)/2,radius=Math.min(Math.hypot(bx-ax,by-ay)/2+(n.params?.radius||40),config.size*.45);return {pivot:{x,y},centre:{x,y:y-lift},rotate:{x,y:y-lift-radius},scale:{x:x+radius*.707,y:y-lift+radius*.707}};}
+  const project=p=>({x:p.x,y:p.y-(Math.max(config.seaLevel,visibleSample(p.x,p.y))-config.baseHeight)/2});
+  function geometry(index){return selectionGeometry(nodeMetadata(index),project,state());}
+  function refreshHover(event){
+    if(gesture||pan||busy||features?.active||api.currentTool()!=='move'){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
+    const q=screen(event),hit=hitSelection(geometry(api.selection()),{x:q.x,y:q.z},api.pathEditing?.());
+    hoveredNode=api.pickAt(localPoint(event));
+    overlay.style.cursor=hit?.action==='rotate'?'grab':hit?.action==='scale'?'nwse-resize':hit?.action==='point'?'crosshair':hoveredNode>=0||hit?'move':'default';
+  }
   overlay.addEventListener('pointerdown',event=>{
     if(![0,1].includes(event.button)||busy||gesture||pan||api.gestureActive?.()||!api.ready())return;event.preventDefault();overlay.focus({preventScroll:true});overlay.setPointerCapture(event.pointerId);
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
     if(features?.active)return;
     const p=localPoint(event),start=performance.now();
     if(api.currentTool()==='move'){
-      const screenPoint=screen(event),selected=api.selection(),handles=moveHandles(selected),hit=handles&&['rotate','scale'].find(k=>Math.hypot(screenPoint.x-handles[k].x,screenPoint.z-handles[k].y)<12/scale);
-      const index=hit?selected:api.selectAt(p);if(index<0)return;const h=moveHandles(index);if(api.beginMove(index)===false)return;gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:nodeMetadata(index)?.params?.amount??0,action:event.shiftKey?'amount':hit||'move'};
+      const screenPoint=screen(event),selected=api.selection(),handles=geometry(selected);
+      const hit=hitSelection(handles,{x:screenPoint.x,y:screenPoint.z},api.pathEditing?.());
+      const index=hit?selected:api.selectAt(p);if(index<0)return;
+      const pointIndex=hit?.action==='point'?hit.index:-1;api.selectPathPoint?.(pointIndex);
+      // In path mode empty ground selects; only a point can start a drag.
+      if(api.pathEditing?.()&&pointIndex<0)return;
+      const h=geometry(index);if(api.beginMove(index)===false)return;
+      gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:nodeMetadata(index)?.params?.amount??0,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action:hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey?'amount':'move'};
     }else{api.beginStroke(api.currentTool(),p,api.strokeOptions());gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'stroke',points:[p],start};}
     pendingStrokeTime=start;metadata?.update?.();schedule();
   });
@@ -262,19 +298,21 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(gesture.type==='stroke'&&Math.hypot(hover[0]-gesture.points.at(-1).x,hover[1]-gesture.points.at(-1).y)>(final?0:3)){gesture.clientX=event.clientX;gesture.clientY=event.clientY;gesture.points.push({x:hover[0],y:hover[1]});pendingStrokeTime=performance.now();api.previewStroke(gesture.points);}
     else if(gesture.type==='move'){
       gesture.clientX=event.clientX;gesture.clientY=event.clientY;const q=screen(event),h=gesture.handles,c=h.pivot,around=(a,b,c1,d)=>[a,b,c1,d,c.x-a*c.x-c1*c.y,c.y-b*c.x-d*c.y];let edit;
-      if(gesture.action==='rotate'){const angle=Math.atan2(q.z-h.centre.y,q.x-h.centre.x)-Math.atan2(gesture.screen.z-h.centre.y,gesture.screen.x-h.centre.x);edit={matrix:around(Math.cos(angle),Math.sin(angle),-Math.sin(angle),Math.cos(angle))};}
-      else if(gesture.action==='scale'){const k=clamp(Math.hypot(q.x-h.centre.x,q.z-h.centre.y)/Math.max(1,Math.hypot(gesture.screen.x-h.centre.x,gesture.screen.z-h.centre.y)),.2,4);edit={matrix:around(k,0,0,k)};}
+      if(gesture.action==='point'){let dx=q.x-gesture.screen.x,dy=q.z-gesture.screen.z;if(event.shiftKey){if(Math.abs(dx)>Math.abs(dy))dy=0;else dx=0;}edit={point:{index:gesture.pointIndex,x:gesture.point.x+dx,y:gesture.point.y+dy}};}
+      else if(gesture.action==='rotate'){let angle=Math.atan2(q.z-h.centre.y,q.x-h.centre.x)-Math.atan2(gesture.screen.z-h.centre.y,gesture.screen.x-h.centre.x);if(event.shiftKey)angle=Math.round(angle/(Math.PI/12))*Math.PI/12;edit={matrix:around(Math.cos(angle),Math.sin(angle),-Math.sin(angle),Math.cos(angle))};}
+      else if(gesture.action==='scale'){let k=clamp(Math.hypot(q.x-h.centre.x,q.z-h.centre.y)/Math.max(1,Math.hypot(gesture.screen.x-h.centre.x,gesture.screen.z-h.centre.y)),.2,4);if(event.shiftKey)k=Math.round(k*10)/10;edit={matrix:around(k,0,0,k)};}
       else if(gesture.action==='amount')edit={amount:gesture.amount+(gesture.screen.z-q.z)*1.5};
       else edit={dx:q.x-gesture.screen.x,dy:q.z-gesture.screen.z};pendingStrokeTime=performance.now();api.previewMove(edit);
     }
   }
   overlay.addEventListener('pointermove',event=>{
     if(pan?.id===event.pointerId){viewport.scrollLeft=pan.left-event.clientX+pan.x;viewport.scrollTop=pan.top-event.clientY+pan.y;position();viewEpoch++;lastScroll=performance.now();schedule();return;}
-    preview(event);if(gesture?.id===event.pointerId)schedule();overlays();
+    preview(event);refreshHover(event);if(gesture?.id===event.pointerId)schedule();overlays();
   });
+  overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
   const end=event=>{if(pan?.id===event.pointerId)pan=null;if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;afterGesture=true;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();queueSave();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
-  document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture)end({pointerId:gesture.id,type:'pointercancel'});});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
+  document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture){event.preventDefault();end({pointerId:gesture.id,type:'pointercancel'});}});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
   window.addEventListener('blur',()=>{space=false;pan=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});});
   function budgets(){gpuBudget=clamp(Number(find('[data-gpu]').value)||512,128,4096)*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
@@ -294,8 +332,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     await idle();const size=chunkSize(),total=Math.ceil(map.width/size)*Math.ceil(map.height/size);let index=0;
     for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height);tile.getContext('2d').drawImage(entry.bitmap,0,0);entry.bitmap.close?.();const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
+  function updateDocumentControls(){const locked=!api.ready()||busy||documentLoading||Boolean(gesture);find('[data-save]').disabled=locked||saving;find('[data-load]').disabled=locked||saving;find('[data-document]').disabled=locked||saving;}
   async function saveDocument() {
-    if(saving){saveAgain=true;return;}saving=true;find('[data-load]').disabled=true;
+    if(!api.ready()||busy||gesture||documentLoading){find('[data-save-state]').textContent='Wait for the editor to finish loading or editing.';return;}
+    if(saving){saveAgain=true;return;}saving=true;updateDocumentControls();find('[data-save-state]').textContent='Saving to server…';
     try {
       const id=find('[data-document]').value.trim();if(!/^[A-Za-z0-9_-]{1,100}$/.test(id))throw new Error('Use letters, numbers, hyphens and underscores for the document name.');if(id!==docId){docId=id;maskVersions.clear();lastMetadata='';}
       const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('/map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
@@ -303,24 +343,28 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const chunks=(await api.maskChunks?.())||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('/map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
       const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('/map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
       find('[data-save-state]').textContent='Saved to server · '+id;
-    }catch(err){find('[data-save-state]').textContent=err.message;throw err;}finally{saving=false;find('[data-load]').disabled=busy;if(saveAgain){saveAgain=false;queueSave();}}
+    }catch(err){find('[data-save-state]').textContent=err.message;throw err;}finally{saving=false;updateDocumentControls();if(saveAgain){saveAgain=false;queueSave();}}
   }
   async function loadDocument() {
+    if(!api.ready()||busy||gesture||documentLoading)throw new Error('Wait for the editor to finish loading or editing.');
+    documentLoading=true;updateDocumentControls();
+    try {
     clearTimeout(saveTimer);while(saving)await tick();clearTimeout(saveTimer);
     const id=find('[data-document]').value.trim(),data=await json('/map-document?'+new URLSearchParams({id}));
     const documentData=data.document??data.metadata??data;
     if(documentData.biome!==config.biomeId||documentData.map?.unitsX!==map.unitsX||documentData.map?.unitsY!==map.unitsY||documentData.seaLevel!==config.seaLevel)throw new Error('Open a canvas with the document’s world, dimensions and sea level before loading it.');
     const sketch=documentData.sketch;
-    await api.loadSketch(sketch);api.restoreMapData(documentData.mapData);docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
+    await api.loadSketch(sketch);api.restoreMapData(documentData.mapData);api.checkpoint();docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
+    }finally{documentLoading=false;updateDocumentControls();}
   }
-  function queueSave(){clearTimeout(saveTimer);if(gesture||busy)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
+  function queueSave(){clearTimeout(saveTimer);if(gesture||busy||documentLoading)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
   find('[data-save]').onclick=()=>saveDocument().catch(()=>{});find('[data-load]').onclick=()=>loadDocument().catch(err=>{find('[data-save-state]').textContent=err.message;});
   // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
   const invalidate=change=>clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);queueSave();});
   function setBusy(on){busy=on;api.setBusy(on);find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on||saving;if(!on){if(resizePending)resize();else schedule();}}
-  features=await mountMapFeatures({config,host:document.querySelector('aside'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
+  features=await mountMapFeatures({config,host:$('feature-tool-host'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();queueSave();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   function minimumBytes(){const e=renderer.estimate(renderer.requiredRegion({x:Math.floor(renderer.size/2),y:Math.floor(renderer.size/2),width:32,height:32}),32,32);return fixedGPU(false)+512*512*8+e.retainedBytes+e.workingBytes+8*MB;}

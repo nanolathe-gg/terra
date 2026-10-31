@@ -79,7 +79,9 @@ export async function mountMapFeatures(api) {
   function update() {
     controls.disabled=!enabled();
     for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=!ready || (['place','erase','fill'].includes(name) && !definitions.size) || (name==='deposit' && !definition(catalogue?.depositName)); }
-    $('[data-catalogue-controls]').hidden=!definitions.size;
+    $('[data-catalogue-controls]').hidden=mode!=='place'||!definitions.size;
+    $('[data-starts]').closest('.control').hidden=mode!=='starts';
+    $('[data-fill]').hidden=mode!=='fill';if(mode==='fill')$('[data-fill]').open=true;
     $('[data-selected]').textContent=selectedName && definition(selectedName)?metadata(definition(selectedName)):'';
     const select=$('[data-starts]'); select.replaceChildren(...starts.map((s,i) => { const option=doc.createElement('option'); option.value=i; option.textContent=`${i+1}: (${s.x}, ${s.z})`; return option; }));
     select.value=String(selectedStart); $('[data-remove-start]').disabled=starts.length<=1 || selectedStart<0;
@@ -93,9 +95,9 @@ export async function mountMapFeatures(api) {
   function changed(text) { selectedFeature=-1; status(text); update(); api.change(); }
   function activate(next) {
     if (!guard()) return false;
-    finishGesture(false); mode=next; hover=null; update(); return true;
+    finishGesture(false);mode=next==='deposit'&&!definition(catalogue?.depositName)?'starts':next;hover=null;update();doc.dispatchEvent(new Event('terraform-feature-mode'));return true;
   }
-  function deactivate() { finishGesture(false); mode=''; hover=null; update(); }
+  function deactivate() { const wasActive=Boolean(mode);finishGesture(false);mode='';hover=null;update();if(wasActive)doc.dispatchEvent(new Event('terraform-feature-mode')); }
   function metadata(d) { return `${d.name} · ${d.footprintX}×${d.footprintZ} cells · metal ${d.metal} · energy ${d.energy} · ${d.blocking?'blocking':'nonblocking'} · ${d.reclaimable?'reclaimable':'not reclaimable'} · ${d.uses} map uses${d.animTrans||d.shadTrans?' · translucent preview at 50% alpha':''}`; }
   function refreshCatalogue() {
     const list=$('[data-catalogue-list]'),kind=$('[data-filter]').value; list.replaceChildren();
@@ -107,8 +109,8 @@ export async function mountMapFeatures(api) {
       button.setAttribute('aria-pressed',String(selectedName===d.name)); button.onclick=() => { if (!guard()) return; selectedName=d.name; selectedFeature=-1; activate('place'); refreshCatalogue(); }; list.append(button);
     }
   }
-  for (const [name,label] of [['place','Place feature'],['erase','Erase'],['deposit','Metal deposit'],['starts','Starts'],['fill','Fill'],['','Terrain tools']]) {
-    const button=doc.createElement('button'); button.type='button'; button.textContent=label; button.onclick=() => name?activate(name):deactivate(); $('[data-tools]').append(button); buttons.set(name,button);
+  for (const [name,label] of [['place','Place feature'],['erase','Erase'],['deposit','Metal deposit'],['starts','Starts'],['fill','Fill']]) {
+    const button=doc.createElement('button'); button.type='button';button.dataset.featureMode=name;button.textContent=label;button.onclick=()=>activate(name); $('[data-tools]').append(button); buttons.set(name,button);
   }
   $('[data-filter]').onchange=() => { if (guard()) refreshCatalogue(); };
   $('[data-starts]').onchange=event => { if (!guard()) { update(); return; } selectedStart=Number(event.target.value); activate('starts'); };
@@ -405,5 +407,5 @@ export async function mountMapFeatures(api) {
     catalogueError=error.message; $('[data-catalogue]').textContent=catalogueError; status('Feature placement is unavailable; start positions remain editable.');
   }
   ready=true; refreshCatalogue(); update();
-  return {serialize,load,draw,deactivate,activate,stats:()=>({imageBytes:[...images.values()].reduce((total,image)=>total+(image.naturalWidth||image.width)*(image.naturalHeight||image.height)*4,0)}),addFeature,removeFeature,addStart,moveStart,removeStart,setFill,fillRegion,get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
+  return {serialize,load,draw,deactivate,activate,stats:()=>({imageBytes:[...images.values()].reduce((total,image)=>total+(image.naturalWidth||image.width)*(image.naturalHeight||image.height)*4,0)}),addFeature,removeFeature,addStart,moveStart,removeStart,setFill,fillRegion,get hint(){return $('[data-help]').textContent;},get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
 }
