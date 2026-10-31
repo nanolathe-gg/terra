@@ -585,8 +585,9 @@ Each is written in full when the one before it lands.
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Merged a7c2256 (deep cross-section and the map-canvas gaps are H8b; `hillLobes` on JS) |
 | Features | Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path. Materials is H14 | Not yet written |
 | Combine or drop | Every remaining control against decision 16 and the impact rule, from the candidates list | After Retire |
-| H13 | GPU memory on 8×8 maps: Lava and Ice within the default budget | Next |
-| H14 | Materials: every world's images become numbers, with water, noise and the palette; the Python preparation goes | Next |
+| H13 | GPU memory on 8×8 maps: Lava and Ice within the default budget | Merged fa83b11 |
+| H14 | Materials: every world's images become numbers, with water, noise and the palette; the Python preparation goes | Part 1 merged 1fcaafd (the inventory, Moon); steps 5 and 6 follow H14b |
+| H14b | Materials as lit height fields: one generator with facets, seams, veins and any stretch angle, then the seven other worlds | Running |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
 **H3, one material model (Green):**

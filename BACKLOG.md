@@ -6025,6 +6025,37 @@ against `main-ab9a80f`; `smoke.mjs --page8` clean.
 branch `H13-gpu-budget`; assets `$R/agent-H13`. Files:
 `sculpt-canvas.js`, `sculpt-chunk-renderer.js`, `repro/smoke.mjs`.
 
+**Done (merged as fa83b11; EXPERIMENTS row 158; notes in
+`$R/agent-H13/NOTES.md`).**
+- **The cause.** The 512 px chunk was not too big: the paged fields had
+  taken its room. On lava-1 at 8×8 it needed 537 MiB against 512, most of it
+  the fields. Green pages at ring 4; Lava and Ice page at ring 192, where 6
+  shape pages already cost about 240 MiB. Three faults:
+  - `weatherBudget` was read once, so a refit's cap of 6 pages never held
+    and a pan filled 22;
+  - `minimumBytes()` left room for a 32 px chunk, not the canonical one with
+    the world's mask layers;
+  - `estimate()` counted 16 bytes a texel where `allocate()` makes 24.
+- **Peaks** while loading and panning, in MiB against 512:
+
+  | World | Before | After | Console |
+  | --- | --- | --- | --- |
+  | Lava | 517.8 | 504.6 | clean; it logged an error before |
+  | Ice | 518.7 | 504.5 | clean |
+  | Green | 377.3 | 377.3 | clean |
+
+- **The cost.** Load is the same. A pan on Lava settles about 100 ms later
+  (354 against 266 ms, median), since the image cache has less room and some
+  chunks rebake. Ice and Green are the same.
+- A refused chunk now names the parts of the estimate, and `smoke.mjs` takes
+  `--worlds8`.
+- **Coordinator's merge checks:** 27 scenes 0.00 against `main-ab9a80f` with
+  clean consoles; smoke clean on nine worlds and on 8×8 Green, Lava and Ice;
+  the gate passes.
+
+**Still open:** the fit assumes 9 MB a weather page where one costs 5, so
+the cap could be 14 pages, not 6. That would recover Lava's 100 ms.
+
 ### H14. Materials: every world from numbers
 
 > **Owner, 2026-10-29:** "we should codify the retail information in some
@@ -6098,6 +6129,70 @@ The gaps are counted in the Done list.
 **Server and guard:** port 8880, CDP 9680; worktree `../terraform-wt-H14`,
 branch `H14-materials`; assets `$R/agent-H14`. H13 merges first; merge main
 before landing.
+
+**Part 1 done (merged as 1fcaafd; EXPERIMENTS row 159; notes in
+`$R/agent-H14/NOTES.md`).** Steps 1 and 2.
+- **The inventory.** A default page load fetched 73 images across the nine
+  worlds; it now fetches 69. Land images still read: 24 across seven worlds
+  (Red 3, Desert 3, Archipelago 5, Crystal 3, Ice 3, Lava 3, Zhon 4). Every
+  world also reads two waters, noise, the palette and fractures.
+- **Dead code gone:** the `rock` key, `mineralRings`, the `rock` and `noise`
+  variant branches, and seven textures uploaded but never bound. Dead images
+  and keys that remain are listed in the notes.
+- **The pipeline.** `measure/material_numbers.py` writes
+  `materials/<world>.json`, which now also holds the `material` and `water`
+  numbers that lived only in `config.json`. `makeMaterials` makes N layers
+  in table order. Only a table with a `placement` block gives placement
+  rows; the other worlds keep theirs from their knobs.
+- **Moon draws no land image.** Its scenes move by mean |diff| 4.31, 1.66
+  and 2.50, all on rims and walls, none on the plain. `stats.py`: 42 marks
+  outside retail before and after, none newly outside. Ready after
+  navigation is no slower. The generated pass takes 4-11 ms warm.
+- **Moon's rock is the finding.** The swatch shows a soft cloud where the
+  art has embossed facets (`$R/agent-H14/moon-sheets/swatch-1/rock.png`).
+  The scenes barely show it, since relief shading and the palette carry the
+  walls, and the coordinator accepted it. Ice, Crystal, Red and Archipelago
+  would not get away with it: their shards, plates, cracks, veins and
+  streaks are their look.
+- **Provenance.** Ground tiles are sampled from neighbour statistics, so
+  they are safe in a table. A quilted plain (Red, Archipelago, Crystal) is
+  retail pixels and cannot go in one.
+- **Coordinator's merge checks:** only moon-1..3 moved, by the agent's
+  figures, and the other 24 scenes are 0.00; `regional.mjs` 0 on Moon's three
+  and green-2; smoke clean on nine worlds, 8×8 Green and 8×8 Moon.
+
+**Part 2: H14b, below.** It replaces steps 3 and 4. Steps 5 and 6 follow it.
+
+### H14b. Materials as lit height fields
+
+The art is rendered terrain: a height field lit from one direction, then
+reduced to a palette. The noise model only matches its statistics, so it
+makes a cloud where the art has facets. One generator should do what the art
+did.
+
+**Deliver,** one commit each:
+1. **One generator** in `engine-materials.wgsl`: a height from the bands,
+   with a ridged share and cells (facets with seams), at a stretch of any
+   angle; lit from one direction; then through the measured rank map and
+   ramp, so the histogram still comes out right. A shared overlay draws thin
+   veins in their own colour. Every new number at 0 leaves a material as it
+   is, so Green and Moon's slope stay 0.00. No knob per world.
+2. **Measure and fit.** `material_numbers.py` adds the light direction,
+   orientation and anisotropy, seam share, cell size, and vein width and
+   spacing. `material_fit.py` fits them.
+3. **A generated ground layer** for a quilted plain.
+4. **Swatches, then stop for review:** Moon rock, Ice rock, Crystal rock,
+   Crystal slope, Red's structured slope and Archipelago's mineral ring, each
+   beside its prepared image, with no world switched.
+5. **The worlds,** after review, one commit each: Moon's rock refit, Lava,
+   Ice, Zhon, Crystal, Red, Desert, Archipelago. `MATERIAL_TABLES` lists all
+   nine.
+
+**Acceptance:** as H14, for each world. The generated pass stays under 100 ms
+warm for a world's full set of layers. Quarter levels still read true.
+
+**Server and guard:** port 8881, CDP 9681; worktree `../terraform-wt-H14b`,
+branch `H14b-lit-materials`; assets `$R/agent-H14b`.
 
 ## After the cards
 
