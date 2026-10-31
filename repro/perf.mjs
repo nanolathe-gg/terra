@@ -1,5 +1,5 @@
 // Card H7 item 1: where the time goes between an edit or a load and the final picture.
-//   node repro/perf.mjs <map4|map8|map16|map40|study> --scene repro/scenes/green-2.json --out <dir>
+//   node repro/perf.mjs <map4|map8|map16|map40> --scene repro/scenes/green-2.json --out <dir>
 //        [--server http://127.0.0.1:8867] [--port 9667] [--no-export] [--label name]
 // Opens a fresh headless Chrome, installs timing hooks before the page runs (no page source is edited), then scripts:
 //   load      scene applied, zoomed to 1x: first picture, weather ready, every visible chunk at final
@@ -7,7 +7,7 @@
 //   release   the stroke's release: time to weather ready and to every visible chunk at final
 //   scroll    a pan across several chunks: rAF frame intervals, coverage, time to final after it stops
 //   export    sculptMap.export (map modes; skipped with --no-export)
-// and writes <out>/<mode>-perf.json. The study mode loads the 1024-px editor and scripts the load, a drag and the release.
+// and writes <out>/<mode>-perf.json.
 // The hooks time GPU passes with timestamp queries (added to every pass that has none), the queue waits, and the JS
 // stages a chunk bake runs through: region read (shape replay), field upload, draw encode, bitmap copy.
 import {spawn} from 'node:child_process';
@@ -23,7 +23,7 @@ const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return 
 const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
 const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
 const [mode] = args;
-if (!['map4', 'map8', 'map16', 'map40', 'study'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|map16|map40|study> --scene <scene.json> --out <dir>'); process.exit(1); }
+if (!['map4', 'map8', 'map16', 'map40'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|map16|map40> --scene <scene.json> --out <dir>'); process.exit(1); }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -146,14 +146,16 @@ function patch(c) {
       return v;
     };
   }
-  const erode = r.erode.bind(r);
-  r.erode = async request => {
-    const t = now(); ev('erode-start', {}); const prev = P.ctx; P.ctx = 'erode';
-    try { const v = await erode(request); P.erodeParts = v.parts; return v; } finally { P.ctx = prev; ev('erode-end', {ms: now() - t}); add('time pass (wall)', now() - t); }
-  };
+  // The Time pass: every run of the erosion class, whether the fields feed it whole or a page asks for its window.
+  import('/sculpt-erosion.js').then(m => {
+    const proto = m.GpuErosion.prototype, run = proto.runGpu;
+    proto.runGpu = async function (request) {
+      const t = now(); ev('erode-start', {}); const prev = P.ctx; P.ctx = 'erode';
+      try { const v = await run.call(this, request); P.erodeParts = v.parts; return v; } finally { P.ctx = prev; ev('erode-end', {ms: now() - t}); add('time pass (wall)', now() - t); }
+    };
+  }).catch(e => { P.patchError = String(e); });
 }
 Object.defineProperty(window, 'sculptCanvas', {configurable: true, get: () => canvasValue, set: v => { canvasValue = v; try { patch(v); } catch (e) { P.patchError = String(e); } }});
-// study page: no map canvas; time the Time pass through the renderer's own hook
 // ---- rAF intervals, recorded on demand
 P.frameStart = () => { P.frames = []; P.last = 0; const loop = t => { if (P.last) P.frames.push(t - P.last); P.last = t; if (P.frameOn) requestAnimationFrame(loop); }; P.frameOn = true; requestAnimationFrame(loop); };
 P.frameStop = () => { P.frameOn = false; return P.frames.slice(); };
@@ -178,7 +180,7 @@ let longWait = false;
 const ev = async expression => { const r = await Promise.race([send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}), sleep(longWait ? 900000 : 240000).then(() => { throw new Error('evaluate timed out: ' + expression.slice(0, 80)); })]); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
 const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
 
-const isMap = mode !== 'study';
+const isMap = true;   // the editor always works on a map
 const url = isMap ? `${server}/sculpt?biome=${scene.biome || 'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`
   : `${server}/sculpt?biome=green&scratch=1${scene.query ? '&' + scene.query : ''}`;
 const result = {mode, label, query: extraQuery, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
