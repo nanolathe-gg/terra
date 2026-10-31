@@ -731,7 +731,8 @@ export class TerrainRenderer {
       pass.setBindGroup(0, device.createBindGroup({layout: this.materialPipeline.getBindGroupLayout(0), entries: [
         {binding: 0, resource: {buffer: table}},
         {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level, mipLevelCount: 1})},
-        {binding: 2, resource: {buffer: buffer}}]}));
+        {binding: 2, resource: {buffer: buffer}},
+        {binding: 3, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level ? level - 1 : 1, mipLevelCount: 1})}]}));
       const n = Math.ceil(size / 2 ** level / 8);
       pass.dispatchWorkgroups(n, n, layers);
       pass.end();
@@ -942,6 +943,7 @@ export class TerrainRenderer {
     this.i('uGroundMode', variant.get('ground') !== 'texture' && (this.groundSource().groundTable || this.groundSource().groundTiles) ? 1 : 0);
     this.f('uGroundContrast', variant.has('groundContrast') ? Number(variant.get('groundContrast')) : 1);
     this.i('uGroundBorrowed', this.groundSource() !== this.ownGround);
+    this.i('uGroundLayer', this.materialData ? this.materialData.order.indexOf('quilt') : -1);   // H14b: a table's quilted plain is the layer after the others
     this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
     this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
     this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);

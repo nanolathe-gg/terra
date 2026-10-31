@@ -9,14 +9,30 @@
 //  - Mip level L is not a box filter of level 0. It is the model evaluated with a footprint of 2^L px, which fades the bands whose
 //    cells are smaller than the footprint (one band at a time) and keeps their variance through the five-point rule: the
 //    footprint rule of H3, so a coarse draw reads the level the model would have made for it.
+//
+// H14b: a material whose row 39 relief is above 0 is made as the art was made: a height field, lit from one direction, reduced
+// to the palette. mmLit builds the height from the bands (a share of them ridged, in a lattice sheared at an integer slope so the
+// streaks run at an angle and still wrap), adds Voronoi facets (each with its own tilt and tone, dark seams between them), lights
+// it, and sends the result through the same measured rank map and ramp, so the histogram still comes out right. A thin-vein overlay
+// draws zero-crossing lines of its own lattice in their own colour. Levels above 0 of such a material are 2 x 2 box means of the level
+// above, not the footprint rule: a seam or vein narrows and softens as the art would when drawn smaller and never vanishes.
+// A material with relief 0 takes the unchanged path above, so every new number at 0 leaves it exactly as it was.
+//   row 39  relief (gradient gain), light azimuth (rad), shear (whole number), height share of z
+//   row 40  ridged share, cell size px (0 off), cell tilt, cell tone
+//   row 41  seam width px, seam depth (z units), vein width px, vein spacing px
+//   row 42  vein colour rgb, vein share of the plane (0 off)
+//   row 43  warp px (every lookup is displaced by noise of 32-px cells: no lattice line shows, facet edges curve), cone strength (round pits and bumps),
+//           seam variation 0..1 (the seam's width follows noise: broken, uneven seams), seam gap 0..1 (the share of the plane with no seams)
 // Fixed seeds: the salt of each material is its index; every operation is integer hashing or a fixed float expression,
 // so the same table gives the same bits on a given GPU.
 
-const MM_ROWS = 39u;
+const MM_ROWS = 44u;
 @group(0) @binding(0) var<storage, read> table: array<vec4f>;
 @group(0) @binding(1) var out: texture_storage_2d_array<rgba8unorm, write>;
 struct Params { size: f32, foot: f32, pad0: f32, pad1: f32 }
 @group(0) @binding(2) var<uniform> params: Params;
+// The level above this one (level 1 while level 0 is made, where it is not read): a lit material's coarse levels are box means of it.
+@group(0) @binding(3) var prev: texture_2d_array<f32>;
 
 fn matRow(i: u32) -> vec4f { return table[i]; }
 
@@ -116,12 +132,171 @@ fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
     return clamp(rgb, vec3f(0.0), vec3f(255.0)) / 255.0;
 }
 
+// ---- H14b: the lit height field -------------------------------------------------------------------------------------------------
+// Lattice coordinates of a pixel with `cells` cells across the texture, the y axis sheared by a whole number of cells per texture
+// width: the cell grid is then a parallelogram grid along the line y = -shear x, and a lattice index still wraps as (i mod cx, j mod cy),
+// because a texture width moves j by shear * cy exactly.
+fn mmU2(pixel: vec2f, cells: vec2f, shear: f32) -> vec2f {
+    let q = pixel / params.size;
+    return vec2f(q.x * cells.x, (q.y + shear * q.x) * cells.y);
+}
+fn mmWrapCell(c: vec2i, cells: vec2f) -> vec2i {
+    let n = vec2i(cells);
+    return ((c % n) + n) % n;
+}
+// Value noise on the sheared lattice in -1..1 with its gradient per pixel: (value, d/dx, d/dy).
+fn mmLatticeG(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> vec3f {
+    let u = mmU2(pixel, cells, shear);
+    let c = vec2i(floor(u));
+    let f = fract(u);
+    let w = f * f * (3.0 - 2.0 * f);
+    let dw = 6.0 * f * (1.0 - f);
+    let c0 = mmWrapCell(c, cells);
+    let c1 = mmWrapCell(c + vec2i(1), cells);
+    let a = mmHash(c0, salt);
+    let b = mmHash(vec2i(c1.x, c0.y), salt);
+    let d = mmHash(vec2i(c0.x, c1.y), salt);
+    let e = mmHash(c1, salt);
+    let lo = mix(a, b, w.x);
+    let hi = mix(d, e, w.x);
+    let dux = ((b - a) * (1.0 - w.y) + (e - d) * w.y) * dw.x * 2.0;
+    let duy = (hi - lo) * dw.y * 2.0;
+    return vec3f((mix(lo, hi, w.y)) * 2.0 - 1.0, (dux * cells.x + duy * cells.y * shear) / params.size, duy * cells.y / params.size);
+}
+struct Facet { f1: f32, f2: f32, cell: vec2i, toward: vec2f }
+// Nearest and second nearest of one jittered feature point per cell of the sheared lattice (periodic through mmWrapCell).
+fn mmFacets(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> Facet {
+    let u = mmU2(pixel, cells, shear);
+    let c = vec2i(floor(u));
+    var out = Facet(9.0, 9.0, vec2i(0), vec2f(0.0));
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let cc = mmWrapCell(c + vec2i(i, j), cells);
+            let point = vec2f(c + vec2i(i, j)) + vec2f(0.1 + 0.8 * mmHash(cc, salt), 0.1 + 0.8 * mmHash(cc, salt + 1u));
+            let d = distance(u, point);
+            if (d < out.f1) { out.f2 = out.f1; out.f1 = d; out.cell = cc; out.toward = u - point; } else if (d < out.f2) { out.f2 = d; }
+        }
+    }
+    return out;
+}
+// 1 on a line, 0 beyond its half width, with half a pixel of edge: a line `width` px wide at `dist` px from its centre.
+fn mmLine(dist: f32, width: f32) -> f32 { return clamp(width * 0.5 - dist + 0.5, 0.0, 1.0); }
+
+// z of a lit material at a level-0 pixel, and the vein weight over it.
+// Development only: params.pad0 above 0 gives every layer that salt, so candidate layers differ only in their numbers (measure/lit_fit.py).
+fn mmSalt(id: u32) -> u32 { return select(id * 16u + 1u, u32(params.pad0) * 16u + 1u, params.pad0 > 0.0); }
+
+fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
+    let r0 = matRow(base);
+    let r1 = matRow(base + 1u);
+    let a = matRow(base + 39u);
+    let b = matRow(base + 40u);
+    let c = matRow(base + 41u);
+    let v = matRow(base + 42u);
+    let stretch = max(r1.w, 0.1);
+    let salt = mmSalt(id);
+    let shear = a.z;
+    let wrap = vec2i(i32(params.size));
+    let ip = ((vec2i(floor(pixel)) % wrap) + wrap) % wrap;
+    // The warp displaces every lookup below by two noises of 32-px cells, so no lattice line shows.
+    let d = matRow(base + 43u);
+    var at = pixel;
+    if (d.x > 0.0) {
+        let wc = vec2f(16.0);
+        at += d.x * vec2f(mmLatticeG(pixel, wc, 0.0, salt + 26u).x, mmLatticeG(pixel, wc, 0.0, salt + 27u).x);
+    }
+    var h = 0.0;
+    var g = vec2f(0.0);
+    for (var k = 1u; k < 7u; k++) {
+        let cell = f32(1u << k);
+        let n = mmLatticeG(at, mmCells(cell, stretch), shear, salt + k);
+        let ridge = select(1.0, -1.0, n.x < 0.0);
+        let t = mix(n.x, 1.0 - 2.0 * abs(n.x), b.x);
+        let dt = mix(1.0, -2.0 * ridge, b.x);
+        let amp = mmAmp(r0, r1, k);
+        h += amp * t;
+        g += amp * dt * n.yz;
+    }
+    var z = a.w * h;
+    if (b.y > 0.0) {
+        let cells = mmCells(b.y, 1.0);   // facets, seams and veins are isotropic: the stretch and shear are the grain's
+        let fc = mmFacets(at, cells, 0.0, salt + 21u);
+        if (d.y > 0.0) {
+            // A cone: its slope points from the cell's feature point, outward for a bump and inward for a pit, in pixel units.
+            let off = fc.toward / cells;
+            g += d.y * select(-1.0, 1.0, mmHash(fc.cell, salt + 28u) > 0.5) * normalize(off + vec2f(1e-5));
+        }
+        let tilt = vec2f(mmHash(fc.cell, salt + 23u), mmHash(fc.cell, salt + 24u)) * 2.0 - 1.0;
+        g += b.z * tilt;
+        z += b.w * (mmHash(fc.cell, salt + 25u) * 2.0 - 1.0);
+        var seamW = c.x;
+        if (d.z > 0.0) { seamW *= max(1.0 + d.z * 1.6 * mmLatticeG(at, max(floor(cells * 1.5), vec2f(1.0)), 0.0, salt + 29u).x, 0.0); }
+        var seam = mmLine((fc.f2 - fc.f1) * 0.5 * b.y, seamW);
+        if (d.w > 0.0) { seam *= smoothstep(2.0 * d.w - 1.0, 2.0 * d.w - 0.7, mmLatticeG(at, max(floor(cells / 4.0), vec2f(1.0)), 0.0, salt + 30u).x); }
+        z -= c.y * seam;
+    }
+    let light = vec3f(cos(a.y) * 0.70711, sin(a.y) * 0.70711, 0.70711);
+    let n3 = normalize(vec3f(-a.x * g, 1.0));
+    z += 4.0 * (dot(n3, light) - 0.70711);
+    z += r0.x * (mmHash(ip, salt) * 2.0 - 1.0);
+    var vein = 0.0;
+    if (v.w > 0.0) {
+        let cells = mmCells(c.w, 1.0);
+        let n = mmLatticeG(at, cells, 0.0, salt + 31u);
+        let gate = mmLatticeG(at, max(floor(cells / 3.0), vec2f(1.0)), 0.0, salt + 32u).x;
+        let dist = abs(n.x) / max(length(n.yz), 1e-4);
+        vein = mmLine(dist, c.z) * smoothstep(1.0 - 2.0 * v.w, 1.4 - 2.0 * v.w, gate);
+    }
+    return vec2f(z, vein);
+}
+fn mmLit(id: u32, pixel: vec2f) -> vec3f {
+    let base = id * MM_ROWS;
+    let r2 = matRow(base + 2u);
+    let veinRow = matRow(base + 42u);
+    let salt = mmSalt(id);
+    let wrap = vec2i(i32(params.size));
+    let ip = ((vec2i(floor(pixel)) % wrap) + wrap) % wrap;
+    let zv = mmLitZ(base, id, pixel);
+    let u = mmU(base, zv.x);
+    var rgb = mmRamp(base, u);
+    let at = clamp(u * 16.0 - 0.5, 0.0, 15.0);
+    let i0 = u32(floor(at));
+    let dir = mix(matRow(base + 19u + i0).rgb, matRow(base + 19u + min(i0 + 1u, 15u)).rgb, fract(at));
+    let white = (mmHash(ip, salt + 8u) + mmHash(ip, salt + 9u) + mmHash(ip, salt + 10u) - 1.5) * 2.0;
+    let two = mmCells(2.0, 1.0);
+    let soft = (mmLattice(pixel, two, salt + 11u) + mmLattice(pixel, two, salt + 12u) + mmLattice(pixel, two, salt + 13u)) * 1.85;
+    rgb += dir * mix(white, soft, r2.x) * r2.y;
+    rgb = mix(rgb, veinRow.rgb, zv.y);
+    return clamp(rgb, vec3f(0.0), vec3f(255.0)) / 255.0;
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn makeMaterial(@builtin(global_invocation_id) id: vec3u) {
     let n = u32(params.size / params.foot);   // texels across this level (size is level 0's)
     if (id.x >= n || id.y >= n) { return; }
+    if (matRow(id.z * MM_ROWS + 39u).x > 0.0) {
+        if (params.foot > 1.5) {
+            let s = vec2i(id.xy) * 2;
+            let sum = textureLoad(prev, s, i32(id.z), 0) + textureLoad(prev, s + vec2i(1, 0), i32(id.z), 0)
+                + textureLoad(prev, s + vec2i(0, 1), i32(id.z), 0) + textureLoad(prev, s + vec2i(1, 1), i32(id.z), 0);
+            textureStore(out, vec2i(id.xy), i32(id.z), vec4f(sum.rgb * 0.25, 1.0));
+        } else {
+            textureStore(out, vec2i(id.xy), i32(id.z), vec4f(mmLit(id.z, vec2f(id.xy) + 0.5), 1.0));
+        }
+        return;
+    }
     // The texel's centre in level-0 pixels, as the draw's snapped pixel of a footprint-sized step.
     let pixel = (vec2f(id.xy) + 0.5) * params.foot;
     let rgb = mmColor(id.z, pixel, params.foot);
     textureStore(out, vec2i(id.xy), i32(id.z), vec4f(rgb, 1.0));
+}
+
+// Development only (measure/swatch.mjs --z): a lit material's z at level 0, 16 bits across red and green, for the fit's rank quantiles.
+@compute @workgroup_size(8, 8, 1)
+fn makeZ(@builtin(global_invocation_id) id: vec3u) {
+    let n = u32(params.size);
+    if (id.x >= n || id.y >= n) { return; }
+    let z = mmLitZ(id.z * MM_ROWS, id.z, vec2f(id.xy) + 0.5).x;
+    let q = u32(clamp((z + 8.0) / 16.0, 0.0, 1.0) * 65535.0);
+    textureStore(out, vec2i(id.xy), i32(id.z), vec4f(f32(q >> 8u) / 255.0, f32(q & 255u) / 255.0, 0.0, 1.0));
 }

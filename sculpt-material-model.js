@@ -1,5 +1,5 @@
 // Cards H3 and H14: materials/<world>.json as the rows engine-materials.wgsl reads (see its header for the layout).
-export const MM_ROWS = 39;
+export const MM_ROWS = 44;
 // The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): ten rows after it.
 export const PLACEMENT_ROW = 156;
 // The rows engine-materials.wgsl makes the layers from: MM_ROWS per layer, in the table's order. A material named twice in the order
@@ -12,8 +12,17 @@ export function materialRows(table) {
     for (const c of m.ramp) rows.push([c[0], c[1], c[2], 0]);
     for (const c of m.tint) rows.push([c[0], c[1], c[2], 0]);
     for (let k = 0; k < 4; k++) rows.push([0, 1, 2, 3].map(i => f.zq[Math.min(k * 4 + i, 12)]));
+    rows.push(...litRows(f.lit));
   }
   return rows;
+}
+// H14b: the five rows of a material's lit height field (engine-materials.wgsl header). All zero, or no `lit` block, is the unlit model.
+// light is the azimuth in turns (0 = light from +x, increasing towards +y, which is down the screen); veinRGB is 0..255.
+function litRows(lit) {
+  if (!lit) return [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  const x = k => lit[k] ?? 0, rgb = lit.veinRGB ?? [0, 0, 0];
+  return [[x('relief'), x('light') * 2 * Math.PI, x('shear'), x('heightShare')], [x('ridged'), x('cell'), x('tilt'), x('tone')],
+    [x('seamWidth'), x('seamDepth'), x('veinWidth'), x('veinSpacing')], [rgb[0], rgb[1], rgb[2], x('veinShare')], [x('warp'), x('cone'), x('seamVary'), x('seamGap')]];
 }
 // A table with a `placement` block (Green's) gives the draw's ten placement rows; the shared artist controls override them, never the
 // measured material statistics. Without overrides this remains the original table.
