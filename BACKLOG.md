@@ -6511,7 +6511,8 @@ assets folder to draw a world.
   pass from `materials/palette.json`), bit-identical to the image on Green and
   Desert. That file is 241 colours of the retail palette, committed as a table
   by the owner's rule that tables measured from retail art are fine. Desert's
-  table names its 52 entries.
+  table names its 52 entries. The owner confirmed the table is fine in the repo
+  (decision 22).
 - **`fractures.png` stays an image.** All nine copies were byte-identical and it
   is ours (`measure/make_fractures.py` reads no retail art), so one copy in
   `materials/` serves every world. Listed for the Fractures card.
@@ -6598,8 +6599,10 @@ before any classic curve goes.**
    compare with 6.40 and 17.52.
 4. **The comparison.** Per kind, a plot of classic against preset. Then all 27
    scenes with every classic curve replaced by its preset, beside retail at 1×
-   and 2×, with `compare.py` and `stats.py` against `merge-h14e`. The switch that
-   does this is for the comparison only and does not land.
+   and 2×, with `compare.py` and `stats.py` against `merge-h14e`. Retail is the
+   bar (decision 22): say for each kind whether the preset is closer to retail
+   than classic or further from it. The height errors are evidence, not a pass
+   mark. The switch that does this is for the comparison only and does not land.
 5. **`moonLobes` into `baseVary` and `baseBump`,** if the look allows (decision
    17), judged on Moon's three windows. If not, it stays, with its sheet.
 
