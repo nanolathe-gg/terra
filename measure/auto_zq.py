@@ -4,7 +4,7 @@ A dev tool. The lab fits a lit material alone (layer 0); in a world's table the 
 salt, so its field's quantiles move a little. This runs the engine's own z pass (measure/swatch.mjs --auto-zq) over the whole table and
 writes each lit material's zq, taken from the material's first layer, into `model`.
 
-  auto_zq.py <materials/<world>.json> [--cdp 9682]
+  auto_zq.py <materials/<world>.json> <work-dir> [--cdp 9682]
 """
 import json
 import subprocess
@@ -18,13 +18,11 @@ if '--cdp' in args:
     i = args.index('--cdp'); cdp = args[i + 1]; del args[i:i + 2]
 path = Path(args[0])
 table = json.loads(path.read_text())
-# A fixed scratch folder per port (the swatch page's Chrome profile stays in it and is reused), not a folder removed afterwards.
-out = Path('/private/tmp/nanolathe-map-editor/agent-H14c/auto-zq-' + cdp)
-if True:
-    r = subprocess.run(['node', str(HERE / 'swatch.mjs'), str(path), str(out), '--auto-zq', '--cdp', cdp], capture_output=True, text=True)
-    if r.returncode:
-        raise SystemExit(r.stdout + r.stderr)
-    meta = json.loads((out / 'meta.json').read_text())
+out = Path(args[1])   # the swatch page's Chrome profile stays here and is reused, so keep one folder per port
+r = subprocess.run(['node', str(HERE / 'swatch.mjs'), str(path), str(out), '--auto-zq', '--cdp', cdp], capture_output=True, text=True)
+if r.returncode:
+    raise SystemExit(r.stdout + r.stderr)
+meta = json.loads((out / 'meta.json').read_text())
 seen = set()
 for layer, name in enumerate(table['order']):
     if name in seen:

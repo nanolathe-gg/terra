@@ -284,7 +284,7 @@ export class TerrainRenderer {
       // world's mean ground colour is the quilt's.
       let bitmap;
       const groundTable = key === 'grass' && this.groundSource().groundTable ? await this.groundTable(this.groundSource().groundTable) : null;
-      if (key === 'grass') this.groundTiled = variant.get('ground') !== 'texture' && (groundTable ? Boolean(groundTable.ground) : Boolean(this.groundSource().groundTiles));
+      if (key === 'grass') this.groundTiled = groundTable ? Boolean(groundTable.ground) : variant.get('ground') !== 'texture' && Boolean(this.groundSource().groundTiles);   // a table has no sampled texture to choose
       if (key === 'grass' && groundTable && !this.groundTiled) bitmap = await createImageBitmap(new ImageData(1, 1));
       else if (key === 'grass' && groundTable) bitmap = await groundTileBitmap(groundTable.ground);
       else {
