@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows} from './sculpt-material-model.js';
+import {materialRows,strataZoneWidths} from './sculpt-material-model.js';
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
 const MASK_PLANE_COUNT = 25;
@@ -282,7 +282,7 @@ export class TerrainRenderer {
       }
       // H3: with the material model the plain's 16 tiles are built from materials/green.json's `ground` data, not read from a file.
       let bitmap;
-      if (key === 'grass' && this.materialData?.ground) bitmap = await groundTileBitmap(this.materialData.ground);
+      if (key === 'grass' && this.materialData?.ground && variant.get('ground') !== 'texture' && !variant.get('groundPattern')) bitmap = await groundTileBitmap(this.materialData.ground);
       else {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Cannot load ${key} material`);
@@ -376,7 +376,6 @@ export class TerrainRenderer {
     this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
-    this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1));
     const rockMean = variant.get('rock') === 'hill' ? material.hillRockMeanRGB : material.rockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
     this.i('uShapeCoverage', variant.get('coverage') === 'form');
@@ -470,11 +469,15 @@ export class TerrainRenderer {
     const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
     this.set('uStrataZones', [...zones, ...new Array(6 - zones.length).fill([0, 0, 0, 0])]);
     // Card E8: a bed thickness per zone (the grey buttes' beds are 2-3 times the apron's); none keeps strataSpacing.
-    const space = (this.config.strataZoneSpacing || []).slice(0, 6);
-    this.set('uStrataZoneSpace', [...space.map(x => [x, 0, 0, 0]), ...new Array(6 - space.length).fill([0, 0, 0, 0])]);
+    this.setStrataSpacing();
     this.i('uStrataZoneCount', zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
+  }
+
+  setStrataSpacing() {
+    const space=strataZoneWidths(this.config,this.variant.get('strataSpacing'));
+    this.set('uStrataZoneSpace',[...space.map(x=>[x,0,0,0]),...new Array(6-space.length).fill([0,0,0,0])]);
   }
 
   // GLSL uniform uFooBar is the uniform block's field fooBar. A value is a
@@ -839,6 +842,11 @@ export class TerrainRenderer {
   // Surface knobs read from the variant; callable again after a change.
   applyKnobs() {
     const variant = this.variant;
+    this.setStrataSpacing();
+    // Placement is live state too: refreshing only scalar uniforms left these
+    // controls frozen at startup in both generated and bridged materials.
+    this.set('uMaterialTable', this.bridge ? this.placementRows(variant) : materialRows(this.materialData, variant));
+    this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1));
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));

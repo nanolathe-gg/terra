@@ -103,7 +103,9 @@ export class GpuErosion {
     const step = (entry, group) => { pass.setPipeline(this.pipelines[entry]); pass.setBindGroup(0, group0); pass.setBindGroup(1, group); if (entry !== 'offsetMain') pass.dispatchWorkgroupsIndirect(tileArgs, 0); else pass.dispatchWorkgroups(groups, groups); };
     step('offsetMain', flux);
     for (let it = 0; it < age; it++) {
-      step('fluxMain', flux); step('waterMain', water); step('exchangeMain', exchange); step('carryMain', carry);
+      // With no rainfall, seedMain starts water/sediment/flux at zero and these
+      // four passes preserve zero. Thermal relaxation remains unchanged.
+      if (rain !== 0) { step('fluxMain', flux); step('waterMain', water); step('exchangeMain', exchange); step('carryMain', carry); }
       step('thermalMain', thermalA); step('thermalMain', thermalB);
     }
     step('settleMain', thermalA);

@@ -1,0 +1,31 @@
+{
+  "nodeTests": 22,
+  "uiChecks": [
+    "Ridge rounded/peaked drawing mode",
+    "Selected rounded-to-peaked conversion",
+    "Undo restored rounded kind",
+    "Search finds fine controls",
+    "Fine mode shows 243 world controls",
+    "Disabled pit size explains missing pit amount",
+    "Export completed",
+    "Water shallow mode",
+    "Surface sand mode",
+    "Planar block mode controls",
+    "Collapsed preset management actions",
+    "Select remains the sole pressed tool while inspecting a ridge",
+    "Report search and 27-scene selector"
+  ],
+  "export": {
+    "units": [
+      2,
+      2
+    ],
+    "uniqueTiles": 1003,
+    "tileSlots": 1188,
+    "features": 0,
+    "starts": 2,
+    "selfCheck": true
+  },
+  "baseline": "c4b1b8027b9622f87e8b4fa97c6b5999d847df40",
+  "mainUntouched": true
+}

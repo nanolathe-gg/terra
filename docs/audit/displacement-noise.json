@@ -1,0 +1,164 @@
+[
+  {
+    "scene": "archipelago-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.062434963579604576
+  },
+  {
+    "scene": "archipelago-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.08350676378772112
+  },
+  {
+    "scene": "archipelago-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.0949531737773153
+  },
+  {
+    "scene": "crystal-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.13111342351716962
+  },
+  {
+    "scene": "crystal-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.16311134235171695
+  },
+  {
+    "scene": "crystal-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.08142559833506764
+  },
+  {
+    "scene": "desert-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.10613943808532779
+  },
+  {
+    "scene": "desert-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.03850156087408949
+  },
+  {
+    "scene": "desert-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.09599375650364204
+  },
+  {
+    "scene": "green-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.015608740894901144
+  },
+  {
+    "scene": "green-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.011186264308012487
+  },
+  {
+    "scene": "green-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.017950052029136316
+  },
+  {
+    "scene": "ice-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.2190426638917794
+  },
+  {
+    "scene": "ice-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.03225806451612903
+  },
+  {
+    "scene": "ice-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.08116545265348596
+  },
+  {
+    "scene": "lava-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.037460978147762745
+  },
+  {
+    "scene": "lava-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.04058272632674298
+  },
+  {
+    "scene": "lava-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.04292403746097815
+  },
+  {
+    "scene": "moon-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.136576482830385
+  },
+  {
+    "scene": "moon-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.10379812695109261
+  },
+  {
+    "scene": "moon-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.11602497398543184
+  },
+  {
+    "scene": "red-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.00858480749219563
+  },
+  {
+    "scene": "red-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.028355879292403748
+  },
+  {
+    "scene": "red-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.015608740894901144
+  },
+  {
+    "scene": "zhon-1",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.0639958376690947
+  },
+  {
+    "scene": "zhon-2",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.07362122788761706
+  },
+  {
+    "scene": "zhon-3",
+    "shiftX": 2,
+    "shiftY": 1,
+    "changedBlocks": 0.029656607700312174
+  }
+]

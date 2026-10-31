@@ -1,11 +1,12 @@
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
-import {mountEditorUI,groupToolControls} from './sculpt-ui.js';
+import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
+import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
 const editorUI=mountEditorUI();
-let syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
+let syncWorldControls=()=>{},syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -96,7 +97,7 @@ const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Mo
 const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // H3 override planes 14-17 (a signed value v multiplies the control it names by 1 + v; 0 changes nothing): erosion rate (H2's pass),
 // loose deposits (sand and scree), vegetation (grass and moss cover), rock exposure. Paint choices 18-25 write them.
-const OVERRIDE_CHOICES=[[18,'Erosion: more'],[19,'Erosion: less'],[20,'Deposits: more'],[21,'Deposits: less'],[22,'Vegetation: more'],[23,'Vegetation: less'],[24,'Rock exposure: more'],[25,'Rock exposure: less']];
+const OVERRIDE_CHOICES=[[18,'Relaxation: more'],[19,'Relaxation: less'],[20,'Deposits: more'],[21,'Deposits: less'],[22,'Vegetation: more'],[23,'Vegetation: less'],[24,'Rock exposure: more'],[25,'Rock exposure: less']];
 const STYLE_CHOICES=[...OVERRIDE_CHOICES,[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
 const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace','styleErosion','styleDeposits','styleVegetation','styleExposure'];
 const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
@@ -237,6 +238,7 @@ const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crysta
 // G6 (Ice): the mountain facets' options, wired beside E7's (the card the stroke builds and strokeParams).
 const G6_KEYS=['iceFacets','iceFacetSize'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
+const worldSetting=key => experiment.has(key)?Number(experiment.get(key)):worldDefault(key);
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
 // Owner ruling (H10): fingers always join the coast as thumbs. The JS engine, which H12 deletes, still reads the two retired knobs, so they are fixed here.
@@ -245,6 +247,11 @@ const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Num
 function buildShapeOptions() {
   const root=$('shape-options');
   root.replaceChildren(...SHAPE_FIELDS.map(([key,id,label,,lo,hi,step,,help,choices]) => {
+    label=controlLabel(key,label);
+    if(key==='profile')choices=[[0,'Classic'],[1,'Custom cross-section']];
+    if(key==='crystalForm')choices=[[0,'Faceted shards'],[1,'Column mound'],[2,'Planar blocks']];
+    if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
+    if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
     const wrap=document.createElement('div'); wrap.className='control'; wrap.id=id+'-control';
     const input=choices?`<select id="${id}" style="width:100%">${choices.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>`:`<input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}">`;
     wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"${choices?' hidden':''}></output></label>${input}<p class="small">${help}</p>`;
@@ -376,8 +383,11 @@ function updateControls() {
   // Berg options show only for the berg form.
   const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (key==='layerCircle' && Number($('layer-style').value)!==1);
   const bergOff=key => tool==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
-  const gated=key => modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
+  const shapeOptions=Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)]));
+  const gated=key => !shapeControlAvailable(key,tool,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
+  if(parametric){$('beach-control').hidden=true;if(shapeOptions.facePx>0)$('softness-control').hidden=true;}
+  if(shapeOptions.bankPx>0)$('bank-control').hidden=true;
   $('section-preview-control').hidden=!SECTION_KINDS.includes(tool) || !parametric;
   if (!$('section-preview-control').hidden) drawSection();
   $('bank-value').textContent=$('bank-width').value+'%';
@@ -408,6 +418,7 @@ function updateControls() {
   $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind} #${selected+1}`:tool==='move'?'Select':`Brush · new ${NODE_NAMES[tool]||tool}`;
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   syncToolGroups(`${tool}:${selected}`);
+  editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive);
   if(featureActive)$('tool-help').textContent=mapFeatures.hint||'Place features and starts · Space + drag to pan';
 }
 
@@ -556,7 +567,7 @@ function markChanged() { markViewChanged(false); error(); }
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
-const NODE_NAMES={crystal:'Crystals',sand:'Sand cover',paint:'Painted masks',grass:'Ground cover',erase:'Ground (erase)',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Hill',mountain:'Mountain',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
+const NODE_NAMES={crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
 function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
@@ -668,7 +679,7 @@ function regionalDirtyRect(from,rect) {
 }
 // Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
 const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
-    frost:{gapSize:worldDefault('frostGapSize'),gapDepth:worldDefault('frostGapDepth'),gaps:worldDefault('frostGaps'),gapReach:worldDefault('frostGapReach')}});
+    frost:{gapSize:worldSetting('frostGapSize'),gapDepth:worldSetting('frostGapDepth'),gaps:worldSetting('frostGaps'),gapReach:worldSetting('frostGapReach')}});
 // H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
 const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
 const pagedWanted=() => worldGrid>1168 || gpuPagesForced();
@@ -1220,6 +1231,7 @@ function deserializeNodes(list) {
   });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
+editorUI.onMode(kind=>{if(selected>=0&&nodes[selected]?.params){changeSelected(n=>{n.kind=kind;});}else document.querySelector(`[data-tool="${kind}"]`)?.click();});
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => {
   if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
   if(tool==='move'&&selected>=0)selectNode(selected);
@@ -1501,9 +1513,9 @@ function buildWorldPanel() {
 
 // Crack styles set several crack knobs at once; each stays editable.
 const CRACK_STYLES={
-  'Retail Green':{crackSeverity:.6,crackSpacing:40,crackLength:2,crackMajor:.8,crackMinor:.75,crackHairline:.6,crackBlocks:.6,crackWidth:1,crackJagged:.6,crackNetwork:.35,crackReach:.6,crackDark:.75,crackLit:.35},
+  'Branching rock':{crackSeverity:.6,crackSpacing:40,crackLength:2,crackMajor:.8,crackMinor:.75,crackHairline:.6,crackBlocks:.6,crackWidth:1,crackJagged:.6,crackNetwork:.35,crackReach:.6,crackDark:.75,crackLit:.35},
   'Hairline':{crackSeverity:.35,crackSpacing:30,crackLength:2,crackMajor:.5,crackMinor:.5,crackHairline:1,crackBlocks:.2,crackWidth:.7,crackJagged:.6,crackNetwork:.2,crackReach:.6,crackDark:.7,crackLit:.25},
-  'Plates (Gaea rock)':{crackSeverity:.7,crackSpacing:48,crackLength:1.25,crackMajor:.9,crackMinor:.9,crackHairline:.7,crackBlocks:1,crackWidth:1,crackJagged:.7,crackNetwork:1,crackReach:.9,crackDark:.8,crackLit:.45},
+  'Polygonal plates':{crackSeverity:.7,crackSpacing:48,crackLength:1.25,crackMajor:.9,crackMinor:.9,crackHairline:.7,crackBlocks:1,crackWidth:1,crackJagged:.7,crackNetwork:1,crackReach:.9,crackDark:.8,crackLit:.45},
   'Deep fissures':{crackSeverity:.9,crackSpacing:56,crackLength:3,crackMajor:1,crackMinor:.4,crackHairline:.3,crackBlocks:.5,crackWidth:1.5,crackJagged:.6,crackNetwork:0,crackReach:.8,crackDark:.85,crackLit:.4},
 };
 function buildKnobs() {
@@ -1517,12 +1529,14 @@ function buildKnobs() {
     row.append(box, label); render.append(row);
   };
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
-  toggle('ground', 'Procedural ground tiles (off: lab texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
+  toggle('ground', 'Procedural ground texture (off: sampled texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
   // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
+  const groups=new Map();
   for (const [title, knobs] of KNOBS) {
-    const box = group(title);
+    const name=WORLD_GROUP_NAMES[title]||title;
+    const box=groups.get(name)||group(name);groups.set(name,box);box.dataset.group=name;
     if(title==='Palette')$('rendering-host').append(box);
     if (title === 'Cracks') {
       const wrap = document.createElement('div'); wrap.className = 'control';
@@ -1536,15 +1550,20 @@ function buildKnobs() {
       });
       box.append(wrap);
     }
-    for (const [key, label, min, max, step, value] of knobs) {
+    for (const [key, oldLabel, min, max, step, value] of knobs) {
+      if(RETIRED_WORLD_CONTROLS.has(key)||PARKED_WORLD_CONTROLS.has(key))continue;
+      const label=controlLabel(key,oldLabel);
       const wrap = document.createElement('div'); wrap.className = 'control';
+      wrap.dataset.knob=key;
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value;
       wrap.innerHTML = `<label for="${id}">${label} <output>${current}</output></label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${current}">`;
-      const input = wrap.querySelector('input'), out = wrap.querySelector('output');
+      let input = wrap.querySelector('input'); const out = wrap.querySelector('output');
+      if(WORLD_CHOICES[key]){const select=document.createElement('select');select.id=id;select.replaceChildren(...WORLD_CHOICES[key].map(([value,label])=>new Option(label,String(value))));select.value=String(current);input.replaceWith(select);input=select;out.hidden=true;}
       input.addEventListener('input', () => { out.textContent = input.value; setKnob(key, input.value); });
       box.append(wrap);
     }
   }
+  syncWorldControls=mountWorldControlIndex(root,()=>Object.fromEntries(renderer.variant));
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
@@ -1552,15 +1571,16 @@ function setKnob(key, value) {
   if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); if (key==='strata') buildWorldPanel(); }
   // Textures are chosen when the renderer starts, so this switch reloads.
   if (key === 'ground' || key === 'groundPattern') { location.reload(); return; }
-  renderer.variant.set(key, value); renderer.applyKnobs(); markViewChanged(); schedule();
+  renderer.variant.set(key, value); renderer.applyKnobs(); syncWorldControls(); markViewChanged(); schedule();
   if (key==='undulation' || key==='undulationScale' || key==='undulationCover') {
     const i=nodes.findIndex(n => n.kind==='ground');
     if (i>=0) { nodes[i][{undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage'}[key]]=Number(value); cancelWeather(); evaluate(i); checkpoint(); queueWeather(); }
     else if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,seed:seed^0x9e37}); cancelWeather(); evaluate(0); checkpoint(); queueWeather(); }
     return;
   }
-  // Transport knobs change where sand is carried, so the worker re-runs.
-  if (['sand','sandReach','windStrength','wind','sandPatchy','sandTail'].includes(key)) { cancelWeather(); queueWeather(); }
+  if (['frostGaps','frostGapReach','frostGapSize','frostGapDepth'].includes(key)) { cancelWeather();evaluate(0);queueWeather();return; }
+  // Deposit supply changes the generated deposit field.
+  if (['sand'].includes(key)) { cancelWeather(); queueWeather(); }
 }
 async function bootMap() {
   worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
@@ -1605,6 +1625,7 @@ async function boot() {
     loadWorlds();
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
     if (worldId!==config.biomeId) LOCAL_KEY+='-'+worldId;
+    config.presetDefaults={...config.defaults};
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
     if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
     for (const [key,value] of Object.entries(config.defaults || {})) if (!experiment.has(key)) experiment.set(key,value);
@@ -1619,6 +1640,10 @@ async function boot() {
     $('ring-controls').hidden=!config.textures.mineralRing && !config.textures.mineralRings;
     $('fringe-style').querySelector('[value="veins"]').disabled=!config.textures.mineralRing;
     $('fringe-style').querySelector('[value="rings"]').disabled=!config.textures.mineralRings;
+    // The shared renderer currently has one bridged fringe layer. Switching
+    // this legacy texture selector never changes that layer; keep saved values
+    // readable, but do not offer an ineffective control.
+    $('fringe-style').closest('.control').hidden=true;
     // The world's own choice (fringeStyle, a string knob): Archipelago's retail rings are
     // curved contours, not veins.
     $('fringe-style').value=config.textures.mineralRings&&(!config.textures.mineralRing||experiment.get('fringeStyle')==='rings')?'rings':'veins';

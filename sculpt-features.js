@@ -34,6 +34,21 @@ function fillOptions(value={},base=DEFAULT_FILL) {
   return out;
 }
 
+// A brush/lasso can only place footprints wholly inside its region. Sampling
+// the rest of a large map does not affect those decisions. Flood still needs
+// the complete connectivity mask.
+export function featureRegionBounds(region,cols,rows,radius) {
+  if(region?.type==='flood')return {x0:0,z0:0,x1:cols,z1:rows};
+  const points=(region?.points||[]).map(p=>Array.isArray(p)?{x:p[0],z:p[1]}:p);
+  if(points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.z)))throw new Error('The fill region contains an invalid point.');
+  if(!['brush','lasso'].includes(region?.type))throw new Error('Choose a brush, lasso or flood region.');
+  if(!points.length)return {x0:0,z0:0,x1:0,z1:0};
+  const reach=region.type==='brush'?(Number.isFinite(region.radius)?Math.max(0,region.radius):radius):0;
+  let x0=Infinity,z0=Infinity,x1=-Infinity,z1=-Infinity;
+  for(const p of points){x0=Math.min(x0,p.x);z0=Math.min(z0,p.z);x1=Math.max(x1,p.x);z1=Math.max(z1,p.z);}
+  return {x0:clamp(Math.floor((x0-reach)/CELL),0,cols),z0:clamp(Math.floor((z0-reach)/CELL),0,rows),x1:clamp(Math.ceil((x1+reach)/CELL)+1,0,cols),z1:clamp(Math.ceil((z1+reach)/CELL)+1,0,rows)};
+}
+
 export async function mountMapFeatures(api) {
   const {config,canvas}=api,map=config.map;
   if (!map) return {serialize:() => ({features:[],starts:[],fill:{...DEFAULT_FILL}}),load:() => {},draw:() => {},get active(){return false;},get busy(){return false;},deactivate:() => {}};
@@ -177,12 +192,12 @@ export async function mountMapFeatures(api) {
   }
 
   const corner=(x,z) => { const h=api.sample(x*CELL,z*CELL); return Number.isFinite(h)?Math.round(clamp(h,0,255)):-1; };
-  function terrainMask() {
+  function terrainMask(bounds={x0:0,z0:0,x1:cols,z1:rows}) {
     const corners=new Int16Array((cols+1)*(rows+1)),gentle=new Uint8Array(cols*rows),stride=cols+1;
-    for (let z=0;z<=rows;z++) for (let x=0;x<=cols;x++) corners[z*stride+x]=corner(x,z);
+    for (let z=bounds.z0;z<=bounds.z1;z++) for (let x=bounds.x0;x<=bounds.x1;x++) corners[z*stride+x]=corner(x,z);
     // internal/mapgen/resources.go gentleLand: every covered cell has four
     // dry exported bytes with a corner difference of at most 10.
-    for (let z=0;z<rows;z++) for (let x=0;x<cols;x++) {
+    for (let z=bounds.z0;z<bounds.z1;z++) for (let x=bounds.x0;x<bounds.x1;x++) {
       const i=z*stride+x,a=corners[i],b=corners[i+1],c=corners[i+stride],d=corners[i+stride+1],lo=Math.min(a,b,c,d);
       gentle[z*cols+x]=lo>config.seaLevel && Math.max(a,b,c,d)-lo<=10?1:0;
     }
@@ -192,7 +207,7 @@ export async function mountMapFeatures(api) {
     for (let z=p.z;z<p.z+d.footprintZ;z++) for (let x=p.x;x<p.x+d.footprintX;x++) if (!mask[z*cols+x]) return false;
     return true;
   }
-  function regionMask(region,gentle) {
+  function regionMask(region,gentle,bounds) {
     const mask=new Uint8Array(cols*rows),points=(region?.points||[]).map(p => Array.isArray(p)?{x:p[0],z:p[1]}:{x:p.x,z:p.z});
     if (points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.z))) throw new Error('The fill region contains an invalid point.');
     if (region?.type==='flood') {
@@ -208,7 +223,7 @@ export async function mountMapFeatures(api) {
     if (region?.type==='lasso' && points.length<3 || region?.type==='brush' && !points.length) return mask;
     if (!['brush','lasso'].includes(region?.type)) throw new Error('Choose a brush, lasso or flood region.');
     const radius=Number.isFinite(region.radius)?Math.max(0,region.radius):fill.radius;
-    for (let z=0;z<rows;z++) for (let x=0;x<cols;x++) {
+    for (let z=bounds.z0;z<bounds.z1;z++) for (let x=bounds.x0;x<bounds.x1;x++) {
       const p={x:x*CELL+8,z:z*CELL+8};
       mask[z*cols+x]=region.type==='lasso'?Number(insidePolygon(p,points)):Number(points.some((q,i) => Math.hypot(p.x-q.x,p.z-q.z)<=radius || i>0 && segmentDistance(p,points[i-1],q)<=radius));
     }
@@ -218,21 +233,25 @@ export async function mountMapFeatures(api) {
     if (!guard()) return {added:0};
     const settings=fillOptions({...options,kind},fill),mix=[...definitions.values()].filter(d => d.kind===settings.kind);
     if (!mix.length) { status(`This world has no ${settings.kind} features to fill.`); return {added:0}; }
-    const gentle=terrainMask(),area=regionMask(region,gentle),total=mix.reduce((sum,d) => sum+Math.max(1,d.uses),0),candidates=[];
-    for (let z=0;z<rows;z++) for (let x=0;x<cols;x++) if (area[z*cols+x]) candidates.push({x,z,rank:hash(x,z,settings.seed^0x34da72f1)});
+    const bounds=featureRegionBounds(region,cols,rows,fill.radius),gentle=terrainMask(bounds),area=regionMask(region,gentle,bounds),total=mix.reduce((sum,d) => sum+Math.max(1,d.uses),0),candidates=[];
+    // Acceptance depends only on the cell and seed. Reject it before sorting;
+    // accepted candidates retain exactly the same relative placement order.
+    for (let z=bounds.z0;z<bounds.z1;z++) for (let x=bounds.x0;x<bounds.x1;x++) if (area[z*cols+x]) {
+      const cluster=clamp((noise(x/12,z/12,settings.seed^0x713c6a91)-.25)*2,0,1),probability=settings.density/100*(1-settings.clustering+settings.clustering*cluster*2);
+      if (hash(x,z,settings.seed^0x517ad0f3)<probability) candidates.push({x,z,rank:hash(x,z,settings.seed^0x34da72f1)});
+    }
     candidates.sort((a,b) => a.rank-b.rank || a.z-b.z || a.x-b.x);
     const occupied=new Uint8Array(cols*rows),put=p => { const d=definition(p.name); for (let z=p.z;z<p.z+d.footprintZ;z++) for (let x=p.x;x<p.x+d.footprintX;x++) occupied[z*cols+x]=1; };
     for (const p of placements) put(p);
+    const deposits=placements.filter(p=>deposit(definition(p.name)));
     let added=0;
     for (const p of candidates) {
-      const cluster=clamp((noise(p.x/12,p.z/12,settings.seed^0x713c6a91)-.25)*2,0,1),probability=settings.density/100*(1-settings.clustering+settings.clustering*cluster*2);
-      if (hash(p.x,p.z,settings.seed^0x517ad0f3)>=probability) continue;
       // mapgenFeatures/placeVegetation use each definition's observed usage
       // as its weight. Position-keyed authoring randomness keeps a repeatable mix.
       let ticket=hash(p.x,p.z,settings.seed^0x25cd781b)*total,d=mix[mix.length-1];
       for (const candidate of mix) { ticket-=Math.max(1,candidate.uses); if (ticket<0) { d=candidate; break; } }
       const placed={name:d.name,x:p.x,z:p.z};
-      if (!inBounds(placed,d) || !gentleFootprint(placed,d,gentle) || nearMargin(placed,d,settings.margin)) continue;
+      if (!inBounds(placed,d) || !gentleFootprint(placed,d,gentle) || nearMargin(placed,d,settings.margin,deposits)) continue;
       let free=true;
       for (let z=p.z;z<p.z+d.footprintZ && free;z++) for (let x=p.x;x<p.x+d.footprintX;x++) if (!area[z*cols+x]) { free=false; break; }
       for (let z=Math.max(0,p.z-settings.gap);z<Math.min(rows,p.z+d.footprintZ+settings.gap) && free;z++) for (let x=Math.max(0,p.x-settings.gap);x<Math.min(cols,p.x+d.footprintX+settings.gap);x++) if (occupied[z*cols+x]) { free=false; break; }
