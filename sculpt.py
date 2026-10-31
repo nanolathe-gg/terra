@@ -788,7 +788,7 @@ def lighten_red_shallows(config, assets):
 
 # H8, H14: the worlds whose land materials are numbers. The engine makes their layers from the table; every other world bridges its
 # prepared images. A table also holds the world's `material` and `water` blocks, which the config no longer carries.
-MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json'}
+MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'ice': '/materials/ice.json'}
 SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
 # The images a table replaces: the page never fetches them, so the config does not name them.
 TABLE_IMAGES = ('grass', 'groundTiles', 'slopeGrass', 'rock', 'hillRock', 'rockWeathered', 'rockFractured')
