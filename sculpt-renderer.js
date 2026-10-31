@@ -731,7 +731,8 @@ export class TerrainRenderer {
       pass.setBindGroup(0, device.createBindGroup({layout: this.materialPipeline.getBindGroupLayout(0), entries: [
         {binding: 0, resource: {buffer: table}},
         {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level, mipLevelCount: 1})},
-        {binding: 2, resource: {buffer: buffer}}]}));
+        {binding: 2, resource: {buffer: buffer}},
+        {binding: 3, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level ? level - 1 : 1, mipLevelCount: 1})}]}));
       const n = Math.ceil(size / 2 ** level / 8);
       pass.dispatchWorkgroups(n, n, layers);
       pass.end();
