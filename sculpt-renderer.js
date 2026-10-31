@@ -839,7 +839,6 @@ export class TerrainRenderer {
   // Surface knobs read from the variant; callable again after a change.
   applyKnobs() {
     const variant = this.variant;
-    this.i('uReliefMode', 1);   // the fall-line surface; the lab look (detail=lab) is gone, its shader branches remain to be cut
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));

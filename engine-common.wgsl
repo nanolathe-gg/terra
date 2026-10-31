@@ -27,7 +27,6 @@ struct Uniforms {
     layered: i32,
     terraced: i32,
     coastalDetail: i32,
-    reliefMode: i32,
     light: vec3f,
     // Draw (sculpt-frag.wgsl).
     shallowColor: vec3f,
@@ -739,9 +738,10 @@ fn surfaceHeight(p: vec2f) -> f32 {
 #ifndef BAKE
     // Baked relief applies at every slope, level ground included: it carries
     // its own slope gain (gentle-slope relief and level-ground lumps).
-    // The bake carries the cracks in this mode (relief-bake.wgsl cracks()).
-    if (u.reliefMode == 1) { return h + bakedFields(p).r * u.detail + debris; }
-#endif
+    // The bake carries the cracks (engine-bake.wgsl cracks()).
+    return h + bakedFields(p).r * u.detail + debris;
+#else
+    // The bake itself builds the relief the draw then reads from its fields.
     if (slope < 0.10) { return h + debris; }
     let n = terrainNoise(p);
     // The same displaced surface supplies projection, normals and occlusion.
@@ -760,6 +760,7 @@ fn surfaceHeight(p: vec2f) -> f32 {
     let facets = 2.0 + 14.0 * smoothstep(0.9, 2.6, slope);
     let detail = (n.g - 0.5) * 6.0 + (n.b - 0.5) * facets;
     return h + detail * gain * u.detail * rough + debris - fractureDepth(p, h, slope);
+#endif
 }
 
 fn surfaceGradient(p: vec2f) -> vec2f {
