@@ -13,7 +13,7 @@ const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Saf
 async function groundTileBitmap({entries, tiles}) {
   const data = new ImageData(512, 32);
   tiles.forEach((tile, t) => { for (let i = 0; i < 1024; i++) {
-    const c = entries[tile.charCodeAt(i) - 97], at = ((i >> 5) * 512 + t * 32 + (i & 31)) * 4;
+    const k = tile.charCodeAt(i), c = entries[k >= 97 ? k - 97 : k - 39], at = ((i >> 5) * 512 + t * 32 + (i & 31)) * 4;
     data.data.set([c[0], c[1], c[2], 255], at);
   } });
   return createImageBitmap(data, {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
@@ -259,9 +259,9 @@ export class TerrainRenderer {
       if (key === 'mineralRing' && !this.config.textures.mineralRing) { this.bound[name] = 'grass'; continue; }
       if (key === 'slopeGrass' && !slopeMaterial) { this.bound[name] = 'grass'; continue; }
       // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
-      if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured.slopeGrass.meanRGB.map(v => v / 255); continue; }
+      if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255); continue; }
       // H4: the engine makes the rocks from numbers too (item 3), so no rock image is fetched; its mean colour is the table's.
-      if (this.materialData && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured.rock.meanRGB.map(v => v / 255); continue; }
+      if (this.materialData && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255); continue; }
       if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
       if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
       // The rock the draw shows is the hill rock (no world's default is another), and structured surfaces carry their own slope and rock image.
@@ -280,8 +280,13 @@ export class TerrainRenderer {
       }
       // H3: a world with a table builds the plain's 16 tiles from the table's `ground` data, not from a file; a borrowed pattern
       // (World panel) names the table of the world it comes from.
+      // A table without `ground` data (a quilted plain: its generated `quilt` layer is the plain) binds a one-texel stand-in, and the
+      // world's mean ground colour is the quilt's.
       let bitmap;
-      if (key === 'grass' && variant.get('ground') !== 'texture' && this.groundSource().groundTable) bitmap = await groundTileBitmap((await this.groundTable(this.groundSource().groundTable)).ground);
+      const groundTable = key === 'grass' && this.groundSource().groundTable ? await this.groundTable(this.groundSource().groundTable) : null;
+      if (key === 'grass') this.groundTiled = groundTable ? Boolean(groundTable.ground) : variant.get('ground') !== 'texture' && Boolean(this.groundSource().groundTiles);   // a table has no sampled texture to choose
+      if (key === 'grass' && groundTable && !this.groundTiled) bitmap = await createImageBitmap(new ImageData(1, 1));
+      else if (key === 'grass' && groundTable) bitmap = await groundTileBitmap(groundTable.ground);
       else {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Cannot load ${key} material`);
@@ -290,7 +295,7 @@ export class TerrainRenderer {
       // Mean colour of each base material, so a world can move it to a new
       // base colour while keeping the texture's grain.
       const meanOf = {grass: 'ground', slopeGrass: 'slope', rock: 'rock'}[key];
-      if (meanOf) this.means[meanOf] = meanColor(bitmap);
+      if (meanOf) this.means[meanOf] = key === 'grass' && groundTable && !this.groundTiled ? this.materialData.measured.quilt.meanRGB.map(v => v / 255) : meanColor(bitmap);
       if (this.bridge) this.bridgeCopy(key, bitmap);
       // Only the plain, the noise and fractures, the waters and the palette are bound to the draw; the land images are copied into the
       // generated array above (bridge) and need no texture of their own.
@@ -329,6 +334,8 @@ export class TerrainRenderer {
     if(this.bridge){ this.bridgeCopy('fringe',fringe); this.bridgeCopy('transitionBody',body); this.bridgeCopy('beach',beach); }
     if(body!==fringe)body.close();fringe.close();
     }
+    // A table world's beach is a generated layer (the table's `beach` material): its mean colour is the table's; the config still names the beach for the flags.
+    if (this.materialData?.measured.beach) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
     this.i('uBeach',Boolean(this.config.textures.beach));
     this.i('uBridged',this.bridge);
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
@@ -940,7 +947,7 @@ export class TerrainRenderer {
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.8);
-    this.i('uGroundMode', variant.get('ground') !== 'texture' && (this.groundSource().groundTable || this.groundSource().groundTiles) ? 1 : 0);
+    this.i('uGroundMode', this.groundTiled ? 1 : 0);
     this.f('uGroundContrast', variant.has('groundContrast') ? Number(variant.get('groundContrast')) : 1);
     this.i('uGroundBorrowed', this.groundSource() !== this.ownGround);
     this.i('uGroundLayer', this.materialData ? this.materialData.order.indexOf('quilt') : -1);   // H14b: a table's quilted plain is the layer after the others

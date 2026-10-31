@@ -23,10 +23,12 @@
 //   row 42  vein colour rgb, vein share of the plane (0 off)
 //   row 43  warp px (every lookup is displaced by noise of 32-px cells: no lattice line shows, facet edges curve), cone strength (round pits and bumps),
 //           seam variation 0..1 (the seam's width follows noise: broken, uneven seams), seam gap 0..1 (the share of the plane with no seams)
+//   row 44  cell weight 0..1 (cells of uneven size with curved outlines: slabs), streak band (the stretch and shear fade out above this band; 0 = all bands), skew (whole number: the lattice slants in x as shear slants it in y, alternately by band), stroke core (extra depth of the stroke's core, share of its depth)
+//   row 45  strokes: cell px (0 off), share of cells (each holds up to two), radius px (at most the cell), depth in z units; width is the vein width
 // Fixed seeds: the salt of each material is its index; every operation is integer hashing or a fixed float expression,
 // so the same table gives the same bits on a given GPU.
 
-const MM_ROWS = 44u;
+const MM_ROWS = 46u;
 @group(0) @binding(0) var<storage, read> table: array<vec4f>;
 @group(0) @binding(1) var out: texture_storage_2d_array<rgba8unorm, write>;
 struct Params { size: f32, foot: f32, pad0: f32, pad1: f32 }
@@ -136,17 +138,17 @@ fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
 // Lattice coordinates of a pixel with `cells` cells across the texture, the y axis sheared by a whole number of cells per texture
 // width: the cell grid is then a parallelogram grid along the line y = -shear x, and a lattice index still wraps as (i mod cx, j mod cy),
 // because a texture width moves j by shear * cy exactly.
-fn mmU2(pixel: vec2f, cells: vec2f, shear: f32) -> vec2f {
+fn mmU2(pixel: vec2f, cells: vec2f, shear: f32, skew: f32) -> vec2f {
     let q = pixel / params.size;
-    return vec2f(q.x * cells.x, (q.y + shear * q.x) * cells.y);
+    return vec2f((q.x + skew * q.y) * cells.x, (q.y + shear * q.x) * cells.y);
 }
 fn mmWrapCell(c: vec2i, cells: vec2f) -> vec2i {
     let n = vec2i(cells);
     return ((c % n) + n) % n;
 }
 // Value noise on the sheared lattice in -1..1 with its gradient per pixel: (value, d/dx, d/dy).
-fn mmLatticeG(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> vec3f {
-    let u = mmU2(pixel, cells, shear);
+fn mmLatticeG(pixel: vec2f, cells: vec2f, shear: f32, skew: f32, salt: u32) -> vec3f {
+    let u = mmU2(pixel, cells, shear, skew);
     let c = vec2i(floor(u));
     let f = fract(u);
     let w = f * f * (3.0 - 2.0 * f);
@@ -161,19 +163,20 @@ fn mmLatticeG(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> vec3f {
     let hi = mix(d, e, w.x);
     let dux = ((b - a) * (1.0 - w.y) + (e - d) * w.y) * dw.x * 2.0;
     let duy = (hi - lo) * dw.y * 2.0;
-    return vec3f((mix(lo, hi, w.y)) * 2.0 - 1.0, (dux * cells.x + duy * cells.y * shear) / params.size, duy * cells.y / params.size);
+    return vec3f((mix(lo, hi, w.y)) * 2.0 - 1.0, (dux * cells.x + duy * cells.y * shear) / params.size, (dux * cells.x * skew + duy * cells.y) / params.size);
 }
 struct Facet { f1: f32, f2: f32, cell: vec2i, toward: vec2f }
 // Nearest and second nearest of one jittered feature point per cell of the sheared lattice (periodic through mmWrapCell).
-fn mmFacets(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> Facet {
-    let u = mmU2(pixel, cells, shear);
+fn mmFacets(pixel: vec2f, cells: vec2f, shear: f32, salt: u32, vary: f32) -> Facet {
+    let u = mmU2(pixel, cells, shear, 0.0);
     let c = vec2i(floor(u));
     var out = Facet(9.0, 9.0, vec2i(0), vec2f(0.0));
     for (var j = -1; j <= 1; j++) {
         for (var i = -1; i <= 1; i++) {
             let cc = mmWrapCell(c + vec2i(i, j), cells);
             let point = vec2f(c + vec2i(i, j)) + vec2f(0.1 + 0.8 * mmHash(cc, salt), 0.1 + 0.8 * mmHash(cc, salt + 1u));
-            let d = distance(u, point);
+            // Each point carries a weight (vary 0 = none): the nearest-point test then gives cells of uneven size with curved outlines.
+            let d = distance(u, point) - vary * (mmHash(cc, salt + 2u) - 0.5) * 1.6;
             if (d < out.f1) { out.f2 = out.f1; out.f1 = d; out.cell = cc; out.toward = u - point; } else if (d < out.f2) { out.f2 = d; }
         }
     }
@@ -181,6 +184,38 @@ fn mmFacets(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> Facet {
 }
 // 1 on a line, 0 beyond its half width, with half a pixel of edge: a line `width` px wide at `dist` px from its centre.
 fn mmLine(dist: f32, width: f32) -> f32 { return clamp(width * 0.5 - dist + 0.5, 0.0, 1.0); }
+
+// Short curved strokes with a dark core: per lattice cell of `size` px up to two circle arcs (its own centre, radius up to `radius`
+// px, which must not exceed the cell, start angle and sweep), each present with probability `share`. Cells are periodic through
+// mmWrapCell, so the layer wraps. Returns how deep the strokes cut into z at this point (line weight plus core weight times `depth`).
+fn mmStrokes(p: vec2f, f: vec4f, width: f32, core: f32, salt: u32) -> f32 {
+    let cells = mmCells(f.x, 1.0);
+    let cpx = params.size / cells.x;
+    let c = vec2i(floor(p / cpx));
+    var total = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let cc = mmWrapCell(c + vec2i(i, j), cells);
+            for (var s = 0u; s < 2u; s++) {
+                let sl = salt + 40u + s * 8u;
+                if (mmHash(cc, sl) > f.y) { continue; }
+                let ctr = (vec2f(c + vec2i(i, j)) + vec2f(mmHash(cc, sl + 1u), mmHash(cc, sl + 2u))) * cpx;
+                let r = min(f.z, cpx) * (0.3 + 0.7 * mmHash(cc, sl + 3u));
+                let a0 = 6.2831853 * mmHash(cc, sl + 4u);
+                let sweep = mix(0.5, 1.6, mmHash(cc, sl + 5u));
+                let dv = p - ctr;
+                var rel = atan2(dv.y, dv.x) - a0;
+                rel -= 6.2831853 * floor(rel / 6.2831853);
+                var dist = abs(length(dv) - r);
+                if (rel > sweep) {
+                    dist = min(distance(p, ctr + r * vec2f(cos(a0), sin(a0))), distance(p, ctr + r * vec2f(cos(a0 + sweep), sin(a0 + sweep))));
+                }
+                total = max(total, mmLine(dist, width) + core * mmLine(dist, width * 0.5));
+            }
+        }
+    }
+    return total * f.w;
+}
 
 // z of a lit material at a level-0 pixel, and the vein weight over it.
 // Development only: params.pad0 above 0 gives every layer that salt, so candidate layers differ only in their numbers (measure/lit_fit.py).
@@ -200,16 +235,25 @@ fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
     let ip = ((vec2i(floor(pixel)) % wrap) + wrap) % wrap;
     // The warp displaces every lookup below by two noises of 32-px cells, so no lattice line shows.
     let d = matRow(base + 43u);
+    let e = matRow(base + 44u);
     var at = pixel;
     if (d.x > 0.0) {
         let wc = vec2f(16.0);
-        at += d.x * vec2f(mmLatticeG(pixel, wc, 0.0, salt + 26u).x, mmLatticeG(pixel, wc, 0.0, salt + 27u).x);
+        at += d.x * vec2f(mmLatticeG(pixel, wc, 0.0, 0.0, salt + 26u).x, mmLatticeG(pixel, wc, 0.0, 0.0, salt + 27u).x);
     }
     var h = 0.0;
     var g = vec2f(0.0);
     for (var k = 1u; k < 7u; k++) {
         let cell = f32(1u << k);
-        let n = mmLatticeG(at, mmCells(cell, stretch), shear, salt + k);
+        // The lattice is skewed too, alternately one way and the other by band, so no cell edge stays vertical: the light shows the
+        // flat ground-slope of an edge column as a streak.
+        let skew = e.z * select(-1.0, 1.0, (k & 1u) == 1u) * select(0.0, 1.0, k >= 3u);
+        var n = mmLatticeG(at, mmCells(cell, stretch), shear, skew, salt + k);
+        if (e.y > 0.0) {
+            // Streaks at fine scale only: band k keeps its stretch and shear down to band e.y and fades into an isotropic band over the next.
+            let wk = clamp(e.y + 1.0 - f32(k), 0.0, 1.0);
+            if (wk < 1.0) { n = mix(mmLatticeG(at, mmCells(cell, 1.0), 0.0, skew, salt + k), n, wk); }
+        }
         let ridge = select(1.0, -1.0, n.x < 0.0);
         let t = mix(n.x, 1.0 - 2.0 * abs(n.x), b.x);
         let dt = mix(1.0, -2.0 * ridge, b.x);
@@ -220,7 +264,7 @@ fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
     var z = a.w * h;
     if (b.y > 0.0) {
         let cells = mmCells(b.y, 1.0);   // facets, seams and veins are isotropic: the stretch and shear are the grain's
-        let fc = mmFacets(at, cells, 0.0, salt + 21u);
+        let fc = mmFacets(at, cells, 0.0, salt + 21u, e.x);
         if (d.y > 0.0) {
             // A cone: its slope points from the cell's feature point, outward for a bump and inward for a pit, in pixel units.
             let off = fc.toward / cells;
@@ -230,20 +274,22 @@ fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
         g += b.z * tilt;
         z += b.w * (mmHash(fc.cell, salt + 25u) * 2.0 - 1.0);
         var seamW = c.x;
-        if (d.z > 0.0) { seamW *= max(1.0 + d.z * 1.6 * mmLatticeG(at, max(floor(cells * 1.5), vec2f(1.0)), 0.0, salt + 29u).x, 0.0); }
+        if (d.z > 0.0) { seamW *= max(1.0 + d.z * 1.6 * mmLatticeG(at, max(floor(cells * 1.5), vec2f(1.0)), 0.0, 0.0, salt + 29u).x, 0.0); }
         var seam = mmLine((fc.f2 - fc.f1) * 0.5 * b.y, seamW);
-        if (d.w > 0.0) { seam *= smoothstep(2.0 * d.w - 1.0, 2.0 * d.w - 0.7, mmLatticeG(at, max(floor(cells / 4.0), vec2f(1.0)), 0.0, salt + 30u).x); }
+        if (d.w > 0.0) { seam *= smoothstep(2.0 * d.w - 1.0, 2.0 * d.w - 0.7, mmLatticeG(at, max(floor(cells / 4.0), vec2f(1.0)), 0.0, 0.0, salt + 30u).x); }
         z -= c.y * seam;
     }
     let light = vec3f(cos(a.y) * 0.70711, sin(a.y) * 0.70711, 0.70711);
     let n3 = normalize(vec3f(-a.x * g, 1.0));
     z += 4.0 * (dot(n3, light) - 0.70711);
     z += r0.x * (mmHash(ip, salt) * 2.0 - 1.0);
+    let f = matRow(base + 45u);
+    if (f.x > 0.0) { z -= mmStrokes(at, f, c.z, e.w, salt); }
     var vein = 0.0;
     if (v.w > 0.0) {
         let cells = mmCells(c.w, 1.0);
-        let n = mmLatticeG(at, cells, 0.0, salt + 31u);
-        let gate = mmLatticeG(at, max(floor(cells / 3.0), vec2f(1.0)), 0.0, salt + 32u).x;
+        let n = mmLatticeG(at, cells, 0.0, 0.0, salt + 31u);
+        let gate = mmLatticeG(at, max(floor(cells / 3.0), vec2f(1.0)), 0.0, 0.0, salt + 32u).x;
         let dist = abs(n.x) / max(length(n.yz), 1e-4);
         vein = mmLine(dist, c.z) * smoothstep(1.0 - 2.0 * v.w, 1.4 - 2.0 * v.w, gate);
     }

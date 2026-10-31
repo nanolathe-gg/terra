@@ -1,0 +1,967 @@
+{
+ "measured": {
+  "ground": {
+   "image": "ice-ground-tiles.png",
+   "draw": "plain ground (the 16 tiles, groundTile)",
+   "size": [
+    32,
+    32
+   ],
+   "meanRGB": [
+    216.08,
+    231.17,
+    253.59
+   ],
+   "lumaMean": 229.21,
+   "lumaSd": 11.67,
+   "sd5": 5.29,
+   "lumaQ": [
+    202.9,
+    212.7,
+    220.7,
+    233.6,
+    241.9,
+    242.0,
+    255.0
+   ],
+   "broad": 1.15,
+   "bands": [
+    6.394,
+    3.412,
+    2.827,
+    2.084,
+    1.315,
+    0.823,
+    0.134
+   ],
+   "stretch": 1.311,
+   "lag": {
+    "x1": 0.338,
+    "x2": 0.136,
+    "y1": 0.444,
+    "y2": 0.274
+   },
+   "chroma": [
+    7.33,
+    4.01,
+    4.36
+   ],
+   "chromaLeft": [
+    1.19,
+    3.09,
+    3.3
+   ],
+   "tintLag": null,
+   "tint": [
+    [
+     -24.1,
+     2.5,
+     1.9
+    ],
+    [
+     -9.3,
+     4.3,
+     -10.2
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     -3.4,
+     3.4,
+     0.0
+    ],
+    [
+     3.9,
+     3.9,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     -6.2,
+     0.9,
+     4.6
+    ],
+    [
+     0.0,
+     3.9,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     -3.8,
+     1.9,
+     0.0
+    ],
+    [
+     9.5,
+     5.7,
+     0.0
+    ]
+   ],
+   "colours": 16,
+   "topShare": 0.289,
+   "ramp": [
+    [
+     193.0,
+     203.6,
+     246.1
+    ],
+    [
+     202.8,
+     221.1,
+     243.1
+    ],
+    [
+     211.0,
+     219.0,
+     255.0
+    ],
+    [
+     211.0,
+     219.0,
+     255.0
+    ],
+    [
+     211.0,
+     219.0,
+     255.0
+    ],
+    [
+     211.0,
+     219.0,
+     255.0
+    ],
+    [
+     204.9,
+     225.1,
+     255.0
+    ],
+    [
+     204.4,
+     228.4,
+     255.0
+    ],
+    [
+     215.0,
+     239.0,
+     255.0
+    ],
+    [
+     215.0,
+     239.0,
+     255.0
+    ],
+    [
+     223.3,
+     238.6,
+     253.2
+    ],
+    [
+     227.0,
+     242.3,
+     255.0
+    ],
+    [
+     227.0,
+     247.0,
+     255.0
+    ],
+    [
+     227.0,
+     247.0,
+     255.0
+    ],
+    [
+     232.1,
+     244.4,
+     255.0
+    ],
+    [
+     241.8,
+     247.1,
+     255.0
+    ]
+   ]
+  },
+  "slopeGrass": {
+   "image": "ice-slope.png",
+   "draw": "cover on slopes (generated layer 0)",
+   "size": [
+    512,
+    512
+   ],
+   "meanRGB": [
+    218.44,
+    233.5,
+    253.43
+   ],
+   "lumaMean": 231.27,
+   "lumaSd": 12.75,
+   "sd5": 7.1,
+   "lumaQ": [
+    190.9,
+    212.0,
+    220.7,
+    233.6,
+    241.9,
+    242.0,
+    255.0
+   ],
+   "broad": 1.27,
+   "bands": [
+    6.067,
+    3.617,
+    3.109,
+    2.371,
+    1.762,
+    1.498,
+    1.171
+   ],
+   "stretch": 1.215,
+   "lag": {
+    "x1": 0.475,
+    "x2": 0.243,
+    "y1": 0.563,
+    "y2": 0.381
+   },
+   "chroma": [
+    6.65,
+    5.21,
+    5.32
+   ],
+   "chromaLeft": [
+    3.25,
+    3.59,
+    3.82
+   ],
+   "tintLag": 0.214,
+   "tint": [
+    [
+     18.8,
+     11.7,
+     9.7
+    ],
+    [
+     -8.6,
+     4.5,
+     -10.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     -3.9,
+     3.9,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     4.1,
+     4.1,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     -2.4,
+     1.0,
+     5.1
+    ],
+    [
+     -2.1,
+     3.7,
+     0.5
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     -1.5,
+     0.7,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     8.3,
+     4.8,
+     -0.4
+    ]
+   ],
+   "colours": 46,
+   "topShare": 0.197,
+   "ramp": [
+    [
+     185.1,
+     202.7,
+     240.1
+    ],
+    [
+     207.2,
+     219.1,
+     247.6
+    ],
+    [
+     211.0,
+     219.0,
+     255.0
+    ],
+    [
+     211.0,
+     219.0,
+     255.0
+    ],
+    [
+     207.7,
+     222.3,
+     255.0
+    ],
+    [
+     203.0,
+     227.0,
+     255.0
+    ],
+    [
+     213.4,
+     237.4,
+     255.0
+    ],
+    [
+     215.0,
+     239.0,
+     255.0
+    ],
+    [
+     215.0,
+     239.0,
+     255.0
+    ],
+    [
+     227.3,
+     238.7,
+     253.6
+    ],
+    [
+     227.4,
+     242.1,
+     254.9
+    ],
+    [
+     227.0,
+     247.0,
+     255.0
+    ],
+    [
+     227.0,
+     247.0,
+     255.0
+    ],
+    [
+     234.7,
+     243.1,
+     255.0
+    ],
+    [
+     235.0,
+     243.0,
+     255.0
+    ],
+    [
+     248.3,
+     250.5,
+     253.7
+    ]
+   ],
+   "lit": {
+    "gradAxis": 178.8,
+    "light": 0.497,
+    "coherence": 0.192,
+    "streak": 171.9,
+    "streakCoherence": 0.12,
+    "shear": 0,
+    "dark": 0.0001,
+    "seam": 0.0,
+    "seamWidth": 1.0,
+    "seamLength": 0.0,
+    "cell": 74898.3,
+    "vein": 0.0087,
+    "veinWidth": 1.25,
+    "veinLength": 0.007,
+    "veinSpacing": 143.5,
+    "veinRGB": [
+     165.3,
+     165.7,
+     216.1
+    ]
+   }
+  },
+  "rock": {
+   "image": "ice-rock.png",
+   "draw": "hill rock (generated layer 1)",
+   "size": [
+    256,
+    256
+   ],
+   "meanRGB": [
+    128.89,
+    145.02,
+    176.05
+   ],
+   "lumaMean": 143.74,
+   "lumaSd": 54.84,
+   "sd5": 42.03,
+   "lumaQ": [
+    38.1,
+    51.8,
+    107.2,
+    138.0,
+    183.3,
+    233.6,
+    242.0
+   ],
+   "broad": 4.02,
+   "bands": [
+    16.197,
+    12.228,
+    12.994,
+    13.778,
+    13.632,
+    10.159,
+    6.076
+   ],
+   "stretch": 1.221,
+   "lag": {
+    "x1": 0.759,
+    "x2": 0.563,
+    "y1": 0.825,
+    "y2": 0.671
+   },
+   "chroma": [
+    17.33,
+    11.44,
+    14.73
+   ],
+   "chromaLeft": [
+    5.76,
+    5.52,
+    9.99
+   ],
+   "tintLag": -0.146,
+   "tint": [
+    [
+     5.6,
+     4.0,
+     16.4
+    ],
+    [
+     -12.7,
+     10.4,
+     -8.5
+    ],
+    [
+     -17.5,
+     15.4,
+     -5.2
+    ],
+    [
+     -22.8,
+     6.4,
+     -19.4
+    ],
+    [
+     -20.9,
+     14.7,
+     -7.9
+    ],
+    [
+     -19.6,
+     5.9,
+     1.7
+    ],
+    [
+     3.2,
+     1.3,
+     -9.5
+    ],
+    [
+     -21.0,
+     10.5,
+     -12.2
+    ],
+    [
+     -22.6,
+     20.1,
+     4.2
+    ],
+    [
+     -1.1,
+     2.3,
+     -18.3
+    ],
+    [
+     -27.0,
+     11.5,
+     1.9
+    ],
+    [
+     -13.6,
+     15.1,
+     -6.8
+    ],
+    [
+     7.0,
+     5.1,
+     19.4
+    ],
+    [
+     -17.6,
+     2.9,
+     3.7
+    ],
+    [
+     -3.6,
+     1.7,
+     -5.8
+    ],
+    [
+     13.9,
+     6.0,
+     -0.2
+    ]
+   ],
+   "colours": 78,
+   "topShare": 0.105,
+   "ramp": [
+    [
+     37.1,
+     45.5,
+     70.4
+    ],
+    [
+     54.5,
+     65.4,
+     91.8
+    ],
+    [
+     73.6,
+     84.5,
+     116.2
+    ],
+    [
+     95.5,
+     91.2,
+     123.2
+    ],
+    [
+     94.8,
+     109.9,
+     146.0
+    ],
+    [
+     92.4,
+     119.8,
+     143.5
+    ],
+    [
+     105.5,
+     142.8,
+     164.8
+    ],
+    [
+     119.3,
+     136.8,
+     170.2
+    ],
+    [
+     138.2,
+     138.8,
+     187.4
+    ],
+    [
+     131.4,
+     166.3,
+     188.8
+    ],
+    [
+     156.9,
+     166.7,
+     215.6
+    ],
+    [
+     170.5,
+     175.5,
+     219.4
+    ],
+    [
+     165.8,
+     200.9,
+     230.6
+    ],
+    [
+     192.9,
+     213.0,
+     241.1
+    ],
+    [
+     207.7,
+     221.8,
+     253.2
+    ],
+    [
+     226.1,
+     241.5,
+     254.7
+    ]
+   ],
+   "lit": {
+    "gradAxis": 18.3,
+    "light": 0.551,
+    "coherence": 0.246,
+    "streak": 12.9,
+    "streakCoherence": 0.221,
+    "shear": 0,
+    "dark": 0.1213,
+    "seam": 0.0605,
+    "seamWidth": 1.25,
+    "seamLength": 0.0484,
+    "cell": 41.3,
+    "vein": 0.45,
+    "veinWidth": 2.89,
+    "veinLength": 0.1558,
+    "veinSpacing": 6.4,
+    "veinRGB": [
+     130.3,
+     144.9,
+     171.7
+    ]
+   }
+  }
+ },
+ "order": [
+  "slopeGrass",
+  "rock",
+  "rock",
+  "rock"
+ ],
+ "ground": {
+  "entries": [
+   [
+    187,
+    159,
+    223
+   ],
+   [
+    155,
+    203,
+    223
+   ],
+   [
+    175,
+    207,
+    255
+   ],
+   [
+    191,
+    219,
+    231
+   ],
+   [
+    231,
+    199,
+    235
+   ],
+   [
+    223,
+    203,
+    255
+   ],
+   [
+    187,
+    227,
+    239
+   ],
+   [
+    199,
+    223,
+    231
+   ],
+   [
+    211,
+    219,
+    255
+   ],
+   [
+    203,
+    227,
+    255
+   ],
+   [
+    215,
+    239,
+    255
+   ],
+   [
+    235,
+    235,
+    235
+   ],
+   [
+    227,
+    239,
+    255
+   ],
+   [
+    227,
+    247,
+    255
+   ],
+   [
+    235,
+    243,
+    255
+   ],
+   [
+    255,
+    255,
+    255
+   ]
+  ],
+  "tiles": [
+   "khcijiiiiiinjigmhjjcinkoijknkjijniimjcjjjiijihiijiiiejkpniiipkiiminoiijfknibnfjikjkjjiknonoinnfkiginikjjiifcichojjikijonnnnkoobknminkjiikjjecijnikiiiimjiipmkkaijpnoiijniiicijjiiiinknojnknkoidmmkkokifgikjjiiiijcikkiihminmkdkkoiijikjhiikjkcjgejimkighnikikipinoiiniccpokiliceckinigijiijmkikoklijimhinninokkkiijiniiijcjookinimkinjijiiknonmimiknkjjfdijnkikokkmijiigihiinniiiikoifgjcmhmkkmkjikikjjjonikmknnijikkjecflcgickioinkkijiinkmkmmijikimcjjgfjoojiimnomkibinomniknoikjiiijfgciokhonimmkmpiiinkihiknmkmkkihjeimnigmmjinimkjjknidhjjikikkikiogmkpjiinikkjmjiimicfjjiiknijkjininmmihokinigmcjjicejihoninmnimkmniikijnmiiiikijfihcimhnnonnmkkiijikmjikiijgikkijihgioinnnmmgiikjkionokmiocekilniiacinnkkinikmijjjnnnonkiiiijjnnkobdonoinnkiikijiminkpookhimiikmiiacmnnkoimiiikhmiijknnokokmkjmikobhmooinikikiikiijfinniikmniiikmnoimkinnijimikojiijiknminnpkinikinkjfnkijnikiijciigijijknnnnonjikkiihiikifbjniiijjjokhmiiiikpnoiinkjiniiijcjihiicjiojemkjhmomkinkkjjknnjiiiimcpiiiknibmimjknpniiikiikijikjjjminkknnifionnkkiknikkijiiigjfjjinnnkinoijjkk",
+   "nnniiiijoijcdfchiiiciniiiimiiknnjjiipdkijijechhiikiijinjikikikpnokinnidjijcjfjfiinkkmkicmioijjooionjiceciifciijjokmknkiikikkjipminnijicgmjjecgjikonmnnjiiininiikikoiiiiiniccifimkkonoimiikihinnmniinnikinidijinijhnnkinkiijjmnmkknnkmookncaiginiiiikikoonijinnnmejmnopnikigcaiminiknkkinnnikiopkiinkknnniiihdinnikiiiiikniijinkikikomikkiiiiijknioinidikkiionkinniknnkiijiikkikiiknnicdkjnknnooikimkniiiiiiinjonnnnnjdgiiiijokknokkknmkmnnjijinpnnmmecjiijjijnnmnnmkinmnojkiiiolkkoijgfnkfinonkmciknnioonnokcbnmiikmcejiijikookmonmknoonlknjfchiinmmhcjhhiknnnnmhikionoikoicjfjmkpkocifcciiknniikoponnnoinkiicinkknomicjimoonjkjinoiknonminimimmmmonnkmfhoonojojpoinoknnkiiiiknopnnpnoijemknimokipiionpikkoonmknnnononkhcjmiknmmiokninpbiinnkikkiknonmkiiiikikinikmiknnfinkookmiiononnnjiiikiijinkikjijbkmkpniiijkkinoiinkonijjcinimoigfjjiinikijiiioiiimhnkpmeimkiknnojgekimiiihciikkimiiinonciiliimiiicciimligiiigiijijjokonikknniikcijiiikmnifgifjjmifkkmkkkohinmnjecjcijmmijbfijiiikknnmihiinpnnocjcahiiioiiabikkiigikoiigfckkinnijedcopikjkbikiinkfiiijiije",
+   "innkmikinnkikiijkkiimnikmnjiknijjimikiiimonoonjjmmkikmkikiciicmmijlnjijjiknonmiikmjikkimniddgiooijmonlikjinnpniikicmiiniicacejonjiinnjijijmnokijiiiijimkiicjjknniniijijiijmkiiiiijmiinonodeiimokkkiijkinniokiniihjmljkoniiijcoppomkcikkmimookniiiijhinnkjjjmioponniiiiikoknkninkjcadikmiiiiigooonnijhiknookmmkiniiiajiniijjecikkmnniciinnnmnkikonkjcinooiiijjiiinmihijikooniihnnoihhikpoijjhcjjjjckimkinnomkniknojjfjjikjiiiiijjnfiikmmonnpkminpnicijiinikjiiijcnkjgekkinnnppkigmihiomkijohcikiikmfcjnkimnnpopoioknnonniiniiikikajchikiniijknokkikiinponiknnniijjcejinnkjinikninimkikonoiiinooijibijikipkkkkiinknkjinnmojiiioihenfniknknmjiijljmiiinomnigijniijjjnikmkmknokijlhoononnkiifiinnijioimpnminppijmjconoonnkkkkkikkkjiigonnipnoikmmiknonnmikinoiinpohinnnmkononnkijninnomnikmjmklnniiinnkmkponiiinimkiinkikimikijniinimomiinocnkkonknnoninnkicimiikkiniiniknoinikinmoonikkokniimikiiikciihnijoknioonnkmiinkiohiinojiiiijiiiidikkkonmnkniikikmdmgmgiikiiikmkhejfgiokmkmkkippoookmokmjigkikoiijakiijoimkjkionnoknopoocgciknpoijcijiiigiijkknkomimoponifc",
+   "kfjiiioomnnkijjjhcojmnnnnhinmkinhjiijnknkmokimjecfimkmnniijkimknoikijinikopokiijjijjjjiokciiikmmooijiikmknkiijjijihejikndaconknpnnidenmkiinjgimfimcjiikifbfjmkiniicccnpmnnkmcinninbenijhbhjiikiijjmjjiiikkiijippnnkjiiiiheijiijikinkikikkmikinnpmnmiiniobjjiihmmiikjiiomkmooijiikonnkmonfcmiijiinniiijnmhjnniiinkinnnkmnkiikkkjjidniiinkenmikjonononiiinihigiikohiokjcikjoijiinnnnnnkmkikjklnnmnokiijinikihenijninnkniiniikpnknnnikiciiknijhiiijiijjijkkkkinnmkokiijddejoiiinkonnkmnlkmoiikmmmkigkiifckmpjijckkinnkoimmmhiikiimjikijjijmnnkimejiiikknnkkonnnkinnnnjikijimnmonjckcmniinljikinnkklniniimkiiniooiiniinokkmkiijkkkkncnijkiimnnjooikioiinnmkknkioiiiiopkiiikikmiookijkjnompniipinniiiiknjicjoinkpolniiiiginmnnonononnkinijfinpnmnnfnkijeiimniinnnnknkkiiijjnnnonmkkomijchiijkinkiimnikkjkciknopokmlinijfjjkijiikijinoimikadinknonnjhokhjiiiijjnkmikknnojdchonmonnijfnigfkkjjhiiinnonknikcejipnpnicjjjfgikihiiinnknnmmjnkfckjnnpniiiicjikijcfgejnkinninnicfjjinkkikmiiiikmoknbjckinkkkinjihiikonoionkmniioponfcfiikmonnicigonoonikknnikninjjocikikcioi",
+   "ikkijinmnkkknpnnpiknjonmkmonijfichdjikokkimmkkikjkmikniiionokijnjmjjcmkiiiiimiijiinnkiihioooniimkjmifkknkjiiiniiijijnihdiknonnnionnnikmidiiijnikjkmijiiiionponkikoomijiiiiikinnijknkinoonikoonoopknkiijninmkinoicjjooikopnnoonpninkijiinnikikioilhnopiknnknnnpnnpnkijiionkmiiikimdionnkmiknnoljikmmikjknnijikknnnijinkiiknknkiimijmkijikiidioinonmiiiiiihjinojjjkkmonnhnkjiiknononiijiijcemnkiiimkmnkniimijiiononkkiijmijjmiikmnmoomoiijlhhonnknninikkiojihiikonjninnonchiinnnikkliiionikjkkkmonnklnnoigjiopniknimnnknnkkimmkionikikmiicejoooiioninnniikiiikinnoipiijkhhcjkpnijkpnkmnjkkiihinonnnopoiiiciiinpiiippkkikimkkjjonnknionnijfkknknknkknommkiikkiknnokiknpkiicmkijinniknokiiikioooknnnikijkikiiikinmijoknminpkpoonimkijmdiikiklhfjiniiinnkikoonnicpnnkkkaikijkichjiikknkigmknonnhdiijfniccjjjidieiipnknmiininnoocgoiidkkjfcjjidechjniknpimikoiooiknkjcmiijiimjagaiifcikjinmikknnnnimjenijikiijccjiijiimjmknjinpkinnidckiikknijedikijikioikojinnmikocijjiikkinicjejfinoonnmkonomoiikficniikijnilicfjjkonnokikkpnnnkmjjekijiikinkjijcfikiipokijkmmkonicj",
+   "iinmjiponkicikkmhgiiinooninidcjikninopojkidiiiijjhiijihicnnjcfiiiiknnnkkojicgimijijgimcjjopmcckniiknpninmohjonmmkjhciiiikkiniehiijinnniknoiinpkikfihinnkponokjjkiinkmpjkiknnkopikjfjjimiojnoiiiijboiknimkmokimknoijcikknihnnikijnfnkiomnmkmnniijmhiiikmiiiikiihfhjiikknooimonnjikokmokmkmnkikhcjohonmhcoikmkoonikiomnmkiiikmmghilinokiminikmonkmmoooonicjnnoiccjnonnniiniinopononnnnkpiiiknkidejikononkinkkknkknklnnonnkjommidhibfpnonkkkkmiiimnijknkoniooojomknncppnmiooonminijjiikikkkmnnkmkinmchnoinnnnonjiijjjikninmooonkmiknoinnnkminkmokmiiijikoonnnonijnoiokmkiikkimnkpniikmnmonmnonokmionnkokkinikkonoooniponmniknnoiinnkniookikomkiinnikinonniiknpoonomiiknonimnpminokniiimiininnnoookoijhconkoonikmginkpinkikikinookmknjecjkpppnjmifhnkiknonijmjionmnoijjgfknknkinncjinooimokiiciokoookfniknininnkmkicihoikihjjfiiknnknkiiiikknkiomokoocjnimiihccokiiikmnkiliniijlopknoiiikkkjfdikmkiifininnokkjooonniniikkoicccdcokkmggjjiknonnonnnikijmniijmiiaionmnnbahooonnoonkiikiiiiihikmibinoiinfhionnnnknijiijikiighjminfkipkiijilnnnmnopkknmjmmkjiggipnjjknni",
+   "kkkioiikmiiikikjijooooiknkiinonnknkinkijijiiiiimiinonooononikmmkjjmkkijjkijjinomkiimnnnnokoiiiiknnkimjiiijokkmkomijkmkinnojhijinjnnkjiijcfjnnmknnihikpikokejlkinjoimiikahhjikooniiikinnnojjonkiikkkioiiccfnpkkmcnjoiooknijikilkkiinijhhcfckkkhijikknnknijiiknkhiiknkfciidiooiijmknninmcichinnnfmhipicinecikinkiikikiknhjeiknnijinnoiikicgiknikiikkiiokjijjminnjimnnkokgfcfjinkkkmijnooinijiknoiniinnkihjcjiikoiinojiinpkhmmjonnnjjmimnmhfijinnknokiiikniknkokonjijijjjicjjjikimnnijikimookokmnicniijfcilijiiokomiiikmknnoinnijjiemkjkfkniijkkikkikjiinpnnnmkhjfniikjfcioknipoiinnooiionmnkoigihikikijejnmoknknnoopkiknnomiiiihinknmijcjinmijjnihnoinkoonnijnniknhnoiejfnipnninicmojomkminiknoinknonkifjjhiiiimionimionnoikmknmmmnkkojjicimjkknkinnmonokijiiiinoijiijedciijijekiinkknopnkhkikiijnknjchejjjmijgikkkmmnnnniiifjnniiknnfijicikkgcfiimnomknnnnnkiinjcnmkjjnilnkmmhhninpomkmnnnimnkihcnoicinkikkiniiiiopononmmnkioihiimkicgimigimkkijonnoonkknnmiohccjnniifkikfjkiiiipookhjinmnmmnmhgiiikjjiikkijijjinnnigfjkmomkiiceikiiceniimikhehinnojejjnknpijjibi",
+   "mihjmiihcckikikioiknkknkipnikiicmjfnnioiijijioooookinnnnkkokinhgicjmnkinigkhikoopiionkookinmimdaoiinmkiinioijinonhnoliinkiiijmihijhpnoniojnniiknediniknnkihjiniijijoknniihpikpnoggfjiikooiicijjmokkjmkopiionnonoiikiinnooijdcghonkfjilnlnknmknnnnikiinpnnmjihadknmchiiijimipkimkiikininikiimjiejdmmhjkjjikonoknnimckkkikiijiijceopkiiipnhiinnokikmjjiiggejkijjbiijpnnkpicjnmkmifjiijifiiijiijigiakoijkiiiiinmikjhjfiknnkjjhjjcihniiniinikkjkikidcjjniikmiiijfifcijhjijnjoinikiigijinnnpoonijjniidihijjecojimnjjjonnkmnnoonniinkkknimmfcfjdekiijiknjnmmnonmjkijjjiijikcfheciknjikiiokinknmkonnmjjckiikfjjcibiicininpoonionmkmokibiiijicgfjoiiiiikonnnnmkiikinpojeikgidiciiniinnnmnpknnpojionnnnjjnihiimiijiiliomnnokijkikonkoomifoijinnoiinjknoonnkijfjijiknonnnckkcinonkiiokmopnknnjgiikinmliiidnmmkinnimkknonnokihiifjijikmiikikkiikiinnoinnnnmohijhjimijjiikjikninnninnkioknnimdaihinkojkiimjiokkkmiikikippiikiciinnoiihiikiijkkimiknjikkinkljkcinoknkiimnikiijinknoijjiijiiijfjonkkiijjijikkimkkknkmminhionkijjnnkmnijimkkjjknmilikkmnmikpnmiiiiknkpkkinmjjii",
+   "ihkmijcijfnponkhknokiniikinkhiinnkiiifjijjinjkjelnoonikinmmklikpjiikigikjkiojojjjionkmkkoniinnonajkiijiniinimokjiknnniinonnonpniijjghmkmkhonnpnijnmmpnnikknoikknfjecenkiicmkigmkknnmnnifiijiinimojjhcmoimfjminnkimpnnnkkijhiiinijehhjjnkijikiokiijknmoooichikiojhbifjiiiioinnnnkihfninnkicfjinoioajdiknnmiiiniijjcjjipimijginooiidiiinmminninfcigecinoikikiiooikicijkinjinniihdiccikijnimjnmknnmegfjikijiomkokjkfmiiiknkkkmpkonmiijiiiijoononiiijiijihiknmkinnnpniikjghinkknnoiiiihimjkmoikiinnoijinegcmnlkmnnkjjchiiimknninnmnnihinhcbinimlknifbjjjdkkmknnoppnijionijaimnijnnijcjijmcknmnnnonninmopiggkkkmhknmoiinimcjikooonkihnonkiecioimikoninkpkmmfjoinokjidmnmiiiiikkiniokinkpnoojjoknnikdiiipikjjoimoonikmnknpnnikokmkmicmikoojikkknonnkppkomnkiiimknmiciiinniijinoonmkioolhmkiknpooomkfkjiooniijknonkiknpplopkmnponnmoieniknkhifjjnoiokikoiijiknpoopkoicjkikjhjjciijmnnkmnkkkikinoonikiiijomihiifhjimkiikkmimminnnomnikkhnpnijigjbekkinkmkinnnonkknkiknoikomkicfiidjdiiihenkmnkkkmnkinknkokkijjhniiikpnijjkikkmjinooniokmcjkiijiiikoklnncfginiijinnnjnkni",
+   "mokpknmnijchichoiiicciikijjinnmnnpopipnpkifcjejnijhgjiijiiinooinnnopkmmopjchijcmjnicekikiikkoojoinnnmonpnhfhceijjnhhhijiikjmkoknokionnnkiijiiikmiiiijiiknmijkkiknonoiooinnimginhinijjjiiiiijmijiinmknniiinkiijiijjiiiijjkmkhoncfikikmkikkinnjikiiikmjjiiijoinjijjimimojinjijikinonikijjicfjoiijeomkkniholimjijikjoonijfgddinkjchnpnmkpinkikfgjfiionninkgfilmniciikkomnnonincgichgkommilhjjhhjjiijkiikoknniidejedejknookkmijijohiiiknokmkikhicejagakkonnjcicjinicejinnnkkmmihhkfjhcejmkiigpjmijjjijinnikkijcichjjakjjiinimpnkjcmihinomkjjmgficejcgicjijomnnmkhainnnkmimjiifcibcjedihfcfjoppmnigikinoikkknnigbijicjmmjehcmknkijainkklmiimkiniammjeikiiniiilinojcjicmmnijjmiidciiijjinkkjjnkkiiiiiiikkjkkijnkidojcfcinmjhcmmkijikkknpmnponoknkknfhchiokfiikihajijmmmkiiokinmijiijiiilnijiijjfiikiiipnkknkiinkinijiikionikijihnniicikikmiiklmkiiiiinikiijiiiiiknigfnjionjkiiiiiniiknikigikiiimnojejigkniminnijoikikjihcadmiijipnijjiiniilnoijioonimiiahiiijcekjkiiihniijoojimnkoinkicgihnnkikniihhcmijiionhinompijmiiihiimcjjomcjaiikkinnkjinnoohconnijikkiiinhaikni",
+   "kkknijniohomkijiijjkidminkiginnijkmkjiijpinponikjhgiicokinomnkninmkkminiinonopjficeijipoonokfgijmminnkooiknoonjnnibcjkonnonihiijknkmnknnniihnkiiifgiiiniinoiinnmkomlnmkokikjinnnjbfgilninmnkikppkknnkjmkmiiiimijjciipnnnknijinnoikmominmkkjnjnojfiiiononilkignokjmknokkiikiniimjniiliimikikkfjonininnnikikijjjiinnjnkiimmkmjjkpokionnoniijojfciiknniiinkjiiipnookknnonmonmoiciikonijijoigjjinnnkipinnknknopihmikpnnkiiophegiopnmnonkkiiinknkjkionnoikkimbjfinnkjimmmijinoniijiknnonniiniahcimniciiknkciknkiijikoonnoniidbjfcjmjinnnmiiiiiinicmiknknnnoibiiijiiiijikijkjiknihgimnmkiknohaiknjiiinaejkiijjinnfciiokmmiinigjniiiijjihijjijikijjiijkojijinjifmkinimifhicmiiikojiiiikijiokijjdmjdmnmcghiokinikikjikkkmiiooniiddijinionikkpmmmijkmnkiiiijnoihmjhijnmkickninokoijnmkinnnjiikoimjkkikmjgimojinooikijimknoinnmkkkkmimiiifhiikinopiihikpkkniinkiiiooiinikkkigkikonnijkokmikinmcpjkinjhikjkjjemmknonniinmkkokokfkiiioicjimikicnikonkiikmgipnnokjijjikifinoknihinonomkikiknnnniiiichopkkiilnhijjkkknpiimikiinikkijejijmjikijkjjiokmnokinnniiiomkjcjiijfcjmik",
+   "nimmnnnohiiiiiihjjnmniikiiihinnmknkkmnnmjijiookijiikpnijikhciopnknickmijehoknolhjkkknnninmjfionknojiinicgmnknknijmkoknookkjjjpmiiiginoicjmookinninonkinoniiiimkkcjainkifcjnopnonnkkpknmpnikiinjioikikojjjikknnnmokkknmnpkiikiiikoonimkdmhiilkkpkomikonnknikmjkikinnnikinnikikkknnijfnpokokiijijiiojmonkimoknnjikimkinnninnijnlkncjnkmmkikmliiiikmkoononkkiijinpnnijikmnijmnkokiimknniknliihinnnpnjikonnnkmkooookpkinnpnjjiinoniniijjmknkiinopnomknnnnnniikjimkikiimiknmikmjhinnhimkiinokkikinninimkmoikikijciokjiimikinnmiininnoimonnniioniimniiiiiijkinjikkknknbjmkknnmnnninikijnkjmkiijninikonniikmnmnmmkniijkiiminjininikimnionkonoinnkoiiikikkigilkoikiijnpkihkinpikoilikimninieikikoinijinnocennnniijnnikmiimhikolikinijkmkmchnknknicnonoiikifjniiiihjkkniknoinnonnkjonnpjoiigkonkinikkikmnmknkmminiknmnmiknikioonniikikinnfmmjjokinmkoomkiifjnnnnijjikkhkommnikkiinionnjiojdikklkiciiknilnnonninkionnnikonikkikikgfhliogejkjponpmkiikiimnminnknimcjiijmiikjinnniiimoikinoiinoniijcjmiijinkikiinkijikoonooiiknokjjjinkokionkjikoidcmnnnonnkininiijmkminooon",
+   "kiinnjjimiiiiinjjinokinijfjkiikinkkjmiigiiiikniiiiopjijkijimnpnkiiijipniinkjipkjinnkmiciiijkkonijjiinpnijoiijkjignikicdookihiklnihiikknjiiiihciiinoinkfonnjjchkjnihmkmiiijhciijhjknkiionoigjfjchmjmkmkijiiiiinihmikkinnmkicebicecjiimooiokkonkjenkjfjikiniibcbecicmonnjmnippoijjkicjgimmkikejejjiikinmijmooonniimjfjciipmmkbijiijjiooijjknnoomjjicjifhipnnoiahcijgkmnnkjinnnijifjeikjiinknnkhiiikinnjnkikkkiifjjijjnninikoihjiinonominnoiiinnkmnkiiinjioiiiijiiinponjmklikjjniijmnniiijnnikkijniinkknjjnmiifijiimoniknimkiininkijikmnniiikicifjjioniionniklnoiojpnikmijniijhjdijiknonnnkjknnkpojjkkkoinknicjhfnknknkiikmiinnknkinopponiikfgihckmoikiikiiiinniiiinnpnopnmihcjijnikokkkmjiniiinniinonnookijabgifihinmimmcmkkommiknmnnnookijcjjiciinonkkmcjinnknpnnommkpomiijehiiinoonoioiichiiniinnpoonnkikjijinkoonpkpnkfjiiiknnminnnmnimijknkkinmmkknoigcjjjiomokkioijmkknikmkkniiijookicfcfnooimkinonkmmkkinooijiiipniiijciihnniilmnnikmmiknonijikknmkkkiinjjmkiknmknimkkknonniiikimkmojkiiiiikciikkinknonopnkiiinnkmkkiihihhcijiijgiiooopppininknkikiinjikniii",
+   "jicejigimnnnninionknijjfigiajjiiiihbnjjnimmkikjnokkinicgjacdcfjfjnianhiinlonimjnkkiknjfchgfcfhijgmijpinmkooknokkiminokjjfcfjjimojkjknkikikniopnikkknoifgiiinijkinkinknooiiiknnnkijfimnjcijiiijiimknijoopniimmkmkmikmijkiiniijiikinknionkkpikikoikmikijiikiniimnkilnmkmnkkijikomniikmmicejokkkninnkkonnmmihmkinnpkkiknhhkmnkmimnmkinnomnmjeniiijimiiijmgkinikkkoigfnigfkkjjikkmjiiipjjiejikijkijhkinijjiiiijionjiniikinjmpnkmiijammmnihiijghknihpknnnnkninommkijcnonicciiicfjoicppinnmmiiokoniimhknnjmdomiiikkijknikikijnoknnnokiciijkbnijinmkiiookifjfmooonnopiniijknfkiiiikijkponikmginonnooponinjoikikijnlniikpnklikkokinoooojijinnifjikiknkjnnikpkiijikiikonijiiiinkiikmoopgnnimknikkikiiknkninikinmicknnophhonkimoiikkjjijiiijniinnnkiononijihinnonkjnijiiikiimkikoninopnkigigiononniiiiikikkikjilnknkknmkgcifdnnnnnnijikknnjiikiikinikmnieimcikiinnjhjimiinjikknijimiiikijniicjjhknnfjmkijimoimkiihijjiiinkiiniijmkicikiikkipiijnjjecjiikiikiiihcheijiimijeoponinicjcinnkkidikhiijhiknkkiicioopnmihjginokiicdihjhjiinijfijdokknnnjjjejknkkidacmihijnkjijjfd",
+   "mookjkijcfhimijinoipooikikinnnimnnnimcmigjcdmiijknnpoinninnkkkkoonmicfkiiceckiikkkjkkiknknihinmjnonojhjnjicdjnikmiiiiiiokikicicoinokicikoidhkokiokpnkmnokikgfkknmnndminikdaimnkkkponikiokinbajikjinjikijmiikmiminonokniiikmagijmnioginijiijmkkiinmknmijiikidehiiikooiijimjjjmkihpmiiknminmiddcijiknoiijiniinkpiciijmnokkomhiimicknmnhkinonkikichikopppnknkoiikkeannjiijpponjmjejkmnoppopojikiijginilniknnkknkjjiikiomnoookijjjadnoonniikokmmmcfiiinokiookimicgbemnnikijnkninoijjjkkoiinkmijpijcjinnipkiniikkihejgminkikonjjiimiimmikniijkiiijcjhennjiiiikiiknnniiiinmkjfkkiicenmkkijmkikikiiinikkhjkijjjokkiicdoijkhjiijominnnjiijjjmmjiijjnkhapokigfniiniiiniiiokjikpijkimmkjcikoiijjikmkijmkonknnmonninkinijiinpopgiiimcminnnkimjnonkkinikiiinknonpnkkihmkmjkioiiknnkiknkknoiliikpokkmniiiijinnnpnmkijmkkiiknonkionnjmikiikichkpnonmjjiiniknnnonkmmmkiiiikkioainnnnniinkijokiknnninioipnmkkjobnoonnkinimdcniikmiiiiikikkoiijodinkkojkkpnnikkkijkiknikiinkjkklkmpnoniinpnoinkoijkinkiikjininmmmonnnikjkopnnimkmniniikiiciiinnokjinnkijinnonmnmonknnikimijiiooog",
+   "nikmnjimijejjnkmkjinihmjkjiichkncpookkoikkjhikmniiknkjmjmjhicempinnninpioidcmnikknjjiokjichomhnnninnnonnnjiinpjimkiikkfhcijiniimiknmkopoifjknnniomikkijiijigninomikinnnoigiiinimnijjjjjjkihjmknnijijjinkifgiknionkkioijikhfnijimnjjahikkdiiiilnooinikkkiiijjkhmgiijjjkkiiinnkinonkkmihhjikjijaijjjiikmikjhiinikmnmiigifjijiijcdcjcikiinecinkkkpnkkkimcjioknifdhfiiiniijjjkiopikmijjiigfnnnkidhiiimkijiihiinnnniikmnihijnkkmiecinjkkkiiiijkkoikkmnnpkiinoiikjijiinkiimkjiiokponmonnnnkjkkihkmfckjojhgikiiiiinknionkklinnidjnnkiijjicfnminhinonikioniinomjcjpojiiindiknnkkjjinnmknocnijmgfhiijcineiiijnnnifkinmgkmmdicjecccpifjipjjmikmkiijijicfipndiijcgejiigjkiijikpnjjmkkiiikionnijfhcjjikfjiijmkinkijopijjnihkpooccjijkikjinkcnmnjijinpikmoiinonoijfjjkiicikiennokijjonimknkikkonnijipnkihijicikokmiknomkonikiiopokkjnnnjinmciiiknhkiinnmkjiiijonnnjjkmkicdoihihiifiknkmmkikkjinkkiiiokiijdombiihjjkimiponmiinnkniinipimkiinkaikijioiijknkijiinniihknoinikmnciimiiijikjomjonklnopiikkmjkmonhjikknniikjmnijpooooopoiimninpkiijlmonokjfcijikmnpnpnjnkiikimoonijn"
+  ]
+ },
+ "material": {
+  "midDepth": 10,
+  "shallowDepth": 0,
+  "deepDepth": 25,
+  "rockSlope": 0.96,
+  "rockFeather": 0.48,
+  "rockCurvature": 0.28,
+  "wetBand": 5,
+  "grassDetail": 1.0,
+  "rockDetail": 1.0,
+  "waterDetail": 1.0,
+  "rockMeanRGB": [
+   128.89,
+   145.02,
+   176.05
+  ],
+  "hillRockMeanRGB": [
+   128.89,
+   145.02,
+   176.05
+  ],
+  "groundRGB": [
+   216.08,
+   231.17,
+   253.59
+  ],
+  "slopeRGB": [
+   218.44,
+   233.5,
+   253.43
+  ],
+  "rockRGB": [
+   128.89,
+   145.02,
+   176.05
+  ],
+  "materialWeathering": 0.0,
+  "depositSpread": 0.65,
+  "rockyCoasts": false,
+  "surfaceRelief": 0.6,
+  "slopeStart": 0.1,
+  "slopeFull": 0.3,
+  "slopeFloor": -4.0,
+  "slopeDry": 4.0,
+  "crystalRGB": [
+   205,
+   220,
+   245
+  ]
+ },
+ "water": {
+  "meanRGB": [
+   38.69,
+   76.19,
+   225.56
+  ],
+  "deepRGB": [
+   38.69,
+   76.19,
+   225.56
+  ],
+  "shallowRGB": [
+   62.87,
+   89.21,
+   225.82
+  ],
+  "shallowMeanRGB": [
+   62.87,
+   89.21,
+   225.82
+  ],
+  "mean": [
+   0.15172549019607842,
+   0.2987843137254902,
+   0.8845490196078432
+  ],
+  "grainRGB": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "midRGB": [
+   54.24,
+   79.64,
+   218.86
+  ]
+ },
+ "model": {
+  "slopeGrass": {
+   "amps": [
+    0.9578,
+    1.2647,
+    1.0697,
+    0.5943,
+    0.4124,
+    0.5263,
+    0.4795
+   ],
+   "stretch": 1.0,
+   "tintMix": 0.428,
+   "tintScale": 1.0,
+   "zq": [
+    -2.874,
+    -2.2737,
+    -1.6633,
+    -1.3173,
+    -0.7112,
+    -0.2797,
+    -0.0205,
+    0.2421,
+    0.6731,
+    1.2791,
+    1.6276,
+    2.2367,
+    2.8508
+   ]
+  },
+  "rock": {
+   "amps": [
+    0.1154,
+    0.6514,
+    1.3843,
+    3.8164,
+    9.8175,
+    14.6325,
+    17.5032
+   ],
+   "stretch": 1.3,
+   "tintMix": 0.0,
+   "tintScale": 1.0,
+   "zq": [
+    -3.6852,
+    -3.0268,
+    -2.278,
+    -1.8261,
+    -1.0382,
+    -0.5219,
+    -0.2467,
+    -0.0026,
+    0.3558,
+    0.7899,
+    0.9669,
+    1.1422,
+    1.2409
+   ],
+   "lit": {
+    "relief": 0.6827,
+    "light": 0.551,
+    "shear": 0,
+    "ridged": 0.4,
+    "warp": 6
+   }
+  }
+ }
+}

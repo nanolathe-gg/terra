@@ -6257,6 +6257,22 @@ fringe, body and ring layers use the fixes above.
 **Server and guard:** port 8882, CDP 9682; worktree `../terraform-wt-H14c`,
 branch `H14c-worlds`; assets `$R/agent-H14c`.
 
+**First run (notes in `$R/agent-H14c/NOTES.md`).**
+- **The three fixes,** all by eye on swatches (`measure/lit-tables/`): slabs
+  (`cellVary`: additive-weighted Voronoi, uneven cells with curved outlines),
+  fine-scale streaks (`streakBand`: stretch and shear fade to isotropic above
+  a band) and strokes (row 45: short circle arcs per lattice cell, cut into z,
+  so the rank ramp makes pink with a dark core). The ring's vertical streak
+  was the light showing the flat slope of value-noise edge columns at wide
+  cells; `skew` slants the lattice in x so no edge stays vertical.
+- **Moved:** Moon's rock, Ice, Lava, Zhon (beach as layer 6), Desert. Desert's
+  plain is its 32-colour tile strip, so tile letters run a-z then A-Z.
+- **Kept on images (stop condition):** Red (an ordered two-colour checker
+  dither plain: a luma-rank ramp makes red/olive salt-and-pepper), Crystal
+  (slope and rock pass; the quilted plain reads grey and regular, three new
+  marks outside retail), Archipelago (islands change character, not
+  diagnosed). Attempt tables are in the notes folder.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
