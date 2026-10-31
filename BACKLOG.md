@@ -5921,6 +5921,78 @@ all 27), and a smoke run that opens `/sculpt` on its default map.
 **Server and guard:** port 8877, CDP 9677; worktree
 `../terraform-wt-H12b`, branch `H12b-study`; assets `$R/agent-H12b`.
 
+**Done (merged as e08ebd7; EXPERIMENTS row 157; notes in
+`$R/agent-H12b/NOTES.md`).** Two agents. Phase 1 (decision 18) is
+complete: the editor has one stroke path and one draw path, both on the
+GPU.
+- **Scenes on a map.** `repro/render.mjs` plays a scene on a 4×4 map at
+  offset 0 with the map's sea and crops the 1024-px window. The first try
+  shifted the strokes by 528 px, which moved every position-dependent
+  noise and gave mean |diff| 16-40 against the study; at offset 0 it is
+  0.9-7.5 (crystal-2 7.45, green-2 5.50, the rest 4 or less), the same
+  forms with a different grain, since the map's Time pass runs over the
+  whole map. The sea barely matters (only green-2 moves, 5.50 to 4.62).
+  Accepted by the coordinator under decision 17. `stats.py`: three marks
+  newly outside, all at a boundary (green-3 `band_32px` 3.33 → 3.35,
+  crystal-2 `band_8px` 6.28 → 6.37, ice-1 `slope_0.30-0.50` .121 → .126,
+  the last one in again at H10 and out again now); about 20 went back in.
+  The new baseline is `$R/repro-out/merge-h12` (from main before this card:
+  `$R/agent-H12b/base-main-map-b`).
+- **`regional.mjs` and `shapecheck.mjs` on a map.** The regional check
+  compares four quadrant runs with the paged fields, plane by plane
+  (`gpuPages=force`). A negative test (one height +1 in one quadrant) is
+  caught: "1 regional field samples differ".
+- **`/sculpt` opens a 4×4 map** when the address has no size.
+- **Deleted:** the study and its pointer handlers, the JS shape engine
+  (`startStroke`, `dab`, the stamps, the helpers), `studyShape`, the demo
+  scenes and the Example select, the frame loop and the whole-image PNG,
+  `renderer.erode` and `GpuErosion.run`, `materialRule`, the CPU study
+  arrays, `regionalReplay`, the raster nodes and the old sketch loaders.
+  `sculpt.js` 3,334 → 1,577 lines.
+- **Errors surface.** A failed shape run, copy, fill or page read, or a
+  failed Time pass, goes to the console and the editor's error line. A
+  shape run that kept failing used to freeze the page (the weather queue
+  re-asked in a loop of resolved promises); it now fails with the error.
+- **`uReliefMode`** and the lab look's shader branches are gone.
+- **`repro/smoke.mjs`:** each world on the default 4×4, every brush adds
+  one node and undoes it, export (Zhon disabled by design), and one 8×8
+  stroke and undo, with a clean console.
+- **The simplification report:**
+
+  | Measure | 467c744 (baseline) | 843b7fc (H6c) | H12 part 1 (bfabbab) | H12b (e08ebd7) |
+  | --- | --- | --- | --- | --- |
+  | Shader files / lines | 4 / 4,002 | 14 / 10,308 | 10 / 6,995 | 10 / 6,992 |
+  | Uniforms | 350 | 375 | 376 | 375 |
+  | Knobs, total / Green | 400 / 79 | 430 / 76 | 417 / 74 | 417 / 74 |
+  | World-preset entries | 429 | 426 | 421 | 421 |
+  | CPU worker files / lines | 9 / 2,050 | 9 / 2,068 | 0 / 0 | 0 / 0 |
+  | `sculpt.js` lines | 4,017 | 4,326 | 3,334 | 1,577 |
+  | JS files / lines | 16 / 8,234 | 19 / 10,425 | 10 / 7,682 | 10 / 5,750 |
+
+  The run-time path and the JS got simpler: one path, no CPU workers,
+  `sculpt.js` −61% and the JS −45% against 843b7fc. The shaders, uniforms
+  and knobs did not: they are close to the baseline's counts because the
+  engine replaced engine 0 one for one. That is phase 2 and 3's work (the
+  feature cards, then combine or drop).
+- **Coordinator's merge checks:**
+  - the 27 renders: `"mismatch":0`, clean consoles, 0.00 against
+    `base-main-map-b` on all 27;
+  - `regional.mjs` 0 on all 27 (on the map, grid 1168);
+  - the 4×4 green-2 export's TNT heights, tiles, features and indexed
+    picture are identical to `merge-h10`'s;
+  - `smoke.mjs --page8` on 8801: nine worlds, 15 brushes each add one node and undo, exports ok (Zhon disabled by design), one 8×8 stroke and undo over 5 pages, every console clean;
+  - the gate passes.
+
+**Still open:**
+- **Lava and Ice 8×8 at the default `gpuMB` 512** raise "chunk needs 537
+  MB (Ice 545 MB) of GPU memory; use chunks of 256 px or smaller". Main
+  raised it too, but only into the error line; it is logged now. The
+  picture finishes. The 8×8 GPU peak (540-615 MB) is over the budget: a
+  budget or chunk-size card.
+- The knob audit was static and by name; `sculpt.py` comments still name
+  the study (about lines 206, 312 and 455); `perf.mjs` keeps dead `isMap`
+  branches.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
