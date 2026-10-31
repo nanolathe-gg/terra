@@ -167,8 +167,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const width=Math.ceil(world_width/scale),height=Math.ceil(world_height/scale);   // H7b: the output has one texel per `scale` world pixels
     const fw=pow2(Math.ceil(region.fieldsWidth/scale)),fh=pow2(Math.ceil(region.fieldsHeight/scale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
     const e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale),required=e.gpuBytes;
-    if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes)
-      throw new Error(`nanolathe: chunk needs ${Math.ceil(required/MB)} MB of GPU memory; use chunks of ${this.chunkSize()} px or smaller`);
+    if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes){
+      // H13: the parts of the estimate, so a refusal says which one crossed the budget (reserved is the canvas, the paged fields and the image cache).
+      const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, mesh ${mb(e.mesh)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
+      throw new Error(`nanolathe: chunk needs ${mb(required)} MB of GPU memory (${parts}); use chunks of ${this.chunkSize()} px or smaller`);
+    }
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);   // H6b: the feed pass writes these four
     this.heightTexture=this.texture('chunk height',gw,gh,1,'r32float',4,read);
     this.routeTexture=this.texture('chunk routes',gw,gh,1,'rgba8unorm',4,read);
