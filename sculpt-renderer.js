@@ -682,28 +682,8 @@ export class TerrainRenderer {
     return {size, data: Array.from(out)};
   }
 
-  // The world's whole startup generation, timed again without replacing anything: the noise (CPU), the palette lookup and the materials (GPU).
-  async timeStartup() {
-    let t = performance.now();
-    makeNoise();
-    const noise = performance.now() - t;
-    const palette = await this.paletteTexture().then(p => { p.texture.destroy(); return this.paletteMs; });
-    const materials = await this.makeMaterials();
-    return {noise, palette, materials, total: noise + palette + materials};
-  }
+  // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
   get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, materials: this.startupMs, total: this.generationMs}; }
-
-  // The palette lookup as RGBA bytes (a check against the lookup it replaced; not used by the draw).
-  async readPalette() {
-    const buffer = this.device.createBuffer({size: 4096 * 96, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyTextureToBuffer({texture: this.textures.palette.texture}, {buffer, bytesPerRow: 4096}, [1024, 96, 1]);
-    this.device.queue.submit([encoder.finish()]);
-    await buffer.mapAsync(GPUMapMode.READ);
-    const out = Array.from(new Uint8Array(buffer.getMappedRange()));
-    buffer.destroy();
-    return out;
-  }
 
   // H4 item 2: the land materials of materials/green.json made on the GPU, once at startup and again when the table changes.
   // One layer per material, GENERATED_SIZE px square, MIP levels halving down to 8 px; level L is made with a footprint of 2^L

@@ -29,5 +29,3 @@ Worlds come from `materials/<world>.json` and `sculpt.py` in every mode, so a
 world needs no bundle. Renders under a different GPU or a
 software WebGPU adapter may differ slightly from the Mac reference renders,
 so render a fresh baseline before comparing.
-
-
