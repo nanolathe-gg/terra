@@ -329,6 +329,8 @@ export class TerrainRenderer {
     if(this.bridge){ this.bridgeCopy('fringe',fringe); this.bridgeCopy('transitionBody',body); this.bridgeCopy('beach',beach); }
     if(body!==fringe)body.close();fringe.close();
     }
+    // A table world's beach is a generated layer (the table's `beach` material): its mean colour is the table's; the config still names the beach for the flags.
+    if (this.materialData?.measured.beach) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
     this.i('uBeach',Boolean(this.config.textures.beach));
     this.i('uBridged',this.bridge);
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
