@@ -6577,6 +6577,12 @@ classic-or-parametric choice goes. Modifiers stay on top: outline (lobes,
 distortion), crest (jag, vary, taper, spurs), base (bumps, apron) and surface
 marks.
 
+**The aim (owner, 2026-10-31):** *"make the parametric controls good enough to
+represent the various biome defaults."* The classic curves are a starting point,
+not the target, and retail is the bar (decision 22). Kinds stay as what a stroke
+does to the ground (set a level, add, carve); their curves become numbers. The
+control count must end lower than today's.
+
 **The conflict to settle first.** The audit
 (`docs/audit/TOOL_AUDIT.md`, "Shared cross-section replacement") fitted today's
 `crossSection` to the classic plateau and rounded ridge and rejected it: best
