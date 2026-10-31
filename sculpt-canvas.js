@@ -214,7 +214,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         }
       }else if(overview)presented();
       const m=metrics();$('timing').textContent=`${bakes} bakes · ${(m.gpuBytes/MB).toFixed(1)} MiB terrain · ${evictions} evictions`;
-    }catch(err){if(err.name!=='AbortError'){$('error').hidden=false;$('error').textContent=err.message;}}
+    }catch(err){if(err.name!=='AbortError'){console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
     finally{drawing=false;if(rerun){rerun=false;schedule();}}
   }
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of

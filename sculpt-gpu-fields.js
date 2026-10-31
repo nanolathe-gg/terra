@@ -535,7 +535,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     return {F: F2, Mk: Mk2, ox, oy, pw, ph, bytes: F2.size + Mk2.size, destroy() { F2.destroy(); Mk2.destroy(); }};
   }
 
-  // Evaluate `list` over `rect` (cells, inclusive; null = the whole map) and read the rectangle back. One at a time, in order (the study).
+  // Evaluate `list` over `rect` (cells, inclusive; null = the whole map) and read the rectangle back. One at a time, in order.
   function run(list, ctx, rect, {readback = true, release = false, plane = null} = {}) {
     const job = queue.then(async () => { const h = submit(list, ctx, rect, {readback, release, plane}); await h.done; return h.land ? await h.land : null; });
     queue = job.catch(() => {});
@@ -772,6 +772,10 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
 // ---- the fields object ----
 // opts: the createRegionalFields options (worldSize, worldGrid, baseHeight, keys, maskKeys, nodes), plus device() (the GPU device, or null
 // until the renderer exists), context() (the host context for prepareNode).
+// A failed pass is never silent: it reaches the console and, through the handler the editor installs, its error line.
+let onFailure = null;
+export function setFailureHandler(fn) { onFailure = fn; }
+const fail = err => { console.error(err); onFailure?.(err); };
 export function createGpuFields(opts) {
   const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, device, context} = opts;   // opts.forceRing (page parameter pageRing=N): a ring chosen by hand, for checking the ring rule against the whole-map engine
   const spacing = (worldSize - 1) / (worldGrid - 1), cells = worldGrid * worldGrid, listeners = new Set();
@@ -811,7 +815,7 @@ export function createGpuFields(opts) {
         lastEval = {...lastEval, copyMs: performance.now() - t0, whole, ...engine.stats().last};
         firstReady ||= performance.now();
         if (out && (report || !wasValid)) { const ev = {revision: report?.revision ?? revision, rect: whole ? null : report.rect}; for (const fn of listeners) fn(ev); }
-      } catch (err) { error = err; console.error(err); }
+      } catch (err) { error = err; fail(err); }
       finally { landing--; }
     });
   }
@@ -820,7 +824,7 @@ export function createGpuFields(opts) {
   function pump() {
     if (!queued) { progress(); return; }
     if (!engine) {
-      if (!starting) starting = getEngine().catch(err => { error = err; console.error(err); queued = null; }).then(() => { starting = null; pump(); });
+      if (!starting) starting = getEngine().catch(err => { error = err; fail(err); queued = null; }).then(() => { starting = null; pump(); });
       return;
     }
     while (queued && outstanding < MAX_OUTSTANDING) {
@@ -830,14 +834,15 @@ export function createGpuFields(opts) {
       const readNow = !gesture() || !valid || whole;
       let h;
       try { h = engine.submit(nodes(), context(), whole ? null : q.rect, {readback: readNow, readRect: nextCopyRect, release: whole}); }
-      catch (err) { error = err; console.error(err); continue; }
+      catch (err) { error = err; fail(err); continue; }
+      error = null;
       reported = joinEvent(reported, q.event); copyRect = nextCopyRect; copyDirty = true;
       const entry = {t: performance.now(), whole, readNow}; runLog.push(entry); if (runLog.length > 400) runLog.shift();
       submittedRevision = Math.max(submittedRevision, q.event?.revision ?? 0); gpuValid = true;
       if (q.event || !wasGpu) { const ev = {revision: q.event?.revision ?? revision, rect: whole ? null : q.event?.rect ?? null}; for (const fn of submitListeners) fn(ev); }
       if (readNow) { const report = reported; reported = null; copyDirty = false; copyRect = null; land(h, whole, report, wasValid, gen); }
       outstanding++;
-      h.done.catch(() => {}).then(() => { entry.doneAt = performance.now(); outstanding--; pump(); if (!outstanding && !queued) flushIfDue(); });
+      h.done.catch(err => { error = err; fail(err); }).then(() => { entry.doneAt = performance.now(); outstanding--; pump(); if (!outstanding && !queued) flushIfDue(); });
     }
     progress();
   }
@@ -863,11 +868,13 @@ export function createGpuFields(opts) {
   const settled = async () => { while (queued || starting) await new Promise(r => waiters.push(r)); };
   // The GPU buffers are current once every requested run has been submitted (the queue is in order on one device, so a bake that records its own
   // work next sees them): it does not wait for the work to finish.
-  const gpuReady = async () => { if (!gpuValid && !queued && !starting) evaluate(null); await settled(); };
+  // A failed run leaves the fields invalid; asking again would fail again at once and spin the page in a loop of resolved promises, so a waiter gets the error.
+  const gpuReady = async () => { if (!gpuValid && !queued && !starting) { if (error) throw error; evaluate(null); } await settled(); if (!gpuValid && error) throw error; };
   // The CPU copy is current: also waits for the reads. A CPU reader forces the read that a gesture left out.
   const whenReady = async () => {
-    if (!valid && !queued && !starting && landing === 0) evaluate(null);
+    if (!valid && !queued && !starting && landing === 0) { if (error) throw error; evaluate(null); }
     for (;;) {
+      if (!valid && error && !queued && !starting) throw error;
       if (queued || starting) { await settled(); continue; }
       flushIfDue(true);
       if (landing > 0) { await landChain; continue; }
@@ -1115,7 +1122,7 @@ export function createPagedFields(opts) {
           const w = pg.weather, raw = await readBuffer(device(), w.weather, 0, 2 * CORE * CORE * 4);
           if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE)};
         }
-      } catch (err) { error = err; } finally { unpin(pg); }
+      } catch (err) { error = err; fail(err); } finally { unpin(pg); }
     }
     trim();
   }
@@ -1154,7 +1161,7 @@ export function createPagedFields(opts) {
       }
       if (!coarseFullAt) coarseFullAt = performance.now();
       scratchT?.destroy(); scratchT = null;   // the evaluation target the background fill borrowed (14 MB) goes back
-    } catch (err) { error = err; console.error(err); }
+    } catch (err) { error = err; fail(err); }
     finally { coarseRunning = false; }
   }
   let coarseFullAt = 0;

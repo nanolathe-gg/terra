@@ -862,8 +862,7 @@ fn shineNoise(q: vec2f) -> vec2f {
 // and the sampled slope cover; sand and crystal from their baked fields).
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32, faceCover: f32,
              slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32) -> vec4f {
-    var sand = 0.0;
-    if (u.reliefMode == 1) { sand = smoothstep(0.35, 0.95, bakedFields(p).a); }
+    var sand = smoothstep(0.35, 0.95, bakedFields(p).a);
     sand = bridgeBeachSand(p, sand);
     // Crystal tops only: the risers between columns stay dark and take the
     // surrounding material's lobe (the world's own note: faces are dark at every facing).
@@ -1365,7 +1364,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // smudges on gentle ground; the fall-line surface lights grass itself.
         // A sandy slope's streaks are the world's look (Zhon dune slopes),
         // not baked shading, so they keep full strength.
-        if (u.reliefMode == 1 && u.slopeSand == 0) { slopeCover *= u.slopeTexture; }
+        if (u.slopeSand == 0) { slopeCover *= u.slopeTexture; }
         if (u.slopeSand != 0) { slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + max(bakedFields(p).a, 0.0)), route); }
         slopeShare = slopeCover;
         grass = mix(grass, slopeGrass, slopeCover);
@@ -1408,7 +1407,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var material = mix(grass, rock, exposed);
     material = bridgeBeach(material, p, pixel, h, slope, slopeShare, exposed);   // H8 bridge
     material = bridgeTransition(material, pixel, rock, exposed, materialWeather);
-    if (u.reliefMode == 1 && u.microRock > 0.0) {
+    if (u.microRock > 0.0) {
         // TA-style faces: moss and rock interleave at lump scale. The broad
         // slope sets how much of the face is rock; the detailed surface
         // decides where: rock on steep flanks and in hollows, moss on tops.
@@ -1516,13 +1515,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // which covers them. Rock went through the face treatment above; where a
     // world has none (microRock 0) it is the plain rock material.
     if (u.paintOn != 0) {
-        let faceHandled = select(0.0, 1.0, u.reliefMode == 1 && u.microRock > 0.0);
+        let faceHandled = select(0.0, 1.0, u.microRock > 0.0);
         material = mix(material, rock, painted.x * (1.0 - faceHandled));
         material = mix(material, snowMaterial(pixel), painted.y);
         material = mix(material, mossMaterial(pixel), painted.w);
         exposed = max(exposed, painted.x);
     }
-    if (u.reliefMode == 1) {
+    {
         // Procedural sand: a colour with two scales of grain, so it needs no
         // sampled art. Coverage comes from the bake.
         let sand = bakedFields(p).a * place.deposits;
@@ -1555,7 +1554,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     // Baked boulders take rock material, lit by the same surface.
-    if (u.reliefMode == 1) {
+    {
         let coverOrCrack = bakedFields(p).b;
         // A crack wall facing the sun.
         if (coverOrCrack > 1.0) { material *= 1.0 + u.crackLit * (coverOrCrack - 1.0); }
@@ -1570,9 +1569,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route) * place.deposits);
     chip = max(chip, smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65);
     material = mix(material, rock, chip * (1.0 - exposed));
-    var cleft = 0.0;
-    if (u.reliefMode != 1) { cleft = smoothstep(0.15, 1.20, fractureDepth(p, h, slope)); }
-    material = mix(material, mix(grass * 0.90, rock * 0.78, 0.30 + exposed * 0.50), cleft * 0.35);
     material *= 1.0 - weather.r * 0.06;
     // H5 3a: wet swaths. Water darkens grass along its flow: soft streaks 15-40 px across and 70 px along the fall line, where the
     // wetness map is high and the ground slopes (the retail slopes' diagonal dark swaths, 20-40 px wide).

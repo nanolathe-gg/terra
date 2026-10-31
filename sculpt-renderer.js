@@ -533,16 +533,6 @@ export class TerrainRenderer {
     return this.config.seaLevel===0 ? height : height.map(h => h-this.config.seaLevel);
   }
 
-  setHeight(height, grid) {
-    this.fieldsDirty = true;
-    if (height.length !== grid * grid) throw new Error('Invalid height field dimensions.');
-    this.height = height;
-    this.grid = grid;
-    this.worldTextures(grid);
-    this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(height), {bytesPerRow: grid * 4}, [grid, grid]);
-    this.f('uGrid', grid);
-  }
-
   setWeather(flow, deposit, talus, sand) {
     this.fieldsDirty = true; this.weatherMaps = false;
     const bytes = new Uint8Array(this.grid * this.grid * 4);
@@ -554,13 +544,6 @@ export class TerrainRenderer {
     }
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.gridTexture, origin: [0, 0, 0]}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
-  }
-
-  // H5: the Time pass's maps, as packed by engine-weather.wgsl: [layer 0, layer 2, layer 3], rgba8 at the grid's resolution.
-  setWeatherMaps(maps) {
-    this.fieldsDirty = true; this.weatherMaps = true;
-    this.worldTextures(this.grid);
-    [0, 2, 3].forEach((layer, k) => this.device.queue.writeTexture({texture: this.gridTexture, origin: [0, 0, layer]}, maps[k], {bytesPerRow: this.grid * 4}, [this.grid, this.grid]));
   }
 
   setRoutes(routes, crackLines, cover, crystal, masks) {
@@ -856,7 +839,6 @@ export class TerrainRenderer {
   // Surface knobs read from the variant; callable again after a change.
   applyKnobs() {
     const variant = this.variant;
-    this.i('uReliefMode', 1);   // the fall-line surface; the lab look (detail=lab) is gone, its shader branches remain to be cut
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
@@ -1033,17 +1015,6 @@ export class TerrainRenderer {
 
   // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
   preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
-
-  // H2: the GPU erosion pass (sculpt-erosion.js, erosion.wgsl), built on first use.
-  async erode(request) {
-    if (!this.erosion) {
-      // The steps run over the active tiles only (engine-erosion.wgsl).
-      const source = await (await fetch('/engine-erosion.wgsl')).text();
-      const {GpuErosion} = await import('./sculpt-erosion.js');
-      this.erosion = new GpuErosion(this, preprocess(source, this.commonSource, new Set(['EROSION'])));
-    }
-    return this.erosion.run(request);
-  }
 
   // H2 rock column (0: the hash beds, as before). columnBeds is "thickness:hardness:slot,..." (up to eight, height
   // units, 0..1, H3's material slot); erosion reads the same uniforms, so the bake and the pass share one column.

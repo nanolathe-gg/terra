@@ -16,14 +16,6 @@ export function configureMap(config, query) {
   return config.map;
 }
 
-export function resizeMap(map,size,fit,viewport,stage,canvas,overlay) {
-  if (!map) return false;
-  const scale=fit?Math.max(.05,Math.min((viewport.clientWidth-28)/map.width,(viewport.clientHeight-28)/map.height)):1;
-  stage.style.width=map.width*scale+'px'; stage.style.height=map.height*scale+'px'; stage.style.overflow='hidden';
-  for (const c of [canvas,overlay]) { c.style.width=size*scale+'px'; c.style.height=size*scale+'px'; }
-  return true;
-}
-
 export function drawMapBounds(ink,map,config,sample) {
   if (!map) return;
   // The camera/play rectangle is in projected pixels; the north and south
@@ -58,10 +50,6 @@ export function sampleMapHeights(map,sample) {
 
 // Art retains the view's full-detail field. Only heights outside the TNT byte
 // range are clamped; the 16px corner samples belong to the attribute map only.
-export function exportMapField(height) {
-  return height.map(h => Math.max(0,Math.min(255,h)));
-}
-
 // The preview is y-(visible-base)/2; TNT art is y-visible/2 [03 §4.1].
 // Copying at base/2 changes only projection, never the material or its noise.
 // Chunks are tile aligned from the beginning, ready for phase 3's streamed bake.
