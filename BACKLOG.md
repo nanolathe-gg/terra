@@ -24,13 +24,14 @@ branches and the projection fix below, so re-render before judging.
    git worktree add ../terraform-wt-<card> -b <card> main
    ```
 
-2. **Your own server, browser port and assets** (table below). Copy the
-   prepared assets once, then serve every world (a missing world silently
-   renders as Green, so never pass `--biomes`):
+2. **Your own server, browser port and assets root** (table below). Link the
+   saved catalogues once, then serve every world (a missing world silently
+   renders as Green, so never pass `--biomes`). Worlds need nothing from the
+   root; `$R/assets-*` is only the measuring source of `measure/`, read-only:
 
    ```
    R=/private/tmp/nanolathe-map-editor
-   mkdir -p $R/agent-<card> && cp -R $R/assets-* $R/features $R/map-catalog.json $R/agent-<card>/
+   mkdir -p $R/agent-<card> && ln -s $R/features $R/map-catalog.json $R/agent-<card>/
    cd ../terraform-wt-<card>
    /Users/daniel/src/terraform/.venv/bin/python sculpt.py \
      --port <server> --assets-root $R/agent-<card> --prepared \
@@ -6481,6 +6482,143 @@ image, show the sheet and go on.
 
 **Server and guard:** port 8884, CDP 9684; worktree `../terraform-wt-H14e`,
 branch `H14e-no-images`; assets `$R/agent-H14e`.
+
+**Done (merged as c33bec2; EXPERIMENTS row 163; notes in
+`$R/agent-H14e/NOTES.md`).** No world image remains, and the server needs no
+assets folder to draw a world.
+- **A fresh clone draws every world.** The coordinator cloned the branch and
+  served it with stock Python (no numpy, no Pillow, no `.venv`) on an empty
+  assets root. All 27 scenes matched the agent's final run at 0.00, with clean
+  consoles. What such a server lacks: the feature catalogue and sprites (the
+  Features tool says why, and starts stay editable), export (the helper is
+  missing), and nothing else. Saved documents start empty.
+- **The image bridge is gone,** 27 scenes 0.00. Which optional stages a world has
+  (body, beach, ring) comes from its table's `order`, which the server passes as
+  `config.layers`. The logic in `engine-bridge.wgsl` stays for Shores, Bodies and
+  Geology.
+- **Water is two more generated materials,** after the table's own layers, named
+  by the `water` block (`deep`, `shallow`). Lava and Moon share one layer. Zhon's
+  river variant carries its own pair. `measure/water_numbers.py` makes them.
+  The first fit lost the diagonal ripple of the art, so the deep water of Green,
+  Ice, Red, Desert, Archipelago, Crystal and Zhon's coast and the shallows of
+  Green, Ice and Zhon are on the lit path. Their art has a direction; Lava, Moon
+  and Zhon's river have none.
+- **The noise is made at startup** (`sculpt-noise.js`, CPU): the four channels
+  by seeded hashing and smoothing, with the mean, spread, quantiles and
+  autocorrelation of the old image. It is a new realisation, so fine detail
+  moved, and Desert's pale cover, which follows the broad channel, most of all.
+- **The palette lookup is made at startup** (`engine-palette.wgsl`, one compute
+  pass from `materials/palette.json`), bit-identical to the image on Green and
+  Desert. That file is 241 colours of the retail palette, committed as a table
+  by the owner's rule that tables measured from retail art are fine. Desert's
+  table names its 52 entries.
+- **`fractures.png` stays an image.** All nine copies were byte-identical and it
+  is ours (`measure/make_fractures.py` reads no retail art), so one copy in
+  `materials/` serves every world. Listed for the Fractures card.
+- **Deleted:** `ground_tiles`, `palette_pairs`, `sculpt_materials`,
+  `sculpt_red_materials`, `sculpt_archipelago_materials`, `sculpt_rock_layers`,
+  `sculpt_slope_material`, `sculpt_section_biome`; `config.json`; the
+  `/sculpt-assets` route; `makeZ` and the `pad0` salt, which `swatch.mjs` patches
+  into its own copy; `fringeStyle` and its control, which did nothing; the
+  dead `ground=texture` toggle. No `shine*` key was ever in a `config.json`, so
+  none moved.
+- **Each world's page config comes from its table:** a `world` block (defaults,
+  base height, colours, Desert's strata, the export's planet, sea level and
+  climate) and Zhon's `river` block. Old and new configs were compared for nine
+  worlds and the river variant: only the removed keys differ.
+  `/map-catalog.json` is served from the tables.
+- **Verdicts,** by eye at 1× and 2× against retail. Mean |diff| is against
+  `merge-h14d`, scenes 1, 2 and 3:
+
+  | World | Mean \|diff\| | Reads |
+  | --- | --- | --- |
+  | Green | 1.05, 3.63, 1.36 | as before; the diagonal ripple is back in the water |
+  | Red | 0.23, 0.88, 10.68 | land as before; water gains a diagonal ripple it lacked, a little broader than the art's |
+  | Archipelago | 4.89, 1.62, 2.25 | as before |
+  | Moon | 1.97, 0.53, 0.89 | as before |
+  | Zhon | 10.33, 11.72, 11.85 | as before; the number is the water's per-pixel dither. Coast water is in no window; one look by eye reads fine |
+  | Lava | 3.66, 2.31, 4.00 | as before |
+  | Desert | 9.94, 3.40, 7.63 | the plain's pale patches sit elsewhere, the same in character |
+  | Crystal | 2.72, 6.66, 2.93 | as before; a faint broad swell in the water |
+  | Ice | 4.99, 9.12, 1.15 | the diagonal in the deep water is stronger than the art's and closer to it than the old image's blotches |
+
+- **Marks:** 118 lines carry a mark outside retail, before and after. Two
+  noise moves on Red, both by a hair: `edge_vertical` red-1 .371 to .353 is
+  newly outside, and `edge_diagonal` swaps (red-1 .486 to .499 goes out, red-2
+  .497 to .480 comes in). Not chased.
+- **Counts:** a default load fetches 1 image and the feature sprites, down from
+  5 (Zhon has no sprites). Python in the repo root goes from 4,729 lines to 1,476;
+  `measure/` from 5,490 to 5,817, since three tools arrive there. Engine lines:
+  bridge 187, palette 74 (new), noise 110 (new, JS). One uniform and four bindings
+  go, two uniforms arrive.
+- **Cost.** Startup generation is 50-58 ms warm and 72-83 ms cold, of which the
+  noise is about 40. Final in view on merged main, ms: Green 426, Red 613, Crystal
+  559, Archipelago 315, Zhon 514, Ice 415, against 615, 547, 308, 652 and 405 for
+  the last five at H14d. The agent's alternating runs of nine worlds agree within
+  noise. The generated array gains two layers on most worlds, about 2.8 MB by
+  formula, and two images leave.
+- **Coordinator's review:** `readPalette` (a check against an image that is gone)
+  and `timeStartup` (no caller) left the engine.
+- **Coordinator's merge checks:** 27 scenes on main 0.00 against the fresh clone,
+  27 consoles clean; `regional.mjs` 0 mismatches on `<world>-1` of all nine
+  worlds; `smoke.mjs` exit 0 (`ok`) on nine worlds plus 8×8 Green, Lava, Ice,
+  Zhon, Red and Archipelago; 22 of 22 tests; `repro/gate.sh` exit 0.
+
+**Still open:** Red's and Crystal's dithered shallows and Zhon's river water keep
+the band fit, with no ripple. The noise costs about 40 ms on the CPU. Many keys in
+each table's `world.defaults` were carried verbatim and not audited.
+
+### H15. Shape: one cross-section for every kind
+
+Decision 16: every kind draws through one parametric cross-section, each
+kind's classic curve (`profile` 0) becomes a preset of it, and the
+classic-or-parametric choice goes. Modifiers stay on top: outline (lobes,
+distortion), crest (jag, vary, taper, spurs), base (bumps, apron) and surface
+marks.
+
+**The conflict to settle first.** The audit
+(`docs/audit/TOOL_AUDIT.md`, "Shared cross-section replacement") fitted today's
+`crossSection` to the classic plateau and rounded ridge and rejected it: best
+raised-region RMS 6.40 and 17.52 height units, maximum 13.59 and 32.06. It was a
+bounded search of today's form (30 and 90 combinations), not proof that no form
+fits. So this card widens the form first, and **the owner sees the comparison
+before any classic curve goes.**
+
+**Part 1, deliver,** one commit each:
+1. **Inventory.** Every kind's classic curve in `engine-shape.wgsl`: what it
+   computes, which tools, worlds and scenes reach it, and which modifiers read
+   it. Which kinds are one curve under two names. Any kind whose curve is not a
+   function of distance alone. A table in the Done list.
+2. **A wider cross-section.** The fewest new numbers that reach the classic
+   curves. Say what each one does in an artist's words. Every classic path
+   stays, and 27 scenes stay 0.00.
+3. **Fit every curve** with a tool in `measure/`: one set of numbers per kind,
+   checked over the sizes and amounts the scenes use. Report RMS and maximum
+   height error per kind, on the audit's raised-region measure so the numbers
+   compare with 6.40 and 17.52.
+4. **The comparison.** Per kind, a plot of classic against preset. Then all 27
+   scenes with every classic curve replaced by its preset, beside retail at 1×
+   and 2×, with `compare.py` and `stats.py` against `merge-h14e`. The switch that
+   does this is for the comparison only and does not land.
+5. **`moonLobes` into `baseVary` and `baseBump`,** if the look allows (decision
+   17), judged on Moon's three windows. If not, it stays, with its sheet.
+
+**Stop there and report.** Nothing is deleted in part 1. The coordinator takes
+the comparison to the owner, and part 2 follows their ruling.
+
+**Part 2, after the ruling:** each kind's curve is numbers in one preset table,
+`profile` 0 and the classic paths go, the classic-or-parametric choice leaves the
+UI, and `sculpt-control-schema.js` follows. Any kind the owner keeps as it is
+stays with its reason. An old save that uses a dropped option draws without it
+(decision 18).
+
+**Acceptance:** as H14, each world's three retail windows by eye at 1× and 2×.
+Part 2 reports `engine-shape.wgsl` lines and shape knobs before and after, and
+must lower both. `regional.mjs` 0 and `smoke.mjs` clean on nine worlds and 8×8.
+Shape stays on the GPU path with no drag slower than `merge-h14e`.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H15`,
+branch `H15-shape`; assets `$R/agent-H15`.
 
 ## After the cards
 

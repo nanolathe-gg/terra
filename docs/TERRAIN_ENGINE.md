@@ -459,6 +459,10 @@ for each control as of c4b1b80; it goes stale as cards delete knobs.
 | Each kind's classic curve | decision 16 | Becomes a preset of the cross-section (Shape) |
 | Pick-one variants (`experiment`, `variant`) | decision 16 | Each becomes a parameter or goes |
 | `talusAngle` (Green), `columnContrast` (green-3) | H5 | Under 5% of their class at the defaults |
+| The Ground pattern list and `groundTiles` | H14d, H14e | Nine worlds to six: Red, Crystal and Archipelago have quilted plains and no tiles to lend |
+| The `rim` URL knob; the bridge's fringe, ring, beach and body knobs | H14e | No longer name an image; the Shores, Bodies and Geology cards may settle them first |
+| Keys in each table's `world.defaults` that nothing registers: `noise`, `rock`, `fingerBlunt`, `flowTint`, `hillLobes`, `lavaTread` and others | H14e | Carried verbatim from the old configs; not audited |
+| The `shine*` knobs | H14e | All in `KNOB_DEFAULTS` or `WORLD_KNOBS`; none moved to a table |
 
 ## Rules for the cards
 
@@ -583,15 +587,16 @@ Each is written in full when the one before it lands.
 | H12 | One path: delete engine 0, the JS shape engine, the CPU workers, the switches and fallbacks, `hillLobes`, the URL-only experiments and the river bake | Merged bfabbab (groups 2-8) and e08ebd7 (H12b) |
 | H12b | Retire the study (decision 21): scenes render on a map, `/sculpt` opens a map; delete the study, the JS shape engine and the CPU draw; errors surface; the simplification report | Merged e08ebd7 (Lava and Ice 8×8 over the 512 MB GPU budget open) |
 | H9 | Every shape option on the GPU that is a pass of its own; Desert's scenes on the GPU path | Merged a7c2256 (deep cross-section and the map-canvas gaps are H8b; `hillLobes` on JS) |
-| Features | Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path. Materials is H14 | Not yet written |
+| Features | Shape, Geology, Fractures, Shores, Bodies, Impacts: one card each, for every world that uses it, on the one path. Materials is H14, Shape is H15 | Each written when the one before lands |
 | Combine or drop | Every remaining control against decision 16 and the impact rule, from the candidates list | After Retire |
 | H13 | GPU memory on 8×8 maps: Lava and Ice within the default budget | Merged fa83b11 |
-| H14 | Materials: every world's images become numbers, with water, noise and the palette; the Python preparation goes | Part 1 merged 1fcaafd (the inventory, Moon); steps 5 and 6 are H14e |
+| H14 | Materials: every world's images become numbers, with water, noise and the palette; the Python preparation goes | Complete: part 1 merged 1fcaafd (the inventory, Moon); H14b to H14e did the rest |
 | H14b | Materials as lit height fields: one generator with facets, seams, veins and any stretch angle | Merged fe068a1 (Crystal and Archipelago swatches failed; H14c) |
 | H14c | The three swatch fixes (slabs, fine streaks, strokes), then the seven other worlds on their tables | Merged 703148c: Moon's rock, Ice, Lava, Zhon and Desert moved; Red, Crystal and Archipelago on images |
 | H14d | The art's dither (hue is error-diffused per pixel), then Red, Crystal and Archipelago | Merged b136359: all nine worlds on tables |
-| H14e | Water, noise and the palette as numbers; the image bridge and the Python preparation go; a server with no world images draws every world | Running |
-| Small leftovers | A weather cap of 14 pages (H13); Lava's terrace softness; the dead images and keys in the H14 inventory; the study comments in `sculpt.py`; in `perf.mjs`, the dead `isMap` branches and the 240 s wait on a world whose export is disabled | After combine-or-drop |
+| H14e | Water, noise and the palette as numbers; the image bridge and the Python preparation go; a server with no world images draws every world | Merged c33bec2: a fresh clone on stock Python draws all nine worlds; `fractures.png`, ours, is the one image left |
+| H15 | Shape: one cross-section for every kind; the owner sees the comparison before any classic curve goes | Running |
+| Small leftovers | A weather cap of 14 pages (H13); Lava's terrace softness; the study comments in `sculpt.py`; the dead `isMap` branches in `perf.mjs`; a lit fit for Red's and Crystal's dithered shallows and Zhon's river water; the noise on the GPU, if 40 ms matters | After combine-or-drop |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
 **H3, one material model (Green):**
