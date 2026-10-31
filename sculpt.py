@@ -790,6 +790,7 @@ def lighten_red_shallows(config, assets):
 MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'desert': '/materials/desert.json', 'zhon': '/materials/zhon.json', 'lava': '/materials/lava.json', 'ice': '/materials/ice.json', 'red': '/materials/red.json', 'crystal': '/materials/crystal.json', 'archipelago': '/materials/archipelago.json'}
 SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
 SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
+SOURCES['materials/fractures.png'] = HERE / 'materials' / 'fractures.png'   # ours (sculpt_fractures.py made it): one crack field for every world
 # The images a table replaces: the page never fetches them, so the config does not name them.
 TABLE_IMAGES = ('grass', 'groundTiles', 'slopeGrass', 'rock', 'hillRock', 'rockWeathered', 'rockFractured')
 

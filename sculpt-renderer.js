@@ -264,30 +264,24 @@ export class TerrainRenderer {
     this.variant = variant;
     const slopeMaterial = ['slopes', 'structured'].includes(variant.get('surface'));
     const rockLayers = variant.get('material') === 'varied';
-    // The draw's own images: noise, fractures, the two waters and the palette, each bound by name (the land is generated).
     this.means = {};
     // The materials the table makes, by name: which optional stages the world has.
     this.layers = new Set(this.materialData.order);
-    for (const key of ['grass', 'fractures']) {
-      let url = this.config.textures[key];
-      // A world builds the plain's 16 tiles from its table's `ground` data, not from a file; a borrowed pattern (World panel) names the
-      // table of the world it comes from. A table without `ground` data (a quilted plain: its generated `quilt` layer is the plain)
-      // binds a one-texel stand-in, and the world's mean ground colour is the quilt's.
-      let bitmap;
-      const groundTable = key === 'grass' ? await this.groundTable(this.groundSource().groundTable) : null;
-      if (key === 'grass') this.groundTiled = Boolean(groundTable.ground);
-      if (key === 'grass' && !this.groundTiled) bitmap = await createImageBitmap(new ImageData(1, 1));
-      else if (key === 'grass') bitmap = await groundTileBitmap(groundTable.ground);
-      else {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Cannot load ${key} material`);
-        bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
-      }
-      if (key === 'grass') this.means.ground = !this.groundTiled ? this.materialData.measured.quilt.meanRGB.map(v => v / 255) : meanColor(bitmap);
-      const numeric = key === 'fractures';
-      this.textures[key] = this.materialTexture(key, [bitmap], {minFilter: numeric ? 'linear' : 'nearest', magFilter: numeric ? 'linear' : 'nearest', mipmaps: false});
-      bitmap.close();
-    }
+    // A world builds the plain's 16 tiles from its table's `ground` data; a borrowed pattern (World panel) names the table of the world it
+    // comes from. A table without `ground` data (a quilted plain: its generated `quilt` layer is the plain) binds a one-texel stand-in,
+    // and the world's mean ground colour is the quilt's.
+    const groundTable = await this.groundTable(this.groundSource().groundTable);
+    this.groundTiled = Boolean(groundTable.ground);
+    const tiles = this.groundTiled ? await groundTileBitmap(groundTable.ground) : await createImageBitmap(new ImageData(1, 1));
+    this.means.ground = this.groundTiled ? meanColor(tiles) : this.materialData.measured.quilt.meanRGB.map(v => v / 255);
+    this.textures.grass = this.materialTexture('grass', [tiles], {minFilter: 'nearest', magFilter: 'nearest', mipmaps: false});
+    tiles.close();
+    // The crack field is ours, not retail's: one committed picture for every world (the Fractures card replaces it).
+    const response = await fetch('/materials/fractures.png');
+    if (!response.ok) throw new Error('Cannot load the fracture field');
+    const cracks = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+    this.textures.fractures = this.materialTexture('fractures', [cracks], {minFilter: 'linear', magFilter: 'linear', mipmaps: false});
+    cracks.close();
     // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
     this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
     this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
