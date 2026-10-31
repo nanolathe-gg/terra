@@ -6194,6 +6194,69 @@ warm for a world's full set of layers. Quarter levels still read true.
 **Server and guard:** port 8881, CDP 9681; worktree `../terraform-wt-H14b`,
 branch `H14b-lit-materials`; assets `$R/agent-H14b`.
 
+**Steps 1-4 done (merged as fe068a1; EXPERIMENTS row 160; notes in
+`$R/agent-H14b/NOTES.md`).**
+- **One generator** in `engine-materials.wgsl`, about 175 lines: bands on a
+  sheared lattice, so streaks run at an angle and still wrap; a ridged share
+  and a warp; Voronoi facets with seams; light from one azimuth; then the
+  same rank map and ramp. A vein overlay draws zero-crossing lines. Five
+  rows a material (39 → 44). A relief of 0 takes the old path, so no scene
+  moved.
+- **Coarse levels** of a lit layer are box means of the level above: a seam
+  or vein softens and never vanishes.
+- **A generated ground layer.** A table whose `order` ends in `quilt` holds
+  a quilted plain. It is plumbed through `bridgeGround`, unused so far.
+- **Tools:** `material_lit.py`, `lit_fit.py`, `lit_lab.py`, and `swatch.mjs`
+  over the whole mip chain. The tables in `measure/lit-tables/` hold about 185
+  numbers each.
+- **Timing:** eight lit layers over seven levels take 34 ms cold and under 4
+  ms warm, plus the one-time pipeline compile of about 400 ms.
+- **The coordinator's review of the six swatches:**
+
+  | Swatch | Verdict |
+  | --- | --- |
+  | Ice rock | Passes. Blue-white lit planes; only blockier than the art's diagonal shards |
+  | Moon rock | Passes. Embossed grey rock; its discrete pits are missing |
+  | Red's cracked slope | Passes. The same cracked rock; crevices a little less bold |
+  | Crystal rock | Fails. Regular stained-glass polygons with grey cells, where the art has large irregular dark slabs |
+  | Crystal slope | Fails. Corduroy stripes, where the art is mottled purple with fine hatching |
+  | Archipelago's ring | Fails. Wandering contour lines and a vertical-streak artefact, where the art has short curved dark strokes |
+
+- **Learned.** Statistics alone mislead here: Ice fitted Voronoi polygons
+  whose numbers matched and whose picture did not. Fit, then judge by eye.
+- **Coordinator's merge checks:** the 27 scenes are 0.00 against `merge-h14a` with
+  clean consoles; `regional.mjs` 0 on moon-1, green-2 and crystal-1; smoke
+  clean on nine worlds; 22 of 22 tests pass; the gate passes.
+
+**Still open:** the development hooks `makeZ` and the `pad0` salt go in H14's
+step 6. `ground=texture` on a table world still fetches an image, and
+`means.ground` does not yet come from the table.
+
+### H14c. The worlds on lit materials
+
+**Fix the three failures first,** one commit each:
+1. **Slabs.** Cells of uneven size with irregular outlines, seams of uneven
+   width that open into black gaps, and tone that stays in the art's colours.
+   Crystal rock reads as dark slabs, not stained glass.
+2. **Streaks at fine scale only.** The stretch and shear fade with the band,
+   so the broad bands stay isotropic and mottled. Crystal slope reads as
+   hatching over blotches, not stripes. Its highlights and patchy cracks stay.
+3. **Strokes.** The overlay gains short curved strokes with a dark core,
+   placed per cell so they wrap, beside or in place of contour lines. Find
+   the vertical-streak artefact and remove it. Archipelago's ring reads as
+   strokes.
+
+**If one still fails after honest tries,** stop and show the coordinator the
+swatch. Its world stays on images until the owner rules, and the others go on.
+
+**Then the worlds,** one commit each, each judged by rule 5 with the
+acceptance of H14: Moon's rock, Ice, Lava, Zhon, Red, Desert, Crystal,
+Archipelago. `MATERIAL_TABLES` lists all nine. Crystal's and Archipelago's
+fringe, body and ring layers use the fixes above.
+
+**Server and guard:** port 8882, CDP 9682; worktree `../terraform-wt-H14c`,
+branch `H14c-worlds`; assets `$R/agent-H14c`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
