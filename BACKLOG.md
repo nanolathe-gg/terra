@@ -6647,6 +6647,93 @@ the plateau curve at shoulder .55. The six cover and plateau kinds reach one
 functions of a cross-section (the first five rows, and the shouldered hill).
 Crater, fissure and crystal are not cross-sections and are left alone.
 
+*Modifiers that are not curves (what each does, and whether it can be one shared control).*
+
+| Modifier | Where | One shared control? |
+| --- | --- | --- |
+| Settling (a hill's raw weights, then blur and compose) | shouldered hill, `settle` | no as a curve; it is a rounding pass over the result, one radius. It could be a shared "round the form" control. Untouched by the presets |
+| Outline wander (`amp`, `rough`) and per-cell width (`width = 1 + k rough nCW`) | every kind | yes: one roughness already feeds it; only the constants (.95, .85, 1.3, 1.6, .2) differ per kind |
+| Face-width noise (`rough (nDet + .3 nCW)`, `faceVar broad`) | plateau family | yes: the section's `faceVariation` (`sVary`) is the same idea with another noise |
+| Cross shift `rough .18 nDet`, local radius `1 + .75 rough nShelf`, height lumps `1 + rough (.75 nCW + .3 nDet)` | shouldered hill | the lumps yes (`1 + rough .09 nDet` on the mountain is the same with another constant); the cross shift and local radius could be one face-wander control |
+| Plateau level `rough 3 nDet` | plateau | yes, same lump idea |
+| `lift` (lip) | section only | already a section control |
+| Natural deep: noise shelf (`42 shelves`), core, `bankFlat`, `beachFlat` | deep, shallow | no: they shape the bed (shelf, core) or stretch the dry part by the ground height; `beachFlat` survives the preset, the shelf and core are untouched |
+| North term, `mesaFlank` | plateau | no as a section control: bearing-dependent, and `mesaFlank` swaps the curve. The presets leave them out |
+| Ridge crest (`ridgeRise`), `baseBump`, outline lobes | hill, mountain, plateau | already modifiers on top of `w` |
+
+*2. The wider cross-section.* Two numbers were added to `crossSection`; every
+other control it needed already existed.
+- **Face curve exponent** (`sP`, 2.4 before): how sharply the foot of a concave
+  face lifts or a convex face rounds. It was a hard-coded 2.4. Mountains need
+  about 2.4 with a full concave curve, the hill's face needs 3.35, a ridge hill
+  4. The classic profile passes 2.4, so nothing changed.
+- **Back slope** (`sBack`, 0 = symmetric): how many times longer the slope behind
+  the crest is than the face in front of it. It turns a hill into a two-sided
+  section that leans: the face side runs the cross-section, the back side a plain
+  smooth slope. The preset passes the classic's own ratio from softness (2.03 at
+  50).
+
+The widths the presets need are shares of the reach, not pixels, so a preset
+keeps its look at every brush size; the existing `sShare` (face share) carries
+them, and the apron/crown controls stay as they were.
+
+*3. Fit.* `measure/section_fit.mjs` fits in one dimension; `measure/section_check.mjs`
+repeats the audit's raised-region measure on the real engine (the audit's stroke,
+flat ground, every wobble off; 4 px sampling; 140, 280 and 560 px across, amounts
+30, 80 and 160, the softnesses the scenes use). Preset numbers are
+`sculpt-shape-presets.js`.
+
+| Kind (preset family) | Numbers (at softness 50) | RMS | max | The audit's classic-fit |
+| --- | --- | --- | --- | --- |
+| plateau, offset, paint, erase, sand, grass (shoulder) | face share .44 (+.6 per unit softness) | 0.00 | 0.00 | 6.40 / 13.59 |
+| deep, shallow (water descent) | face share .9, land section with the bed as target | 0.00 | 0.00 | - |
+| lower, smooth | face share 1 | 0.36-0.94 | 1.44 | - |
+| mountain | share .709, curve -1, exponent 2.39, crown .485 (share -.33 and crown +.57 per unit softness) | 0.59-8.89 (amount 30-160, softness 0-1) | 14.57 | - |
+| shouldered hill | face share .864, curve -1, exponent 3.35, crown .416, back slope 2.03 | 0.07-0.72 | 2.83 | 17.52 / 32.06 |
+| hill with ridge options (plain) | share .666, curve -.25, exponent 3.96, crown .469 | 0.01-0.04 | 0.12 | - |
+
+The mountain's worst cases are amount 160 at softness 0 or 1; at softness 50 it
+is 0.59-3.10 (max 7.6), at amounts 30-80 and softness 50 it is at most 1.56 (max
+3.8). The hill: a symmetric section about the crest line fits the classic
+shouldered hill at RMS 16.7 / max 31.0 in one dimension, which is the audit's
+17.52 / 32.06; letting the crest sit off-centre brings it to 6.4 / 11.8; the
+two-sided section brings it to 0.07-0.72 / 2.83 on the engine. So the audit's
+rejection was the missing lean, not the form. The plateau's 6.40 was its grid:
+the classic face share is .44 and the audit's search had 40, 80, ... px.
+
+*4. Comparison.* All 27 scenes with `?shapePresets` against the default
+(`merge-h14e` baseline). Default (switch off): all 27 scenes mean |diff| 0.00,
+`console` empty on every scene. With presets, mean |diff| per scene:
+archipelago 0.47 / 1.26 / 1.09; crystal 1.77 / 0.00 / 0.00; desert 4.76 / 0.24 /
+0.00; green 0.54 / 5.81 / 0.36; ice 7.35 / 0.00 / 0.00; lava 0.12 / 0.37 / 2.94;
+moon 1.28 / 0.82 / 0.33; red 1.59 / 0.13 / 0.31; zhon 0.86 / 0.40 / 0.17.
+`stats.py`: three marks newly outside the retail family (red-2 shore band 129.00,
+red-1 horizontal edge density .167, moon-2 steepness above 1.0 at .006); none went
+back inside. Reading by kind: hill, plateau, offset, deep and shallow reproduce
+the classic to within the noise of the other wobble terms, so they are as close
+to retail as classic is and no closer; the larger scene differences (green-2,
+ice-1, desert-1, lava-3) come from the shoulder family's noise (`sVary` stands for
+three classic noise terms and is only roughly the same amount) and from the
+world's contour bands moving with the height; none looks nearer to retail by
+eye and none looks further. Mountains are slightly softer-peaked than classic.
+
+*5. `moonLobes`.* Moon's three windows with `moonLobes` 0 and `baseVary` 22,
+`baseBump` 2.5 on every hill and mountain: the outline loses its folded, lumpy
+edge (a foot-only window, fixed wavelengths, at most .15 of the radius), and the
+retail windows' broken edge is further away. The look does not hold, so
+`moonLobes` stays as it is. Sheets: `$R/agent-H15/sheets-moonlobes`.
+
+*Not done.* Item "fit to retail slope profiles" (retail heights per world): not
+attempted; the presets are fitted to the classic curves and judged against retail
+by eye. The preset path does not cover terraces/lip/apron as presets (they stay
+authored controls), ramp, crater, fissure and crystal.
+
+*For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
+with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
+`sBack` is read only by the shouldered-hill branch in `engine-shape.wgsl`; a
+parametric hill needs the shouldered geometry kept (face vector, end taper) with
+the cross-section in place of `hillSection`. `sculpt.py` serves the presets file.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
