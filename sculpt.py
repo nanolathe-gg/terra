@@ -801,6 +801,8 @@ def apply_material_table(biome, config):
     config['layers'] = table['order']   # the materials the table makes: which optional stages (body, beach, ring) the world has
     config['material'] = table['material']
     config['water'] = table['water']
+    if 'river' in table:
+        config['river'] = table['river']   # the river variant's material and water numbers (WORLD_VARIANTS)
     for key in TABLE_IMAGES:
         config['textures'].pop(key, None)
 

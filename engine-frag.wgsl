@@ -7,10 +7,6 @@
 // ground, as the GLSL sampler pointed at the ground's unit).
 @group(1) @binding(0) var grassTex: texture_2d<f32>;
 @group(1) @binding(1) var grassSamp: sampler;
-@group(1) @binding(14) var waterTex: texture_2d<f32>;
-@group(1) @binding(15) var waterSamp: sampler;
-@group(1) @binding(16) var waterShallowTex: texture_2d<f32>;
-@group(1) @binding(17) var waterShallowSamp: sampler;
 @group(1) @binding(18) var paletteTex: texture_2d<f32>;
 // H4: the land materials of materials/green.json, made at startup (engine-materials.wgsl): a layer per material, a mip level per footprint.
 @group(1) @binding(19) var generatedTex: texture_2d_array<f32>;
@@ -1837,12 +1833,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
             else { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
         }
-        let waterSize = vec2f(textureDimensions(waterTex, 0));
-        let grain = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb - u.waterMean;
+        let grain = genColor(u.waterLayer, pixel) - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
         if (u.nativeShallows != 0 && u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
-            var shallow = pixelSample(waterShallowTex, waterShallowSamp, pixel, vec2f(textureDimensions(waterShallowTex, 0))).rgb;
-            let deepWater = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb;
+            var shallow = genColor(u.shallowLayer, pixel);
+            let deepWater = genColor(u.waterLayer, pixel);
             // The lit bed: the ground under the water, lit by the same sun and
             // tinted, replaces the shallow art's noise (retail draws its shallows
             // as the lit terrain through a blue tint).

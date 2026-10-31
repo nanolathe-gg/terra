@@ -202,7 +202,7 @@ export class TerrainRenderer {
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(0, F), sampler(1, F),
-      texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F), texture(19, F, 'float', '2d-array')]});
+      texture(18, F), texture(19, F, 'float', '2d-array')]});
     // GL drew with LESS against a cleared depth of 1; the vertex shader maps
     // GL's clip depth onto WebGPU's 0..1 range.
     [this.drawPipeline, this.bakePipeline] = await Promise.all([
@@ -232,6 +232,8 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
+    // The water's grain is two more generated materials after the table's own, named by the config's water block (shared when the two are one).
+    for (const name of [this.config.water.deep, this.config.water.shallow]) if (!this.materialData.order.includes(name)) this.materialData.order.push(name);
     await this.makeMaterials();
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
@@ -250,7 +252,7 @@ export class TerrainRenderer {
     this.means = {};
     // The materials the table makes, by name: which optional stages the world has.
     this.layers = new Set(this.materialData.order);
-    for (const key of ['noise', 'grass', 'fractures', 'water', 'waterShallow', 'palette']) {
+    for (const key of ['noise', 'grass', 'fractures', 'palette']) {
       let url = this.config.textures[key];
       if (key === 'noise') url = this.config.assetBase + 'noise-ridged-gaussian.png';
       // A world builds the plain's 16 tiles from its table's `ground` data, not from a file; a borrowed pattern (World panel) names the
@@ -324,7 +326,9 @@ export class TerrainRenderer {
     this.i('uLedgeCoverage', variant.get('coverage') === 'ledge');
     this.v('uShallowColor', (this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     this.v('uDeepColor', (this.config.water?.deepRGB || [16, 57, 133]).map(v => v / 255));
-    this.v('uWaterMean', (this.config.water?.meanRGB || [38, 76, 226]).map(v => v / 255));
+    this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
+    this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));
+    this.i('uShallowLayer', this.materialData.order.indexOf(this.config.water.shallow));
     this.setWeather();
     this.setMaterialField();
   }
@@ -590,8 +594,7 @@ export class TerrainRenderer {
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
   materialBindGroup() {
     return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
-      ...[this.textures.grass, this.textures.water, this.textures.waterShallow].flatMap((t, i) => [
-        {binding: [0, 14, 16][i], resource: t.view}, {binding: [1, 15, 17][i], resource: t.sampler}]),
+      {binding: 0, resource: this.textures.grass.view}, {binding: 1, resource: this.textures.grass.sampler},
       {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}]});
   }
 

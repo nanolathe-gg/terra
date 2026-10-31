@@ -130,6 +130,8 @@ struct Uniforms {
     crispShore: f32,
     bankRock: f32,
     groundMode: i32,
+    waterLayer: i32,       // H14e: the generated layers that are the deep and the shallow water's grain (the table's water materials)
+    shallowLayer: i32,
     groundLayer: i32,      // H14b: the generated layer that is the plain's quilted image, or -1 (the plain is the sampled image or the tiles)
     groundTiles: i32,
     sandGrain: f32,
