@@ -23,10 +23,12 @@
 //   row 42  vein colour rgb, vein share of the plane (0 off)
 //   row 43  warp px (every lookup is displaced by noise of 32-px cells: no lattice line shows, facet edges curve), cone strength (round pits and bumps),
 //           seam variation 0..1 (the seam's width follows noise: broken, uneven seams), seam gap 0..1 (the share of the plane with no seams)
+//   row 44  cell weight 0..1 (cells of uneven size with curved outlines: slabs), 0, 0, 0
+//   row 45  (reserved: zero)
 // Fixed seeds: the salt of each material is its index; every operation is integer hashing or a fixed float expression,
 // so the same table gives the same bits on a given GPU.
 
-const MM_ROWS = 44u;
+const MM_ROWS = 46u;
 @group(0) @binding(0) var<storage, read> table: array<vec4f>;
 @group(0) @binding(1) var out: texture_storage_2d_array<rgba8unorm, write>;
 struct Params { size: f32, foot: f32, pad0: f32, pad1: f32 }
@@ -165,7 +167,7 @@ fn mmLatticeG(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> vec3f {
 }
 struct Facet { f1: f32, f2: f32, cell: vec2i, toward: vec2f }
 // Nearest and second nearest of one jittered feature point per cell of the sheared lattice (periodic through mmWrapCell).
-fn mmFacets(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> Facet {
+fn mmFacets(pixel: vec2f, cells: vec2f, shear: f32, salt: u32, vary: f32) -> Facet {
     let u = mmU2(pixel, cells, shear);
     let c = vec2i(floor(u));
     var out = Facet(9.0, 9.0, vec2i(0), vec2f(0.0));
@@ -173,7 +175,8 @@ fn mmFacets(pixel: vec2f, cells: vec2f, shear: f32, salt: u32) -> Facet {
         for (var i = -1; i <= 1; i++) {
             let cc = mmWrapCell(c + vec2i(i, j), cells);
             let point = vec2f(c + vec2i(i, j)) + vec2f(0.1 + 0.8 * mmHash(cc, salt), 0.1 + 0.8 * mmHash(cc, salt + 1u));
-            let d = distance(u, point);
+            // Each point carries a weight (vary 0 = none): the nearest-point test then gives cells of uneven size with curved outlines.
+            let d = distance(u, point) - vary * (mmHash(cc, salt + 2u) - 0.5) * 1.6;
             if (d < out.f1) { out.f2 = out.f1; out.f1 = d; out.cell = cc; out.toward = u - point; } else if (d < out.f2) { out.f2 = d; }
         }
     }
@@ -200,6 +203,7 @@ fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
     let ip = ((vec2i(floor(pixel)) % wrap) + wrap) % wrap;
     // The warp displaces every lookup below by two noises of 32-px cells, so no lattice line shows.
     let d = matRow(base + 43u);
+    let e = matRow(base + 44u);
     var at = pixel;
     if (d.x > 0.0) {
         let wc = vec2f(16.0);
@@ -220,7 +224,7 @@ fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
     var z = a.w * h;
     if (b.y > 0.0) {
         let cells = mmCells(b.y, 1.0);   // facets, seams and veins are isotropic: the stretch and shear are the grain's
-        let fc = mmFacets(at, cells, 0.0, salt + 21u);
+        let fc = mmFacets(at, cells, 0.0, salt + 21u, e.x);
         if (d.y > 0.0) {
             // A cone: its slope points from the cell's feature point, outward for a bump and inward for a pit, in pixel units.
             let off = fc.toward / cells;
