@@ -185,8 +185,8 @@ fn faceRise(d: f32, A: f32, F: f32, pt: f32, n: u32, nj: f32, nA: f32, nB: f32) 
   let t = (d - A) / F; let k = abs(u.sCurve);
   var g = sm(0.0, 1.0, t);
   if (k > 0.0) {
-    var c = pow(t, 2.4);
-    if (u.sCurve > 0.0) { c = 1.0 - pow(1.0 - t, 2.4); }
+    var c = pow(t, u.sP);
+    if (u.sCurve > 0.0) { c = 1.0 - pow(1.0 - t, u.sP); }
     g = g + (c - g) * k;
   }
   var lev = g;
@@ -422,12 +422,21 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       if (u.softness == 0.5) { section = (cross + 1.34) / 2.0; }
       else if (cross < 0.0) { section = 0.67 * (1.0 + cross / u.backWidth); }
       else { section = 0.67 + 0.33 * cross / u.faceWidth; }
-      if (side2 > vv * vv) { let q = 1.0 - vv * vv / side2; w = hillSection(section) * q * q; }
+      if (side2 > vv * vv) {
+        let q = 1.0 - vv * vv / side2;
+        if (u.sOn != 0u && u.sBack > 0.0) {
+          // H15 two-sided section: the face side runs the cross-section over faceWidth, the back side a smoothstep over sBack times that.
+          var sec = 0.0;
+          if (cross >= 0.0) { sec = crossSection(cross / u.faceWidth, u.faceWidth * localRadius, F[PH * cells + i], nCW, nShelf, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)); }
+          else { sec = sm(0.0, 1.0, 1.0 + cross / (u.sBack * u.faceWidth)); }
+          w = sec * q * q;
+        } else { w = hillSection(section) * q * q; }
+      }
     } else {
       w = pow(1.0 - r * r, u.mexp);
     }
     var lift = 0.0;
-    if (u.sOn != 0u) {
+    if (u.sOn != 0u && !shouldered) {
       w = crossSection(r, radius * width * u.bankScale, F[PH * cells + i], nCW, nShelf, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells));
       lift = sLift;
     }
@@ -474,7 +483,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     if (kind == 2u && u.natural != 0u) { bed = bed + 42.0 * (sm(-0.15, 0.55, nShelf) * sm(0.08, 0.50, br)) * u.shelves; }
     value = base + (bed - base) * w;
     if (kind == 2u && u.natural != 0u && bcore != 0.0) { value = min(value, base + (u.sea - 55.0 - base) * bcore); }
-    if (u.sOn == 0u && u.beachFlat != 0.5 && base > u.sea && base <= u.baseH + 1.0 && value > u.sea) {
+    if ((u.sOn == 0u || u.sWater == 0u) && u.beachFlat != 0.5 && base > u.sea && base <= u.baseH + 1.0 && value > u.sea) {
       let above = (value - u.sea) / (base - u.sea);
       value = u.sea + (base - u.sea) * pow(above, exp2((u.beachFlat - 0.5) * 2.4));
     }

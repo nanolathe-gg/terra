@@ -48,7 +48,7 @@ const NODE_FIELDS = [
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
+    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary', 'sP', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -135,7 +135,7 @@ function sectionUniforms(kind, q, c) {
   if (!(q.profile >= .5) || !SECTION_KINDS.includes(kind)) return {};
   const water = kind === 'deep' || kind === 'shallow', dome = kind === 'hill' || kind === 'mountain', crown = dome ? q.crown : 0;
   return {sOn: 1, sWater: water ? 1 : 0, sDome: dome ? 1 : 0, sBed: c.sea + (kind === 'deep' ? -55 : -7), sApron: q.apronPx, sApronH: q.apronHeight, sFace: q.facePx, sShare: clamp(.38 + (q.softness - .5) * .6, .1, .88),
-    sCurve: q.faceCurve, sSteps: Math.round(clamp(q.terraces, 0, 8)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter, sLip: q.lip, sCapW: .55 * crown, sCapRise: .45 * crown, sCapExp: 1 + 2 * crown,
+    sCurve: q.faceCurve, sP: 2.4, sSteps: Math.round(clamp(q.terraces, 0, 8)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter, sLip: q.lip, sCapW: .55 * crown, sCapRise: .45 * crown, sCapExp: 1 + 2 * crown,
     sBank: q.bankPx, sShelf: q.shelfPx, sShelfD: q.shelfDepth, sShelfSteps: Math.round(clamp(q.shelfSteps, 0, 6)), sVary: (q.faceVariation ?? .8) * .5};
 }
 // H9: the outline displacement of baseOutline (Desert's baseVary, px) and moonOutline (Moon's moonLobes, a share of the radius) as the parameters of
