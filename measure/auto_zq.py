@@ -2,7 +2,8 @@
 
 A dev tool. The lab fits a lit material alone (layer 0); in a world's table the same material is another layer and has another noise
 salt, so its field's quantiles move a little. This runs the engine's own z pass (measure/swatch.mjs --auto-zq) over the whole table and
-writes each lit material's zq, taken from the material's first layer, into `model`.
+writes each lit material's zq, taken from the material's first layer, into `model`. The layers are the table's `order` and, as the
+renderer appends them, the two water materials its `water` block names.
 
   auto_zq.py <materials/<world>.json> <work-dir> [--cdp 9682]
 """
@@ -19,12 +20,20 @@ if '--cdp' in args:
 path = Path(args[0])
 table = json.loads(path.read_text())
 out = Path(args[1])   # the swatch page's Chrome profile stays here and is reused, so keep one folder per port
-r = subprocess.run(['node', str(HERE / 'swatch.mjs'), str(path), str(out), '--auto-zq', '--cdp', cdp], capture_output=True, text=True)
+out.mkdir(parents=True, exist_ok=True)
+# The renderer appends the two water materials the table's `water` block names after the table's own layers: make them the same way.
+layers = list(table['order'])
+for name in (table['water'].get('deep'), table['water'].get('shallow')):
+    if name and name not in layers:
+        layers.append(name)
+tmp = out / 'layers.json'
+tmp.write_text(json.dumps({**table, 'order': layers}))
+r = subprocess.run(['node', str(HERE / 'swatch.mjs'), str(tmp), str(out), '--auto-zq', '--cdp', cdp], capture_output=True, text=True)
 if r.returncode:
     raise SystemExit(r.stdout + r.stderr)
 meta = json.loads((out / 'meta.json').read_text())
 seen = set()
-for layer, name in enumerate(table['order']):
+for layer, name in enumerate(layers):
     if name in seen:
         continue
     seen.add(name)

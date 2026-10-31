@@ -8,6 +8,11 @@ dither sigma when given) and fitted by material_fit on a scratch table holding o
 the fitted model go into materials/<world>.json under the name; the table's own `order` is left alone, because the renderer appends
 the two the world's `water` block names (`deep`, `shallow`) after it. Where deep and shallow are one image, name one material and
 give both the same name in the `water` block.
+
+Water art is a ripple that runs along one diagonal, so the deep water of most worlds (and some shallows) is then a lit material: the
+band fit above is the starting point, and measure/lit_lab.py (the image, or the image blurred at sigma 1 where the material is
+dithered), material_fit.py --lit and merge_lit.py give it the lit numbers; a dithered material keeps `dither` 1, `tintScale` 0 and
+amps[0] 0. auto_zq.py then sets its quantiles, with the water layers in the positions the renderer gives them.
 """
 import json
 import subprocess
