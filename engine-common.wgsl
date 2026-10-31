@@ -130,6 +130,8 @@ struct Uniforms {
     crispShore: f32,
     bankRock: f32,
     groundMode: i32,
+    waterLayer: i32,       // H14e: the generated layers that are the deep and the shallow water's grain (the table's water materials)
+    shallowLayer: i32,
     groundLayer: i32,      // H14b: the generated layer that is the plain's quilted image, or -1 (the plain is the sampled image or the tiles)
     groundTiles: i32,
     sandGrain: f32,
@@ -395,7 +397,6 @@ struct Uniforms {
     columnBeds: array<vec4f, 8>,   // per bed: x thickness (height units), y hardness 0..1, z material slot (H3, unused here)
     materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
-    bridged: i32,         // H8 bridge: 1 when the world's own prepared images fill the generated array (no materials table); engine-bridge.wgsl reads it
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
     blocks: f32,          // 1: blocks on faces (with a reduced facet and gully set, ENGINE_KNOBS); 0: none (also leaves the beds' boundaries unragged)
     blockRow: f32,        // px: height of a piece before the hardness scale (soft rock 0.7 of it, hard 1.5)

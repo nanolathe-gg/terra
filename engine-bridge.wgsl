@@ -2,9 +2,8 @@
 // (sculpt-frag.wgsl), put back so every world draws on the engine. It is appended to engine-frag.wgsl.
 // Rules (TERRAIN_ENGINE "Bridges are separate and counted"):
 //  - every block is gated by a uniform that already exists, never by a world;
-//  - the images it reads are the world's prepared images, written into the generated array texture by the renderer
-//    (sculpt-renderer.js, the bridge): layer 0 slope grass, 1 rock, 2 weathered, 3 fractured, 4 fringe, 5 transition body, 6 beach,
-//    7 mineral ring. A world whose materials are numbers (a materials table) writes none of them and takes no block here;
+//  - the generated layers it reads come from each world's table (its `order`): 0 slope grass, 1 rock, 2 weathered, 3 fractured, 4 fringe,
+//    5 transition body, 6 beach, 7 mineral ring;
 //  - each block names the feature card that replaces it, and the card deletes the block.
 
 // Layer 7 is the last; fetched like the engine's own generated materials (genColor, engine-frag.wgsl).
@@ -15,19 +14,8 @@ var<private> bTransPower: f32;
 var<private> bTransCore: f32;
 var<private> bTransShared: bool;
 
-// Replaced by: Materials (the plain's quilted ground becomes a generated material).
-// A world whose plain is one quilted image (ground texture mode) reads it directly, or, once its table has a `quilt` material (H14b),
-// the generated layer made from it; the 16-tile plain stays in groundTile.
-fn bridgeGround(pixel: vec2f) -> vec3f {
-    if (u.groundLayer >= 0) { return genColor(u.groundLayer, pixel); }
-    return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb;
-}
-
-// Replaced by: Materials (the ground image becomes a generated material, as Green's slope grass already is).
-fn bridgeGrassImage(pixel: vec2f) -> vec3f {
-    if (u.groundLayer >= 0) { return genColor(u.groundLayer, pixel); }
-    return pixelSample(grassTex, grassSamp, pixel, vec2f(512.0)).rgb;
-}
+// A world whose plain is one quilted image takes the generated layer its table's `quilt` material makes; the 16-tile plain stays in groundTile.
+fn bridgeGround(pixel: vec2f) -> vec3f { return genColor(u.groundLayer, pixel); }
 
 // Replaced by: Shores (beach sand is a shore material). The lightest of the ground and the beach: snow takes the beach when it is lighter.
 fn bridgeSnow(pixel: vec2f, snow: ptr<function, vec3f>, mean: ptr<function, vec3f>) {

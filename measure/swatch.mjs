@@ -29,7 +29,21 @@ const [tableFile, out] = args;
 mkdirSync(out, {recursive: true});
 const table = JSON.parse(readFileSync(tableFile, 'utf8'));
 const rows = materialRows(table);
-const shader = readFileSync(resolve(here, '../engine-materials.wgsl'), 'utf8');
+// The fitting hooks live here, not in the engine: --same-seed gives every layer one noise salt (candidate layers then differ only in their
+// numbers), and the makeZ entry writes a lit material's z at level 0 (16 bits across red and green) for the fit's rank quantiles.
+const engineShader = readFileSync(resolve(here, '../engine-materials.wgsl'), 'utf8');
+const SALT = 'fn mmSalt(id: u32) -> u32 { return id * 16u + 1u; }';
+if (!engineShader.includes(SALT)) throw new Error('swatch.mjs: engine-materials.wgsl no longer has the salt function the hooks patch');
+const shader = engineShader.replace(SALT, 'fn mmSalt(id: u32) -> u32 { return select(id * 16u + 1u, u32(params.pad0) * 16u + 1u, params.pad0 > 0.0); }') + `
+@compute @workgroup_size(8, 8, 1)
+fn makeZ(@builtin(global_invocation_id) id: vec3u) {
+    let n = u32(params.size);
+    if (id.x >= n || id.y >= n) { return; }
+    let z = mmLitZ(id.z * MM_ROWS, id.z, vec2f(id.xy) + 0.5).x;
+    let q = u32(clamp((z + 8.0) / 16.0, 0.0, 1.0) * 65535.0);
+    textureStore(out, vec2i(id.xy), i32(id.z), vec4f(f32(q >> 8u) / 255.0, f32(q & 255u) / 255.0, 0.0, 1.0));
+}
+`;
 const n = size >> level;
 const page = `<!doctype html><body><script type="module">
 const rows = ${JSON.stringify(rows)}, layers = ${table.order.length}, size = ${size}, level = ${level}, n = ${n}, zMode = ${zMode}, sameSeed = ${sameSeed}, autoZq = ${autoZq}, mmRows = ${MM_ROWS};

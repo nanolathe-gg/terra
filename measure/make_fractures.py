@@ -1,4 +1,7 @@
-"""Sparse finite fracture groups for the optional sculpting appearance layer.
+"""Makes materials/fractures.png, the crack field every world draws (card H14e: committed, because it is ours and its port to startup
+is the Fractures card's). A dev tool: `make_fractures.py --out DIR`, then copy DIR/fractures.png to materials/.
+
+Sparse finite fracture groups for the optional sculpting appearance layer.
 
 Wholly authored line geometry, not recovered geology or a retail algorithm.
 No terrain, native brightness or artwork is read. The shader owns dry-slope

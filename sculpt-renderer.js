@@ -4,10 +4,19 @@
 // world-resolution fields bake, a compute pass).
 
 import {materialRows,tablePlacementRows,PLACEMENT_ROW,strataZoneWidths} from './sculpt-material-model.js';
+import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
 const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
+
+// sRGB 0..255 to OKLab (Ottosson 2020), as engine-palette.wgsl does on the GPU: the palette's colours are converted once here.
+function oklab(rgb) {
+  const lin = rgb.map(v => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const [l, m, s] = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]]
+    .map(r => Math.cbrt(r[0] * lin[0] + r[1] * lin[1] + r[2] * lin[2]));
+  return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+}
 
 // The plain's tiles as a 512 x 32 picture: tile t at x = 32 t, entry letters looked up in the colour list (H3).
 async function groundTileBitmap({entries, tiles}) {
@@ -99,9 +108,6 @@ const MIP_SHADER = `
 
 // H4: the generated materials' level-0 size and level count (512 down to 8 px).
 const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
-// H8 bridge: the generated array's layers for a world without a materials table (engine-bridge.wgsl): slope grass, rock, weathered, fractured,
-// fringe, transition body, beach, mineral ring. Removed by the Materials card with the images.
-const BRIDGE_LAYERS = 8, BRIDGE_LAYER = {slopeGrass: 0, rock: 1, rockWeathered: 2, rockFractured: 3, fringe: 4, transitionBody: 5, beach: 6, mineralRing: 7};
 
 export class TerrainRenderer {
   static async create(canvas, config) {
@@ -157,18 +163,18 @@ export class TerrainRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
 
     // The engine's shaders (engine-frag / engine-bake / engine-common) draw every world.
-    // H8: a world whose materials are numbers names its table in the config (config.materialTable); the others bridge their prepared images.
+    // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
-    this.materialModel = Boolean(tableUrl);
-    this.bridge = !tableUrl;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', ...(tableUrl ? [tableUrl.replace(/^\//, '')] : [])];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', tableUrl.replace(/^\//, ''), 'engine-palette.wgsl', 'materials/palette.json'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
     const modelTable = extra[2];
+    this.paletteSource = extra[3];
+    this.paletteColours = JSON.parse(extra[4]).colours;
     this.materialsSource = extra[0];
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
@@ -207,7 +213,7 @@ export class TerrainRenderer {
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(0, F), sampler(1, F),
-      texture(14, F), sampler(15, F), texture(16, F), sampler(17, F), texture(18, F), texture(19, F, 'float', '2d-array')]});
+      texture(18, F), texture(19, F, 'float', '2d-array')]});
     // GL drew with LESS against a cleared depth of 1; the vertex shader maps
     // GL's clip depth onto WebGPU's 0..1 range.
     [this.drawPipeline, this.bakePipeline] = await Promise.all([
@@ -236,8 +242,16 @@ export class TerrainRenderer {
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
-    if (modelTable) this.materialData = JSON.parse(modelTable);
-    if (this.materialData) await this.makeMaterials(); else this.makeBridgeTexture();
+    this.materialData = JSON.parse(modelTable);
+    // The water's grain is two more generated materials after the table's own, named by the config's water block (shared when the two are one).
+    for (const name of [this.config.water.deep, this.config.water.shallow]) if (!this.materialData.order.includes(name)) this.materialData.order.push(name);
+    // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
+    this.textures = {};
+    const generation = performance.now();
+    const gpu = Promise.all([this.makeMaterials(), this.paletteTexture()]);
+    this.textures.noise = this.noiseTexture();
+    this.textures.palette = (await gpu)[1];
+    this.generationMs = performance.now() - generation;
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
@@ -250,95 +264,31 @@ export class TerrainRenderer {
     this.variant = variant;
     const slopeMaterial = ['slopes', 'structured'].includes(variant.get('surface'));
     const rockLayers = variant.get('material') === 'varied';
-    // Each GLSL sampler named a texture unit; here it names a loaded texture
-    // (bound(): its texture view and sampler). Aliases keep GL's sharing.
-    this.textures = {};
-    this.bound = {};
     this.means = {};
-    for (const [key, name] of [['noise','uNoise'], ['grass','uGrass'], ['rock','uRock'], ['water','uWater'], ['palette','uPalette'], ['waterShallow','uWaterShallow'], ['slopeGrass','uSlopeGrass'], ['rockWeathered','uRockWeathered'], ['rockFractured','uRockFractured'], ['fractures','uFractures'], ['mineralRing','uMineralRing']]) {
-      if (key === 'mineralRing' && (!this.config.textures.mineralRing || this.materialData)) { this.bound[name] = 'grass'; continue; }   // a table's ring is generated layer 7
-      if (key === 'slopeGrass' && !slopeMaterial) { this.bound[name] = 'grass'; continue; }
-      // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
-      if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255); continue; }
-      // H4: the engine makes the rocks from numbers too (item 3), so no rock image is fetched; its mean colour is the table's.
-      if (this.materialData && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255); continue; }
-      if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
-      if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
-      // The rock the draw shows is the hill rock (no world's default is another), and structured surfaces carry their own slope and rock image.
-      let url = this.config.textures[key];
-      if (key === 'rock') url = this.config.textures.hillRock;
-      if (variant.get('surface') === 'structured') {
-        if (key === 'slopeGrass' && this.config.textures.slopeStructured) url = this.config.textures.slopeStructured;
-        if (key === 'rock' && this.config.textures.rockStructured) url = this.config.textures.rockStructured;
-      }
-      if (key === 'noise') url = this.config.assetBase + 'noise-ridged-gaussian.png';
-      // Procedural ground tiles replace the sampled grass when the biome has them.
-      // A world may use another world's ground pattern (World panel).
-      if (key === 'grass') {
-        const ground = this.groundSource();
-        url = variant.get('ground') !== 'texture' && ground.groundTiles ? ground.groundTiles : ground.grass;
-      }
-      // H3: a world with a table builds the plain's 16 tiles from the table's `ground` data, not from a file; a borrowed pattern
-      // (World panel) names the table of the world it comes from.
-      // A table without `ground` data (a quilted plain: its generated `quilt` layer is the plain) binds a one-texel stand-in, and the
-      // world's mean ground colour is the quilt's.
-      let bitmap;
-      const groundTable = key === 'grass' && this.groundSource().groundTable ? await this.groundTable(this.groundSource().groundTable) : null;
-      if (key === 'grass') this.groundTiled = groundTable ? Boolean(groundTable.ground) : variant.get('ground') !== 'texture' && Boolean(this.groundSource().groundTiles);   // a table has no sampled texture to choose
-      if (key === 'grass' && groundTable && !this.groundTiled) bitmap = await createImageBitmap(new ImageData(1, 1));
-      else if (key === 'grass' && groundTable) bitmap = await groundTileBitmap(groundTable.ground);
-      else {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Cannot load ${key} material`);
-        bitmap = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
-      }
-      // Mean colour of each base material, so a world can move it to a new
-      // base colour while keeping the texture's grain.
-      const meanOf = {grass: 'ground', slopeGrass: 'slope', rock: 'rock'}[key];
-      if (meanOf) this.means[meanOf] = key === 'grass' && groundTable && !this.groundTiled ? this.materialData.measured.quilt.meanRGB.map(v => v / 255) : meanColor(bitmap);
-      if (this.bridge) this.bridgeCopy(key, bitmap);
-      // Only the plain, the noise and fractures, the waters and the palette are bound to the draw; the land images are copied into the
-      // generated array above (bridge) and need no texture of their own.
-      if (['grass', 'noise', 'fractures', 'water', 'waterShallow', 'palette'].includes(key)) {
-        const numeric = key === 'noise' || key === 'fractures', detailLevels = key === 'grass' && Boolean(this.config.textures.transitionBody);
-        this.textures[key] = this.materialTexture(key, [bitmap], {minFilter: detailLevels || numeric ? 'linear' : 'nearest', magFilter: numeric ? 'linear' : 'nearest', mipmaps: detailLevels});
-      }
-      bitmap.close();
-      this.bound[name] = key;
-    }
-    // Two optional transition stages share one array texture. Keeping both
-    // layers resident makes the weathering-strength control continuous.
-    // H4: the engine draw has no fringe, ring or slope-grass images (Green has no mineral margins or beach).
-    // The transition body is a world flag, not a bridge one: a table world's body is generated layer 5 and bridgeMargins' shared transition (ring, body, contours) needs it.
-    this.transitionBody=!this.bridge&&Boolean(this.config.textures.transitionBody);
-    if(this.bridge){
-    const fringeURL=this.config.textures.slopeFringe||this.config.textures.slopeGrass||this.config.textures.grass;
-    const loadFringe=async url=>{
-      const response=await fetch(url);
-      if(!response.ok) throw new Error('Cannot load transition material');
-      return createImageBitmap(await response.blob(),{colorSpaceConversion:'none',premultiplyAlpha:'none'});
-    };
-    const fringe=await loadFringe(fringeURL);
-    this.transitionBody=Boolean(this.config.textures.transitionBody);
-    const body=this.transitionBody?await loadFringe(this.config.textures.transitionBody):fringe;
-    // A third layer holds the world's beach sand, if it has one (the WebGL
-    // renderer had no texture unit left), tiled to the layer size.
-    let beach=fringe;
-    if(this.config.textures.beach){
-      const source=await loadFringe(this.config.textures.beach);
-      this.means.beach=meanColor(source);
-      const tile=new OffscreenCanvas(fringe.width,fringe.height),g=tile.getContext('2d');
-      for(let y=0;y<fringe.height;y+=source.height)for(let x=0;x<fringe.width;x+=source.width)g.drawImage(source,x,y);
-      source.close(); beach=tile;
-    }
-    for(const bitmap of [body,beach]) if(bitmap.width!==fringe.width||bitmap.height!==fringe.height) throw new Error('Transition material sizes must match');
-    if(this.bridge){ this.bridgeCopy('fringe',fringe); this.bridgeCopy('transitionBody',body); this.bridgeCopy('beach',beach); }
-    if(body!==fringe)body.close();fringe.close();
-    }
-    // A table world's beach is a generated layer (the table's `beach` material): its mean colour is the table's; the config still names the beach for the flags.
-    if (this.materialData?.measured.beach) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
-    this.i('uBeach',Boolean(this.config.textures.beach));
-    this.i('uBridged',this.bridge);
+    // The materials the table makes, by name: which optional stages the world has.
+    this.layers = new Set(this.materialData.order);
+    // A world builds the plain's 16 tiles from its table's `ground` data; a borrowed pattern (World panel) names the table of the world it
+    // comes from. A table without `ground` data (a quilted plain: its generated `quilt` layer is the plain) binds a one-texel stand-in,
+    // and the world's mean ground colour is the quilt's.
+    const groundTable = await this.groundTable(this.groundSource().groundTable);
+    this.groundTiled = Boolean(groundTable.ground);
+    const tiles = this.groundTiled ? await groundTileBitmap(groundTable.ground) : await createImageBitmap(new ImageData(1, 1));
+    this.means.ground = this.groundTiled ? meanColor(tiles) : this.materialData.measured.quilt.meanRGB.map(v => v / 255);
+    this.textures.grass = this.materialTexture('grass', [tiles], {minFilter: 'nearest', magFilter: 'nearest', mipmaps: false});
+    tiles.close();
+    // The crack field is ours, not retail's: one committed picture for every world (the Fractures card replaces it).
+    const response = await fetch('/materials/fractures.png');
+    if (!response.ok) throw new Error('Cannot load the fracture field');
+    const cracks = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+    this.textures.fractures = this.materialTexture('fractures', [cracks], {minFilter: 'linear', magFilter: 'linear', mipmaps: false});
+    cracks.close();
+    // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
+    this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
+    this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
+    // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the beach is layer 6, the ring 7.
+    this.transitionBody = this.layers.has('body');
+    if (this.layers.has('beach')) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
+    this.i('uBeach', this.layers.has('beach'));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
@@ -354,7 +304,6 @@ export class TerrainRenderer {
     this.i('uMineralMargins', variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope');
     this.i('uRockLayers', rockLayers);
     this.applyKnobs();
-    if (this.bridge) this.generateMipmaps(this.generated.texture, BRIDGE_LAYERS, GENERATED_LEVELS);
     this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -386,7 +335,9 @@ export class TerrainRenderer {
     this.i('uLedgeCoverage', variant.get('coverage') === 'ledge');
     this.v('uShallowColor', (this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     this.v('uDeepColor', (this.config.water?.deepRGB || [16, 57, 133]).map(v => v / 255));
-    this.v('uWaterMean', (this.config.water?.meanRGB || [38, 76, 226]).map(v => v / 255));
+    this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
+    this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));
+    this.i('uShallowLayer', this.materialData.order.indexOf(this.config.water.shallow));
     this.setWeather();
     this.setMaterialField();
   }
@@ -410,6 +361,46 @@ export class TerrainRenderer {
     if (mipmaps) this.generateMipmaps(texture, layers, mipLevelCount);
     return {texture, view: texture.createView({dimension: layers > 1 ? '2d-array' : '2d'}),
       sampler: this.sampler({minFilter, magFilter, mipmapFilter: mipmaps ? 'linear' : 'nearest', addressModeU: 'repeat', addressModeV: 'repeat'})};
+  }
+
+  // The draw's noise (sculpt-noise.js): periodic RGBA8, linear filtering, repeating.
+  noiseTexture() {
+    const start = performance.now();
+    const texture = this.device.createTexture({label: 'noise', size: [NOISE_SIZE, NOISE_SIZE], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
+    this.device.queue.writeTexture({texture}, makeNoise(), {bytesPerRow: NOISE_SIZE * 4}, [NOISE_SIZE, NOISE_SIZE]);
+    this.noiseMs = performance.now() - start;
+    return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
+  }
+
+  // The palette lookup (engine-palette.wgsl): the table's colours, or the ones its `palette.entries` pick, as a 1024 x 96 RGBA8 texture.
+  async paletteTexture() {
+    const device = this.device, start = performance.now();
+    const colours = (this.materialData.palette?.entries ?? this.paletteColours.map((_, i) => i)).map(i => this.paletteColours[i]);
+    const rows = new Float32Array(colours.length * 8);
+    colours.forEach((c, i) => { rows.set([c[0], c[1], c[2], 0], i * 8); rows.set(oklab(c), i * 8 + 4); });
+    const buffer = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(buffer, 0, rows);
+    const count = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(count, 0, new Uint32Array([colours.length, 0, 0, 0]));
+    const texture = device.createTexture({label: 'palette lookup', size: [1024, 96], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
+    if (!this.palettePipeline) {
+      const module = device.createShaderModule({label: 'engine-palette.wgsl', code: this.paletteSource});
+      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+      if (errors.length) throw new Error('nanolathe: engine-palette.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+      this.palettePipeline = await device.createComputePipelineAsync({label: 'palette', layout: 'auto', compute: {module, entryPoint: 'paletteMain'}});
+    }
+    const encoder = device.createCommandEncoder({label: 'palette'});
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(this.palettePipeline);
+    pass.setBindGroup(0, device.createBindGroup({layout: this.palettePipeline.getBindGroupLayout(0), entries: [
+      {binding: 0, resource: {buffer}}, {binding: 1, resource: {buffer: count}}, {binding: 2, resource: texture.createView()}]}));
+    pass.dispatchWorkgroups(128, 4);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+    await device.queue.onSubmittedWorkDone();
+    buffer.destroy(); count.destroy();
+    this.paletteMs = performance.now() - start;
+    return {texture, view: texture.createView()};
   }
 
   generateMipmaps(texture, layers, levels) {
@@ -456,7 +447,7 @@ export class TerrainRenderer {
   // Base colours chosen for a world: {ground, slope, rock, sand, beach,
   // shallow, deep} as [r,g,b] 0..1, or absent to keep the world's own.
   groundSource() {
-    return this.config.groundPatterns?.[this.variant.get('groundPattern')] || (this.ownGround ??= {...this.config.textures, groundTable: this.config.materialTable});
+    return this.config.groundPatterns?.[this.variant.get('groundPattern')] || (this.ownGround ??= {groundTable: this.config.materialTable});
   }
   // A world's table by URL: this world's own is already loaded.
   async groundTable(url) {
@@ -642,37 +633,20 @@ export class TerrainRenderer {
   commonBindGroup(kind) {
     return this.bindGroups[kind] ??= this.device.createBindGroup({label: kind, layout: this.commonLayout, entries: [
       {binding: 0, resource: {buffer: this.uniformBuffer}},
-      ...[this.heightTexture, this.textures.noise.texture, this.textures[this.bound.uFractures].texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
+      ...[this.heightTexture, this.textures.noise.texture, this.textures.fractures.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
       {binding: 4, resource: this.gridTexture.createView({dimension: '2d-array'})},
       {binding: 6, resource: (kind === 'bake' ? this.routeTexture : this.fieldsTexture).createView()},
       {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat},
       {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})}]});
   }
 
-  // Group 1. The mineral-ring binding takes the chosen fringe texture, or
-  // whatever its GLSL sampler pointed at (the ground) when there is none.
-  materialBindGroup(fringe) {
+  // Group 1: the plain's tiles, the waters, the palette and the generated materials.
+  materialBindGroup() {
     return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
-      ...[this.textures.grass, this.textures[this.bound.uWater], this.textures[this.bound.uWaterShallow]].flatMap((t, i) => [
-        {binding: [0, 14, 16][i], resource: t.view}, {binding: [1, 15, 17][i], resource: t.sampler}]),
-      {binding: 18, resource: this.textures[this.bound.uPalette].view}, {binding: 19, resource: this.generated.view}]});
+      {binding: 0, resource: this.textures.grass.view}, {binding: 1, resource: this.textures.grass.sampler},
+      {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}]});
   }
 
-  // H8 bridge: the generated array for a world with no materials table. Its layers hold the world's own prepared images (bridgeCopy),
-  // 256 px images tiled 2 x 2 so a level-0 lookup reads what the shared draw's repeating sampler read; the mips are box filters of the images.
-  makeBridgeTexture() {
-    const texture = this.device.createTexture({label: 'bridged materials', size: [GENERATED_SIZE, GENERATED_SIZE, BRIDGE_LAYERS], format: 'rgba8unorm', mipLevelCount: GENERATED_LEVELS,
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT});
-    this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
-  }
-  bridgeCopy(key, bitmap) {
-    const layers = key === 'rock' && this.variant.get('material') !== 'varied' ? [1, 2, 3] : [BRIDGE_LAYER[key]];   // without rock layers the weathered and fractured slots are the rock
-    if (layers[0] === undefined) return;
-    const {width, height} = bitmap;
-    if (GENERATED_SIZE % width || GENERATED_SIZE % height) throw new Error(`nanolathe: bridged material ${key} is ${width} x ${height}; it must divide ${GENERATED_SIZE}`);
-    for (const layer of layers) for (let y = 0; y < GENERATED_SIZE; y += height) for (let x = 0; x < GENERATED_SIZE; x += width)
-      this.device.queue.copyExternalImageToTexture({source: bitmap}, {texture: this.generated.texture, origin: [x, y, layer], premultipliedAlpha: false}, [width, height]);
-  }
   // The ten placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the knobs the
   // shared draw's placement read. Green's rows are materials/green.json's.
   placementRows(variant) {
@@ -707,6 +681,9 @@ export class TerrainRenderer {
     buffer.destroy();
     return {size, data: Array.from(out)};
   }
+
+  // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
+  get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, materials: this.startupMs, total: this.generationMs}; }
 
   // H4 item 2: the land materials of materials/green.json made on the GPU, once at startup and again when the table changes.
   // One layer per material, GENERATED_SIZE px square, MIP levels halving down to 8 px; level L is made with a footprint of 2^L
@@ -792,7 +769,7 @@ export class TerrainRenderer {
     };
   }
 
-  draw({quality = 'preview', clay = false, light = 'original', fractures = 0, scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, fringeStyle = 'veins', materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
+  draw({quality = 'preview', clay = false, light = 'original', fractures = 0, scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
     const full = quality === 'full';
     this.i('uFull', full);
@@ -803,10 +780,9 @@ export class TerrainRenderer {
     this.i('uMaterialReady', this.materialReady);
     const useBody=this.transitionBody && this.materialReady && weatherAmount>0;
     this.i('uTransitionBody', Boolean(useBody));
-    this.f('uFractureAmount', this.config.textures.fractures ? fractures : 0);
+    this.f('uFractureAmount', fractures);
     this.f('uDetail', this.variant.get('relief') === 'base' ? 0 : detail);
-    const fringeTexture = Boolean(this.config.textures.mineralRing);
-    this.f('uRingAmount', fringeTexture ? ring : 0);
+    this.f('uRingAmount', this.layers.has('ring') ? ring : 0);
     this.f('uRingSpread', ringSpread);
     this.f('uRingVariation', ringVariation);
     this.i('uScree', scree > 0);
@@ -855,7 +831,7 @@ export class TerrainRenderer {
     pass.setPipeline(this.drawPipeline);
     if (this.chunkViewport) pass.setViewport(...this.chunkViewport, 0, 1);
     pass.setBindGroup(0, this.commonBindGroup('draw'));
-    pass.setBindGroup(1, this.materialBindGroup(fringeTexture));
+    pass.setBindGroup(1, this.materialBindGroup());
     const mesh = this.meshes[full ? 1 : 0];
     pass.setVertexBuffer(0, mesh.vertices);
     pass.setIndexBuffer(mesh.indices, 'uint32');
@@ -873,7 +849,7 @@ export class TerrainRenderer {
     const variant = this.variant;
     this.setStrataSpacing();
     // Placement is live state too: refreshing only scalar uniforms left these
-    // controls frozen at startup in both generated and bridged materials.
+    // controls frozen at startup in the generated materials.
     this.set('uMaterialTable', this.placementTable(variant));
     this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1));
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
@@ -1152,8 +1128,8 @@ export class TerrainRenderer {
     set('uBandRelief', number('bandRelief', 0));
     set('uBandWander', number('bandWander', 0));
     set('uBandGaps', number('bandGaps', 0));
-    set('uBeachDistance', this.config.textures.beach ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
-    set('uHasBeach', Boolean(this.config.textures.beach));
+    set('uBeachDistance', this.layers.has('beach') ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
+    set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));

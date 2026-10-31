@@ -7,10 +7,6 @@
 // ground, as the GLSL sampler pointed at the ground's unit).
 @group(1) @binding(0) var grassTex: texture_2d<f32>;
 @group(1) @binding(1) var grassSamp: sampler;
-@group(1) @binding(14) var waterTex: texture_2d<f32>;
-@group(1) @binding(15) var waterSamp: sampler;
-@group(1) @binding(16) var waterShallowTex: texture_2d<f32>;
-@group(1) @binding(17) var waterShallowSamp: sampler;
 @group(1) @binding(18) var paletteTex: texture_2d<f32>;
 // H4: the land materials of materials/green.json, made at startup (engine-materials.wgsl): a layer per material, a mip level per footprint.
 @group(1) @binding(19) var generatedTex: texture_2d_array<f32>;
@@ -145,7 +141,7 @@ fn cavityDepth(p: vec2f, h: f32) -> f32 {
 
 // Two-entry mixes: retail art shows colours the palette lacks as pixel
 // mixes of two entries (Painted Desert's tans are 50/50 pairs). The lookup's
-// rows 32-63 and 64-95 hold the colour's best pair (palette_pairs.py); the
+// rows 32-63 and 64-95 hold the colour's best pair (engine-palette.wgsl); the
 // mix along A-B is measured per pixel and a per-pixel threshold picks one.
 fn palettePair(rgb: vec3f, threshold: f32) -> vec3f {
     let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
@@ -222,8 +218,8 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
 
 // Base ground from a fixed set of 32-px tiles, randomly placed on the TNT
 // tile grid, so level ground costs only uGroundTiles unique tiles. The tiles
-// are sampled offline from retail neighbour statistics (ground_tiles.py) and
-// stored in the first row of the ground texture.
+// are measured offline from retail neighbour statistics (the table's `ground` data) and
+// drawn into the first row of the ground texture at startup.
 fn groundHash(q: vec3i) -> f32 {
     var n = u32(q.x) * 374761393u + u32(q.y) * 668265263u + u32(q.z) * 2246822519u;
     n = (n ^ (n >> 13u)) * 1274126177u;
@@ -257,7 +253,7 @@ fn groundSource(pixel: vec2f) -> vec3f {
 #endif
     return groundTile(pixel);
 }
-fn grassImage(pixel: vec2f) -> vec3f { if (u.bridged != 0) { return bridgeGrassImage(pixel); } return genColor(0, pixel); }
+fn grassImage(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
 // Lab histogram of the rock face is worse with it (.057/.076/.083 against .049/.067/.079 by class).
@@ -1837,12 +1833,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
             else { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
         }
-        let waterSize = vec2f(textureDimensions(waterTex, 0));
-        let grain = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb - u.waterMean;
+        let grain = genColor(u.waterLayer, pixel) - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
         if (u.nativeShallows != 0 && u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
-            var shallow = pixelSample(waterShallowTex, waterShallowSamp, pixel, vec2f(textureDimensions(waterShallowTex, 0))).rgb;
-            let deepWater = pixelSample(waterTex, waterSamp, pixel, waterSize).rgb;
+            var shallow = genColor(u.shallowLayer, pixel);
+            let deepWater = genColor(u.waterLayer, pixel);
             // The lit bed: the ground under the water, lit by the same sun and
             // tinted, replaces the shallow art's noise (retail draws its shallows
             // as the lit terrain through a blue tint).

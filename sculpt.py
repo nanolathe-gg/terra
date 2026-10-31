@@ -12,8 +12,8 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
-    'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
+    'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
+    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-noise.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -72,7 +72,7 @@ KNOB_DEFAULTS = dict(
     # 1 or 2; the world knobs default to the earlier noise water, a ramp from
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
-    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, fringeStyle='veins', bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=4,
+    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
@@ -368,7 +368,7 @@ WORLD_KNOBS = {
                         # shading give (103, 92, 76) and 7% dark. The ring is the curved 'Nested
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
-                        hillLight=1.25, ringFade=1, fringeStyle='rings',
+                        hillLight=1.25, ringFade=1,
                         bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20,
                         # E11 (round 7 report: "weird black/dark lines around the hills" and "more
                         # noticeable circle features in the red fringe"): the dark lines were the
@@ -479,7 +479,7 @@ WORLD_KNOBS = {
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
     # colour-by-depth ramp, so no depth averaging (authored from the
-    # sections, see sculpt_section_biome.py 'lava'). Its bank ridges are
+    # sections, measured by measure/). Its bank ridges are
     # irregular, not banded (section measurement), so no contour bands.
     # Bank lines measured on the section-built retail maps (measure/lava_*):
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
@@ -533,8 +533,7 @@ WORLD_KNOBS = {
     # Crystal: dead-level violet ground (the flat sections sit at one height
     # or within 82-87), crater walls and rough ridges crazed by a near-black
     # polygonal crack web, plates rather than rills by eye, and no sand or
-    # beach (authored from the sections, see
-    # sculpt_section_biome.py 'crystal'). Its column fields are a separate
+    # beach (authored from the sections). Its column fields are a separate
     # brush, not these knobs. The web's plates on the rough ridges measure
     # 14.7 px across at the median (max caliper 20; measure/
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
@@ -595,7 +594,7 @@ WORLD_KNOBS = {
     # shaded faces are smooth slate streaks with no crack network, and a
     # pack-ice shelf instead of a beach; its banks into the water are white
     # floes, never the slate of the shaded hill faces (authored from the
-    # sections, see sculpt_section_biome.py 'ice').
+    # sections).
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
     'ice': dict(undulation=4, plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
@@ -709,9 +708,9 @@ WORLD_VARIANTS = {
     'zhon': {
         # The river family (card B4): the reproduction windows' sections are
         # river sections, whose water is brown at the shore and dark olive in
-        # the deeps, not the coast's grey-green and teal. The textures come
-        # from the family's other sections (sculpt_section_biome.river_water);
-        # 'river' names the config block they are prepared into.
+        # the deeps, not the coast's grey-green and teal. Its two water
+        # materials (riverWater, riverShallow) and its material and water
+        # numbers are the `river` block of materials/zhon.json.
         # The river's colour by depth reaches its deep end by ~40 units, not
         # the coast's 60 (windows zhon-1..3 at 34-44 / 44-56: R 57 / 40), and
         # it varies over a short reach, so the depth average is tighter. Mean
@@ -752,7 +751,7 @@ def apply_variant(config, biome, variant):
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
     if v.get('river'):
-        # Swap in the world's river water (textures, ramp, mean colours).
+        # Swap in the world's river water (its material and water numbers, which name the river's two water materials).
         for key, value in copy.deepcopy(config['river']).items():
             out[key] = {**out.get(key, {}), **value}
     out['baseColors'] = dict(config.get('colors', {}))
@@ -764,51 +763,18 @@ def apply_variant(config, biome, variant):
     return out
 
 
-# Red's shallow water, lifted toward retail's (card B4). The quilted purple is
-# the mean of the coast sections' interiors. Across the three Red windows the
-# retail pixels at depths 0-12 average (106, 65, 117) against the texture as
-# drawn (91, 53, 109): brighter by 15 in red and 12 in green, and the pools of
-# red-2 reach (125, 80, 138). A share of the texture is replaced by a light
-# lilac, which lifts the level and keeps the grain and the hue family.
-RED_SHALLOW_LIFT = 0.18
-RED_SHALLOW_LILAC = (200, 150, 170)
-
-
-def lighten_red_shallows(config, assets):
-    import numpy as np
-    from PIL import Image
-    src = Path(assets) / 'red-water-shallow.png'
-    img = np.asarray(Image.open(src).convert('RGB'), np.float32)
-    lit = (img * (1 - RED_SHALLOW_LIFT) + np.asarray(RED_SHALLOW_LILAC, np.float32) * RED_SHALLOW_LIFT).round().astype(np.uint8)
-    Image.fromarray(lit).save(Path(assets) / 'red-water-shallow-lit.png')
-    config['textures']['waterShallow'] = '/sculpt-assets/red-water-shallow-lit.png'
-    mean = lit.reshape(-1, 3).mean(axis=0).tolist()
-    config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
-
-
-# H8, H14: the worlds whose land materials are numbers. The engine makes their layers from the table; every other world bridges its
-# prepared images. A table also holds the world's `material` and `water` blocks, which the config no longer carries.
+# Every world is described by one committed table, materials/<world>.json (measured and fitted by measure/): the materials its layers are
+# made from, its `material` and `water` numbers, its page defaults and base height (`world`), and, for Zhon, its river variant. Nothing
+# here reads an image or a retail source, so a server needs no assets folder to draw a world.
 MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'desert': '/materials/desert.json', 'zhon': '/materials/zhon.json', 'lava': '/materials/lava.json', 'ice': '/materials/ice.json', 'red': '/materials/red.json', 'crystal': '/materials/crystal.json', 'archipelago': '/materials/archipelago.json'}
 SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
-# The images a table replaces: the page never fetches them, so the config does not name them.
-TABLE_IMAGES = ('grass', 'groundTiles', 'slopeGrass', 'rock', 'hillRock', 'rockWeathered', 'rockFractured')
-
-
-def apply_material_table(biome, config):
-    """Point the config at the world's committed table and take its material and water numbers from it."""
-    table = json.loads((Path(__file__).resolve().parent / MATERIAL_TABLES[biome].lstrip('/')).read_text())
-    config['materialTable'] = MATERIAL_TABLES[biome]
-    config['material'] = table['material']
-    config['water'] = table['water']
-    for key in TABLE_IMAGES:
-        config['textures'].pop(key, None)
+SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
+SOURCES['materials/fractures.png'] = HERE / 'materials' / 'fractures.png'   # ours (measure/make_fractures.py made it): one crack field for every world
 
 
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
-    if biome in MATERIAL_TABLES:
-        apply_material_table(biome, config)
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
@@ -817,226 +783,52 @@ def world_knobs(biome, config):
     return config
 
 
-def biome_config(biome, assets, prepared=False):
-    """Prepare one biome's materials in its own asset folder and return its
-    page configuration, with texture URLs under /sculpt-assets/<biome>/.
-    The result is saved as config.json; prepared loads that instead, for an
-    assets bundle without the retail sources (BUNDLE.md)."""
-    saved = assets / 'config.json'
-    if prepared:
-        # Knobs come from this checkout, not the saved file, so a card can
-        # add or retune one without the retail sources.
-        return world_knobs(biome, json.loads(saved.read_text()))
-    from sculpt_fractures import make_fracture_field
-    if biome in ('moon', 'zhon', 'lava', 'crystal', 'ice'):
-        # Measured from a decoded section catalog (sculpt_section_biome.py).
-        from sculpt_section_biome import prepare_section_biome
-        config = prepare_section_biome(biome, assets)
-    elif biome == 'archipelago':
-        from sculpt_archipelago_materials import prepare_archipelago_assets
-        config = prepare_archipelago_assets(assets)
-    elif biome in ('red', 'desert'):
-        # Painted Desert is an authored world on Red Planet's materials.
-        from sculpt_red_materials import prepare_red_assets, prepare_structured_red_assets
-        config = prepare_red_assets(assets)
-        structured = prepare_structured_red_assets(assets)
-        config['textures']['slopeStructured'] = structured['slope']['texture']
-        # This biome's slope and exposed face are one cracked material family.
-        config['textures']['rockStructured'] = structured['slope']['texture']
-    else:
-        from sculpt_materials import prepare_assets, DEFAULT_DATA
-        from sculpt_slope_material import make_slope_material
-        from sculpt_rock_layers import make_rock_layers
-        config = prepare_assets(assets)
-        slope = make_slope_material(DEFAULT_DATA, assets)
-        config['textures']['slopeGrass'] = '/sculpt-assets/slope-grass.png'
-        config['textures']['hillRock'] = '/sculpt-assets/slope-rock.png'
-        config['material']['hillRockMeanRGB'] = slope['rockMeanRGB']
-        make_rock_layers(DEFAULT_DATA, assets)
-        config['textures']['rockWeathered'] = '/sculpt-assets/rock-weathered.png'
-        config['textures']['rockFractured'] = '/sculpt-assets/rock-fractured.png'
-        from ground_tiles import make_ground_tiles
-        make_ground_tiles(assets, DEFAULT_DATA / 'corpus')
-        config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
-    make_fracture_field(assets)
-    config['textures']['fractures'] = '/sculpt-assets/fractures.png'
-    # Palette lookup with two-entry mixes (rows 0-31 are the nearest entry,
-    # as before); the shader uses the pair rows when Mix palette pairs is on.
-    from palette_pairs import make_pair_lut
-    make_pair_lut(assets)
-    config['textures']['palette'] = '/sculpt-assets/palette-pairs.png'
-    config.update(size=1024, grid=512, baseHeight=24, seaLevel=0, biomeId=biome, biome=BIOME_NAMES[biome])
-    # Accepted Green Planet authoring profile. Explicit query values still
-    # select older comparisons; plain /sculpt opens the reviewed treatment.
-    config['defaults'] = dict(noise='ridged', coverage='form', rock='hill',
-        lighting='front', surface='slopes', scene='compact',
-        transition='soil', material='varied',
-        fractures='40', scree='70', shade='separate')
-    config['material'].update(materialWeathering=0.0, depositSpread=.65)
-    if biome == 'green':
-        # Water colour by depth measured on the retail Green coast sections.
-        config['material'].update(shallowDepth=24, deepDepth=60)
-    if biome in ('red', 'desert'):
-        config['defaults'].update(surface='structured', transition='mineral', material='single', fractures='80', scree='0')
-        if biome == 'red':
-            lighten_red_shallows(config, assets)
-        config['material'].update(rockyCoasts=True, surfaceRelief=1.25, fractureDepth=1.25,
-                                  slopeStart=.06, slopeFull=.30, slopeFloor=-4.0, slopeDry=5.0)
-    elif biome == 'archipelago':
-        # Low sandy islands need little rise above water. This is an authored
-        # scene default, not an inferred conversion of native section heights.
-        config['baseHeight'] = 8
-        config['defaults'].update(surface='structured', transition='mineral', material='single',
-                                  fractures='20', scree='0', example='islands')
-        config['material'].update(rockyCoasts=False, surfaceRelief=.45, fractureDepth=.35,
-                                  slopeStart=.08, slopeFull=.35, slopeFloor=6.0, slopeDry=8.0,
-                                  slopeOnLowBanks=False, elevatedCover=[0, 30, .92], rampMaterial=1.0,
-                                  groundFringe=True, ringAmount=.7, ringSpread=.35, ringVariation=.5,
-                                  fringeSignal=[1, -1, 0, 0], fringeRange=[.08, .28], materialWeathering=1.0,
-                                  transitionDetail=.65)
-    elif biome == 'moon':
-        # Craters are the Moon's feature and it has no water. Its slopes keep
-        # the light ejecta material down to the level dust (authored profile).
-        # Lunar dust is flat between craters: little broad relief, no cracks.
-        config['defaults'].update(example='hills', material='single', fractures='0', scree='40')
-        config['material'].update(rockyCoasts=False, surfaceRelief=.35, slopeFloor=-4.0, slopeDry=4.0)
-    elif biome == 'zhon':
-        # Zhon's level ground sits only ~3 height units above its measured
-        # shoreline (sea 59, flats 62); 8 leaves the editor's water tools room,
-        # as Archipelago's authored base does.
-        config['baseHeight'] = 8
-        config['defaults'].update(example='islands', material='single', fractures='20', scree='0')
-        # Its slope art is sandy (streaked dune slopes): shown where sand
-        # lies beneath and on ramps, which are sand in its sections.
-        config['material'].update(rockyCoasts=False, slopeStart=.08, slopeFull=.40,
-                                  slopeFloor=6.0, slopeDry=9.0, slopeSand=True, rampMaterial=1.0)
-    elif biome == 'lava':
-        # Lava's land stands ~21 units above its measured shoreline (sea 24,
-        # flats 45), close to the default base of 24, which stays. Its coasts
-        # interlock land and lava fingers; the ridged slope material runs
-        # down the banks to the lava's edge, and the section slope class
-        # starts at 3 units per 16-px cell (~.19 per px). Authored profile.
-        # Faces between the bank lines keep the ground's colour; the dark
-        # striated rock is for cliffs only (measured shaded luma 51/45/38 at
-        # slopes 0.4/0.65/1.0). Lava does not wet the ground.
-        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0',
-                                  faceSlope='1.4,2.2', rockShare='0.1,0.8')
-        config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
-                                  slopeFloor=-4.0, slopeDry=2.0, rockSlope=2.4, wetBand=1.01)
-    elif biome == 'crystal':
-        # Crystal's land stands 20 units above the sea its retail maps set
-        # (land 85, sea 65 on all four), close to the default base of 24,
-        # which stays. Its maps are mostly water with column-covered islands
-        # and hills. The section slope class starts at 2 units per 16-px
-        # cell (~.125 per px) and the crack-webbed bank runs down to the
-        # shelf. Authored profile.
-        config['defaults'].update(example='columns', material='single', fractures='40', scree='0')
-        # Its level ground is streaked on one diagonal (retail crystal
-        # cracked: along-streak correlation of high-passed luma .12/.08 at
-        # 6/12 px, 60 degrees). The 32-px tile model loses the streaks
-        # (.00/.03); the quilted ground texture keeps them (.14/.09).
-        config['defaults'].update(ground='texture')
-        # Column tops: violet palette entries 220/221 (lit ~luma 60-78),
-        # mean (74,58,90) over 3632 measured tops (crystal-geometry.json).
-        config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.08, slopeFull=.25,
-                                  slopeFloor=-4.0, slopeDry=2.0, crystalRGB=[74, 58, 90])
-    elif biome == 'ice':
-        # Ice's snow stands 20 units above its measured shoreline (sea 65,
-        # flats 85; retail maps set 75 and draw the floe shelf below it), so
-        # the default base of 24 stays. Snow slopes stay white to the floes;
-        # slope class from 3 units per 16-px cell (~.19 per px). Authored
-        # profile.
-        config['defaults'].update(example='coasts', material='single', fractures='0', scree='0')
-        # Ice blocks: snow tops (216,231,253).
-        config['material'].update(rockyCoasts=False, surfaceRelief=.6, slopeStart=.1, slopeFull=.3,
-                                  slopeFloor=-4.0, slopeDry=4.0, crystalRGB=[205, 220, 245])
-    world_knobs(biome, config)
-    if biome == 'zhon':
-        # Zhon's domes are blue-grey (retail sections: mean (43,57,81), median
-        # luminance 52); its rock art renders neutral grey, so the world
-        # defaults its rock colour to match.
-        config['colors'] = {'rock': '#3d5174'}
-    if biome == 'desert':
-        # Measured on the retail map. Its tans are 50/50 mixes of two palette
-        # entries (orange 20+178, cool 84+65), which nearest-colour cannot
-        # make, so the world stays full colour until the palette stage mixes
-        # index pairs. Bed colour slots: 1 orange (189,143,105), 2 cool
-        # band and cap (190,198,185), 3 upper rock (lit ~(159,152,135)).
-        # Slot 5 (card E8): the grey band at the foot of the raised ground, retail's neutral grey
-        # (mean (118,115,112) over its pixels; palette entries 88-89 in pairs).
-        # Card G4: slot 0 (the orange beds) from (189,143,105) to (189,140,108). Picture orange (R-B > 40, 5x5 mean) on the
-        # three windows, retail / before: hue 21.9 / 26.0, 21.4 / 23.8, 21.8 / 25.4; G/B 1.25 / 1.33, 1.21 / 1.27, 1.25 / 1.31.
-        config['strataColors'] = [[189, 140, 108], [190, 198, 185], [150, 144, 128], [175, 111, 90], [118, 115, 112]]
-        # Zones by height above the plain: orange with cool bands (share
-        # ~0.2 low, ~0.4 by 17), the pale cap from ~56-60 (share 0.95), grey
-        # rock with orange lines above ~69 (card E3: rust-pink lines, so the strata stay
-        # readable on the tall buttes instead of one grey; card E8: share .4 -> .3 with
-        # the beds 11 thick, which keeps the lines 2-5 units wide as on retail's buttes).
-        config['strataZones'] = [[1, 0, 1, .2], [17, 0, 1, .4], [53, 0, 1, .4], [58, 0, 1, .95], [69, 2, 3, .3]]
-        # Card E8: bed thickness per zone. Orange-line gaps on the lit flanks of retail's
-        # raised ground (measure/desert_strata_gaps.py): median 10.8 units above 70 (14 px),
-        # 8.1 from 20 up; the aprons keep the world's 6.
-        config['strataZoneSpacing'] = [6, 6, 6, 6, 11]
-        config['defaults']['example'] = 'mesas'
-        # The plain: exact-index tiles from the retail map's level ground,
-        # when the map has been exported (see ground_tiles.py).
-        retail = Path('/private/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3')
-        if retail.is_dir():
-            from ground_tiles import make_ground_tiles
-            tiles = make_ground_tiles(assets, retail, name='ground-tiles', per_map=2000, skip=(), above_sea=0, tolerance=2,
-                                      max_height=8, max_vocab=32)
-            config['textures']['groundTiles'] = '/sculpt-assets/ground-tiles.png'
-            # Retail mixes each bed from the same ramps when shaded (orange
-            # is mauve 19-22 over yellow 177-181, the cap greys 83-86 with
-            # cream 65-67 and mint 50-51); over the whole palette, shading
-            # walked the orange onto grey 86 + bright orange 198, which the
-            # map never uses. Pairs come only from the entries of the map's
-            # raised ground (99%) and its plain tiles.
-            from palette_pairs import make_pair_lut, retail_entries
-            make_pair_lut(assets, name='palette-pairs-desert.png', entries=retail_entries(retail) + tiles['vocabulary'])
-            config['textures']['palette'] = '/sculpt-assets/palette-pairs-desert.png'
-    config['assetBase'] = f'/sculpt-assets/{biome}/'
-    config['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['textures'].items()}
-    if 'river' in config:
-        config['river']['textures'] = {k: v.replace('/sculpt-assets/', config['assetBase'], 1) for k, v in config['river']['textures'].items()}
-    config['biomes'] = BIOME_NAMES
-    saved.write_text(json.dumps(config))
-    return config
+def export_defaults(biome):
+    """The map export's per-world defaults (retail planet, sea level, OTA climate medians), committed in the world's table."""
+    return json.loads((HERE / MATERIAL_TABLES[biome].lstrip('/')).read_text())['world']['export']
+
+
+def biome_config(biome):
+    """One world's page configuration, built from its table."""
+    table = json.loads((HERE / MATERIAL_TABLES[biome].lstrip('/')).read_text())
+    world = copy.deepcopy(table['world'])
+    world.pop('export', None)   # the page's world catalogue (EXPORT_DEFAULTS), not the page's config
+    config = {'biome': BIOME_NAMES[biome], 'biomeId': biome, 'size': 1024, 'grid': 512, 'seaLevel': 0, 'baseHeight': world.pop('baseHeight', 24),
+              'materialTable': MATERIAL_TABLES[biome], 'layers': table['order'],   # the materials the table makes: which optional stages (body, beach, ring) the world has
+              'material': table['material'], 'water': table['water'], **world}
+    if 'river' in table:
+        config['river'] = table['river']   # the river variant's material and water numbers (WORLD_VARIANTS)
+    return world_knobs(biome, config)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8767)
     parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert,crystal,ice',
-                        help='comma-separated biomes to prepare; the first is the default')
+                        help='comma-separated biomes to serve; the first is the default')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
-                        help='each biome prepares its materials in <root>/assets-<biome>')
+                        help='where exports, saved documents and the map and feature catalogues live; the worlds themselves need nothing here')
     parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export)')
     parser.add_argument('--feature-tool', type=Path, help='Card D feature catalogue binary (default <assets-root>/bin/map-features)')
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
-    parser.add_argument('--prepared', action='store_true', help='load each world from its saved config.json and the saved map-catalog.json and feature catalogues, without the retail sources (BUNDLE.md)')
+    parser.add_argument('--prepared', action='store_true', help='read the saved map-catalog.json and feature catalogues in the assets root instead of the retail sources (BUNDLE.md); worlds never read retail sources')
     args = parser.parse_args()
     from sculpt_export import MapExport
     from sculpt_document import MapDocument
     map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
     map_document = MapDocument(args.assets_root / 'documents')
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
-    assets = {b: args.assets_root / f'assets-{b}' for b in biomes}
-    configs = {}
-    for b in biomes:
-        # A world whose source data is missing (e.g. a section catalog) is
-        # skipped with a message rather than stopping the server.
-        try:
-            configs[b] = biome_config(b, assets[b], args.prepared)
-        except (FileNotFoundError, OSError, ValueError) as err:
-            print(f'skipping world {b}: {err}', flush=True)
-    biomes = [b for b in biomes if b in configs]
+    configs = {b: biome_config(b) for b in biomes}
+    # What the page reads of the map catalogue is committed with the worlds; only an export reads the installed content.
+    catalogue = {'worlds': {b: export_defaults(b) for b in biomes}}
+    feature_tool = args.feature_tool or args.assets_root / 'bin' / 'map-features'
+    # A world has features to offer when its catalogue is saved (prepared) or the helper that makes it is built.
+    features_installed = lambda world: (args.assets_root / 'features' / world / 'catalog.json').is_file() or (not args.prepared and feature_tool.is_file())
     # Any world may take another's ground pattern (World panel); the
     # pattern's mean is replaced by the world's ground colour.
     # A table world with no tile data (a quilted plain generated as a layer) has no pattern to lend; every other world does.
-    patterns = {b: {'name': BIOME_NAMES[b], 'grass': configs[b]['textures'].get('grass'),
-                    'groundTiles': configs[b]['textures'].get('groundTiles'), 'groundTable': configs[b].get('materialTable')} for b in biomes
-                if not configs[b].get('materialTable') or 'ground' in json.loads((HERE / configs[b]['materialTable'].lstrip('/')).read_text())}
+    patterns = {b: {'name': BIOME_NAMES[b], 'groundTable': configs[b]['materialTable']} for b in biomes
+                if 'ground' in json.loads((HERE / configs[b]['materialTable'].lstrip('/')).read_text())}
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns
@@ -1045,6 +837,14 @@ def main():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlsplit(self.path).path
+            if path == '/map-catalog.json':
+                map_export.reply(self, catalogue)
+                return
+            parts = path.split('/')
+            if len(parts) == 4 and parts[1] == 'map-features' and parts[3] == 'catalog.json' and not features_installed(parts[2]):
+                # A server without the installed content has no feature set to offer: an empty catalogue, with the reason.
+                map_export.reply(self, {'world': parts[2], 'features': [], 'unavailable': 'This server has no feature catalogue installed, so no features can be placed; start positions remain editable.'})
+                return
             try:
                 if map_document.get(self, self.path) or map_export.get(self, self.path):
                     return
@@ -1076,14 +876,6 @@ def main():
                 if name in ('', 'sculpt'):
                     name = 'sculpt.html'
                 file = SOURCES.get(name)
-                if path.startswith('/sculpt-assets/'):
-                    biome, _, leaf = path.removeprefix('/sculpt-assets/').partition('/')
-                    if biome in configs:
-                        allowed = {v.rsplit('/', 1)[-1] for v in configs[biome]['textures'].values()}
-                        allowed.update(v.rsplit('/', 1)[-1] for v in configs[biome].get('river', {}).get('textures', {}).values())
-                        allowed.update(('rock-restrained.png', 'rock-structural.png', 'noise-ridged-gaussian.png'))
-                        if leaf in allowed:
-                            file = assets[biome] / leaf
                 if file is None or not file.is_file():
                     self.send_error(404)
                     return

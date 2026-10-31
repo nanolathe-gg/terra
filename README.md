@@ -34,8 +34,8 @@ terrain, features, starts and OTA settings. Limits and later phases are in
 Where the terrain engine is going (ground, weathering, surface and light) is
 in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md).
 
-The prepared `assets-*` folders must already be copied under that assets root,
-as the backlog specifies. Helpers read `~/TotalAnnihilation` without writing
+The nine worlds need nothing under the assets root: each is drawn from its committed table in `materials/`, and a server with an
+empty assets root opens every world (without feature sprites or exports, which read the installed content). Helpers read `~/TotalAnnihilation` without writing
 to it. To use other content, repeat `--game-root DIR` in mount order.
 `--export-tool PATH` and `--feature-tool PATH` select helpers built elsewhere.
 Restart the server after Python edits or changing installed content. Each

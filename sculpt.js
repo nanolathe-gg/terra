@@ -779,7 +779,7 @@ function endRegionalMove(commit=true) {
   selectNode(gesture.index); updateControls(); schedule(); queueWeather(); return commit?gesture.index:false;
 }
 function currentDrawOptions() {
-  return {clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
+  return {clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
 }
 function regionalHeightCell(x,y) {
   const h=regionalFields.cell(x,y),i=y*worldGrid+x;
@@ -1148,7 +1148,7 @@ function sketch() {
   return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
-    ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
+    ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
     tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),shelves:Number($('shelves').value),shallowMode:$('shallow-mode').value,fractures:Number($('fractures').value),scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'stroke-graph'};
 }
 function persistLater() {
@@ -1173,7 +1173,6 @@ function loadSketch(s) {
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
-  if (['rings','veins'].includes(s.fringeStyle)) $('fringe-style').value=s.fringeStyle;
   nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
@@ -1275,7 +1274,6 @@ $('tool-style').addEventListener('change',() => {
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for (const id of ['mineral-ring','ring-spread','ring-variation']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for(const id of ['material-weathering','deposit-spread']) $(id).addEventListener('input',()=>{markViewChanged();updateControls();schedule();queueWeather();persistLater();});
-$('fringe-style').addEventListener('change',() => { markViewChanged(); schedule(); persistLater(); });
 $('fractures').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 $('shallow-mode').addEventListener('change',() => { rememberTool(true); updateControls(); persistLater(); if (selected>=0) { editSelectedFromControls(); checkpoint(); queueWeather(); } });
 $('scree').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); queueWeather(); persistLater(); });
@@ -1467,7 +1465,7 @@ function buildWorldPanel() {
   variantSelect.onchange=() => goToWorld(config.biomeId,worldId===config.biomeId?null:worldId,{variant:variantSelect.value});
   const rows=$('world-colors'); rows.replaceChildren();
   for (const [key,label] of COLOR_KEYS) {
-    if (key==='beach' && !config.textures.beach) continue;
+    if (key==='beach' && !config.layers.includes('beach')) continue;
     if (key.startsWith('strata') && !(Number(experiment.get('strata'))>0)) continue;
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
@@ -1529,8 +1527,6 @@ function buildKnobs() {
     row.append(box, label); render.append(row);
   };
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
-  // A world made from numbers has no sampled ground to switch to.
-  if (config.textures.grass) toggle('ground', 'Procedural ground texture (off: sampled texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
   // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
@@ -1637,17 +1633,8 @@ async function boot() {
     $('material-weathering').value=Math.round((config.material?.materialWeathering??0)*100);
     $('deposit-spread').value=Math.round((config.material?.depositSpread??.65)*100);
     $('transition-detail').value=Math.round((config.material?.transitionDetail??.65)*100);
-    $('transition-detail-control').hidden=!config.textures.transitionBody;
-    $('ring-controls').hidden=!config.textures.mineralRing && !config.textures.mineralRings;
-    $('fringe-style').querySelector('[value="veins"]').disabled=!config.textures.mineralRing;
-    $('fringe-style').querySelector('[value="rings"]').disabled=!config.textures.mineralRings;
-    // The shared renderer currently has one bridged fringe layer. Switching
-    // this legacy texture selector never changes that layer; keep saved values
-    // readable, but do not offer an ineffective control.
-    $('fringe-style').closest('.control').hidden=true;
-    // The world's own choice (fringeStyle, a string knob): Archipelago's retail rings are
-    // curved contours, not veins.
-    $('fringe-style').value=config.textures.mineralRings&&(!config.textures.mineralRing||experiment.get('fringeStyle')==='rings')?'rings':'veins';
+    $('transition-detail-control').hidden=!config.layers.includes('body');
+    $('ring-controls').hidden=!config.layers.includes('ring');
     $('mineral-ring').value=Math.round((config.material?.ringAmount??0)*100);
     $('ring-spread').value=Math.round((config.material?.ringSpread??.65)*100);
     $('ring-variation').value=Math.round((config.material?.ringVariation??.7)*100);
@@ -1694,8 +1681,8 @@ async function gpuRegionalCheck() {
     return {grid:G,planes,mismatches,gpuShape:true};
   } finally { engine.destroy(); }
 }
-window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level),
-  drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
+window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
+  drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),
   // replayDetail: the same, per field key (h, then the mask planes).

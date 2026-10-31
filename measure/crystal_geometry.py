@@ -31,7 +31,8 @@ from scipy import ndimage as ndi
 from scipy.spatial import ConvexHull, cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from sculpt_section_biome import PALETTE, palette_codes, project_cells  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from section_common import PALETTE, palette_codes, project_cells  # noqa: E402
 
 LUMA = np.array([.299, .587, .114], np.float32)
 CATALOGS = Path('/private/tmp/nanolathe-map-editor/catalogs')
