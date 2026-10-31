@@ -13,11 +13,23 @@ const only = opt('--kinds', '') ? opt('--kinds', '').split(',') : null;
 const STEP = 4, W = 1100, H = 600, YC = 500, Y0 = YC - H / 2;
 const path = [[440, YC], [580, YC], [700, YC]];
 const SIZES = [140, 280, 560], AMOUNTS = [30, 80, 160];
+const SOFT = [.5, 0, .88, 1];
 const KINDS = {
-  plateau: {soft: [.5, 0, 1], amounts: AMOUNTS}, offset: {soft: [.5], amounts: [30, 80]}, lower: {soft: [.5], amounts: [30, 80]},
-  mountain: {soft: [.5, 0, 1], amounts: AMOUNTS}, hill: {soft: [.5, .88], amounts: AMOUNTS},
-  hillPlain: {kind: 'hill', extra: {crestJag: .01}, soft: [.5], amounts: AMOUNTS},
-  deep: {soft: [.5], amounts: [80]}, shallow: {soft: [.5], amounts: [80]},
+  plateau: {soft: SOFT, amounts: AMOUNTS}, offset: {soft: SOFT, amounts: AMOUNTS}, lower: {soft: SOFT, amounts: AMOUNTS},
+  mountain: {soft: SOFT, amounts: AMOUNTS}, hill: {soft: SOFT, amounts: AMOUNTS},
+  hillPlain: {kind: 'hill', extra: {crestJag: .01}, soft: SOFT, amounts: AMOUNTS},
+  deep: {soft: SOFT, amounts: AMOUNTS}, shallow: {soft: SOFT, amounts: AMOUNTS},
+  // Strokes that carry the stored section keys (cards in the UI's units), the authored apron, face, crown, shelf, terraces and lip.
+  secPlateau: {kind: 'plateau', extra: {profile: 1, apronPx: 50, apronHeight: 15, facePx: 130}, soft: [.5], amounts: [80, 160]},
+  secShare: {kind: 'plateau', extra: {profile: 1, faceCurve: -50}, soft: [0, .5, 1], amounts: [80]},
+  secConvex: {kind: 'offset', extra: {profile: 1, apronPx: 20, apronHeight: 10, faceCurve: 60}, soft: [.5], amounts: [80]},
+  secTerrace: {kind: 'offset', extra: {profile: 1, apronPx: 40, apronHeight: 15, facePx: 200, terraces: 7, ledge: 40, terraceJitter: 0}, soft: [.6], amounts: [80]},
+  secLip: {kind: 'plateau', extra: {profile: 1, facePx: 90, lip: 6}, soft: [.5], amounts: [80]},
+  secHill: {kind: 'hill', extra: {profile: 1, crown: 70, apronPx: 20, apronHeight: 10, facePx: 90}, soft: [.5], amounts: [70]},
+  secMountain: {kind: 'mountain', extra: {profile: 1, crown: 50, faceCurve: 30, apronPx: 30, apronHeight: 20}, soft: [.5], amounts: [80]},
+  secDeep: {kind: 'deep', extra: {profile: 1, apronPx: 30, apronHeight: 15, facePx: 90, shelfPx: 190, shelfDepth: 8}, soft: [.5], amounts: [80]},
+  secShelf: {kind: 'deep', extra: {profile: 1, facePx: 90, shelfPx: 150, shelfDepth: 12, shelfSteps: 3}, soft: [.5], amounts: [80]},
+  secBank: {kind: 'shallow', extra: {profile: 1, apronPx: 30, facePx: 90, terraces: 3, ledge: 50, terraceJitter: 0, lip: -8}, soft: [.5], amounts: [80]},
 };
 const cases = [];
 for (const [name, d] of Object.entries(KINDS)) { if (only && !only.includes(name)) continue; for (const size of SIZES) for (const amount of d.amounts) for (const soft of d.soft) cases.push({name, kind: d.kind || name, size, amount, soft, extra: d.extra || {}}); }

@@ -141,6 +141,18 @@ fn maskSet(i: u32, p: u32, v: i32) {
   Mk[at] = (w & ~(255u << sh)) | ((bitcast<u32>(v) & 255u) << sh);
 }
 
+// H15 part 2: one curve. The host samples a stroke's curve (height share against distance share from the foot, 0..1) at CV_N + 3 even steps, one step
+// before the foot to one past the top, into MW after the node's extra rows, four samples to a row. curveAt reads it with Catmull-Rom interpolation (linear
+// steps put visible slope kinks into the lighting). `off` is u.curveBase or u.backBase, relative to the node's rows past its mask writes.
+const CV_N = 32.0;
+fn cvAt(at: u32, k: u32) -> f32 { return MW[at + (k >> 2u)][k & 3u]; }
+fn curveAt(off: u32, t: f32) -> f32 {
+  let at = u.mwBase + u.nwrites + off;
+  let x = clamp(t, 0.0, 1.0) * CV_N; let k = min(u32(x), u32(CV_N) - 1u); let f = x - f32(k);
+  let p0 = cvAt(at, k); let p1 = cvAt(at, k + 1u); let p2 = cvAt(at, k + 2u); let p3 = cvAt(at, k + 3u);
+  return max(0.0, p1 + 0.5 * f * (p2 - p0 + f * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + f * (3.0 * (p1 - p2) + p3 - p0))));
+}
+
 // hillSection(): the shouldered hill's cross-section: a smoothstep to 0.67 of the way across, then a monotone cubic Hermite through
 // the knots (0.67, 0.78, 0.89, 1) at rises (1, 0.34, 0.02, 0); the host passes the tangents.
 fn hillSection(t: f32) -> f32 {
@@ -400,9 +412,9 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       var north = 0.0;
       if (u.northWiden > 0.0) { north = max(0.0, -(wy - cy)) / max(1e-3, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy))); }
       let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.northWiden * 0.32 * north * north, 0.12, 0.90);
-      w = 1.0 - sm(shoulder, 1.0, r);
+      if (u.cvOn != 0u) { w = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder)); } else { w = 1.0 - sm(shoulder, 1.0, r); }
     } else if (kind == 2u || kind == 3u) {
-      w = 1.0 - sm(0.10, 1.0, r);
+      if (u.cvOn != 0u) { w = curveAt(u.curveBase, (1.0 - r) / 0.9); } else { w = 1.0 - sm(0.10, 1.0, r); }
     } else if (kind == 5u && shouldered) {
       var face = vec2f(u.faceX, u.faceY);
       if (span2 > 0.0) { let len = sqrt(span2); face = vec2f(-sy / len * u.faceSide, sx / len * u.faceSide); }
@@ -424,7 +436,11 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       else { section = 0.67 + 0.33 * cross / u.faceWidth; }
       if (side2 > vv * vv) {
         let q = 1.0 - vv * vv / side2;
-        if (u.sOn != 0u && u.sBack > 0.0) {
+        if (u.cvOn != 0u) {
+          // H15 part 2: the face side reads the front curve over faceWidth, the back side the back curve over sBack (the lean) times that.
+          if (cross >= 0.0) { w = curveAt(u.curveBase, 1.0 - cross / u.faceWidth) * q * q; }
+          else { w = curveAt(u.backBase, 1.0 + cross / (u.sBack * u.faceWidth)) * q * q; }
+        } else if (u.sOn != 0u && u.sBack > 0.0) {
           // H15 two-sided section: the face side runs the cross-section over faceWidth, the back side a smoothstep over sBack times that.
           var sec = 0.0;
           if (cross >= 0.0) { sec = crossSection(cross / u.faceWidth, u.faceWidth * localRadius, F[PH * cells + i], nCW, nShelf, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)); }
@@ -433,7 +449,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
         } else { w = hillSection(section) * q * q; }
       }
     } else {
-      w = pow(1.0 - r * r, u.mexp);
+      if (u.cvOn != 0u) { w = curveAt(u.curveBase, 1.0 - r); } else { w = pow(1.0 - r * r, u.mexp); }
     }
     var lift = 0.0;
     if (u.sOn != 0u && !shouldered) {
@@ -709,13 +725,16 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
       var north = 0.0;
       if (u.northWiden > 0.0) { north = max(0.0, -(wy - cy)) / max(1e-3, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy))); }
       let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.northWiden * 0.32 * north * north, 0.12, 0.90);
-      w = 1.0 - sm(shoulder, 1.0, r);
+      if (u.cvOn != 0u) { w = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder)); } else { w = 1.0 - sm(shoulder, 1.0, r); }
       if (kind == 6u && u.mesaFlank > 0.0) {
         let cap = shoulder * (1.0 - 0.45 * u.mesaFlank); let tt = clamp((r - cap) / (1.0 - cap), 0.0, 1.0);
-        w = w + ((1.0 - tt) * (1.0 - tt) + (1.0 - sm(0.0, 1.0, tt)) * tt - w) * u.mesaFlank;
+        // The mesa curve is the back table over the cap's share; a fractional mesaFlank blends it with the plateau curve as before.
+        var mesa = (1.0 - tt) * (1.0 - tt) + (1.0 - sm(0.0, 1.0, tt)) * tt;
+        if (u.cvOn != 0u) { mesa = curveAt(u.backBase, (1.0 - r) / (1.0 - cap)); }
+        w = w + (mesa - w) * u.mesaFlank;
       }
     } else {
-      w = 1.0 - sm(0.0, 1.0, r);
+      if (u.cvOn != 0u) { w = curveAt(u.curveBase, 1.0 - r); } else { w = 1.0 - sm(0.0, 1.0, r); }
       if (kind == 8u) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
     }
     if (u.sOn != 0u) {
