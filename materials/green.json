@@ -1971,5 +1971,48 @@
   ],
   "deep": "water",
   "shallow": "shallow"
+ },
+ "world": {
+  "defaults": {
+   "noise": "ridged",
+   "coverage": "form",
+   "rock": "hill",
+   "lighting": "front",
+   "forms": "shouldered",
+   "surface": "slopes",
+   "scene": "compact",
+   "weather": "broad",
+   "transition": "soil",
+   "material": "varied",
+   "edges": "natural",
+   "fractures": "40",
+   "scree": "70",
+   "shade": "separate",
+   "fingerBlunt": "0",
+   "fingerCoast": "0",
+   "flowTint": "1",
+   "flowShallow": "0.85",
+   "flowStreak": "0.5",
+   "flowStreakLen": "140",
+   "flowBank": "0.9",
+   "faceRock": "1",
+   "hillLobes": "0",
+   "hillSteps": "8",
+   "lavaTread": "0"
+  },
+  "export": {
+   "planet": "Green planet",
+   "defaultSeaLevel": 75,
+   "climate": {
+    "minWind": 500,
+    "maxWind": 4500,
+    "tidal": 25,
+    "solar": 20,
+    "gravity": 112,
+    "surfaceMetal": 3,
+    "mohoMetal": 40,
+    "lava": false
+   }
+  }
  }
 }

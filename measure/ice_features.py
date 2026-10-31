@@ -31,7 +31,7 @@ from scipy.spatial import ConvexHull
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sculpt_section_biome import PALETTE, palette_codes, project_cells  # noqa: E402
+from section_common import PALETTE, palette_codes, project_cells  # noqa: E402
 from crystal_geometry import q, simplify_closed, calipers, colour_summary  # noqa: E402
 
 LUMA = np.array([.299, .587, .114], np.float32)

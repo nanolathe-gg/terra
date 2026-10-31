@@ -243,8 +243,7 @@ fn mmStrokes(p: vec2f, f: vec4f, width: f32, core: f32, salt: u32) -> f32 {
 }
 
 // z of a lit material at a level-0 pixel, and the vein weight over it.
-// Development only: params.pad0 above 0 gives every layer that salt, so candidate layers differ only in their numbers (measure/lit_fit.py).
-fn mmSalt(id: u32) -> u32 { return select(id * 16u + 1u, u32(params.pad0) * 16u + 1u, params.pad0 > 0.0); }
+fn mmSalt(id: u32) -> u32 { return id * 16u + 1u; }
 
 fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
     let r0 = matRow(base);
@@ -446,14 +445,4 @@ fn makeMaterial(@builtin(global_invocation_id) id: vec3u) {
     let pixel = (vec2f(id.xy) + 0.5) * params.foot;
     let rgb = mmColor(id.z, pixel, params.foot);
     textureStore(out, vec2i(id.xy), i32(id.z), vec4f(rgb, 1.0));
-}
-
-// Development only (measure/swatch.mjs --z): a lit material's z at level 0, 16 bits across red and green, for the fit's rank quantiles.
-@compute @workgroup_size(8, 8, 1)
-fn makeZ(@builtin(global_invocation_id) id: vec3u) {
-    let n = u32(params.size);
-    if (id.x >= n || id.y >= n) { return; }
-    let z = mmLitZ(id.z * MM_ROWS, id.z, vec2f(id.xy) + 0.5).x;
-    let q = u32(clamp((z + 8.0) / 16.0, 0.0, 1.0) * 65535.0);
-    textureStore(out, vec2i(id.xy), i32(id.z), vec4f(f32(q >> 8u) / 255.0, f32(q & 255u) / 255.0, 0.0, 1.0));
 }

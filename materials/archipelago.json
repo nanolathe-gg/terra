@@ -2033,5 +2033,50 @@
     2.7429
    ]
   }
+ },
+ "world": {
+  "baseHeight": 8,
+  "defaults": {
+   "noise": "ridged",
+   "coverage": "form",
+   "rock": "hill",
+   "lighting": "front",
+   "forms": "shouldered",
+   "surface": "structured",
+   "scene": "compact",
+   "weather": "broad",
+   "transition": "mineral",
+   "material": "single",
+   "edges": "natural",
+   "fractures": "20",
+   "scree": "0",
+   "shade": "separate",
+   "example": "islands",
+   "fingerBlunt": "0",
+   "fingerCoast": "0",
+   "flowTint": "1",
+   "flowShallow": "0.85",
+   "flowStreak": "0.5",
+   "flowStreakLen": "140",
+   "flowBank": "0.9",
+   "faceRock": "0",
+   "hillLobes": "0",
+   "hillSteps": "8",
+   "lavaTread": "0"
+  },
+  "export": {
+   "planet": "Archipelago",
+   "defaultSeaLevel": 84,
+   "climate": {
+    "minWind": 800,
+    "maxWind": 4000,
+    "tidal": 25,
+    "solar": 20,
+    "gravity": 112,
+    "surfaceMetal": 5,
+    "mohoMetal": 50,
+    "lava": false
+   }
+  }
  }
 }

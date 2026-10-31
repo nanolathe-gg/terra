@@ -1439,5 +1439,115 @@
    219,
    234
   ]
+ },
+ "world": {
+  "defaults": {
+   "noise": "ridged",
+   "coverage": "form",
+   "rock": "hill",
+   "lighting": "front",
+   "forms": "shouldered",
+   "surface": "structured",
+   "scene": "compact",
+   "weather": "broad",
+   "transition": "mineral",
+   "material": "single",
+   "edges": "natural",
+   "fractures": "80",
+   "scree": "0",
+   "shade": "separate",
+   "fingerBlunt": "0",
+   "fingerCoast": "0",
+   "flowTint": "1",
+   "flowShallow": "0.85",
+   "flowStreak": "0.5",
+   "flowStreakLen": "140",
+   "flowBank": "0.9",
+   "faceRock": "0",
+   "hillLobes": "0",
+   "hillSteps": "8",
+   "lavaTread": "0",
+   "example": "mesas"
+  },
+  "strataColors": [
+   [
+    189,
+    140,
+    108
+   ],
+   [
+    190,
+    198,
+    185
+   ],
+   [
+    150,
+    144,
+    128
+   ],
+   [
+    175,
+    111,
+    90
+   ],
+   [
+    118,
+    115,
+    112
+   ]
+  ],
+  "strataZones": [
+   [
+    1,
+    0,
+    1,
+    0.2
+   ],
+   [
+    17,
+    0,
+    1,
+    0.4
+   ],
+   [
+    53,
+    0,
+    1,
+    0.4
+   ],
+   [
+    58,
+    0,
+    1,
+    0.95
+   ],
+   [
+    69,
+    2,
+    3,
+    0.3
+   ]
+  ],
+  "strataZoneSpacing": [
+   6,
+   6,
+   6,
+   6,
+   11
+  ],
+  "export": {
+   "planet": "Desert",
+   "defaultSeaLevel": 0,
+   "climate": {
+    "minWind": 400,
+    "maxWind": 3000,
+    "tidal": 0,
+    "solar": 195,
+    "gravity": 112,
+    "surfaceMetal": 3,
+    "mohoMetal": 50,
+    "lava": false
+   }
+  }
  }
 }

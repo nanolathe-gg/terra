@@ -226,7 +226,8 @@ def main():
     # What config.json held that no committed file did: the world's material and water numbers (measured means, depths, authored
     # coverage and relief values). The server overlays them on the page's config (sculpt.py, world_knobs).
     old['material'] = config['material']
-    old['water'] = config['water']
+    # `deep` and `shallow` name the two water materials (measure/water_numbers.py); a rewrite keeps them.
+    old['water'] = {**config['water'], **{k: v for k, v in old.get('water', {}).items() if k in ('deep', 'shallow')}}
     out.write_text(json.dumps(old, indent=1) + '\n')
     for name, row in table.items():
         print(f"{name:11s} mean {row['lumaMean']:6.1f} sd {row['lumaSd']:5.1f} sd5 {row['sd5']:5.2f} stretch {row['stretch']:.2f} "

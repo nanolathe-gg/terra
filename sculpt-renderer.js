@@ -447,7 +447,7 @@ export class TerrainRenderer {
   // Base colours chosen for a world: {ground, slope, rock, sand, beach,
   // shallow, deep} as [r,g,b] 0..1, or absent to keep the world's own.
   groundSource() {
-    return this.config.groundPatterns?.[this.variant.get('groundPattern')] || (this.ownGround ??= {...this.config.textures, groundTable: this.config.materialTable});
+    return this.config.groundPatterns?.[this.variant.get('groundPattern')] || (this.ownGround ??= {groundTable: this.config.materialTable});
   }
   // A world's table by URL: this world's own is already loaded.
   async groundTable(url) {
@@ -789,7 +789,7 @@ export class TerrainRenderer {
     };
   }
 
-  draw({quality = 'preview', clay = false, light = 'original', fractures = 0, scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, fringeStyle = 'veins', materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
+  draw({quality = 'preview', clay = false, light = 'original', fractures = 0, scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
     const full = quality === 'full';
     this.i('uFull', full);

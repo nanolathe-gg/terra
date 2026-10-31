@@ -219,7 +219,7 @@ $('internal').onclick=()=>run('Preset/internal sensitivity',async()=>{
  const fixture=[['plateau',[[280,270],[550,300]],{card:{diameter:420,amount:110,cracks:100}}],['mountain',[[800,120],[880,400]],{card:{diameter:320,amount:150,cracks:100}}],['deep',[[0,830],[1000,830]],{card:{diameter:620,shelves:70,shorePlates:100,plateMaterial:world==='ice'?2:1},waterBed:0,waterDeep:0,waterShore:0}],['crater',[[760,600]],{card:{diameter:300,amount:65,craterFacets:100,crystalCraterSkin:100}}]];
  const ranges={blockRow:[2,16],blockWidth:[3,20],blockStep:[0,2],blockChip:[0,4],columnContrast:[0,2],columnBeds:['5:.2,9:1','12:1,4:.1'],crystalCraterWebPx:[6,30],crystalCraterLight:[0,2],crystalShallowPx:[4,30],crystalSeamEnd:[.55,.95],crystalFace:[0,2],crystalTone:[0,2],crystalSeam:[0,2],erosionAge:[16,200],erosionRain:[0,1],talusAngle:[25,65],faceStreakFrom:[.1,1.5],rillDepth:[0,4],rillSpacing:[4,24],stoneSize:[2,16],outcrop:[0,2],cavity:[0,2],closeShadow:[0,2],microRock:[0,2]};
  const assignment=k=>k.startsWith('crystal')?'crystal':['shadeBlue','frostWet'].includes(k)?'ice':'green';
- const keys=Object.keys(all.defaults).filter(k=>!known.has(k)&&!['groundPattern','fringeStyle'].includes(k)&&assignment(k)===world);
+ const keys=Object.keys(all.defaults).filter(k=>!known.has(k)&&!['groundPattern'].includes(k)&&assignment(k)===world);
  const original=new Map(api.renderer.variant);
  for(const key of keys){
   if(stop)break;const gates={};if(key.startsWith('block')||key==='hillBlocks')Object.assign(gates,{blocks:1,rockOrder:1,hillBlocks:1});if(key.startsWith('column'))gates.column=1;if(key.startsWith('crystalCrater'))Object.assign(gates,{crystalCraterWeb:1});if(key.startsWith('crystalShallow'))gates.crystalShallow=1;if(key.startsWith('rill'))gates.rillDepth=3;if(key.startsWith('stone'))gates.stoneDensity=1;
@@ -257,7 +257,7 @@ $('repeat-perf').onclick=()=>run('Warm interleaved alternatives',async()=>{
 
 $('surface').onclick=()=>run('Surface and legacy-control sensitivity',async()=>{
  const world=$('world-filter').value,api=await load(world),s=scenes[world+'-1'];api.scene(s.strokes,{ground:s.ground!==false});const rows=[];
- for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['mineral-ring',0,100],['ring-spread',0,100],['ring-variation',0,100],['fringe-style','veins','rings'],['fractures',0,100],['scree',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
+ for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['mineral-ring',0,100],['ring-spread',0,100],['ring-variation',0,100],['fractures',0,100],['scree',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
   const original=frame.contentDocument.getElementById(id).value;await api.control(id,lo);const a=await api.capture();await api.control(id,hi);const b=await api.capture();await api.control(id,original);const r={key:id,world,lo,hi,...summarize(a.canvas,b.canvas)};rows.push(r);line(`${id}: ${(r.changedBlocks*100).toFixed(1)}% blocks, max RGB ${r.maxRGB}`);
  }await save(`${$('label').value}/surface-${world}.json`,rows);
 });

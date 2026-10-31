@@ -141,7 +141,7 @@ fn cavityDepth(p: vec2f, h: f32) -> f32 {
 
 // Two-entry mixes: retail art shows colours the palette lacks as pixel
 // mixes of two entries (Painted Desert's tans are 50/50 pairs). The lookup's
-// rows 32-63 and 64-95 hold the colour's best pair (palette_pairs.py); the
+// rows 32-63 and 64-95 hold the colour's best pair (engine-palette.wgsl); the
 // mix along A-B is measured per pixel and a per-pixel threshold picks one.
 fn palettePair(rgb: vec3f, threshold: f32) -> vec3f {
     let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
@@ -218,8 +218,8 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
 
 // Base ground from a fixed set of 32-px tiles, randomly placed on the TNT
 // tile grid, so level ground costs only uGroundTiles unique tiles. The tiles
-// are sampled offline from retail neighbour statistics (ground_tiles.py) and
-// stored in the first row of the ground texture.
+// are measured offline from retail neighbour statistics (the table's `ground` data) and
+// drawn into the first row of the ground texture at startup.
 fn groundHash(q: vec3i) -> f32 {
     var n = u32(q.x) * 374761393u + u32(q.y) * 668265263u + u32(q.z) * 2246822519u;
     n = (n ^ (n >> 13u)) * 1274126177u;
