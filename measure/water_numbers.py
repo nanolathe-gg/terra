@@ -12,6 +12,7 @@ give both the same name in the `water` block.
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -21,14 +22,14 @@ import material_numbers as mn
 
 def main():
     args = sys.argv[1:]
-    opts = {'--work': None, '--cdp': '9684', '--rounds': '8'}
+    opts = {'--work': None, '--cdp': '9663', '--rounds': '8'}
     for flag in opts:
         if flag in args:
             i = args.index(flag)
             opts[flag] = args[i + 1]
             del args[i:i + 2]
     world, assets, specs = args[0], Path(args[1]), args[2:]
-    work = Path(opts['--work'] or f'/private/tmp/nanolathe-map-editor/agent-H14e/water-{world}')
+    work = Path(opts['--work'] or tempfile.mkdtemp(prefix=f'water-{world}-'))
     work.mkdir(parents=True, exist_ok=True)
     config = json.loads((assets / 'config.json').read_text())
     measured = {}

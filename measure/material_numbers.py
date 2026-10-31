@@ -7,8 +7,8 @@ and they stay outside git).
 
   material_numbers.py <world> <assets-dir> [--out materials/<world>.json] [--dither beach=1.0,quilt=1.5]
 
-The materials a world draws follow the bridge's layer rules (sculpt-renderer.js,
-BRIDGE_LAYER): slope grass is the slope image (the structured one on a
+The materials a world draws follow the layer rules the image bridge laid them out by (card H14e deleted
+the bridge; the table's `order` is now the layout): slope grass is the slope image (the structured one on a
 structured surface), rock is the hill rock (or the structured one), weathered
 and fractured are their own images only where the world's material is `varied`
 and the rock otherwise. A layer whose image is an earlier layer's names that
@@ -45,7 +45,7 @@ Per material:
             for the images that are not the 16-tile strip (card H14b).
 A world whose plain is one quilted image (no ground tiles, or a default of ground=texture) gets that image as one more material,
 `quilt`, last in `order`: the generated array holds it as a layer and the draw's plain reads it (card H14b step 3).
-A world with a mineral ring, beach or transition body gets layers 4-7 as the bridge laid them out (fringe, body, beach, ring).
+A world with a mineral ring, beach or transition body gets layers 4-7 (fringe, body, beach, ring).
 Tiled images wrap, as the draw's repeat sampling does; the ground strip is
 sixteen separate 32 x 32 tiles and does not.
 """
@@ -210,7 +210,9 @@ def main():
         file = config['textures']['grass'].rsplit('/', 1)[-1]
         table['quilt'] = {'image': file, 'draw': DRAWS['quilt'], **measure(load(assets / file, 'wrap'), 'wrap', dithers.get('quilt', 0.0))}
     old = json.loads(out.read_text()) if out.exists() else {}
-    old['measured'] = table
+    # The water materials the table's `water` and `river.water` blocks name (measure/water_numbers.py) are not in this tool's plan: keep them.
+    names = {old.get('water', {}).get(k) for k in ('deep', 'shallow')} | {old.get('river', {}).get('water', {}).get(k) for k in ('deep', 'shallow')}
+    old['measured'] = {**{n: old['measured'][n] for n in names if n in old.get('measured', {})}, **table}
     old['order'] = [name for name, _ in plan] + (['quilt'] if quilt else [])
     # The plain is not modelled: its 16 tiles are kept as data: the colour entries in luma order and each tile as 1,024 entry letters
     # (a = first entry), rows top first. The draw builds them at startup (groundTileBitmap, sculpt-renderer.js).
