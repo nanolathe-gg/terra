@@ -230,7 +230,7 @@ try {
   await send('Page.navigate', {url});
   const bootStart = Date.now();
   for (let i = 0; i < 1200; i++) {
-    if (await ev(isMap ? '!!window.sculptCanvas&&!document.getElementById("map-export").disabled' : '!document.getElementById("export")?.disabled')) break;
+    if (await ev(isMap ? `!!window.sculptCanvas&&${scene.biome === 'zhon' ? 'true' : '!document.getElementById("map-export").disabled'}` : '!document.getElementById("export")?.disabled')) break;   // Zhon cannot export, by design
     const e = await ev('document.getElementById("error")?.textContent'); if (e) throw new Error(e);
     await sleep(200);
   }
