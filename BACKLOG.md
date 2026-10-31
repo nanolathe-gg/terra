@@ -6828,6 +6828,20 @@ attempted; the presets are fitted to the classic curves and judged against retai
 by eye. The preset path does not cover terraces/lip/apron as presets (they stay
 authored controls), ramp, crater, fissure and crystal.
 
+**Done (part 2, step A).** One curve table per stroke, behind the same `?shapePresets`
+switch. The host samples the curve at 32 intervals plus one guard sample each side
+(35 values, four to an `MW` row after the node's extra rows: `u.curveBase`, and `u.backBase`
+for the shouldered hill's back and the plateau's mesa flank); the shader reads it with
+Catmull-Rom interpolation. A departure from the design note (linear, 33 or 65): linear 33
+moved green-2 by .87, linear 65 by .38 and Catmull-Rom 33 by .18, because piecewise-linear
+steps put slope kinks into the lighting. Only the line that computes each curve changed, so
+part 1's `sVary` stand-in is gone and Lava-3's rings and Crystal-1's clipped column are gone
+(Crystal-1 0.00, Lava-3 .18). `section_check` over sizes 140-560, amounts 30-160 and
+softness 0, .5, .88, 1: RMS at most .01, max .08 for plateau, offset, lower, mountain, hill,
+plain hill, deep and shallow. "Exact" in part 1 now reads "to within interpolation": RMS at
+most .007. 27 scenes: mean |diff| at most .18; no mark newly outside retail; regional 0 on
+all 27. `curveAt` clamps at 0 below; a lip that dips below 0 needs that lifted.
+
 *For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
 with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
 `sBack` is read only by the shouldered-hill branch in `engine-shape.wgsl`; a
