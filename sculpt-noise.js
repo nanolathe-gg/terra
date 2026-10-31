@@ -5,7 +5,8 @@
 //   a  Gaussian-smoothed white noise, sigma 1 px
 // Each channel is centred and scaled so its 99.5th percentile of |value| sits at .49 either side of .5 (clipped), as the image was.
 // A different realisation of the same statistics: nothing reads it as a picture. Everything here is integer hashing and IEEE
-// arithmetic, so it is the same bytes on every machine. Large sigmas are three box passes (a close Gaussian); small ones are exact.
+// arithmetic (only the one-pixel kernel calls Math.exp, which the language does not pin bit for bit across engines), so it is the same
+// bytes on one engine and machine, which is all the determinism rule asks. Large sigmas are three box passes (a close Gaussian); small ones are exact.
 export const NOISE_SIZE = 512;
 
 function white(size, seed, sum = 1) {
