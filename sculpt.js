@@ -59,7 +59,7 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:[
 // Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
 // Cross-section (card C1): the kinds that take the parametric profile, and the
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
-// card startStroke builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
+// card scriptedScene builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
 const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
 // Card E8: the kinds whose feet may be ragged and bumpy (baseVary, baseBump).
 const BASE_KINDS=['plateau','offset','hill','mountain'];
@@ -436,7 +436,7 @@ function waterSection(c,d,reach,base,kw,ka,nj,nA,nB) {
   sectionLift=c.lip!==0?c.lip*lipRim(d-I,F):0;
   return v;
 }
-// The one call dab() makes: the weight w (0 at the foot, 1 at the full rise or
+// The one call the brush dab makes (engine-shape.wgsl): the weight w (0 at the foot, 1 at the full rise or
 // the bed) for the cell at index i, r of the way out to the foot, whose
 // outline reaches `reach` px. The lip is left in sectionLift for the caller.
 function drawSection() {
@@ -466,7 +466,7 @@ function drawSection() {
 }
 // Line features (card C4). A ridge (a hill or mountain with spurs or crest
 // options) is swept as short pieces, each with width and height multipliers at
-// its two ends that dab() reads as s.piece, so the crest swells, narrows and
+// its two ends that the brush dab reads as the piece, so the crest swells, narrows and
 // tapers along its path and every spur is simply more pieces on the same
 // stroke: the nearest influence wins, so a spur meets its parent at the crest
 // with no seam and no detached lump. Spur geometry comes from the stroke seed
