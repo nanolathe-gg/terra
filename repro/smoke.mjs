@@ -1,6 +1,6 @@
 // Smoke run: for each world, open the default editor (/sculpt with no map size, the 4x4 map), paint one stroke with every brush,
-// undo it, and export. With --page8 it also opens one 8x8 map (which pages), paints one stroke and undoes it.
-//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8] [--no-export]
+// undo it, and export. With --page8 it also opens one 8x8 map per world in --worlds8 (default green; which pages), paints one stroke and undoes it.
+//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export]
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
 import {spawn} from 'node:child_process';
@@ -10,7 +10,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out');
-const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), page8 = flag('--page8'), noExport = flag('--no-export');
+const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'offset', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];
@@ -92,10 +92,10 @@ for (const world of worlds) {
   });
   console.log(JSON.stringify(result));
 }
-if (page8) {
-  const url = `${server}/sculpt?biome=green&mapX=8&mapY=8&scratch=smoke-8-${Date.now()}&gpuMB=512&heapMB=1536`;
+if (page8) for (const world of worlds8) {
+  const url = `${server}/sculpt?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
   const r = await session(url, async ({send, ev, logs}) => {
-    const r = {page8: true};
+    const r = {page8: true, world};
     try {
       await ready(ev, true); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       r.paged = await ev('sculptDebug.pageInfo()?.np ?? null');
