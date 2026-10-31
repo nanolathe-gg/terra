@@ -973,7 +973,7 @@ export function createPagedFields(opts) {
   const WEATHER_BYTES = CORE * CORE * 20, CPU_PAGES = 16;
   // Page caps: 9 shape pages and 24 weather pages when the GPU budget allows; fewer (never under the 6 a chunk's feed gathers at once) when it does not.
   let SHAPE_PAGES = 9, WEATHER_PAGES = 24;
-  const shapeBudget = () => opts.shapeBudget ?? SHAPE_PAGES * SHAPE_BYTES, weatherBudget = opts.weatherBudget ?? WEATHER_PAGES * WEATHER_BYTES;
+  const shapeBudget = () => opts.shapeBudget ?? SHAPE_PAGES * SHAPE_BYTES, weatherBudget = () => opts.weatherBudget ?? WEATHER_PAGES * WEATHER_BYTES;   // H13: a function like shapeBudget, so a refit's page cap holds (it was read once, at 24 pages)
   const listeners = new Set(), submitListeners = new Set(), pagesMap = new Map();
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
@@ -1104,7 +1104,7 @@ export function createPagedFields(opts) {
       }
     };
     lru(pg => pg.target, dropShape, shapeBudget(), SHAPE_BYTES);
-    lru(pg => pg.weather, dropWeather, weatherBudget, WEATHER_BYTES);
+    lru(pg => pg.weather, dropWeather, weatherBudget(), WEATHER_BYTES);
     let withCpu = 0; for (const pg of pagesMap.values()) if (pg.cpu) withCpu++;
     while (withCpu > CPU_PAGES) { let victim = null; for (const pg of pagesMap.values()) if (pg.cpu && !pg.pins && (!victim || pg.used < victim.used)) victim = pg; if (!victim) break; victim.cpu = null; victim.cpuW = null; withCpu--; }
   }
@@ -1351,7 +1351,7 @@ export function createPagedFields(opts) {
 
   const stats = () => {
     const g = engine?.stats() || {}, resident = [...pagesMap.values()].filter(p => p.target).length, weathers = [...pagesMap.values()].filter(p => p.weather).length;
-    return {revision, residentBytes: cpuBytes() + coarse.byteLength, cacheBytes: cpuBytes(), cacheEntries: resident, lastWorkingBytes: 0, peakBytes: cpuBytes(), budget: shapeBudget() + weatherBudget, hits: 0, misses: 0, replays: 0, evictions: 0,
+    return {revision, residentBytes: cpuBytes() + coarse.byteLength, cacheBytes: cpuBytes(), cacheEntries: resident, lastWorkingBytes: 0, peakBytes: cpuBytes(), budget: shapeBudget() + weatherBudget(), hits: 0, misses: 0, replays: 0, evictions: 0,
       chunkCells: CORE, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: 52, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0, connectionTiles: 0, connectionCells: 0,
       gpuShape: {...g, gpuBytes: gpuBytes(), paged: true, core: CORE, ring: RING, ringChanges, apron: APRON, shapePages: resident, weatherPages: weathers, pagesTotal: np * np, shapeBytes: shapeBytes(), weatherBytes: weatherBytes(), stagingBytes: stagingBytes(), cpuCopyBytes: cpuBytes(),
         coarse: {points: coarse.length, filled: coarseHave.reduce((a, b) => a + b, 0), done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, error: (error || firstError)?.message || null}};

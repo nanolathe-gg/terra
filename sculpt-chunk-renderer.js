@@ -132,8 +132,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   // H7b: at scale s (2 for a quarter bake) the fields lattice and the output have one texel per s world pixels each way.
   estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1) {
+    // input per texel: height 4 + routes 4 + weather/material 4 layers x 4 (as allocate() makes them), then 4 a mask layer.
     const field=pow2(Math.ceil(region.fieldsWidth/scale))*pow2(Math.ceil(region.fieldsHeight/scale))*8;
-    const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(16+maskLayers*4);
+    const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(24+maskLayers*4);
     const m=region.mesh,cols=m.col1-m.col0,rows=m.row1-m.row0;
     const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24),output=Math.ceil(width/scale)*Math.ceil(height/scale)*12;
     return {field,input,mesh,output,maskPlaneCount,maskLayers,workingBytes:field+input+mesh+output,
