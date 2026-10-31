@@ -256,7 +256,7 @@ export class TerrainRenderer {
     this.bound = {};
     this.means = {};
     for (const [key, name] of [['noise','uNoise'], ['grass','uGrass'], ['rock','uRock'], ['water','uWater'], ['palette','uPalette'], ['waterShallow','uWaterShallow'], ['slopeGrass','uSlopeGrass'], ['rockWeathered','uRockWeathered'], ['rockFractured','uRockFractured'], ['fractures','uFractures'], ['mineralRing','uMineralRing']]) {
-      if (key === 'mineralRing' && !this.config.textures.mineralRing) { this.bound[name] = 'grass'; continue; }
+      if (key === 'mineralRing' && (!this.config.textures.mineralRing || this.materialData)) { this.bound[name] = 'grass'; continue; }   // a table's ring is generated layer 7
       if (key === 'slopeGrass' && !slopeMaterial) { this.bound[name] = 'grass'; continue; }
       // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
       if (key === 'slopeGrass' && this.materialModel) { this.bound[name] = 'grass'; this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255); continue; }
@@ -309,7 +309,8 @@ export class TerrainRenderer {
     // Two optional transition stages share one array texture. Keeping both
     // layers resident makes the weathering-strength control continuous.
     // H4: the engine draw has no fringe, ring or slope-grass images (Green has no mineral margins or beach).
-    this.transitionBody=false;
+    // The transition body is a world flag, not a bridge one: a table world's body is generated layer 5 and bridgeMargins' shared transition (ring, body, contours) needs it.
+    this.transitionBody=!this.bridge&&Boolean(this.config.textures.transitionBody);
     if(this.bridge){
     const fringeURL=this.config.textures.slopeFringe||this.config.textures.slopeGrass||this.config.textures.grass;
     const loadFringe=async url=>{
