@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'sculpt-material-model.js', 'materials/green.json', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
+    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -786,18 +786,32 @@ def lighten_red_shallows(config, assets):
     config['water'].update(shallowRGB=mean, shallowMeanRGB=mean)
 
 
-# H8: the worlds whose land materials are numbers. The engine reads the table; every other world bridges its prepared images.
-MATERIAL_TABLES = {'green': '/materials/green.json'}
+# H8, H14: the worlds whose land materials are numbers. The engine makes their layers from the table; every other world bridges its
+# prepared images. A table also holds the world's `material` and `water` blocks, which the config no longer carries.
+MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json'}
+SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
+# The images a table replaces: the page never fetches them, so the config does not name them.
+TABLE_IMAGES = ('grass', 'groundTiles', 'slopeGrass', 'rock', 'hillRock', 'rockWeathered', 'rockFractured')
+
+
+def apply_material_table(biome, config):
+    """Point the config at the world's committed table and take its material and water numbers from it."""
+    table = json.loads((Path(__file__).resolve().parent / MATERIAL_TABLES[biome].lstrip('/')).read_text())
+    config['materialTable'] = MATERIAL_TABLES[biome]
+    config['material'] = table['material']
+    config['water'] = table['water']
+    for key in TABLE_IMAGES:
+        config['textures'].pop(key, None)
 
 
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
+    if biome in MATERIAL_TABLES:
+        apply_material_table(biome, config)
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
-    if biome in MATERIAL_TABLES:
-        config['materialTable'] = MATERIAL_TABLES[biome]
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)
     return config
@@ -1019,8 +1033,8 @@ def main():
     biomes = [b for b in biomes if b in configs]
     # Any world may take another's ground pattern (World panel); the
     # pattern's mean is replaced by the world's ground colour.
-    patterns = {b: {'name': BIOME_NAMES[b], 'grass': configs[b]['textures']['grass'],
-                    'groundTiles': configs[b]['textures'].get('groundTiles')} for b in biomes}
+    patterns = {b: {'name': BIOME_NAMES[b], 'grass': configs[b]['textures'].get('grass'),
+                    'groundTiles': configs[b]['textures'].get('groundTiles'), 'groundTable': configs[b].get('materialTable')} for b in biomes}
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns

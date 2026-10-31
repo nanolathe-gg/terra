@@ -1,11 +1,11 @@
-"""Swatch sheets: each prepared image beside the model's picture of it (card H3, item 3).
+"""Swatch sheets: each prepared image beside the model's picture of it (cards H3 and H14).
 
 A dev tool. For every material it renders the model (measure/swatch.mjs) at foot 1 and at foot 4 (a
 quarter-resolution draw), snaps both and the prepared image to the palette (palette-lut.png, the
 nearest entry, as the draw's palette stage does), and writes <out>/<material>.png: prepared | model,
 at 1x and 2x, with the numbers under each. `numbers.json` holds the same numbers.
 
-  material_swatches.py <materials/green.json> <assets-green-dir> <out-dir> [--cdp 9663]
+  material_swatches.py <materials/<world>.json> <assets-dir> <out-dir> [--cdp 9663]
 """
 import json
 import subprocess
@@ -19,8 +19,6 @@ from scipy import ndimage as ndi
 HERE = Path(__file__).resolve().parent
 LUMA = np.array([.299, .587, .114])
 SIGMAS = [0.0] + [0.7 * 2 ** k for k in range(7)]
-IMAGES = {'slopeGrass': 'slope-grass.png', 'rock': 'slope-rock.png',
-          'weathered': 'rock-weathered.png', 'fractured': 'rock-fractured.png'}
 N = 256
 
 
@@ -45,13 +43,13 @@ def stats(a):
             'rgb': [round(float(v), 1) for v in mean]}
 
 
-def prepared(assets, name):
-    a = np.asarray(Image.open(assets / IMAGES[name]).convert('RGB')).astype(float)
+def prepared(assets, name, table):
+    a = np.asarray(Image.open(assets / table['measured'][name]['image']).convert('RGB')).astype(float)
     if name == 'ground':     # the draw's mosaic: 32-px tiles chosen at random from the strip
         rng = np.random.default_rng(5)
         tiles = [a[:32, 32 * i:32 * i + 32] for i in range(16)]
         a = np.vstack([np.hstack([tiles[rng.integers(16)] for _ in range(16)]) for _ in range(16)])
-    return a[:512, :512]
+    return np.tile(a, (-(-512 // a.shape[0]), -(-512 // a.shape[1]), 1))[:512, :512]   # a 256-px image repeats, as the draw's tiling did
 
 
 def main():
@@ -66,8 +64,8 @@ def main():
     for foot in (1, 4):
         subprocess.run(['node', str(HERE / 'swatch.mjs'), str(table), str(out / f'raw{foot}'), '--foot', str(foot), '--size', '512', '--cdp', cdp], check=True, capture_output=True)
     numbers = {}
-    for name in t['order']:
-        img = snap(lut, prepared(assets, name))
+    for name in dict.fromkeys(t['order']):
+        img = snap(lut, prepared(assets, name, t))
         gen = {}
         for foot in (1, 4):
             n = 512 // foot

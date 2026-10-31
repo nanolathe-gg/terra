@@ -1,13 +1,23 @@
-"""Measure Green's land materials from the prepared images (card H3, item 2).
+"""Measure a world's land materials from its prepared images (cards H3 and H14).
 
 A dev tool; the server never runs it. It reads the prepared images and writes
-the numbers a material is made from, `materials/green.json`'s `measured` rows,
-so the editor needs no image at run time (the images are only where the
-numbers come from, and they stay outside git).
+the numbers a material is made from, `materials/<world>.json`, so the editor
+needs no image at run time (the images are only where the numbers come from,
+and they stay outside git).
 
-  material_numbers.py <assets-green-dir> [--out materials/green.json]
+  material_numbers.py <world> <assets-dir> [--out materials/<world>.json]
 
-Per material (the five Green draws):
+The materials a world draws follow the bridge's layer rules (sculpt-renderer.js,
+BRIDGE_LAYER): slope grass is the slope image (the structured one on a
+structured surface), rock is the hill rock (or the structured one), weathered
+and fractured are their own images only where the world's material is `varied`
+and the rock otherwise. A layer whose image is an earlier layer's names that
+material again in `order` (Moon: slopeGrass, rock, rock, rock). The file keeps
+what is already in it (a fitted `model`, a `placement` block) and rewrites
+`measured`, `order`, `ground`, and the config's `material` and `water` blocks,
+the numbers that were only in the uncommitted config.json.
+
+Per material:
   ramp      RGB at 16 luma quantiles: the mean colour of each sixteenth of the
             pixels ranked by luma (0.299, 0.587, 0.114), darkest first. The
             model maps a uniform rank through it, so its histogram is the
@@ -45,14 +55,24 @@ from scipy import ndimage as ndi
 LUMA = np.array([.299, .587, .114])
 KNOTS = 16
 SIGMAS = [0.0] + [0.7 * 2 ** k for k in range(7)]    # 0, .7, 1.4 ... 44.8
-# The material set: name, image, how it wraps (tile size or None), what the draw calls it.
-MATERIALS = [
-    ('ground', 'ground-tiles.png', 'strip', 'plain grass (grassTex via groundTile)'),
-    ('slopeGrass', 'slope-grass.png', 'wrap', 'grass on slopes (slopeGrassTex)'),
-    ('rock', 'slope-rock.png', 'wrap', 'hill rock (rockTex with rock=hill)'),
-    ('weathered', 'rock-weathered.png', 'wrap', 'weathered rock patches (rockWeatheredTex)'),
-    ('fractured', 'rock-fractured.png', 'wrap', 'fractured rock patches (rockFracturedTex)'),
-]
+DRAWS = {'ground': 'plain ground (the 16 tiles, groundTile)', 'slopeGrass': 'cover on slopes (generated layer 0)',
+         'rock': 'hill rock (generated layer 1)', 'weathered': 'weathered rock patches (generated layer 2)',
+         'fractured': 'fractured rock patches (generated layer 3)'}
+
+
+def layer_plan(config):
+    """The four rock-family layers of the bridge's rules as [(material name, image file name)] in layer order."""
+    t, d = config['textures'], config['defaults']
+    structured = d.get('surface') == 'structured'
+    slope = t['slopeStructured'] if structured and 'slopeStructured' in t else t['slopeGrass']
+    rock = t['rockStructured'] if structured and 'rockStructured' in t else t['hillRock']
+    varied = d.get('material') == 'varied'
+    images = [slope, rock, t['rockWeathered'] if varied else rock, t['rockFractured'] if varied else rock]
+    plan, seen = [], {}
+    for name, url in zip(['slopeGrass', 'rock', 'weathered', 'fractured'], images):
+        file = url.rsplit('/', 1)[-1]
+        plan.append((seen.setdefault(file, name), file))
+    return plan
 
 
 def load(path, mode):
@@ -127,26 +147,43 @@ def measure(a, mode):
 
 def main():
     args = sys.argv[1:]
-    out = Path(args[args.index('--out') + 1]) if '--out' in args else Path(__file__).resolve().parent.parent / 'materials' / 'green.json'
+    out = None
     if '--out' in args:
+        out = Path(args[args.index('--out') + 1])
         del args[args.index('--out'):args.index('--out') + 2]
-    assets = Path(args[0])
+    world, assets = args[0], Path(args[1])
+    out = out or Path(__file__).resolve().parent.parent / 'materials' / f'{world}.json'
+    config = json.loads((assets / 'config.json').read_text())
+    if 'groundTiles' not in config['textures']:
+        raise SystemExit(f'{world}: the plain is one quilted image, not 16 tiles; its ground numbers are a later step')
+    plan = layer_plan(config)
     table = {}
-    for name, image, mode, note in MATERIALS:
-        table[name] = {'image': image, 'draw': note, **measure(load(assets / image, mode), mode)}
+    ground_file = config['textures']['groundTiles'].rsplit('/', 1)[-1]
+    table['ground'] = {'image': ground_file, 'draw': DRAWS['ground'], **measure(load(assets / ground_file, 'strip'), 'strip')}
+    for name, file in plan:
+        if name not in table:
+            table[name] = {'image': file, 'draw': DRAWS[name], **measure(load(assets / file, 'wrap'), 'wrap')}
     old = json.loads(out.read_text()) if out.exists() else {}
     old['measured'] = table
-    # The plain is not modelled: its 16 tiles (generated, in ours, by ground_tiles.py from an index model of retail's flat ground)
-    # are kept as data: the colour entries in luma order and each tile as 1,024 entry letters (a = first entry), rows top first.
-    strip = np.asarray(Image.open(assets / 'ground-tiles.png').convert('RGB'))[:32]
+    old['order'] = [name for name, _ in plan]
+    # The plain is not modelled: its 16 tiles are kept as data: the colour entries in luma order and each tile as 1,024 entry letters
+    # (a = first entry), rows top first. The draw builds them at startup (groundTileBitmap, sculpt-renderer.js).
+    strip = np.asarray(Image.open(assets / ground_file).convert('RGB'))[:32]
     entries = sorted({tuple(c) for c in strip.reshape(-1, 3)}, key=lambda c: float(np.dot(c, LUMA)))
+    if len(entries) > 26:
+        raise SystemExit(f'{world}: {len(entries)} ground colours do not fit the one-letter entry code')
     index = {c: i for i, c in enumerate(entries)}
     old['ground'] = {'entries': [list(map(int, c)) for c in entries],
                      'tiles': [''.join(chr(97 + index[tuple(strip[y, 32 * t + x])]) for y in range(32) for x in range(32)) for t in range(16)]}
+    # What config.json held that no committed file did: the world's material and water numbers (measured means, depths, authored
+    # coverage and relief values). The server overlays them on the page's config (sculpt.py, world_knobs).
+    old['material'] = config['material']
+    old['water'] = config['water']
     out.write_text(json.dumps(old, indent=1) + '\n')
     for name, row in table.items():
         print(f"{name:11s} mean {row['lumaMean']:6.1f} sd {row['lumaSd']:5.1f} sd5 {row['sd5']:5.2f} stretch {row['stretch']:.2f} "
               f"lag {row['lag']['x1']:.2f}/{row['lag']['y1']:.2f} chroma {row['chroma']} left {row['chromaLeft']} colours {row['colours']} bands {row['bands']}")
+    print('order', old['order'])
 
 
 main()

@@ -1374,5 +1374,60 @@
    "jgmkjjpjnmjggjkjcjgjgcjjjgmjpmjpjgjjjjcgpjkmpnmgjjpkjjcjgjggcigpjjgggjjjajppqjjcjkjgjgjjjjjmjjhjmgmpmcgmjgpqpggegppjgmgjgjgjqmggjjnjgjjnjjcjjjjcjgglpgjjcjgjgjgjjgjjppcjgjcjfpgjjjjkjgjgjgjgjgpghjjgpmnmjgmgmgjmcgjjgpgjjjcjjjkmgjjpjjgjgmjmgjjnjjgjjmpngjjcgjmmkjgjmkjjpkmkjgjgjkjcjonpmhcpmpgjcjcjnmlpgjgjcjmmgpjmgjcgjgjnmkmgjecjegpnmgjjcjnmgjggmcpmnjcjgjnpnmgechngkjggjgjjgjjjechcjgjcjjdfgpmjejahhgjcjjpmpmgjcjcjcjjgjecjkjnjgjmghhgjmkmmkpmbeecjjjgjgcjjmmgmgjnjhgjjgpkpmqjjjcjcjgjgjjjgljmjjpgmgjjgjjjgpjmcjgjjcjjcjggmgjngjnmjjgcjiggjgnmjgjjgjmkjcjjggmpmjjgjghjgrjppgmjnmrgjkmmcjjcppmgjgmmjghkmgmgjjggjqjpppjnjgjjnjnjgjgjgjjjjjgmgpjjgpjkjgpgmmgjggpgjjjgjnjjggmmgjbjjnmnjmnmgmmmmjjrjggjgmjgjjjgmjgjgjpgmkmjjgngjjkjgjjjjnjgjkmkmgmgjnjjnmkjgmjjpcjjpnjkjjjcjhkjjpkpgmjfjgjjcmnamjjgmjgppgmcceegjgmmjnjjjgpgjjjcjmjjnjmcpmgjcjhecjnpgjggcjjgpggjjcjajgjmpnjcjghajcjjrigjjgmmjpjcjjgjgjjojgjjjjgjcjcjirpnjppqjkjgrnjjgjgjcjggajgjgecjkgjjgpqpgjpgjjgjjpmcjgjjjgmcjjjjpmmgjcjjgpnmgjjjngjcjgmgjgjjgjggjkmkmjgghgmgjgggjjcjjjjmgjgjjcjjgnmmmkmjchgjc",
    "qmjjgjjjjmkjgmjjgegejjgjcljgngjomgjgmqjggmmmjnpnmcjgjgjcekmjjmjjjmjjgjjgjjknpgjgmjjjgjcjcpkjgjgjgjgnjcjcjgjmgjgjgjgjgmjdjjmjpgjkmmmjgjcjjccjjgmcmghnmpgjrjngjmmjjkjgjjegjjjgmjgjqjjjgmjpjjjjnmngjmjjcgjjjcjngpgjjgpgmnglmojgjcmgencgjmggjgjmpmmgjjgpjmjjjjcjcjgjmgjjjqmjgmmqmkjjncjjnomkmgjjbjmggjgdkmkjcmqpgmnjajgjjjmmmmgjjpnjkjjjjkmnmmjjjcjcjjjjcjngnojmpgjjfjjgghnjgmcjgjgpgjnmgjjjppjggpkmcjgjjajcpcejjmmqmgpgjjgfjgjmgjmpgjppgjjjgjcgmonpjjjpkmgjpgjnmjqjjgpnjjgcjgjjnjjjkjgcjmgjgjjjnjpmjjkjjgjjjjnjmfjgjgjmngmgmmggggjgngjjgjcgjgjnjmjjgjggpjjkjgjjjjjggmcgmgjjjjcjmgpgjjjjgjgmmiggcgmjgjgecjjggjjgnpmjjgjnmggjnrbmmpgjgmjejcjjmjcmjgjgjjjjgmjjjljpnmgjgrgjcjjgpnmgnpmgjngjjgjlpfjkjgmgjgjcjgjjgjgmjgnjgppgjjgrgjcjgmkjjcjgmpkdcjgpnmjjmcjjkmmgjcjcmkmgmjgenjjgjjgmgjjgjjjnmmjgjjgjjjnjbjjcjgjjggjgjmfpgjgjkjgjggjmkjgjmjgjggjgjjgjnpjcmcjgjjjjjjjojpgjcghcjjnmgecjjfjjgjgmcgnjgjnjgmpqnmjajgjjjjcjnmaghcegmmmjgmajcjnjjjgjcjjggjjgpjjmjchjohjomrhcjcjjcjgmcgmcjncjcjijgpcmjgmjjihgjgjgjjmgmpcjjajgpmkjmjgjgjjggpajjjgjjpgjjpmbgjjjjnmnojpgjgjmgjjgccjg"
   ]
+ },
+ "material": {
+  "rockSlope": 1.145,
+  "rockFeather": 0.43,
+  "rockCurvature": 0.28,
+  "wetBand": 13,
+  "shallowDepth": 24,
+  "deepDepth": 60,
+  "grassDetail": 1.0,
+  "rockDetail": 1.0,
+  "waterDetail": 1.0,
+  "rockMeanRGB": [
+   85,
+   84,
+   79
+  ],
+  "hillRockMeanRGB": [
+   58.22270202636719,
+   60.38319396972656,
+   54.40046691894531
+  ],
+  "materialWeathering": 0.0,
+  "depositSpread": 0.65
+ },
+ "water": {
+  "shallowRGB": [
+   96,
+   138,
+   252
+  ],
+  "deepRGB": [
+   38,
+   76,
+   226
+  ],
+  "shallowMeanRGB": [
+   72.73431396484375,
+   112.0411376953125,
+   240.67425537109375
+  ],
+  "meanRGB": [
+   38.5101318359375,
+   76.08489990234375,
+   225.5614013671875
+  ],
+  "mean": [
+   0.15102012484681374,
+   0.29837215647977944,
+   0.8845545151654411
+  ],
+  "grainRGB": [
+   1.0,
+   1.0,
+   1.0
+  ]
  }
 }
