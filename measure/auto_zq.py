@@ -9,7 +9,6 @@ writes each lit material's zq, taken from the material's first layer, into `mode
 import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -19,8 +18,9 @@ if '--cdp' in args:
     i = args.index('--cdp'); cdp = args[i + 1]; del args[i:i + 2]
 path = Path(args[0])
 table = json.loads(path.read_text())
-with tempfile.TemporaryDirectory() as tmp:
-    out = Path(tmp) / 'out'
+# A fixed scratch folder per port (the swatch page's Chrome profile stays in it and is reused), not a folder removed afterwards.
+out = Path('/private/tmp/auto-zq-' + cdp)
+if True:
     r = subprocess.run(['node', str(HERE / 'swatch.mjs'), str(path), str(out), '--auto-zq', '--cdp', cdp], capture_output=True, text=True)
     if r.returncode:
         raise SystemExit(r.stdout + r.stderr)
