@@ -596,7 +596,7 @@ Each is written in full when the one before it lands.
 | H14d | The art's dither (hue is error-diffused per pixel), then Red, Crystal and Archipelago | Merged b136359: all nine worlds on tables |
 | H14e | Water, noise and the palette as numbers; the image bridge and the Python preparation go; a server with no world images draws every world | Merged c33bec2: a fresh clone on stock Python draws all nine worlds; `fractures.png`, ours, is the one image left |
 | H15 | Shape: one cross-section for every kind; the owner sees the comparison before any classic curve goes | Running |
-| Small leftovers | A weather cap of 14 pages (H13); Lava's terrace softness; the study comments in `sculpt.py`; the dead `isMap` branches in `perf.mjs`; a lit fit for Red's and Crystal's dithered shallows and Zhon's river water; the noise on the GPU, if 40 ms matters | After combine-or-drop |
+| Small leftovers | A weather cap of 14 pages (H13); Lava's terrace softness; the study comments in `sculpt.py`; the dead `isMap` branches in `perf.mjs`; a looser ripple on Ice's and Red's water; a lit fit for Red's and Crystal's dithered shallows and Zhon's river water; the noise on the GPU, if 40 ms matters | After combine-or-drop |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
 **H3, one material model (Green):**

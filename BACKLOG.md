@@ -6506,7 +6506,7 @@ assets folder to draw a world.
 - **The noise is made at startup** (`sculpt-noise.js`, CPU): the four channels
   by seeded hashing and smoothing, with the mean, spread, quantiles and
   autocorrelation of the old image. It is a new realisation, so fine detail
-  moved, and Desert's pale cover, which follows the broad channel, most of all.
+  moved. Desert moved most: its pale caps and grey band follow the broad channel.
 - **The palette lookup is made at startup** (`engine-palette.wgsl`, one compute
   pass from `materials/palette.json`), bit-identical to the image on Green and
   Desert. That file is 241 colours of the retail palette, committed as a table
@@ -6538,9 +6538,9 @@ assets folder to draw a world.
   | Moon | 1.97, 0.53, 0.89 | as before |
   | Zhon | 10.33, 11.72, 11.85 | as before; the number is the water's per-pixel dither. Coast water is in no window; one look by eye reads fine |
   | Lava | 3.66, 2.31, 4.00 | as before |
-  | Desert | 9.94, 3.40, 7.63 | the plain's pale patches sit elsewhere, the same in character |
+  | Desert | 9.94, 3.40, 7.63 | the pale caps and the grey band sit in different places on the same heights, the same in character |
   | Crystal | 2.72, 6.66, 2.93 | as before; a faint broad swell in the water |
-  | Ice | 4.99, 9.12, 1.15 | the diagonal in the deep water is stronger than the art's and closer to it than the old image's blotches |
+  | Ice | 4.99, 9.12, 1.15 | land as before; the deep water's ripple has the art's direction and scale, but is more regular and a little stronger, and shows at 1× where the art's barely does |
 
 - **Marks:** 118 lines carry a mark outside retail, before and after. Two
   noise moves on Red, both by a hair: `edge_vertical` red-1 .371 to .353 is
@@ -6564,8 +6564,8 @@ assets folder to draw a world.
   worlds; `smoke.mjs` exit 0 (`ok`) on nine worlds plus 8×8 Green, Lava, Ice,
   Zhon, Red and Archipelago; 22 of 22 tests; `repro/gate.sh` exit 0.
 
-**Still open:** Red's and Crystal's dithered shallows and Zhon's river water keep
-the band fit, with no ripple. The noise costs about 40 ms on the CPU. Many keys in
+**Still open:** the ripple on Ice and Red is more regular than the art's. Red's and
+Crystal's dithered shallows and Zhon's river water keep the band fit, with no ripple. The noise costs about 40 ms on the CPU. Many keys in
 each table's `world.defaults` were carried verbatim and not audited.
 
 ### H15. Shape: one cross-section for every kind
