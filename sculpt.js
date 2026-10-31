@@ -1,5 +1,5 @@
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
-import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer} from './sculpt-gpu-fields.js';
+import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -259,6 +259,7 @@ const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
 // Rounded authored knots preserve a long shoulder and a short exposed face.
 // Zero slope at the crown avoids the knife edge of a skewed power-law dome.
+setFailureHandler(err => error(err?.message??String(err)));
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
@@ -972,8 +973,8 @@ function queueWeather() {
   flushEval();
   if (pagedOn()) { queuePagedWeather(); return; }
   // H6b: a fed Time pass needs the GPU planes current, not the CPU copy; the copy a gesture left out is read in the background from here.
-  if (feedWeatherOk() && regionalFields?.gpuReady) { regionalFields.settle(); if (regionalFields.gpuPending()) { regionalFields.gpuReady().then(queueWeather); return; } }
-  else if (regionalFields?.pending?.()) { regionalFields.ready().then(queueWeather); return; }   // H6: the map's GPU fields are still being copied
+  if (feedWeatherOk() && regionalFields?.gpuReady) { regionalFields.settle(); if (regionalFields.gpuPending()) { regionalFields.gpuReady().then(queueWeather,err => failWeather('the shape pass failed: '+err.message,err)); return; } }
+  else if (regionalFields?.pending?.()) { regionalFields.ready().then(queueWeather,err => failWeather('the shape pass failed: '+err.message,err)); return; }   // H6: the map's GPU fields are still being copied
   if (!weatherOn()) {
     weatherState='disabled'; $('weather-state').textContent='Weathering off · authored surface'; updateControls(); return;
   }
@@ -985,7 +986,7 @@ function queueWeather() {
     if (!(feedWeatherOk() && regionalFields.gpuBuffers())) { failWeather('the GPU fields are not ready'); return; }
     $('weather-state').textContent='Refining exposed slopes…';
     runFedWeather(job);
-  } catch (err) { failWeather(err.message); }
+  } catch (err) { failWeather(err.message,err); }
 }
 // H12: the material field's knobs, or null when the Material weathering control is 0. The field comes from the Time pass's eroded height on the GPU
 // (engine-weather.wgsl mf*) and joins the chunk feed in gridTexture layer 1; a change of any of these drops the weather like a change of the pass's own knobs.
@@ -1010,9 +1011,10 @@ async function runFedWeather(job) {
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
     markViewChanged(); updateControls(); schedule();
-  } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message); }
+  } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message,err); }
 }
-function failWeather(message) {
+function failWeather(message,err=null) {
+  console.error(err??new Error(message)); error('Weathering failed: '+message);
   weatherJob++; weatherBase=null;
   weatherState=$('weather').checked?'failed':'disabled';
   $('weather-state').textContent=$('weather').checked
