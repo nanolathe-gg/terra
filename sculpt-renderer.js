@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,strataZoneWidths} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,PLACEMENT_ROW,strataZoneWidths} from './sculpt-material-model.js';
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
 const MASK_PLANE_COUNT = 25;
@@ -236,7 +236,7 @@ export class TerrainRenderer {
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
-    if (modelTable) { this.materialData = JSON.parse(modelTable); this.set('uMaterialTable', materialRows(this.materialData)); }
+    if (modelTable) this.materialData = JSON.parse(modelTable);
     if (this.materialData) await this.makeMaterials(); else this.makeBridgeTexture();
     this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
@@ -254,10 +254,8 @@ export class TerrainRenderer {
     // (bound(): its texture view and sampler). Aliases keep GL's sharing.
     this.textures = {};
     this.bound = {};
-    this.fringeTextures = {};
     this.means = {};
-    for (const [key, name] of [['noise','uNoise'], ['grass','uGrass'], ['rock','uRock'], ['water','uWater'], ['palette','uPalette'], ['waterShallow','uWaterShallow'], ['slopeGrass','uSlopeGrass'], ['rockWeathered','uRockWeathered'], ['rockFractured','uRockFractured'], ['fractures','uFractures'], ['mineralRing','uMineralRing'], ['mineralRings','uMineralRing']]) {
-      if (key === 'mineralRings' && !this.config.textures.mineralRings) continue;
+    for (const [key, name] of [['noise','uNoise'], ['grass','uGrass'], ['rock','uRock'], ['water','uWater'], ['palette','uPalette'], ['waterShallow','uWaterShallow'], ['slopeGrass','uSlopeGrass'], ['rockWeathered','uRockWeathered'], ['rockFractured','uRockFractured'], ['fractures','uFractures'], ['mineralRing','uMineralRing']]) {
       if (key === 'mineralRing' && !this.config.textures.mineralRing) { this.bound[name] = 'grass'; continue; }
       if (key === 'slopeGrass' && !slopeMaterial) { this.bound[name] = 'grass'; continue; }
       // H3: Green's slope grass is made from numbers, so its image is not loaded (the slot reads the ground).
@@ -266,23 +264,24 @@ export class TerrainRenderer {
       if (this.materialData && ['rock', 'rockWeathered', 'rockFractured'].includes(key)) { this.bound[name] = 'grass'; if (key === 'rock') this.means.rock = this.materialData.measured.rock.meanRGB.map(v => v / 255); continue; }
       if (key.startsWith('rock') && key !== 'rock' && !rockLayers) { this.bound[name] = 'rock'; continue; }
       if (key === 'fractures' && !this.config.textures.fractures) { this.bound[name] = 'noise'; continue; }
+      // The rock the draw shows is the hill rock (no world's default is another), and structured surfaces carry their own slope and rock image.
       let url = this.config.textures[key];
-      if (key === 'rock' && variant.get('rock') === 'hill') url = this.config.textures.hillRock;
-      if (key === 'rock' && variant.get('rock') === 'structural') url = this.config.assetBase + 'rock-structural.png';
+      if (key === 'rock') url = this.config.textures.hillRock;
       if (variant.get('surface') === 'structured') {
         if (key === 'slopeGrass' && this.config.textures.slopeStructured) url = this.config.textures.slopeStructured;
         if (key === 'rock' && this.config.textures.rockStructured) url = this.config.textures.rockStructured;
       }
-      if (key === 'noise' && variant.get('noise') === 'ridged') url = this.config.assetBase + 'noise-ridged-gaussian.png';
+      if (key === 'noise') url = this.config.assetBase + 'noise-ridged-gaussian.png';
       // Procedural ground tiles replace the sampled grass when the biome has them.
       // A world may use another world's ground pattern (World panel).
       if (key === 'grass') {
         const ground = this.groundSource();
         url = variant.get('ground') !== 'texture' && ground.groundTiles ? ground.groundTiles : ground.grass;
       }
-      // H3: with the material model the plain's 16 tiles are built from materials/green.json's `ground` data, not read from a file.
+      // H3: a world with a table builds the plain's 16 tiles from the table's `ground` data, not from a file; a borrowed pattern
+      // (World panel) names the table of the world it comes from.
       let bitmap;
-      if (key === 'grass' && this.materialData?.ground && variant.get('ground') !== 'texture' && !variant.get('groundPattern')) bitmap = await groundTileBitmap(this.materialData.ground);
+      if (key === 'grass' && variant.get('ground') !== 'texture' && this.groundSource().groundTable) bitmap = await groundTileBitmap((await this.groundTable(this.groundSource().groundTable)).ground);
       else {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Cannot load ${key} material`);
@@ -293,14 +292,13 @@ export class TerrainRenderer {
       const meanOf = {grass: 'ground', slopeGrass: 'slope', rock: 'rock'}[key];
       if (meanOf) this.means[meanOf] = meanColor(bitmap);
       if (this.bridge) this.bridgeCopy(key, bitmap);
-      const numeric = key === 'noise' || key === 'fractures';
-      const detailLevels = this.config.textures.transitionBody && ['grass','slopeGrass','rock','mineralRing','mineralRings'].includes(key);
-      const loaded = this.materialTexture(key, [bitmap], {
-        minFilter: detailLevels || numeric ? 'linear' : 'nearest', magFilter: numeric ? 'linear' : 'nearest', mipmaps: detailLevels});
-      if (key === 'mineralRing') this.fringeTextures.veins = loaded;
-      if (key === 'mineralRings') this.fringeTextures.rings = loaded;
+      // Only the plain, the noise and fractures, the waters and the palette are bound to the draw; the land images are copied into the
+      // generated array above (bridge) and need no texture of their own.
+      if (['grass', 'noise', 'fractures', 'water', 'waterShallow', 'palette'].includes(key)) {
+        const numeric = key === 'noise' || key === 'fractures', detailLevels = key === 'grass' && Boolean(this.config.textures.transitionBody);
+        this.textures[key] = this.materialTexture(key, [bitmap], {minFilter: detailLevels || numeric ? 'linear' : 'nearest', magFilter: numeric ? 'linear' : 'nearest', mipmaps: detailLevels});
+      }
       bitmap.close();
-      this.textures[key] = loaded;
       this.bound[name] = key;
     }
     // Two optional transition stages share one array texture. Keeping both
@@ -329,8 +327,6 @@ export class TerrainRenderer {
     }
     for(const bitmap of [body,beach]) if(bitmap.width!==fringe.width||bitmap.height!==fringe.height) throw new Error('Transition material sizes must match');
     if(this.bridge){ this.bridgeCopy('fringe',fringe); this.bridgeCopy('transitionBody',body); this.bridgeCopy('beach',beach); }
-    this.textures.slopeFringe=this.materialTexture('slopeFringe',[fringe,body,beach],{minFilter:this.transitionBody?'linear':'nearest',magFilter:'nearest',mipmaps:this.transitionBody});
-    this.bound.uSlopeFringe='slopeFringe';
     if(body!==fringe)body.close();fringe.close();
     }
     this.i('uBeach',Boolean(this.config.textures.beach));
@@ -350,7 +346,7 @@ export class TerrainRenderer {
     this.i('uMineralMargins', variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope');
     this.i('uRockLayers', rockLayers);
     this.applyKnobs();
-    if (this.bridge) { this.generateMipmaps(this.generated.texture, BRIDGE_LAYERS, GENERATED_LEVELS); this.set('uMaterialTable', this.placementRows(variant)); }
+    if (this.bridge) this.generateMipmaps(this.generated.texture, BRIDGE_LAYERS, GENERATED_LEVELS);
     this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -376,7 +372,7 @@ export class TerrainRenderer {
     this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
-    const rockMean = variant.get('rock') === 'hill' ? material.hillRockMeanRGB : material.rockMeanRGB || [85, 84, 79];
+    const rockMean = material.hillRockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
     this.i('uShapeCoverage', variant.get('coverage') === 'form');
     this.i('uLedgeCoverage', variant.get('coverage') === 'ledge');
@@ -452,7 +448,14 @@ export class TerrainRenderer {
   // Base colours chosen for a world: {ground, slope, rock, sand, beach,
   // shallow, deep} as [r,g,b] 0..1, or absent to keep the world's own.
   groundSource() {
-    return this.config.groundPatterns?.[this.variant.get('groundPattern')] || this.config.textures;
+    return this.config.groundPatterns?.[this.variant.get('groundPattern')] || (this.ownGround ??= {...this.config.textures, groundTable: this.config.materialTable});
+  }
+  // A world's table by URL: this world's own is already loaded.
+  async groundTable(url) {
+    if (url === this.config.materialTable) return this.materialData;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Cannot load ground pattern ${url}`);
+    return response.json();
   }
 
   setColors(colors = {}) {
@@ -662,8 +665,8 @@ export class TerrainRenderer {
     for (const layer of layers) for (let y = 0; y < GENERATED_SIZE; y += height) for (let x = 0; x < GENERATED_SIZE; x += width)
       this.device.queue.copyExternalImageToTexture({source: bitmap}, {texture: this.generated.texture, origin: [x, y, layer], premultipliedAlpha: false}, [width, height]);
   }
-  // H8 bridge: the placement rows of a world with no table (the ten rows after the four materials; engine-frag.wgsl landPlace reads them),
-  // from the knobs the shared draw's placement read. Green's rows are materials/green.json; this builds the same rows for the shared draw's formulas.
+  // The ten placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the knobs the
+  // shared draw's placement read. Green's rows are materials/green.json's.
   placementRows(variant) {
     const material = this.config.material || {}, num = (k, d) => variant.has(k) ? Number(variant.get(k)) : d, list = (k, d) => (variant.get(k) || d).split(',').map(Number);
     const mode = variant.get('coverage'), soil = variant.get('transition') === 'soil', mineral = variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope';
@@ -672,11 +675,15 @@ export class TerrainRenderer {
     if (mode === 'form') { r0 = [0.55, 0.45, 0.28, 5]; r1 = [soil ? 0.80 : 0.25, soil ? 0.70 : 0, 0.55, 10]; third = 0; }
     if (mode === 'ledge') { r0 = [0.15, 0.85, 0.15, 3]; r1 = [0.15, 0, 0.55, 4]; third = 0; }
     const face = list('faceSlope', '0.35,0.9'), share = list('rockShare', '0.2,1.0'), score = list('faceScore', '0.2,2.0,0.5,0.3');
-    const rows = Array.from({length: 166}, () => [0, 0, 0, 0]);
-    rows.splice(156, 10, r0, r1, [threshold - feather * 0.5, threshold + feather * 0.5, third, 0],
+    return [r0, r1, [threshold - feather * 0.5, threshold + feather * 0.5, third, 0],
       [0.2, soil ? 18 : 1e9, 18, 28], material.rockyCoasts ? [-1e4, -1e3, 0, 0] : [12, 36, 0, 0], [0.45, 0.9, mineral ? 0.45 : 0, mineral ? 1.4 : 0],
-      [face[0], face[1], num('faceEdge', 0.8), 0], [share[0], share[1], 0, 0], score, [num('gullyRock', 0.5), num('rockOrder', 0), 0, 0]);
-    return rows;
+      [face[0], face[1], num('faceEdge', 0.8), 0], [share[0], share[1], 0, 0], score, [num('gullyRock', 0.5), num('rockOrder', 0), 0, 0]];
+  }
+  // The draw's uniform table: only the ten placement rows are read, at PLACEMENT_ROW. A table with a `placement` block gives them
+  // (Green's); every other table leaves them to the knobs, as the world's placement always was.
+  placementTable(variant) {
+    const rows = this.materialData?.placement ? tablePlacementRows(this.materialData, variant) : this.placementRows(variant);
+    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows];
   }
 
   // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
@@ -776,7 +783,7 @@ export class TerrainRenderer {
     this.i('uTransitionBody', Boolean(useBody));
     this.f('uFractureAmount', this.config.textures.fractures ? fractures : 0);
     this.f('uDetail', this.variant.get('relief') === 'base' ? 0 : detail);
-    const fringeTexture = this.fringeTextures[fringeStyle] || this.fringeTextures.veins || this.fringeTextures.rings;
+    const fringeTexture = Boolean(this.config.textures.mineralRing);
     this.f('uRingAmount', fringeTexture ? ring : 0);
     this.f('uRingSpread', ringSpread);
     this.f('uRingVariation', ringVariation);
@@ -845,7 +852,7 @@ export class TerrainRenderer {
     this.setStrataSpacing();
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in both generated and bridged materials.
-    this.set('uMaterialTable', this.bridge ? this.placementRows(variant) : materialRows(this.materialData, variant));
+    this.set('uMaterialTable', this.placementTable(variant));
     this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1));
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
@@ -932,9 +939,9 @@ export class TerrainRenderer {
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
     this.f('uSandGrain', variant.has('sandGrain') ? Number(variant.get('sandGrain')) : 0.8);
-    this.i('uGroundMode', variant.get('ground') !== 'texture' && this.groundSource().groundTiles ? 1 : 0);
+    this.i('uGroundMode', variant.get('ground') !== 'texture' && (this.groundSource().groundTable || this.groundSource().groundTiles) ? 1 : 0);
     this.f('uGroundContrast', variant.has('groundContrast') ? Number(variant.get('groundContrast')) : 1);
-    this.i('uGroundBorrowed', this.groundSource() !== this.config.textures);
+    this.i('uGroundBorrowed', this.groundSource() !== this.ownGround);
     this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
     this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
     this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);

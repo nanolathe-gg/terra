@@ -1529,7 +1529,8 @@ function buildKnobs() {
     row.append(box, label); render.append(row);
   };
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
-  toggle('ground', 'Procedural ground texture (off: sampled texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
+  // A world made from numbers has no sampled ground to switch to.
+  if (config.textures.grass) toggle('ground', 'Procedural ground texture (off: sampled texture)', 'tiles', 'texture', params.get('ground') !== 'texture');
   // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
