@@ -7,6 +7,7 @@
 // below it are made first, as the editor's startup makes them, because a lit material's level is a box mean of the one above.
 // --auto-zq: first measures each lit layer's z (makeZ) and sets its zq rows to the field's own quantiles, written to meta.json (`zq`, by layer).
 // --time: also times the whole startup chain (every level, every layer), seven runs, in meta.json (`times`, ms, first is cold).
+// --same-seed: every layer uses layer 0's noise salt (the fit compares candidates that differ only in their numbers).
 // --z: runs entry makeZ instead (level 0): <name>.rgba holds a lit material's z, 16 bits as red*256+green, z = v / 65535 * 16 - 8.
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
@@ -21,6 +22,7 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const zMode = args.includes('--z') && args.splice(args.indexOf('--z'), 1).length > 0;
 const foot = Number(opt('--foot', 1)), size = Number(opt('--size', 512)), cdp = Number(opt('--cdp', 9663));
 const autoZq = args.includes('--auto-zq') && args.splice(args.indexOf('--auto-zq'), 1).length > 0;
+const sameSeed = args.includes('--same-seed') && args.splice(args.indexOf('--same-seed'), 1).length > 0;
 const timing = args.includes('--time') && args.splice(args.indexOf('--time'), 1).length > 0;
 const level = zMode ? 0 : Math.round(Math.log2(foot));
 const [tableFile, out] = args;
@@ -30,7 +32,7 @@ const rows = materialRows(table);
 const shader = readFileSync(resolve(here, '../engine-materials.wgsl'), 'utf8');
 const n = size >> level;
 const page = `<!doctype html><body><script type="module">
-const rows = ${JSON.stringify(rows)}, layers = ${table.order.length}, size = ${size}, level = ${level}, n = ${n}, zMode = ${zMode}, autoZq = ${autoZq}, mmRows = ${MM_ROWS};
+const rows = ${JSON.stringify(rows)}, layers = ${table.order.length}, size = ${size}, level = ${level}, n = ${n}, zMode = ${zMode}, sameSeed = ${sameSeed}, autoZq = ${autoZq}, mmRows = ${MM_ROWS};
 const timing = ${timing};
 const adapter = await navigator.gpu.requestAdapter(); const device = await adapter.requestDevice();
 const module = device.createShaderModule({code: await (await fetch('/engine-materials.wgsl')).text()});
@@ -48,7 +50,7 @@ const groupsFor = (pipe, withPrev, upTo) => {
   const g = [];
   for (let m = 0; m <= upTo; m++) {
     const p = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
-    device.queue.writeBuffer(p, 0, new Float32Array([size, 2 ** m, 0, 0]));
+    device.queue.writeBuffer(p, 0, new Float32Array([size, 2 ** m, sameSeed ? 1 : 0, 0]));
     const entries = [{binding: 0, resource: {buffer: table}}, {binding: 1, resource: view(m)}, {binding: 2, resource: {buffer: p}}];
     if (withPrev) entries.push({binding: 3, resource: view(m ? m - 1 : 1)});
     g.push(device.createBindGroup({layout: pipe.getBindGroupLayout(0), entries}));

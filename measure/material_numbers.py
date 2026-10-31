@@ -41,6 +41,11 @@ Per material:
   chroma    s.d. of each colour channel left once the ramp alone is taken
             away, and `chromaLeft` what is left after the tint too.
   colours   distinct colours in the image, and the share of the commonest.
+  lit       the structure numbers of a lit height field (material_lit.py: light axis, orientation, anisotropy, seams, cell size, veins),
+            for the images that are not the 16-tile strip (card H14b).
+A world whose plain is one quilted image (no ground tiles, or a default of ground=texture) gets that image as one more material,
+`quilt`, last in `order`: the generated array holds it as a layer and the draw's plain reads it (card H14b step 3).
+A world with a mineral ring, beach or transition body gets layers 4-7 as the bridge laid them out (fringe, body, beach, ring).
 Tiled images wrap, as the draw's repeat sampling does; the ground strip is
 sixteen separate 32 x 32 tiles and does not.
 """
@@ -52,12 +57,17 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage as ndi
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import material_lit as ml
+
 LUMA = np.array([.299, .587, .114])
 KNOTS = 16
 SIGMAS = [0.0] + [0.7 * 2 ** k for k in range(7)]    # 0, .7, 1.4 ... 44.8
 DRAWS = {'ground': 'plain ground (the 16 tiles, groundTile)', 'slopeGrass': 'cover on slopes (generated layer 0)',
          'rock': 'hill rock (generated layer 1)', 'weathered': 'weathered rock patches (generated layer 2)',
-         'fractured': 'fractured rock patches (generated layer 3)'}
+         'fractured': 'fractured rock patches (generated layer 3)', 'fringe': 'fringe (generated layer 4)',
+         'body': 'transition body (generated layer 5)', 'beach': 'beach (generated layer 6)', 'ring': 'mineral ring (generated layer 7)',
+         'quilt': 'the plain as one quilted image (generated layer after the others)'}
 
 
 def layer_plan(config):
@@ -68,8 +78,16 @@ def layer_plan(config):
     rock = t['rockStructured'] if structured and 'rockStructured' in t else t['hillRock']
     varied = d.get('material') == 'varied'
     images = [slope, rock, t['rockWeathered'] if varied else rock, t['rockFractured'] if varied else rock]
+    names = ['slopeGrass', 'rock', 'weathered', 'fractured']
+    # Layers 4-7 as the bridge laid them out: each defaults to the fringe image (slopeFringe, else the slope image); a world that names a
+    # transition body, beach or mineral ring has its layers up to the last of those.
+    fringe = t.get('slopeFringe', t['slopeGrass'])
+    extra = [('fringe', fringe), ('body', t.get('transitionBody', fringe)), ('beach', t.get('beach', fringe)), ('ring', t.get('mineralRing', fringe))]
+    last = max([i for i, k in enumerate(['slopeFringe', 'transitionBody', 'beach', 'mineralRing']) if k in t], default=-1)
+    names += [n for n, _ in extra[:last + 1]]
+    images += [u for _, u in extra[:last + 1]]
     plan, seen = [], {}
-    for name, url in zip(['slopeGrass', 'rock', 'weathered', 'fractured'], images):
+    for name, url in zip(names, images):
         file = url.rsplit('/', 1)[-1]
         plan.append((seen.setdefault(file, name), file))
     return plan
@@ -142,6 +160,7 @@ def measure(a, mode):
         'tint': [[round(float(v), 1) for v in row] for row in tint],
         'colours': int(len(colours)), 'topShare': round(float(counts.max() / counts.sum()), 3),
         'ramp': [[round(float(v), 1) for v in row] for row in ramp],
+        **({'lit': ml.lit_numbers(a)} if mode == 'wrap' else {}),
     }
 
 
@@ -154,27 +173,32 @@ def main():
     world, assets = args[0], Path(args[1])
     out = out or Path(__file__).resolve().parent.parent / 'materials' / f'{world}.json'
     config = json.loads((assets / 'config.json').read_text())
-    if 'groundTiles' not in config['textures']:
-        raise SystemExit(f'{world}: the plain is one quilted image, not 16 tiles; its ground numbers are a later step')
     plan = layer_plan(config)
+    tiles = 'groundTiles' in config['textures']
+    quilt = not tiles or config['defaults'].get('ground') == 'texture'
     table = {}
-    ground_file = config['textures']['groundTiles'].rsplit('/', 1)[-1]
-    table['ground'] = {'image': ground_file, 'draw': DRAWS['ground'], **measure(load(assets / ground_file, 'strip'), 'strip')}
+    if tiles:
+        ground_file = config['textures']['groundTiles'].rsplit('/', 1)[-1]
+        table['ground'] = {'image': ground_file, 'draw': DRAWS['ground'], **measure(load(assets / ground_file, 'strip'), 'strip')}
     for name, file in plan:
         if name not in table:
             table[name] = {'image': file, 'draw': DRAWS[name], **measure(load(assets / file, 'wrap'), 'wrap')}
+    if quilt:
+        file = config['textures']['grass'].rsplit('/', 1)[-1]
+        table['quilt'] = {'image': file, 'draw': DRAWS['quilt'], **measure(load(assets / file, 'wrap'), 'wrap')}
     old = json.loads(out.read_text()) if out.exists() else {}
     old['measured'] = table
-    old['order'] = [name for name, _ in plan]
+    old['order'] = [name for name, _ in plan] + (['quilt'] if quilt else [])
     # The plain is not modelled: its 16 tiles are kept as data: the colour entries in luma order and each tile as 1,024 entry letters
     # (a = first entry), rows top first. The draw builds them at startup (groundTileBitmap, sculpt-renderer.js).
-    strip = np.asarray(Image.open(assets / ground_file).convert('RGB'))[:32]
-    entries = sorted({tuple(c) for c in strip.reshape(-1, 3)}, key=lambda c: float(np.dot(c, LUMA)))
-    if len(entries) > 26:
-        raise SystemExit(f'{world}: {len(entries)} ground colours do not fit the one-letter entry code')
-    index = {c: i for i, c in enumerate(entries)}
-    old['ground'] = {'entries': [list(map(int, c)) for c in entries],
-                     'tiles': [''.join(chr(97 + index[tuple(strip[y, 32 * t + x])]) for y in range(32) for x in range(32)) for t in range(16)]}
+    if tiles:
+        strip = np.asarray(Image.open(assets / ground_file).convert('RGB'))[:32]
+        entries = sorted({tuple(c) for c in strip.reshape(-1, 3)}, key=lambda c: float(np.dot(c, LUMA)))
+        if len(entries) > 26:
+            raise SystemExit(f'{world}: {len(entries)} ground colours do not fit the one-letter entry code')
+        index = {c: i for i, c in enumerate(entries)}
+        old['ground'] = {'entries': [list(map(int, c)) for c in entries],
+                         'tiles': [''.join(chr(97 + index[tuple(strip[y, 32 * t + x])]) for y in range(32) for x in range(32)) for t in range(16)]}
     # What config.json held that no committed file did: the world's material and water numbers (measured means, depths, authored
     # coverage and relief values). The server overlays them on the page's config (sculpt.py, world_knobs).
     old['material'] = config['material']
@@ -186,4 +210,5 @@ def main():
     print('order', old['order'])
 
 
-main()
+if __name__ == '__main__':
+    main()

@@ -7,6 +7,12 @@ variance (the ramp supplies the histogram only when z is a unit normal). It writ
 rows of materials/<world>.json (the materials named in its `order`, once each).
 
   material_fit.py <materials/<world>.json> <work-dir> [--rounds 6] [--cdp 9663]
+
+A lit material (card H14b: its `lit` block has a relief above 0) is not fitted by band ratios: its picture is a lit height field,
+and its numbers (light, cells, seams, veins, relief, band amplitudes) are found by a pattern search on rendered swatches, with the
+image itself as the target. That is lit_fit.py; this script hands it the material:
+
+  material_fit.py --lit <table.json> <material> <image> <assets-dir> <work-dir> [--rounds 12] [--cdp 9681] [--fix key,key]
 """
 import json
 import subprocess
@@ -94,6 +100,10 @@ def run(table, work, rounds, cdp, foot=1):
 
 def main():
     args = sys.argv[1:]
+    if args and args[0] == '--lit':
+        import lit_fit
+        sys.argv = [sys.argv[0]] + args[1:]
+        return lit_fit.main()
     rounds = int(args[args.index('--rounds') + 1]) if '--rounds' in args else 6
     cdp = int(args[args.index('--cdp') + 1]) if '--cdp' in args else 9663
     for flag in ('--rounds', '--cdp'):
@@ -145,4 +155,5 @@ def main():
     path.write_text(json.dumps(table, indent=1) + '\n')
 
 
-main()
+if __name__ == '__main__':
+    main()

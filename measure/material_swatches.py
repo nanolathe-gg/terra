@@ -99,4 +99,5 @@ def main():
             print(f"{name:10s} {label:15s} mean {s['mean']:5.1f} sd {s['sd']:5.1f} sd5 {s['sd5']:5.2f} hue {s['hue']:5.1f} sat {s['sat']:.3f} rgb {s['rgb']}")
 
 
-main()
+if __name__ == '__main__':
+    main()
