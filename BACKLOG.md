@@ -6615,16 +6615,107 @@ before any classic curve goes.**
 **Stop there and report.** Nothing is deleted in part 1. The coordinator takes
 the comparison to the owner, and part 2 follows their ruling.
 
-**Part 2, after the ruling:** each kind's curve is numbers in one preset table,
-`profile` 0 and the classic paths go, the classic-or-parametric choice leaves the
-UI, and `sculpt-control-schema.js` follows. Any kind the owner keeps as it is
-stays with its reason. An old save that uses a dropped option draws without it
-(decision 18).
+**Part 1, the coordinator's review.** Part 1 is on branch `H15-shape` with its
+Done list. Two new numbers matched the classic curves with noise off: the hill's
+RMS went from 17.52 to at most .72, and the plateau's 6.40 was only a coarse search.
+With noise on the presets used a stand-in, and that caused most of the scene
+changes, including Lava-3's rings and Crystal-1's clipped column. They also left
+out Desert's `mesaFlank` and the default `northFace`, so Desert's sheets are not
+final. `moonLobes` stays for now: one window lost its folds and another came closer
+to retail, so the Impacts card settles it.
 
-**Acceptance:** as H14, each world's three retail windows by eye at 1× and 2×.
-Part 2 reports `engine-shape.wgsl` lines and shape knobs before and after, and
-must lower both. `regional.mjs` 0 and `smoke.mjs` clean on nine worlds and 8×8.
-Shape stays on the GPU path with no drag slower than `merge-h14e`.
+**Part 2: one curve (owner, decision 23).** One curve, height at each distance from
+the line, replaces every kind's curve and the numbers that describe it. Hill,
+mountain, plateau, offset, lower, deep and shallow all draw through it. Craters,
+crystals, fissures and ramps stay separate.
+
+**The contract:**
+- **The curve** is a list of knots (distance share, height share) from the foot (0)
+  to the top (1). Heights may pass 1 or 0, so a lip is a curve shape, which is why
+  it runs from distance to height and not the other way round.
+- **The host builds the table; the shader only reads it.** `prepareNode` turns the
+  stroke's kind, softness and any curve it carries into a fixed table of 33 samples
+  or more, by monotone cubic through the knots, and stores it after the node's mask
+  writes in `MW` (the `u.mwBase` pattern) with a new `u.curveBase`. The shader reads
+  it with one small function. So no scene or saved document needs editing to draw.
+- **Softness stays continuous.** A preset is a short function of softness that
+  gives knots, sampled per stroke. The mountain's exponent and the hill's widths
+  move with softness, and one fixed table per kind would bring the mountain's error
+  back.
+- **The face share.** The curve covers the face, foot to top, and the top is flat
+  beyond it: `w = curve(clamp((1 - r) / face, 0, 1))`. For the plateau family `face`
+  is `1 - shoulder`, so softness and every noise term keep working by moving
+  `face` per cell. Hills and mountains use 1. A face set in px (today's `facePx`)
+  keeps the cliff the same width when a stroke widens; a share scales with it.
+- **The shouldered hill's geometry stays:** face vector, facing side, the elliptical
+  end taper `q*q` and the cross shift. Only `hillSection` goes. The classic hill's
+  two sides have different shapes, so a preset may carry a separate back curve. The
+  default back is the front stretched by the lean.
+- **Lean and facing.** Lean is the back's length over the face's (part 1's `sBack`).
+  Facing is a side of the stroke, or a map bearing. The bearing absorbs `northFace`,
+  whose term is `.32 * northFace * north^2` with `north = max(0, -dy) / |d|`, on by
+  default at .7.
+- **Ground action is a setting, not a curve:** add (offset, hill, mountain), set a
+  level (plateau, `PT[preIdx] + amount`), carve to a bed (lower, deep, shallow).
+- **Modifiers that stay, untouched:** settling, as "round the form"; deep's noise
+  shelf and core, `bankFlat` and `beachFlat` (Shores); `baseVary`, `baseBump` and
+  `moonLobes` (Impacts); the ridge crest options. Terraces stay on top of the curve
+  until Geology takes them.
+
+**What happens to each control** (17 today, about 9 after):
+
+| Control | After |
+| --- | --- |
+| `profile` | Goes |
+| `apronPx`, `apronHeight`, `faceCurve`, `crown`, `lip`, `shelfPx`, `shelfDepth`, `shelfSteps` | Absorbed by the curve |
+| `mesaFlank` | Absorbed: Desert's plateau preset is the mesa curve |
+| `northFace` | Absorbed by lean, with facing set to north |
+| `facePx` | Stays: 0 scales with the stroke, above 0 keeps the face that wide |
+| `softness`, `faceVariation` | Stay |
+| `terraces`, `ledge`, `terraceJitter` | Stay until Geology |
+| New | The curve (a form to pick and knots to drag), lean, facing |
+
+**Step A: the table, with no change of look.** Replace only the line that computes
+each curve. Every per-kind noise term stays exactly as it is, so part 1's stand-in
+(`sVary` for the plateau family) goes. Reuse the `?shapePresets` switch to compare.
+`sculpt-shape-presets.js` becomes the short preset functions; `sP` goes into the
+curve, and `sBack` stays as the lean.
+*Acceptance:* `section_check.mjs` at most RMS .1 and maximum .5 for all seven kinds
+across sizes 140-560, amounts 30-160 and the scenes' softnesses (0, .5, .88, 1),
+mountain included. 27 scenes with the switch on: mean |diff| at most .2, with any
+scene above that explained. No mark newly outside retail. `regional.mjs` 0 on nine
+worlds. Drag no slower than `merge-h14e` (`perf.mjs map4 --only drag`). The part-1
+Done list's "exact" becomes "to within interpolation, reported". This step is
+what proves the owner's yes: if the mountain misses, stop and report.
+
+**Step B: delete the classic path.** The classic branches, `hillSection` and its
+tangents, `landSection`, `waterSection`, `faceRise`'s curve math, `profile` and the
+switch. The stored section keys become knots in one host function, which step C
+deletes. Red-3's deep stroke depends on ground height, so its conversion is
+approximate: judge it against retail and report it.
+*Acceptance:* as step A, against step A's renders, except red-2 and red-3, which are
+judged against retail. Report `engine-shape.wgsl` lines, uniforms and JS lines, before
+and after. Lines must drop.
+
+**Step C: the controls.** Lean and facing on every line stroke. `northFace` and
+`mesaFlank` become a bearing and a preset. The stored section keys go: the scene
+strokes that use them and Desert's tool preset carry knots instead. Forms to pick:
+at least hill, mountain, plateau, mesa, cliff and terrace. `drawSection()` becomes an
+editor: drag, add and remove knots, reset to the form. A stroke saves its knots.
+Per-kind noise constants become shared where they are the same idea, as sliders
+for outline, width, face and height, each default-driven by `roughness`.
+*Acceptance:* the control count falls as the table says; report it. Knots survive
+save and reload. Each form draws correctly at 140 and 560 px.
+
+**Step D: toward retail.** Measure each world's slopes and fit its forms to them:
+`$R/repro-r7/<scene>/heights.npy` (64 x 64, 16 px cells) and the family maps in
+`$R/retail-<world>`, averaging height against distance from the foot, by feature
+height. The heights are coarse, so they judge form, not detail. A world's forms go in
+its table. Keep a measured curve only where the three windows read at least as close.
+*Acceptance:* each world's windows by eye at 1x and 2x against retail (decision 22),
+`stats.py`, and every check of step A.
+
+**Two dispatches:** A and B, then C and D, so each report can be reviewed.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H15`,
 branch `H15-shape`; assets `$R/agent-H15`.

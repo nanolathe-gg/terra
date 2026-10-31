@@ -160,6 +160,22 @@ feature.
     - The retail palette is fine in the repo as a table
       (`materials/palette.json`).
 
+23. **One curve for every shape.** *"Can't a single slope curve plus e.g.
+    radius-to-height curve controlling the distance from the drawn line at a given
+    height a feature goes represent everything from small smooth hills to large
+    cliffs to peak covered mountains to large flat plateaus? Then we can add sliders
+    for variability in various dimensions, add things like stratification, etc and
+    get all kinds of unique features. Craters and crystals obviously stay separate,
+    but this should cover a lot of the geology shouldn't it? ... I guess for the
+    asymmetrical nature we would need another control as that's a totally separate
+    axis."* Then, on the plan: *"Okay go ahead with that"* (2026-10-31).
+    - A slope curve and a radius-to-height curve are one curve seen two ways, so
+      there is one: height at each distance from the line. Hills, cliffs, peaks,
+      plateaus and mesas are presets of it, and a preset is only its numbers.
+    - Lean and facing are the separate axis. Variability and strata go on top.
+    - This replaces fitting numbers to today's cross-section. Decision 16 stands;
+      this is how Shape meets it.
+
 ## The Green slice
 
 Green gets its own engine: new shaders and GPU passes for every stage,
@@ -467,9 +483,9 @@ for each control as of c4b1b80; it goes stale as cards delete knobs.
 | Plate material 0 (plain floes) | H10 | Unused; slabs and frost replaced it. **Dropped (owner, decision 20; H10)** |
 | Coast layer style 2 (mounds) | H10 | Unused. **Dropped (owner, decision 20; H10)** |
 | Hill facets | H10 | Unused; hills do not write the plane facets read. **Dropped (owner, decision 20; H10)** |
-| `moonLobes` with `baseVary` and `baseBump` | H9 | The same outline noise; one shared GPU function now. **Merge if the look allows (owner, decision 17; Shape)** |
+| `moonLobes` with `baseVary` and `baseBump` | H9 | The same outline noise; one shared GPU function now. **Merge if the look allows (owner, decision 17).** H15 tried it and the result was mixed; the Impacts card settles it |
 | Shape mask writes, and per-stroke water mask choices | H9 | Near-duplicates of the Paint tool and the World panel's water options |
-| Each kind's classic curve | decision 16 | Becomes a preset of the cross-section (Shape) |
+| Each kind's classic curve | decision 16 | **Replaced by one curve (owner, decision 23; H15)** |
 | Pick-one variants (`experiment`, `variant`) | decision 16 | Each becomes a parameter or goes |
 | `talusAngle` (Green), `columnContrast` (green-3) | H5 | Under 5% of their class at the defaults |
 | The Ground pattern list and `groundTiles` | H14d, H14e | Nine worlds to six: Red, Crystal and Archipelago have quilted plains and no tiles to lend |
@@ -608,7 +624,7 @@ Each is written in full when the one before it lands.
 | H14c | The three swatch fixes (slabs, fine streaks, strokes), then the seven other worlds on their tables | Merged 703148c: Moon's rock, Ice, Lava, Zhon and Desert moved; Red, Crystal and Archipelago on images |
 | H14d | The art's dither (hue is error-diffused per pixel), then Red, Crystal and Archipelago | Merged b136359: all nine worlds on tables |
 | H14e | Water, noise and the palette as numbers; the image bridge and the Python preparation go; a server with no world images draws every world | Merged c33bec2: a fresh clone on stock Python draws all nine worlds; `fractures.png`, ours, is the one image left |
-| H15 | Shape: one cross-section for every kind; the owner sees the comparison before any classic curve goes | Running |
+| H15 | Shape: one curve for every kind (decision 23), with lean, facing and shared variability; each world's forms measured from retail | Part 1 reviewed; part 2 running, steps A and B first |
 | Small leftovers | A weather cap of 14 pages (H13); Lava's terrace softness; the study comments in `sculpt.py`; the dead `isMap` branches in `perf.mjs`; a looser ripple on Ice's and Red's water; a lit fit for Red's and Crystal's dithered shallows and Zhon's river water; the noise on the GPU, if 40 ms matters | After combine-or-drop |
 | Later | The knob audit, a Go server in place of `sculpt.py`, a `gogpu/wgpu` trial, then the UI pass | Waiting |
 
