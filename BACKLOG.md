@@ -6620,6 +6620,33 @@ Shape stays on the GPU path with no drag slower than `merge-h14e`.
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H15`,
 branch `H15-shape`; assets `$R/agent-H15`.
 
+**Done (part 1).**
+
+*1. Inventory.* `r` is the cell's distance from the stroke over its outline
+reach (0 at the stroke, 1 at the foot), `t = 1 - r`. Every curve is applied
+after the outline wobble and before the modifiers: the crest (`ridgeRise`
+multiplies `w`), `baseBump`, mask writes, the cracks mark, protection
+(`smoothstep(.65, .95, w)`) and the coast pass's footprint all read `w`.
+
+| Kinds (shader kind) | Classic curve `w` | Who reaches it (scenes) | Function of distance alone? |
+| --- | --- | --- | --- |
+| plateau (6), offset (7), erase (1), paint (0), sand (9), grass (10) | one curve under six names: `1 - smoothstep(shoulder, 1, r)`; width `1 + 1.3 rough nCW`; `shoulder = .56 + rough (nDet + .3 nCW) + faceVar .22 broad - (softness - .5) .6 - north term` | plateau: desert-1/2/3, lava-3, red-2; offset: crystal-1, desert-1, ice-1/2, red-1/2; paint: green-1/2, red-3 (as mask brushes); erase: green-2; sand: zhon-1/2/3 | no: the shoulder and width vary per cell with three noise fields, and the north term depends on the bearing. `mesaFlank` swaps in a concave-flank curve (plateau only) |
+| lower (8), smooth (11) | one curve under two names: `1 - smoothstep(0, 1, r)` (lower adds `1 + .09 rough nDet`) | moon-1 (lower); smooth is not in a scene | yes |
+| deep (2), shallow (3) | one curve under two names: `1 - smoothstep(.10, 1, r)`; the value is `base + (bed - base) w`. Deep natural adds width noise, a noise-driven shelf and a core; bank width/beach flatness stretch the dry part | 82 strokes in 20 scenes (every world but desert and moon) | no for natural deep (shelf noise, core); shallow yes |
+| mountain (4), plain hill (5, with `profile` 1 or ridge options) | one curve under two names: `(1 - r^2)^m`; `m = 3.5 * 2^((.5 - softness) 1.5)` for the mountain, 2 for the hill | mountain: 9 strokes in 7 scenes; plain hill: lava-3 (spurs) | yes (the crest adds `ridgeRise`) |
+| hill (5, shouldered, the default) | a monotone cubic through four knots (rise 1, .34, .02, 0) on the face side, a smoothstep on the back; along a signed cross coordinate, with an elliptical taper at the ends | 69 strokes in 17 scenes | **no**: asymmetric about the crest line, so a function of the signed side, not of distance |
+| ramp (12) | `1 - smoothstep(.55, 1, plain distance / radius)`, with edge noise | not in a scene | yes; the plateau curve at a fixed shoulder, in its own stamp |
+| crater (13) | bowl `1 - smoothstep(floor, 1, rb)` plus rim Gaussian plus apron | 29 strokes (moon, crystal, red) | no: lobed outline, rim sectors/gaps vary the height and width by bearing |
+| fissure (14) | cut `(1 - q) sqrt(1 - q)` | not in a scene | the network form uses the distance to a Voronoi edge |
+| crystal (15) | polygon, column and berg geometry | crystal, ice scenes | no |
+
+Under two names: erase = paint = plateau = offset = sand = grass; lower =
+smooth; deep = shallow; mountain = plain hill (different exponent); ramp is
+the plateau curve at shoulder .55. The six cover and plateau kinds reach one
+`stampN`/`stamp` branch; the comparison below covers the curves that are
+functions of a cross-section (the first five rows, and the shouldered hill).
+Crater, fissure and crystal are not cross-sections and are left alone.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
