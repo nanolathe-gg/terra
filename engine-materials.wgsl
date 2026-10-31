@@ -28,7 +28,17 @@
 // Fixed seeds: the salt of each material is its index; every operation is integer hashing or a fixed float expression,
 // so the same table gives the same bits on a given GPU.
 
-const MM_ROWS = 46u;
+// H14d: a material whose row 2 z (dither amount) is above 0 is dithered as the art was: the art is a smooth colour reduced to a small
+// palette by error diffusion, so its hue alternates pixel by pixel, which a rank ramp (hue tied to luma) cannot make. The ramp is then the
+// smooth colour (measured on the image blurred, material_numbers.py --dither), and each pixel's final colour is the nearest of the
+// material's own colours (up to 16), found by Floyd-Steinberg error diffusion on rgb, so the mean over any area is the smooth colour.
+//   rows 46..61 per colour: rgb, and w = 1 for a colour in use (the colours are the commonest of the image, measured)
+//   row 2 z   the amount: the output is the ramp plus this share of (nearest colour - ramp)
+// The pass is makeDither (level 0 only): one invocation runs a serpentine error diffusion over a DITHER_BLOCK px square of the layer, the
+// error never crossing a block edge, so the layer still wraps and the blocks run in parallel. Levels above 0 of a dithered material are
+// 2 x 2 box means of the level above, as a lit material's are (the mean over an area is the smooth colour).
+const MM_ROWS = 62u;
+const DITHER_BLOCK = 32u;
 @group(0) @binding(0) var<storage, read> table: array<vec4f>;
 @group(0) @binding(1) var out: texture_storage_2d_array<rgba8unorm, write>;
 struct Params { size: f32, foot: f32, pad0: f32, pad1: f32 }
@@ -97,11 +107,11 @@ fn mmRamp(base: u32, u: f32) -> vec3f {
     return mix(matRow(base + 3u + i0).rgb, matRow(base + 3u + min(i0 + 1u, 15u)).rgb, fract(at));
 }
 
-fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
+// The unlit model's z at a pixel (`lost` is the variance the footprint rule moves into the five-point average).
+fn mmUnlitZ(id: u32, pixel: vec2f, foot: f32) -> vec2f {
     let base = id * MM_ROWS;
     let r0 = matRow(base);
     let r1 = matRow(base + 1u);
-    let r2 = matRow(base + 2u);
     let stretch = max(r1.w, 0.1);
     let salt = id * 16u + 1u;
     let wrap = vec2i(i32(params.size));
@@ -116,6 +126,19 @@ fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
         z += a * w * mmLattice(pixel, mmCells(cell, stretch), salt + k);
         lost += a * a * MM_VL * (1.0 - w * w);
     }
+    return vec2f(z, lost);
+}
+
+fn mmColor(id: u32, pixel: vec2f, foot: f32) -> vec3f {
+    let base = id * MM_ROWS;
+    let r2 = matRow(base + 2u);
+    let salt = id * 16u + 1u;
+    let wrap = vec2i(i32(params.size));
+    let ip = ((vec2i(floor(pixel)) % wrap) + wrap) % wrap;
+    let w0 = clamp(2.0 / foot - 1.0, 0.0, 1.0);
+    let zl = mmUnlitZ(id, pixel, foot);
+    let z = zl.x;
+    let lost = zl.y;
     var rgb = mmRamp(base, mmU(base, z));
     if (lost > 1e-6) {
         let s = sqrt(lost);
@@ -316,10 +339,76 @@ fn mmLit(id: u32, pixel: vec2f) -> vec3f {
     return clamp(rgb, vec3f(0.0), vec3f(255.0)) / 255.0;
 }
 
+// ---- H14d: the dither pass ------------------------------------------------------------------------------------------------------
+// One invocation per DITHER_BLOCK square of a dithered layer, level 0: serpentine Floyd-Steinberg on rgb. The field being reduced is the
+// layer's own smooth colour (z through the rank map and the ramp), reduced to the nearest of the material's colours.
+@compute @workgroup_size(8, 8, 1)
+fn makeDither(@builtin(global_invocation_id) id: vec3u) {
+    let base = id.z * MM_ROWS;
+    let blocks = u32(params.size) / DITHER_BLOCK;
+    if (id.x >= blocks || id.y >= blocks) { return; }
+    let r2 = matRow(base + 2u);
+    if (r2.z <= 0.0) { return; }
+    let lit = matRow(base + 39u).x > 0.0;
+    var rows: array<array<vec3f, 34>, 2>;
+    for (var i = 0u; i < 34u; i++) { rows[0][i] = vec3f(0.0); rows[1][i] = vec3f(0.0); }
+    let origin = vec2i(id.xy * DITHER_BLOCK);
+    for (var y = 0u; y < DITHER_BLOCK; y++) {
+        let cur = y & 1u;
+        let nxt = cur ^ 1u;
+        for (var i = 0u; i < 34u; i++) { rows[nxt][i] = vec3f(0.0); }
+        let left = (y & 1u) == 0u;
+        for (var j = 0u; j < DITHER_BLOCK; j++) {
+            let x = select(DITHER_BLOCK - 1u - j, j, left);
+            let dx = select(-1, 1, left);
+            let pi = origin + vec2i(i32(x), i32(y));
+            let pixel = vec2f(pi) + 0.5;
+            var z = 0.0;
+            var vein = 0.0;
+            if (lit) {
+                let zv = mmLitZ(base, id.z, pixel);
+                z = zv.x;
+                vein = zv.y;
+            } else {
+                z = mmUnlitZ(id.z, pixel, 1.0).x;
+            }
+            let smoothRgb = mmRamp(base, mmU(base, z));
+            let v = clamp(smoothRgb + rows[cur][x + 1u], vec3f(0.0), vec3f(255.0));
+            var best = 1e30;
+            var pick = v;
+            for (var k = 0u; k < 16u; k++) {
+                let c = matRow(base + 46u + k);
+                if (c.w <= 0.0) { continue; }
+                let d = dot(c.rgb - v, c.rgb - v);
+                if (d < best) { best = d; pick = c.rgb; }
+            }
+            let err = v - pick;
+            let c1 = u32(i32(x + 1u) + dx);
+            rows[cur][c1] += err * 0.4375;
+            rows[nxt][u32(i32(x + 1u) - dx)] += err * 0.1875;
+            rows[nxt][x + 1u] += err * 0.3125;
+            rows[nxt][c1] += err * 0.0625;
+            var rgb = mix(smoothRgb, pick, r2.z);
+            if (lit) { rgb = mix(rgb, matRow(base + 42u).rgb, vein); }
+            textureStore(out, pi, i32(id.z), vec4f(clamp(rgb, vec3f(0.0), vec3f(255.0)) / 255.0, 1.0));
+        }
+    }
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn makeMaterial(@builtin(global_invocation_id) id: vec3u) {
     let n = u32(params.size / params.foot);   // texels across this level (size is level 0's)
     if (id.x >= n || id.y >= n) { return; }
+    if (matRow(id.z * MM_ROWS + 2u).z > 0.0) {
+        // Dithered: level 0 is makeDither's; the levels above are box means of the one above.
+        if (params.foot > 1.5) {
+            let s = vec2i(id.xy) * 2;
+            let sum = textureLoad(prev, s, i32(id.z), 0) + textureLoad(prev, s + vec2i(1, 0), i32(id.z), 0)
+                + textureLoad(prev, s + vec2i(0, 1), i32(id.z), 0) + textureLoad(prev, s + vec2i(1, 1), i32(id.z), 0);
+            textureStore(out, vec2i(id.xy), i32(id.z), vec4f(sum.rgb * 0.25, 1.0));
+        }
+        return;
+    }
     if (matRow(id.z * MM_ROWS + 39u).x > 0.0) {
         if (params.foot > 1.5) {
             let s = vec2i(id.xy) * 2;

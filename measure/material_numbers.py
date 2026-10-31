@@ -5,7 +5,7 @@ the numbers a material is made from, `materials/<world>.json`, so the editor
 needs no image at run time (the images are only where the numbers come from,
 and they stay outside git).
 
-  material_numbers.py <world> <assets-dir> [--out materials/<world>.json]
+  material_numbers.py <world> <assets-dir> [--out materials/<world>.json] [--dither beach=1.0,quilt=1.5]
 
 The materials a world draws follow the bridge's layer rules (sculpt-renderer.js,
 BRIDGE_LAYER): slope grass is the slope image (the structured one on a
@@ -123,10 +123,19 @@ def lag(L, k, axis, mode):
     return float((d * np.roll(d, -k, axis=axis)).mean() / d.var())
 
 
-def measure(a, mode):
+def vocabulary(flat, count=16):
+    """H14d: the commonest colours of the image (up to `count`), most used first: what the dither pass reduces the smooth colour to."""
+    cols, n = np.unique(flat, axis=0, return_counts=True)
+    return [[int(v) for v in c] for c in cols[np.argsort(-n, kind='stable')[:count]]]
+
+
+def measure(a, mode, dither=0.0):
+    """`dither` > 0 (H14d, wrapped images): the knots are the bins of the rank of the luma blurred at that sigma, so the ramp is the smooth
+    colour, and the image's commonest colours (`vocab`, up to 16) are what the dither pass reduces it to."""
     L = a @ LUMA
     flat = a.reshape(-1, 3)
-    order = np.argsort(L.reshape(-1), kind='stable')
+    key = ndi.gaussian_filter(L, dither, mode='wrap') if dither > 0 else L
+    order = np.argsort(key.reshape(-1), kind='stable')
     rank = np.empty(len(order)); rank[order] = (np.arange(len(order)) + .5) / len(order)
     bins = np.minimum((rank * KNOTS).astype(int), KNOTS - 1)
     ramp = np.stack([flat[bins == k].mean(0) for k in range(KNOTS)])
@@ -166,6 +175,9 @@ def measure(a, mode):
         'colours': int(len(colours)), 'topShare': round(float(counts.max() / counts.sum()), 3),
         'ramp': [[round(float(v), 1) for v in row] for row in ramp],
         **({'lit': ml.lit_numbers(a)} if mode == 'wrap' else {}),
+        **({'dither': dither, 'vocab': vocabulary(flat),
+            # the smooth field the dither reduces: its bands are what the model's z is fitted to (the image's own bands are mostly the dither)
+            'smoothBands': [round(float(b), 3) for b in (lambda bl: [(bl[k] - bl[k + 1]).std() for k in range(7)])([blur(key, s, mode) for s in SIGMAS])]} if dither > 0 else {}),
     }
 
 
@@ -175,6 +187,11 @@ def main():
     if '--out' in args:
         out = Path(args[args.index('--out') + 1])
         del args[args.index('--out'):args.index('--out') + 2]
+    dithers = {}
+    if '--dither' in args:
+        i = args.index('--dither')
+        dithers = {kv.split('=')[0]: float(kv.split('=')[1]) for kv in args[i + 1].split(',')}
+        del args[i:i + 2]
     world, assets = args[0], Path(args[1])
     out = out or Path(__file__).resolve().parent.parent / 'materials' / f'{world}.json'
     config = json.loads((assets / 'config.json').read_text())
@@ -187,10 +204,10 @@ def main():
         table['ground'] = {'image': ground_file, 'draw': DRAWS['ground'], **measure(load(assets / ground_file, 'strip'), 'strip')}
     for name, file in plan:
         if name not in table:
-            table[name] = {'image': file, 'draw': DRAWS[name], **measure(load(assets / file, 'wrap'), 'wrap')}
+            table[name] = {'image': file, 'draw': DRAWS[name], **measure(load(assets / file, 'wrap'), 'wrap', dithers.get(name, 0.0))}
     if quilt:
         file = config['textures']['grass'].rsplit('/', 1)[-1]
-        table['quilt'] = {'image': file, 'draw': DRAWS['quilt'], **measure(load(assets / file, 'wrap'), 'wrap')}
+        table['quilt'] = {'image': file, 'draw': DRAWS['quilt'], **measure(load(assets / file, 'wrap'), 'wrap', dithers.get('quilt', 0.0))}
     old = json.loads(out.read_text()) if out.exists() else {}
     old['measured'] = table
     old['order'] = [name for name, _ in plan] + (['quilt'] if quilt else [])

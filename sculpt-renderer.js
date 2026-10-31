@@ -718,6 +718,7 @@ export class TerrainRenderer {
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error('nanolathe: engine-materials.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
       this.materialPipeline = await device.createComputePipelineAsync({label: 'materials', layout: 'auto', compute: {module, entryPoint: 'makeMaterial'}});
+      this.ditherPipeline = await device.createComputePipelineAsync({label: 'material dither', layout: 'auto', compute: {module, entryPoint: 'makeDither'}});
     }
     if (!this.generated) {
       const texture = device.createTexture({label: 'generated materials', size: [size, size, layers], format: 'rgba8unorm', mipLevelCount: levels,
@@ -743,6 +744,18 @@ export class TerrainRenderer {
       const n = Math.ceil(size / 2 ** level / 8);
       pass.dispatchWorkgroups(n, n, layers);
       pass.end();
+      if (level === 0) {
+        // A dithered material's level 0 (engine-materials.wgsl makeDither): one invocation per 32-px block, the levels above box-mean it.
+        const dither = encoder.beginComputePass({label: 'materials dither'});
+        dither.setPipeline(this.ditherPipeline);
+        dither.setBindGroup(0, device.createBindGroup({layout: this.ditherPipeline.getBindGroupLayout(0), entries: [
+          {binding: 0, resource: {buffer: table}},
+          {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: 0, mipLevelCount: 1})},
+          {binding: 2, resource: {buffer: buffer}}]}));
+        const blocks = Math.ceil(size / 32 / 8);
+        dither.dispatchWorkgroups(blocks, blocks, layers);
+        dither.end();
+      }
     }
     device.queue.submit([encoder.finish()]);
     await device.queue.onSubmittedWorkDone();
