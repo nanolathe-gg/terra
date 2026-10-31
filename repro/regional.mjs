@@ -1,5 +1,6 @@
 // Compare every authored field with four regional replays in an owned browser.
 //   node regional.mjs <scene.json> [--server http://127.0.0.1:8801] [--port 9450]
+import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import {createServer} from 'node:net';
@@ -112,6 +113,7 @@ async function main() {
   process.once('SIGINT', onInterrupt); process.once('SIGTERM', onTerminate);
   try {
     profile = mkdtempSync(join(tmpdir(), 'nanolathe-regional-'));
+    await cdpPortFree(port);
     chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: ['ignore', 'ignore', 'pipe']});
     exited = new Promise(resolve => chrome.once('close', () => { closed = true; resolve(); }));

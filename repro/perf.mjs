@@ -10,6 +10,7 @@
 // and writes <out>/<mode>-perf.json.
 // The hooks time GPU passes with timestamp queries (added to every pass that has none), the queue waits, and the JS
 // stages a chunk bake runs through: region read (shape replay), field upload, draw encode, bitmap copy.
+import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {loadavg} from 'node:os';
@@ -162,6 +163,7 @@ P.frameStop = () => { P.frameOn = false; return P.frames.slice(); };
 })()`;
 
 // ---------------------------------------------------------------- Chrome and CDP
+await cdpPortFree(port);
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', '--enable-precise-memory-info',
   `--remote-debugging-port=${port}`, `--user-data-dir=${out}/profile-${mode}`, '--window-size=1600,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 let ws, id = 0; const wait = new Map(), logs = [];
