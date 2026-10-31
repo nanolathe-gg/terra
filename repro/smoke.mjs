@@ -99,7 +99,7 @@ if (page8) for (const world of worlds8) {
   const r = await session(url, async ({send, ev, logs}) => {
     const r = {page8: true, world};
     try {
-      await ready(ev, true); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
+      await ready(ev, world !== 'zhon'); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       r.paged = await ev('sculptDebug.pageInfo()?.np ?? null');
       const before = await ev('sculptDebug.nodes().length'); await strokeAt(send, ev, 'hill');
       r.added = (await ev('sculptDebug.nodes().length')) - before;

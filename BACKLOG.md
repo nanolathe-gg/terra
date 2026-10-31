@@ -6257,7 +6257,8 @@ fringe, body and ring layers use the fixes above.
 **Server and guard:** port 8882, CDP 9682; worktree `../terraform-wt-H14c`,
 branch `H14c-worlds`; assets `$R/agent-H14c`.
 
-**First run (notes in `$R/agent-H14c/NOTES.md`).**
+**Done (merged as 703148c; EXPERIMENTS row 161; notes in
+`$R/agent-H14c/NOTES.md`).**
 - **The three fixes,** all by eye on swatches (`measure/lit-tables/`): slabs
   (`cellVary`: additive-weighted Voronoi, uneven cells with curved outlines),
   fine-scale streaks (`streakBand`: stretch and shear fade to isotropic above
@@ -6265,13 +6266,110 @@ branch `H14c-worlds`; assets `$R/agent-H14c`.
   so the rank ramp makes pink with a dark core). The ring's vertical streak
   was the light showing the flat slope of value-noise edge columns at wide
   cells; `skew` slants the lattice in x so no edge stays vertical.
-- **Moved:** Moon's rock, Ice, Lava, Zhon (beach as layer 6), Desert. Desert's
-  plain is its 32-colour tile strip, so tile letters run a-z then A-Z.
-- **Kept on images (stop condition):** Red (an ordered two-colour checker
-  dither plain: a luma-rank ramp makes red/olive salt-and-pepper), Crystal
-  (slope and rock pass; the quilted plain reads grey and regular, three new
-  marks outside retail), Archipelago (islands change character, not
-  diagnosed). Attempt tables are in the notes folder.
+- **Moved,** by eye at 1× and 2× against retail and by `stats.py`. Mean
+  |diff| is against `merge-h14b`, scenes 1, 2 and 3:
+
+  | World | Mean \|diff\| | New marks outside retail | Reads |
+  | --- | --- | --- | --- |
+  | Moon's rock | 0.35, 0.25, 0.47 | none | as before; the slope stays unlit |
+  | Ice | 4.31, 0.09, 2.35 | none | as before |
+  | Lava | 0.04, 0.06, 0.19 | none | as before |
+  | Desert | 1.17, 0.59, 0.94 | none | as before; its plain is a 32-colour tile strip, so tile letters run a-z then A-Z |
+  | Zhon | 4.54, 2.57, 1.41 | none | sand, with a pink speckle at 2× that the old image and the reference lack; accepted by decision 17, H14d removes it |
+
+- **Kept on images:**
+
+  | World | Mean \|diff\| of the attempt | Why |
+  | --- | --- | --- |
+  | Red | 18.4, 17.5, 8.3 | The plain turns to red and olive salt-and-pepper. See H14d: the agent's reading (an ordered checker) was wrong |
+  | Crystal | 20, 11, 19 | Slope and rock pass as swatches; the quilted plain goes grey and regular, and loses its bright streaks. Three new marks outside retail |
+  | Archipelago | 7.6, 24.8, 27.3 | The islands change character: dark blobs with pale gaps, no pink ring. Not diagnosed |
+
+  The attempts are in `$R/agent-H14c/` (`red-attempt/`, `crystal-attempt/`,
+  `arch-attempt/`, sheets `sheets/*-attempt-*.png`).
+- **The fixes are inert on main.** `cellVary`, `streakBand`, `skew` and the
+  strokes are set by no committed world table, and the quilt-only plain
+  plumbing in `sculpt-renderer.js` ran only in the three failed attempts.
+  Crystal's slope and rock pass as swatches; Crystal itself is on images.
+- **Cost.** A default load now fetches 5 images on a moved world (noise,
+  water, shallow water, palette, fractures), down from 9-10; Red and Crystal
+  fetch 9, Archipelago 11. Final in view is the same within 3% (Zhon 436 ->
+  457 ms, the most). The generated array is 4 layers on Moon, Ice, Lava and
+  Desert (5.6 MB against 11.2 by formula; `perf.mjs --only` did not capture
+  memory) and 7 on Zhon (9.8 MB). Zhon's 7 layers take 2.8-4.5 ms warm.
+- **Zhon's 244 s "boot" is `perf.mjs`, not the page.** Its ready loop runs
+  1200 × 200 ms for an export button that Zhon disables by design, then falls
+  through. Its load figures were taken after that wait. Listed under small
+  leftovers.
+- **Coordinator's review:** a table world now ignores `ground=texture`, which
+  read a `quilt` mean no such table has (`ice-1` with it renders clean);
+  `auto_zq.py` takes its work folder; `smoke.mjs --page8` no longer waits on
+  Zhon's export, which it had never reached.
+- **Coordinator's merge checks:** only the five moved worlds changed against
+  `merge-h14b`, the other 12 scenes are 0.00, and all 27 consoles are clean;
+  `regional.mjs` 0 on moon-1, ice-1, lava-1, zhon-1 and desert-1; smoke clean
+  on nine worlds, exports included, and on 8×8 Green, Lava, Ice and Zhon; all
+  nine ground patterns are offered; 22 of 22 tests pass; the gate passes.
+
+### H14d. The art's dither, then the last three worlds
+
+**The finding** (coordinator's measurement of the prepared images). The
+plains did not fail for want of strokes or a parity number. The art is a
+smooth colour reduced to the palette by error diffusion, so its hue is
+dithered per pixel. A rank ramp ties hue to luma and cannot make that.
+
+| Art | Chroma lag 1, x and y | (1,1) | (1,-1) | Box 8 / white |
+| --- | --- | --- | --- | --- |
+| Red plain | -.44, -.38 | +.25 | -.04 | .37 |
+| Zhon beach | -.61, -.48 | +.25 | +.25 | .25 |
+| Crystal plain | -.35, -.34 | +.13 | +.12 | 1.06 |
+| Crystal slope | -.32, -.28 | +.15 | +.14 | 1.51 |
+| Ice rock | -.29, -.27 | +.04 | -.01 | .79 |
+| Moon rock | -.02, .00 | +.11 | +.11 | 1.87 |
+| Archipelago plain | +.01, +.01 | +.01 | +.01 | 1.08 |
+| *Floyd-Steinberg simulated at share .3* | -.43, -.42 | +.16 | .00 | .22 |
+| *A 64 px blue-noise tile, thresholded* | -.25, -.25 | -.16 | -.09 | .32 |
+| *A high-passed hash, thresholded* | -.22, -.21 | +.05 | | .70 |
+
+- **Red's plain is not an ordered checker.** Pixel parity does not split its
+  colours (total variation .012). Its red (111, 51, 59) and olive (107, 91,
+  23) have nearly the same luma, so a luma rank scrambles them.
+- **Moon's rock has no hue dither,** which is why it was easy.
+- **A guess, to verify:** Crystal's grey cells and Zhon's pink speckle are
+  this same fault, rank bins averaging or splitting dithered hues.
+- **Archipelago's plain is white noise,** so its failure is something else.
+
+**Deliver,** one commit each:
+1. **A dither step at the end of the generator.** The ramp stays a smooth
+   colour; a mask picks the final colour per pixel between palette colours.
+   A number at 0 leaves a material as it is. Two forms, in this order:
+   - **The mask first.** Each ramp bin holds two colours and a share,
+     measured by splitting the bin along its chroma axis, and a tiled
+     blue-noise threshold picks between them. It is parallel and cheap. It
+     gets the even spread and misses the art's pixel texture (the table).
+   - **Error diffusion if the mask fails by eye at 2×.** One sequential pass
+     at startup, wrapped so the layer stays periodic and within the 100 ms.
+     Say what it costs.
+2. **Zhon's beach,** the quickest proof: the world is on its table. The pink
+   speckle goes.
+3. **Red.** The plain, then its lattice of dark dots, measured. Red moves.
+4. **Crystal.** Refit the plain with the dither; add bright streaks along the
+   shear only if it still lacks them. Crystal moves. Its grey cells go.
+5. **Archipelago.** The bridge reads the fringe's luma as a signal
+   (`fringeSignal`, `fringeRange`, `stone`), not only as a colour. Compare
+   layers 0, 4, 5 and 7 with the images as the bridge reads them, say what
+   changed the islands, then fix it. Archipelago moves.
+
+**If one still fails after honest tries,** it stays on images with its sheet
+and the others go on. Step 6 of H14 cannot delete the bridge while a world
+still reads it, so the coordinator takes any such world to the owner.
+
+**Acceptance:** as H14, for each world. `MATERIAL_TABLES` lists all nine, or
+the gaps are named. A world's layers stay under 100 ms warm. Quarter levels
+read true: a box mean of a dithered layer should now give the smooth colour.
+
+**Server and guard:** port 8883, CDP 9683; worktree `../terraform-wt-H14d`,
+branch `H14d-dither`; assets `$R/agent-H14d`.
 
 ## After the cards
 
