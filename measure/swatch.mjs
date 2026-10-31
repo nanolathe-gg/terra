@@ -40,6 +40,7 @@ const info = await module.getCompilationInfo();
 if (info.messages.some(m => m.type === 'error')) { document.title = 'ERR ' + info.messages.map(m => m.lineNum + ': ' + m.message).join(' | '); throw 0; }
 const makePipeline = entryPoint => device.createComputePipelineAsync({layout: 'auto', compute: {module, entryPoint}});
 const pipeline = await makePipeline(zMode ? 'makeZ' : 'makeMaterial');
+const ditherPipe = zMode ? null : await makePipeline('makeDither');
 const table = device.createBuffer({size: rows.length * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
 const upload = () => device.queue.writeBuffer(table, 0, new Float32Array(rows.flat()));
 upload();
@@ -57,10 +58,20 @@ const groupsFor = (pipe, withPrev, upTo) => {
   }
   return g;
 };
+const ditherGroup = zMode ? null : (() => {
+  const p = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+  device.queue.writeBuffer(p, 0, new Float32Array([size, 1, sameSeed ? 1 : 0, 0]));
+  return device.createBindGroup({layout: ditherPipe.getBindGroupLayout(0), entries: [{binding: 0, resource: {buffer: table}}, {binding: 1, resource: view(0)}, {binding: 2, resource: {buffer: p}}]});
+})();
 const encodeChain = (enc, pipe, groups, upTo) => {
   for (let m = 0; m <= upTo; m++) {
     const pass = enc.beginComputePass(); pass.setPipeline(pipe); pass.setBindGroup(0, groups[m]);
     const d = Math.ceil((size >> m) / 8); pass.dispatchWorkgroups(d, d, layers); pass.end();
+    if (m === 0 && pipe === pipeline && !zMode) {
+      // H14d: a dithered material's level 0 (makeDither), before the levels above box-mean it.
+      const dp = enc.beginComputePass(); dp.setPipeline(ditherPipe); dp.setBindGroup(0, ditherGroup);
+      const b = Math.ceil(size / 32 / 8); dp.dispatchWorkgroups(b, b, layers); dp.end();
+    }
   }
 };
 const readLevel = async m => {

@@ -125,7 +125,7 @@ fn bridgeMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, grass: ve
         }
         if (u.transitionDetail > 0.0) {
             let uv = pixel / 512.0;
-            let groundLow = textureSampleLevel(grassTex, grassSamp, uv, 3.0).rgb;
+            let groundLow = select(textureSampleLevel(grassTex, grassSamp, uv, 3.0).rgb, textureSampleLevel(generatedTex, linearRepeat, uv, max(u.groundLayer, 0), 3.0).rgb, u.groundLayer >= 0);
             let ringLow = textureSampleLevel(generatedTex, linearRepeat, uv, 7, 3.0).rgb;
             let bodyLow = textureSampleLevel(generatedTex, linearRepeat, uv, 5, 3.0).rgb;
             bTransLow = mix(mix(groundLow, ringLow, ringWeight), bodyLow, warm);

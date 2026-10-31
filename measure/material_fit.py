@@ -120,13 +120,19 @@ def main():
     model = table.get('model', {})
     for name in ORDER:
         m = table['measured'][name]
-        target = np.array(m['bands'])
+        target = np.array(m.get('smoothBands', m['bands']))
         a = target / np.sqrt(var)
         if name in model:
             a = np.array(model[name]['amps'])
         a = a / np.sqrt((a * a * var).sum())
         lag = m['tintLag'] if m['tintLag'] is not None else 0.0
         model[name] = {'amps': a.tolist(), 'stretch': 1.0, 'tintMix': float(np.clip(2.0 * lag, 0, .8)), 'tintScale': 1.0}
+        if 'vocab' in m:
+            # H14d: a dithered material has no grain band and no tint noise (the error diffusion is the pixel-level part).
+            model[name].update(dither=1.0, tintScale=0.0)
+            a[0] = 0.0
+            a = a / np.sqrt((a * a * var).sum())
+            model[name]['amps'] = a.tolist()
     table['model'] = model
     TABLE_MODEL.update(model)
     for n in ORDER:
@@ -136,8 +142,11 @@ def main():
         worst = 0
         for name in ORDER:
             L = sw[name] @ LUMA
+            ms = table['measured'][name]
+            if 'smoothBands' in ms:
+                L = ndi.gaussian_filter(L, ms['dither'], mode='wrap')   # a dithered material's smooth field is what is fitted
             b, broad = bands(L)
-            target = np.array(table['measured'][name]['bands'])
+            target = np.array(ms.get('smoothBands', ms['bands']))
             ratio = np.clip(target / np.maximum(b, 1e-3), .5, 2.0) ** .8
             a = np.array(model[name]['amps']) * ratio
             a = a / np.sqrt((a * a * var).sum())
