@@ -1,3 +1,4 @@
+import {shapePaths} from './sculpt-paths.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -227,7 +228,7 @@ export function prepareNode(n, geom, c) {
   if (n.kind === 'ground') return {op: 'ground', seed: (n.seed ?? 1) >>> 0, amp: n.amplitude ?? 8, wave: n.wavelength ?? 160, cover: n.coverage ?? .5};
   const q = c.params(n), kind = n.kind, kcode = KIND[kind];
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
-  const seed = ((n.seed ?? c.seed) >>> 0), pts = n.points, radius = q.radius;
+  const seed = ((n.seed ?? c.seed) >>> 0), allPoints = n.points, paths = shapePaths(n), radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
   const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
@@ -254,9 +255,13 @@ export function prepareNode(n, geom, c) {
   };
   const macro = naturalWater || naturalPlateau, fx = macro ? F_COAST_X : F_X, fy = macro ? F_COAST_Y : F_Y;
   const segs = [], extra = [];
-  let reads = kind === 'plateau' || kind === 'crater' ? [{x: pts[0].x, y: pts[0].y}] : [];
+  let reads = kind === 'plateau' || kind === 'crater' ? [{x: allPoints[0].x, y: allPoints[0].y}] : [];
   const dab = (p, e, f0, f1) => segs.push({px: p.x, py: p.y, ex: (e || p).x, ey: (e || p).y, f0, f1, nx: sampleNoise(fx, p.x, p.y), ny: sampleNoise(fy, p.x, p.y)});
   let settle = false, faceSide = 1, face = [1, 0];
+  // Prepare paths independently, then submit their capsules as one shape.
+  // Heights, masks, smoothing and coastal effects are applied once to the union.
+  for (const indices of paths) {
+  const pts=indices.map(i=>allPoints[i]),segmentStart=segs.length;
   if (shouldered) {
     face = [Math.cos(Math.PI / 2 + sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8 + turn), Math.sin(Math.PI / 2 + sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8 + turn)];
     const path = [pts[0]];
@@ -353,8 +358,9 @@ export function prepareNode(n, geom, c) {
       if (l2 < 1e-8) continue;
       const len = Math.sqrt(l2); list.push({a, b, cum: total, len}); total += len;
     }
-    for (const e of list) segs.push({px: e.a.x, py: e.a.y, ex: e.b.x, ey: e.b.y, f0: [e.cum, e.len], f1: [total, 0], nx: 0, ny: 0});
-    if (total > 0) reads = [{x: first.x, y: first.y}, {x: last.x, y: last.y}];
+    const readOffset=reads.length;
+    for (const e of list) segs.push({px: e.a.x, py: e.a.y, ex: e.b.x, ey: e.b.y, f0: [e.cum, e.len], f1: [total, readOffset], nx: 0, ny: 0});
+    if (total > 0) reads.push({x:first.x,y:first.y},{x:last.x,y:last.y});
   } else if (ridgeOn(kind, q) || n.pieces) {
     // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
     const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
@@ -370,6 +376,13 @@ export function prepareNode(n, geom, c) {
       const a = path[k - 1], b = path[k], pieces = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / longest);
       for (let j = 0; j < pieces; j++) dab({x: a.x + (b.x - a.x) * j / pieces, y: a.y + (b.y - a.y) * j / pieces}, {x: a.x + (b.x - a.x) * (j + 1) / pieces, y: a.y + (b.y - a.y) * (j + 1) / pieces});
     }
+  }
+  // Each short hill path owns its tangent, even alongside longer paths.
+  if(shouldered&&paths.length>1)for(let k=segmentStart;k<segs.length;k++){
+    const s=segs[k];if(s.frame)continue;
+    const dx=s.ex-s.px,dy=s.ey-s.py,len=Math.hypot(dx,dy);
+    s.f0=s.f1=len?[-dy/len*faceSide,dx/len*faceSide]:face.slice();s.frame=true;
+  }
   }
   // The integer box of every capsule, as dab() clamps it; the union is the node's region.
   let region = null;
@@ -401,7 +414,7 @@ export function prepareNode(n, geom, c) {
   if ((water || (kind === 'offset' && q.shorePlates > 0) || facetMode) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
-  const count = Math.round(q.craterlets || 0), centre = pts[pts.length >> 1], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };
+  const count = Math.round(q.craterlets || 0), centre = allPoints[paths[0][paths[0].length >> 1]], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };
   const out = [main];
   for (let k = 0; k < count; k++) {
     const angle = rnd(k, 1) * Math.PI * 2 + turn, dist = radius * (.9 + rnd(k, 2) * 1.1), small = radius * (.1 + .22 * rnd(k, 3));

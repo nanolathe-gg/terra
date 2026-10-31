@@ -788,7 +788,7 @@ fn stampRamp(@builtin(global_invocation_id) g: vec3u) {
 #endif
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   let radius = u.radius;
-  var bestD = 3.0e38; var along = 0.0; var total = 1.0; var hit = false;
+  var bestD = 3.0e38; var along = 0.0; var total = 1.0; var readOffset = 0u; var hit = false;
   for (var k = 0u; k < u.nseg; k++) {
     let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -802,7 +802,7 @@ fn stampRamp(@builtin(global_invocation_id) g: vec3u) {
     let ax = wx - cx + edge * (u.rotX * ex - u.rotY * ey); let ay = wy - cy + edge * (u.rotY * ex + u.rotX * ey);
     let dist = sqrt(ax * ax + ay * ay);
     if (dist >= radius || dist >= bestD) { continue; }
-    bestD = dist; along = s1.x + t * s1.y; total = s1.z; hit = true;
+    bestD = dist; along = s1.x + t * s1.y; total = s1.z; readOffset = u32(s1.w); hit = true;
   }
   if (!hit) { return; }
   let w = 1.0 - sm(0.55, 1.0, bestD / radius);
@@ -811,7 +811,7 @@ fn stampRamp(@builtin(global_invocation_id) g: vec3u) {
   var grade = (tt - ease * 0.5) / (1.0 - ease);
   if (tt < ease) { grade = tt * tt / (2.0 * ease * (1.0 - ease)); }
   else if (tt > 1.0 - ease) { grade = 1.0 - (1.0 - tt) * (1.0 - tt) / (2.0 * ease * (1.0 - ease)); }
-  let ah = PT[u.preIdx]; let bh = PT[u.preIdx + 1u];
+  let ah = PT[u.preIdx + readOffset]; let bh = PT[u.preIdx + readOffset + 1u];
   let level = ah + (bh - ah) * grade;
   let base = F[PH * cells + i];
   F[PH * cells + i] = clamp(base + (level - base) * w, u.minH, u.maxH);

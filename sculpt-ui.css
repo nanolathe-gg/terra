@@ -72,6 +72,13 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 .feature-body .small{font-size:10px}
 .feature-group.is-off>summary{color:var(--muted)}
 #selection-panel{margin-bottom:14px}
+#drawing-options{padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+#drawing-options .selection-modes button{padding:6px 3px;font-size:11px}
+#shape-path-list{display:flex;flex-direction:column;gap:4px;max-height:100px;overflow:auto;margin-top:10px}
+#shape-path-list button{text-align:left;padding:4px 7px;font-size:10px}
+#path-actions .row{display:grid;grid-template-columns:1fr 1fr}
+#path-actions .row button{padding:5px 2px;font-size:10px}
+.path-count{font-size:9px;color:var(--muted);white-space:nowrap}
 #selection-panel .row{flex-wrap:wrap}
 #selection-panel button{flex:1 0 auto}
 .workspace{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;background:#101719}

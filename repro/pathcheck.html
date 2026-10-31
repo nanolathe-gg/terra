@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Shape path GPU checks</title>
+<style>body{background:#172127;color:#def;font:15px system-ui;margin:32px}button{padding:10px}pre{white-space:pre-wrap;line-height:1.6}</style>
+<h1>Shape path GPU checks</h1><p>Runs the actual shape shaders on whole-map and paged targets.</p>
+<button id="run">Run GPU checks</button><pre id="results" role="status">Ready</pre>
+<script type="module">
+import {createShapeEngine} from '../sculpt-gpu-fields.js';
+const output=document.querySelector('#results'),button=document.querySelector('#run');
+const defaults={radius:12,amount:30,rough:0,softness:.5,bankWidth:.5,beachFlatness:.5,faceVariation:0,rimHeight:.3,paintChannel:3,maskChannel:4,maskAmount:.4,fissureWidth:6,fissureCell:60,crystalCount:3,crystalSize:16,crystalSides:5,bergFace:.8};
+const ctx={seed:3,baseHeight:99,sea:75,params:n=>new Proxy({...defaults,...n.params},{get:(o,k)=>o[k]??0})};
+const shape=(kind,params={})=>({kind,seed:3,points:[{x:28,y:64},{x:64,y:64},{x:100,y:64}],params});
+const assert=(v,msg)=>{if(!v)throw new Error(msg);};
+const delta=(a,b)=>{let max=0;for(const key of ['floats','masks'])for(let i=0;i<a[key].length;i++)for(let j=0;j<a[key][i].length;j++){const d=Math.abs(a[key][i][j]-b[key][i][j]);assert(Number.isFinite(d),'Non-finite output');max=Math.max(max,d);}return max;};
+button.onclick=async()=>{
+ button.disabled=true;output.textContent='Running…\n';let device;
+ try{
+  const adapter=await navigator.gpu.requestAdapter();assert(adapter,'WebGPU unavailable');device=await adapter.requestDevice();
+  device.addEventListener('uncapturederror',e=>{output.textContent+='GPU ERROR: '+e.error.message+'\n';});
+  for(const pages of [false,true]){
+   const engine=await createShapeEngine({device,grid:128,spacing:1,baseHeight:99,sea:75,minH:-100,maxH:500,pages});
+   const target=pages?engine.makeTarget(0,0,128,128):null;
+   const run=async nodes=>{device.pushErrorScope('validation');const h=engine.submit(nodes,ctx,null,{target});const out=await h.land;await h.done;const error=await device.popErrorScope();assert(!error,error?.message);return out;};
+   const prefix=[{kind:'ground',seed:9,amplitude:12,wavelength:70,coverage:.5}];
+   for(const kind of ['plateau','hill','mountain','ramp','offset','crater','fissure','crystal','deep','shallow','smooth','erase','sand','grass','paint']){
+    const n=shape(kind),a=await run([...prefix,n]),b=await run([...prefix,{...n,paths:[[0,1,2],[0,1,2]]}]);
+    const d=delta(a,b);assert(d<.001,`${kind}: duplicate paths changed output by ${d}`);
+    output.textContent+=`${pages?'Paged':'Whole'} ${kind}: duplicate paths do not stack (max difference ${d})\n`;
+   }
+   // Two separated paths must leave the gap untouched, while crossing ones
+   // share one height contribution rather than summing two mountains.
+   const disconnected={...shape('mountain'),points:[{x:28,y:30},{x:100,y:30},{x:28,y:98},{x:100,y:98}],paths:[[0,1],[2,3]]};
+   const separate=await run([disconnected]);assert(Math.abs(separate.floats[0][64*128+64]-99)<.001,'Phantom connecting edge');
+   const crossing={...shape('mountain'),points:[{x:28,y:64},{x:100,y:64},{x:64,y:28},{x:64,y:100}],paths:[[0,1],[2,3]]};
+   const joined=await run([crossing]);assert(Math.abs(joined.floats[0][64*128+64]-129)<.001,'Crossing paths stacked');
+   const stacked=await run([{...crossing,paths:[[0,1]]},{...crossing,paths:[[2,3]]}]);assert(Math.abs(stacked.floats[0][64*128+64]-159)<.001,'Separate shape ordering changed');
+   // Each ramp retains its own pre-shape endpoint heights. Compare the second
+   // path against rendering it alone over exactly the same underlying terrain.
+   const ramps={...disconnected,kind:'ramp'},both=await run([...prefix,ramps]);
+   const second=await run([...prefix,{...ramps,points:ramps.points.slice(2),paths:undefined}]);
+   for(let y=87;y<=109;y++)for(let x=20;x<=108;x++)assert(Math.abs(both.floats[0][y*128+x]-second.floats[0][y*128+x])<.001,'Ramp endpoint reads crossed paths');
+   output.textContent+=`${pages?'Paged':'Whole'} geometry: gaps untouched; intersections join; separate shapes stack; ramp endpoints independent\n`;
+   target?.destroy();engine.destroy();
+  }
+  output.textContent+='PASS: all GPU checks completed';
+ }catch(e){output.textContent+='FAIL: '+e.stack;}finally{device?.destroy();button.disabled=false;}
+};
+</script></html>

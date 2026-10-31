@@ -1,3 +1,4 @@
+import {shapePaths} from './sculpt-paths.js';
 // Shared geometry keeps the selection overlay and pointer hit targets aligned.
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export function selectionTransform(node, changes={}) {
@@ -27,7 +28,7 @@ export function selectionGeometry(node,project,view) {
   const move=within(centre),rotate=within({x:centre.x,y:bounds.y0-20/scale}),resize=within({x:bounds.x1,y:bounds.y1});
   if(Math.hypot(rotate.x-move.x,rotate.y-move.y)<28/scale)rotate.y=within({x:rotate.x,y:move.y+(move.y<view.y+view.height/2?40:-40)/scale}).y;
   if(Math.hypot(resize.x-move.x,resize.y-move.y)<28/scale)resize.x=within({x:move.x+(move.x<view.x+view.width/2?40:-40)/scale,y:resize.y}).x;
-  return {points,pivot,centre,bounds,scale,view,visible:intersects,move,rotate,resize};
+  return {points,paths:shapePaths(node),pivot,centre,bounds,scale,view,visible:intersects,move,rotate,resize};
 }
 export function hitSelection(geometry,p,pathMode=false) {
   if(!geometry?.visible)return null;
@@ -42,12 +43,12 @@ export function hitSelection(geometry,p,pathMode=false) {
   }
   return null;
 }
-export function drawSelection(ctx,g,{label='',pathMode=false,point=-1,hover=false}={}) {
+export function drawSelection(ctx,g,{label='',pathMode=false,point=-1,activePath=-1,hover=false}={}) {
   if(!g?.visible)return;
   const s=g.scale,b=g.bounds,color=hover?'#9ce5ef':pathMode?'#d2b1ff':'#ffe0a0';
   ctx.save();ctx.strokeStyle=color;ctx.lineWidth=(hover?1.5:1)/s;
   ctx.setLineDash([5/s,4/s]);ctx.strokeRect(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0);ctx.setLineDash([]);
-  ctx.beginPath();g.points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.lineWidth=(hover?3:2)/s;ctx.stroke();
+  for(const [i,path] of g.paths.entries()){ctx.beginPath();path.forEach((index,j)=>{const p=g.points[index];j?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});ctx.globalAlpha=pathMode&&activePath>=0&&i!==activePath?0.45:1;ctx.lineWidth=(hover?3:2)/s;ctx.stroke();}ctx.globalAlpha=1;
   const tag=(text,p)=>{ctx.font=`${11/s}px system-ui`;ctx.textAlign='left';ctx.textBaseline='middle';const w=ctx.measureText(text).width+12/s,x=clamp(p.x,g.view.x+3/s,g.view.x+g.view.width-w-3/s),y=clamp(p.y,g.view.y+12/s,g.view.y+g.view.height-12/s);ctx.fillStyle='#142128ed';ctx.fillRect(x,y-10/s,w,20/s);ctx.fillStyle=color;ctx.fillText(text,x+6/s,y);};
   // Selected identity lives in the canvas toolbar; hover previews need a tag.
   if(hover){tag(label,{x:b.x0,y:b.y0-14/s});ctx.restore();return;}

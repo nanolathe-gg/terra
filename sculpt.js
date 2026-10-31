@@ -2,9 +2,10 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls} from './sculpt-ui.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
+import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
 const editorUI=mountEditorUI();
-let syncToolGroups=()=>{},pathEditing=false,pathPoint=-1;
+let syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -294,32 +295,42 @@ function updateControls() {
   $('feature-tool').setAttribute('aria-pressed',String(featureActive));
   $('feature-tool-host').hidden=!featureActive;
   $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params);
-  $('selection-panel').hidden=featureActive||tool!=='move';
+  $('selection-panel').hidden=featureActive||tool!=='move';$('drawing-options').hidden=featureActive;
   $('edit-path').setAttribute('aria-pressed',String(pathEditing));
-  $('transform-mode').setAttribute('aria-pressed',String(!pathEditing));
+  $('transform-mode').setAttribute('aria-pressed',String(!pathEditing&&drawMode!=='add'));
   $('selection-panel').classList.toggle('path-mode',pathEditing);
   const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
   $('selection-empty').hidden=hasSelection;
   $('path-actions').hidden=!pathEditing||!hasSelection;
-  $('transform-controls').hidden=pathEditing||!hasSelection;
+  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';$('path-help').hidden=drawMode==='add';
   $('selection-hud').hidden=!selectionActive;
   $('selection-hud').classList.toggle('path-mode',pathEditing);
-  $('selection-mode').textContent=selectionActive?`${pathEditing?'Edit path':'Transform'} · ${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
-  $('canvas-path-mode').textContent=pathEditing?'Transform':'Edit path';
+  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path':pathAdding?'Extend / branch':pathEditing?'Edit paths':'Transform'} · ${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
+  $('canvas-path-mode').textContent=pathEditing?'Transform':'Edit paths';
   for(const id of ['selection-clear','selection-delete','transform-mode','canvas-path-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
   for(const id of ['toggle-tools','toggle-inspector','focus-canvas'])$(id).disabled=loading||Boolean(stroke||moving);
   const transform=hasSelection?selectionTransform(selectedNode).values:null;
   for(const key of ['x','y','rotation','scale']){const input=$('selection-'+key);input.disabled=!hasSelection||loading||Boolean(stroke||moving);if(document.activeElement!==input)input.value=transform?String(Math.round(transform[key]*10)/10):'';}
   if(config?.map){$('selection-x').max=config.map.width-1;$('selection-y').max=config.map.height-1;}
-  $('edit-path').disabled=!nodes[selected]?.points;
-  $('path-add').disabled=!pathEditing||!nodes[selected]?.points;
-  $('path-delete').disabled=!pathEditing||pathPoint<0||(nodes[selected]?.points?.length??0)<=1;
+  const paths=hasSelection?shapePaths(selectedNode):[],activePath=paths[pathIndex]||[],pointAt=activePath.indexOf(pathPoint),locked=loading||Boolean(stroke||moving);
+  $('draw-new').disabled=locked||!ready;
+  $('draw-add').disabled=locked||!hasSelection||selectedNode?.hidden;
+  $('draw-new').setAttribute('aria-pressed',String(tool!=='move'&&drawMode!=='add'));
+  $('draw-add').setAttribute('aria-pressed',String(drawMode==='add'));
+  $('drawing-target').textContent=drawMode==='add'?`Draw into ${NODE_NAMES[selectedNode?.kind]||'shape'} #${selected+1}. Start on a point to attach a branch. Escape finishes.`:hasSelection?'Add a path to this shape, or start a new shape.':'Choose a brush, then draw a new shape.';
+  $('edit-path').disabled=!hasSelection||locked;
+  $('path-add').disabled=!pathEditing||pointAt<0||pointAt===activePath.length-1||locked;
+  $('path-delete').disabled=!pathEditing||pathPoint<0||(selectedNode?.points?.length??0)<=1||locked;
+  $('path-extend').disabled=!pathEditing||pathPoint<0||locked;
+  $('path-extend').setAttribute('aria-pressed',String(pathAdding));
+  $('path-remove').disabled=!pathEditing||paths.length<=1||locked;
+  if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
   for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points;
   $('view-clay').setAttribute('aria-pressed',String($('clay').checked));
   $('view-rendered').setAttribute('aria-pressed',String(!$('clay').checked));
   for(const id of ['save','load','view-clay','view-rendered','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
   const pointCount=nodes[selected]?.points?.length||0;
-  $('path-help').textContent=pathEditing?`${pointCount} path points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Drag a point, or insert and delete with the buttons above.`:'Drag to move · labelled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
+  $('path-help').textContent=pathEditing?pathAdding?'Click to extend from the selected point. An interior point starts a branch. Escape finishes.':`${paths.length} path${paths.length===1?'':'s'} · ${pointCount} points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Select a point to insert, extend, or branch.`:'Drag to move · labelled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
   // With Select active, show the selected shape's own controls.
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
@@ -383,12 +394,12 @@ function updateControls() {
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
   } finally { tool=activeTool; }
-  if (tool==='move') { $('tool-help').textContent=HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase'].includes(nodes[selected]?.kind); }
+  if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase'].includes(nodes[selected]?.kind); }
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
   $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind} #${selected+1}`:tool==='move'?'Select':`Brush · new ${NODE_NAMES[tool]||tool}`;
-  $('brush-scope').textContent=editing?'Editing this layer. Choose a tool to draw a new stroke.':tool==='move'?'Click a shape to select and edit it.':'Settings for your next stroke.';
+  $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   syncToolGroups(`${tool}:${selected}`);
   if(featureActive)$('tool-help').textContent=mapFeatures.hint||'Place features and starts · Space + drag to pan';
 }
@@ -548,7 +559,7 @@ const craterletRand=(seed,k,a) => { let x=Math.imul((seed>>>0)+k*7919+a*104729,2
 // Craterlet k of crater node n: centre and radius, from the crater's seed
 // alone (region replay needs the centres before it replays anything).
 function craterletSpot(n,seed,radius,k) {
-  const c=n.points[n.points.length>>1],turn=isIdentity(n.frame)?0:Math.atan2(n.frame[1],n.frame[0]);
+  const first=shapePaths(n)[0],c=n.points[first[first.length>>1]],turn=isIdentity(n.frame)?0:Math.atan2(n.frame[1],n.frame[0]);
   const angle=craterletRand(seed,k,1)*Math.PI*2+turn,dist=radius*(.9+craterletRand(seed,k,2)*1.1),small=radius*(.1+.22*craterletRand(seed,k,3));
   return {p:{x:clamp(c.x+Math.cos(angle)*dist,0,size-1),y:clamp(c.y+Math.sin(angle)*dist,0,size-1)},small};
 }
@@ -597,7 +608,7 @@ function regionalStages(list=nodes) {
     out.push({...n,regionalBody:true});
     for (let k=0;k<Math.round(q.craterlets||0);k++) {
       const {p,small}=craterletSpot(n,s,q.radius,k);
-      out.push({...n,points:[p],params:{...q,radius:small,amount:q.amount*(.25+.3*craterletRand(s,k,4)),craterlets:0},seed:(s+k*2654435761)>>>0,regionalChild:true});
+      out.push({...n,points:[p],paths:undefined,params:{...q,radius:small,amount:q.amount*(.25+.3*craterletRand(s,k,4)),craterlets:0},seed:(s+k*2654435761)>>>0,regionalChild:true});
     }
     if (Math.round(q.spurCount)>=1) out.push({...n,regionalSpurs:true});
   }
@@ -640,7 +651,7 @@ function regionalDirtyRect(from,rect) {
   const pointTouched=p => { const x=p.x/spacing,y=p.y/spacing; return overlaps(dirty,{x0:Math.floor(x),y0:Math.floor(y),x1:Math.ceil(x),y1:Math.ceil(y)}); };
   for (let i=Math.max(0,from+1);i<nodes.length;i++) {
     const n=nodes[i]; if (n.hidden || !n.points?.length) continue;
-    const b=nodeBounds(n),points=['plateau','crater'].includes(n.kind)?[n.points[0]]:n.kind==='ramp'?[n.points[0],n.points[n.points.length-1]]:[];
+    const b=nodeBounds(n),points=['plateau','crater'].includes(n.kind)?[n.points[0]]:n.kind==='ramp'?shapePaths(n).flatMap(path=>[n.points[path[0]],n.points[path.at(-1)]]):[];
     if (n.kind==='crater') for (let k=0;k<Math.round(n.params?.craterlets??worldDefault('craterlets'));k++) points.push(craterletSpot(n,n.seed??seed,n.params?.radius??40,k).p);
     if (points.some(pointTouched)) { dirty=unionRect(dirty,b); continue; }
     const pad=regionalReadApron(n),reach={x0:Math.max(0,dirty.x0-pad),y0:Math.max(0,dirty.y0-pad),x1:Math.min(worldGrid-1,dirty.x1+pad),y1:Math.min(worldGrid-1,dirty.y1+pad)};
@@ -674,29 +685,44 @@ function regionalPoints(points) {
   if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
   return points.map(p => ({x:clamp(p.x,0,(config.map?.width??size)-1),y:clamp(p.y,0,(config.map?.height??size)-1)}));
 }
-function beginRegionalStroke(kind,point,options={}) {
-  if (stroke || moving || !HELP[kind] || kind==='move') throw new Error('A terrain gesture is already active or the brush is invalid.');
-  const points=regionalPoints([point]),params={...currentStrokeOptions(),...options},node={kind,points,params,seed:params.seed??seed};
-  delete params.seed; cancelWeather();
-  const index=nodes.length,selectionBefore=selected;
-  nodes.push(node); selected=-1; stroke={regional:true,kind,node,index,selectionBefore,path:points};
-  evaluate(index,nodeBounds(node)); renderLayers(); updateControls(); schedule();
-  return index;
+function beginRegionalStroke(kind,point,options={},attachment=-1,target=-1) {
+  if(stroke||moving||!HELP[kind]||kind==='move')throw new Error('A terrain gesture is already active or the brush is invalid.');
+  const points=regionalPoints([point]),adding=target>=0&&nodes[target]?.points;
+  const selectionBefore=selected,index=adding?target:nodes.length;
+  const original=adding?cloneNodes([nodes[index]])[0]:null;
+  const params=adding?{...original.params}:{...currentStrokeOptions(),...options};
+  const node=adding?cloneNodes([original])[0]:{kind,points,params,seed:params.seed??seed};
+  delete params.seed;cancelWeather();
+  let path=0;
+  if(adding){path=appendPath(node,attachment>=0?[]:points,attachment);nodes[index]=node;}
+  else nodes.push(node);
+  const basePoints=adding?node.points.length-(attachment>=0?0:1):0;
+  stroke={regional:true,kind:node.kind,node,index,selectionBefore,original,pathIndex:path,attachment,basePoints};
+  selected=adding?index:-1;
+  evaluate(index,nodeBounds(node));renderLayers();updateControls();schedule();return index;
 }
 function previewRegionalStroke(points) {
-  if (!stroke?.regional) return false;
-  const node=stroke.node,before=nodeBounds(node),next=regionalPoints(Array.isArray(points)?points:[points]);
-  node.points=Array.isArray(points)?next:[...node.points,...next]; stroke.path=node.points;
-  evaluate(stroke.index,unionRect(before,nodeBounds(node))); schedule();
-  return stroke.index;
+  if(!stroke?.regional)return false;
+  const node=stroke.node,before=nodeBounds(node),next=regionalPoints(points);
+  if(stroke.original){
+    node.points=node.points.slice(0,stroke.basePoints);
+    const path=stroke.attachment>=0?[stroke.attachment]:[];
+    for(const p of next.slice(stroke.attachment>=0?1:0)){path.push(node.points.length);node.points.push(p);}
+    node.paths[stroke.pathIndex]=path;
+  }else node.points=next;
+  evaluate(stroke.index,unionRect(before,nodeBounds(node)));schedule();return stroke.index;
 }
 function endRegionalStroke(commit=true) {
-  if (!stroke?.regional) return false;
-  const gesture=stroke,node=gesture.node,rect=nodeBounds(node); stroke=null;
-  if (!commit) { nodes.splice(gesture.index,1); selected=gesture.selectionBefore; evaluate(gesture.index,rect); }
-  else { selected=-1; checkpoint(); }
-  renderLayers(); updateControls(); schedule(); queueWeather();
-  return commit?gesture.index:false;
+  if(!stroke?.regional)return false;
+  const gesture=stroke,rect=nodeBounds(gesture.node);stroke=null;
+  const emptyBranch=gesture.original&&gesture.attachment>=0&&gesture.node.paths[gesture.pathIndex].length===1;
+  if(!commit||emptyBranch){
+    if(gesture.original)nodes[gesture.index]=gesture.original;else nodes.splice(gesture.index,1);
+    selected=gesture.selectionBefore;evaluate(gesture.index,unionRect(rect,gesture.original?nodeBounds(gesture.original):null));
+  }else{selected=gesture.index;pathPoint=-1;pathIndex=gesture.original?gesture.pathIndex:0;if(!gesture.original)pathEditing=false;checkpoint();}
+  if(selected>=0)selectNode(selected);
+  if(commit&&!emptyBranch&&gesture.original){drawMode='add';pathIndex=gesture.pathIndex;}
+  renderLayers();updateControls();schedule();queueWeather();return commit?gesture.index:false;
 }
 function applyRegionalStroke(kind,points,options={}) {
   const path=regionalPoints(points),index=beginRegionalStroke(kind,path[0],options);
@@ -878,25 +904,28 @@ function regionalStats() {
 }
 const sculptRegion={
   fitGpuBudget:() => regionalFields?.refit?.(),
-  read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),frame:n.frame?.slice()}:undefined; },
-  loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
+  read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
+  loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
-  beginStroke:beginRegionalStroke,previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
-  pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,selectPathPoint:i=>{pathPoint=i;updateControls();},
+  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1),previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
+  pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
+  drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:tool,
+  selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
+  addPathPoint:p=>{if(pathAdding&&pathPoint>=0)changeSelected(n=>{const added=extendPoint(n,pathPoint,regionalPoints([p])[0],pathIndex);pathPoint=added.point;pathIndex=added.path;});pathAdding=true;updateControls();},
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:i=>`${NODE_NAMES[nodes[i]?.kind]||nodes[i]?.kind} #${i+1}`,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
 };
 window.sculptRegion=sculptRegion;
-function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),frame:n.frame?.slice(),params:n.params?{...n.params}:undefined})); }
+function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),paths:clonePaths(n),frame:n.frame?.slice(),params:n.params?{...n.params}:undefined})); }
 function nodeDistance(n,p) {
   if (!n.points || n.hidden) return Infinity;
   let best=Infinity;
-  for (let i=0;i<n.points.length;i++) {
-    const a=n.points[i],b=n.points[Math.min(i+1,n.points.length-1)],dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
+  for(const path of shapePaths(n))for(let i=0;i<path.length;i++){
+    const a=n.points[path[i]],b=n.points[path[Math.min(i+1,path.length-1)]],dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
     const t=l2?clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/l2,0,1):0;
     best=Math.min(best,Math.hypot(p.x-a.x-dx*t,p.y-a.y-dy*t));
   }
@@ -919,7 +948,7 @@ function changeSelected(edit) {
   const n=nodes[selected]; if (!n?.points || stroke || moving || loading || !ready) return;
   const before=nodeBounds(n); cancelWeather(); edit(n);
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected);
-  flushEval(); markViewChanged(); checkpoint(); queueWeather(); selectNode(selected); schedule();
+  flushEval(); markViewChanged(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected);pathAdding=adding;drawMode=mode;updateControls();schedule();
 }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
@@ -927,8 +956,8 @@ function pickNode(p) {
   return best;
 }
 function selectNode(i) {
-  if(selected!==i)pathPoint=-1;
-  selected=i;
+  if(selected!==i){pathPoint=-1;pathIndex=0;}
+  pathAdding=false;drawMode='select';selected=i;
   const n=nodes[i];
   if (n && n.params && HELP[n.kind]) {
     if (tool!=='move') { rememberTool(); tool='move'; }
@@ -965,11 +994,11 @@ function renderLayers() {
     const item=document.createElement('li');item.draggable=true;item.dataset.index=i;
     item.className=(i===selected?'selected ':'')+(n.hidden?'is-hidden':'');
     const grip=document.createElement('span');grip.className='layer-grip';grip.textContent='⠿';grip.setAttribute('aria-hidden','true');
-    const name=document.createElement('button');name.className='layer-name';name.textContent=NODE_NAMES[n.kind]||n.kind;name.setAttribute('aria-pressed',String(i===selected));name.onclick=()=>selectNode(i===selected?-1:i);
+    const name=document.createElement('button');name.className='layer-name';name.textContent=NODE_NAMES[n.kind]||n.kind;const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(i===selected));name.onclick=()=>selectNode(i===selected?-1:i);
     const number=document.createElement('span');number.className='layer-index';number.textContent=String(i+1).padStart(2,'0');
     const visibility=document.createElement('button');visibility.className='layer-visibility';visibility.textContent=n.hidden?'○':'◉';visibility.title=visibility.ariaLabel=`${n.hidden?'Show':'Hide'} ${name.textContent}`;visibility.setAttribute('aria-pressed',String(!n.hidden));visibility.onclick=()=>{selected=i;nodeAction('hide');};
     name.disabled=visibility.disabled=loading||Boolean(stroke||moving);
-    item.append(grip,number,name,visibility);
+    item.append(grip,number,name,count,visibility);
     item.ondragstart=e=>{if(stroke||moving||loading||mapFeatures?.busy){e.preventDefault();return;}e.dataTransfer.setData('application/x-terraform-layer',String(i));e.dataTransfer.effectAllowed='move';};
     item.ondragover=e=>{if(e.dataTransfer.types.includes('application/x-terraform-layer')){e.preventDefault();e.dataTransfer.dropEffect='move';item.classList.add('drag-over');}};
     item.ondragleave=()=>item.classList.remove('drag-over');
@@ -977,7 +1006,7 @@ function renderLayers() {
     item.ondragend=()=>list.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
     return item;
   }).reverse());
-  if(!nodes.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Draw a stroke to create a layer.';list.append(empty);}
+  if(!nodes.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Draw a path to create a shape.';list.append(empty);}
   for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0||loading||Boolean(stroke||moving);
   $('node-up').disabled||=selected>=nodes.length-1;$('node-down').disabled||=selected<=0;
   $('node-seed').disabled||=nodes[selected]?.seed===undefined;
@@ -1006,7 +1035,7 @@ function checkpoint(mapOnly=false) {
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
-  cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
+  cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
@@ -1098,7 +1127,7 @@ function scriptedScene(list,{ground=true}={}) {
 function sketch() {
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:5,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,refinementSeed,
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),fringeStyle:$('fringe-style').value,materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -1113,7 +1142,7 @@ function persistLater() {
   },450);
 }
 function loadSketch(s) {
-  if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
+  if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const next=deserializeNodes(s.nodes);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
@@ -1127,7 +1156,7 @@ function loadSketch(s) {
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   if (['rings','veins'].includes(s.fringeStyle)) $('fringe-style').value=s.fringeStyle;
-  nodes=next; selected=-1; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -1175,14 +1204,17 @@ function addGroundNode() {
   if (amplitude>0) addNode({kind:'ground',amplitude,wavelength:experiment.has('undulationScale')?Number(experiment.get('undulationScale')):200,coverage:experiment.has('undulationCover')?Number(experiment.get('undulationCover')):.45,seed:seed^0x9e37});
 }
 function serializeNodes() {
-  return nodes.map(n => ({...n,points:n.points?.map(p => ({x:p.x,y:p.y}))}));
+  return nodes.map(n => ({...n,points:n.points?.map(p => ({x:p.x,y:p.y})),paths:clonePaths(n)}));
 }
 function deserializeNodes(list) {
-  return list.filter(n => n && (NODE_NAMES[n.kind])).map(n => ({kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params,points:n.points,frame:Array.isArray(n.frame) && n.frame.length===6 && n.frame.every(Number.isFinite)?n.frame:undefined}));
+  return list.filter(n=>n&&NODE_NAMES[n.kind]).map(n=>{
+    validatePaths(n);
+    return {kind:n.kind,hidden:Boolean(n.hidden),factor:n.factor,amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:Array.isArray(n.frame)&&n.frame.length===6&&n.frame.every(Number.isFinite)?n.frame.slice():undefined};
+  });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => {
-  if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;
+  if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
   if(tool==='move'&&selected>=0)selectNode(selected);
   else{selected=-1;pathPoint=-1;renderLayers();showTool(toolSettings[tool]);}
   updateControls();schedule();persistLater();
@@ -1190,8 +1222,8 @@ for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('cl
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
 for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
-$('feature-tool').onclick=()=>{if(stroke||moving)return;selected=-1;mapFeatures?.activate('deposit');renderLayers();updateControls();};
-function setPathMode(on){if(stroke||moving||loading)return;pathEditing=on;pathPoint=-1;updateControls();schedule();}
+$('feature-tool').onclick=()=>{if(stroke||moving)return;selected=-1;pathAdding=false;drawMode='select';mapFeatures?.activate('deposit');renderLayers();updateControls();};
+function setPathMode(on){if(stroke||moving||loading)return;pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
 $('edit-path').onclick=()=>setPathMode(!pathEditing);$('transform-mode').onclick=()=>setPathMode(false);
 $('canvas-path-mode').onclick=()=>setPathMode(!pathEditing);
 $('selection-clear').onclick=$('canvas-deselect').onclick=()=>selectNode(-1);
@@ -1207,8 +1239,12 @@ for(const key of ['x','y','rotation','scale']){
   });
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();input.value=String(Math.round(selectionTransform(nodes[selected]).values[key]*10)/10);input.blur();}});
 }
-$('path-add').onclick=()=>changeSelected(n=>{const i=pathPoint>=0?pathPoint:n.points.length-1,a=n.points[i],b=n.points[i+1]||{x:clamp(a.x+40,0,config.map.width-1),y:a.y};n.points.splice(i+1,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});pathPoint=i+1;});
-$('path-delete').onclick=()=>{if(pathPoint<0||nodes[selected]?.points?.length<=1)return;changeSelected(n=>{n.points.splice(pathPoint,1);pathPoint=Math.min(pathPoint,n.points.length-1);});};
+$('path-add').onclick=()=>changeSelected(n=>{const added=insertPoint(n,pathIndex,pathPoint);if(added>=0)pathPoint=added;});
+$('path-delete').onclick=()=>{if(pathPoint<0)return;changeSelected(n=>{if(removePoint(n,pathPoint)){pathPoint=-1;pathIndex=Math.min(pathIndex,shapePaths(n).length-1);pathAdding=false;}});};
+$('path-remove').onclick=()=>changeSelected(n=>{removePath(n,pathIndex);pathIndex=0;pathPoint=-1;pathAdding=false;});
+$('path-extend').onclick=()=>{pathAdding=!pathAdding;updateControls();schedule();};
+$('draw-new').onclick=()=>{if(stroke||moving||loading)return;const candidate=nodes[selected]?.kind||tool,kind=HELP[candidate]&&candidate!=='move'?candidate:'plateau';document.querySelector(`[data-tool="${kind}"]`)?.click();};
+$('draw-add').onclick=()=>{if(stroke||moving||loading||!nodes[selected]?.points||nodes[selected].hidden)return;drawMode='add';pathEditing=false;pathAdding=false;pathPoint=-1;updateControls();schedule();};
 for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>changeSelected(n=>transformNode(n,nodeState(n),about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value))));
 document.addEventListener('terraform-feature-mode',()=>updateControls());
 $('tool-style').addEventListener('change',() => {
@@ -1264,7 +1300,7 @@ window.addEventListener('keydown',event => {
   if(event.code==='KeyP'&&tool==='move'&&selected>=0&&!event.ctrlKey&&!event.metaKey&&!stroke&&!moving){event.preventDefault();setPathMode(!pathEditing);return;}
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
   if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint>=0 && selected>=0 && !stroke && !moving) {event.preventDefault();$('path-delete').click();return;}
-  if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
+  if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(pathAdding){pathAdding=false;updateControls();schedule();}else if(drawMode==='add'){drawMode='select';updateControls();schedule();}else if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
   const arrow={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
   if(arrow&&tool==='move'&&selected>=0&&event.target===overlay&&!event.metaKey&&!event.ctrlKey&&!stroke&&!moving){
     if(pathEditing&&pathPoint<0){event.preventDefault();return;}

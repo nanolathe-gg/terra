@@ -159,9 +159,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     drawMapBounds(ink,map,config,api.sampleAuthored??sourceSample); features?.draw(ink,v);
     if(api.currentTool()==='move'&&!features?.active){
       if(hoveredNode>=0&&hoveredNode!==api.selection())drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
-      drawSelection(ink,geometry(api.selection()),{label:api.selectionLabel(api.selection()),pathMode:api.pathEditing?.(),point:api.pathSelection?.()});
+      drawSelection(ink,geometry(api.selection()),{label:api.selectionLabel(api.selection()),pathMode:api.pathEditing?.()||api.drawMode?.()==='add',point:api.pathSelection?.(),activePath:api.pathIndex?.()});
     }
-    if (hover && !features?.active && api.currentTool()!=='move') { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
+    if (hover && !features?.active && (api.currentTool()!=='move'||api.drawMode?.()==='add')) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
     // H7b: ?levelsOverlay=1 marks each shown chunk with its level: orange Q for a quarter image, green F for a final one.
     if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
     ink.restore();
@@ -269,7 +269,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const project=p=>({x:p.x,y:p.y-(Math.max(config.seaLevel,visibleSample(p.x,p.y))-config.baseHeight)/2});
   function geometry(index){return selectionGeometry(nodeMetadata(index),project,state());}
   function refreshHover(event){
-    if(gesture||pan||busy||features?.active||api.currentTool()!=='move'){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
+    if(gesture||pan||busy||features?.active||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
     const q=screen(event),hit=hitSelection(geometry(api.selection()),{x:q.x,y:q.z},api.pathEditing?.());
     hoveredNode=api.pickAt(localPoint(event));
     overlay.style.cursor=hit?.action==='rotate'?'grab':hit?.action==='scale'?'nwse-resize':hit?.action==='point'?'crosshair':hoveredNode>=0||hit?'move':'default';
@@ -279,7 +279,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
     if(features?.active)return;
     const p=localPoint(event),start=performance.now();
-    if(api.currentTool()==='move'){
+    if(api.pathAdding?.()){api.addPathPoint(p);schedule();return;}
+    if(api.currentTool()==='move'&&api.drawMode?.()!=='add'){
       const screenPoint=screen(event),selected=api.selection(),handles=geometry(selected);
       const hit=hitSelection(handles,{x:screenPoint.x,y:screenPoint.z},api.pathEditing?.());
       const index=hit?selected:api.selectAt(p);if(index<0)return;
@@ -288,7 +289,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(api.pathEditing?.()&&pointIndex<0)return;
       const h=geometry(index);if(api.beginMove(index)===false)return;
       gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:nodeMetadata(index)?.params?.amount??0,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action:hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey?'amount':'move'};
-    }else{api.beginStroke(api.currentTool(),p,api.strokeOptions());gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'stroke',points:[p],start};}
+    }else{
+      const q=screen(event),hit=api.drawMode?.()==='add'?hitSelection(geometry(api.selection()),{x:q.x,y:q.z},true):null;
+      const anchor=hit?.action==='point'?hit.index:-1,startPoint=anchor>=0?nodeMetadata(api.selection()).points[anchor]:p;
+      api.beginStroke(api.drawingKind?.()||api.currentTool(),startPoint,api.strokeOptions(),anchor);
+      gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'stroke',points:[startPoint],start};
+    }
     pendingStrokeTime=start;metadata?.update?.();schedule();
   });
   function preview(event,final=false){
