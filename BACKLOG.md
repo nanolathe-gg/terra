@@ -8008,6 +8008,10 @@ rounds, per the handoff rules. Assets/logs and cleanup candidates are in
 `$R/agent-H21/NOTES.md`; all files retained. Own servers stopped after cwd/PID
 verification. Part 2 not started; branch `H21-impacts` is for owner review.
 
+**Part 1, the coordinator's review.** Read the diff and `docs/audit/IMPACTS.md`, viewed the `moonLobes` sheet (moon-1 further, moon-2 further, moon-3 mixed: keep stands), and merged it with H20, which needed `geology_controls.mjs` and `geology_diff.py` joined by hand: every family lists as it did.
+- *The lighting group cost every pixel.* `markLight` and `away` had moved out of their marks' gates, so Green paid for marks it does not draw: terrain 5.10 ms per pass against main's 5.02 over eight alternating rounds at the same `n`. They went back inside, which gives up two of the five lines. Now 5.00 against 5.04, with all 27 scenes 0.00 and pitted, cracked, `slopeMarks` and `wrinkles` on moon-1 byte for byte.
+- *Part 2* is `handoff/5-impacts-part2-H21.md`: a switch-off table, Moon, crystal-1's craters from H20, then its rows on the sheet.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
