@@ -7762,6 +7762,35 @@ lit on the wall, in screen pixels, so the rock keeps its grain. On a tall wall t
 - *Checks* (all on the final head). regional 0 on all 27; smoke (page8 on six worlds) clean; gate 0; `node --test` 33 of 33; `shape_controls` no dead control; `section_check --against classic-ref.json` 0; `curveedit` green and desert 0. Quarter draw (`materialFoot=2`) against final on the green wall: same features, coarser grain, no pop. Indexed export of the red wall: the relief survives the palette and the dark faces stay brown (the export's offset to the render was matched by eye, so the crop is the same look, not the same pixels).
 - *Perf* (map4 `--only drag`, four rounds, order alternating): terrain 1070 / 1078 ms on green-2, 996 / 992 on the wall scene (head / main), relief bake 433 / 427 and 337 / 339, edit latency p95 36 / 42 and 37 / 38, rAF p95 16.7 on all. map40 on the wall scene: rAF p95 16.7 on both, edit latency p95 40 against 39.7; the prototype's 33 to 50 ms does not occur.
 
+### H21. Impacts
+
+**Why.** One regolith family for craters, cups, ribs, folds and pockmarks, on Moon,
+and craters on Red and Crystal. Starts from main `28e623d`, after H19 landed.
+Bodies owns crystal cells, frost and ice slabs; the crater-facet overlap is named
+in the inventory, not folded into this card.
+
+**Part 1: inventory, impact, outline and one code merge.** A commit per step, then
+stop for the owner's review. No retail tuning and no part 2 in this dispatch.
+1. Inventory every `moon*`, `crater*`, `pock*` control and `worms`, `wrinkles`,
+   `slopeMarks`, including shape-card readers, related crater-rim/web options,
+   worlds, marks, shared ideas and any world gates. Explain what draws on moon-2.
+2. Extend `measure/geology_controls.mjs --family impacts`; measure the effective
+   scene/card values and default-only probes on the three windows of each world.
+   List zero and under-5% results with class coverage; delete no weak controls.
+3. Settle `moonLobes` against `baseVary`/`baseBump`, using H15's trial and fresh
+   post-H19 evidence. Merge only if the look allows; otherwise document why it stays.
+4. Merge the largest same-idea code group found by the inventory. It must be
+   shorter and pixel-identical; distinguish a real change from compiler drift.
+
+**Checks.** Fresh archived-main baseline; all 27 scenes, compare, stats, regional,
+smoke page8 on six worlds, gate, Node tests, shape control and section checks,
+and curve editing on Green/Desert. Read retail beside every visually judged
+window at 1x and 2x. No perf rounds: the owner runs those on a quiet machine.
+
+**Server and guard:** own server 8895/CDP 9695; archived baseline 8896/CDP 9696;
+branch `H21-impacts`; assets `$R/agent-H21`. Results and exact command exits go in
+its `NOTES.md`; no asset or render is committed.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
