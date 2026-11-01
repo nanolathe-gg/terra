@@ -6963,6 +6963,37 @@ water branch and the second table go, and Red-3's waterline follows the ground.
   Lean and facing are per stroke. The dense forms' table size matters (the lighting reads kinks): keep a fitted form at
   48 intervals or more, or check the 27 scenes.
 
+**Done (part 2, step D).** Measured, and nothing kept: every world keeps the shared forms, no table has a `forms` block, and the 27 scenes are
+as they were (0.00 against step C's final render). The tool is `measure/fit_forms.py <world>`: every usable retail map of the world (`heights.bin` at 16 px
+cells with the sea off; Zhon from the four `repro-r7/zhon-*/heights.npy` windows, a small sample), features above the map's modal dry height (a foot at 2
+units, a top at least 8 units up, at least 40 px foot to top), the mean height share against distance share from the foot per feature height bin
+(0-30, 30-80, 80+; water the same going down), 9-knot fits, and eight-sector slope lengths. Output for all nine worlds is in `$R/agent-H15/fit-D`.
+- *What the cells say.* Features under 80 units are two to four cells from foot to top, so any shape reads as a near-linear ramp at that sampling: they give a
+  width (about 40-65 px at 30-80 units, Desert 150; 85-320 px for the tall bin), not a form. The measured plateau curve sits .06-.08 (rms) from our smoothstep, about the
+  split-half noise of the world's own maps (.02-.14). Foot and top rounding is below one cell, so a fit has a hard foot and shoulder.
+- *Tried on Green and Red, read worse or the same.* The 30-80 curve as plateau, hill (both sides) and radial hill at lean 100, the 80+ curve as mountain, and
+  water curves from the shore: Green hills lose the rock arc at their south foot (further, 1x), the radial hill at lean 100 gets a hard outline ring and a flat
+  top (further), the plateau alone reads the same, Red-1's mountain gets a hard circular outline (further), and the water forms put a dark bank line on
+  Green's shores and take Red-3's shallows to almost nothing (further). Water moves to the Shores card; the measurements stay in `fit-D`.
+- *Mountains, the one bounded test.* The 80+ bin mixes flat-topped plateaus with peaks. Tall features (80+ units, at least 96 px) split on the share of their
+  cells at 90% of the top or higher: under .08 is peaked (a cone has about .02), else flat-topped. Peaked: Green 10 features (3 maps, rms against the mountain
+  form .10, smoothstep .07), Red 30 (2 maps, .11 and .08, split-half .09), Desert 4, Archipelago 1, Ice 1, the others none. The peaked curves sit within twice
+  their split-half noise of our mountain form (Red .11 against .19), so the form stands and no candidate was rendered. Flat-topped tall features (Lava,
+  Ice, Crystal, Archipelago, Red) are plateaus and mesas; their curves sit .08-.23 from the mountain form and .05-.16 from smoothstep, which is not evidence for a
+  form either (Lava, Ice and Red split halves differ by .11-.17).
+- *Lean.* No consistent north lean in the heights. By the bearing the ground falls toward, run north over south is .86-1.03 by gradient and .88-1.33 by ray
+  length in Green's bins (Green 80+ east over west and the diagonals scatter .6-1.6 on 60-70 features); the other worlds read the same way in `fit-D`. The
+  shape defaults (1.7 north for the plateau family, about 2 for the shouldered hill) are unchanged, and nothing here supports or contradicts them: whatever
+  makes them read right is in the projection or the shader, not the heights.
+- *Keep rule.* A form is kept only where a window reads closer and none reads further; "same" is not enough, since it adds a change that earns nothing. None did.
+- *Departures.* The foot threshold is 2 units and features qualify on their top (the brief's 8 units over the plain, taken for the foot, would lose the foot
+  cells); each feature weighs the same in a pooled, [1 2 1]-smoothed bin mean. Only Green and Red were rendered (nine worlds were not tried wholesale: the
+  first two read worse and the coordinator settled the rest). A per-world `forms` block, `setWorldForms` and a water-form seam were built and removed again, so
+  `sculpt-shape-presets.js` is as at step C.
+- *The coordinator's review.* I viewed the Red and Green sheets and agree the fits read further; only 1x was viewed, enough to reject them. The diff against step
+  C is `measure/fit_forms.py`, this entry and one table row; all 27 scenes are 0.00. So decision 23's shared forms stand for every world, each world's own
+  look comes from a stroke's curve and the world's tool presets, and retail's heights are too coarse to set a form. **H15 is done.**
+
 **Step C, the coordinator's review.** Reading the diff and then moving every control on the real engine
 (`measure/shape_controls.mjs`, new) found what the step's checks could not, because they only proved controls were stored:
 - *Dead on the default hill:* Face width, terraces, ledge and terrace variation. Decision 3 said one face width for every
