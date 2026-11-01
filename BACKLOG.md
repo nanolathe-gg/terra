@@ -7951,6 +7951,63 @@ lit on the wall, in screen pixels, so the rock keeps its grain. On a tall wall t
 - *A margin the card missed.* The new fringe reads the baked field 48 px out, past a quarter draw's `draw` reach of 37, so a chunk edge could show during a drag. `reaches()` now carries it when `crystalShallow` is on. All 27 scenes unchanged, smoke clean on Crystal and Ice.
 - *The G7 sheet.* The agent's third panel barely differed from the second, because `crystalShoreScale` stops at 1 and the plate sizes are 14 to 24 px. Redrawn with plate size 40 on the strokes: `$R/agent-H20/rv/g7/crystal-2-G7.png` and `crystal-3-G7.png`. By eye retail reads 30 to 50 px on crystal-2 and 15 to 30 on crystal-3, with hairline seams on both. The owner rules; the cells stay as G7 left them until then.
 
+### H21. Impacts
+
+**Why.** One regolith family for craters, cups, ribs, folds and pockmarks, on Moon,
+and craters on Red and Crystal. Starts from main `28e623d`, after H19 landed.
+Bodies owns crystal cells, frost and ice slabs; the crater-facet overlap is named
+in the inventory, not folded into this card.
+
+**Part 1: inventory, impact, outline and one code merge.** A commit per step, then
+stop for the owner's review. No retail tuning and no part 2 in this dispatch.
+1. Inventory every `moon*`, `crater*`, `pock*` control and `worms`, `wrinkles`,
+   `slopeMarks`, including shape-card readers, related crater-rim/web options,
+   worlds, marks, shared ideas and any world gates. Explain what draws on moon-2.
+2. Extend `measure/geology_controls.mjs --family impacts`; measure the effective
+   scene/card values and default-only probes on the three windows of each world.
+   List zero and under-5% results with class coverage; delete no weak controls.
+3. Settle `moonLobes` against `baseVary`/`baseBump`, using H15's trial and fresh
+   post-H19 evidence. Merge only if the look allows; otherwise document why it stays.
+4. Merge the largest same-idea code group found by the inventory. It must be
+   shorter and pixel-identical; distinguish a real change from compiler drift.
+
+**Checks.** Fresh archived-main baseline; all 27 scenes, compare, stats, regional,
+smoke page8 on six worlds, gate, Node tests, shape control and section checks,
+and curve editing on Green/Desert. Read retail beside every visually judged
+window at 1x and 2x. No perf rounds: the owner runs those on a quiet machine.
+
+**Server and guard:** own server 8895/CDP 9695; archived baseline 8896/CDP 9696;
+branch `H21-impacts`; assets `$R/agent-H21`. Results and exact command exits go in
+its `NOTES.md`; no asset or render is committed.
+
+**Done (part 1).** Inventory and evidence: [Impacts](docs/audit/IMPACTS.md), with
+31 controls and their actual readers/owners, and what draws on moon-2 (crater
+spurs and regolith marks; no authored fissure). The effective-card sweep covers
+38 states / 123 renders: 27 clear the 5% screen, 11 do not. The report distinguishes
+inactive gates from weak probes and records the higher Moon/Crystal registration
+floor; nothing is called globally dead or deleted.
+
+`moonLobes` stays. Six fresh H15-style substitution renders, including inherited
+crater spurs, were viewed against retail at 1x/2x: foot controls lose face folds
+and have different support, amplitude and scale. The combine-or-drop row now
+recommends keep. No preset or shape value changed.
+
+One common surface-lighting expression group replaces the duplicated visibility,
+base-light and facing calculations: `engine-frag.wgsl` 2015→2010 (-5 lines);
+bake/bridge/shape unchanged (1397/150/1628). All 27 RGBA buffers and height arrays
+are exactly equal to archived main `28e623d`; four enabled-mark probes are exact
+too. Turning cups off moves moon-1 2.521682 MAD / 7.004261% pixels, so the comparison
+detects a real change. No compiler drift.
+
+Checks all exit 0: 27-scene renders/compare, 675 retail flags and 675 metric cells
+unchanged, regional all 27 (837 field comparisons), smoke (135 brushes, eight
+exports plus Zhon disabled, six page8 worlds), 35 Node tests, gate, shape controls
+(no shown `!`), H15 section comparison, and 48 curve-editor checks on Green/Desert.
+The report lists exact section errors and all viewed/not-viewed images. No perf
+rounds, per the handoff rules. Assets/logs and cleanup candidates are in
+`$R/agent-H21/NOTES.md`; all files retained. Own servers stopped after cwd/PID
+verification. Part 2 not started; branch `H21-impacts` is for owner review.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs

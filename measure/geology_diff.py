@@ -25,6 +25,9 @@ Classes, read on the base render's heights (the sea is subtracted; the dry base 
   shore     either side within 120 px of the waterline: what a stroke's coast pass cuts (layers, fingers, plates, the dry bank)
   crater    H20: discs round the scene's crater strokes, each .75 of the card's diameter in radius (the bowl, rim and apron), at the stroke's points as the
             scene file gives them (no height shift: the discs are wider than the shift); the class for the crystal craters' skin and web
+  impact    H21: dry relief at least 1.5 either side of the plain (includes crater bowls, unlike raised)
+  fold      H21: dry gentle slopes .025–.60, moonFolds' support
+  These masks use the existing height-grid projection approximation; a below-5% row is not proof of dead code.
   wall      H19: ground faceRelief's gate is above .5 on (1 - broad.y / 2 at least 2.25, engine-frag.wgsl), at the screen rows it is drawn on (a row
             less g / 2), which are many more than its world rows. A retail window holds almost none, so each root holds <world>-1 alone, the
             world's repro/walls scene
@@ -85,6 +88,11 @@ def class_mask(root, world, n, cls):
         return m
     h = ndi.zoom(g, 1024 / g.shape[0], order=1)
     base = BASE.get(world, 24)
+    if cls == 'impact':
+        return (h > .5) & (np.abs(h - base) >= 1.5)
+    if cls == 'fold':
+        slope = slope_map(g, 2)
+        return (h > .5) & (slope >= .025) & (slope <= .60)
     if cls in ('shallows', 'edge', 'beach', 'shore'):
         dry, wet = h > .5, h < -.5
         if not dry.any() or not wet.any():

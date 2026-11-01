@@ -1729,9 +1729,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Straight strokes over the rock faces, darker the more rock shows (card E6; after shadeBlue, which rebuilds the colour).
         color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
     }
+    // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), shared by shine and the surface marks.
+    let markSeen = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
+    let markLight = u.ambient + 0.95 * max(0.0, dot(normal, u.light)) * markSeen;
+    let turned = 1.0 - clamp(shading, 0.0, 1.0);
+    let away = smoothstep(-0.05, 0.10, dot(broad, normalize(u.light.xy)));
     if (u.shineOn != 0) {
-        // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), so no glint sits in a shadow.
-        let sunSeen = (1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope))) * (1.0 - flatBank) * closeVis;
+        let sunSeen = markSeen * (1.0 - flatBank) * closeVis;
         var shine = shineTerm(pixel, p, gLit, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform, faceRelief);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
@@ -1741,9 +1745,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
     if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
-        let shaded = 1.0 - clamp(shading, 0.0, 1.0);
-        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, shaded));
-        color *= 1.0 - pits * landform * mix(0.5, 0.92, shaded);
+        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, turned));
+        color *= 1.0 - pits * landform * mix(0.5, 0.92, turned);
     }
     if (u.moonFolds > 0.0 && h > u.sea + 1.0) {
         // G8 (Moon): thin dark folds across the lit and moderate slopes.
@@ -1751,36 +1754,29 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     if (u.moonRibs > 0.0 && h > u.sea + 1.0) {
         // G8 (Moon): the shaded flank's strokes, on steep ground of every facing, more where turned from the sun.
-        let turnedRib = 1.0 - clamp(shading, 0.0, 1.0);
-        let wall = u.moonRibs * smoothstep(0.15, 0.5, slope) * smoothstep(0.12, 0.5, turnedRib);
+        let wall = u.moonRibs * smoothstep(0.15, 0.5, slope) * smoothstep(0.12, 0.5, turned);
         if (wall > 0.0) {
-            let seenRib = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
-            let beforeRib = max(0.0, dot(normal, u.light));
             let afterRib = max(0.0, dot(normalize(vec3f(-(g + u.moonRibDepth * moonRibs(pixel)), 1.0)), u.light));
-            let strokes = clamp((u.ambient + 0.95 * afterRib * seenRib) / (u.ambient + 0.95 * beforeRib * seenRib), 0.3, 2.6);
-            color *= mix(1.0, strokes * (1.0 - u.moonRibDark * smoothstep(0.1, 0.55, turnedRib)), wall);
+            let strokes = clamp((u.ambient + 0.95 * afterRib * markSeen) / markLight, 0.3, 2.6);
+            color *= mix(1.0, strokes * (1.0 - u.moonRibDark * smoothstep(0.1, 0.55, turned)), wall);
         }
     }
     if (u.moonCups > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
         // G8 (Moon): lit cups, many on shaded steep faces, few on lit ground, none on the flat top. The
         // sun shades each one as it shades the face: the cup's wall turned from the sun goes dark, the
         // wall toward it keeps the face's light.
-        let turned = 1.0 - clamp(shading, 0.0, 1.0);
         let steep = smoothstep(0.08, 0.40, slope);
         let clump = 0.6 + 0.8 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
         let keep = min(u.moonCups * mix(0.04, 1.0, smoothstep(0.1, 0.55, turned)) * steep * clump * landform, 1.0);
         if (keep > 0.0) {
             let cups = moonCups(pixel, u.moonCupSize, keep, u.moonCupDepth);
-            let seen = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
-            let before = max(0.0, dot(normal, u.light));
             let after = max(0.0, dot(normalize(vec3f(-(g + cups.xy), 1.0)), u.light));
-            color *= clamp((u.ambient + 0.95 * after * seen) / (u.ambient + 0.95 * before * seen), 0.2, 1.3) * (1.0 - 0.7 * cups.z);
+            color *= clamp((u.ambient + 0.95 * after * markSeen) / markLight, 0.2, 1.3) * (1.0 - 0.7 * cups.z);
         }
     }
     if (u.slopeMarks > 0.0 && h > u.sea + 1.0) {
         // More on faces turned from the light (sections: ~0.6 as many on
         // lit faces of the same slope).
-        let away = smoothstep(-0.05, 0.10, dot(broad, normalize(u.light.xy)));
         // Fewer on lit faces (eight Lunar maps: ~1.9% of px against ~5.4% on
         // shaded faces of the same slope; our surface already has some).
         let density = u.slopeMarks * smoothstep(0.12, 0.45, slope) * mix(0.15, 1.0, away);
@@ -1793,7 +1789,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     if (u.wrinkles > 0.0 && h > u.sea + 1.0) {
         // Joined wrinkles (Moon): on every slope, more on faces turned from the light.
-        let away = smoothstep(-0.05, 0.10, dot(broad, normalize(u.light.xy)));
         let gate = smoothstep(0.05, 0.30, slope) * mix(0.55, 1.0, away);
         if (gate > 0.0) {
             // The long axis stays fixed on the screen, ~27 degrees off vertical as the
