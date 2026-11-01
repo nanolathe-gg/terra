@@ -188,6 +188,8 @@ fn faceOf(own: f32, reach: f32, nCW: f32) -> f32 {
   let kw = clamp(1.0 + 0.5 * u.faceVar * nCW, 0.4, 1.8);
   return min(u.facePx * kw / reach, 0.98);
 }
+// The height lumps: the stroke's height wanders by rough times its two noise fields (nCW, nDet) at the host's weights hgtA and hgtB.
+fn lumps(nCW: f32, nDet: f32) -> f32 { return 1.0 + u.rough * (u.hgtA * nCW + u.hgtB * nDet); }
 // How far a cell lies toward the side the stroke leans (0..1: the cosine between the stroke's bearing and the direction from the stroke to the cell, never
 // below 0). The lean side is a map bearing (bearX, bearY) or, with leanSide, the left (+1) or right (-1) of the drawn direction (none on a point).
 fn leanToward(ddx: f32, ddy: f32, sx: f32, sy: f32, span2: f32) -> f32 {
@@ -318,8 +320,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     let dx = wx - cx + ampK * (u.rotX * ex - u.rotY * ey);
     let dy = wy - cy + ampK * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
-    if (kind == 2u && u.natural != 0u) { width = clamp(1.0 + u.rough * 1.6 * nCW, 0.45, 1.9); }
-    else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
+    if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
     var reach = radius * width * u.bankScale;
     if (u.ridge != 0u) { reach = reach * (s1.x + (s1.y - s1.x) * t); }
     // Lean on a kind with no shoulder to widen: the slope toward the lean side runs leanK of its length longer (shorter below 0).
@@ -376,7 +377,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     }
     if (!shouldered) { c = terraced(c, x, y, i, cells); }
     if (u.ridge != 0u) { c = c * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
-    if (kind == 4u || (kind == 5u && !shouldered)) { c = keepLip(c * (1.0 + u.rough * 0.09 * nDet)); }
+    if (kind == 4u || (kind == 5u && !shouldered)) { c = keepLip(c * lumps(nCW, nDet)); }
     let key = select(max(c, core), c, core == 0.0);
     if (!shouldered && (key <= best || (c == 0.0 && core == 0.0))) { continue; }
     best = key; bc = c; br = r; bcore = core; visited = true;
@@ -411,7 +412,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     lift = u.amount * ex;
   } else if (kind == 5u) {
     var mult = 1.0;
-    if (u.plain == 0u) { mult = 1.0 + u.rough * (0.75 * nCW + 0.30 * nDet); }
+    if (u.plain == 0u) { mult = lumps(nCW, nDet); }
     value = base + u.amount * w * mult + baseBump(lx, ly, w);
     lift = u.amount * ex * mult;
   } else {
@@ -490,9 +491,9 @@ fn compose(@builtin(global_invocation_id) g: vec3u) {
 #endif
   let joined = Sc[2u * cells + i]; let raw = Sc[i];
 #ifdef PAGES
-  let lift = 1.0 + u.rough * (0.75 * nzCell(5u, x, y, i, cells) + 0.30 * nzCell(2u, x, y, i, cells));
+  let lift = lumps(nzCell(5u, x, y, i, cells), nzCell(2u, x, y, i, cells));
 #else
-  let lift = 1.0 + u.rough * (0.75 * Nz[5u * cells + i] + 0.30 * Nz[2u * cells + i]);
+  let lift = lumps(Nz[5u * cells + i], Nz[2u * cells + i]);
 #endif
   // The weights are the raw curve (a lip passes 1), so the lift carries the excess through the blur; protection and routes read the clipped share.
   F[PH * cells + i] = clamp(F[PH * cells + i] + u.amount * joined * lift, u.minH, u.maxH);
@@ -636,7 +637,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     let dx = wx - cx + u.amp * (u.rotX * ex - u.rotY * ey);
     let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
-    if (natural) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
+    if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
     var reach = radius * width * u.bankScale;
     if (!natural && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); reach = reach * (1.0 + u.leanK * ln * ln); }
     var r = sqrt(dx * dx + dy * dy) / reach;
@@ -652,7 +653,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
       c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW));
     } else {
       c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW));
-      if (kind == 8u) { c = keepLip(c * (1.0 + u.rough * 0.09 * nDet)); }
+      if (kind == 8u) { c = keepLip(c * lumps(nCW, nDet)); }
     }
     c = terraced(c, x, y, i, cells);
     if (c <= best) { continue; }

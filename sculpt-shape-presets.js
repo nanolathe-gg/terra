@@ -66,6 +66,24 @@ export function leanSetup(kind, q) {
   return {ratio, k: (ratio ?? (FAMILY.includes(kind) ? 1.7 : 1)) - 1, side, bx, by, family: FAMILY.includes(kind)};
 }
 
+// Variability: roughness stays the master; these tables hold what each kind multiplies it by, and the stroke's three sliders (outlineVar, widthVar, heightVar,
+// 100% each) scale them, so the defaults draw what the per-kind constants drew.
+//   outline: how far the outline wanders (radius share per unit roughness)
+//   width:   the cell's width noise, 1 + roughness * k * noise, clamped to [lo, hi]
+//   height:  the height lumps, 1 + roughness * (a * noiseCW + b * noiseDet)
+// Left as they are because they are different ideas: the plateau's level wander (rough * 3 height units, not a share), the shouldered hill's cross shift and
+// local radius (the face's own wander), and the deep stroke's shelf and core.
+const OUTLINE = {deep: 1.1, family: .95, hill: .85, other: .2};
+const WIDTH = {deep: [1.6, .45, 1.9], family: [1.3, .55, 1.7]};
+const HEIGHT = {hill: [.75, .3], dome: [0, .09], mountain: [0, .09], lower: [0, .09]};
+export function variability(kind, {naturalWater, naturalPlateau, shouldered, plainHill}, q) {
+  const o = q.outlineVar ?? 1, w = q.widthVar ?? 1, h = q.heightVar ?? 1;
+  const wd = naturalWater ? WIDTH.deep : naturalPlateau ? WIDTH.family : null;
+  const ht = shouldered ? HEIGHT.hill : plainHill ? HEIGHT.dome : HEIGHT[kind] ?? null;
+  return {amp: (naturalWater ? OUTLINE.deep : naturalPlateau ? OUTLINE.family : shouldered ? OUTLINE.hill : OUTLINE.other) * o,
+    wK: wd ? wd[0] * w : 0, wLo: wd?.[1] ?? 1, wHi: wd?.[2] ?? 1, hgtA: ht ? ht[0] * h : 0, hgtB: ht ? ht[1] * h : 0};
+}
+
 // The kinds that take a cross-section curve, its face width and terraces.
 export const SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
 export const hasCurve = q => Boolean(q.curve);

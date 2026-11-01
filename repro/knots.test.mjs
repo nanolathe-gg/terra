@@ -36,3 +36,14 @@ test('lean: the plateau family keeps the old north term by default, facing picks
  assert.deepEqual([leanSetup('hill',{facing:5}).bx,leanSetup('hill',{facing:5}).by],[1,0]);
  assert.equal(leanSetup('hill',{facing:1}).side,1);assert.equal(leanSetup('hill',{facing:2}).side,-1);
 });
+
+import {variability} from '../sculpt-shape-presets.js';
+test('variability: the sliders at 100% give the per-kind constants, 0 switches a term off',()=>{
+ const v=variability('plateau',{naturalPlateau:true},{});
+ assert.deepEqual([v.amp,v.wK,v.wLo,v.wHi,v.hgtA,v.hgtB],[.95,1.3,.55,1.7,0,0]);
+ assert.deepEqual(Object.values(variability('deep',{naturalWater:true},{})).slice(0,4),[1.1,1.6,.45,1.9]);
+ const h=variability('hill',{shouldered:true},{});assert.deepEqual([h.amp,h.hgtA,h.hgtB],[.85,.75,.3]);
+ assert.deepEqual([variability('mountain',{},{}).amp,variability('mountain',{},{}).hgtB],[.2,.09]);
+ assert.equal(variability('plateau',{naturalPlateau:true},{widthVar:0}).wK,0);
+ assert.equal(variability('hill',{shouldered:true},{heightVar:2}).hgtA,1.5);
+});
