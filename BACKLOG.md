@@ -7945,6 +7945,12 @@ lit on the wall, in screen pixels, so the rock keeps its grain. On a tall wall t
 - *Perf (`p2/perf/table.txt`, `perf.mjs map4 --only drag --no-export`, green-2 and crystal-2, four rounds, head first in 1-2, main first in 3-4; host load 2.9-6.8 at the starts).* Read `ms / n`; `n` matches (green-2 210-211, crystal-2 209-213). green-2 `chunk | terrain` 5.12 / 5.09 / 5.16 / 5.08 head against 5.20 / 5.25 / 5.21 / 5.22 main (x0.98), relief bake 2.10 / 2.10 (x1.00), `erode | shape passes` 2.05 / 2.11 (x0.97); crystal-2 terrain 3.42 / 3.68 / 3.59 / 3.64 against 3.62 / 3.43 / 3.55 / 3.67 (x1.00), erode shape passes 4.60 / 4.52 / 4.73 against 4.78 / 4.41 / 4.81 (x0.98). The rounds agree: no regression, including the eight added taps.
 - *Departures.* The step 3 slab depth fade and `crystalSeamEnd` trials were not committed. A first check chain ran twice at once (two copies of one script) and its logs were discarded; the figures above are from a clean single run (`p2/chkB`). The seam judgement is thin (a window with land). `crystal-1`'s Done lines above are numbers plus the viewed pairs only.
 
+**Part 2, the coordinator's review.** Read the diff; viewed ice-1 whole, crystal-1, -2 and -3 at 1x against retail, and the G7 sheets.
+- *Ice-1* reads clearly closer: the pockets and the straight-sided ponds are gone. Its coast is smoother than retail's tooth, which stays on Small leftovers.
+- *Crystal's fringe* is a small gain: the far sea is smoother and the near carpet stays. crystal-1 and crystal-3 read the same.
+- *A margin the card missed.* The new fringe reads the baked field 48 px out, past a quarter draw's `draw` reach of 37, so a chunk edge could show during a drag. `reaches()` now carries it when `crystalShallow` is on. All 27 scenes unchanged, smoke clean on Crystal and Ice.
+- *The G7 sheet.* The agent's third panel barely differed from the second, because `crystalShoreScale` stops at 1 and the plate sizes are 14 to 24 px. Redrawn with plate size 40 on the strokes: `$R/agent-H20/rv/g7/crystal-2-G7.png` and `crystal-3-G7.png`. By eye retail reads 30 to 50 px on crystal-2 and 15 to 30 on crystal-3, with hairline seams on both. The owner rules; the cells stay as G7 left them until then.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
