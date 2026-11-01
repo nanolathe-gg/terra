@@ -59,30 +59,6 @@ fn rockStrata(hr: f32, zone: i32, paint: f32) -> vec3f {
     let isB = smoothstep(split - 0.04, split + 0.04, fract(t));
     return mix(strataSlot(z.y), strataSlot(z.z), isB);
 }
-// H16 proof: the bed colour at coordinate c from the column (slot -> the strata colours), its edges softened as the strata's are (about
-// 1.5 px of slope across) with the colour of the bed below or above.
-fn geoStrata(c: f32, slope: f32) -> vec3f {
-    let bed = geoColumn(c);
-    let edge = clamp(1.5 * max(slope, 0.05) / bed.thick, 0.01, 0.2);
-    let here = strataSlot(bed.slot);
-    let low = 0.5 * (1.0 - smoothstep(0.0, edge, bed.through));
-    let high = 0.5 * (1.0 - smoothstep(0.0, edge, 1.0 - bed.through));
-    var rgb = here;
-    if (low > 0.0) { rgb = mix(rgb, strataSlot(geoColumn(bed.foot - 0.01).slot), low); }
-    if (high > 0.0) { rgb = mix(rgb, strataSlot(geoColumn(bed.foot + bed.thick + 0.01).slot), high); }
-    // Level ground in a section nearly all one bed is held to that bed (the cap sheet, desertCapFlat's rule read from the column).
-    let sec = u.geoSections[geoSectionAt(c)];
-    var period = 0.0;
-    var widest = 0.0;
-    var slot = 0.0;
-    for (var j = 0; j < i32(sec.z); j++) {
-        let b = u.geoBeds[i32(sec.y) + j];
-        period += b.x;
-        if (b.x > widest) { widest = b.x; slot = b.z; }
-    }
-    let hold = u.desertCapFlat * smoothstep(0.88, 0.94, widest / max(period, 0.01)) * (1.0 - smoothstep(0.05, 0.22, slope));
-    return mix(rgb, strataSlot(slot), hold);
-}
 fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     let wander = (terrainNoise(p * 0.03 + vec2f(41.0, 7.0)).r - 0.5) * 2.0 * u.baseBandWander
                + (terrainNoise(p * 0.35 + vec2f(5.0, 63.0)).g - 0.5) * 1.5;
@@ -1082,18 +1058,7 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     if (field < outer * 0.3 || field > 0.65) { return base; }
     let zone = smoothstep(outer * 0.3, outer * 1.5, field) * (1.0 - smoothstep(0.45, 0.7, field));
     if (zone <= 0.0) { return base; }
-    var count = i32(clamp(u.ringCount, 1.0, 24.0));
-    // H16 proof: the copies are the beds of the table's ring section (count, level spacing from the thicknesses, line weight from the
-    // hardness with ringContrast and ringTaper folded in, tone from the slot as a blend 0..1); drift, scallop, reach and fill stay options.
-    let geoRings = u.geology > 0.0 && u.geoCount > 0.0 && u.geoOpts.w > 0.0;
-    let ring0 = i32(u.geoSections[1].y);
-    var geoTotal = 1.0;
-    if (geoRings) {
-        count = i32(clamp(u.geoSections[1].z, 1.0, 24.0));
-        geoTotal = 0.0;
-        for (var i = 0; i < count; i++) { geoTotal += u.geoBeds[ring0 + i].x; }
-    }
-    var geoStart = geoTotal;
+    let count = i32(clamp(u.ringCount, 1.0, 24.0));
     let inner = sqrt(-log(0.45));
     let far = sqrt(-log(outer));
     let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
@@ -1108,16 +1073,7 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let j = f32(count - 1 - n);
         let t = j / max(f32(count - 1), 1.0);
         let vis = 1.0 - smoothstep(reach - 0.12, reach + 0.12, t);
-        var level = mix(inner, far, (j + 0.5) / f32(count));
-        var weight = (1.0 - u.ringTaper * t) * u.ringContrast;
-        var toneBlend = t;
-        if (geoRings) {
-            let bed = u.geoBeds[ring0 + i32(j)];
-            geoStart -= bed.x;
-            level = mix(inner, far, (geoStart + 0.5 * bed.x) / geoTotal);
-            weight = bed.y;
-            toneBlend = bed.z;
-        }
+        let level = mix(inner, far, (j + 0.5) / f32(count));
         let wander = (shelfNoise(p / 170.0 + j * 7.3) - 0.5) * 2.0;
         let angle = radians(u.ringShiftDir) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * u.ringScatter * 3.14159;
         let shift = u.ringShift * (0.45 + 0.55 * ringHash(j + 41.0));
@@ -1134,8 +1090,8 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let inside = 1.0 - smoothstep(-0.7, 0.7, d);
         rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
         // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
-        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), toneBlend), u.ringTone);
-        rgb = mix(rgb, lineTone, line * gap * zone * vis * weight);
+        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
+        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
     }
     return rgb;
 }
@@ -1513,9 +1469,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let warp = (terrainNoise(p * 0.08 + vec2f(5.0, 9.0)).r - 0.5) * u.strataWarp
                  + (terrainNoise(p * 0.7 + vec2f(17.0, 2.0)).g - 0.5) * 2.6
                  + (terrainNoise(p * 2.1 + vec2f(3.0, 41.0)).b - 0.5) * 1.2;
-        // H16 proof: the coordinate is the column's (geoCoord), the one the bake's ledges read.
-        let geoOn = u.geology > 0.0 && u.geoCount > 0.0;
-        let hr = select(h - u.base + warp, geoCoord(p, h), geoOn);
+        let hr = h - u.base + warp;
         var zone = 0;
         for (var i = 1; i < 6; i++) { if (i < u.strataZoneCount && hr >= u.strataZones[i].x) { zone = i; } }
         let z = u.strataZones[zone];
@@ -1543,9 +1497,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Card E8: the strata run through the rock itself, so painted rock carries the top
         // zone's own beds (its grey with the lines), not one flat colour, wherever it is painted.
         if (u.strataZoneSpace[topZone].x > 0.0) { rockBed = rockStrata(hr, topZone, painted.x); }
-        var stratum = mix(strataSlot(z.y), strataSlot(z.z), isB);
-        if (geoOn) { stratum = geoStrata(hr, slope); }
-        let bed = mix(stratum, rockBed, painted.x);
+        let bed = mix(mix(strataSlot(z.y), strataSlot(z.z), isB), rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
         // The ground's grain survives in the beds as brightness, scaled by

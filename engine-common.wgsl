@@ -390,11 +390,12 @@ struct Uniforms {
     // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
-    // H2 (rock column, Green). Every default is the earlier look.
-    column: f32,          // 0: each bed's thickness and strength come from a hash; 1: from the rock column below (columnAt)
+    // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
+    columnSectionCount: i32,   // sections of the column, 1..6 (0: the world has no column; each bed's thickness and strength come from a hash)
     columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
-    columnCount: f32,     // beds in the column, 1..8, that repeat upward
-    columnBeds: array<vec4f, 8>,   // per bed: x thickness (height units), y hardness 0..1, z material slot (H3, unused here)
+    columnBeds: array<vec4f, 24>,       // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
+    columnSections: array<vec4f, 6>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w unused
+    columnWander: vec4f,  // the wander the coordinate takes from value noise (height units): x its amplitude in the bake, y in the Time pass
     materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
@@ -420,14 +421,6 @@ struct Uniforms {
     stoneSize: f32,       // px: the largest stone (larger below hard beds)
     // H4b (Green): rock blocks on the hills' rock, outside the structured face (0: none).
     hillBlocks: f32,      // 0..1: how much of the hill rock (slope .5 and over, off the structured face) is cut into small pieces
-    // H16 (branch only, never lands): the geology proof. geology 1 draws a world's banding from the table below instead of its own knobs.
-    geology: f32,         // 0: every world as it was; 1: the proof (strata colours and ledges, bands, rings read geoBeds)
-    geoCount: f32,        // beds in the table, 1..24 (0: the world has no proof table)
-    geoSectionCount: f32, // sections of the column, 1..6
-    geoBeds: array<vec4f, 24>,       // per bed: x thickness (height units, or ring steps), y hardness 0..1, z material slot, w unused
-    geoSections: array<vec4f, 6>,    // per section: x starts at this coordinate, y first bed, z bed count, w thickness jitter 0..1
-    geoWander: vec4f,     // coordinate wander in height units: x px of the broad octave, y its amplitude, z the 1.4 px octave, w the 0.5 px octave
-    geoOpts: vec4f,       // x: 1 blends the thicknesses of neighbouring sections with the same slots, y ledge strength (1: 2 * hardness), z, w unused
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
@@ -465,12 +458,18 @@ fn valueNoise(q: vec2f) -> f32 {
 // rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both
 // call it with the surface height of the grid they hold, so a ledge erosion leaves
 // stands where the bake draws one: it depends only on (p, z), not on the smoothed
-// ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip) and the broad wander are the
-// hash beds' own, at the same scale (the bed spacing).
+// ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip)
+// and the broad wander are the hash beds' own. The Time pass has its own wander amplitude (columnWander.y): until H16 it read the bed
+// spacing before the bake had set it, so its wander was the 2-unit floor and the bake's the spacing; the table keeps both as they drew.
+// TODO(question): one amplitude for both would put a ledge and its wear on one coordinate; it moves Green's three scenes by .8-1.7 mean |diff|.
 fn columnOffset(p: vec2f) -> f32 {
     let a = radians(u.bedDipDir);
     let tilt = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
-    let S = max(u.bedSpacing, 2.0);
+#ifdef EROSION
+    let S = u.columnWander.y;
+#else
+    let S = u.columnWander.x;
+#endif
     let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
     return tilt + wander;
 }
@@ -480,20 +479,28 @@ struct ColumnBed { index: f32, hardness: f32, through: f32, thick: f32 }
 
 // The bed at coordinate c: its running index (unique along the whole column, so
 // hashes keyed on it differ from cycle to cycle), hardness 0..1, how far through the bed
-// c lies (0 at its foot, 1 at its top) and its thickness. The column repeats upward.
+// c lies (0 at its foot, 1 at its top) and its thickness. The column is a list of sections from low to high; each repeats its
+// beds upward from coordinate 0, and the one whose start c has passed (the lowest, below them all) is the one that answers.
+fn columnSectionAt(c: f32) -> i32 {
+    var s = 0;
+    for (var i = 1; i < u.columnSectionCount; i++) { if (c >= u.columnSections[i].x) { s = i; } }
+    return s;
+}
 fn columnAt(c: f32) -> ColumnBed {
-    let n = max(i32(u.columnCount), 1);
+    let sec = u.columnSections[columnSectionAt(c)];
+    let first = i32(sec.y);
+    let n = max(i32(sec.z), 1);
     var period = 0.0;
-    for (var i = 0; i < n; i++) { period += u.columnBeds[i].x; }
+    for (var i = 0; i < n; i++) { period += u.columnBeds[first + i].x; }
     let cycle = floor(c / period);
     let r = c - cycle * period;
     var bed: ColumnBed;
     var lo = 0.0;
     for (var i = 0; i < n; i++) {
-        let t = u.columnBeds[i].x;
+        let t = u.columnBeds[first + i].x;
         if (r < lo + t || i == n - 1) {
             bed.index = cycle * f32(n) + f32(i);
-            bed.hardness = u.columnBeds[i].y;
+            bed.hardness = u.columnBeds[first + i].y;
             bed.through = clamp((r - lo) / t, 0.0, 1.0);
             bed.thick = t;
             return bed;
@@ -502,70 +509,6 @@ fn columnAt(c: f32) -> ColumnBed {
     }
     return bed;
 }
-// H16 (branch only): the proof's column. Sections from low to high, each a bed list that repeats upward from coordinate 0, with an optional
-// jitter of the thicknesses by running index (renormalised so a cycle keeps its period) and, between sections with the same slots, a blend
-// of the thicknesses over the gap between their starts. One section of the Green column's kind is the case geoSectionCount 1.
-struct GeoBed { index: f32, hardness: f32, slot: f32, through: f32, thick: f32, foot: f32 }
-
-fn geoSectionAt(c: f32) -> i32 {
-    var s = 0;
-    for (var i = 1; i < i32(u.geoSectionCount); i++) { if (c >= u.geoSections[i].x) { s = i; } }
-    return s;
-}
-// Thickness of bed j of section s in cycle k, before renormalising.
-fn geoThick(s: i32, j: i32, k: f32, blend: f32) -> f32 {
-    let sec = u.geoSections[s];
-    var t = u.geoBeds[i32(sec.y) + j].x;
-    if (blend > 0.0 && s + 1 < i32(u.geoSectionCount)) {
-        let nx = u.geoSections[s + 1];
-        t = mix(t, u.geoBeds[i32(nx.y) + j].x, blend);
-    }
-    return t * (1.0 + sec.w * (2.0 * cellHash(vec2f(k, f32(j) + 5.5)).x - 1.0));
-}
-fn geoColumn(c: f32) -> GeoBed {
-    let s = geoSectionAt(c);
-    let sec = u.geoSections[s];
-    let n = max(i32(sec.z), 1);
-    var blend = 0.0;
-    if (u.geoOpts.x > 0.0 && s + 1 < i32(u.geoSectionCount)) {
-        let nx = u.geoSections[s + 1];
-        var same = nx.z == sec.z;
-        for (var j = 0; j < n; j++) { if (u.geoBeds[i32(sec.y) + j].z != u.geoBeds[i32(nx.y) + j].z) { same = false; } }
-        if (same) { blend = clamp((c - sec.x) / max(nx.x - sec.x, 0.1), 0.0, 1.0); }
-    }
-    var period = 0.0;
-    for (var j = 0; j < n; j++) { period += u.geoBeds[i32(sec.y) + j].x; }
-    let cycle = floor(c / period);
-    // The jitter and blend change the cycle's thicknesses; its period stays the table's.
-    var total = 0.0;
-    for (var j = 0; j < n; j++) { total += geoThick(s, j, cycle, blend); }
-    let scale = period / total;
-    let r = c - cycle * period;
-    var bed: GeoBed;
-    var lo = 0.0;
-    for (var j = 0; j < n; j++) {
-        let t = geoThick(s, j, cycle, blend) * scale;
-        if (r < lo + t || j == n - 1) {
-            let b = u.geoBeds[i32(sec.y) + j];
-            bed.index = cycle * f32(n) + f32(j);
-            bed.hardness = b.y;
-            bed.slot = b.z;
-            bed.thick = t;
-            bed.through = clamp((r - lo) / t, 0.0, 1.0);
-            bed.foot = cycle * period + lo;
-            return bed;
-        }
-        lo += t;
-    }
-    return bed;
-}
-// The coordinate Desert's strata and ledges share: the height above the plain plus the wander (the strata's warp, in value noise).
-fn geoCoord(p: vec2f, z: f32) -> f32 {
-    let w = u.geoWander;
-    let sc = max(w.x, 1.0);
-    return z - u.base + valueNoise(p / sc + 5.0) * w.y + valueNoise(p / (sc * 0.11) + 17.0) * w.z + valueNoise(p / (sc * 0.04) + 41.0) * w.w;
-}
-
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;

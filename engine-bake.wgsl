@@ -464,32 +464,8 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     return vec3f(off, lip, bed.index);
 }
 
-// H16 proof: the same bed shape read from the proof's column at geoCoord, the coordinate the strata colours use. A bed's ledge stands
-// geoOpts.y * 2 * hardness of the hash bed's mean (hardness .5 is the hash bed's own).
-fn geoBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
-    let a = radians(u.bedDipDir);
-    let dip = vec2f(cos(a), sin(a));
-    let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
-    let S = max(u.bedSpacing, 2.0);
-    let bed = geoColumn(geoCoord(p, h));
-    let f = bed.through;
-    let bedPx = bed.thick / G;
-    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
-    let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
-    var off = step_ * (bed.thick / S) * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;
-    let dTop = (1.0 - f) * bedPx;
-    let dFoot = (f - (1.0 - riser)) * bedPx;
-    let lip = exp(-dTop * dTop / 5.0);
-    let notch = exp(-(dFoot + 1.0) * (dFoot + 1.0) / 6.0);
-    let punch = u.geoOpts.y * 2.0 * bed.hardness;
-    off *= punch;
-    off += punch * u.bedLip * (lip - 0.8 * notch);
-    return vec3f(off, lip, bed.index);
-}
-
 fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
-    if (u.column > 0.0) { return columnBedRelief(p, h, gOver); }
-    if (u.geology > 0.0 && u.geoCount > 0.0) { return geoBedRelief(p, h, gOver); }
+    if (u.columnSectionCount > 0) { return columnBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let tilt = u.bedDip * dot(p, dip);
@@ -828,8 +804,6 @@ fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
 // Retail lines are tonal steps, not drawn lines: a riser facing the sun is
 // a light line and one facing away a dark one; they are jagged at pixel
 // scale, broken into dashes, and mostly on gentle slopes (blind round 7).
-fn geoBandsOn() -> bool { return u.geology > 0.0 && u.geoCount > 0.0 && u.geoOpts.z > 0.0; }
-var<private> geoBandHardness: f32;
 fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3f {
     if (banding <= 0.0 || h < u.sea + 0.5) { return vec3f(0.0); }
     // Low banks drawn level (flatBank, Archipelago) carry no bands either.
@@ -840,7 +814,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     // H5 3a: retail's gentle slopes carry few of the small dashes the risers make there.
     gate *= 1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope));
     if (gate <= 0.0) { return vec3f(0.0); }
-    var S = u.bandSpacing;
+    let S = u.bandSpacing;
     // H5 3a: the lines of retail's terraced grass follow no contour for long: their phase wanders over 17 px and 6 px, further
     // where water has run (the wetness map), so a line bends, ends against its neighbour and re-forms.
     var wander = 0.0;
@@ -859,18 +833,9 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     }
     let uu = (h + jag + wander + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
                 + valueNoise(p / 3.3 + 19.0) * S * 0.06 * min(1.0, 0.3 / max(slope, 0.05))) / S;   // GLSL: u
-    var v = fract(uu);
+    let v = fract(uu);
     let w = clamp(u.bandSoftness, 0.05, 1.0);
-    var offset = S * (floor(uu) + smoothstep(1.0 - w, 1.0, v)) - uu * S;
-    // H16 proof: the bands are the column's beds at this coordinate (the table's thickness for bandSpacing, its hardness for bandLine).
-    var lineStrength = u.bandLine;
-    if (geoBandsOn()) {
-        let bed = geoColumn(uu * S);
-        v = bed.through;
-        S = bed.thick;
-        offset = S * (smoothstep(1.0 - w, 1.0, v) - v);
-        lineStrength = bed.hardness;
-    }
+    let offset = S * (floor(uu) + smoothstep(1.0 - w, 1.0, v)) - uu * S;
     var dash = smoothstep(-0.55, 0.05, valueNoise(p / 22.0 + 51.0)) * smoothstep(-0.7, -0.1, valueNoise(p / 6.0 + 33.0))
              * (0.55 + 0.45 * (valueNoise(p / 70.0 + 9.0) * 0.5 + 0.5));
     // Jagged cells already break the lines; retail covers the whole slope.
@@ -878,7 +843,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     let strength = banding * gate * dash;
     // Distance from the riser's middle, in world px along the slope.
     let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.02);
-    let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * lineStrength;
+    let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
     // The riser leans downhill (-fall): lit if that faces the sun.
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
     return vec3f(offset * strength, line, facing);
@@ -915,7 +880,7 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f3
                       max(baseHeight(p + vec2f(0.0, 16.0)), u.sea) - max(baseHeight(p - vec2f(0.0, 16.0)), u.sea)) / 32.0;
     // On a narrow steep bank the broad slope is gentler than the face, so
     // the steeper of the two sets the step (lines no closer than ~7 px).
-    let S = select(u.bandSpacing, u.geoBeds[0].x, geoBandsOn()) * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);   // H16 proof: the table's thickness is the spacing at slope .5
+    let S = u.bandSpacing * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
     var field = h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18;
     // Card B3: retail's bank lines fork, end and meet, because they trace a
     // rough surface rather than a smooth slope. The relief's ribs and lumps
@@ -924,15 +889,7 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f3
     if (u.bandRelief > 0.0) { field += u.bandRelief * relief; }
     if (u.bandWander > 0.0) { field += u.bandWander * S * (valueNoise(p / 41.0 + 61.0) * 1.2 + valueNoise(p / 17.0 + 77.0) * 0.5); }
     let uu = field / S;   // GLSL: u
-    var v = fract(uu);
-    geoBandHardness = u.bandLine;
-    // H16 proof: the line steps are the column's beds, read at the field in units of the table's thickness (the spacing by ground stays).
-    if (geoBandsOn()) {
-        let T = u.geoBeds[0].x;
-        let bed = geoColumn(uu * T);
-        v = bed.through;
-        geoBandHardness = bed.hardness;
-    }
+    let v = fract(uu);
     let px = min(v, 1.0 - v) * S / max(slope, 0.05);
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
     // A dark V, wider on steep shaded faces. Its width at half depth is the
@@ -1300,7 +1257,7 @@ fn bake(p: vec2f) -> vec4f {
     height += bands.x;
     var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
-    if (u.bandStyle == 1) { let lava = lavaLines(p, h, slope, fall, banding, height).x; bandDark = lava * geoBandHardness * (1.0 - route); }
+    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall, banding, height).x * u.bandLine * (1.0 - route); }
     var sand = sandCover(p, slope, height) * (1.0 - route);
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
@@ -1383,7 +1340,7 @@ fn bake(p: vec2f) -> vec4f {
             bedG = mix(cliff.gradient, slope, cliff.local * (1.0 - u.cliffBed));
         }
         // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
-        if (u.column > 0.0 || (u.geology > 0.0 && u.geoCount > 0.0)) { bedH = h; }
+        if (u.columnSectionCount > 0) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
         // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
         // The form fades out over the face's foot, so no gully reaches the water plane.

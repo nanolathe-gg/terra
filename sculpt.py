@@ -199,8 +199,8 @@ KNOB_DEFAULTS.update(ringTone=0)
 KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffFine=0, cliffDomain=90)
 # H1 (lit relief): shade the ground behind a 1-6 px ledge, and darken crevices and crack floors (0: off).
 KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
-# H2 (rock column): column 1 reads each bed's thickness and hardness from columnBeds ("thickness:hardness:slot", up to
-# eight, repeating upward) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
+# H2, H16 (rock column): a world with a `column` block in its table reads each bed's thickness and hardness from it (sections of
+# beds that repeat upward, materials/<world>.json) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). erosion 1 runs the GPU shallow-water pass in place of the droplet worker for the 1024-px study:
 # erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
@@ -210,23 +210,7 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
-KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
-# H16 (branch only, never lands): the geology proof. geology 1 (URL) draws a world's banding from the table GEOLOGY_PROOF gives it;
-# 0 leaves every world as it was. geoBeds "thickness:hardness:slot,...", geoSections "start:first:count:jitter;...", geoWander
-# "px:amp:fine:finest", geoOpts "blend:ledge".
-KNOB_DEFAULTS.update(geology=0, geoBeds='', geoSections='', geoWander='100:0:0:0', geoOpts='0:1')
-GEOLOGY_PROOF = {
-    'desert': dict(
-        geoBeds='4.8:.5:0,1.2:.5:1,3.6:.5:0,2.4:.5:1,3.6:.5:0,2.4:.5:1,.3:.5:0,5.7:.5:1,7.7:.5:2,3.3:.5:3',
-        geoSections='1:0:2:.45;17:2:2:.45;53:4:2:.45;58:6:2:.45;69:8:2:.45',
-        geoWander='40:2:.4:.15', geoOpts='1:1'),
-    # Archipelago: bed 0 is the hill foot's band bed (bandSpacing 3.7, bandLine .68); beds 1-22 are the fringe's copies, inner to outer,
-    # hardness = ringContrast .95 * (1 - ringTaper .35 * j / 21) and slot = j / 21 (the tone blend). Section 1 is read by index, never by coordinate.
-    'archipelago': dict(geoBeds='3.7:.68:0,1:0.9500:0.0000,1:0.9342:0.0476,1:0.9183:0.0952,1:0.9025:0.1429,1:0.8867:0.1905,1:0.8708:0.2381,1:0.8550:0.2857,1:0.8392:0.3333,1:0.8233:0.3810,1:0.8075:0.4286,1:0.7917:0.4762,1:0.7758:0.5238,1:0.7600:0.5714,1:0.7442:0.6190,1:0.7283:0.6667,1:0.7125:0.7143,1:0.6967:0.7619,1:0.6808:0.8095,1:0.6650:0.8571,1:0.6492:0.9048,1:0.6333:0.9524,1:0.6175:1.0000',
-                        geoSections='-1000:0:1:0;1000000000:1:22:0', geoOpts='0:1:1:1'),
-    'red': dict(geoBeds='3.7:1:0', geoSections='-1000:0:1:0', geoOpts='0:1:1'),
-    'lava': dict(geoBeds='7:1:0', geoSections='-1000:0:1:0', geoOpts='0:1:1'),
-}
+KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
 # BUDGET 3, sculpt-erosion.js): its maps are made, its height moves no further than the worker's did.
@@ -320,9 +304,9 @@ WORLD_KNOBS = {
                   # the whole face. green-2 face (x 20-880, y 650-870) mean luma / s.d. / share under 30 / p90 gradient:
                   # retail 45.8 / 27.2 / .245 / 17.6, G2 46.9 / 23.3 / .143 / 14.8, here 44.7 / 26.4 / .247 / 17.6.
                   closeShadow=.8, cavity=.6,
-                  # H2 (rock column): eight beds repeating every 47 height units (a hash bed averaged 5): thin hard beds that stand
-                  # as ledges between thicker soft ones, so the hard ones read as lines and the soft ones as the space between.
-                  column=1, columnBeds='4:.9:0,7:.2:1,3:.7:0,8:.15:1,5:1:0,7:.3:1,4:.6:0,9:.2:1',
+                  # H2 (rock column): its `column` table (materials/green.json) has eight beds repeating every 47 height units (a hash
+                  # bed averaged 5): thin hard beds that stand as ledges between thicker soft ones, so the hard ones read as lines and the
+                  # soft ones as the space between.
                   # H2 (erosion): the GPU shallow-water pass replaces the droplet worker's loop on the study.
                   erosion=1, ),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
@@ -790,7 +774,7 @@ def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
-             'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {}), **GEOLOGY_PROOF.get(biome, {})}
+             'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)

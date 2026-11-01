@@ -1030,35 +1030,25 @@ export class TerrainRenderer {
   // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
   preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
 
-  // H2 rock column (0: the hash beds, as before). columnBeds is "thickness:hardness:slot,..." (up to eight, height
-  // units, 0..1, H3's material slot); erosion reads the same uniforms, so the bake and the pass share one column.
+  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json) lists sections from low to high, each a
+  // start coordinate and beds [thickness, hardness 0..1, material slot] that repeat upward; a variant's row of the block (its id under
+  // `variants`) replaces the sections. No table: no column, the hash beds as before. Erosion reads the same uniforms, so the bake and
+  // the pass share one column.
   setColumn() {
-    const v = this.variant;
-    const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
-    const beds = String(v.get('columnBeds') || '5:.5:0').split(',').slice(0, 8).map(s => s.split(':').map(Number))
-      .filter(b => b[0] > 0).map(b => [b[0], Math.min(1, Math.max(0, b[1] || 0)), b[2] || 0, 0]);
-    this.set('uColumn', number('column', 0));
-    this.set('uColumnContrast', number('columnContrast', 1));
-    this.set('uColumnCount', Math.max(1, beds.length));
+    const column = this.config.column, v = this.variant;
+    const sections = (column?.variants?.[this.config.variant]?.sections || column?.sections || []).slice(0, 6);
+    const beds = [], starts = [];
+    for (const s of sections) {
+      starts.push([s.start, beds.length, s.beds.length, 0]);
+      for (const b of s.beds) beds.push([b[0], Math.min(1, Math.max(0, b[1])), b[2], 0]);
+    }
+    if (beds.length > 24) throw new Error('nanolathe: a rock column holds at most 24 beds');
+    const x = Number(v.get('columnContrast'));
+    this.i('uColumnSectionCount', starts.length);
+    this.set('uColumnContrast', Number.isFinite(x) && v.has('columnContrast') ? x : 1);
     this.set('uColumnBeds', beds.length ? beds : [[5, .5, 0, 0]]);
-    this.setGeology();
-  }
-
-  // H16 (branch only, never lands): the geology proof's table. geology 0, or a world without a table, leaves every uniform at zero. The strings are
-  // "thickness:hardness:slot,..." (geoBeds, up to 24), "start:firstBed:count:jitter;..." (geoSections, up to six), "px:amplitude:fine:finest"
-  // (geoWander) and "blend:ledge:bands" (geoOpts).
-  setGeology() {
-    const v = this.variant;
-    const list = (key, size) => String(v.get(key) || '').split(/[;,]/).map(s => s.trim()).filter(Boolean).map(s => { const a = s.split(':').map(Number); while (a.length < size) a.push(0); return a.slice(0, size); });
-    const beds = list('geoBeds', 4).slice(0, 24), sections = list('geoSections', 4).slice(0, 6);
-    const on = Number(v.get('geology')) > 0 && beds.length > 0;
-    this.set('uGeology', on ? 1 : 0);
-    this.set('uGeoCount', on ? beds.length : 0);
-    this.set('uGeoSectionCount', on ? Math.max(1, sections.length) : 0);
-    this.set('uGeoBeds', on ? beds : [[1, .5, 0, 0]]);
-    this.set('uGeoSections', on ? (sections.length ? sections : [[-1000, 0, beds.length, 0]]) : [[-1000, 0, 1, 0]]);
-    const w = list('geoWander', 4)[0] || [100, 0, 0, 0], o = list('geoOpts', 4)[0] || [0, 1, 0, 0];
-    this.set('uGeoWander', w); this.set('uGeoOpts', o);
+    this.set('uColumnSections', starts.length ? starts : [[0, 0, 1, 0]]);
+    this.set('uColumnWander', [column?.wander?.value ?? 0, column?.wander?.erosion ?? 0, 0, 0]);
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.
