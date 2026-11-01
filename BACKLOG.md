@@ -8012,7 +8012,7 @@ verification. Part 2 not started; branch `H21-impacts` is for owner review.
 - *The lighting group cost every pixel.* `markLight` and `away` had moved out of their marks' gates, so Green paid for marks it does not draw: terrain 5.10 ms per pass against main's 5.02 over eight alternating rounds at the same `n`. They went back inside, which gives up two of the five lines. Now 5.00 against 5.04, with all 27 scenes 0.00 and pitted, cracked, `slopeMarks` and `wrinkles` on moon-1 byte for byte.
 - *Part 2* is `handoff/5-impacts-part2-H21.md`: a switch-off table, Moon, crystal-1's craters from H20, then its rows on the sheet.
 
-**Done (part 2; ready for review).** [Impacts part 2](docs/audit/IMPACTS-2.md)
+**Done (part 2).** [Impacts part 2](docs/audit/IMPACTS-2.md)
 records the switch-off table (34 valid renders), three Moon ideas, three Crystal
 ideas and two Red ideas. Only Crystal's crater web (1→.35) and contrast (1.6→1)
 are kept: crystal-1 reads closer at 1x, mean |diff| .389075597. crystal-2 reads
@@ -8036,6 +8036,8 @@ and Desert. The report gives exact section errors, viewed/not-viewed images and
 trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 `*-2` folders; NOTES lists retained cleanup candidates. Six commits on
 `H21-impacts-2`, based on `f64afa1`, for the owner's review; no later work started.
+
+**Part 2, the coordinator's review.** Read the diff and `docs/audit/IMPACTS-2.md`, recounted the sheet's rows, repeated crystal-1, -2, -3, moon-1 and red-1 from the branch (crystal-1 .389 and 21,800 pixels, crystal-2 one pixel, the rest byte for byte), and viewed the final sheet. crystal-1's web and tone read closer; its cracks are softer than retail's thin dark lines, and the broad planes stay out of reach. No shader changed, so no perf rounds.
 
 ## After the cards
 
