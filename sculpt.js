@@ -1,6 +1,7 @@
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
-import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
+import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
+import {copyColumn} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
@@ -40,6 +41,7 @@ const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
 let config, renderer, grid, size, spacing;
+let defaultColumn, columnOverride=null, columnEditing=false, syncColumnPanel=()=>{};
 let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
@@ -811,7 +813,7 @@ function configurePagedTime(fields=regionalFields) {
   const p={age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),columnContrast:renderer.variantNumber('columnContrast',1),
     envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
   const material=materialKnobs();
-  return fields.setTime({key:JSON.stringify({...p,material}),material:Boolean(material),run:async win => {
+  return fields.setTime({key:JSON.stringify({...p,material,column:config.column,variant:config.variant}),material:Boolean(material),run:async win => {
     const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
     const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy});
     // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
@@ -905,7 +907,7 @@ const sculptRegion={
   fitGpuBudget:() => regionalFields?.refit?.(),
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
-  sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
+  sketch,loadSketch:(s,id)=>loadSketchFile(s,false,id),maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuTransientBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
@@ -1029,13 +1031,14 @@ function flushEval() {
 }
 function checkpoint(mapOnly=false) {
   flushEval();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
+  restoreColumn(history[next].column);syncColumnPanel();
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
 }
 
@@ -1137,6 +1140,7 @@ function sketch() {
   applySeedControl();
   rememberTool();
   return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
+    ...(columnOverride?{column:structuredClone(columnOverride)}:{}),
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -1152,7 +1156,7 @@ function persistLater() {
 }
 function loadSketch(s) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const next=deserializeNodes(s.nodes);
+  const next=deserializeNodes(s.nodes),column=copyColumn(s.column,defaultColumn);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
@@ -1164,6 +1168,7 @@ function loadSketch(s) {
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
+  restoreColumn(column);syncColumnPanel();
   nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
@@ -1186,26 +1191,29 @@ async function takePendingSketch(token) {
     return data?.format==='nanolathe-sketch-handoff' && data.token===token?data.sketch:null;
   } catch (_) { return null; }
 }
-async function loadSketchFile(s) {
+async function loadSketchFile(s,commit=true,documentId=null) {
+  if(!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || !Array.isArray(s.nodes) || s.nodes.some(n=>!n || n.kind==='raster'))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
-  if (biome && (biome!==config.biomeId || mapChanged)) {
+  if (biome && (biome!==config.biomeId || mapChanged || (s.variant||'')!==(config.variant||''))) {
     let served=false,variant='';
     try {
       const response=await fetch('/sculpt-config.json?biome='+encodeURIComponent(biome));
       const servedConfig=response.ok?await response.json():null;
       served=servedConfig?.biomeId===biome;
       variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
-    } catch (_) {}
-    if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return; }
+      if(s.variant && variant!==s.variant)throw new Error('The saved column variant is unavailable.');
+      if(served)copyColumn(s.column,servedConfig.column);
+    } catch (err) { error(err.message); return false; }
+    if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
     try { await stashPendingSketch(token,s); }
-    catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return; }
+    catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
-    goToWorld(biome,null,{pendingSketch:token,variant,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
-    return;
+    goToWorld(biome,null,{pendingSketch:token,variant,document:documentId,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    return false;
   }
-  loadSketch(s); checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();
+  loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
 }
 function addGroundNode() {
   const amplitude=experiment.has('undulation')?Number(experiment.get('undulation')):10;
@@ -1423,7 +1431,18 @@ const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
 // A world's colors: the server's defaults for its base world, then the
 // world's own choices; null means explicitly off (the texture's own color).
 function mergedColors() { return {...(config.colors||{}),...(activeWorld().colors||{})}; }
-function worldColors() { const out={}; for (const [k,v] of Object.entries(mergedColors())) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); return out; }
+function worldColors() { const out={}; for (const [k,v] of Object.entries(mergedColors())) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); columnOverride?.colors?.forEach((c,i)=>{out['strata'+(i+1)]=c.map(v=>v/255);});return out; }
+function columnForEdit(){const column=structuredClone(config.column);if(column?.colors){const colors=worldColors();column.colors=column.colors.map((c,i)=>colors['strata'+(i+1)]?.map(v=>v*255)||c);}return column;}
+function restoreColumn(column){
+  columnOverride=column;config.column=column||defaultColumn;columnEditing=false;
+  cancelWeather();refined=refinedBase=null;dropGpuWeather();clearRendererWeather();renderer.applyKnobs();renderer.setColors(worldColors());syncWorldControls();markViewChanged();
+}
+function editColumn(value){
+  const column=copyColumn(value,defaultColumn),next=JSON.stringify(column)===JSON.stringify(defaultColumn)?null:column;
+  if(JSON.stringify(next)===JSON.stringify(columnOverride))return;
+  restoreColumn(next);columnEditing=true;schedule();queueWeather();persistLater();
+}
+function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();mapCanvas.saveDocument().catch(()=>{});}
 function defaultColor(key) {
   const m=renderer.means,w=config.water||{},mat=config.material||{};
   const rgb=v => v&&v.map(x => x/255);
@@ -1457,7 +1476,7 @@ function buildWorldPanel() {
   const rows=$('world-colors'); rows.replaceChildren();
   for (const [key,label] of COLOR_KEYS) {
     if (key==='beach' && !config.layers.includes('beach')) continue;
-    if (key.startsWith('strata') && !(Number(experiment.get('strata'))>0)) continue;
+    if (key.startsWith('strata') && (config.column?.colors || !(Number(experiment.get('strata'))>0))) continue;
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
@@ -1587,13 +1606,14 @@ async function bootMap() {
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
+  syncColumnPanel=mountColumnPanel(()=>({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),editColumn,commitColumn,()=>{editColumn(null);commitColumn();});
   $('fracture-control').hidden=true;
   $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100); $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
   let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
   if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved map recipe.'); } catch (err) { error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); } }
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
-  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
+  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   const pending=await takePendingSketch(experiment.get('pendingSketch'));
   if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
@@ -1602,6 +1622,7 @@ async function bootMap() {
 async function boot() {
   try {
     const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
+    defaultColumn=config.column;
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
     if (!experiment.has('mapX') && !experiment.has('mapY')) { experiment.set('mapX','4'); experiment.set('mapY','4'); }
     {
