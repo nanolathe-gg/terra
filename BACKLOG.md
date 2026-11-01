@@ -7048,6 +7048,19 @@ Worlds: Green, Red, Desert, Archipelago, Lava.
 
 Nothing lands from part 1. **Part 2** (the build) is written from its report.
 
+**Done (part 1).** Branch `H16-geology`, nothing to land. `measure/geology_controls.mjs` (with `measure/geology_diff.py`) moves each
+geology knob from a world's value to the default on that world's three scenes and reports repro/compare.py's mean |diff| and moved share
+and, as `impact.py` reads it, the share of 16-px blocks of the knob's class that changed (class: raised ground, the bank between sea and
+plain, or the fringe's halo; floor 1-3%). Of the 100 states (97 world settings and red-2's three stroke options), 31 act at 5% or more, 45 move a few pixels but under 5%, 24 move nothing.
+Dead on every scene: `bedHeight`, `bedVary`, `bedPunch`, `bedFlow`, `jointAngle/Spacing/Run/Gaps` and `cliffStagger` on Green; Lava's whole
+`band*` set (its `banding` is 0, so the bank-line pass never runs); Zhon's `sandBanding`; Moon's `bandLine`; Lava's `layerLedge`, `layerRough`,
+`layerVary` and meander/spread/circle on these three scenes. The proof (`?geology=1`, branch only) draws Desert's strata colours and ledges
+from one column of sections (mean |diff| 10.1/5.4/7.6 against main, no new stats mark outside retail, read as the same family and a little
+cleaner at 2x), and Red's bands, Archipelago's fringe copies and Lava's bank lines from one-bed or ring-bed tables at exactly 0.00.
+Lava's visible banding is the coast pass's staircase plus a cavity crease and cannot be a height column in the draw. Switch off, the 27
+scenes are 0.00 against main. NOTES.md of `agent-H16` holds the inventory, the bridge audit, the control table (70 knobs and 3 tables
+before; 27 in Geology and 17 moved to Shape, Coast and Materials after) and the sheets.
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H16`, branch
 `H16-geology`; assets `$R/agent-H16`.
 
