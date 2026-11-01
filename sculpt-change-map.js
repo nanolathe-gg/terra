@@ -2,6 +2,13 @@
 // JS. A height or mask edit already invalidates authored dependencies. This
 // catches additional changes introduced by refinement without clearing the map.
 const pipelines=new WeakMap();
+// Geometry edits invalidate refinement even where their heights happen to match.
+// Keep the accumulated footprint until a result for the new geometry replaces it.
+export function invalidateRefinement(previous,rect,grid){
+ const r=rect??{x0:0,y0:0,x1:grid-1,y1:grid-1};
+ return {x0:Math.max(0,Math.min(previous?.x0??r.x0,r.x0)),y0:Math.max(0,Math.min(previous?.y0??r.y0,r.y0)),x1:Math.min(grid-1,Math.max(previous?.x1??r.x1,r.x1)),y1:Math.min(grid-1,Math.max(previous?.y1??r.y1,r.y1))};
+}
+export const refinementValid=(rect,x,y)=>!rect||x<rect.x0||y<rect.y0||x>rect.x1||y>rect.y1;
 export function dirtyTileRects(flags,grid,tile,spacing){
  const columns=Math.ceil(grid/tile),out=[];
  for(let i=0;i<flags.length;i++)if(flags[i]){const x=(i%columns)*tile,y=Math.floor(i/columns)*tile;out.push({x:x*spacing,y:y*spacing,width:Math.min(tile,grid-x)*spacing,height:Math.min(tile,grid-y)*spacing});}

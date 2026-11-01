@@ -1,4 +1,4 @@
-import {changedWeatherTiles} from './sculpt-change-map.js';
+import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
 import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
@@ -44,6 +44,7 @@ let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
 let gpuWeather=null, gpuErosionMs=null, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
+let refinedInvalidRect=null;
 let controlsEditing=false;
 let tool='plateau', seed=2701, varySeed=true, refinementSeed=2701, stroke=null, pan=null, pointerId=null, loading=false;
 const randomSeed=current=>{const next=(Math.random()*4294967296)>>>0;return next===current?(next+1)>>>0:next;};
@@ -757,7 +758,7 @@ function currentDrawOptions() {
 }
 function regionalHeightCell(x,y) {
   const h=regionalFields.cell(x,y),i=y*worldGrid+x;
-  if (!refined || !refinedBase || !$('weather').checked) return h;
+  if (!refined || !refinedBase || !$('weather').checked || !refinementValid(refinedInvalidRect,x,y)) return h;
   return Math.fround(h+(refined[i]-refinedBase[i])*(1-smooth(0,10,Math.abs(h-refinedBase[i])))*(1-regionalFields.cell(x,y,'r')));
 }
 function sampleRegional(x,y) {
@@ -790,7 +791,7 @@ async function gpuWeatherCpu(withMaps) {
     if (w.loading) { await w.loading; continue; }
     w.loading=(async () => {
       if (gpuWeather!==w || w.destroyed) return;
-      if (!w.cpuHeight) { const raw=await readBuffer(renderer.device,w.weather,0,n*8); if (gpuWeather===w) { refinedBase=new Float32Array(raw,0,n); refined=new Float32Array(raw,n*4,n); w.cpuHeight=true; } }
+      if (!w.cpuHeight) { const raw=await readBuffer(renderer.device,w.weather,0,n*8); if (gpuWeather===w) { refinedBase=new Float32Array(raw,0,n); refined=new Float32Array(raw,n*4,n); refinedInvalidRect=w.invalidRect??null; w.cpuHeight=true; } }
       else if (w.mapsOn && !w.cpuMaps) {
         const [a,b,c]=await Promise.all(w.maps.map(m => readBuffer(renderer.device,m,0,n*4)));
         if (gpuWeather===w && w.mapsOn) { regionalWeather={p0:new Uint8Array(a),p1:new Uint8Array(b),p2:new Uint8Array(c)}; w.cpuMaps=true; }
@@ -840,7 +841,7 @@ async function gpuFeedSource(signal,regionFn) {
   const on=$('weather').checked;
   if (on && refined && !gpuWeather) return null;
   const w=on?gpuWeather:null;
-  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,release:w?leaseGpuWeather(w):() => {}};
+  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,get invalidRect(){return w?.invalidRect;},release:w?leaseGpuWeather(w):() => {}};
 }
 function readRegional(request) {
   if (pagedOn()) return regionalFields.readAsync(request);
@@ -857,7 +858,7 @@ function readRegional(request) {
   };
   for (let y=0;y<r.gridHeight;y++) for (let x=0;x<r.gridWidth;x++) {
     const i=y*r.gridWidth+x,j=(y+oy)*worldGrid+x+ox,h=r.fields.h[i];
-    fields.h[i]+=(refined[j]-refinedBase[j])*(1-smooth(0,10,Math.abs(h-refinedBase[j])))*(1-r.fields.r[i]);
+    if(refinementValid(refinedInvalidRect,x+ox,y+oy))fields.h[i]+=(refined[j]-refinedBase[j])*(1-smooth(0,10,Math.abs(h-refinedBase[j])))*(1-r.fields.r[i]);
   }
   ['flow','deposit','talus','sand','wear','wet','hard','slope','fx','fy','channel','ridge'].forEach((key,k) => {
     const packed=regionalWeather?.['p'+(k>>2)];
@@ -867,6 +868,9 @@ function readRegional(request) {
     weather[key]=out;
   });
   const materialField=crop(regionalWeather?.materialField,4),extra=[fields.h,...Object.values(weather),materialField].reduce((sum,a) => sum+(a?.byteLength??0),0);
+  if(refinedInvalidRect)for(let y=0;y<r.gridHeight;y++)for(let x=0;x<r.gridWidth;x++)if(!refinementValid(refinedInvalidRect,x+ox,y+oy)){
+    const i=y*r.gridWidth+x;for(const a of Object.values(weather))if(a)a[i]=0;if(materialField)materialField.fill(0,i*4,i*4+4);
+  }
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
 function setMapBusy(on) {
@@ -1080,12 +1084,16 @@ async function runFedWeather(job) {
     const previous=gpuWeather,release=previous?leaseGpuWeather(previous):()=>{};let dirty;
     try{dirty=await changedWeatherTiles(renderer.device,previous,result,grid,spacing);}finally{release();}
     if(job!==weatherJob||stroke||moving){retireGpuWeather(result);return;}
+    const invalid=previous?.invalidRect;
     dropGpuWeather();
     gpuWeather={weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
-    markViewChanged(false);if(dirty===null)mapCanvas.invalidate(null,{refinement:true});else for(const rect of dirty)mapCanvas.invalidate(rect,{refinement:true});
+    markViewChanged(false);if(dirty===null)mapCanvas.invalidate(null,{refinement:true});else {
+      if(invalid)dirty.push({x:invalid.x0*spacing,y:invalid.y0*spacing,width:(invalid.x1-invalid.x0+1)*spacing,height:(invalid.y1-invalid.y0+1)*spacing});
+      for(const rect of dirty)mapCanvas.invalidate(rect,{refinement:true});
+    }
     updateControls(); schedule();
   } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message,err); }
 }
@@ -1566,6 +1574,12 @@ async function bootMap() {
   // Outside a scoped regional replay, only the graph and empty placeholders
   // exist. In particular, opening a 40×40 map allocates no world field planes.
   seed=Number($('seed').value); refinementSeed=seed; regionalFields=makeRegionalFields();
+  regionalFields.subscribeSubmit(change=>{
+    if(regionalFields.paged)return;
+    const r=change.rect,rect=r?{x0:Math.floor(r.x/spacing),y0:Math.floor(r.y/spacing),x1:Math.ceil((r.x+r.width)/spacing),y1:Math.ceil((r.y+r.height)/spacing)}:null;
+    if(gpuWeather)gpuWeather.invalidRect=invalidateRefinement(gpuWeather.invalidRect,rect,worldGrid);
+    if(refined)refinedInvalidRect=invalidateRefinement(refinedInvalidRect,rect,worldGrid);
+  });
   addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background

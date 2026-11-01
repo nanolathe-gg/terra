@@ -1,4 +1,5 @@
 import {shapePaths} from './sculpt-paths.js';
+import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
@@ -1128,7 +1129,7 @@ export function createPagedFields(opts) {
         }
         if (pg.weather && !pg.stale) {
           const w = pg.weather, raw = await readBuffer(device(), w.weather, 0, 2 * CORE * CORE * 4);
-          if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE)};
+          if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE),source:w};
         }
       } catch (err) { error = err; fail(err); } finally { unpin(pg); }
     }
@@ -1214,6 +1215,9 @@ export function createPagedFields(opts) {
       d.queue.submit([enc.finish()]);
       await d.queue.onSubmittedWorkDone();
       r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy();
+      // An edit can arrive while this page refines. Keep its invalid footprint
+      // on the late result too; the next settled read will compute it again.
+      if(pg.staleSeq!==seq){w.invalidRect=pg.weather?.invalidRect??coreRect(pg);pg.stale=true;}
       dropWeather(pg); pg.weather = w; if (pg.staleSeq === seq) pg.stale = false;
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
@@ -1245,6 +1249,7 @@ export function createPagedFields(opts) {
         if (o.x1 < o.x0 || o.y1 < o.y0) return;
         const u = d.createBuffer({label: 'gather uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(64));
         [src.ox, src.oy, src.pw, src.ph, o.x0, o.y0, o.x1, o.y1, rect.x0, rect.y0, gw, gh].forEach((v, i) => { if ([0, 1, 4, 5, 6, 7, 8, 9].includes(i)) dv.setInt32(i * 4, v, true); else dv.setUint32(i * 4, v, true); });
+        const invalid=pg.weather?.invalidRect;[invalid?.x0??1,invalid?.y0??1,invalid?.x1??0,invalid?.y1??0].forEach((v,i)=>dv.setInt32(48+i*4,v,true));
         d.queue.writeBuffer(u, 0, dv.buffer); tmp.push(u);
         const r = {'3.0': {buffer: u}, ...res}, pass = enc.beginComputePass({label: entry});
         pass.setPipeline(passes.pipes[entry]); for (const [g, bg] of passes.groups(entry, r)) pass.setBindGroup(g, bg);
@@ -1315,7 +1320,7 @@ export function createPagedFields(opts) {
     const pg = pageAt(ix, iy);
     if (!pg?.cpu || pg.cpuRev !== pg.rev) return coarseAt(ix, iy);
     const i = (iy - pg.y0 + RING) * SIDE + ix - pg.x0 + RING, h = pg.cpu.h[i];
-    if (!time || !pg.cpuW) return h;
+    if (!time || !pg.cpuW || !refinementValid(pg.cpuW.source?.invalidRect,ix,iy)) return h;
     const j = (iy - pg.y0) * CORE + ix - pg.x0, base = pg.cpuW.base[j];
     return h + (pg.cpuW.e[j] - base) * (1 - smooth(0, 10, Math.abs(h - base))) * (1 - pg.cpu.r[i]);
   };
@@ -1328,7 +1333,7 @@ export function createPagedFields(opts) {
     const announce = event.rect;
     for (const pg of pagesMap.values()) {
       if (!r) { dropShape(pg); dropWeather(pg); pg.staleSeq++; pg.stale = false; continue; }
-      if (pg.weather && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
+      if ((pg.weather||pg.weatherJob) && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { if(pg.weather)pg.weather.invalidRect=invalidateRefinement(pg.weather.invalidRect,r,worldGrid);pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
       if (pg.target && engine && hits(bufRect(pg), r)) { evalPage(pg, r); wantCpu(pg); }
     }
     if (!r) { pendingStale = null; for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }
@@ -1436,13 +1441,14 @@ export function feedPasses(device) {
   feedCache.set(device, cached);
   return cached;
 }
-// The feed passes' uniform (struct FU of engine-feed.wgsl): 16 words.
+// The feed passes' uniform (struct FU of engine-feed.wgsl): 20 words.
 export function feedUniform(device, f) {
-  const buffer = device.createBuffer({label: 'feed uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(64));
+  const buffer = device.createBuffer({label: 'feed uniform', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(80));
   const u = ['grid', 'cells', 'ox', 'oy', 'gw', 'gh', 'cw', 'ch', 'mode', 'rateMask'], fl = ['sea', 'spacing', 'envelope'];
   u.forEach((k, i) => { if (['ox', 'oy'].includes(k)) dv.setInt32(i * 4, f[k] ?? 0, true); else dv.setUint32(i * 4, (f[k] ?? 0) >>> 0, true); });
   fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
   dv.setUint32(13 * 4, f.tilesWide ?? 0, true);
+  const r=f.invalidRect;[r?.x0??1,r?.y0??1,r?.x1??0,r?.y1??0].forEach((v,i)=>dv.setInt32(64+i*4,v,true));
   device.queue.writeBuffer(buffer, 0, dv.buffer);
   return buffer;
 }

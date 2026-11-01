@@ -18,6 +18,7 @@ Open `http://127.0.0.1:8906/interaction/index.html` and its port-8907 counterpar
 - **Test dirty fields:** Candidate-only GPU fixture. Verify identical buffers produce no dirty tiles; change the second height plane, third packed map, fourth material channel, and the last edge tile; verify disabled maps force a reset.
 - **Check tile output:** Compare bounded relief dispatch with full padded dispatch at three tile positions and scales 1, 2 and 8. Evict resources between captures so previous texture contents cannot hide missing computation. Covers odd dimensions and map edges; use 40×40 to exercise paged fields.
 - **Check retained view:** Verify hovering causes no terrain paints, then return through Fit, 1×, scrolling and resize and compare the resulting pixels exactly.
+- **Check move trails:** Move a plateau and hill away from their previous position while refinement is paused. Capture the old position, live preview, authored-only preview, canceled move and committed result. Compare a patch at the old base, distant terrain and cancellation. Run 4×4 and 8×8 to cover whole-map and paged refinement. `drag-trails-results.json` records Green and Red checks and the settled-output comparison against `0a20bdc`.
 - **Capture scene:** Select each of the 27 committed scenes in turn. Full-resolution 1024×1024 captures of the selected retail-comparison scene, plus a fixed 128×128 authored-height sample lattice. The helper rejects empty captures and waits for iframe navigation before accessing the new device.
 
 Compare the reference captures with:

@@ -1,0 +1,238 @@
+{
+  "baseline": "0a20bdc",
+  "checks": {
+    "lip-verified/green-2": {
+      "units": 4,
+      "results": [
+        {
+          "kind": "plateau",
+          "cancel": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "distant": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "oldBase": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          }
+        },
+        {
+          "kind": "hill",
+          "cancel": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "distant": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "oldBase": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          }
+        }
+      ],
+      "errors": ""
+    },
+    "lip-verified/red-2": {
+      "units": 4,
+      "results": [
+        {
+          "kind": "plateau",
+          "cancel": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "distant": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "oldBase": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          }
+        },
+        {
+          "kind": "hill",
+          "cancel": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "distant": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "oldBase": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          }
+        }
+      ],
+      "errors": ""
+    },
+    "lip-paged-final/green-2": {
+      "units": 8,
+      "results": [
+        {
+          "kind": "plateau",
+          "cancel": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "distant": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "oldBase": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          }
+        },
+        {
+          "kind": "hill",
+          "cancel": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "distant": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          },
+          "oldBase": {
+            "max": 0,
+            "changedChannels": 0,
+            "mean": 0
+          }
+        }
+      ],
+      "errors": ""
+    }
+  },
+  "settledComparisons": [
+    {
+      "kind": "hill",
+      "state": "before",
+      "max": 0,
+      "changedChannels": 0
+    },
+    {
+      "kind": "hill",
+      "state": "released",
+      "max": 0,
+      "changedChannels": 0
+    },
+    {
+      "kind": "plateau",
+      "state": "before",
+      "max": 0,
+      "changedChannels": 0
+    },
+    {
+      "kind": "plateau",
+      "state": "released",
+      "max": 0,
+      "changedChannels": 0
+    }
+  ],
+  "timingCheck": {
+    "note": "One fresh baseline and two candidate runs; exploratory, not a repeated performance conclusion. First candidate run was variable. Times are active-input RAF p95; fresh deliveries are tiles, not viewport FPS.",
+    "baseline": [
+      {
+        "name": "draw",
+        "freshTilesPerSecond": 57.06653715230625,
+        "activeFrameP95": 9.200000000000273,
+        "settleMs": 479.39999997615814
+      },
+      {
+        "name": "drag",
+        "freshTilesPerSecond": 54.13385827089235,
+        "activeFrameP95": 9.199999999999818,
+        "settleMs": 516.7999999523163
+      },
+      {
+        "name": "slider",
+        "freshTilesPerSecond": 32.232070910556,
+        "activeFrameP95": 16.800000000000182,
+        "settleMs": 607.1000000238419
+      },
+      {
+        "name": "path-point",
+        "freshTilesPerSecond": 61.95546950629236,
+        "activeFrameP95": 9.100000000000364,
+        "settleMs": 434.90000009536743
+      }
+    ],
+    "candidate1": [
+      {
+        "name": "draw",
+        "freshTilesPerSecond": 51.26327352170556,
+        "activeFrameP95": 9,
+        "settleMs": 493.7999999523163
+      },
+      {
+        "name": "drag",
+        "freshTilesPerSecond": 28.287163478980844,
+        "activeFrameP95": 16.771999999999935,
+        "settleMs": 653.2999999523163
+      },
+      {
+        "name": "slider",
+        "freshTilesPerSecond": 23.483365949119374,
+        "activeFrameP95": 25,
+        "settleMs": 595.1000000238419
+      },
+      {
+        "name": "path-point",
+        "freshTilesPerSecond": 45.679482301273474,
+        "activeFrameP95": 9.100000000000364,
+        "settleMs": 591.8999999761581
+      }
+    ],
+    "candidate2": [
+      {
+        "name": "draw",
+        "freshTilesPerSecond": 49.65859714463066,
+        "activeFrameP95": 9.300000000000182,
+        "settleMs": 459.10000002384186
+      },
+      {
+        "name": "drag",
+        "freshTilesPerSecond": 48.35589941849033,
+        "activeFrameP95": 9,
+        "settleMs": 494.3000000715256
+      },
+      {
+        "name": "slider",
+        "freshTilesPerSecond": 29.665587917061377,
+        "activeFrameP95": 16.699999999999818,
+        "settleMs": 426.60000002384186
+      },
+      {
+        "name": "path-point",
+        "freshTilesPerSecond": 51.45167217483754,
+        "activeFrameP95": 9.200000000000728,
+        "settleMs": 437.2999999523163
+      }
+    ]
+  }
+}

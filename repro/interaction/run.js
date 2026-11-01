@@ -110,3 +110,25 @@ $('viewcheck').onclick=()=>run(async()=>{
  const result={hoverPaints,viewRoundTrip:{max,changedChannels:count},errors:d.getElementById('error').textContent};await save(label+'/retained-view.json',result);
  if(hoverPaints||max||result.errors)throw Error(JSON.stringify(result));line('Hover terrain paints: 0; Fit/zoom/resize round-trip: exact.');
 });
+
+$('movecheck').onclick=()=>run(async()=>{
+ const name=$('scene').value,units=Number($('units').value),label=$('label').value+'/'+name,a=await load(name,units),d=frame.contentDocument,results=[];
+ const capture=async(tag,rect={x:0,y:0,width:1024,height:1024})=>{const b=await a.canvas.debugBake(rect,1),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();await png(label+'/'+tag+'.png',c);return c;};
+ const difference=(a,b,rect={x:0,y:0,width:a.width,height:a.height})=>{const x=a.getContext('2d').getImageData(rect.x,rect.y,rect.width,rect.height).data,y=b.getContext('2d').getImageData(rect.x,rect.y,rect.width,rect.height).data;let max=0,changed=0,total=0;for(let i=0;i<x.length;i++){const e=Math.abs(x[i]-y[i]);max=Math.max(max,e);if(e)changed++;total+=e;}return {max,changedChannels:changed,mean:total/x.length};};
+ const farRect={x:1400,y:1400,width:512,height:512};
+ for(const kind of ['plateau','hill']){
+  a.scene([[kind,[[280,480],[430,480]],{card:{diameter:300,amount:100,roughness:35}}]],{ground:true});await a.settle();a.canvas.setBusy(true);
+  try{
+   const before=await capture(kind+'-before'),far=await capture(kind+'-far-before',farRect);a.region.beginMove(a.nodes.length-1);a.region.previewMove({dx:330,dy:30});
+   const moving=await capture(kind+'-moving'),farMoving=await capture(kind+'-far-moving',farRect);
+   const weather=d.getElementById('weather'),enabled=weather.checked;weather.checked=false;
+   let authored;try{authored=await capture(kind+'-authored');}finally{weather.checked=enabled;}
+   a.region.endMove(false);await a.settle();const canceled=await capture(kind+'-canceled');
+   const cancel=difference(before,canceled),distant=difference(far,farMoving),oldBase=difference(moving,authored,{x:64,y:300,width:300,height:360});
+   results.push({kind,cancel,distant,oldBase});
+   a.region.beginMove(a.nodes.length-1);a.region.previewMove({dx:330,dy:30});a.region.endMove(true);await a.settle();await capture(kind+'-released');
+   if(cancel.max||distant.max)throw Error('Move/cancel changed unrelated output: '+JSON.stringify(results.at(-1)));
+  }finally{a.canvas.setBusy(false);}
+ }
+ await save(label+'/move-check.json',{units,results,errors:d.getElementById('error').textContent});line('Saved move comparisons; cancel and distant output match exactly. '+JSON.stringify(results));
+});

@@ -116,3 +116,15 @@ Validation: 90 tile/resolution cases match full padded rendering pixel for pixel
 Final refinement remains roughly half a second after close-view release. Further gains likely require reusing unchanged shape-graph prefixes or sharing relief computation across neighboring tiles. Marking only the newest path segment dirty would be incorrect: taper, smoothing, branching and endpoint-dependent forms can alter earlier portions of a path.
 
 Review the [editing-speed report](http://127.0.0.1:8909/editing-speed.html) and [prototype](http://127.0.0.1:8908/sculpt?biome=green&mapX=4&mapY=4&scratch=speed-review). `speed-results.json` includes the trial summaries and correctness checks. This remains an unmerged worktree prototype.
+
+## Old-base lip during dragging
+
+Moving a plateau or hill left an outline at its original position until release. The authored shape moved correctly; the preview still blended the previous refinement result into the new geometry. A height-similarity gate rejected old erosion only where height changed substantially. Around the low foot of a shape, the small difference allowed stale erosion to survive. The associated deposit and material maps were also reused without a geometry-validity check.
+
+Refinement now records the accumulated edited footprint. The GPU feed suppresses stale height offsets, weather maps and material fields inside that footprint while preserving valid refinement elsewhere. The same rule applies to paged gathers and CPU height sampling. The normal refinement pass replaces this metadata after release. Publishing a fresh result also invalidates the previously suppressed area, even if its buffers match the old result, so canceling a drag restores all detail. This adds checks to existing passes and no per-pointer refinement pass or world-sized buffer.
+
+The browser fixture passes for both shapes on Green 4×4, Red 4×4 and paged Green 8×8: the sampled old-base patch matches authored terrain exactly, distant terrain is unchanged, and canceling a move restores identical pixels. Four settled Green images (plateau/hill before and after movement) match the preceding `0a20bdc` build pixel for pixel. All 31 Node tests pass. The edited footprint remains an authored preview while dragging; refinement detail returns after release.
+
+See the [before/after comparison](http://127.0.0.1:8909/drag-trails.html) and `drag-trails-results.json` for captured checks and the focused timing check. This fix remains on the performance worktree for review.
+
+A focused performance check had one baseline and two candidate runs. Candidate drawing delivered 49.7–51.3 fresh tiles/sec versus 57.1 in the fresh baseline; dragging varied from 28.3 to 48.4 versus 54.1. Active frame p95 was 9–25 ms across candidate actions, versus 9–17 ms in the baseline. The second candidate run was closer to the baseline, but these runs do not establish unchanged throughput. Raw timings are retained in the comparison data; this remains a correctness fix for review, with the earlier Fit performance limitation still open.
