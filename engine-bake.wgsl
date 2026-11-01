@@ -387,39 +387,17 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 // up to 0.25 of a bed wherever the joint is present, so rows end and step at
 // the joints instead of running on as contour lines. Returns (groove height
 // offset <= 0, block shift in bed thicknesses).
-fn jointPresent(cell: f32, y: f32) -> f32 {
-    let run = max(u.jointRun, 20.0);
-    return smoothstep(mix(-1.1, 0.15, u.jointGaps), mix(-0.7, 0.55, u.jointGaps), valueNoise(vec2f(y / run, cell * 3.7) + 11.0));
+fn jointGroove() -> Groove {
+    return Groove(vec4f(u.jointAngle, max(u.jointSpacing, 6.0), u.jointDepth, max(u.jointRun, 20.0)), vec3f(u.jointGaps, 11.0, 23.0),
+                  vec3f(0.35, 4.0, 4.4), vec3f(0.05, 0.7, 9.1), vec3f(0.15, 0.7, 19.0),
+                  vec4f(0.55, 0.0, 0.9, 41.0), vec4f(1.3 + 0.9 * 0.55, 0.0, 0.9 * 0.9, 41.0), vec4f(0.7, 0.3, 0.5, 5.1));
 }
 fn jointField(p: vec2f) -> vec2f { return jointFieldAt(p, 0.0); }
 // G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
 fn jointFieldAt(p: vec2f, off: f32) -> vec2f {
-    let a = radians(u.jointAngle);
-    let along = vec2f(sin(a), cos(a));
-    let across = vec2f(cos(a), -sin(a));
-    let J = max(u.jointSpacing, 6.0);
-    let y = dot(p, along);
-    let x = dot(p, across) + J * 0.35 * valueNoise(p / (J * 4.0) + 4.4) + J * 0.05 * valueNoise(p / (J * 0.7) + 9.1) + off;
-    let c = floor(x / J);
-    var best = 1e9;
-    var cell = c;
-    var left = -1e9;
-    var leftCell = c - 1.0;
-    for (var i = -1; i <= 1; i++) {
-        let ci = c + f32(i);
-        let pos = (ci + 0.15 + 0.7 * cellHash(vec2f(ci, 19.0)).x) * J;
-        let d = abs(x - pos);
-        if (d < best) { best = d; cell = ci; }
-        if (pos <= x && pos > left) { left = pos; leftCell = ci; }
-    }
-    let run = max(u.jointRun, 20.0);
-    let deep = 0.55 + 0.9 * cellHash(vec2f(cell, 41.0)).y;
-    let along_ = 0.7 + 0.3 * valueNoise(vec2f(y / (run * 0.5), cell * 5.1) + 23.0);
-    let hw = 1.3 + 0.9 * deep;
-    let t = max(0.0, 1.0 - best / hw);
-    let groove = -u.jointDepth * deep * along_ * jointPresent(cell, y) * t * t * (3.0 - 2.0 * t);
-    let shift = (cellHash(vec2f(leftCell, 57.0)).x - 0.5) * 0.5 * jointPresent(leftCell, y);
-    return vec2f(groove, shift);
+    let g = jointGroove();
+    let cut = groove(p, g, off);
+    return vec2f(-cut.depth, (cellHash(vec2f(cut.left, 57.0)).x - 0.5) * 0.5 * grooveRun(cut.left, cut.y, g.line.w, g.gaps.x, g.gaps.y));
 }
 
 // Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
@@ -563,11 +541,45 @@ fn blockField(p: vec2f, pf: vec2f, h: f32, hill: f32) -> vec4f {
 // score the stripes; and the fine detail is angular facets, not rounded cells.
 // Everything is height the sun lights; nothing here is ink.
 
-// Whether the stretch of a groove at distance y along its line is present:
-// runs of about `run` px with gaps (a share of the length), per cell and salt.
+// One groove, for every mark cut as lines (joints, gullies, scratches): a lattice of lines `spacing` apart, leaning `angle` degrees from the
+// screen's north-south and bending with two octaves of noise; each line a smooth channel up to `depth` deep in runs of about `run` px with
+// gaps, deepest mid-run. A family is the numbers of its Groove (jointGroove, gullyGroove, scratchField); the code is shared.
+struct Groove {
+    line: vec4f,    // angle (degrees), spacing (px), depth, run (px)
+    gaps: vec3f,    // the share of a run missing; the noise salts of the runs and of the depth along them
+    broad: vec3f,   // the lattice's wander: a broad octave's amount (spacings), scale (spacings) and noise offset
+    fine: vec3f,    // and a fine octave's
+    place: vec3f,   // a line sits at (cell + x + y * hash) spacings; z salts the hash
+    deep: vec4f,    // a line's depth share: x + hash(cell, w) . (y, z)
+    wide: vec4f,    // a line's half-width (px), the same way
+    swell: vec4f,   // the depth along a run: x + y * noise(down the run / (run * z), cell * w)
+}
+// The deepest cut here (a depth), the lattice coordinates (x across the lines, with `off` px added; y along them) and the index of the line
+// left of x, where a joint shifts the beds and a gully's rib begins.
+struct Cut { depth: f32, x: f32, y: f32, left: f32 }
+fn groovePos(c: f32, g: Groove) -> f32 { return (c + g.place.x + g.place.y * cellHash(vec2f(c, g.place.z)).x) * g.line.y; }
+// Whether the stretch of a groove at distance y along its line is present: runs of about `run` px with gaps (a share of the length), per cell and salt.
 fn grooveRun(cell: f32, y: f32, run: f32, gaps: f32, salt: f32) -> f32 {
-    let r = max(run, 12.0);
-    return smoothstep(mix(-1.1, 0.15, gaps), mix(-0.7, 0.55, gaps), valueNoise(vec2f(y / r, cell * 3.7) + salt));
+    return smoothstep(mix(-1.1, 0.15, gaps), mix(-0.7, 0.55, gaps), valueNoise(vec2f(y / run, cell * 3.7) + salt));
+}
+fn groove(p: vec2f, g: Groove, off: f32) -> Cut {
+    let a = radians(g.line.x);
+    let S = g.line.y;
+    let y = dot(p, vec2f(sin(a), cos(a)));
+    let x = dot(p, vec2f(cos(a), -sin(a))) + S * g.broad.x * valueNoise(p / (S * g.broad.y) + g.broad.z) + S * g.fine.x * valueNoise(p / (S * g.fine.y) + g.fine.z) + off;
+    let c = floor(x / S);
+    var cut = Cut(0.0, x, y, c - 1.0);
+    for (var i = -1; i <= 1; i++) {
+        let ci = c + f32(i);
+        let pos = groovePos(ci, g);
+        if (pos <= x && ci > cut.left) { cut.left = ci; }
+        let t = max(0.0, 1.0 - abs(x - pos) / (g.wide.x + dot(cellHash(vec2f(ci, g.wide.w)), g.wide.yz)));
+        if (t <= 0.0) { continue; }
+        let deep = g.deep.x + dot(cellHash(vec2f(ci, g.deep.w)), g.deep.yz);
+        let swell = g.swell.x + g.swell.y * valueNoise(vec2f(y / (g.line.w * g.swell.z), ci * g.swell.w) + g.gaps.z);
+        cut.depth = max(cut.depth, g.line.z * deep * swell * grooveRun(ci, y, g.line.w, g.gaps.x, g.gaps.y) * t * t * (3.0 - 2.0 * t));
+    }
+    return cut;
 }
 
 // Gullies and ribs. Gully lines lean gullyAngle from the screen's north-south
@@ -577,65 +589,29 @@ fn grooveRun(cell: f32, y: f32, run: f32, gaps: f32, salt: f32) -> f32 {
 // it as a whole. A gully is carved into the line as a smooth channel gullyWidth
 // across and up to gullyDepth deep, in runs of gullyRun px with gaps (gullyGaps),
 // deepest mid-run. Returns (height offset, how deep the gully floor is here, 0..1).
-fn gullyPos(c: f32, S: f32) -> f32 { return (c + 0.2 + 0.6 * cellHash(vec2f(c, 13.0)).x) * S; }
+fn gullyGroove() -> Groove {
+    let half_ = 0.5 * max(u.gullyWidth, 2.0);
+    return Groove(vec4f(u.gullyAngle, max(u.gullySpacing, 8.0), u.gullyDepth, max(u.gullyRun, 12.0)), vec3f(u.gullyGaps, 61.0, 23.0),
+                  vec3f(0.55, 3.0, 6.3), vec3f(0.10, 0.8, 2.9), vec3f(0.2, 0.6, 13.0),
+                  vec4f(0.5, 0.0, 0.9, 41.0), vec4f(0.7 * half_, 0.6 * half_, 0.0, 5.0), vec4f(0.55, 0.45, 0.6, 5.1));
+}
 fn gullyField(p: vec2f) -> vec2f {
-    let a = radians(u.gullyAngle);
-    let along = vec2f(sin(a), cos(a));
-    let across = vec2f(cos(a), -sin(a));
-    let S = max(u.gullySpacing, 8.0);
-    let y = dot(p, along);
-    let x = dot(p, across) + S * 0.55 * valueNoise(p / (S * 3.0) + 6.3) + S * 0.10 * valueNoise(p / (S * 0.8) + 2.9);
-    let c0 = floor(x / S);
-    var cl = c0 - 1.0;
-    if (x >= gullyPos(c0, S)) { cl = c0; }
-    let cr = cl + 1.0;
-    let pl = gullyPos(cl, S);
-    let pr = gullyPos(cr, S);
-    let t = clamp((x - pl) / (pr - pl), 0.0, 1.0);
-    let hl = u.ribTilt * S * (cellHash(vec2f(cl, 77.0)).x - 0.5) * 2.0;
-    let hr = u.ribTilt * S * (cellHash(vec2f(cr, 77.0)).x - 0.5) * 2.0;
-    var off = mix(hl, hr, mix(t, smoothstep(0.0, 1.0, t), 0.4));
-    var floor_ = 0.0;
-    if (u.gullyDepth > 0.0) {
-        var cut = 0.0;
-        for (var i = 0; i < 2; i++) {
-            let c = select(cl, cr, i == 1);
-            let d = abs(x - select(pl, pr, i == 1));
-            let hw = max(u.gullyWidth, 2.0) * 0.5 * (0.7 + 0.6 * cellHash(vec2f(c, 5.0)).x);
-            let u_ = clamp(d / hw, 0.0, 1.0);
-            let prof = 1.0 - smoothstep(0.0, 1.0, u_);
-            let deep = 0.5 + 0.9 * cellHash(vec2f(c, 41.0)).y;
-            let mid = 0.55 + 0.45 * valueNoise(vec2f(y / (max(u.gullyRun, 12.0) * 0.6), c * 5.1) + 23.0);
-            cut = max(cut, u.gullyDepth * deep * mid * grooveRun(c, y, u.gullyRun, u.gullyGaps, 61.0) * prof);
-        }
-        off -= cut;
-        floor_ = cut / u.gullyDepth;
-    }
-    return vec2f(off, floor_);
+    let g = gullyGroove();
+    let cut = groove(p, g, 0.0);
+    let pl = groovePos(cut.left, g);
+    let t = clamp((cut.x - pl) / (groovePos(cut.left + 1.0, g) - pl), 0.0, 1.0);
+    let hl = u.ribTilt * g.line.y * (cellHash(vec2f(cut.left, 77.0)).x - 0.5) * 2.0;
+    let hr = u.ribTilt * g.line.y * (cellHash(vec2f(cut.left + 1.0, 77.0)).x - 0.5) * 2.0;
+    return vec2f(mix(hl, hr, mix(t, smoothstep(0.0, 1.0, t), 0.4)) - cut.depth, select(0.0, cut.depth / u.gullyDepth, u.gullyDepth > 0.0));
 }
 
 // Weathering scratches: thin grooves leaning scratchAngle, scratchSpacing apart,
 // 1-2 px wide and up to scratchDepth deep, in runs of scratchRun px with gaps.
 fn scratchField(p: vec2f) -> f32 {
-    let a = radians(u.scratchAngle);
-    let along = vec2f(sin(a), cos(a));
-    let across = vec2f(cos(a), -sin(a));
-    let S = max(u.scratchSpacing, 3.0);
-    let y = dot(p, along);
-    let x = dot(p, across) + S * 0.5 * valueNoise(p / (S * 6.0) + 12.4) + S * 0.12 * valueNoise(p / (S * 1.3) + 7.7);
-    let c = floor(x / S);
-    var best = 1e9;
-    var cell = c;
-    for (var i = -1; i <= 1; i++) {
-        let ci = c + f32(i);
-        let d = abs(x - (ci + 0.1 + 0.8 * cellHash(vec2f(ci, 29.0)).x) * S);
-        if (d < best) { best = d; cell = ci; }
-    }
-    let run = max(u.scratchRun, 12.0);
-    let depth = u.scratchDepth * (0.5 + 0.8 * cellHash(vec2f(cell, 43.0)).x) * (0.6 + 0.4 * valueNoise(vec2f(y / (run * 0.4), cell * 7.1) + 3.0));
-    let hw = 0.8 + 0.5 * cellHash(vec2f(cell, 47.0)).y;
-    let t = max(0.0, 1.0 - best / hw);
-    return -depth * grooveRun(cell, y, run, u.scratchGaps, 53.0) * t * t * (3.0 - 2.0 * t);
+    let g = Groove(vec4f(u.scratchAngle, max(u.scratchSpacing, 3.0), u.scratchDepth, max(u.scratchRun, 12.0)), vec3f(u.scratchGaps, 53.0, 3.0),
+                   vec3f(0.5, 6.0, 12.4), vec3f(0.12, 1.3, 7.7), vec3f(0.1, 0.8, 29.0),
+                   vec4f(0.5, 0.8, 0.0, 43.0), vec4f(0.8, 0.0, 0.5, 47.0), vec4f(0.6, 0.4, 0.4, 7.1));
+    return -groove(p, g, 0.0).depth;
 }
 
 // Angular facets: a jittered grid of cells F px tall and `stretch` times as wide
