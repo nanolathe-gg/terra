@@ -7214,7 +7214,7 @@ grey shoulders still read as short wormy marks in ours.
   | --- | --- | --- | --- | --- |
   | **cracks()** cell search, 3 levels (`cracks`, `fractureLevel`, `crackShade*`) | `crackSeverity .6`, `crackSpacing 40`, `crackLength 2`, `crackMajor .8`, `crackMinor .75`, `crackHairline .6`, `crackBlocks .6`, `crackWidth 1`, `crackJagged .6`, `crackNetwork .35`, `crackReach .6`, `crackStyle 0` | Severity: Red .3 Arch .4 Desert 0 Moon 0 Zhon .4 Lava .4 Crystal .7 Ice 0 (variants Green evad .45, Desert triad .5, Moon cracked .35, Ice snow .2 / bergs 0); Spacing: Red 28 Crystal 16; Length: Crystal 1.25 (triad 3); Major: Arch .6 Desert .2 Moon .5 Zhon .6 Ice .4 (triad .7); Minor: Desert .1 Moon .5 Ice .3 (triad .15); Hairline: Desert 0 Lava 0 Crystal .3 Ice .2; Blocks: Desert .1 Moon .4 Lava .3 Crystal .8 Ice .2 (evad .3, triad .15); Width: Red .5; Network: Lava 0 Crystal 1; Reach: Red .5 (evad .75, triad .5); Style 1: Green, Red, Desert; Jagged: none | ink or carved cracks (dark, lit, carve depth) and a block height per cell (`crackBlocks`, which also gates `broken`, the share of ribs the cracks replace) | the second cell search (blockField, facetLevel); `crackBlocks`/`crackLength` are `blockStep`/stretch of the block cells; `crackSeverity` is a depth like `*Depth` |
   | **crack tone** (`engine-frag.wgsl`: the baked crack code) | `crackDark .75`, `crackLit .35` | Dark: Green .4 (evad .55) Red .35 Arch .3 Moon .6 Zhon .45 Lava .35 Crystal .9; Lit: none | how dark a line code reads, how bright a lit wall; **also scales band lines, facet seams, block creases and gully floors**, because every one of them is written through the same code | owner of the tone of every mark below |
-  | **joint** groove (`jointFieldAt`, `jointPresent`) | `jointSpacing 36`, `jointAngle 0`, `jointDepth 2`, `jointRun 120`, `jointGaps .3` | Green 34 / -20 / 3 (engine 0) / 200 / .35; Red 30 / -10 / 3 / 160 / .4; Desert 30 / 0 / 3 / 120 / .4 (Spacing, Depth, Gaps) | a lattice of vertical grooves 1.3-2.2 px half-width, plus a shift of the bed rows to the right of each joint (`jointField().y`, read by `bedRelief`, so Green's engine preset, which sets `jointDepth` 0, still draws the shift) | gully and scratch, five for five |
+  | **joint** groove (`jointFieldAt`, `jointPresent`) | `jointSpacing 36`, `jointAngle 0`, `jointDepth 2`, `jointRun 120`, `jointGaps .3` | Green 34 / -20 / 3 (engine 0) / 200 / .35; Red 30 / -10 / 3 / 160 / .4; Desert 30 / 0 / 3 / 120 / .4 (Spacing, Depth, Gaps) | a lattice of vertical grooves 1.3-2.2 px half-width, plus a shift of the bed rows to the right of each joint (`jointField().y`, passed to `bedRelief`; a world with a column ignores it and Green's `bedFlow` is 0, so it draws nothing in any of the nine worlds, step 2) | gully and scratch, five for five |
   | **gully** groove + rib (`gullyField`, `gullyPos`) | `gullyDepth 0`, `gullySpacing 40`, `gullyWidth 14`, `gullyAngle -20`, `gullyRun 160`, `gullyGaps .3`, `gullyShade 0`, `ribTilt 0` | Green 8 (engine 4) / 36 / 14 / -20 / 90 / .4 / shade 1.2 / rib .2 | broad channels between rib planes (the planes are `ribTilt`; the channels are a groove) | joint and scratch; `gullyShade` is `facetSeam` / `blockSeam` for a groove floor |
   | **scratch** groove (`scratchField`) | `scratchDepth 0`, `scratchSpacing 9`, `scratchAngle -20`, `scratchRun 90`, `scratchGaps .4` | Green 2.5 (engine 1.2) / 9 / -20 / 140 / .3 | thin 1-2 px grooves | joint and gully |
   | **facet** cell search (`facetLevel`, `facetField`) | `facetTilt 0`, `facetSize 6`, `facetStretch 1.5`, `facetStep 1`, `facetSeam 0`, `facetSkew 1`, `facetCoarse 0` | Green 1 (engine .3) / 3.2 / 1.8 / 1.5 / 1.6 / .25 / .5 | tilted planes with steps in cells 3.2 px x 1.8, three levels (`cliffFine` adds the third) | `blockField` (size, stretch, tilt, step, seam) and `cracks()`' blocks |
@@ -7230,6 +7230,53 @@ grey shoulders still read as short wormy marks in ours.
   **Strays and their owners (not folded in):** `cliff*` (the frame every groove is drawn in, shared), `faceStreak` and `faceDark` (face
   material), `worms`, `wrinkles`, `slopeMarks` (Impacts or Bodies), `rill*` and `outcropCracks` (the Time pass's marks), `crackedStep`,
   `crackedContrast` and `bedCrackSlope` (Shores' bed; it only feeds the call of `cracks()` that Red's cracked bed makes), and `gullyRock` (Materials' placement: the weight of the baked-gully term in the rock-face score, `engine-frag.wgsl` row 9 x; Desert sets it to 0).
+
+- *Step 2, does it act (`measure/geology_controls.mjs --family fractures`, out `$R/agent-H17/fam`, 80 states and 23 probes, 27 scenes each, console clean).*
+  Each knob is moved from the scene's own value to the default (the page's order: query, Green's engine preset, variant, world, default) on the
+  world's three scenes; a scene that already sits at the target is shown `=` and left out. The class is **slope blocks, not raised blocks**:
+  16-px blocks (impact.py's rule, 40 px margin) whose slope is at least .10 for the cracks and crack tone, at least .50 (retail's rock face)
+  for the structured face (joints, gullies, scratches, facets, blocks, `ribTilt`); `geology_diff.py` has both classes as `slope` / `face`.
+  The bar is decision 11's 5% of the class on at least one scene. Numbers are mean |diff| / blocks changed, per scene; `-` is no change.
+  - **Dead** (mean |diff| 0.00 on every scene it applies to): Green `jointSpacing`, `jointAngle`, `jointRun`, `jointGaps` (`jointDepth` is 0 and
+    the joint's bed shift is ignored by a world with a column and multiplied by Green's `bedFlow` 0: **the joint's shift is dead in all nine
+    worlds**), Moon `crackMajor`, `crackMinor`, `crackDark` (Moon sets `crackSeverity` 0, so no scene draws a crack), Lava `crackSeverity`
+    (.4 to .6 and to 1: 0.00) and `crackBlocks`.
+  - **Under 5%** (moved, by a few pixels): Green `crackSeverity` (evad .45 -> .6; .45 -> 1: 0.1%), `crackBlocks`, `crackReach`, `crackStyle` .5%,
+    `crackJagged` (1 -> 0: mean |diff| 2.83 on green-2, 1.4% of rock face), `crackLit` 0%, `crackWidth` (1 -> 2) 0%, `jointDepth` (0 -> 4)
+    4.3%, `gullyRun` 3.2%, `gullyGaps` 0%, `gullyShade` 1.4%, `scratchDepth` (1.2 -> 0 and -> 3) 0%, `scratchRun`, `scratchGaps`,
+    `scratchSpacing` (9 -> 18), `scratchAngle` (-20 -> 20) 0%, `facetStep` 0% (1.5 -> 4: 9.3%), `facetSkew` 0%, `blockTilt` .4%, `blockStep` 3.2%,
+    `blockSeam` 0%, `blockGrit` 0% (the 0.00 blocks and 2-4% of pixels are the thin marks: 1-2 px lines move pixels, not 16-px block means);
+    Red `crackSeverity` (.3 -> 1: 1.1 / 0 / 1.1%), `crackWidth`, `crackReach`, `crackDark`, `crackJagged`, `crackStyle` 1.5%, `jointSpacing`
+    .6%, `jointAngle` .6%, `jointDepth` (3 -> 8: 1.7%), `jointRun`, `jointGaps`; Desert `crackLength` 4.6%, `crackMajor`, `crackMinor` 1.6%,
+    `crackHairline`, `crackBlocks`, `crackReach`, `crackStyle` 1.5%, `jointSpacing`, `jointDepth` (3 -> 8: 0%), `jointGaps`; Archipelago
+    `crackSeverity`, `crackMajor`; Moon `crackBlocks` .1%; Zhon `crackSeverity`, `crackMajor`, `crackDark` .1%; Lava `crackHairline`,
+    `crackNetwork`; Crystal `crackSeverity`, `crackSpacing` .9%, `crackLength`, `crackHairline`, `crackBlocks`, `crackNetwork` .1%, `crackDark`.
+  - **Act** (blocks changed on the scene that shows it): Green `crackDark` .75 vs .4 23.8% (green-2; it also scales every other mark), `gullyDepth`
+    11.1%, `gullySpacing` 27.1%, `gullyAngle` (-20 -> 20) 52.1%, `gullyWidth` (14 -> 4) 5.7%, `ribTilt` 8.4%, `facetTilt` 58.2%, `facetSize` 12.5%,
+    `facetStretch` 6.4%, `facetSeam` 44.6%, `blocks` 60.4%, `blockRow` (4 -> 8) 16.8%, `blockWidth` (7 -> 14) 22.1%, `blockChip` 9.6%,
+    `hillBlocks` 8.1% / 5.6% (green-1 / -3, where the hill rock is); `blockTilt` (.8 -> 1.6) 31.4%, `blockStep` (3 -> 6) 16.4%, `blockSeam` (.6 ->
+    1.5) 58.9% (these three are under 5% for the world's small move but act at a wider one); Red `crackSpacing` 5.4%; Archipelago `crackDark` 23.7%,
+    Lava `crackDark` 34.7%; Moon `crackSeverity` (0 -> .6) 43.4%; Desert `crackSeverity` (0 -> .6) 12.8%; Ice `crackSeverity` 40.0% and, on ice-1
+    (variant snow, the only Ice scene with cracks), `crackMajor` 9.0%, `crackMinor` 26.9%, `crackHairline` 12.3%, `crackBlocks` 5.8%.
+  - A knob that is dead or under 5% here is **listed for the owner, nothing is deleted**; the moves are the world's own to the default
+    (a few are small, e.g. `jointSpacing` 34 -> 36), so the wider probes above (`--probe`) are the fairer test for a knob they could not
+    reach. Tool: `--family` selects the family (the geology regex stays the default) and reads each scene's own value; `geology_diff.py`
+    gained the `slope` and `face` classes.
+- *Step 3, `fractures.png`: it draws nothing in this build, and forced to draw it adds nothing `cracks()` cannot.* (a) The slider is hidden
+  (`fracture-control`), its value reaches `uFractureAmount` only through `draw()`, and the one consumer, `fractureDepth`, sits in the `BAKE`
+  branch of `surfaceHeight`, which no bake code calls (the draw's own branch, `h + bakedFields.r * u.detail + debris`, has no fractures term).
+  `fractures=100` on all 27 scenes: mean |diff| 0.000 and 0.00% of pixels moved on every one (`$R/agent-H17/fr`). (b) To see what it would
+  draw, a scratch copy outside git (`$R/agent-H17/fr-copy`) wired `fractureDepth` into the draw's `surfaceHeight` and rendered the same
+  27 at `fractures=100`, `fractureDepth` 1.0 (the settings the code has: the amount is 0-1, the depth the table's, 1.0): mean |diff| against
+  the unwired build 0.002-0.22 (Desert .22 / .06 / .17, Moon .14 / .03 / .06, Ice .11 / .03 / .01, Green .02 / .05 / .01, Red .04 / .02 / .00,
+  the rest under .03), **0.0-0.75% of pixels**. Viewed (sheets `sheet-fr/{green,desert,moon}` 1x and 2x, retail | before | after, cropped where after
+  differs most): the added marks are 1-px dark and lit segments 12-45 px long, scattered, that read like the `cracks()` ink on Desert's butte
+  and Moon's rim, and nowhere do they make a long fissure or a grey shoulder; Green, whose fissures are the card's case, changes by under
+  .06 and shows no mark I could tell from the render without it. So: it draws nothing `cracks()` cannot, and it is on the owner's
+  combine-or-drop list as dead (`materials/fractures.png` 137.6 KB, binding 3 of the draw's group 0 (`fracturesTex`), the `fractures`
+  slider and `uFractureAmount` / `uFractureDepth` / `config.material.fractureDepth`, `fractureDepth()` in `engine-common.wgsl`,
+  `measure/make_fractures.py`). Nothing is deleted and nothing ported. Seen: Green, Desert and Moon only; Red, Archipelago, Zhon, Lava,
+  Crystal and Ice were measured, not viewed.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
 
