@@ -7728,6 +7728,40 @@ edit latency p95                           21.0 20.7 21.0 22.6        | 28.5 23.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H18`, branch `H18-shores`; assets `$R/agent-H18`.
 
+### H19. Face relief: lit rock on stretched walls
+
+> **Owner, 2026-11-01:** "I had another agent try to improve vertical or near-vertical faces to add proper relief and lighting for rock structure and texture ... To my eye it's a visual
+> improvement, but feel free to push back or suggest alternative approaches."
+
+**Why.** TA's camera is fixed and oblique, so a wall facing the viewer spreads one world pixel over several screen pixels. Everything baked in world space (the fine normal, the crack codes,
+the cavity) stretches into a vertical smear there. The owner's prototype, `prototype/cliff-surface-detail` at 5ae5365, fixes that: the height gradient the material tables already hold is cached at startup and
+lit on the wall, in screen pixels, so the rock keeps its grain. On a tall wall that is a clear win.
+
+**The coordinator's review of the prototype.** Rendered all 27 scenes from an export, against retail, plus the prototype's own painted cliff through `repro/render.mjs` on Green, Desert and Ice.
+- *What holds.* The idea, the cached gradients (`mmRelief`), the tangent frame, the fix to `shineTerm`, which was rebuilding a top-down normal and cancelling the relief. No terrain height, palette or world branch moves. It merges with main with no conflicts, and nothing is newly outside retail by `repro/stats.py` (535 of 668, as before).
+- *What does not, as it stands.* It gates on slope, so it reaches ground where nothing has stretched, and the retail windows pay for walls they do not have. green-2's rock goes darker where main was close: median luma retail 43, main 42, prototype 31; near-black share 14%, 23%, 38%. Its long cracks and H17's marks go, since slopes over 1 lose the fine normal and the crack code. ice-3's smooth slab top takes dark gouges. Desert's strata take black scribbles at relief 1, which .3 clears. Moon takes isolated white pixels. The cavity darkens twice (in `cav`, then `material *=`), and `shineOutside` is bypassed in every world, which adds pale grit to Green's natural rock.
+- *Against the owner's direction.* Four modes (`surfaceMapping`), two of them rejected experiments kept for comparison: the owner has said not to drag two render paths along. Layer 0 of the atlas, the analytic footprint and the triplanar code serve only those two. Mode 3 reads level 0 at any footprint where `genColor` follows `materialFoot`, so a quarter draw does not match the final one, and the seven mips go unread.
+- *A stricter gate, tried in a scratch copy (`$R/agent-H18/cliff/stretch-gate.patch`).* Relief only where the projection stretches: `smoothstep(1.5, 3.0, 1.0 - 0.5 * broad.y)`, the prototype's own `denom0`. One cavity, `shineOutside` left alone. green-2 0.00 against main, the largest move on any of the 27 scenes .10 mean |diff|, 535 of 668 unchanged, console clean. The tall walls keep the win (`$R/agent-H18/cliff/variant/row-*.png`) at the right tone, and the crowns keep their cracks. Desert's wall wants relief about .4.
+
+**The build.** A port by hand from 5ae5365 onto main, not a merge. One path, one control.
+1. One atlas layer: `makeSurface`'s lit gradient, or `blockSurfaceHeight` for a table with no `lit` block (Green, Lava, Zhon). Read at the footprint's level, as `genColor` reads, with `textureLoad`, so no sampler binding.
+2. The stretch gate, the one place relief is decided. Inside it the relief replaces the fine normal, the crack code and the top-down cavity. Outside it, nothing changes. No sample is taken outside it.
+3. One knob, `faceRelief`, a world value, with one slider in Rock face. No `surfaceMapping`, no `surfaceScale`, no colour path: `genColor` already gives the wall its colour.
+4. Authored wall scenes in `repro/walls/`, one a world, since no retail window holds a tall wall.
+5. No prototype notes, results file, harness buttons or diagnostic views.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H19`, branch `H19-face-relief`; assets `$R/agent-H19`.
+
+**Done.** Renders, logs and timings are in `$R/agent-H19` (`NOTES.md` is its file map). 111 lines added and 16 removed across the seven code files (the prototype: 236 and 16 on three); no second path.
+- *Walls.* `repro/walls/<world>.json`, the painted cliff of H18 in each world. Archipelago's low light (`shadeDepth` .3) leaves its wall a subtle change; every other world's smear is gone at 1x.
+- *Atlas.* One 512 px layer, rgba16float, seven mips (`makeRelief`, engine-materials.wgsl): a lit material's gradient from `mmRelief`, or `blockSurfaceHeight` for a table with no `lit` block (the cavity only there). 2.8 MB. Startup GPU time on Green 0.85 to 0.92 ms against 1.9 to 2.0 ms for the materials pass (Desert .33 against 8.5, Ice .20 against 1.8).
+- *Gate.* `faceRelief = smoothstep(1.5, 3, 1 - broad.y / 2) x rock cover x u.faceRelief` in `fragmentMain`: the screen row is `1 - broad.y / 2` world rows, above 1 only where the wall leans toward the viewer, so a wall facing away keeps the world-space look. The numbers held on all nine wall scenes. Inside it the normal, crack code and cavity take the atlas; `shineTerm` tilts the wall's own normal; `shineOutside` untouched. The atlas is read only where the gate is above 0, at the footprint's level as `genColor` reads.
+- *Kept and not.* The moss fleck's cell follows `pixel` on a wall (the vertical dashes became small dashes; no vertex-stage input). The ambient lift stayed out: tried in a scratch copy on seven walls, it reads darker and harder on Moon and Red and adds nothing on the others.
+- *Control.* `faceRelief` 1, one slider in Rock face; Desert .4 (1 reads as black scribbles, .3 to .5 as rock); Moon .5 (1 reads as hard plates in the shade). The other seven read as rock at 1; at .25 Crystal's wall keeps its smear. Decision 11: against 0, the control moves 25% (Lava) to 83% (Ice) of the new `wall` class of `measure/geology_diff.py`, read on each world's wall scene. No retail window has a wall to read it on.
+- *Retail scenes.* 27 of 27 clean, `mismatch` 0. green-2 .01 (505 pixels moved, median luma 63.35 on both, so its rock keeps main's tone), 24 scenes at or under .09. Over the card's bar: crystal-2 .33, crystal-1 and -3 .16. Crystal's column risers are real walls facing the viewer, so the gate takes them. Viewed against retail at 1x and 2x, the risers only lose some smear, the three windows' mean luma moves under .02, and `stats.py` has no cell newly outside (535 of 668). By decision 22 that stands, and Crystal stays at 1: its wall scene is where the control pays.
+- *Checks* (all on the final head). regional 0 on all 27; smoke (page8 on six worlds) clean; gate 0; `node --test` 33 of 33; `shape_controls` no dead control; `section_check --against classic-ref.json` 0; `curveedit` green and desert 0. Quarter draw (`materialFoot=2`) against final on the green wall: same features, coarser grain, no pop. Indexed export of the red wall: the relief survives the palette and the dark faces stay brown (the export's offset to the render was matched by eye, so the crop is the same look, not the same pixels).
+- *Perf* (map4 `--only drag`, four rounds, order alternating): terrain 1070 / 1078 ms on green-2, 996 / 992 on the wall scene (head / main), relief bake 433 / 427 and 337 / 339, edit latency p95 36 / 42 and 37 / 38, rAF p95 16.7 on all. map40 on the wall scene: rAF p95 16.7 on both, edit latency p95 40 against 39.7; the prototype's 33 to 50 ms does not occur.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs

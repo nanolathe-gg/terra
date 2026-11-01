@@ -267,6 +267,7 @@ struct Uniforms {
     // E9 (Green rock faces). Every default reproduces the earlier output exactly.
     rockMoss: f32,        // how much of the rock art's own green (fractured and weathered tiles) is kept (1: all, as before; 0: none)
     shineOutside: f32,    // share of the rock's glints kept outside painted rock (1: everywhere, as the shine model gives them)
+    faceRelief: f32,      // share of the rock relief lit on a wall that faces the viewer (0: the world-space look; engine-frag.wgsl)
     rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
     gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
     gullySpacing: f32,    // distance between gully lines, world px

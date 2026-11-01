@@ -214,7 +214,7 @@ export class TerrainRenderer {
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(0, F), sampler(1, F),
-      texture(18, F), texture(19, F, 'float', '2d-array')]});
+      texture(18, F), texture(19, F, 'float', '2d-array'), texture(20, F)]});
     // GL drew with LESS against a cleared depth of 1; the vertex shader maps
     // GL's clip depth onto WebGPU's 0..1 range.
     [this.drawPipeline, this.bakePipeline] = await Promise.all([
@@ -633,7 +633,7 @@ export class TerrainRenderer {
   materialBindGroup() {
     return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
       {binding: 0, resource: this.textures.grass.view}, {binding: 1, resource: this.textures.grass.sampler},
-      {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}]});
+      {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}, {binding: 20, resource: this.relief.createView()}]});
   }
 
   // The ten placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the knobs the
@@ -686,11 +686,15 @@ export class TerrainRenderer {
       if (errors.length) throw new Error('nanolathe: engine-materials.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
       this.materialPipeline = await device.createComputePipelineAsync({label: 'materials', layout: 'auto', compute: {module, entryPoint: 'makeMaterial'}});
       this.ditherPipeline = await device.createComputePipelineAsync({label: 'material dither', layout: 'auto', compute: {module, entryPoint: 'makeDither'}});
+      this.reliefPipeline = await device.createComputePipelineAsync({label: 'material relief', layout: 'auto', compute: {module, entryPoint: 'makeRelief'}});
     }
     if (!this.generated) {
       const texture = device.createTexture({label: 'generated materials', size: [size, size, layers], format: 'rgba8unorm', mipLevelCount: levels,
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
       this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
+      // H19: the rock's height gradient (engine-materials.wgsl makeRelief), one layer with the colours' levels.
+      this.relief = device.createTexture({label: 'rock relief', size: [size, size], format: 'rgba16float', mipLevelCount: levels,
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING});
     }
     const rows = Float32Array.from(materialRows(this.materialData).flat());
     const table = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
@@ -711,6 +715,14 @@ export class TerrainRenderer {
       const n = Math.ceil(size / 2 ** level / 8);
       pass.dispatchWorkgroups(n, n, layers);
       pass.end();
+      const relief = encoder.beginComputePass({label: 'material relief level ' + level});
+      relief.setPipeline(this.reliefPipeline);
+      relief.setBindGroup(0, device.createBindGroup({layout: this.reliefPipeline.getBindGroupLayout(0), entries: [
+        {binding: 0, resource: {buffer: table}}, {binding: 2, resource: {buffer: buffer}},
+        {binding: 4, resource: this.relief.createView({baseMipLevel: level, mipLevelCount: 1})},
+        {binding: 5, resource: this.relief.createView({baseMipLevel: level ? level - 1 : 1, mipLevelCount: 1})}]}));
+      relief.dispatchWorkgroups(n, n);
+      relief.end();
       if (level === 0) {
         // A dithered material's level 0 (engine-materials.wgsl makeDither): one invocation per 32-px block, the levels above box-mean it.
         const dither = encoder.beginComputePass({label: 'materials dither'});
@@ -959,6 +971,7 @@ export class TerrainRenderer {
     // E9 (Green rock faces).
     this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
     this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
+    this.f('uFaceRelief', variant.has('faceRelief') ? Number(variant.get('faceRelief')) : 1);
     this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);
     // Flow bake (card F1): only read where a bake wrote planes 20-24 (uFlowOn).
     this.f('uFlowTint', variant.has('flowTint') ? Number(variant.get('flowTint')) : 1);
