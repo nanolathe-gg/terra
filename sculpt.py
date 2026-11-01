@@ -29,7 +29,7 @@ KNOB_DEFAULTS = dict(
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
-    faceVariation=.8, northFace=.7, mesaFlank=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
+    faceVariation=.8, lean=0, facing=0, outlineVar=1, widthVar=1, heightVar=1, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
     sand=0, sandReach=.6, windStrength=.5, wind=20, sandPatchy=.7, sandTail=.6, sandDust=.5, sandGrass=.6,
@@ -61,10 +61,8 @@ KNOB_DEFAULTS = dict(
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
     # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
     flatBank=0,
-    # Cross-section (card C1): a stroke that sets any of these carries its own section
-    # (px, units or shares as labelled; sculpt-shape-presets.js carriesSection).
-    apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
-    lip=0, crown=.5, shelfPx=0, shelfDepth=6, shelfSteps=0,
+    # Cross-section (card C1): the face width in px (0: a share of the brush) and the terraces on the curve (sculpt-shape-presets.js).
+    facePx=0, terraces=0, ledge=.6, terraceJitter=.35,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
@@ -409,7 +407,7 @@ WORLD_KNOBS = {
     # mesa in repro/scenes/desert.json). Sunlit faces are no brighter than
     # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
     # 1.07-1.14), so no highlight above level.
-    'desert': dict(mesaFlank=1, lightCap=1, paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
+    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
                    bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
@@ -486,7 +484,7 @@ WORLD_KNOBS = {
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0, bandStyle=1, bandSpacing=7, bandLine=1,
-                 northFace=.7, fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
+                 fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
                  # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
                  bankPx=60,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a

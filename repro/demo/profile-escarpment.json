@@ -1,5 +1,4 @@
-{"biome": "green", "ground": false, "query": "",
+{"biome":"green","ground":false,"query":"",
  "strokes": [
-  ["offset", [[140, 470], [420, 440], [700, 470], [900, 430]], {"card": {"diameter": 380, "amount": 70, "roughness": 22, "cracks": 0, "softness": 50,
-    "profile": 1, "apronPx": 36, "apronHeight": 12, "facePx": 120, "faceCurve": 0, "terraces": 3, "ledge": 50, "terraceJitter": 80, "lip": 0, "faceVariation": 100}}]
+  ["offset",[[140,470],[420,440],[700,470],[900,430]],{"card":{"diameter":380,"amount":70,"roughness":22,"cracks":0,"softness":50,"facePx":156,"terraces":3,"ledge":50,"terraceJitter":80,"faceVariation":100,"curve":{"form":"plateau","knots":[[0,0],[0.042,0.009],[0.083,0.026],[0.125,0.048],[0.167,0.074],[0.208,0.103],[0.25,0.122],[0.292,0.136],[0.333,0.163],[0.375,0.201],[0.417,0.249],[0.458,0.306],[0.5,0.368],[0.542,0.435],[0.583,0.505],[0.625,0.576],[0.667,0.647],[0.708,0.716],[0.75,0.782],[0.792,0.841],[0.833,0.894],[0.875,0.938],[0.917,0.971],[0.958,0.992],[1,1]]}}}]
  ]}

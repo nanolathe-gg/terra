@@ -231,7 +231,7 @@ $('internal').onclick=()=>run('Preset/internal sensitivity',async()=>{
 });
 $('profiles').onclick=()=>run('Shared-profile replacement trial',async()=>{
  const api=await load('green'),rows=[],engine=await createShapeEngine({device:api.device,grid:384,spacing:2,baseHeight:99,sea:75,minH:-15,maxH:375});
- const fixed={...api.config.defaults,radius:140,amount:80,rough:0,softness:.5,northFace:0,mesaFlank:0,profile:0,baseVary:0,baseBump:0,moonLobes:0,spurCount:0,crestJag:0,crestVary:0,crestTaper:0,terraces:0,lip:0,faceVariation:0,apronHeight:.2,cracks:0},points=[{x:240,y:330},{x:380,y:330},{x:500,y:330}],ctx={seed:2701,baseHeight:99,sea:75,params:n=>({...fixed,...n.params})};
+ const fixed={...api.config.defaults,radius:140,amount:80,rough:0,softness:.5,lean:100,baseVary:0,baseBump:0,moonLobes:0,spurCount:0,crestJag:0,crestVary:0,crestTaper:0,terraces:0,lip:0,faceVariation:0,apronHeight:.2,cracks:0},points=[{x:240,y:330},{x:380,y:330},{x:500,y:330}],ctx={seed:2701,baseHeight:99,sea:75,params:n=>({...fixed,...n.params})};
  for(const kind of ['plateau','hill']){
   const node={kind,seed:2701,points,params:fixed},original=await engine.run([node],ctx);let best;
   for(const facePx of [40,80,120,160,200])for(const faceCurve of [-.75,0,.75])for(const apronPx of [0,40])for(const crown of kind==='hill'?[0,.5,1]:[.5]){

@@ -6891,6 +6891,99 @@ and `lipRim` and its four uniforms go, along with the water-lip sliver. Water be
 too, from the ground to the bed, as every unsectioned water stroke already is, so `carried`'s
 water branch and the second table go, and Red-3's waterline follows the ground.
 
+**Done (part 2, step C).** Four commits, one per slice (knots, lean and facing, variability, the editor).
+- *Knots.* A curve is a list of `[distance share, height share]` knots, sampled by a monotone cubic
+  (Fritsch-Carlson, zero tangent at the ends and at a change of slope, so a lip knot does not ring) into the
+  one table, which the shader still reads with Catmull-Rom. A stroke with no curve of its own draws its kind's
+  form at its softness; one with its own stores `curve: {form, knots?}`: the form alone stays live with
+  softness, `knots` (made on the first drag) are what saves. The table can also read `back`, for a shape whose two
+  sides differ (the hill's back); the editor does not edit it. Forms (`sculpt-shape-presets.js`): hill (four knots,
+  exactly the old face), mountain, plateau, mesa (Desert's apron and face), cliff, terrace (three treads), and
+  the ridge hill's dome. `landSection`, `waterSection`, `carriesSection`, `hillSection`, `lipRim`, the plateau's
+  mesa table and the water's second table are gone. `CV_N` lives in the host and is injected into the shader.
+- *Why the power-law and smoothstep forms have 48 intervals, not a short list.* The table is the whole shape and
+  the lighting reads its kinks: forms at 12 and 24 intervals moved the 22 non-section scenes by .3-.8 and .1-.4
+  (mean |diff|); 48 gives at most .13. The hill, mesa, cliff and terrace forms are 4 to 8 knots. The editor shows nine
+  handles for a dense form and a first drag makes those nine the stroke's own.
+- *One face width.* `face = facePx > 0 ? min(facePx kw / reach, .98) : the kind's own share` (1 minus the shoulder for
+  the plateau family, .9 for water, 1 for the rest); `w = curve((1 - r) / face)`. `kw` is the cell's width noise,
+  shared by the whole face. `cvPx cvA cvS cvD cvCap cvFs cvLo cvHi cvWater sLip lipAt lipDir lipF` are gone.
+  Terraces run over the whole curve.
+- *Lip.* The raw curve value is kept when the host says the table leaves 0..1 (`cvLip`); the winning segment is
+  picked on the raw value, `w = clamp(c, 0, 1)`, and the excess lifts the height by the kind's own multiplier
+  (`amount`; the plateau's `PT + amount + rough 3 nDet - base`; `-amount` on lower; `base - bed` on water, where a
+  lip is the curve below 0). The settled hill keeps the raw value through the blur and the compose pass, so its
+  lip is carried by `amount`, and protection and routes read `min(joined, 1)`. This removed the water-lip sliver.
+- *Water.* One table from the ground (0) to the bed (1). Red-3's deep stroke is sampled from the old two tables at
+  Red's ground height (24) into 25 knots (24 even intervals); its waterline now follows the ground. `bankFlat` and `beachFlat` apply to
+  knotted water too.
+- *Lean and facing (slice 2).* `lean` is the back's length over the face's (0: the shape's own). `facing` is the side
+  the shape leans toward: a map bearing (eight points, default north) or the left or right of the drawn direction.
+  Mapping: the plateau family's north term `.7 * .32 * north^2` is `(lean - 1) * .32 * toward^2`, `toward` the
+  cosine between the bearing and the direction from the stroke to the cell, default lean 1.7 facing north (bit-
+  identical, 24 scenes 0.00). The shouldered hill: lean is `sBack`, its face vector is the bearing turned round
+  (north: the old pi/2, exactly), a side forces `faceSide`. Other kinds have lean 1 by default; a lean stretches the
+  slope toward the bearing by `(lean - 1) toward^2` of its reach and widens the footprint. The review made that one
+  factor, `leaned`: it stretches the reach, or on the plateau family moves the shoulder and stretches a px face.
+  `northFace` and `mesaFlank` are gone.
+- *Variability (slice 3).* One host table (`variability`): outline `amp` .95 / .85 / 1.1 / .2, width noise 1.3 [.55, 1.7]
+  and 1.6 [.45, 1.9], height lumps `.09 nDet` and `.75 nCW + .30 nDet`; five uniforms and one `lumps()` function in the
+  shader replace the per-kind branches. Sliders for outline, width (plateau, offset, deep) and height (hill, mountain),
+  0-200%, default 100%: 27 scenes 0.00 against the slice before. Left as different ideas: the plateau's level wander
+  (3 height units per roughness), the hill's cross shift and local radius, deep's shelf and core.
+- *Controls.* At b7bfa42, for the plateau, offset, hill, mountain and water strokes: `apronPx apronHeight faceCurve
+  crown lip shelfPx shelfDepth shelfSteps` (8 curve keys), `mesaFlank northFace`, `facePx softness faceVariation`,
+  `terraces ledge terraceJitter` = 16. Now: the curve (form picker and knot editor, one control), `facePx softness
+  faceVariation terraces ledge terraceJitter`, `lean facing`, `outlineVar widthVar heightVar` = 12. The card's "about 9"
+  left out the three variability sliders; the true number is 12, or 13 counting the form picker apart from the knots.
+- *Editor.* `drawSection()` is the editor (see the slice 4 commit): form picker, handles, drag, click to add, double-click
+  or Shift-click to remove, Reset to the form, and a strip across the whole shape with the lean. `repro/curveedit.mjs`
+  drives it by CDP on Green and Desert (24 checks each: every form at 144 and 560 px, the knot operations, lean and
+  facing, editing a selected stroke and undo, autosave and reload with the same knots and the same heights).
+- *Checks.* Lines at b7bfa42 -> now: `engine-shape.wgsl` 1650 -> 1628, `sculpt-gpu-fields.js` 1484 -> 1486, `sculpt.js`
+  1659 -> 1713, `sculpt-shape-presets.js` 104 -> 134; node uniform fields 192 -> 188. 27 scenes against `outReview`: all 22
+  scenes that carried no section at most .13 (green-2 .05, lava-3 .13, green-1 .04); desert-1/2/3 12.3, 3.1, 10.2, red-2
+  2.8, red-3 1.5. `stats.py`: one mark newly outside (red-2 `edge_diagonal` .481 -> .501, band top .487, retail .467).
+  `section_check`: default kinds against `classic-ref.json` RMS at most .00, max .03; each form against
+  its knots at 140 and 560 px (bilinear lattice reproduced) RMS .00-.08, max .32. `regional` 0 on all 27, smoke clean on six
+  worlds (also `--page8`), `gate.sh` 0, 27 node tests. Drag (`perf.mjs map4 --only drag`, three alternating rounds against
+  the review head): rAF p95 16.7-16.8 ms both, edit latency p50 41.9-44.4 against 42.3-44.8 ms, p95 47.5-48.5 against
+  47.5-47.8 ms.
+- *Judged against retail, at 1x and 2x.* Desert-1, -2 and -3: the same (mean |diff| is large because a small height
+  change moves every strata line; the layout and the bands read as before). Red-2: the lake, its terraces and the round
+  hill the same. Red-3: the shallows as wide as before and the bank as speckled (the Shores card's), the dark bank band
+  a little more continuous at 2x: the same.
+- *Departures and approximations.* Desert's plateau preset is the mesa form at `facePx` 210 (the old apron 80 plus face 130). A face wider than the
+  reach is capped at .98 of it. A water knot above 1 digs below the bed. The cliff and terrace forms and the lean strip are
+  new shapes of ours, not fitted to retail (step D). The diameter slider steps by 8, so the editor was driven at 144 px;
+  the engine check is at 140. Scene files were converted by a throwaway script: each old section's table, resampled to 24
+  intervals, with `facePx` set to its nominal width.
+- *For step D.* A world's forms go in a table that `strokeKnots` reads in place of `FORMS`; `curve.form` is how a stroke
+  names its form. The editor reads `FORMS[name](softness)`, so a world's form appears in the picker by being in `FORMS`.
+  Lean and facing are per stroke. The dense forms' table size matters (the lighting reads kinks): keep a fitted form at
+  48 intervals or more, or check the 27 scenes.
+
+**Step C, the coordinator's review.** Reading the diff and then moving every control on the real engine
+(`measure/shape_controls.mjs`, new) found what the step's checks could not, because they only proved controls were stored:
+- *Dead on the default hill:* Face width, terraces, ledge and terrace variation. Decision 3 said one face width for every
+  kind, and the shouldered branch never read it. `hillWidths` now does; terraces run there too.
+- *Dead on a stroke with a Face width:* lean and facing on the plateau family, which is Desert's mesa. `faceOf` takes the
+  lean now. A px stroke still has no default north lean, so no scene moved.
+- *Shown with nothing to act on:* face variation with no face to vary, softness on a ridge's dome. `shapeControlAvailable`
+  gates both on what reads them.
+- *Red-2's hill.* The conversion left it shouldered, which read lopsided against retail's round mound, and even a shouldered
+  hill at lean 1 is a diamond: its curve runs across the crest only, and it wanders .85 of the roughness to the plain
+  hill's .2. So a hill's shouldered geometry is now its lean, and a hill at lean 1 is the plain radial one (`isShouldered`).
+  That is how a round mound is drawn; Red-2's hill carries `lean: 100`. The shape steps at 100%, between the two geometries.
+- *Smaller.* A chosen bearing wandered up to 1.8 radians with the default's coast noise. A hill's back jumped to the front's
+  knots on the first drag, and the preview read a different back from the engine; a stroke's back now stays its form's.
+  Two unused exports and one stale test key.
+- *Corrected from the report:* it called Desert-1 closer in band count; viewed, it is the same.
+- *Left.* Height lumps on a mountain or ridge are weak (.3 units at 200%, roughness 40): live, under the 5% bar, for the
+  combine-or-drop list. `repro/audit` still names the old keys and its profile trial no longer applies.
+After the fixes all 27 scenes match the step's final render but Red-2 (.76, the hill); no control prints dead; tests 27,
+gate, regional on 27, smoke with `--page8`, `curveedit` on two worlds and `section_check` all exit 0.
+
 *For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
 with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
 `sBack` is read only by the shouldered-hill branch in `engine-shape.wgsl`; a

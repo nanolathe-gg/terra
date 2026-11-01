@@ -144,7 +144,7 @@ fn maskSet(i: u32, p: u32, v: i32) {
 // H15 part 2: one curve. The host samples a stroke's curve (height share against distance share from the foot, 0..1) at CV_N + 3 even steps, one step
 // before the foot to one past the top, into MW after the node's extra rows, four samples to a row. curveAt reads it with Catmull-Rom interpolation (linear
 // steps put visible slope kinks into the lighting). `off` is u.curveBase or u.backBase, relative to the node's rows past its mask writes.
-const CV_N = 64.0;
+/*CV_N*/
 fn cvAt(at: u32, k: u32) -> f32 { return MW[at + (k >> 2u)][k & 3u]; }
 fn curveRaw(off: u32, t: f32) -> f32 {
   let at = u.mwBase + u.nwrites + off;
@@ -152,13 +152,14 @@ fn curveRaw(off: u32, t: f32) -> f32 {
   let p0 = cvAt(at, k); let p1 = cvAt(at, k + 1u); let p2 = cvAt(at, k + 2u); let p3 = cvAt(at, k + 3u);
   return p1 + 0.5 * f * (p2 - p0 + f * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + f * (3.0 * (p1 - p2) + p3 - p0)));
 }
-fn curveAt(off: u32, t: f32) -> f32 { return max(0.0, curveRaw(off, t)); }
+// A curve leaves 0..1 only when the host says it has a lip (u.cvLip): above 1 on land, below 0 on water; the excess is kept for the kind's lift.
+fn keepLip(c: f32) -> f32 { return select(clamp(c, 0.0, 1.0), c, u.cvLip != 0u); }
+fn curveAt(off: u32, t: f32) -> f32 { return keepLip(curveRaw(off, t)); }
 
 // One thread per cell: every capsule of the node in order. Kinds: 0 paint 1 erase 2 deep 3 shallow 4 mountain 5 hill.
 // A hill with settle != 0 only writes its raw weights (Sc plane 0); blur and compose passes finish it.
-// H9 parametric cross-section, after H15 part 2: the curve is a host table (curveAt); what stays here is the width noise a carried section's px widths follow
-// (carried), the terraces on the curve's value (terraced) and the lip's additive lift (sLift, per cell).
-var<private> sLift: f32 = 0.0;
+// H9 parametric cross-section, after H15 part 2: the curve is a host table (curveAt); what stays here is the terraces on the curve's value (terraced)
+// and the face share a cell's reach gives the curve (faceOf).
 fn terraceLevel(m: u32, n: u32, nA: f32, nB: f32) -> f32 {
   let fm = f32(m); let fnn = f32(n);
   var j = 0.0;
@@ -173,55 +174,31 @@ fn terrace(g: f32, n: u32, nj: f32, nA: f32, nB: f32) -> f32 {
   let lo = terraceLevel(k, n, nA, nB); let hi = terraceLevel(k + 1u, n, nA, nB);
   return lo + (hi - lo) * sm(u.sFlat, 1.0, q - f32(k));
 }
-// Terraces on the curve's value between cvLo and cvHi (the face, above the apron).
-fn terraced(w: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
-  if (u.sSteps == 0u) { return w; }
-  let g = (w - u.cvLo) / (u.cvHi - u.cvLo);
-  if (g <= 0.0 || g >= 1.0) { return w; }
-  return u.cvLo + (u.cvHi - u.cvLo) * terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells));
+// Terraces on the curve's value over the whole of 0..1; a lip's excess (outside 0..1) rides on top untouched.
+fn terraced(c: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
+  if (u.sSteps == 0u) { return c; }
+  let g = clamp(c, 0.0, 1.0);
+  if (g <= 0.0 || g >= 1.0) { return c; }
+  return terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g);
 }
-fn lipRim(t: f32, F: f32) -> f32 {
-  if (t >= 0.0) { return 1.0 - sm(0.0, 0.45 * F, t); }
-  return 1.0 - sm(0.0, clamp(0.4 * F, 5.0, 30.0), -t);
+// The share of its reach the curve covers at a cell, foot to top (flat beyond): the kind's own share `own` (1 minus the shoulder, or 1), or facePx, kept
+// that wide whatever the stroke's size, wandering with the cell's width noise (kw, shared by the whole face) and stretched by the lean.
+fn faceOf(own: f32, reach: f32, nCW: f32, leaned: f32) -> f32 {
+  if (u.facePx <= 0.0) { return own; }
+  let kw = clamp(1.0 + 0.5 * u.faceVar * nCW, 0.4, 1.8);
+  return min(u.facePx * kw * leaned / reach, 0.98);
 }
-// A stroke that carries section keys: the cell's apron (ka) and face (kw) widths wander with their own noise, so the distance d from the foot is mapped
-// back onto the table's nominal px (cvA apron, cvPx top, past it the cap shares what is left of the reach); the table is then read at that share of cvD.
-fn carried(r: f32, reach: f32, nCW: f32, nShelf: f32, base: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
-  let d = (1.0 - r) * reach;
-  let kw = clamp(1.0 + 0.5 * u.faceVar * nCW, 0.4, 1.8); let ka = clamp(1.0 + 0.5 * u.faceVar * nShelf, 0.4, 1.8);
-  var dn = 0.0; var top = 0.0; var F = 0.0; var Ic = 0.0;
-  if (u.cvWater != 0u) {
-    // Water, from the foot: the lip's inset, the face (kw), the apron and the shelf (ka), then the bed's descent over .7 of the reach left.
-    var I = u.lipAt; F = u.lipF * kw; var A = u.cvA * ka; var S = u.cvS * ka;
-    let tot = I + F + A + S;
-    if (tot > 0.92 * reach) { let k = 0.92 * reach / tot; I = I * k; F = F * k; A = A * k; S = S * k; }
-    Ic = I;
-    let b1 = I; let b2 = b1 + F; let b3 = b2 + A; let b4 = b3 + S;
-    if (d < b1) { dn = d * u.lipAt / I; }
-    else if (d < b2) { dn = u.lipAt + (d - b1) * u.lipF / F; }
-    else if (d < b3) { dn = u.lipAt + u.lipF + (d - b2) * u.cvA / A; }
-    else if (d < b4) { dn = u.cvPx - u.cvS + (d - b3) * u.cvS / S; }
-    else { dn = u.cvPx + (d - b4) * (u.cvD - u.cvPx) / (0.7 * max(reach - b4, 1e-3)); }
-  } else {
-    var A = u.cvA * ka; F = (u.cvPx - u.cvA) * kw;
-    if (u.cvFs > 0.0) { F = u.cvFs * reach * kw; }
-    if (A + F > 0.98 * reach) { let k = 0.98 * reach / (A + F); A = A * k; F = F * k; }
-    top = A + F;
-    if (d < A) { dn = d * u.cvA / A; }
-    else if (d < top) { dn = u.cvA + (d - A) * (u.cvPx - u.cvA) / F; }
-    else { dn = u.cvPx + (d - top) * u.cvCap / max(reach - top, 1e-3); }
+// The height lumps: the stroke's height wanders by rough times its two noise fields (nCW, nDet) at the host's weights hgtA and hgtB.
+fn lumps(nCW: f32, nDet: f32) -> f32 { return 1.0 + u.rough * (u.hgtA * nCW + u.hgtB * nDet); }
+// How far a cell lies toward the side the stroke leans (0..1: the cosine between the stroke's bearing and the direction from the stroke to the cell, never
+// below 0). The lean side is a map bearing (bearX, bearY) or, with leanSide, the left (+1) or right (-1) of the drawn direction (none on a point).
+fn leanToward(ddx: f32, ddy: f32, sx: f32, sy: f32, span2: f32) -> f32 {
+  var bx = u.bearX; var by = u.bearY;
+  if (u.leanSide != 0.0) {
+    if (span2 <= 0.0) { return 0.0; }
+    let len = sqrt(span2); bx = u.leanSide * sy / len; by = -u.leanSide * sx / len;
   }
-  sLift = 0.0;
-  if (u.sLip != 0.0) { if (u.lipDir > 0.0) { sLift = u.sLip * lipRim(d - Ic, F); } else { sLift = u.sLip * lipRim(top - d, F); } }
-  let c = terraced(curveAt(u.curveBase, dn / u.cvD), x, y, i, cells);
-  if (u.cvWater == 0u) { return c; }
-  // Water: the bank curve c (1 at the bank top) and the shelf and bed (height under the sea) combine with this cell's ground height above the sea.
-  let hb = base - u.sea; let db = select(7.0, 55.0, u.kind == 2u);
-  if (hb + db < 0.5) { return 0.0; }
-  let w = clamp((hb * (1.0 - c) - curveRaw(u.backBase, dn / u.cvD)) / (hb + db), 0.0, 1.0);
-  // Past the lip's inset on dry ground the bank is below the ground, but at the bank's flat top w rounds to 0 and the stamp would skip the cell and lose the lip.
-  if (u.sLip != 0.0 && w <= 0.0 && d >= Ic && base > u.sea) { return 1e-30; }
-  return w;
+  return max(0.0, (ddx * bx + ddy * by) / max(1e-3, sqrt(ddx * ddx + ddy * ddy)));
 }
 
 // H9: a landform's or water stroke's mask writes, once the node is settled: plane, target, gain, flat per write (maskSetup/paintCell of sculpt.js).
@@ -319,7 +296,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i]; let nShelf = Nz[6u * cells + i];
 #endif
   let radius = u.radius;
-  var best = 0.0; var bw = 0.0; var br = 0.0; var bcore = 0.0; var dist = 3.0e38; var visited = false; var blift = 0.0;
+  var best = -1.0e30; var bc = 0.0; var br = 0.0; var bcore = 0.0; var dist = 3.0e38; var visited = false;
   for (var k = 0u; k < u.nseg; k++) {
     let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -343,10 +320,14 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     let dx = wx - cx + ampK * (u.rotX * ex - u.rotY * ey);
     let dy = wy - cy + ampK * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
-    if (kind == 2u && u.natural != 0u) { width = clamp(1.0 + u.rough * 1.6 * nCW, 0.45, 1.9); }
-    else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
-    var r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
-    if (u.ridge != 0u) { r = r / (s1.x + (s1.y - s1.x) * t); }
+    if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
+    var reach = radius * width * u.bankScale;
+    if (u.ridge != 0u) { reach = reach * (s1.x + (s1.y - s1.x) * t); }
+    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): the reach stretches, or on a kind with a shoulder the face does.
+    var leaned = 1.0;
+    if (!shouldered && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
+    if (kind >= 2u) { reach = reach * leaned; }
+    var r = sqrt(dx * dx + dy * dy) / reach;
     var lobe = 0.0;
     if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
     // Dry bank (bankPx): the dry part of the outline radius, from this cell's waterline out, is stretched to bankPx; reads only the cell's own prefix height.
@@ -360,17 +341,16 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var core = 0.0;
     if (kind == 2u && u.natural != 0u) { core = 1.0 - sm(0.20, u.coreEdge, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / radius); }
     if (r >= 1.0 && core == 0.0 && !shouldered) { continue; }
-    var w = 0.0; var lift = 0.0;
+    // The curve's raw value c: a lip is c above 1 on land or below 0 on water, split off after the loop (w = clamp(c), the rest lifts the value).
+    var c = 0.0;
     if (kind == 0u || kind == 1u) {
       // Plateau-like edge: a broad-scale face-width variation, the north foreshortening term, then the shoulder.
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
-      var north = 0.0;
-      if (u.northWiden > 0.0) { north = max(0.0, -(wy - cy)) / max(1e-3, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy))); }
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.northWiden * 0.32 * north * north, 0.12, 0.90);
-      w = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
+      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW, leaned));
     } else if (kind == 2u || kind == 3u) {
-      if (u.cvPx > 0.0) { w = carried(r, radius * width * u.bankScale, nCW, nShelf, F[PH * cells + i], x, y, i, cells); lift = sLift; } else { w = curveAt(u.curveBase, (1.0 - r) / 0.9); }
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(0.9, reach, nCW, leaned));
     } else if (kind == 5u && shouldered) {
       var face = vec2f(u.faceX, u.faceY);
       if (span2 > 0.0) { let len = sqrt(span2); face = vec2f(-sy / len * u.faceSide, sx / len * u.faceSide); }
@@ -389,28 +369,28 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       if (side2 > vv * vv) {
         let q = 1.0 - vv * vv / side2;
         // The face side reads the front curve over faceWidth, the back side the back curve over sBack (the lean) times that.
-        if (cross >= 0.0) { w = curveAt(u.curveBase, 1.0 - cross / u.faceWidth) * q * q; }
-        else { w = curveAt(u.backBase, 1.0 + cross / (u.sBack * u.faceWidth)) * q * q; }
+        if (cross >= 0.0) { c = curveAt(u.curveBase, 1.0 - cross / u.faceWidth) * q * q; }
+        else { c = curveAt(u.backBase, 1.0 + cross / (u.sBack * u.faceWidth)) * q * q; }
       }
     } else {
-      if (u.cvPx > 0.0) { w = carried(r, radius * width * u.bankScale, nCW, nShelf, 0.0, x, y, i, cells); lift = sLift; } else { w = curveAt(u.curveBase, 1.0 - r); }
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW, leaned));
     }
-    if (!shouldered && u.cvPx == 0.0) { w = terraced(w, x, y, i, cells); }
-    if (u.ridge != 0u) { w = w * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
-    if (kind == 4u || (kind == 5u && !shouldered)) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
-    let influence = max(w, core);
-    if (!shouldered && influence <= best) { continue; }
-    best = influence; bw = w; br = r; bcore = core; blift = lift; visited = true;
+    c = terraced(c, x, y, i, cells);
+    if (u.ridge != 0u) { c = c * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
+    if (kind == 4u || (kind == 5u && !shouldered)) { c = keepLip(c * lumps(nCW, nDet)); }
+    let key = select(max(c, core), c, core == 0.0);
+    if (!shouldered && (key <= best || (c == 0.0 && core == 0.0))) { continue; }
+    best = key; bc = c; br = r; bcore = core; visited = true;
   }
   if (!visited) {
     if (u.settle != 0u) { Sc[i] = 0.0; }
     return;
   }
   if (u.settle != 0u) { Sc[i] = best; return; }
-  let influence = best; let w = bw;
+  let w = clamp(bc, 0.0, 1.0); let ex = bc - w; let influence = max(w, bcore);
   if (u.coPutW != 0u) { Sc[4u * cells + i] = influence; }   // H10: the footprint the coast pass guards its crossings with (CW)
   let base = F[PH * cells + i];
-  var value = base;
+  var value = base; var lift = 0.0;
   let pbase = F[PP * cells + i];
   if (kind == 0u) {
     let f = w * u.amountPct;
@@ -428,24 +408,26 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       maskSet(i, pl, i32(floor(b + (mw.y - b) * w * mw.z + 0.5)));
     }
   } else if (kind == 4u) {
-    value = base + u.amount * w;
-    value = value + baseBump(lx, ly, w);
+    value = base + u.amount * w + baseBump(lx, ly, w);
+    lift = u.amount * ex;
   } else if (kind == 5u) {
-    value = base + u.amount * w;
-    if (u.plain == 0u) { value = base + u.amount * w * (1.0 + u.rough * (0.75 * nCW + 0.30 * nDet)); }
-    value = value + baseBump(lx, ly, w);
+    var mult = 1.0;
+    if (u.plain == 0u) { mult = lumps(nCW, nDet); }
+    value = base + u.amount * w * mult + baseBump(lx, ly, w);
+    lift = u.amount * ex * mult;
   } else {
     var bed = u.sea + select(-7.0, -55.0, kind == 2u);
     if (kind == 2u && u.natural != 0u) { bed = bed + 42.0 * (sm(-0.15, 0.55, nShelf) * sm(0.08, 0.50, br)) * u.shelves; }
     value = base + (bed - base) * w;
+    lift = (bed - base) * ex;   // a water lip is the curve below 0: the ground stands above where it was
     if (kind == 2u && u.natural != 0u && bcore != 0.0) { value = min(value, base + (u.sea - 55.0 - base) * bcore); }
-    if (u.cvPx == 0.0 && u.beachFlat != 0.5 && base > u.sea && base <= u.baseH + 1.0 && value > u.sea) {
+    if (u.beachFlat != 0.5 && base > u.sea && base <= u.baseH + 1.0 && value > u.sea) {
       let above = (value - u.sea) / (base - u.sea);
       value = u.sea + (base - u.sea) * pow(above, exp2((u.beachFlat - 0.5) * 2.4));
     }
     if (kind == 3u && u.passage != 0u) { value = max(base, value); }
   }
-  value = value + blift;
+  value = value + lift;
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   if (kind >= 2u && u.nwrites > 0u && influence > 0.0) { shapeMasks(i, influence); }
   // Routes open where the height changed; protection follows the kind (a cover brush leaves it alone).
@@ -509,14 +491,15 @@ fn compose(@builtin(global_invocation_id) g: vec3u) {
 #endif
   let joined = Sc[2u * cells + i]; let raw = Sc[i];
 #ifdef PAGES
-  let lift = 1.0 + u.rough * (0.75 * nzCell(5u, x, y, i, cells) + 0.30 * nzCell(2u, x, y, i, cells));
+  let lift = lumps(nzCell(5u, x, y, i, cells), nzCell(2u, x, y, i, cells));
 #else
-  let lift = 1.0 + u.rough * (0.75 * Nz[5u * cells + i] + 0.30 * Nz[2u * cells + i]);
+  let lift = lumps(Nz[5u * cells + i], Nz[2u * cells + i]);
 #endif
+  // The weights are the raw curve (a lip passes 1), so the lift carries the excess through the blur; protection and routes read the clipped share.
   F[PH * cells + i] = clamp(F[PH * cells + i] + u.amount * joined * lift, u.minH, u.maxH);
-  if (u.nwrites > 0u && raw > 0.0) { shapeMasks(i, raw); }
-  F[PP * cells + i] = F[PP * cells + i] * (1.0 - joined);
-  F[PR * cells + i] = F[PR * cells + i] * (1.0 - joined);
+  if (u.nwrites > 0u && raw > 0.0) { shapeMasks(i, min(raw, 1.0)); }
+  F[PP * cells + i] = F[PP * cells + i] * (1.0 - min(joined, 1.0));
+  F[PR * cells + i] = F[PR * cells + i] * (1.0 - min(joined, 1.0));
   if (u.crackAmt > 0.0 && raw > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, raw * 1.6) * u.crackAmt); }
 }
 
@@ -637,7 +620,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
   let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i];
 #endif
   let radius = u.radius;
-  var best = 0.0; var visited = false; var blift = 0.0;
+  var best = 0.0; var visited = false;
   for (var k = 0u; k < u.nseg; k++) {
     let s0 = Seg[(u.segBase + k) * 4u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -654,48 +637,43 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     let dx = wx - cx + u.amp * (u.rotX * ex - u.rotY * ey);
     let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
-    if (natural) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
-    var r = sqrt(dx * dx + dy * dy) / (radius * width * u.bankScale);
+    if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
+    var reach = radius * width * u.bankScale;
+    var leaned = 1.0;
+    if (u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
+    if (!natural) { reach = reach * leaned; }
+    var r = sqrt(dx * dx + dy * dy) / reach;
     if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / (width * u.bankScale); }
     if (r >= 1.0) { continue; }
-    var w = 0.0; var lift = 0.0;
-    if (natural && u.cvPx > 0.0) {
-      w = carried(r, radius * width * u.bankScale, nCW, nzF(6u, x, y, i, cells), 0.0, x, y, i, cells); lift = sLift;
-    } else if (natural) {
+    var c = 0.0;
+    if (natural) {
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
-      var north = 0.0;
-      if (u.northWiden > 0.0) { north = max(0.0, -(wy - cy)) / max(1e-3, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy))); }
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.northWiden * 0.32 * north * north, 0.12, 0.90);
-      w = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
-      if (kind == 6u && u.mesaFlank > 0.0) {
-        // The mesa curve is the back table over the cap's share; a fractional mesaFlank blends it with the plateau curve.
-        let cap = shoulder * (1.0 - 0.45 * u.mesaFlank);
-        w = w + (curveAt(u.backBase, (1.0 - r) / (1.0 - cap)) - w) * u.mesaFlank;
-      }
+      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW, leaned));
     } else {
-      w = curveAt(u.curveBase, 1.0 - r);
-      if (kind == 8u) { w = clamp(w * (1.0 + u.rough * 0.09 * nDet), 0.0, 1.0); }
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW, leaned));
+      if (kind == 8u) { c = keepLip(c * lumps(nCW, nDet)); }
     }
-    if (u.cvPx == 0.0) { w = terraced(w, x, y, i, cells); }
-    if (w <= best) { continue; }
-    best = w; blift = lift; visited = true;
+    c = terraced(c, x, y, i, cells);
+    if (c <= best) { continue; }
+    best = c; visited = true;
   }
   if (!visited) { return; }
-  let w = best;
+  let w = clamp(best, 0.0, 1.0); let ex = best - w;
   if (u.coPutW != 0u) { Sc[4u * cells + i] = w; }   // H10: the footprint of an offset that carries shore plates
   let base = F[PH * cells + i];
   let pbase = F[PP * cells + i];
-  var value = base;
-  if (kind == 6u) { value = base + (PT[u.preIdx] + u.amount + u.rough * 3.0 * nDet - base) * w; }
-  else if (kind == 7u) { value = base + u.amount * w; }
-  else if (kind == 8u) { value = base - u.amount * w; }
+  var value = base; var lift = 0.0;
+  if (kind == 6u) { let rise = PT[u.preIdx] + u.amount + u.rough * 3.0 * nDet - base; value = base + rise * w; lift = rise * ex; }
+  else if (kind == 7u) { value = base + u.amount * w; lift = u.amount * ex; }
+  else if (kind == 8u) { value = base - u.amount * w; lift = -u.amount * ex; }
   else if (kind == 9u || kind == 10u) {
     let tv = select(-1.0, 1.0, kind == 9u); let vb = F[PV * cells + i];
     F[PV * cells + i] = vb + (tv - vb) * w * u.amountPct;
   }
   else if (kind == 11u) { value = base + (Sc[2u * cells + i] - base) * w * u.amountPct; }
-  value = value + baseBump(lx, ly, w) + blift;
+  value = value + baseBump(lx, ly, w) + lift;
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   if (u.nwrites > 0u && (kind == 6u || kind == 7u) && w > 0.0) { shapeMasks(i, w); }
   if (kind != 11u && value != base) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }

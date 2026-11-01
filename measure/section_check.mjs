@@ -1,11 +1,13 @@
-// H15: the audit's raised-region measure, on the real engine: each kind's classic curve against its cross-section preset, over the sizes,
-// amounts and softnesses the scenes use. One stroke of three collinear points (the audit's: 240,380,500 at y 330, moved 200 px right onto a 4 x 4 map),
-// ground left flat, roughness and every wobble off. Heights are the authored field, sampled every STEP px. A cell counts when either
-// render is at least one unit from the flat ground (the audit's "raised region").
+// H15: the audit's raised-region measure, on the real engine, in two parts.
+//  1. The default kinds (no curve of their own) against samples saved from the classic path (--against classic-ref.json, one array per case): RMS and max.
+//  2. Each form of sculpt-shape-presets.js against its own knots: a stroke that picks the form draws, with every wobble off, base + amount * knotCurve(t),
+//     t = (1 - d / R) / face, d the distance from the stroke, face .44 (softness .5, no shoulder noise). 140 and 560 px across.
+// One stroke of three collinear points (440,580,700 at y 500) on a 4 x 4 map, ground left flat, roughness and every wobble off. Heights are the authored field,
+// sampled every STEP px. A cell counts when either height is at least one unit from the flat ground (the audit's "raised region").
 //   node measure/section_check.mjs --out DIR [--server http://127.0.0.1:8885] [--port 9685] [--kinds plateau,hill,...] [--against classic-ref.json]
-// --against: the classic path is gone (H15 step B); compare the current engine with the samples step A saved from it (one array per case, keyed as `samples`).
-// Writes DIR/section-check.json (one row per case) and DIR/<kind>.svg (classic against preset along the stroke's cross-section).
+// Writes DIR/section-check.json (one row per case). Without --against only the forms are measured.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
+import {FORMS, FORM_NAMES, knotCurve} from '../sculpt-shape-presets.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
@@ -20,20 +22,11 @@ const KINDS = {
   mountain: {soft: SOFT, amounts: AMOUNTS}, hill: {soft: SOFT, amounts: AMOUNTS},
   hillPlain: {kind: 'hill', extra: {crestJag: .01}, soft: SOFT, amounts: AMOUNTS},
   deep: {soft: SOFT, amounts: AMOUNTS}, shallow: {soft: SOFT, amounts: AMOUNTS},
-  // Strokes that carry the stored section keys (cards in the UI's units), the authored apron, face, crown, shelf, terraces and lip.
-  secPlateau: {kind: 'plateau', extra: {profile: 1, apronPx: 50, apronHeight: 15, facePx: 130}, soft: [.5], amounts: [80, 160]},
-  secShare: {kind: 'plateau', extra: {profile: 1, faceCurve: -50}, soft: [0, .5, 1], amounts: [80]},
-  secConvex: {kind: 'offset', extra: {profile: 1, apronPx: 20, apronHeight: 10, faceCurve: 60}, soft: [.5], amounts: [80]},
-  secTerrace: {kind: 'offset', extra: {profile: 1, apronPx: 40, apronHeight: 15, facePx: 200, terraces: 7, ledge: 40, terraceJitter: 0}, soft: [.6], amounts: [80]},
-  secLip: {kind: 'plateau', extra: {profile: 1, facePx: 90, lip: 6}, soft: [.5], amounts: [80]},
-  secHill: {kind: 'hill', extra: {profile: 1, crown: 70, apronPx: 20, apronHeight: 10, facePx: 90}, soft: [.5], amounts: [70]},
-  secMountain: {kind: 'mountain', extra: {profile: 1, crown: 50, faceCurve: 30, apronPx: 30, apronHeight: 20}, soft: [.5], amounts: [80]},
-  secDeep: {kind: 'deep', extra: {profile: 1, apronPx: 30, apronHeight: 15, facePx: 90, shelfPx: 190, shelfDepth: 8}, soft: [.5], amounts: [80]},
-  secShelf: {kind: 'deep', extra: {profile: 1, facePx: 90, shelfPx: 150, shelfDepth: 12, shelfSteps: 3}, soft: [.5], amounts: [80]},
-  secBank: {kind: 'shallow', extra: {profile: 1, apronPx: 30, facePx: 90, terraces: 3, ledge: 50, terraceJitter: 0, lip: -8}, soft: [.5], amounts: [80]},
 };
 const cases = [];
-for (const [name, d] of Object.entries(KINDS)) { if (only && !only.includes(name)) continue; for (const size of SIZES) for (const amount of d.amounts) for (const soft of d.soft) cases.push({name, kind: d.kind || name, size, amount, soft, extra: d.extra || {}}); }
+if (against) for (const [name, d] of Object.entries(KINDS)) { if (only && !only.includes(name)) continue; for (const size of SIZES) for (const amount of d.amounts) for (const soft of d.soft) cases.push({name, kind: d.kind || name, size, amount, soft, extra: d.extra || {}}); }
+// A form's own check: an offset (base + amount * curve) that picks the form by name, at softness .5 so the face is .44 of the reach.
+for (const form of FORM_NAMES) { if (only && !only.includes('form:' + form)) continue; for (const size of [140, 560]) cases.push({name: 'form:' + form, kind: 'offset', size, amount: 80, soft: .5, extra: {curve: {form}}, form}); }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function run(query) {
   await cdpPortFree(port);
@@ -51,7 +44,7 @@ async function run(query) {
     await send('Page.navigate', {url: `${server}/sculpt?biome=green&mapX=4&mapY=4&scratch=sc${Date.now()}&gpuMB=512&heapMB=1536${query}`}); await ready();
     const res = {};
     for (const c of cases) {
-      const card = {diameter: c.size, amount: c.amount, roughness: 0, softness: Math.round(c.soft * 100), cracks: 0, faceVariation: 0, northFace: 0, mesaFlank: 0, baseVary: 0, baseBump: 0, moonLobes: 0, ...c.extra};
+      const card = {diameter: c.size, amount: c.amount, roughness: 0, softness: Math.round(c.soft * 100), cracks: 0, faceVariation: 0, lean: c.kind === 'plateau' || c.kind === 'offset' ? 100 : 0, baseVary: 0, baseBump: 0, moonLobes: 0, ...c.extra};
       await ev(`sculptDebug.scene(${JSON.stringify([[c.kind, path, {card}]])},{ground:false})`); await ready();
       await ev('sculptCanvas.idle()');
       res[JSON.stringify([c.name, c.size, c.amount, c.soft])] = await ev(`(() => { const o = []; for (let y = 0; y < ${H}; y += ${STEP}) for (let x = 0; x < ${W}; x += ${STEP}) o.push(sculptDebug.corner(x, y + ${Y0}).authored); return o; })()`);
@@ -60,13 +53,25 @@ async function run(query) {
   } finally { chrome.kill(); }
 }
 mkdirSync(out, {recursive: true});
-const classic = against ? {res: JSON.parse(readFileSync(against, 'utf8')), logs: []} : await run(''), preset = await run(against ? '' : '&shapePresets');
-const rows = [];
+const cur = await run(''), ref = against ? JSON.parse(readFileSync(against, 'utf8')) : {};
+const rows = [], dump = {};
 for (const c of cases) {
-  const key = JSON.stringify([c.name, c.size, c.amount, c.soft]), a = classic.res[key], b = preset.res[key];
-  const ground = [...a].sort((x, y) => x - y)[a.length >> 1]; let s = 0, n = 0, mx = 0;
+  const key = JSON.stringify([c.name, c.size, c.amount, c.soft]), b = cur.res[key];
+  let a = ref[key], ground;
+  if (c.form) {
+    // The form against its knots: the distance to the stroke's capsule (a horizontal line at YC from 440 to 700), then the curve over the face share.
+    // The page samples the node lattice bilinearly (spacing (world - 1) / (grid - 1) of the 4 x 4 map), so the reference does too.
+    const f = knotCurve(FORMS[c.form](c.soft).knots), R = c.size / 2, face = .44, base = b[0], SP = (4 * 1024 - 1) / (4 * 512 - 1); ground = base; a = [];
+    const node = (i, j) => { const x = i * SP, d = Math.hypot(Math.max(440 - x, 0, x - 700), j * SP - YC); return base + c.amount * f(Math.max(0, 1 - d / R) / face); };
+    for (let y = 0; y < H; y += STEP) for (let x = 0; x < W; x += STEP) {
+      const X = x / SP, Y = (y + Y0) / SP, i = Math.floor(X), j = Math.floor(Y), fx = X - i, fy = Y - j;
+      a.push((node(i, j) * (1 - fx) + node(i + 1, j) * fx) * (1 - fy) + (node(i, j + 1) * (1 - fx) + node(i + 1, j + 1) * fx) * fy);
+    }
+    dump[c.name + c.size] = {expected: a, engine: b};
+  } else ground = [...a].sort((x, y) => x - y)[a.length >> 1];
+  let s = 0, n = 0, mx = 0;
   for (let i = 0; i < a.length; i++) { if (Math.abs(a[i] - ground) < 1 && Math.abs(b[i] - ground) < 1) continue; const d = a[i] - b[i]; s += d * d; n++; mx = Math.max(mx, Math.abs(d)); }
   rows.push({kind: c.name, size: c.size, amount: c.amount, softness: c.soft, cells: n, rms: n ? Math.sqrt(s / n) : 0, max: mx});
 }
-writeFileSync(`${out}/section-check.json`, JSON.stringify({rows, console: [...classic.logs, ...preset.logs].slice(0, 10), samples: against ? {} : Object.fromEntries(Object.entries(classic.res).map(([k, v]) => [k, {classic: v, preset: preset.res[k]}]))}));
-for (const kind of Object.keys(KINDS)) { const r = rows.filter(x => x.kind === kind); if (!r.length) continue; console.log(kind.padEnd(10), 'RMS', Math.min(...r.map(x => x.rms)).toFixed(2), '-', Math.max(...r.map(x => x.rms)).toFixed(2), ' max', Math.max(...r.map(x => x.max)).toFixed(2), ' cases', r.length); }
+writeFileSync(`${out}/section-check.json`, JSON.stringify({rows, console: cur.logs.slice(0, 10), samples: dump}));
+for (const kind of [...new Set(rows.map(r => r.kind))]) { const r = rows.filter(x => x.kind === kind); console.log(kind.padEnd(14), 'RMS', Math.min(...r.map(x => x.rms)).toFixed(2), '-', Math.max(...r.map(x => x.rms)).toFixed(2), ' max', Math.max(...r.map(x => x.max)).toFixed(2), ' cases', r.length); }

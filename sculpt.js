@@ -1,7 +1,7 @@
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
 import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {carriesSection,sectionPreview,SECTION_KINDS} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -52,7 +52,7 @@ let revision=0, autosaveTimer, ready=false;
 const TOOL_PRESETS={
   green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,apronPx:80,apronHeight:25,facePx:130,faceCurve:0},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,facePx:210,curve:{form:'mesa'}},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks.
@@ -79,7 +79,7 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
-const SECTION_KEYS=['apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
+const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -110,8 +110,11 @@ const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
   ['craterEjecta','crater-ejecta','Ejecta',['crater'],0,100,5,100,'Ragged patches of throw-out beyond the rim.'],
   ['faceVariation','face-variation','Face width variation',['plateau','offset','erase',...SECTION_KINDS.slice(2)],0,150,5,100,'How much the edge face widens and narrows along the outline (on a carried cross-section, every width of it).'],
-  ['mesaFlank','mesa-flank','Mesa flanks',['plateau'],0,100,5,100,'A narrower cap with a sharp edge and wide, even flanks to a concave foot (Painted Desert mesas).'],
-  ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
+  ['lean','lean','Lean (back length over face; 0: the shape\'s own)',SECTION_KINDS,0,400,5,100,'How much longer the slope toward the lean side runs than the one away from it (100: the same both sides). 0 keeps what the shape does on its own: a hill\'s long back, a plateau\'s wider faces toward north, no lean on the rest.'],
+  ['outlineVar','outline-var','Outline wander',SECTION_KINDS,0,200,5,100,'How far the outline strays from the line you drew, as a share of what roughness gives this kind (100: as it is; 0: a clean outline).'],
+  ['widthVar','width-var','Width variation',['plateau','offset','deep'],0,200,5,100,'How much the shape widens and narrows along its outline, as a share of what roughness gives it (100: as it is; 0: an even width).'],
+  ['heightVar','height-var','Height lumps',['hill','mountain'],0,200,5,100,'How much the height wanders along the shape, as a share of what roughness gives it (100: as it is; 0: an even crest).'],
+  ['facing','facing','Lean toward',SECTION_KINDS,0,10,1,1,'The side the shape leans toward, the long gentle slope: a map direction or a side of the line you draw (a ridge\'s steep face is the opposite side).',FACING_CHOICES],
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
   ['bankPx','bank-px','Dry bank (px)',['deep','shallow'],0,160,2,1,'Width of the dry bank from the waterline to the level ground, whatever the shape\'s size (0: a share of the shape, set by Bank width).'],
   // Card E4 (Lava): fingers and terraces cut into the joined coast once the stroke is swept (stampCoastShore).
@@ -121,18 +124,10 @@ const SHAPE_FIELDS=[
   ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
   ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighbouring risers meet and part and no two layers run parallel for long.'],
   ['layerStyle','layer-style','Layer style',['deep','shallow'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2).',[[0,'Contour'],[1,'Circular']]],
-  ['apronPx','sec-apron-px','Apron width (px)',SECTION_KINDS,0,160,2,1,'A gentle concave skirt at the foot (talus, desert aprons; on water, the beach at the waterline).'],
-  ['apronHeight','sec-apron-height','Apron height',SECTION_KINDS,0,60,5,100,'Share of the whole rise (of the bank, on water) reached at the apron\'s top.'],
-  ['facePx','sec-face-px','Face width (px)',SECTION_KINDS,0,240,2,1,'Width of the steep face above the apron (0: a share of the brush set by Slope softness; on water, from Dry bank).'],
-  ['faceCurve','sec-face-curve','Face curve (− concave, + convex)',SECTION_KINDS,-100,100,5,100,'Concave: a soft foot and a crisp top edge. Convex: a crisp foot and a rounded shoulder.'],
+  ['facePx','sec-face-px','Face width (px)',SECTION_KINDS,0,400,2,1,'Width of the whole curve, foot to top, kept the same whatever the brush size (0: a share of the brush set by Slope softness).'],
   ['terraces','sec-terraces','Terraces',SECTION_KINDS,0,8,1,1,'Cut the face into this many flat ledges with risers between them.'],
   ['ledge','sec-ledge','Ledge (flat share of a step)',SECTION_KINDS,0,90,5,100,'How much of each step is flat; the rest is the riser.'],
   ['terraceJitter','sec-terrace-jitter','Terrace variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
-  ['lip','sec-lip','Lip (units; − rounds the edge)',SECTION_KINDS,-30,30,1,1,'A raised rim at the top of the face; a negative value rounds the edge off.'],
-  ['crown','sec-crown','Crown roundness',['hill','mountain'],0,100,5,100,'The cap above the face: 0 is a point (or flat, with a short Face width); 100 a wide rounded dome.'],
-  ['shelfPx','sec-shelf-px','Shelf width (px)',['deep','shallow'],0,200,2,1,'A submerged shelf between the waterline and the drop to the bed.'],
-  ['shelfDepth','sec-shelf-depth','Shelf depth (units below sea)',['deep','shallow'],0,30,1,1,'How far below the sea the shelf lies (never deeper than the bed).'],
-  ['shelfSteps','sec-shelf-steps','Shelf steps',['deep','shallow'],0,6,1,1,'0: one sloping bench; more: layered flat shelves, one below another.'],
   ['spurCount','spur-count','Spurs',['hill','mountain','crater'],0,12,1,1,'Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape\'s own seed. Each joins its parent at the crest.'],
   ['spurLength','spur-length','Spur length (px)',['hill','mountain','crater'],20,400,10,1,'Average reach of a spur; each runs from about half to one and a half times this.'],
   ['spurSpread','spur-spread','Spur angle spread',['hill','mountain','crater'],0,100,5,100,'0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding.'],
@@ -255,10 +250,17 @@ function buildShapeOptions() {
     wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"${choices?' hidden':''}></output></label>${input}<p class="small">${help}</p>`;
     return wrap;
   }));
-  // The cross-section preview sits right under its switch (card C1).
+  // The curve editor sits above the face width (H15 part 2, step C): a form to pick, the curve's knots to drag, and the lean.
   const preview=document.createElement('div'); preview.className='control'; preview.id='section-preview-control'; preview.hidden=true;
-  preview.innerHTML='<canvas id="section-preview" width="222" height="84" style="width:100%;background:#172119;border:1px solid #465344;border-radius:4px"></canvas><p class="small">Cross-section, foot to cap (water: bank top to bed), before the outline noise.</p>';
-  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='apronPx')].after(preview);
+  const cvStyle='width:100%;background:#172119;border:1px solid #465344;border-radius:4px;touch-action:none;display:block;margin-top:4px';
+  preview.innerHTML=`<label for="curve-form">Curve</label><select id="curve-form" style="width:100%"><option value="">The shape\'s own</option>${FORM_NAMES.map(f => `<option value="${f}">${f[0].toUpperCase()+f.slice(1)}</option>`).join('')}</select>`+
+    `<canvas id="section-preview" width="222" height="120" style="${cvStyle};cursor:crosshair"></canvas><canvas id="section-across" width="222" height="44" style="${cvStyle}"></canvas>`+
+    `<div style="display:flex;gap:6px;margin-top:4px;align-items:center"><button type="button" id="curve-reset" style="flex:none">Reset to the form</button><span class="small" id="curve-lean" style="flex:1"></span></div>`+
+    '<p class="small">Height share against distance share, foot to top. Drag a knot; click the line to add one; double-click a knot (or Shift-click) to remove it. A knot above 1 makes a lip (on water, below 0).</p>';
+  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='facePx')].before(preview);
+  $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
+  $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
+  curveEditorEvents();
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -381,10 +383,9 @@ function updateControls() {
   const shapeOptions=Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)]));
   const gated=key => !shapeControlAvailable(key,tool,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
-  const carries=carriesSection(tool,shapeOptions);
-  if(carries){$('beach-control').hidden=true;if(shapeOptions.facePx>0)$('softness-control').hidden=true;}
-  if(shapeOptions.bankPx>0)$('bank-control').hidden=true;
-  $('section-preview-control').hidden=!carries;
+  if(SECTION_KINDS.includes(tool) && !shapeControlAvailable('softness',tool,{...shapeOptions,curve:currentCurve()}))$('softness-control').hidden=true;
+  if(shapeOptions.bankPx>0 && !(shapeOptions.facePx>0))$('bank-control').hidden=true;
+  $('section-preview-control').hidden=!SECTION_KINDS.includes(tool);
   if (!$('section-preview-control').hidden) drawSection();
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
@@ -429,25 +430,78 @@ const about=(pivot,m) => compose([1,0,0,1,pivot.x,pivot.y],compose(m,[1,0,0,1,-p
 const rotation=a => [Math.cos(a),Math.sin(a),-Math.sin(a),Math.cos(a),0,0];
 const scaling=k => [k,0,0,k,0,0];
 const isIdentity=m => !m || m.every((v,i) => Math.abs(v-IDENTITY[i])<1e-9);
-// The cross-section preview: the carried section (sculpt-shape-presets.js sectionPreview) from foot to cap, before the outline noise.
+// The curve editor (H15 part 2, step C). The curve a stroke carries is {form, knots?}: the form alone follows softness, knots (once one is dragged) are what
+// saves. The preview draws the real table (sculpt-shape-presets.js sectionPreview), foot to top, before the outline noise.
+const CV_LO=-.6,CV_HI=1.6,CV_PAD=9;
+const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].kind : tool;
+const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.curve : toolSettings[tool]?.curve) || null;
+function curveContext() {
+  const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),shouldered=isShouldered(kind,o,ridgeOn(kind,o));
+  return {kind,shouldered,water:kind==='deep' || kind==='shallow',q:{...o,radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve()}};
+}
+// Hand the curve to the shape being edited (or to the brush, for the next stroke); null goes back to the kind's own form.
+function setCurve(curve) {
+  if (selected>=0 && nodes[selected]?.params) {
+    const n=nodes[selected],p={...n.params}; if (curve) p.curve=curve; else delete p.curve; n.params=p;
+    updateControls(); editSelectedFromControls(); persistLater(); return;
+  }
+  const t={...toolSettings[tool],preset:'custom'}; if (curve) t.curve=curve; else delete t.curve; toolSettings[tool]=t;
+  updateControls(); schedule(); persistLater();
+}
+const cvXY=(x,v,W,H) => [CV_PAD+(W-2*CV_PAD)*x,H-CV_PAD-(H-2*CV_PAD)*(v-CV_LO)/(CV_HI-CV_LO)];
 function drawSection() {
-  const cv=$('section-preview'),g=cv.getContext('2d'),W=cv.width,H=cv.height,kind=tool;
+  const cv=$('section-preview'),g=cv.getContext('2d'),W=cv.width,H=cv.height,c=curveContext(),{water,ys,knots}=sectionPreview(c.kind,c.q,c.shouldered),n=ys.length-1;
   g.clearRect(0,0,W,H);
-  const probe={...shapeDefaults(),softness:Number($('softness').value)/100,amount:Number($('amount').value),faceVariation:0,bankPx:shapeValue('bankPx'),...Object.fromEntries(SECTION_KEYS.map(k => [k,shapeValue(k)]))};
-  const radius=Number($('diameter').value)/2,bankScale=2**((Number($('bank-width').value)/100-.5)*1.3),sea=config.seaLevel,top=config.baseHeight,amount=probe.amount;
-  const prev=sectionPreview(kind,probe,{radius,bankScale,sea,baseH:top});
-  if (!prev) return;
-  const {water,ys,bed}=prev,n=ys.length-1;
-  let lo=Math.min(...ys),hi=Math.max(...ys);
-  if (water) { lo=Math.min(lo,bed); hi=Math.max(hi,top); } else { lo=Math.min(lo,0); hi=Math.max(hi,amount); }
-  const pad=8,X=k => pad+(W-2*pad)*k/n,Y=v => H-pad-(H-2*pad)*(v-lo)/Math.max(hi-lo,1);
-  g.strokeStyle='#465344'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(pad,Y(water?sea:0)); g.lineTo(W-pad,Y(water?sea:0)); g.stroke(); g.setLineDash([]);
-  g.beginPath(); g.moveTo(X(0),H-pad);
-  for (let k=0;k<=n;k++) g.lineTo(X(k),Y(ys[k]));
-  g.lineTo(X(n),H-pad); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
-  g.beginPath(); for (let k=0;k<=n;k++) g[k?'lineTo':'moveTo'](X(k),Y(ys[k]));
+  g.strokeStyle='#465344'; g.setLineDash([3,3]); for (const v of [0,1]) { const [,y]=cvXY(0,v,W,H); g.beginPath(); g.moveTo(CV_PAD,y); g.lineTo(W-CV_PAD,y); g.stroke(); } g.setLineDash([]);
+  const [,y0]=cvXY(0,0,W,H); g.beginPath(); g.moveTo(CV_PAD,y0);
+  for (let k=0;k<=n;k++) g.lineTo(...cvXY(k/n,ys[k],W,H));
+  g.lineTo(W-CV_PAD,y0); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
+  g.beginPath(); for (let k=0;k<=n;k++) g[k?'lineTo':'moveTo'](...cvXY(k/n,ys[k],W,H));
   g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
-  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(water?'bank top':'foot',pad,10); g.textAlign='right'; g.fillText(water?'bed':'cap',W-pad,10); g.textAlign='left';
+  // The handles: the stroke's own knots, or its form's (a power law or a smoothstep shows nine, which a drag then makes its own).
+  g.fillStyle=c.q.curve?.knots?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [x,v] of (c.q.curve?.knots||knots.length<=12?knots:thinKnots(knots))) { g.beginPath(); g.arc(...cvXY(x,v,W,H),3.5,0,7); g.fill(); }
+  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(water?'ground':'foot',CV_PAD,10); g.textAlign='right'; g.fillText(water?'bed':'top',W-CV_PAD,10); g.textAlign='left';
+  $('curve-form').value=c.q.curve?.form||''; $('curve-reset').disabled=!c.q.curve?.knots;
+  // Lean: the whole cross-section, the long slope toward the lean side on the left (its back curve where the shape has one).
+  const ratio=leanRatio(c.kind,c.q,c.shouldered),across=$('section-across'),a=across.getContext('2d'),AW=across.width,AH=across.height,{back}=sectionPreview(c.kind,c.q,c.shouldered);
+  const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
+  $('curve-lean').textContent=`Lean ${(Math.round(ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
+  across.hidden=c.water; a.clearRect(0,0,AW,AH);
+  if (!c.water) {
+    const total=ratio+1,X=t => CV_PAD+(AW-2*CV_PAD)*t/total,Y=v => AH-6-(AH-12)*Math.min(Math.max(v,0),1.5)/1.5;
+    a.beginPath(); a.moveTo(X(0),Y(0));
+    for (let k=0;k<=n;k++) a.lineTo(X(ratio*(1-k/n)),Y(back[k]));
+    for (let k=n;k>=0;k--) a.lineTo(X(ratio+(1-k/n)),Y(ys[k]));
+    a.lineTo(X(total),Y(0)); a.closePath(); a.fillStyle='rgba(180,213,137,.25)'; a.fill(); a.strokeStyle='#b4d589'; a.stroke();
+  }
+}
+function curveEditorEvents() {
+  const cv=$('section-preview'); let drag=-1;
+  const at=e => { const r=cv.getBoundingClientRect(),W=cv.width,H=cv.height,px=(e.clientX-r.left)*W/r.width,py=(e.clientY-r.top)*H/r.height; return {px,py,x:clamp((px-CV_PAD)/(W-2*CV_PAD),0,1),v:CV_LO+(CV_HI-CV_LO)*(H-CV_PAD-py)/(H-2*CV_PAD)}; };
+  // The knots to edit: the stroke's own, or its form's (thinned when the form samples a power law or a smoothstep finely).
+  const knotsNow=() => { const c=curveContext(),k=strokeKnots(c.kind,c.q,c.shouldered).knots; return {c,knots:(c.q.curve?.knots||k.length<=12?k:thinKnots(k)).map(p => [...p])}; };
+  const store=(c,knots) => setCurve({form:c.q.curve?.form||defaultForm(c.kind,c.shouldered),knots:knots.map(([x,v]) => [Math.round(x*1000)/1000,Math.round(v*1000)/1000])});
+  const hit=(knots,p) => { let best=-1,d=8; knots.forEach(([x,v],i) => { const [kx,ky]=cvXY(x,v,cv.width,cv.height),dd=Math.hypot(kx-p.px,ky-p.py); if (dd<d) { d=dd; best=i; } }); return best; };
+  const remove=(c,knots,i) => { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(c,knots); return true; } return false; };
+  cv.addEventListener('contextmenu',e => e.preventDefault());
+  cv.addEventListener('pointerdown',e => {
+    const p=at(e),{c,knots}=knotsNow(),i=hit(knots,p); if (e.button===2) return;
+    if (i>=0 && e.shiftKey) { if (remove(c,knots,i) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if (i>=0) { drag=i; } else {
+      const x=clamp(p.x,.01,.99); let j=knots.findIndex(k => k[0]>x); if (j<0) j=knots.length-1;
+      knots.splice(j,0,[x,clamp(p.v,c.water?-.5:0,1.5)]); drag=j; store(c,knots);
+    }
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove',e => {
+    if (drag<0) return;
+    const p=at(e),{c,knots}=knotsNow(),k=knots[drag];
+    if (drag>0 && drag<knots.length-1) k[0]=clamp(p.x,knots[drag-1][0]+.01,knots[drag+1][0]-.01);
+    k[1]=clamp(p.v,c.water?-.5:0,1.5); store(c,knots);
+  });
+  const finish=() => { if (drag>=0) { drag=-1; if (selected>=0) { checkpoint(); queueWeather(); } } };
+  cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
+  cv.addEventListener('dblclick',e => { const p=at(e),{c,knots}=knotsNow(),i=hit(knots,p); if (i>=0 && remove(c,knots,i) && selected>=0) { checkpoint(); queueWeather(); } });
 }
 // Line features (card C4). A ridge (a hill or mountain with spurs or crest
 // options) is swept as short pieces, each with width and height multipliers at
@@ -486,7 +540,7 @@ function markChanged() { markViewChanged(false); error(); }
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const NODE_NAMES={crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,northFace:s.northFace,mesaFlank:s.mesaFlank,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,outlineVar:s.outlineVar,widthVar:s.widthVar,heightVar:s.heightVar,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),curve:s.curve,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
 const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);
@@ -553,7 +607,7 @@ function regionalStages(list=nodes) {
 function regionalReadApron(n) {
   if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
   const q={...shapeDefaults(),...n.params},bank=2**(((q.bankWidth??.5)-.5)*1.3);
-  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):n.kind==='hill' && !carriesSection(n.kind,q) && !ridgeOn(n.kind,q)?4:0;
+  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):isShouldered(n.kind,q,ridgeOn(n.kind,q))?4:0;
   // A framed finger cache is keyed on authoring cells; include every world
   // cell that can share that key. Radial thumbs can share a coastal key from
   // both sides of the radial band, so their first-call order needs that band.
@@ -615,7 +669,7 @@ function makeRegionalFields() {
 // field snapshot or world-sized noise array in map mode.
 function currentStrokeOptions() {
   applySeedControl();
-  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)]))};
+  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{})};
 }
 function regionalPoints(points) {
   if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
@@ -1051,7 +1105,7 @@ function scriptedScene(list,{ground=true}={}) {
   list.forEach(([kind,points,options={}],i) => {
     const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
-      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),seed:(seed+i*7919)>>>0};
+      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
   });
@@ -1599,7 +1653,7 @@ async function gpuRegionalCheck() {
     return {grid:G,planes,mismatches,gpuShape:true};
   } finally { engine.destroy(); }
 }
-window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
+window.sculptDebug = {curve:() => currentCurve(),pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),
