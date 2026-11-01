@@ -379,7 +379,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const documentData=data.document??data.metadata??data;
     if(documentData.biome!==config.biomeId||documentData.map?.unitsX!==map.unitsX||documentData.map?.unitsY!==map.unitsY||documentData.seaLevel!==config.seaLevel)throw new Error('Open a canvas with the document’s world, dimensions and sea level before loading it.');
     const sketch=documentData.sketch;
-    await api.loadSketch(sketch);api.restoreMapData(documentData.mapData);api.checkpoint();docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
+    if(await api.loadSketch(sketch,id)===false)return;api.restoreMapData(documentData.mapData);api.checkpoint();docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
     }finally{documentLoading=false;updateDocumentControls();}
   }
   function queueSave(){clearTimeout(saveTimer);if(gesture||busy||documentLoading)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}

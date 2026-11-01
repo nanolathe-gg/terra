@@ -223,3 +223,7 @@ kbd{font:9px system-ui;color:var(--muted);margin-left:4px}
 .control-requirement { margin-top:4px; font-size:11px; line-height:1.35; color:#b6adb5; }
 .control-search .fine-controls { display:flex; align-items:center; gap:6px; font-size:12px; margin-top:8px; }
 .control-search .fine-controls input { width:auto; }
+#column-panel h4{margin:12px 0 6px;font-size:12px;color:#d4e5dd}.column-section>label,.column-options label{display:block;font-size:11px;color:var(--muted)}
+.column-section input,.column-options input,.column-options select{display:block;width:100%;min-width:0;margin-top:4px}.column-section>label input{width:100px}
+.column-section table{width:100%;table-layout:fixed;border-collapse:collapse;margin-top:8px}.column-section th{text-align:left;font-size:10px;color:var(--muted);font-weight:500}.column-section td{padding:3px 4px 3px 0}.column-section td input,.column-section td select{width:100%;min-width:0;margin:0;padding:5px}
+.column-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.column-options input[type=color]{height:28px}.column-body input:invalid{border-color:#d58f85}

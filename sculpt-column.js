@@ -17,3 +17,29 @@ export function columnRows(column, variant) {
   if (beds.length > COLUMN_BEDS || starts.length > COLUMN_SECTIONS) throw new Error('nanolathe: a rock column is too large for its uniforms');
   return {beds, starts, bands};
 }
+
+// A map edits the world's existing table, never its shape or uniform capacity. Validate before touching the open map.
+export function copyColumn(value, template) {
+  if (value == null) return null;
+  const fail = () => { throw new Error('Invalid rock column: keep the existing rows, finite values, positive thicknesses and ordered starts.'); };
+  function shape(v, t) {
+    if (typeof t === 'number') { if (typeof v !== 'number' || !Number.isFinite(Math.fround(v))) fail(); }
+    else if (typeof t === 'string') { if (!['plain', 'sea'].includes(v)) fail(); }
+    else if (Array.isArray(t)) { if (!Array.isArray(v) || v.length !== t.length) fail(); return t.map((x, i) => shape(v[i], x)); }
+    else { if (!t || !v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).length !== Object.keys(t).length) fail(); return Object.fromEntries(Object.keys(t).map(k=>{if(!Object.hasOwn(v,k))fail();return [k,shape(v[k],t[k])];})); }
+    return v;
+  }
+  value=shape(value, template);
+  const slots = value.colors?.length || 5;
+  for (const row of [value, ...Object.values(value.variants || {})]) {
+    if (row.bands && (!(Math.fround(row.bands[0]) > 0) || row.bands[1] < 0 || row.bands[1] > 1)) fail();
+    for (const [i, s] of (row.sections || []).entries()) {
+      if (i && Math.fround(s.start) <= Math.fround(row.sections[i - 1].start)) fail();
+      for (const [thickness, hardness, slot] of s.beds) if (!(Math.fround(thickness) > 0) || hardness < 0 || hardness > 1 || !Number.isInteger(slot) || slot < 0 || slot >= slots) fail();
+    }
+    const rows=columnRows(value, Object.entries(value.variants || {}).find(([, v]) => v === row)?.[0]);
+    if(rows.starts.some(s=>!Number.isFinite(Math.fround(s[3])) || !(Math.fround(s[3])>0)))fail();
+  }
+  if (value.colors?.some(c => c.some(v => v < 0 || v > 255))) fail();
+  return value;
+}
