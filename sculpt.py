@@ -218,7 +218,8 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 # Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
 # scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
 # H17: terraceBreak 1.4 -> 0. Its phase wander broke green-2's slope into a dense blotchy mass; at 0 the band lines follow
-# the contours as retail's flowing lines do (viewed at 1x; green-1 and green-3 do not change).
+# the contours as retail's flowing lines do (viewed at 1x; green-1 and green-3 do not change). banding .8 -> .5 (WORLD_KNOBS)
+# lightens and thins those lines toward retail's soft dashes.
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
@@ -233,7 +234,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
-    'green': dict(banding=.8, crackDark=.4,
+    'green': dict(banding=.5, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
