@@ -7442,6 +7442,25 @@ grey shoulders still read as short wormy marks in ours.
 
 **Part 3: the marks toward retail, then the count.** Written from part 2's report. Targets, in order, viewed: green-2's band, green-1's rim, green-3's ridge, red-1's and red-2's marks, ice-1's and ice-3's fibres, moon-2 if moon-1 and moon-3 do not read further. By world values and shared code, no new knob. The count is lines and the consolidated list for combine-or-drop; nothing is deleted.
 
+**Step 1 (part 3): what draws each mark.** Each scene rendered with one family off by query, the target cropped at 2x (`$R/agent-H17/sheets3/s1-g2-a`, `s5-rock`, `s8-g1`, `s11-red-*`, `s12-ice1`, `s13-ice1`, `s15-moon-2`; renders in `$R/agent-H17/p3`).
+
+| Target | The mark that reads wrong | What draws it (switch off, and what is left) |
+| --- | --- | --- |
+| green-2 slope | dense blotchy worm texture where retail has fine contour lines | **Bands** (`banding` 0 leaves smooth grass), shaped by `terraceBreak` 1.4 (its phase wander) and `bandJag`. `crackSeverity` 0, `hillBlocks` 0, `slopeTexture`/`microRock` 0, `facetTilt`/`blocks`/`cliffFine` 0 and `faceStreak` 0 each leave it unchanged. Not a crack network. |
+| green-2 rock band | vertical gullies, speckled light grey, dripping lower edge | The speckle is **blocks** (`blocks` 0 leaves long horizontal beds under it); gullies, scratches, facets, cracks, `faceStreak` and `bedHeight` 0 change little. The dripping lower edge is the painted rock mask (the shape), not a fracture family. |
+| green-1 rim, green-3 ridge | short marks scattered over the slope | Thin dark curvy lines are `cracks()` (gone at `crackSeverity` 0); the short vertical streaks are the hill's relief ribs. `hillBlocks`, `banding`, facets and `faceStreak` 0 change nothing visible. |
+| red-1, red-2 | red-1 marks run down the fall; red-2 has no mud polygons | `cracks()` is the only family, and it draws almost nothing: `crackSeverity` 0 vs .3 is not seen at 1x. Retail's polygons are on level ground, where `cracks()` is gated off by slope. |
+| ice-1, ice-3 | branching worm cracks (retail: dense dark fibres) | In ours the cracks are nearly invisible (`crackSeverity` 0 differs little); the thin parallel blue strokes are drawn by the shape stage (Shape's), not by a groove. `rockOrder` 1 with scratches draws nothing on Ice. |
+| moon-2 | no fissures | `crackSeverity` is 0; at .35 with majors and minors .5 it still draws no fissure at 1x. |
+
+**Part 3, targets (every window below was viewed at 1x and at 2x on a sheet).**
+- *green-2 slope: kept, `terraceBreak` 1.4 -> 0 (Green's engine).* Try 1 (one idea: the phase wander of the bands). 0 turns the blotchy mass into flowing contour lines, as retail's; .5 sits in between and is still blotchy. `bandJag` 0, `bandSoftness` 1 and `terraceCalm` 1 were also viewed (further: smooth or patchy). green-1 and green-3 were rendered with it and look the same. Closer at 1x; the lines are still bolder and wider-spaced than retail's fine dashes (`bandSpacing` is the column's and cannot be set by query).
+- *green-2 rock band: did not move.* Three tries (`blocks` 0; `blockTilt` .4 + `blockStep` 1.5; `blockTilt` .4 + `blockSeam` 1.2 + `gullyDepth` 2): none read closer to retail's dark level beds. What it would take: a bed-aligned block cell and a harder bottom edge in the rock mask (shape, out of scope).
+- *green-1 rim and green-3 ridge: did not move.* Three tries (`crackJagged` 0; plus `crackLength` 4; plus `crackMajor` 1, `crackMinor` .2, `crackNetwork` 0): at 2x the lines are longer and straighter, at 1x they do not show (decision 11: dropped). Retail's fissures come in discrete patches with grey shoulders; that needs a patch gate on the lines.
+- *red-1 and red-2: did not move.* Three tries (`crackSpacing` 16 + `crackNetwork` 1, Crystal's; plus `crackSeverity` .6 and `crackWidth` 1; `crackSeverity` 0 as the control): nothing is drawn on red-2's ground either way. Needs `cracks()` to draw on level ground.
+- *ice-1 and ice-3: did not move.* Three tries on ice-1 (scratches through `rockOrder` 1; a stronger scratch set; dense dark cracks): the scratches draw nothing on Ice, the dense cracks add blobs, not fibres. ice-3 was not rendered. Needs the structured face to run on ice, which is a gate, not a value.
+- *moon-2: did not move.* One try (`crackSeverity` .35, majors and minors .5): no fissure at 1x. moon-1 and moon-3 were rendered and not viewed.
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
 
 ## After the cards
