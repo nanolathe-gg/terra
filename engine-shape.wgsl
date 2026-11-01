@@ -1328,9 +1328,16 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
   if (u.plMat == 1u) {
     let L = max(8.0, u.plSize * clamp(u.plScale, 0.1, 1.0)); let seam = max(u.spacing * 0.5, max(0.0, u.plGap) * 0.5);
     let k = plCells(lx, ly, L, 0x481u, 0x287u, 0.4);
-    let keep = plHalf(k.bi, k.bj, 0x721u); let shade = 0.8 + 0.2 * plHalf(k.bi, k.bj, 0x3b9u); let lift = plHalf(k.bi, k.bj, 0x6d3u);
+    let keep = plHalf(k.bi, k.bj, 0x721u); var shade = 0.8 + 0.2 * plHalf(k.bi, k.bj, 0x3b9u); let lift = plHalf(k.bi, k.bj, 0x6d3u);
     if (keep > 1.0 - sm(0.2, 1.0, d / width)) { return; }
-    let edge = (k.d2 - k.d1) / (2.0 * max(1.0, length(k.b - k.n))) * scale + vnoise(lx / 6.0, ly / 6.0, u.seed ^ 0x317u) * 0.5;
+    let wob = vnoise(lx / 6.0, ly / 6.0, u.seed ^ 0x317u) * 0.5;
+    var edge = (k.d2 - k.d1) / (2.0 * max(1.0, length(k.b - k.n))) * scale + wob;
+    // H20b: a plate whose centre reads low in a slow noise breaks into a mesh of cells 0.4 of L; its own outline is kept as the nearer seam.
+    if (u.plVary > 0.0 && 0.5 + 0.5 * vnoise(k.b.x / (L * 4.0), k.b.y / (L * 4.0), u.seed ^ 0x5d1u) < u.plVary) {
+      let f = plCells(lx, ly, L * 0.4, 0x6a9u, 0x2e3u, 0.4);
+      edge = min(edge, (f.d2 - f.d1) / (2.0 * max(1.0, length(f.b - f.n))) * scale + wob);
+      shade = 0.8 + 0.2 * plHalf(f.bi, f.bj, 0x1f5u);
+    }
     let seamed = edge < seam;
     F[px] = select(shade, u.plSeam, seamed); F[pp] = 1.0;
     if (wet) { F[ph] = clamp(max(raw, sea - 3.2 + lift), u.minH, u.maxH); }

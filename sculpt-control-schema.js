@@ -24,7 +24,7 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
  iceSlate:'Slate faces',iceCrystal:'Straight face fibres',iceCrest:'Cap lumps',iceSoft:'Rounded lighting',iceSnow:'Snow on level caps',iceFall:'Slope fibres',iceApron:'Hatched foot apron',iceFrost:'Needle hairlines',
  crystalForm:'Form',crystalSize:'Element width (px)',crystalCount:'Elements per cluster',crystalSides:'Polygon sides',crystalTop:'Flat top share',crystalLean:'Apex lean',
  crystalTiers:'Stepped column tops',crystalAlign:'Align blocks to shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
- craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreScale:'Slab size multiplier',crystalShoreSeam:'Slab seam weight',
+ craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreScale:'Slab size multiplier',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
  iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',moonLobes:'Outline lobes',lavaMeander:'Layer meander',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
  fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerAmount:'Lobe coverage',fingerSize:'Lobe size',fingerSpread:'Lobe clustering',fingerHeight:'Lobe height',
  styleErosion:'Local relaxation',styleDeposits:'Local deposits',styleVegetation:'Local vegetation',styleExposure:'Local rock exposure',
@@ -46,7 +46,7 @@ export function shapeControlAvailable(key,kind,p){
   if(['crystalTop','crystalLean'].includes(key))return form===0;
   if(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergFlat','bergTiltDir'].includes(key))return form===2&&(!['bergFlat','bergTiltDir'].includes(key)||p.bergTilt>0);
  }
- if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreScale','crystalShoreSeam'].includes(key))return plates&&(key==='frostNeedles'?!slab:key.startsWith('crystalShore')?slab:true);
+ if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreScale','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key.startsWith('crystalShore')||key==='plateVary'?slab:true);
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  if(key==='iceFacetSize')return kind==='mountain'&&p.iceFacets>0;
  if(['ledge','terraceJitter'].includes(key))return p.terraces>0;

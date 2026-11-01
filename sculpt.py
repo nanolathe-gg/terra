@@ -101,6 +101,8 @@ KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
 KNOB_DEFAULTS.update(crystalShoreScale=1, crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
+# H20b (Crystal): the share of shore slabs that break into a fine mesh inside their own outline (0: the earlier output).
+KNOB_DEFAULTS.update(plateVary=0)
 # E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
 KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
@@ -588,6 +590,9 @@ WORLD_KNOBS = {
                     # but maybe we also allow some variability"), so the plates draw at plateSize as given and
                     # no world sets the scale.
                     crystalShoreSeam=.56, crystalSeamEnd=.68,
+                    # H20b: in patches a slab breaks into a fine mesh inside its outline (retail: crystal-3's band
+                    # beside larger plates, small cells among the big ones on crystal-1's mound).
+                    plateVary=.35,
                     # G7: the shallow mosaic's cells 8 px (were 10) under fainter seams (.45, were .55).
                     crystalShallowInk=.45),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
