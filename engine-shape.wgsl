@@ -1297,6 +1297,19 @@ fn coastLayers(@builtin(global_invocation_id) g: vec3u) {
 // result, so a repeat run is identical. The band is plWater px into the water and plLand px onto land from the stroke's waterline.
 fn plH(x: i32, y: i32, salt: u32) -> f32 { return hashi(x, y, u.seed ^ salt); }
 fn plHalf(x: i32, y: i32, salt: u32) -> f32 { return hashi(x, y, u.seed ^ salt) * 0.5 + 0.5; }
+// The two nearest points of the lattice of L-sized cells around (lx, ly) in the shape's frame: each cell's point is its centre moved by plH (salts sa and sb) times jit of a cell.
+// Squared distances, the points, and the cells, nearest (b) first.
+struct PlCells { d1: f32, d2: f32, b: vec2f, n: vec2f, bi: i32, bj: i32, ni: i32, nj: i32 }
+fn plCells(lx: f32, ly: f32, L: f32, sa: u32, sb: u32, jit: f32) -> PlCells {
+  var r = PlCells(3.0e38, 3.0e38, vec2f(0.0), vec2f(0.0), 0, 0, 0, 0);
+  let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
+  for (var v = cj - 1; v <= cj + 1; v++) { for (var w = ci - 1; w <= ci + 1; w++) {
+    let c = vec2f((f32(w) + 0.5 + plH(w, v, sa) * jit) * L, (f32(v) + 0.5 + plH(w, v, sb) * jit) * L);
+    let q = (lx - c.x) * (lx - c.x) + (ly - c.y) * (ly - c.y);
+    if (q < r.d1) { r.d2 = r.d1; r.n = r.b; r.ni = r.bi; r.nj = r.bj; r.d1 = q; r.b = c; r.bi = w; r.bj = v; } else if (q < r.d2) { r.d2 = q; r.n = c; r.ni = w; r.nj = v; }
+  } }
+  return r;
+}
 
 @compute @workgroup_size(8, 8)
 fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
@@ -1314,16 +1327,10 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
   let ph = PH * cells + i; let pp = PP * cells + i; let pr = PR * cells + i; let pv = PV * cells + i; let px = PX * cells + i;
   if (u.plMat == 1u) {
     let L = max(8.0, u.plSize * clamp(u.plScale, 0.1, 1.0)); let seam = max(u.spacing * 0.5, max(0.0, u.plGap) * 0.5);
-    let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
-    var d1 = 3.0e38; var d2 = 3.0e38; var bx = 0.0; var by = 0.0; var nx = 0.0; var ny = 0.0; var bi = 0; var bj = 0;
-    for (var v = cj - 1; v <= cj + 1; v++) { for (var w = ci - 1; w <= ci + 1; w++) {
-      let cx = (f32(w) + 0.5 + plH(w, v, 0x481u) * 0.4) * L; let cy = (f32(v) + 0.5 + plH(w, v, 0x287u) * 0.4) * L;
-      let q = (lx - cx) * (lx - cx) + (ly - cy) * (ly - cy);
-      if (q < d1) { d2 = d1; nx = bx; ny = by; d1 = q; bx = cx; by = cy; bi = w; bj = v; } else if (q < d2) { d2 = q; nx = cx; ny = cy; }
-    } }
-    let keep = plHalf(bi, bj, 0x721u); let shade = 0.8 + 0.2 * plHalf(bi, bj, 0x3b9u); let lift = plHalf(bi, bj, 0x6d3u);
+    let k = plCells(lx, ly, L, 0x481u, 0x287u, 0.4);
+    let keep = plHalf(k.bi, k.bj, 0x721u); let shade = 0.8 + 0.2 * plHalf(k.bi, k.bj, 0x3b9u); let lift = plHalf(k.bi, k.bj, 0x6d3u);
     if (keep > 1.0 - sm(0.2, 1.0, d / width)) { return; }
-    let edge = (d2 - d1) / (2.0 * max(1.0, length(vec2f(bx - nx, by - ny)))) * scale + vnoise(lx / 6.0, ly / 6.0, u.seed ^ 0x317u) * 0.5;
+    let edge = (k.d2 - k.d1) / (2.0 * max(1.0, length(k.b - k.n))) * scale + vnoise(lx / 6.0, ly / 6.0, u.seed ^ 0x317u) * 0.5;
     let seamed = edge < seam;
     F[px] = select(shade, u.plSeam, seamed); F[pp] = 1.0;
     if (wet) { F[ph] = clamp(max(raw, sea - 3.2 + lift), u.minH, u.maxH); }
@@ -1335,18 +1342,12 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
   let gapSize = u.frGapSize; let L = max(20.0, u.plSize); let sp0 = max(3.0, u.plGap); let turn = atan2(u.rotY, u.rotX);
   F[pp] = max(F[pp], 0.04);
   F[pr] = max(F[pr], (1.0 + 4.0 * (1.0 - d / width)) / 255.0);
-  let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
-  var d1 = 3.0e38; var bx = 0.0; var by = 0.0; var bi = 0; var bj = 0;
-  for (var v = cj - 1; v <= cj + 1; v++) { for (var w = ci - 1; w <= ci + 1; w++) {
-    let cx = (f32(w) + 0.5 + plH(w, v, 0x481u) * 0.4) * L; let cy = (f32(v) + 0.5 + plH(w, v, 0x287u) * 0.4) * L;
-    let q = (lx - cx) * (lx - cx) + (ly - cy) * (ly - cy);
-    if (q < d1) { d1 = q; bx = cx; by = cy; bi = w; bj = v; }
-  } }
-  let kind3 = i32(floor(plHalf(bi, bj, 0x5d1u) * 3.0)) % 3;
-  let pkeep = plHalf(bi, bj, 0x721u); let needles = plHalf(bi, bj, 0x9c5u) < u.plNeedles;
-  let angle = turn + 1.5707963 + f32(kind3) * 1.0471976 + plH(bi, bj, 0x3c9u) * 0.12;
-  let pgap = sp0 * (0.8 + 0.5 * plHalf(bi, bj, 0x6b7u)); let phase = plHalf(bi, bj, 0x1f3u);
-  let pid = (bi * 73856093) ^ (bj * 19349663);
+  let pc = plCells(lx, ly, L, 0x481u, 0x287u, 0.4);
+  let kind3 = i32(floor(plHalf(pc.bi, pc.bj, 0x5d1u) * 3.0)) % 3;
+  let pkeep = plHalf(pc.bi, pc.bj, 0x721u); let needles = plHalf(pc.bi, pc.bj, 0x9c5u) < u.plNeedles;
+  let angle = turn + 1.5707963 + f32(kind3) * 1.0471976 + plH(pc.bi, pc.bj, 0x3c9u) * 0.12;
+  let pgap = sp0 * (0.8 + 0.5 * plHalf(pc.bi, pc.bj, 0x6b7u)); let phase = plHalf(pc.bi, pc.bj, 0x1f3u);
+  let pid = (pc.bi * 73856093) ^ (pc.bj * 19349663);
   let support = 1.0 - sm(0.1, 1.0, d / width);
   let ca = cos(angle); let sa = sin(angle);
   let across = (lx * ca + ly * sa) / (pgap * scale) + phase; let along = (-lx * sa + ly * ca) / scale;
@@ -1366,14 +1367,9 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
     return;
   }
   // Land: a low ridge along each needle, a groove along the seam between the big cells, melt pockets.
-  let SL = L * 3.0; let sci = i32(floor(lx / SL)); let scj = i32(floor(ly / SL));
-  var s1 = 3.0e38; var s2 = 3.0e38; var sbx = 0.0; var sby = 0.0; var snx = 0.0; var sny = 0.0; var skb = 0.0; var skn = 0.0;
-  for (var v = scj - 1; v <= scj + 1; v++) { for (var w = sci - 1; w <= sci + 1; w++) {
-    let cx = (f32(w) + 0.5 + plH(w, v, 0x6c1u) * 0.42) * SL; let cy = (f32(v) + 0.5 + plH(w, v, 0x7e9u) * 0.42) * SL; let kk = plHalf(w, v, 0x8d3u);
-    let q = (lx - cx) * (lx - cx) + (ly - cy) * (ly - cy);
-    if (q < s1) { s2 = s1; snx = sbx; sny = sby; skn = skb; s1 = q; sbx = cx; sby = cy; skb = kk; } else if (q < s2) { s2 = q; snx = cx; sny = cy; skn = kk; }
-  } }
-  let sedge = (s2 - s1) / (2.0 * max(1.0, length(vec2f(sbx - snx, sby - sny)))) * scale + vnoise(lx / 9.0, ly / 9.0, u.seed ^ 0x317u) * 1.2;
+  let sk = plCells(lx, ly, L * 3.0, 0x6c1u, 0x7e9u, 0.42);
+  let skb = plHalf(sk.bi, sk.bj, 0x8d3u); let skn = plHalf(sk.ni, sk.nj, 0x8d3u);
+  let sedge = (sk.d2 - sk.d1) / (2.0 * max(1.0, length(sk.b - sk.n))) * scale + vnoise(lx / 9.0, ly / 9.0, u.seed ^ 0x317u) * 1.2;
   var seam = 0.0;
   if (max(skb, skn) > 1.0 - support * 0.9) { seam = sm(1.6, 0.3, sedge); }
   let lift = strip * min(2.5, u.plHeight * 0.7) - seam * 2.5;
@@ -1425,19 +1421,16 @@ fn cgLevel(x: f32, y: f32, m: f32) -> i32 {
   if (f > 0.84 - 0.3 * u.cgSizeVar) { return 1; }
   return 0;
 }
-// The column's centre in the shape's frame and in the world.
-struct CgCol { l: vec2f, w: vec2f }
-fn cgCentre(lv: i32, i: i32, j: i32) -> CgCol {
-  let Ll = u.cgSize * SZL[lv]; let o = u32(lv) * 16u;
-  let lx = (f32(i) + 0.5 + (cgRnd(i, j, 1u + o) - 0.5) * 0.9) * Ll; let ly = (f32(j) + 0.5 + (cgRnd(i, j, 2u + o) - 0.5) * 0.9) * Ll;
-  var wx = lx; var wy = ly;
-  if (u.framed != 0u) {
-    let det = u.inv0 * u.inv3 - u.inv1 * u.inv2;
-    let a = u.inv3 / det; let b = -u.inv1 / det; let c = -u.inv2 / det; let d = u.inv0 / det;
-    let e = -(a * u.inv4 + c * u.inv5); let f = -(b * u.inv4 + d * u.inv5);
-    wx = a * lx + c * ly + e; wy = b * lx + d * ly + f;
-  }
-  var r: CgCol; r.l = vec2f(lx, ly); r.w = vec2f(wx, wy); return r;
+// The jittered point of cell (i, j) of size L in the shape's frame (hash salts 1 + o and 2 + o, jit of a cell around its centre), and a point of the frame in the world.
+fn cgPoint(i: i32, j: i32, L: f32, jit: f32, o: u32) -> vec2f {
+  return vec2f((f32(i) + 0.5 + (cgRnd(i, j, 1u + o) - 0.5) * jit) * L, (f32(j) + 0.5 + (cgRnd(i, j, 2u + o) - 0.5) * jit) * L);
+}
+fn cgWorld(l: vec2f) -> vec2f {
+  if (u.framed == 0u) { return l; }
+  let det = u.inv0 * u.inv3 - u.inv1 * u.inv2;
+  let a = u.inv3 / det; let b = -u.inv1 / det; let c = -u.inv2 / det; let d = u.inv0 / det;
+  let e = -(a * u.inv4 + c * u.inv5); let f = -(b * u.inv4 + d * u.inv5);
+  return vec2f(a * l.x + c * l.y + e, b * l.x + d * l.y + f);
 }
 
 @compute @workgroup_size(8, 8)
@@ -1458,9 +1451,9 @@ fn stampColumns(@builtin(global_invocation_id) g: vec3u) {
   for (var lv = 0; lv < levels; lv++) {
     let Ll = u.cgSize * SZL[lv]; let ci = i32(floor(lx / Ll)); let cj = i32(floor(ly / Ll));
     for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let c = cgCentre(lv, ii, j);
-      if (levels > 1 && cgLevel(c.w.x, c.w.y, cgMound(c.w.x, c.w.y)) != lv) { continue; }
-      let d = length(vec2f(lx, ly) - c.l);
+      let cl = cgPoint(ii, j, u.cgSize * SZL[lv], 0.9, u32(lv) * 16u); let cw = cgWorld(cl);
+      if (levels > 1 && cgLevel(cw.x, cw.y, cgMound(cw.x, cw.y)) != lv) { continue; }
+      let d = length(vec2f(lx, ly) - cl);
       if (d < d1) { d2 = d1; d1 = d; bl = lv; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
     } }
   }
@@ -1468,13 +1461,13 @@ fn stampColumns(@builtin(global_invocation_id) g: vec3u) {
     // No width in use is near: the widest columns, whatever they asked for.
     let ci = i32(floor(lx / u.cgSize)); let cj = i32(floor(ly / u.cgSize));
     for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let c = cgCentre(0, ii, j); let d = length(vec2f(lx, ly) - c.l);
+      let d = length(vec2f(lx, ly) - cgPoint(ii, j, u.cgSize, 0.9, 0u));
       if (d < d1) { d2 = d1; d1 = d; bl = 0; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
     } }
   }
   let o = u32(bl) * 16u;
-  let c = cgCentre(bl, bi, bj);
-  let m = cgMound(c.w.x, c.w.y);
+  let cl = cgPoint(bi, bj, u.cgSize * SZL[bl], 0.9, o); let cw = cgWorld(cl);
+  let m = cgMound(cw.x, cw.y);
   if (m <= 1.0) { return; }
   let base = F[PH * cells + i];
   // A bare column is the mound's own smooth hill: no flat top, no crystal mark, no protection.
@@ -1484,11 +1477,11 @@ fn stampColumns(@builtin(global_invocation_id) g: vec3u) {
     return;
   }
   let e = 2.0;
-  let gx = (cgMound(c.w.x + e, c.w.y) - cgMound(c.w.x - e, c.w.y)) / (2.0 * e); let gy = (cgMound(c.w.x, c.w.y + e) - cgMound(c.w.x, c.w.y - e)) / (2.0 * e);
+  let gx = (cgMound(cw.x + e, cw.y) - cgMound(cw.x - e, cw.y)) / (2.0 * e); let gy = (cgMound(cw.x, cw.y + e) - cgMound(cw.x, cw.y - e)) / (2.0 * e);
   var step = 0.0;
   if (!(cgRnd(bi, bj, 3u + o) < 0.4)) { step = (cgRnd(bi, bj, 4u + o) - 0.35) * 2.0 * u.cgStep * (0.5 + u.cgVar) * SZS[bl]; }
   let shade = 0.8 + 0.2 * cgRnd(bi, bj, 5u + o);
-  let incline = gx * (wx - c.w.x) + gy * (wy - c.w.y);
+  let incline = gx * (wx - cw.x) + gy * (wy - cw.y);
   var top = m + step;
   if (u.cgTiers > 0.0) { top = top + incline * (1.0 - clamp(u.cgTiers, 0.0, 1.0)); } else { top = top + incline; }
   if (u.cgFacet > 0.0) {
@@ -1496,7 +1489,7 @@ fn stampColumns(@builtin(global_invocation_id) g: vec3u) {
     let h0 = cgRnd(bi, bj, 6u + o) * 6.2831853; let h1 = h0 + 3.1415927 * (0.5 + cgRnd(bi, bj, 7u + o));
     let m0 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 8u + o)); var m1 = 0.0;
     if (!(cgRnd(bi, bj, 9u + o) < 0.3)) { m1 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 10u + o)); }
-    let ox = lx - c.l.x; let oy = ly - c.l.y;
+    let ox = lx - cl.x; let oy = ly - cl.y;
     let pa = cos(h0) * m0 * ox + sin(h0) * m0 * oy; let pb = cos(h1) * m1 * ox + sin(h1) * m1 * oy;
     if (cgRnd(bi, bj, 11u + o) < 0.5) { top = top + min(pa, pb); } else { top = top + max(pa, pb); }
   }
@@ -1568,16 +1561,9 @@ struct FcSeed { l: vec2f, w: vec2f, h: f32, dx: f32, dy: f32, step: f32, shade: 
 fn fcSeed(i: i32, j: i32, cells: u32) -> FcSeed {
   let L = u.fcL; let crater = u.fcMode == 1u;
   let jit = select(1.0, 0.9, crater);
-  let lx = (f32(i) + 0.5 + (cgRnd(i, j, 1u) - 0.5) * jit) * L; let ly = (f32(j) + 0.5 + (cgRnd(i, j, 2u) - 0.5) * jit) * L;
-  var wx = lx; var wy = ly;
-  if (u.framed != 0u) {
-    let det = u.inv0 * u.inv3 - u.inv1 * u.inv2;
-    let a = u.inv3 / det; let b = -u.inv1 / det; let c = -u.inv2 / det; let d = u.inv0 / det;
-    let e = -(a * u.inv4 + c * u.inv5); let f = -(b * u.inv4 + d * u.inv5);
-    wx = a * lx + c * ly + e; wy = b * lx + d * ly + f;
-  }
-  let gx = i32(floor(wx / u.spacing + 0.5)); let gy = i32(floor(wy / u.spacing + 0.5)); let e3 = 3;
-  var s: FcSeed; s.l = vec2f(lx, ly); s.w = vec2f(wx, wy);
+  let l = cgPoint(i, j, L, jit, 0u); let w = cgWorld(l);
+  let gx = i32(floor(w.x / u.spacing + 0.5)); let gy = i32(floor(w.y / u.spacing + 0.5)); let e3 = 3;
+  var s: FcSeed; s.l = l; s.w = w;
   s.h = fcAt(gx, gy, cells);
   s.dx = (fcAt(gx + e3, gy, cells) - fcAt(gx - e3, gy, cells)) / (2.0 * 3.0 * u.spacing);
   s.dy = (fcAt(gx, gy + e3, cells) - fcAt(gx, gy - e3, cells)) / (2.0 * 3.0 * u.spacing);
@@ -1605,9 +1591,7 @@ fn facetApply(@builtin(global_invocation_id) g: vec3u) {
   let L = u.fcL; let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
   var d1 = 3.0e38; var d2 = 3.0e38; var bi = 0; var bj = 0;
   for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-    let jit = select(1.0, 0.9, crater);
-    let sx = (f32(ii) + 0.5 + (cgRnd(ii, j, 1u) - 0.5) * jit) * L; let sy = (f32(j) + 0.5 + (cgRnd(ii, j, 2u) - 0.5) * jit) * L;
-    let d = length(vec2f(lx - sx, ly - sy));
+    let d = length(vec2f(lx, ly) - cgPoint(ii, j, L, select(1.0, 0.9, crater), 0u));
     if (d < d1) { d2 = d1; d1 = d; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
   } }
   let s = fcSeed(bi, bj, cells);
