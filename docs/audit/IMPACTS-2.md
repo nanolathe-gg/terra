@@ -87,4 +87,6 @@ Both whole retail pairs and 2x sheets viewed; both renders exit 0, mismatch 0, c
 
 ## Final checks and review record
 
-To be filled from the final logs, including every changed statistics flag and the exact viewed/not-viewed list.
+The [Impacts count](COMBINE_OR_DROP.md#impacts-h21) has 14 review rows: 11 unique weak/inactive controls and three unresolved bundles. The fresh seven-state Crystal sweep covers the changed web/contrast context, 21 renders, exit 0, mismatch 0 and empty console. [Numeric results](impacts-controls-2.json) give both the historical impact class and the narrower crater class: Step, Web and Light are under 5% of impact but above 10% of crater blocks. No control deletion follows from the diluted screen. The one conditional wobble line was already counted by Bodies and is not added again. No knob or runtime code changes in the count step.
+
+Final validation results follow from the saved logs.
