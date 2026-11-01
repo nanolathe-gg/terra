@@ -20,6 +20,8 @@ CELL = 16
 FOOT = 2.0          # a cell is in a feature from this many units over the plain (a foot at the plain itself would take the noise in)
 MIN_RISE = 8.0      # the feature's top over the plain
 MIN_WIDTH = 40.0    # px; narrower features are two cells or fewer from foot to top and say nothing about form
+TALL_WIDTH = 96.0   # px, six cells
+PEAK_SHARE = .08
 SECTORS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
 
@@ -66,7 +68,7 @@ def features(h, plain, water):
             continue
         gy, gx = np.gradient(z[sl])
         top_cells = m & (z[sl] >= .9 * top)
-        yield {'sections': sections(m, top_cells), 'rise': float(top), 'width': width, 'area': int(zz.size), 'rel': zz / top, 'dist': dd / width,
+        yield {'sections': sections(m, top_cells), 'topShare': float(np.mean(zz >= .9 * top)), 'rise': float(top), 'width': width, 'area': int(zz.size), 'rel': zz / top, 'dist': dd / width,
                'gx': gx[m], 'gy': gy[m]}
 
 
@@ -197,40 +199,45 @@ def analyse(world, root, bins, cells, nknots, only):
             pooled[kind] += fs
         print(f'  {name}: plain {p:g}, {len(pooled["land"])} land / {len(pooled["water"])} water features so far', file=sys.stderr)
     edges = [0] + bins + [1e9]
+    groups = []
     for kind in ('land', 'water'):
         for lo, hi in zip(edges[:-1], edges[1:]):
-            fs = [f for f in pooled[kind] if lo <= f['rise'] < hi]
-            label = f'{lo:g}-{hi:g}' if hi < 1e9 else f'{lo:g}+'
-            if len(fs) < 3:
-                out[kind][label] = {'features': len(fs)}
-                continue
-            x, mean, support = curve_of(fs, cells)
-            ok = ~np.isnan(mean) & (support >= 10)
-            mean = smoothed(mean)
-            xs, ys = np.concatenate([[0], x[ok]]), np.concatenate([[0], isotonic(np.clip(mean[ok], 0, 1.0))])
-            halves = [curve_of([f for f in fs if hash_half(f['map']) == k], cells)[1] for k in (0, 1)]
-            hv = ~np.isnan(halves[0]) & ~np.isnan(halves[1])
-            half_rms = float(np.sqrt(np.mean((smoothed(halves[0])[hv] - smoothed(halves[1])[hv]) ** 2))) if hv.any() else None
-            ys = ys / ys[-1]                                              # the top is 1 by definition
-            knots, rms, mx = fit_knots(xs, ys, nknots)
-            ref = {'smoothstep': float(np.sqrt(np.mean((smooth(xs) - ys) ** 2))), 'mountain3.5': float(np.sqrt(np.mean((mountain(xs) - ys) ** 2)))}
-            med, cnt = lean_of(fs)
-            fin = med[~np.isnan(med)]
-            ray = {}
-            for key, (na, nb) in {'NS': ('N', 'S'), 'WE': ('W', 'E')}.items():
-                pairs = np.array([p for f in fs for p in f['sections'][key]]).reshape(-1, 2)
-                ray[key] = {'pairs': len(pairs), na + '_px': round(float(pairs[:, 0].mean()), 1) if len(pairs) else None, nb + '_px': round(float(pairs[:, 1].mean()), 1) if len(pairs) else None,
-                            f'{na}/{nb}': round(float(pairs[:, 0].mean() / pairs[:, 1].mean()), 2) if len(pairs) else None,
-                            f'{na}/{nb} median pair': round(float(np.median(pairs[:, 0] / pairs[:, 1])), 2) if len(pairs) else None}
-            out[kind][label] = {
-                'features': len(fs), 'maps': sorted({f['map'] for f in fs}), 'riseMedian': float(np.median([f['rise'] for f in fs])),
-                'widthPx': {'p25': float(np.percentile([f['width'] for f in fs], 25)), 'median': float(np.median([f['width'] for f in fs])),
-                            'p75': float(np.percentile([f['width'] for f in fs], 75))},
-                'curve': [[round(float(a), 3), round(float(b), 3)] for a, b in zip(x[ok], mean[ok])],
-                'knots': knots, 'fitRms': round(rms, 4), 'halvesRms': None if half_rms is None else round(half_rms, 4), 'fitMax': round(mx, 4), 'refRms': {k: round(v, 4) for k, v in ref.items()},
-                'runPx': {s: (None if np.isnan(v) else round(float(v), 1)) for s, v in zip(SECTORS, med)},
-                'runCells': dict(zip(SECTORS, cnt)), 'rays': ray,
-                'lean': {'N/S': ratio(med, 0, 4), 'NE/SW': ratio(med, 1, 5), 'E/W': ratio(med, 2, 6), 'SE/NW': ratio(med, 3, 7)} if len(fin) == 8 else None}
+            groups.append((kind, f'{lo:g}-{hi:g}' if hi < 1e9 else f'{lo:g}+', [f for f in pooled[kind] if lo <= f['rise'] < hi]))
+    # Tall features (80+ units, at least TALL_WIDTH px from foot to top) split by how much of the feature lies near its top: PEAK_SHARE of its cells at
+    # 90% of the top or higher. A cone has about 2% there, a plateau a third; below the threshold it is peaked, at or above it flat-topped.
+    tall = [f for f in pooled['land'] if f['rise'] >= 80 and f['width'] >= TALL_WIDTH]
+    groups += [('land', '80+ peaked', [f for f in tall if f['topShare'] < PEAK_SHARE]), ('land', '80+ flat', [f for f in tall if f['topShare'] >= PEAK_SHARE])]
+    for kind, label, fs in groups:
+        if len(fs) < 3:
+            out[kind][label] = {'features': len(fs)}
+            continue
+        x, mean, support = curve_of(fs, cells)
+        ok = ~np.isnan(mean) & (support >= 10)
+        mean = smoothed(mean)
+        xs, ys = np.concatenate([[0], x[ok]]), np.concatenate([[0], isotonic(np.clip(mean[ok], 0, 1.0))])
+        halves = [curve_of([f for f in fs if hash_half(f['map']) == k], cells)[1] for k in (0, 1)]
+        hv = ~np.isnan(halves[0]) & ~np.isnan(halves[1])
+        half_rms = float(np.sqrt(np.mean((smoothed(halves[0])[hv] - smoothed(halves[1])[hv]) ** 2))) if hv.any() else None
+        ys = ys / ys[-1]                                              # the top is 1 by definition
+        knots, rms, mx = fit_knots(xs, ys, nknots)
+        ref = {'smoothstep': float(np.sqrt(np.mean((smooth(xs) - ys) ** 2))), 'mountain3.5': float(np.sqrt(np.mean((mountain(xs) - ys) ** 2)))}
+        med, cnt = lean_of(fs)
+        fin = med[~np.isnan(med)]
+        ray = {}
+        for key, (na, nb) in {'NS': ('N', 'S'), 'WE': ('W', 'E')}.items():
+            pairs = np.array([p for f in fs for p in f['sections'][key]]).reshape(-1, 2)
+            ray[key] = {'pairs': len(pairs), na + '_px': round(float(pairs[:, 0].mean()), 1) if len(pairs) else None, nb + '_px': round(float(pairs[:, 1].mean()), 1) if len(pairs) else None,
+                        f'{na}/{nb}': round(float(pairs[:, 0].mean() / pairs[:, 1].mean()), 2) if len(pairs) else None,
+                        f'{na}/{nb} median pair': round(float(np.median(pairs[:, 0] / pairs[:, 1])), 2) if len(pairs) else None}
+        out[kind][label] = {
+            'features': len(fs), 'maps': sorted({f['map'] for f in fs}), 'riseMedian': float(np.median([f['rise'] for f in fs])),
+            'widthPx': {'p25': float(np.percentile([f['width'] for f in fs], 25)), 'median': float(np.median([f['width'] for f in fs])),
+                        'p75': float(np.percentile([f['width'] for f in fs], 75))},
+            'curve': [[round(float(a), 3), round(float(b), 3)] for a, b in zip(x[ok], mean[ok])],
+            'knots': knots, 'fitRms': round(rms, 4), 'halvesRms': None if half_rms is None else round(half_rms, 4), 'fitMax': round(mx, 4), 'refRms': {k: round(v, 4) for k, v in ref.items()},
+            'runPx': {s: (None if np.isnan(v) else round(float(v), 1)) for s, v in zip(SECTORS, med)},
+            'runCells': dict(zip(SECTORS, cnt)), 'rays': ray,
+            'lean': {'N/S': ratio(med, 0, 4), 'NE/SW': ratio(med, 1, 5), 'E/W': ratio(med, 2, 6), 'SE/NW': ratio(med, 3, 7)} if len(fin) == 8 else None}
     return out
 
 

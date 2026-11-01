@@ -28,7 +28,6 @@ export function knotCurve(knots) {
 }
 export const sampleKnots = knots => { const f = knotCurve(knots); return Array.from({length: CV_N + 3}, (_, j) => f((j - 1) / CV_N)); };
 
-const isWater = kind => kind === 'deep' || kind === 'shallow';
 // ---- forms: short functions of softness that return knots (and, for the shouldered hill, a back) ----
 const at = (f, xs) => xs.map(x => [x, f(x)]);
 const even = n => Array.from({length: n + 1}, (_, i) => i / n);
@@ -49,20 +48,9 @@ export const FORMS = {
   // The plain hill of a ridge (spurs and crest options): the mountain's power law at exponent 2.
   dome: () => ({knots: at(ridge(2), even(48))}),
 };
-// Water's own forms: the plateau's smoothstep until a world measures its banks (the bank of a lake falls faster than a hill's foot rises).
-FORMS.deep = FORMS.shallow = FORMS.plateau;
 export const FORM_NAMES = ['hill', 'mountain', 'plateau', 'mesa', 'cliff', 'terrace'];
 // The form a kind draws by default.
-export const defaultForm = (kind, shouldered) => kind === 'hill' ? (shouldered ? 'hill' : 'dome') : kind === 'mountain' ? 'mountain' : isWater(kind) ? kind : 'plateau';
-
-// A world's forms (its table's `forms` block: name -> {knots, back?}, measured from that world's retail maps) are read in place of the shared ones, by name; a
-// name the world does not give keeps the shared form. A page draws one world, so this is set once, when the world's table loads.
-let worldForms = null;
-export const setWorldForms = table => { worldForms = table?.forms ?? null; };
-export const formOf = (name, softness) => {
-  const w = worldForms?.[name];
-  return w ? {knots: w.knots, ...(w.back ? {back: w.back} : {})} : FORMS[name]?.(softness);
-};
+export const defaultForm = (kind, shouldered) => kind === 'hill' ? (shouldered ? 'hill' : 'dome') : kind === 'mountain' ? 'mountain' : 'plateau';
 
 // Lean and facing. Lean is the back's length over the face's: the slope toward the lean side runs `ratio` times the length of the other (0: the kind's own,
 // which is the shouldered hill's softness-driven back and, for the plateau family, 1.7: the face widened .7 * .32 north^2 on the side toward north).
@@ -105,10 +93,11 @@ export function variability(kind, {naturalWater, naturalPlateau, shouldered, pla
 
 // The kinds that take a cross-section curve, its face width and terraces.
 export const SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
+const isWater = kind => kind === 'deep' || kind === 'shallow';
 
 // The stroke's curve: {knots, back?} (form at the stroke's softness unless it carries knots of its own).
 export function strokeKnots(kind, q, shouldered) {
-  const c = q.curve, f = FORMS[c?.form] ? c.form : defaultForm(kind, shouldered), base = formOf(f, q.softness);
+  const c = q.curve, f = FORMS[c?.form] ? c.form : defaultForm(kind, shouldered), base = FORMS[f](q.softness);
   if (!c?.knots) return base;
   return {knots: c.knots, back: c.back ?? base.back};
 }
