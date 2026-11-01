@@ -7775,7 +7775,12 @@ lit on the wall, in screen pixels, so the rock keeps its grain. On a tall wall t
 4. The bridge's two Bodies blocks (`bridgeSlateFace`, `bridgeSlateRock`) on the engine's own path, and the blocks deleted. The result must be shorter than what it replaces.
 5. A switch-off table for each world's three windows: what draws each mark, proved by turning it off, and where each body reads furthest from retail. Nothing is tuned yet.
 
-**Part 2** is the merges and the marks toward retail, then the count, written out here from part 1's report.
+**Part 2.** From part 1's report and its review:
+1. One `markCells` in the draw for `shallowCell`, `craterWeb`, `iceHatch` and `iceFrostLines`; `cells` takes the third distance and `lavaCells` goes, Lava's jitter an argument; `cgPoint`, `cgWorld` and `plCells` in the shape stage. Each shorter, each 0.00.
+2. Crystal's sea: where the fringe ends, on crystal-2 and crystal-3, and the seams' weight. A reach, so G7 stands: the cell size does not move.
+3. Ice-1's band: the pockets by number, the straight-sided ponds by a small change to `coastPlates` if it closes them.
+4. A sheet of retail against G7's cells and retail's size, for the owner to rule on.
+5. The Bodies rows on `docs/audit/COMBINE_OR_DROP.md`, and what numbers could not reach on Small leftovers: ice-3's block and lava-3's hills, which need a table or code.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H20`, branch `H20-bodies`; assets `$R/agent-H20`.
 
