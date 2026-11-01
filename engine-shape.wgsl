@@ -189,21 +189,39 @@ fn lipRim(t: f32, F: f32) -> f32 {
 fn carried(r: f32, reach: f32, nCW: f32, nShelf: f32, base: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
   let d = (1.0 - r) * reach;
   let kw = clamp(1.0 + 0.5 * u.faceVar * nCW, 0.4, 1.8); let ka = clamp(1.0 + 0.5 * u.faceVar * nShelf, 0.4, 1.8);
-  var A = u.cvA * ka; var F = (u.cvPx - u.cvA) * kw;
-  if (u.cvFs > 0.0) { F = u.cvFs * reach * kw; }
-  if (A + F > 0.98 * reach) { let k = 0.98 * reach / (A + F); A = A * k; F = F * k; }
-  let top = A + F; var dn = 0.0;
-  if (d < A) { dn = d * u.cvA / A; }
-  else if (d < top) { dn = u.cvA + (d - A) * (u.cvPx - u.cvA) / F; }
-  else { dn = u.cvPx + (d - top) * u.cvCap / max(reach - top, 1e-3); }
+  var dn = 0.0; var top = 0.0; var F = 0.0; var Ic = 0.0;
+  if (u.cvWater != 0u) {
+    // Water, from the foot: the lip's inset, the face (kw), the apron and the shelf (ka), then the bed's descent over .7 of the reach left.
+    var I = u.lipAt; F = u.lipF * kw; var A = u.cvA * ka; var S = u.cvS * ka;
+    let tot = I + F + A + S;
+    if (tot > 0.92 * reach) { let k = 0.92 * reach / tot; I = I * k; F = F * k; A = A * k; S = S * k; }
+    Ic = I;
+    let b1 = I; let b2 = b1 + F; let b3 = b2 + A; let b4 = b3 + S;
+    if (d < b1) { dn = d * u.lipAt / I; }
+    else if (d < b2) { dn = u.lipAt + (d - b1) * u.lipF / F; }
+    else if (d < b3) { dn = u.lipAt + u.lipF + (d - b2) * u.cvA / A; }
+    else if (d < b4) { dn = u.cvPx - u.cvS + (d - b3) * u.cvS / S; }
+    else { dn = u.cvPx + (d - b4) * (u.cvD - u.cvPx) / (0.7 * max(reach - b4, 1e-3)); }
+  } else {
+    var A = u.cvA * ka; F = (u.cvPx - u.cvA) * kw;
+    if (u.cvFs > 0.0) { F = u.cvFs * reach * kw; }
+    if (A + F > 0.98 * reach) { let k = 0.98 * reach / (A + F); A = A * k; F = F * k; }
+    top = A + F;
+    if (d < A) { dn = d * u.cvA / A; }
+    else if (d < top) { dn = u.cvA + (d - A) * (u.cvPx - u.cvA) / F; }
+    else { dn = u.cvPx + (d - top) * u.cvCap / max(reach - top, 1e-3); }
+  }
   sLift = 0.0;
-  if (u.sLip != 0.0) { if (u.lipDir > 0.0) { sLift = u.sLip * lipRim(d - u.lipAt, u.lipF); } else { sLift = u.sLip * lipRim(top - d, F); } }
+  if (u.sLip != 0.0) { if (u.lipDir > 0.0) { sLift = u.sLip * lipRim(d - Ic, F); } else { sLift = u.sLip * lipRim(top - d, F); } }
   let c = terraced(curveAt(u.curveBase, dn / u.cvD), x, y, i, cells);
   if (u.cvWater == 0u) { return c; }
   // Water: the bank curve c (1 at the bank top) and the shelf and bed (height under the sea) combine with this cell's ground height above the sea.
   let hb = base - u.sea; let db = select(7.0, 55.0, u.kind == 2u);
   if (hb + db < 0.5) { return 0.0; }
-  return clamp((hb * (1.0 - c) - curveRaw(u.backBase, dn / u.cvD)) / (hb + db), 0.0, 1.0);
+  let w = clamp((hb * (1.0 - c) - curveRaw(u.backBase, dn / u.cvD)) / (hb + db), 0.0, 1.0);
+  // Past the lip's inset on dry ground the bank is below the ground, but at the bank's flat top w rounds to 0 and the stamp would skip the cell and lose the lip.
+  if (u.sLip != 0.0 && w <= 0.0 && d >= Ic && base > u.sea) { return 1e-30; }
+  return w;
 }
 
 // H9: a landform's or water stroke's mask writes, once the node is settled: plane, target, gain, flat per write (maskSetup/paintCell of sculpt.js).

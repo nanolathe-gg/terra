@@ -6856,11 +6856,17 @@ every consumer of `w` clamps or subtracts it: the kind-4/5 `clamp(w, 0, 1)`, `1 
 protection and the cover brushes, the mask writes' gain, and its unit is height, not a share of the amount
 (a plateau's `PT + amount - base` is unknown to the host). A carried section's apron and face keep their
 own width noise (`ka`, `kw`), so the shader maps each cell's distance back onto the table's nominal px
-(`carried`). Water is two tables (`P` the bank, `Q` the shelf and bed in height units) combined per cell with
-the ground's height, so Red-3 reads the ground exactly as the classic did. Approximations, all measured by
-`section_check --against` on the saved classic samples: shelf steps are baked without jitter (RMS .4, max
-3.5), a bank with terraces and a negative lip (RMS .19, max 6.9), a dome whose face is wider than its reach
-(RMS .23, max 2.4). Desert's tool preset sets no `profile` now; its plateau keys carry the section.
+(`carried`; on water segment by segment: inset, face, apron, shelf, then the bed's descent over .7 of
+what is left of the cell's reach). Water is two tables (`P` the bank, `Q` the shelf and bed in height
+units) combined per cell with the ground's height, so Red-3 reads the ground as the classic did: with
+noise on, Red-3's deep stroke moves .001 mean height against step A (a first single-stretch mapping
+moved it 1.15 because it stretched the inset, shelf and bed with the face). Approximations, measured by
+`section_check --against` on the saved classic samples: shelf steps are baked without jitter (RMS .4,
+max 3.5); a water lip at the small brush sizes (RMS up to .3, max 6.7, a sliver of cells at the edge of
+the footprint; cause not isolated; no scene or preset uses a lip); a dome whose face is wider than its
+reach (RMS .23, max 2.4). Terraces on a carried water stroke run on the bank table `P` between the apron
+height and 1, before the ground combination. Desert's tool preset sets no `profile` now; its plateau keys
+carry the section. A saved document with `profile: 0` and any section key set now carries that section.
 
 *For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
 with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.

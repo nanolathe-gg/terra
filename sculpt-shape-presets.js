@@ -52,17 +52,17 @@ function landSection(kind, q, R) {
 function waterSection(kind, q, R, sea) {
   const db = kind === 'deep' ? 55 : 7;
   let A = q.apronPx, F = q.facePx > 0 ? q.facePx : q.bankPx > 0 ? Math.max(q.bankPx - A, 6) : .4 * R, S = q.shelfPx > 0 && q.shelfDepth > 0 ? q.shelfPx : 0, I = q.lip !== 0 ? clamp(.4 * F, 5, 30) : 0;
-  const total = I + A + F + S; if (total > .92 * R) { const k = .92 * R / total; I *= k; A *= k; F *= k; S *= k; }
-  const B = A + F, rest = I + B + S, depth = Math.min(q.shelfDepth, .7 * db), ah = A > 0 ? Math.min(q.apronHeight, .9) : 0, steps = Math.round(clamp(q.shelfSteps, 0, 6)), D = rest + .7 * (R - rest);
+  // Widths as the keys say; the shader shrinks inset, face, apron and shelf to .92 of each cell's reach (carried) and runs the bed's descent over .7 of what is left.
+  const B = A + F, rest = I + B + S, depth = Math.min(q.shelfDepth, .7 * db), ah = A > 0 ? Math.min(q.apronHeight, .9) : 0, steps = Math.round(clamp(q.shelfSteps, 0, 6)), L = .7 * Math.max(R - rest, .08 * R), D = rest + L;
   const p = dd => dd <= 0 ? 0 : dd < A ? ah * (dd / A) ** 1.5 : dd >= A + F ? 1 : ah + (1 - ah) * faceShape((dd - A) / F, q.faceCurve);
   const P = d => d < I ? 1 : d < I + B ? p(B - (d - I)) : 0;
   const Q = d => {
     if (d < I + B) return 0;
     if (d < rest) { const t = (d - I - B) / S; return -depth * (steps > 0 ? 1 - stepped(1 - t, steps, q.ledge) : sm(t / .35)); }
     const top = S > 0 ? -depth : 0;
-    return top + (-db - top) * sm((d - rest) / (.7 * (R - rest)));
+    return top + (-db - top) * sm((d - rest) / L);
   };
-  return {front: sample(t => P(t * D)), back: sample(t => Q(t * D)), D, u: {cvPx: D, cvA: 0, cvD: D, cvCap: 0, cvFs: 0, cvLo: ah, cvHi: 1, cvWater: 1, sLip: q.lip, lipDir: 1, lipAt: I, lipF: F}};
+  return {front: sample(t => P(t * D)), back: sample(t => Q(t * D)), D, u: {cvPx: rest, cvA: A, cvS: S, cvD: D, cvCap: 0, cvFs: 0, cvLo: ah, cvHi: 1, cvWater: 1, sLip: q.lip, lipDir: 1, lipAt: I, lipF: F}};
 }
 
 // The front table (and the back one where the shape needs a second curve) of a stroke, with the uniforms its section adds, or null for a kind with no cross-section.
