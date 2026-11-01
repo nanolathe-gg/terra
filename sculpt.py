@@ -211,6 +211,16 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
 KNOB_DEFAULTS.update(column=0, columnContrast=1, columnBeds='5:.5:0', erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
+# H16 (branch only, never lands): the geology proof. geology 1 (URL) draws a world's banding from the table GEOLOGY_PROOF gives it;
+# 0 leaves every world as it was. geoBeds "thickness:hardness:slot,...", geoSections "start:first:count:jitter;...", geoWander
+# "px:amp:fine:finest", geoOpts "blend:ledge".
+KNOB_DEFAULTS.update(geology=0, geoBeds='', geoSections='', geoWander='100:0:0:0', geoOpts='0:1')
+GEOLOGY_PROOF = {
+    'desert': dict(
+        geoBeds='4.8:.5:0,1.2:.5:1,3.6:.5:0,2.4:.5:1,3.6:.5:0,2.4:.5:1,.3:.5:0,5.7:.5:1,7.7:.5:2,3.3:.5:3',
+        geoSections='1:0:2:.45;17:2:2:.45;53:4:2:.45;58:6:2:.45;69:8:2:.45',
+        geoWander='40:2:.4:.15', geoOpts='1:1'),
+}
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
 # BUDGET 3, sculpt-erosion.js): its maps are made, its height moves no further than the worker's did.
@@ -774,7 +784,7 @@ def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
-             'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
+             'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {}), **GEOLOGY_PROOF.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)

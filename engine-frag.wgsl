@@ -59,6 +59,30 @@ fn rockStrata(hr: f32, zone: i32, paint: f32) -> vec3f {
     let isB = smoothstep(split - 0.04, split + 0.04, fract(t));
     return mix(strataSlot(z.y), strataSlot(z.z), isB);
 }
+// H16 proof: the bed colour at coordinate c from the column (slot -> the strata colours), its edges softened as the strata's are (about
+// 1.5 px of slope across) with the colour of the bed below or above.
+fn geoStrata(c: f32, slope: f32) -> vec3f {
+    let bed = geoColumn(c);
+    let edge = clamp(1.5 * max(slope, 0.05) / bed.thick, 0.01, 0.2);
+    let here = strataSlot(bed.slot);
+    let low = 0.5 * (1.0 - smoothstep(0.0, edge, bed.through));
+    let high = 0.5 * (1.0 - smoothstep(0.0, edge, 1.0 - bed.through));
+    var rgb = here;
+    if (low > 0.0) { rgb = mix(rgb, strataSlot(geoColumn(bed.foot - 0.01).slot), low); }
+    if (high > 0.0) { rgb = mix(rgb, strataSlot(geoColumn(bed.foot + bed.thick + 0.01).slot), high); }
+    // Level ground in a section nearly all one bed is held to that bed (the cap sheet, desertCapFlat's rule read from the column).
+    let sec = u.geoSections[geoSectionAt(c)];
+    var period = 0.0;
+    var widest = 0.0;
+    var slot = 0.0;
+    for (var j = 0; j < i32(sec.z); j++) {
+        let b = u.geoBeds[i32(sec.y) + j];
+        period += b.x;
+        if (b.x > widest) { widest = b.x; slot = b.z; }
+    }
+    let hold = u.desertCapFlat * smoothstep(0.88, 0.94, widest / max(period, 0.01)) * (1.0 - smoothstep(0.05, 0.22, slope));
+    return mix(rgb, strataSlot(slot), hold);
+}
 fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     let wander = (terrainNoise(p * 0.03 + vec2f(41.0, 7.0)).r - 0.5) * 2.0 * u.baseBandWander
                + (terrainNoise(p * 0.35 + vec2f(5.0, 63.0)).g - 0.5) * 1.5;
@@ -1469,7 +1493,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let warp = (terrainNoise(p * 0.08 + vec2f(5.0, 9.0)).r - 0.5) * u.strataWarp
                  + (terrainNoise(p * 0.7 + vec2f(17.0, 2.0)).g - 0.5) * 2.6
                  + (terrainNoise(p * 2.1 + vec2f(3.0, 41.0)).b - 0.5) * 1.2;
-        let hr = h - u.base + warp;
+        // H16 proof: the coordinate is the column's (geoCoord), the one the bake's ledges read.
+        let geoOn = u.geology > 0.0 && u.geoCount > 0.0;
+        let hr = select(h - u.base + warp, geoCoord(p, h), geoOn);
         var zone = 0;
         for (var i = 1; i < 6; i++) { if (i < u.strataZoneCount && hr >= u.strataZones[i].x) { zone = i; } }
         let z = u.strataZones[zone];
@@ -1497,7 +1523,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Card E8: the strata run through the rock itself, so painted rock carries the top
         // zone's own beds (its grey with the lines), not one flat colour, wherever it is painted.
         if (u.strataZoneSpace[topZone].x > 0.0) { rockBed = rockStrata(hr, topZone, painted.x); }
-        let bed = mix(mix(strataSlot(z.y), strataSlot(z.z), isB), rockBed, painted.x);
+        var stratum = mix(strataSlot(z.y), strataSlot(z.z), isB);
+        if (geoOn) { stratum = geoStrata(hr, slope); }
+        let bed = mix(stratum, rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
         // The ground's grain survives in the beds as brightness, scaled by

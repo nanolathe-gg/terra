@@ -420,6 +420,14 @@ struct Uniforms {
     stoneSize: f32,       // px: the largest stone (larger below hard beds)
     // H4b (Green): rock blocks on the hills' rock, outside the structured face (0: none).
     hillBlocks: f32,      // 0..1: how much of the hill rock (slope .5 and over, off the structured face) is cut into small pieces
+    // H16 (branch only, never lands): the geology proof. geology 1 draws a world's banding from the table below instead of its own knobs.
+    geology: f32,         // 0: every world as it was; 1: the proof (strata colours and ledges, bands, rings read geoBeds)
+    geoCount: f32,        // beds in the table, 1..24 (0: the world has no proof table)
+    geoSectionCount: f32, // sections of the column, 1..6
+    geoBeds: array<vec4f, 24>,       // per bed: x thickness (height units, or ring steps), y hardness 0..1, z material slot, w unused
+    geoSections: array<vec4f, 6>,    // per section: x starts at this coordinate, y first bed, z bed count, w thickness jitter 0..1
+    geoWander: vec4f,     // coordinate wander in height units: x px of the broad octave, y its amplitude, z the 1.4 px octave, w the 0.5 px octave
+    geoOpts: vec4f,       // x: 1 blends the thicknesses of neighbouring sections with the same slots, y ledge strength (1: 2 * hardness), z, w unused
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
@@ -494,6 +502,70 @@ fn columnAt(c: f32) -> ColumnBed {
     }
     return bed;
 }
+// H16 (branch only): the proof's column. Sections from low to high, each a bed list that repeats upward from coordinate 0, with an optional
+// jitter of the thicknesses by running index (renormalised so a cycle keeps its period) and, between sections with the same slots, a blend
+// of the thicknesses over the gap between their starts. One section of the Green column's kind is the case geoSectionCount 1.
+struct GeoBed { index: f32, hardness: f32, slot: f32, through: f32, thick: f32, foot: f32 }
+
+fn geoSectionAt(c: f32) -> i32 {
+    var s = 0;
+    for (var i = 1; i < i32(u.geoSectionCount); i++) { if (c >= u.geoSections[i].x) { s = i; } }
+    return s;
+}
+// Thickness of bed j of section s in cycle k, before renormalising.
+fn geoThick(s: i32, j: i32, k: f32, blend: f32) -> f32 {
+    let sec = u.geoSections[s];
+    var t = u.geoBeds[i32(sec.y) + j].x;
+    if (blend > 0.0 && s + 1 < i32(u.geoSectionCount)) {
+        let nx = u.geoSections[s + 1];
+        t = mix(t, u.geoBeds[i32(nx.y) + j].x, blend);
+    }
+    return t * (1.0 + sec.w * (2.0 * cellHash(vec2f(k, f32(j) + 5.5)).x - 1.0));
+}
+fn geoColumn(c: f32) -> GeoBed {
+    let s = geoSectionAt(c);
+    let sec = u.geoSections[s];
+    let n = max(i32(sec.z), 1);
+    var blend = 0.0;
+    if (u.geoOpts.x > 0.0 && s + 1 < i32(u.geoSectionCount)) {
+        let nx = u.geoSections[s + 1];
+        var same = nx.z == sec.z;
+        for (var j = 0; j < n; j++) { if (u.geoBeds[i32(sec.y) + j].z != u.geoBeds[i32(nx.y) + j].z) { same = false; } }
+        if (same) { blend = clamp((c - sec.x) / max(nx.x - sec.x, 0.1), 0.0, 1.0); }
+    }
+    var period = 0.0;
+    for (var j = 0; j < n; j++) { period += u.geoBeds[i32(sec.y) + j].x; }
+    let cycle = floor(c / period);
+    // The jitter and blend change the cycle's thicknesses; its period stays the table's.
+    var total = 0.0;
+    for (var j = 0; j < n; j++) { total += geoThick(s, j, cycle, blend); }
+    let scale = period / total;
+    let r = c - cycle * period;
+    var bed: GeoBed;
+    var lo = 0.0;
+    for (var j = 0; j < n; j++) {
+        let t = geoThick(s, j, cycle, blend) * scale;
+        if (r < lo + t || j == n - 1) {
+            let b = u.geoBeds[i32(sec.y) + j];
+            bed.index = cycle * f32(n) + f32(j);
+            bed.hardness = b.y;
+            bed.slot = b.z;
+            bed.thick = t;
+            bed.through = clamp((r - lo) / t, 0.0, 1.0);
+            bed.foot = cycle * period + lo;
+            return bed;
+        }
+        lo += t;
+    }
+    return bed;
+}
+// The coordinate Desert's strata and ledges share: the height above the plain plus the wander (the strata's warp, in value noise).
+fn geoCoord(p: vec2f, z: f32) -> f32 {
+    let w = u.geoWander;
+    let sc = max(w.x, 1.0);
+    return z - u.base + valueNoise(p / sc + 5.0) * w.y + valueNoise(p / (sc * 0.11) + 17.0) * w.z + valueNoise(p / (sc * 0.04) + 41.0) * w.w;
+}
+
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;

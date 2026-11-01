@@ -1041,6 +1041,24 @@ export class TerrainRenderer {
     this.set('uColumnContrast', number('columnContrast', 1));
     this.set('uColumnCount', Math.max(1, beds.length));
     this.set('uColumnBeds', beds.length ? beds : [[5, .5, 0, 0]]);
+    this.setGeology();
+  }
+
+  // H16 (branch only, never lands): the geology proof's table. geology 0, or a world without a table, leaves every uniform at zero. The strings are
+  // "thickness:hardness:slot,..." (geoBeds, up to 24), "start:firstBed:count:jitter;..." (geoSections, up to six), "px:amplitude:fine:finest"
+  // (geoWander) and "blend:ledge" (geoOpts).
+  setGeology() {
+    const v = this.variant;
+    const list = (key, size) => String(v.get(key) || '').split(/[;,]/).map(s => s.trim()).filter(Boolean).map(s => { const a = s.split(':').map(Number); while (a.length < size) a.push(0); return a.slice(0, size); });
+    const beds = list('geoBeds', 4).slice(0, 24), sections = list('geoSections', 4).slice(0, 6);
+    const on = Number(v.get('geology')) > 0 && beds.length > 0;
+    this.set('uGeology', on ? 1 : 0);
+    this.set('uGeoCount', on ? beds.length : 0);
+    this.set('uGeoSectionCount', on ? Math.max(1, sections.length) : 0);
+    this.set('uGeoBeds', on ? beds : [[1, .5, 0, 0]]);
+    this.set('uGeoSections', on ? (sections.length ? sections : [[-1000, 0, beds.length, 0]]) : [[-1000, 0, 1, 0]]);
+    const w = list('geoWander', 4)[0] || [100, 0, 0, 0], o = list('geoOpts', 4)[0] || [0, 1, 0, 0];
+    this.set('uGeoWander', w); this.set('uGeoOpts', o);
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.

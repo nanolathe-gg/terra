@@ -464,8 +464,32 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     return vec3f(off, lip, bed.index);
 }
 
+// H16 proof: the same bed shape read from the proof's column at geoCoord, the coordinate the strata colours use. A bed's ledge stands
+// geoOpts.y * 2 * hardness of the hash bed's mean (hardness .5 is the hash bed's own).
+fn geoBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
+    let a = radians(u.bedDipDir);
+    let dip = vec2f(cos(a), sin(a));
+    let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
+    let S = max(u.bedSpacing, 2.0);
+    let bed = geoColumn(geoCoord(p, h));
+    let f = bed.through;
+    let bedPx = bed.thick / G;
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
+    var off = step_ * (bed.thick / S) * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;
+    let dTop = (1.0 - f) * bedPx;
+    let dFoot = (f - (1.0 - riser)) * bedPx;
+    let lip = exp(-dTop * dTop / 5.0);
+    let notch = exp(-(dFoot + 1.0) * (dFoot + 1.0) / 6.0);
+    let punch = u.geoOpts.y * 2.0 * bed.hardness;
+    off *= punch;
+    off += punch * u.bedLip * (lip - 0.8 * notch);
+    return vec3f(off, lip, bed.index);
+}
+
 fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
     if (u.column > 0.0) { return columnBedRelief(p, h, gOver); }
+    if (u.geology > 0.0 && u.geoCount > 0.0) { return geoBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let tilt = u.bedDip * dot(p, dip);
@@ -1340,7 +1364,7 @@ fn bake(p: vec2f) -> vec4f {
             bedG = mix(cliff.gradient, slope, cliff.local * (1.0 - u.cliffBed));
         }
         // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
-        if (u.column > 0.0) { bedH = h; }
+        if (u.column > 0.0 || (u.geology > 0.0 && u.geoCount > 0.0)) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
         // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
         // The form fades out over the face's foot, so no gully reaches the water plane.
