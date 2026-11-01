@@ -7061,6 +7061,30 @@ Lava's visible banding is the coast pass's staircase plus a cavity crease and ca
 scenes are 0.00 against main. NOTES.md of `agent-H16` holds the inventory, the bridge audit, the control table (70 knobs and 3 tables
 before; 27 in Geology and 17 moved to Shape, Coast and Materials after) and the sheets.
 
+**Part 1, the coordinator's review.** The inventory and the impact numbers stand; three
+readings do not.
+- *Desert is not yet proved.* desert-2 renders `variant=triad`, whose zone table the proof never
+  read, so one table drew all three windows. Its grey butte went pale and desert-1's band round the
+  cap thinned: both further at 1x, not the same. That is a settings error, not a limit of the column.
+  It does mean a variant is a row of the world's column table, not a knob override.
+- *Archipelago's 0.00 proves nothing.* The 22 bed rows are `ringContrast (1 - ringTaper j / 21)`
+  written out: more numbers in place of three knobs. Red is one bed, and Lava drew nothing.
+- *The proposed table is not a plan.* It drops knobs that act (`ringLobe` 10%, `ringPatchSize` 21%),
+  never moved others (`ringScatter`, `ringShiftDir`, four `baseBand` sub-knobs), and keeps knobs
+  under 5% (`bedLedge`, `bedLip`, `bedBend`, on one Green scene). Dropping is the owner's, in
+  combine-or-drop.
+
+**Part 2: one column, for what is a column.**
+- *In:* beds, strata and bands, which all step with height. One function, one table per world in
+  `materials/<world>.json`, a variant a row of it.
+- *Out, a departure from decision 16's wording:* rings and Lava's layers step with distance from a
+  foot or a coast, not with height, and a column would add numbers, not remove them. Rings stay their
+  own stack. Layers and the sediment transition go to Shores, the terraces stay in Shape, and the
+  fringe image and `mineralDetail` stay in Materials.
+- *Order, a commit each:* the proof goes and one column reads Green at 0.00; Desert's colours exactly
+  (both tables); Desert's ledges on the colours' coordinate; bands, Green last, since it runs two
+  mechanisms today. Only merged knobs go. The rest are listed for combine-or-drop, with numbers.
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H16`, branch
 `H16-geology`; assets `$R/agent-H16`.
 
