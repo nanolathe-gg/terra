@@ -112,7 +112,8 @@ feature.
     - `hillLobes` is dropped in favour of the cross-section's terraces.
     - The URL-only shape experiments are deleted.
     - `moonLobes` merges into `baseVary` and `baseBump`, if the look
-      allows.
+      allows. H21 part 1 retains it: fresh trials lose face folds; the foot
+      controls have different support and scale ([evidence](audit/IMPACTS.md#moonlobes-ruling-keep)).
     - *"As for slight differences on the GPU version, I think that's
       totally fine. We want a similar look, tiny changes in height or
       shape or shading due to the GPU math are acceptable."*

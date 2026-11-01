@@ -125,3 +125,20 @@ Values and measurements are window 1 / 2 / 3. Rows are sorted zero, below thresh
 | sweep / moon | `worms`: 0/0/0 → .4 | 4.17/1.87/2.29 | 23.61/10.98/13.01 | slope | 53.81/23.61/29.37 | 52.04/44.26/48.71 | yes |
 | cracked / moon | `wrinkles`: 0.8/0.8/0.8 → 0 | 4.07/1.48/2.22 | 15.25/5.75/8.19 | slope | 53.81/23.41/28.81 | 52.31/44.11/51.95 | yes |
 | sweep / moon | `wrinkles`: 0/0/0 → .8 | 4.13/1.53/2.29 | 14.69/5.78/8.04 | slope | 53.81/23.61/29.37 | 50.27/41.88/51.87 | yes |
+
+## moonLobes ruling: keep
+
+Fresh post-H19 trials use H15's exact proposed values, not retail tuning: moonLobes .5→0, baseVary 0→22 px, baseBump 0→2.5 units. `lobes/` applies these to authored hills/mountains; `lobes-all/` also reaches crater child spurs through the parent. Six renders, all exit 0, mismatch 0, console []. Their retail/before/after sheets are `sheets-lobes/{1x,2x}.png` and `sheets-lobes-all/{1x,2x}.png`; all four sheets and all six whole `pair.png` windows were opened. H15's two historical sheets and the three fresh baseline Moon pairs were also opened.
+
+| Trial | MAD, windows 1/2/3 | Pixels moved % | Impact-class blocks changed % |
+|---|---|---|---|
+| Authored hills/mountains | 5.891 / 1.474 / 4.069 | 23.11 / 6.43 / 12.30 | 27.69 / 11.19 / 26.32 |
+| Includes crater spurs | 5.891 / 2.233 / 4.069 | 23.11 / 8.66 / 12.30 | 27.69 / 16.68 / 26.32 |
+
+- **moon-1, 1x and 2x:** further in the contour/fold structure. The lower-right formation becomes a more even wall/foot; retail has folds running up into it. The fresh version repeats H15's loss. Baseline itself still has too much isolated fine pitting and too little broad folded relief.
+- **moon-2:** hill-only is roughly the same in its main mismatch at 1x; the radial crater still dominates and the missing sinuous fissures stay missing. At 2x the nearby hill is smoother. The full substitution also straightens/smooths the spurs, losing their branching relief without reproducing retail's rounded, folded radial formation: further in that structure at both scales, not an equivalent replacement. The whole window confirms those large retail fissures have no corresponding authored strokes.
+- **moon-3, 1x and 2x:** mixed. The upper formation's jagged rosette becomes smoother, which helps one mismatch, but the folded interior flattens toward an oval. Retail's rounded but strongly folded forms are neither of these. No overall closer claim, and no basis for retiring the independent outline option.
+
+The structural limit is decisive: baseVary's maximum displacement is .15 radius, with fixed 55/21 px wavelengths and a foot mask; moonLobes .5 uses radius-scaled .5/.18/.07 wavelengths through the face. baseBump only lifts the foot. Increasing these numbers cannot reproduce the current family of radius-scaled outlines at multiple brush sizes. Both already call the same outlineShift kernel, so there is no duplicate kernel to delete. **Keep moonLobes; no control/value/shape change and zero claimed saving for this rejected merge.** A future owner-approved outline redesign could unify parameterization; that is outside part 1.
+
+The first six pair-tool calls exited 1 because the trial folders lacked retail heights.npy (the render and image sheets succeeded). Copied the baseline's existing retail height/crop metadata into those own folders; all six pair-tool retries exited 0. No render was rerun or deleted for that packaging error.
