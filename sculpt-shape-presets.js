@@ -51,11 +51,11 @@ export const FORMS = {
 export const FORM_NAMES = ['hill', 'mountain', 'plateau', 'mesa', 'cliff', 'terrace'];
 // The form a kind draws by default.
 export const defaultForm = (kind, shouldered) => kind === 'hill' ? (shouldered ? 'hill' : 'dome') : kind === 'mountain' ? 'mountain' : 'plateau';
-export const formKnots = (name, softness) => FORMS[name](softness);
 
 // Lean and facing. Lean is the back's length over the face's: the slope toward the lean side runs `ratio` times the length of the other (0: the kind's own,
 // which is the shouldered hill's softness-driven back and, for the plateau family, 1.7: the face widened .7 * .32 north^2 on the side toward north).
-// Facing is the lean side: a map bearing, or the left or right of the drawn direction. A shouldered hill's face is the side opposite.
+// Facing is the lean side: a map bearing, or the left or right of the drawn direction. A shouldered hill's face is the side opposite. A stroke with a Face
+// width has no lean of its own: the px face stays what it says until a lean is set.
 export const FACING_CHOICES = [[0, 'World default (north)'], [1, 'Left of the line'], [2, 'Right of the line'], [3, 'North'], [4, 'North-east'], [5, 'East'], [6, 'South-east'],
   [7, 'South'], [8, 'South-west'], [9, 'West'], [10, 'North-west']];
 const R2 = Math.SQRT1_2, BEARINGS = [[0, -1], [R2, -R2], [1, 0], [R2, R2], [0, 1], [-R2, R2], [-1, 0], [-R2, -R2]];
@@ -63,7 +63,14 @@ const FAMILY = ['paint', 'erase', 'plateau', 'offset', 'sand', 'grass'];
 export function leanSetup(kind, q) {
   const f = Math.round(q.facing || 0), side = f === 1 ? 1 : f === 2 ? -1 : 0, [bx, by] = BEARINGS[side ? 0 : Math.max(f, 3) - 3];
   const ratio = q.lean > 0 ? clamp(q.lean, .25, 4) : null;
-  return {ratio, k: (ratio ?? (FAMILY.includes(kind) ? 1.7 : 1)) - 1, side, bx, by, family: FAMILY.includes(kind)};
+  return {ratio, k: (ratio ?? (FAMILY.includes(kind) && !(q.facePx > 0) ? 1.7 : 1)) - 1, side, bx, by};
+}
+// A hill's shouldered geometry (face vector, end taper) is how it leans, so a hill with ridge options, or at lean 1, is the plain radial one.
+export const isShouldered = (kind, q, ridge) => kind === 'hill' && !ridge && q.lean !== 1;
+// The shouldered hill's face and back widths, shares of the radius: softness sets both, Face width sets the face, and a lean sets the back from the face.
+export function hillWidths(q, ratio) {
+  const soft = .66 + (q.softness - .5) * .9, face = q.facePx > 0 ? q.facePx / q.radius : soft;
+  return {face, back: ratio ? ratio * face : q.softness === .5 ? 1.34 : 2 - soft};
 }
 
 // Variability: roughness stays the master; these tables hold what each kind multiplies it by, and the stroke's three sliders (outlineVar, widthVar, heightVar,
@@ -86,14 +93,13 @@ export function variability(kind, {naturalWater, naturalPlateau, shouldered, pla
 
 // The kinds that take a cross-section curve, its face width and terraces.
 export const SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
-export const hasCurve = q => Boolean(q.curve);
 const isWater = kind => kind === 'deep' || kind === 'shallow';
 
 // The stroke's curve: {knots, back?} (form at the stroke's softness unless it carries knots of its own).
 export function strokeKnots(kind, q, shouldered) {
   const c = q.curve, f = FORMS[c?.form] ? c.form : defaultForm(kind, shouldered), base = FORMS[f](q.softness);
   if (!c?.knots) return base;
-  return {knots: c.knots, back: c.back ?? (shouldered ? c.knots : undefined)};
+  return {knots: c.knots, back: c.back ?? base.back};
 }
 
 // The front table (and the back one where the shape needs a second curve) of a stroke, with the uniforms its curve adds, or null for a kind with no
@@ -115,15 +121,14 @@ export function readTable(tab, t) {
 // The lean a stroke shows: its own, else the shouldered hill's softness-driven back over its face, else the kind's default.
 export function leanRatio(kind, q, shouldered) {
   const L = leanSetup(kind, q);
-  if (L.ratio) return L.ratio;
-  if (shouldered) { const fw = .66 + (q.softness - .5) * .9; return (q.softness === .5 ? 1.34 : 2 - fw) / fw; }
-  return L.family ? 1.7 : 1;
+  if (L.ratio || !shouldered) return L.k + 1;
+  const w = hillWidths(q); return w.back / w.face;
 }
 // Knots for a form that has many (a power law or a smoothstep sampled finely): nine even ones, the starting point for dragging.
 export function thinKnots(knots, n = 9) { const f = knotCurve(knots); return Array.from({length: n}, (_, i) => [i / (n - 1), Math.round(f(i / (n - 1)) * 1000) / 1000]); }
 
 // The editor's preview: the stroke's table, foot to top, n + 1 samples (land: share of the rise; water: share of the descent), and its back's.
 export function sectionPreview(kind, q, shouldered, n = 160) {
-  const k = strokeKnots(kind, q, shouldered), tab = sampleKnots(k.knots), back = shouldered || k.back ? sampleKnots(k.back ?? k.knots) : tab, at = tb => Float32Array.from({length: n + 1}, (_, i) => readTable(tb, i / n));
+  const k = strokeKnots(kind, q, shouldered), tab = sampleKnots(k.knots), back = shouldered ? sampleKnots(k.back ?? SMOOTH) : tab, at = tb => Float32Array.from({length: n + 1}, (_, i) => readTable(tb, i / n));
   return {water: isWater(kind), ys: at(tab), back: at(back), knots: k.knots};
 }

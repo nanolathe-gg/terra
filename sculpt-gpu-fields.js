@@ -1,5 +1,5 @@
 import {shapePaths} from './sculpt-paths.js';
-import {strokeCurve, leanSetup, variability, CV_N} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -215,9 +215,9 @@ export function prepareNode(n, geom, c) {
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), allPoints = n.points, paths = shapePaths(n), radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
-  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), plainHill = kind === 'hill' && ridgeOn(kind, q), shouldered = kind === 'hill' && !plainHill;
+  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), shouldered = isShouldered(kind, q, ridgeOn(kind, q)), plainHill = kind === 'hill' && !shouldered;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
-  const lean = leanSetup(kind, q), faceWidth = .66 + (q.softness - .5) * .9, backWidth = lean.ratio ? lean.ratio * faceWidth : q.softness === .5 ? 1.34 : 2 - faceWidth;
+  const lean = leanSetup(kind, q), {face: faceWidth, back: backWidth} = hillWidths(q, lean.ratio);
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
   const fis = kind === 'fissure' ? (() => {
     const kf = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1, hw0 = Math.max(q.fissureWidth, 1) * .5, hw = hw0 * kf, net = q.fissureNetwork >= .5, jag = q.fissureJag, famp = hw * (.5 + 2.2 * jag) + 1;
@@ -225,7 +225,7 @@ export function prepareNode(n, geom, c) {
   })() : null;
   const vary = variability(kind, {naturalWater, naturalPlateau, shouldered, plainHill}, q);
   const amp = kind === 'crater' ? q.rough * radius * .45 : kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * vary.amp;
-  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale * (!shouldered && !lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp + (water && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
+  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : shouldered ? Math.max(1.4, backWidth, faceWidth) : 1) * bankScale * (!shouldered && !lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp + (water && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
@@ -249,7 +249,7 @@ export function prepareNode(n, geom, c) {
   for (const indices of paths) {
   const pts=indices.map(i=>allPoints[i]),segmentStart=segs.length;
   if (shouldered) {
-    const fa = Math.atan2(-lean.by, -lean.bx) + sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8 + turn;
+    const fa = Math.atan2(-lean.by, -lean.bx) + (q.facing ? 0 : sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8) + turn;   // a chosen side holds; the default wanders
     face = [Math.cos(fa), Math.sin(fa)];
     const path = [pts[0]];
     for (const p of pts.slice(1)) if (Math.hypot(p.x - path[path.length - 1].x, p.y - path[path.length - 1].y) >= .2) path.push(p);

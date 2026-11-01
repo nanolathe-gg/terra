@@ -1,7 +1,7 @@
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
 import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,leanSetup} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -383,7 +383,7 @@ function updateControls() {
   const shapeOptions=Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)]));
   const gated=key => !shapeControlAvailable(key,tool,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
-  if(shapeOptions.facePx>0 && ['plateau','offset','deep','shallow'].includes(tool))$('softness-control').hidden=true;
+  if(SECTION_KINDS.includes(tool) && !shapeControlAvailable('softness',tool,{...shapeOptions,curve:currentCurve()}))$('softness-control').hidden=true;
   if(shapeOptions.bankPx>0 && !(shapeOptions.facePx>0))$('bank-control').hidden=true;
   $('section-preview-control').hidden=!SECTION_KINDS.includes(tool);
   if (!$('section-preview-control').hidden) drawSection();
@@ -436,8 +436,8 @@ const CV_LO=-.6,CV_HI=1.6,CV_PAD=9;
 const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].kind : tool;
 const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.curve : toolSettings[tool]?.curve) || null;
 function curveContext() {
-  const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),shouldered=kind==='hill' && !ridgeOn(kind,o);
-  return {kind,shouldered,water:kind==='deep' || kind==='shallow',q:{...o,softness:Number($('softness').value)/100,curve:currentCurve()}};
+  const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),shouldered=isShouldered(kind,o,ridgeOn(kind,o));
+  return {kind,shouldered,water:kind==='deep' || kind==='shallow',q:{...o,radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve()}};
 }
 // Hand the curve to the shape being edited (or to the brush, for the next stroke); null goes back to the kind's own form.
 function setCurve(curve) {
@@ -607,7 +607,7 @@ function regionalStages(list=nodes) {
 function regionalReadApron(n) {
   if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
   const q={...shapeDefaults(),...n.params},bank=2**(((q.bankWidth??.5)-.5)*1.3);
-  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):n.kind==='hill' && !ridgeOn(n.kind,q)?4:0;
+  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):isShouldered(n.kind,q,ridgeOn(n.kind,q))?4:0;
   // A framed finger cache is keyed on authoring cells; include every world
   // cell that can share that key. Radial thumbs can share a coastal key from
   // both sides of the radial band, so their first-call order needs that band.

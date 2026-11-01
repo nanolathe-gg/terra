@@ -182,11 +182,11 @@ fn terraced(c: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
   return terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g);
 }
 // The share of its reach the curve covers at a cell, foot to top (flat beyond): the kind's own share `own` (1 minus the shoulder, or 1), or facePx, kept
-// that wide whatever the stroke's size and wandering with the cell's width noise (kw, shared by the whole face).
-fn faceOf(own: f32, reach: f32, nCW: f32) -> f32 {
+// that wide whatever the stroke's size, wandering with the cell's width noise (kw, shared by the whole face) and stretched by the lean.
+fn faceOf(own: f32, reach: f32, nCW: f32, leaned: f32) -> f32 {
   if (u.facePx <= 0.0) { return own; }
   let kw = clamp(1.0 + 0.5 * u.faceVar * nCW, 0.4, 1.8);
-  return min(u.facePx * kw / reach, 0.98);
+  return min(u.facePx * kw * leaned / reach, 0.98);
 }
 // The height lumps: the stroke's height wanders by rough times its two noise fields (nCW, nDet) at the host's weights hgtA and hgtB.
 fn lumps(nCW: f32, nDet: f32) -> f32 { return 1.0 + u.rough * (u.hgtA * nCW + u.hgtB * nDet); }
@@ -323,8 +323,10 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
     var reach = radius * width * u.bankScale;
     if (u.ridge != 0u) { reach = reach * (s1.x + (s1.y - s1.x) * t); }
-    // Lean on a kind with no shoulder to widen: the slope toward the lean side runs leanK of its length longer (shorter below 0).
-    if (kind >= 2u && !shouldered && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); reach = reach * (1.0 + u.leanK * ln * ln); }
+    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): the reach stretches, or on a kind with a shoulder the face does.
+    var leaned = 1.0;
+    if (!shouldered && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
+    if (kind >= 2u) { reach = reach * leaned; }
     var r = sqrt(dx * dx + dy * dy) / reach;
     var lobe = 0.0;
     if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
@@ -345,12 +347,10 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       // Plateau-like edge: a broad-scale face-width variation, the north foreshortening term, then the shoulder.
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
-      var north = 0.0;
-      if (u.leanK != 0.0) { north = leanToward(wx - cx, wy - cy, sx, sy, span2); }
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.leanK * 0.32 * north * north, 0.12, 0.90);
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW));
+      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW, leaned));
     } else if (kind == 2u || kind == 3u) {
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(0.9, reach, nCW));
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(0.9, reach, nCW, leaned));
     } else if (kind == 5u && shouldered) {
       var face = vec2f(u.faceX, u.faceY);
       if (span2 > 0.0) { let len = sqrt(span2); face = vec2f(-sy / len * u.faceSide, sx / len * u.faceSide); }
@@ -373,9 +373,9 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
         else { c = curveAt(u.backBase, 1.0 + cross / (u.sBack * u.faceWidth)) * q * q; }
       }
     } else {
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW));
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW, leaned));
     }
-    if (!shouldered) { c = terraced(c, x, y, i, cells); }
+    c = terraced(c, x, y, i, cells);
     if (u.ridge != 0u) { c = c * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
     if (kind == 4u || (kind == 5u && !shouldered)) { c = keepLip(c * lumps(nCW, nDet)); }
     let key = select(max(c, core), c, core == 0.0);
@@ -639,7 +639,9 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     var width = 1.0;
     if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
     var reach = radius * width * u.bankScale;
-    if (!natural && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); reach = reach * (1.0 + u.leanK * ln * ln); }
+    var leaned = 1.0;
+    if (u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
+    if (!natural) { reach = reach * leaned; }
     var r = sqrt(dx * dx + dy * dy) / reach;
     if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / (width * u.bankScale); }
     if (r >= 1.0) { continue; }
@@ -647,12 +649,10 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     if (natural) {
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
-      var north = 0.0;
-      if (u.leanK != 0.0) { north = leanToward(wx - cx, wy - cy, sx, sy, span2); }
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.leanK * 0.32 * north * north, 0.12, 0.90);
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW));
+      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW, leaned));
     } else {
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW));
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW, leaned));
       if (kind == 8u) { c = keepLip(c * lumps(nCW, nDet)); }
     }
     c = terraced(c, x, y, i, cells);

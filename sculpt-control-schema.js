@@ -1,3 +1,4 @@
+import {isShouldered} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -30,10 +31,14 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
 export function shapeControlAvailable(key,kind,p){
- const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
+ const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2,ridge=Math.round(p.spurCount)>=1||p.crestJag>0||p.crestVary>0||p.crestTaper>0;
+ const sharedFace=['plateau','offset','erase','paint','sand','grass'].includes(kind)&&!(p.facePx>0),shoulderedHill=isShouldered(kind,p,ridge);
  // The classic shouldered ridge uses a different footprint; its settled path
  // bypasses these foot effects. Custom/variable ridges use the shared profile.
- if(kind==='hill'&&['baseVary','baseBump'].includes(key)&&!(Math.round(p.spurCount)>=1||p.crestJag>0||p.crestVary>0||p.crestTaper>0))return false;
+ if(shoulderedHill&&['baseVary','baseBump','faceVariation'].includes(key))return false;
+ // The face wanders on a share face (its shoulder) or a px one; softness reads the shoulder, a hill's widths, and the forms that follow it.
+ if(key==='faceVariation')return sharedFace||p.facePx>0;
+ if(key==='softness')return sharedFace||shoulderedHill||(!p.curve?.knots&&['mountain','cliff'].includes(p.curve?.form||(kind==='mountain'?'mountain':'')));
  if(key==='moonLobes'&&p.baseVary>0)return false;
  if(kind==='crystal'){
   if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;
