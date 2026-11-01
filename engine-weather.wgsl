@@ -73,7 +73,7 @@ fn mapsMain(@builtin(global_invocation_id) id: vec3u) {
     wet = clamp(2.0 * wet / wsum, 0.0, 1.0);
     let wear = smoothstep(0.0, mp.wearFull, max(0.0, authored[i] - c.x));
     var hardness = 0.0;
-    if (u.columnOpts.z > 0.0) { hardness = columnAt(c.x - u.columnOpts.y + f.w).hardness; }
+    if (u.columnSectionCount > 0 && u.columnContrast > 0.0) { hardness = columnAt(c.x - u.columnOrigin + f.w).hardness; }
     // Sand: a placement rule over deposit and slope (it settles where water dropped what it carried, on ground that is not steep).
     let sand = mp.sand * smoothstep(0.03, 0.30, deposit) * (1.0 - smoothstep(0.20, 0.60, slope)) * (1.0 - smoothstep(0.75, 1.0, flow));
     // Channel: where the flow runs hard over ground that falls (a rill's own floor); ridge: flow below its neighbours (the interfluve).

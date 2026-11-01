@@ -41,8 +41,8 @@ fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[cla
 // The colour of the column's section s at coordinate c. A bed meets the next one over edge, a share of the cycle: a boundary inside a
 // cycle is softened on both sides, the cycle's top (topFade) inside its top bed. hold (0..1) holds ground that is nearly all one bed
 // (the widest bed's share of the cycle over .88) to that bed's colour: retail's pale caps are one sheet of the cool bed (card G4).
-fn columnColour(c: f32, s: i32, ramp: bool, edge: f32, topFade: bool, hold: f32) -> vec3f {
-    let bed = columnBedIn(c, s, ramp);
+fn columnColour(c: f32, s: i32, edge: f32, topFade: bool, hold: f32) -> vec3f {
+    let bed = columnBedIn(c, s);
     let w = edge * bed.period;
     let r = bed.through * bed.thick;
     var rgb = strataSlot(bed.slot);
@@ -1449,7 +1449,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, rock, crown);
         exposed = max(exposed, crown);
     }
-    if (u.strata > 0.0) {
+    if (u.strata > 0.0 && u.columnSectionCount > 0) {
         // Beds by height, measured on retail Painted Desert: the column's sections (a start above the plain, a pair of beds as
         // colour slots with B's share of each period). Within a section A and B alternate every period, quasi-periodically (B's
         // share varies per cycle), and B's share ramps toward the next section when both use the same pair. Beds colour all
@@ -1463,15 +1463,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // (Retail keeps one ragged orange patch of 40-150 px per cap. A threshold on noise drew smooth stains or thin veins, so
         // ours draws none.)
         let level = 1.0 - smoothstep(0.05, 0.22, slope);
-        let edge = clamp(1.5 * max(slope, 0.05) / columnPeriod(zone), 0.01, 0.2);
-        let stratum = columnColour(hr, zone, true, edge, true, u.desertCapFlat * level);
+        let edge = clamp(1.5 * max(slope, 0.05) / u.columnSections[zone].w, 0.01, 0.2);
+        let stratum = columnColour(hr, zone, edge, true, u.desertCapFlat * level);
         // Painted rock (card C5) in a world with beds takes the colour its highest ground is painted with (its top section's
         // main bed: Painted Desert's grey buttes), and (card E8) the strata run through the rock itself, so painted rock carries
         // the top section's own beds (its grey with the lines), not one flat colour, wherever it is painted. A painted mesa's
-        // rock is mostly gentle: a fixed edge, no ramp.
-        let topZone = max(u.columnSectionCount - 1, 0);
+        // rock is mostly gentle: a fixed edge.
+        let topZone = u.columnSectionCount - 1;
         var rockBed = vec3f(0.0);
-        if (painted.x > 0.0) { rockBed = columnColour(hr, topZone, false, 0.04, false, 0.0); }
+        if (painted.x > 0.0) { rockBed = columnColour(hr, topZone, 0.04, false, 0.0); }
         let bed = mix(stratum, rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);

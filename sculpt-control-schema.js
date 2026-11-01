@@ -61,6 +61,7 @@ export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>n(parent)<=0?`Enable ${label} to use this setting.`:'';
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
  if(['bedHeight','bedVary','bedPunch','bedFlow'].includes(key)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';
+ if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir'&&n('bedDip')===0)return 'Set Bed tilt above or below zero to choose its direction.';
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedFlow','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','scratchDepth','scratchSpacing','scratchAngle','scratchRun','scratchGaps','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['bandWidth','bandRelief','bandWander','bandGaps'].includes(key)&&n('bandStyle')<.5)return 'Choose Bank lines in Contour bands to use this setting.';

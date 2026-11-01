@@ -175,7 +175,9 @@ struct Uniforms {
     worms: f32,           // wormy regolith relief on slopes (lunar)
     boulderRound: f32,    // 0: angular boulders; 1: rounded domes
     bandStyle: i32,       // 0 tonal steps (Green), 1 bank lines (Lava)
+    bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
+    bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
     bandWidth: f32,       // bank lines (style 1): width at half depth, px (0: 1.6)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
@@ -383,13 +385,13 @@ struct Uniforms {
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
     // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
-    columnSectionCount: i32,   // geology sections of the column (0: the world has no column; each bed's thickness and strength come from a hash)
+    columnSectionCount: i32,   // sections of the column (0: the world has no column; each bed's thickness and strength come from a hash)
     columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
+    columnOrigin: f32,    // the height the coordinate counts from (the plain's, or 0)
     columnBeds: array<vec4f, 32>,       // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
-    columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w unused; the geology sections, then the band row's
-    columnWander: vec4f,  // the wander the coordinate takes from value noise (height units): x its amplitude in the bake, y in the Time pass
+    columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
+    columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    columnOpts: vec4f,    // x: 1 varies each cycle's share of a two-bed section; y: the height the coordinate counts from (the plain's, or 0); z: 1 lets the bake's beds, the Time pass's hardness and the rock blocks read the column; w: sections of the band row
     materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
@@ -453,22 +455,15 @@ fn valueNoise(q: vec2f) -> f32 {
 // call it with the surface height of the grid they hold, so a ledge erosion leaves
 // stands where the bake draws one: it depends only on (p, z), not on the smoothed
 // ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip)
-// and the broad wander are the hash beds' own. The Time pass has its own wander amplitude (columnWander.y): until H16 it read the bed
-// spacing before the bake had set it, so its wander was the 2-unit floor and the bake's the spacing; the table keeps both as they drew.
-// TODO(question): one amplitude for both would put a ledge and its wear on one coordinate; it moves Green's three scenes by .8-1.7 mean |diff|.
-// The Time pass has no noise texture either, so the terrain wander (Desert's) is left out of the coordinate it reads hardness at: up to about
-// 3 units off the bake's, and the same for every bed there (hardness .5).
+// and the broad wander are the hash beds' own.
 fn columnOffset(p: vec2f) -> f32 {
     let a = radians(u.bedDipDir);
-    let tilt = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
-#ifdef EROSION
-    let S = u.columnWander.y;
-#else
-    let S = u.columnWander.x;
-#endif
-    var offset = tilt + (valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1);
+    var offset = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
+    let S = u.columnWander;
+    if (S != 0.0) { offset += valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1; }
 #ifndef EROSION
-    // Painted Desert's beds meander broadly and wander about a unit at 5-25 px: three octaves of the terrain noise.
+    // Painted Desert's beds meander broadly and wander about a unit at 5-25 px: three octaves of the terrain noise. The Time pass
+    // has no noise texture, and a world that draws this has no hardness for it to read.
     if (u.columnTerrain.x != 0.0 || u.columnTerrain.y != 0.0 || u.columnTerrain.z != 0.0) {
         offset += (terrainNoise(p * 0.08 + vec2f(5.0, 9.0)).r - 0.5) * u.columnTerrain.x
                 + (terrainNoise(p * 0.7 + vec2f(17.0, 2.0)).g - 0.5) * u.columnTerrain.y
@@ -477,14 +472,12 @@ fn columnOffset(p: vec2f) -> f32 {
 #endif
     return offset;
 }
-fn columnCoord(p: vec2f, z: f32) -> f32 { return z - u.columnOpts.y + columnOffset(p); }
+fn columnCoord(p: vec2f, z: f32) -> f32 { return z - u.columnOrigin + columnOffset(p); }
 
 // The bed's running index, hardness, material slot, how far through it c lies, its thickness, its place j among the section's n beds
-// (first: the section's first bed in columnBeds), the cycle's period, and the widest bed's share of the cycle with its slot.
+// (first: the section's first bed in columnBeds), the cycle's period, and a two-bed section's wider bed: its share of the cycle and its slot.
 struct ColumnBed { index: f32, hardness: f32, slot: f32, through: f32, thick: f32, period: f32, widest: f32, widestSlot: f32, first: i32, j: i32, n: i32 }
 
-// Retail Painted Desert's beds vary from cycle to cycle (measured on the retail map): the second bed's share of a two-bed cycle is
-// scaled by .55 to 1.45 by a hash of the cycle.
 fn columnCycleHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
 
 // The bed at coordinate c: its running index (unique along the whole column, so
@@ -496,55 +489,38 @@ fn columnSectionAt(c: f32) -> i32 {
     for (var i = 1; i < u.columnSectionCount; i++) { if (c >= u.columnSections[i].x) { s = i; } }
     return s;
 }
-fn columnPeriod(s: i32) -> f32 {
-    let sec = u.columnSections[s];
-    var period = 0.0;
-    for (var i = 0; i < i32(sec.z); i++) { period += u.columnBeds[i32(sec.y) + i].x; }
-    return period;
-}
-// Section s at coordinate c. Where ramp is set and the next section has the same slots in the same order, the beds' shares of the cycle
-// run from this section's toward the next one's between their starts (the cycle's period stays this section's).
-fn columnBedIn(c: f32, s: i32, ramp: bool) -> ColumnBed {
+// Section s at coordinate c. A two-bed section's second bed has a share of the cycle (the period stays the section's): where the next
+// section has the same two slots the share runs toward the next one's between their starts, and retail Painted Desert's beds vary from
+// cycle to cycle (measured on the retail map), so a hash of the cycle scales it by .55 to 1.45.
+fn columnBedIn(c: f32, s: i32) -> ColumnBed {
     let sec = u.columnSections[s];
     let first = i32(sec.y);
-    let n = max(i32(sec.z), 1);
-    let period = columnPeriod(s);
-    var toward = 0.0;
-    var nextFirst = 0;
-    var nextPeriod = 1.0;
-    if (ramp && s + 1 < u.columnSectionCount) {
-        let nx = u.columnSections[s + 1];
-        nextFirst = i32(nx.y);
-        var same = i32(nx.z) == n;
-        nextPeriod = columnPeriod(s + 1);
-        for (var i = 0; i < n; i++) { if (u.columnBeds[first + i].z != u.columnBeds[nextFirst + i].z) { same = false; } }
-        if (same) { toward = clamp((c - sec.x) / max(nx.x - sec.x, 0.1), 0.0, 1.0); }
-    }
+    let n = i32(sec.z);
+    let period = sec.w;
     let cycle = floor(c / period);
     let r = c - cycle * period;
-    // The thickness of bed i in this cycle.
-    var thick = array<f32, 8>();
-    var widest = 0.0;
-    var widestSlot = 0.0;
-    for (var i = 0; i < n; i++) {
-        var t = u.columnBeds[first + i].x;
-        if (toward > 0.0) { t = period * mix(t / period, u.columnBeds[nextFirst + i].x / nextPeriod, toward); }
-        thick[i] = t;
-        if (t / period > widest) { widest = t / period; widestSlot = u.columnBeds[first + i].z; }
-    }
-    if (u.columnOpts.x > 0.0 && n == 2) {
-        thick[1] = period * clamp(thick[1] / period * (0.55 + 0.9 * columnCycleHash(cycle + 0.37)), 0.03, 0.97);
-        thick[0] = period - thick[1];
-    }
     var bed: ColumnBed;
     bed.period = period;
-    bed.widest = widest;
-    bed.widestSlot = widestSlot;
     bed.first = first;
     bed.n = n;
+    var second = 0.0;
+    if (n == 2) {
+        var share = u.columnBeds[first + 1].x / period;
+        if (s + 1 < u.columnSectionCount) {
+            let nx = u.columnSections[s + 1];
+            let next = i32(nx.y);
+            if (nx.z == 2.0 && u.columnBeds[next].z == u.columnBeds[first].z && u.columnBeds[next + 1].z == u.columnBeds[first + 1].z) {
+                share = mix(share, u.columnBeds[next + 1].x / nx.w, clamp((c - sec.x) / max(nx.x - sec.x, 0.1), 0.0, 1.0));
+            }
+        }
+        bed.widest = max(share, 1.0 - share);
+        bed.widestSlot = u.columnBeds[first + select(0, 1, share > 0.5)].z;
+        second = period * clamp(share * (0.55 + 0.9 * columnCycleHash(cycle + 0.37)), 0.03, 0.97);
+    }
     var lo = 0.0;
     for (var i = 0; i < n; i++) {
-        let t = thick[i];
+        var t = u.columnBeds[first + i].x;
+        if (n == 2) { t = select(period - second, second, i == 1); }
         if (r < lo + t || i == n - 1) {
             bed.index = cycle * f32(n) + f32(i);
             bed.hardness = u.columnBeds[first + i].y;
@@ -558,18 +534,7 @@ fn columnBedIn(c: f32, s: i32, ramp: bool) -> ColumnBed {
     }
     return bed;
 }
-fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), true); }
-
-// The band row, the sections after the geology ones (every world has one): the contour bands' steps. A bed's thickness is the height
-// between two risers, its hardness the darkness of the line along its riser. columnBandSpacing is the row's mean step, the scale of the
-// noise that wanders the lines.
-fn columnBandAt(c: f32) -> ColumnBed {
-    var s = u.columnSectionCount;
-    for (var i = u.columnSectionCount + 1; i < u.columnSectionCount + i32(u.columnOpts.w); i++) { if (c >= u.columnSections[i].x) { s = i; } }
-    return columnBedIn(c, s, false);
-}
-fn columnBandSpacing() -> f32 { return columnPeriod(u.columnSectionCount) / max(u.columnSections[u.columnSectionCount].z, 1.0); }
-fn columnBandLine() -> f32 { return u.columnBeds[i32(u.columnSections[u.columnSectionCount].y)].y; }
+fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;

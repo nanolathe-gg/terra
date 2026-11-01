@@ -1230,7 +1230,7 @@
    "lavaTread": "0.6"
   },
   "column": {
-   "bands": [{"start": 0, "beds": [[7, 1, 0]]}]
+   "bands": [7, 1]
   },
   "export": {
    "planet": "Lava",

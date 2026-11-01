@@ -1194,7 +1194,7 @@
    "lavaTread": "0"
   },
   "column": {
-   "bands": [{"start": 0, "beds": [[3.7, 0.63, 0]]}]
+   "bands": [3.7, 0.63]
   },
   "export": {
    "planet": "Lunar",

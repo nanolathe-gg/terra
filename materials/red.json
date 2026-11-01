@@ -1478,7 +1478,7 @@
    "lavaTread": "0"
   },
   "column": {
-   "bands": [{"start": 0, "beds": [[3.7, 1, 0]]}]
+   "bands": [3.7, 1]
   },
   "export": {
    "planet": "Red Planet",

@@ -52,10 +52,10 @@ fn at(x: i32, y: i32) -> u32 { return u32(y * i32(ep.grid) + x); }
 fn inside(x: i32, y: i32) -> bool { let n = i32(ep.grid); return x >= 0 && y >= 0 && x < n && y < n; }
 fn ground(s: vec4f) -> f32 { return s.x + s.y; }
 
-// Hardness of the rock at the surface of a sample (0 with no column: every bed alike).
+// Hardness of the rock at the surface of a sample (0 with no column or no contrast: every bed alike).
 fn hardnessOf(rock: f32, offset: f32) -> f32 {
-    if (u.columnOpts.z <= 0.0) { return 0.0; }
-    return columnAt(rock - u.columnOpts.y + offset).hardness;
+    if (u.columnSectionCount == 0 || u.columnContrast <= 0.0) { return 0.0; }
+    return columnAt(rock - u.columnOrigin + offset).hardness;
 }
 
 @compute @workgroup_size(8, 8)

@@ -407,7 +407,8 @@ WORLD_KNOBS = {
     # mesa in repro/scenes/desert.json). Sunlit faces are no brighter than
     # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
     # 1.07-1.14), so no highlight above level.
-    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataContrast=1, banding=.4,
+    # Its beds are all alike (columnContrast 0): they stand one ledge high, and the Time pass reads no hardness.
+    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
                    strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's

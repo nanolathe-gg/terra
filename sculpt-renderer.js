@@ -1016,21 +1016,21 @@ export class TerrainRenderer {
   // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
   preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
 
-  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json) lists sections from low to high, each a
-  // start coordinate and beds [thickness, hardness 0..1, material slot] that repeat upward; a variant's row of the block (its id under
-  // `variants`) replaces the sections. No table: no column, the hash beds as before. Erosion reads the same uniforms, so the bake and
-  // the pass share one column.
+  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json; sculpt-column.js). No sections: no column, the
+  // hash beds as before. Erosion reads the same uniforms, so the bake and the pass share one column.
   setColumn() {
     const column = this.config.column, v = this.variant;
-    const {beds, starts, sections, bands} = columnRows(column, this.config.variant);
+    const {beds, starts, bands} = columnRows(column, this.config.variant);
     const x = Number(v.get('columnContrast'));
-    this.i('uColumnSectionCount', sections);
+    this.i('uColumnSectionCount', starts.length);
     this.set('uColumnContrast', Number.isFinite(x) && v.has('columnContrast') ? x : 1);
     this.set('uColumnBeds', beds);
     this.set('uColumnSections', starts);
-    this.set('uColumnWander', [column?.wander?.value ?? 0, column?.wander?.erosion ?? 0, 0, 0]);
+    this.set('uColumnWander', column?.wander?.value ?? 0);
     this.set('uColumnTerrain', [...(column?.wander?.terrain || [0, 0, 0]), 0]);
-    this.set('uColumnOpts', [column?.vary ? 1 : 0, column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0, column?.ledges ? 1 : 0, bands]);
+    this.set('uColumnOrigin', column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0);
+    this.set('uBandSpacing', bands[0]);
+    this.set('uBandLine', bands[1]);
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.

@@ -465,7 +465,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
 }
 
 fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
-    if (u.columnOpts.z > 0.0) { return columnBedRelief(p, h, gOver); }
+    if (u.columnSectionCount > 0) { return columnBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let tilt = u.bedDip * dot(p, dip);
@@ -814,7 +814,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     // H5 3a: retail's gentle slopes carry few of the small dashes the risers make there.
     gate *= 1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope));
     if (gate <= 0.0) { return vec3f(0.0); }
-    let S = columnBandSpacing();
+    let S = u.bandSpacing;
     // H5 3a: the lines of retail's terraced grass follow no contour for long: their phase wanders over 17 px and 6 px, further
     // where water has run (the wetness map), so a line bends, ends against its neighbour and re-forms.
     var wander = 0.0;
@@ -833,18 +833,17 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     }
     let uu = (h + jag + wander + valueNoise(p / 34.0 + 7.0) * S * 0.55 + valueNoise(p / 11.0 + 3.0) * S * 0.15
                 + valueNoise(p / 3.3 + 19.0) * S * 0.06 * min(1.0, 0.3 / max(slope, 0.05))) / S;   // GLSL: u
-    let bed = columnBandAt(uu * S);
-    let v = bed.through;
+    let v = fract(uu);
     let w = clamp(u.bandSoftness, 0.05, 1.0);
-    let offset = bed.thick * (smoothstep(1.0 - w, 1.0, v) - v);
+    let offset = S * (floor(uu) + smoothstep(1.0 - w, 1.0, v)) - uu * S;
     var dash = smoothstep(-0.55, 0.05, valueNoise(p / 22.0 + 51.0)) * smoothstep(-0.7, -0.1, valueNoise(p / 6.0 + 33.0))
              * (0.55 + 0.45 * (valueNoise(p / 70.0 + 9.0) * 0.5 + 0.5));
     // Jagged cells already break the lines; retail covers the whole slope.
     dash = mix(dash, 1.0, 0.7 * clamp(u.bandJag, 0.0, 1.0));
     let strength = banding * gate * dash;
     // Distance from the riser's middle, in world px along the slope.
-    let px = abs(v - (1.0 - w * 0.5)) * bed.thick / max(slope, 0.02);
-    let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * bed.hardness;
+    let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.02);
+    let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
     // The riser leans downhill (-fall): lit if that faces the sun.
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
     return vec3f(offset * strength, line, facing);
@@ -881,7 +880,7 @@ fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f3
                       max(baseHeight(p + vec2f(0.0, 16.0)), u.sea) - max(baseHeight(p - vec2f(0.0, 16.0)), u.sea)) / 32.0;
     // On a narrow steep bank the broad slope is gentler than the face, so
     // the steeper of the two sets the step (lines no closer than ~7 px).
-    let S = columnBandSpacing() * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
+    let S = u.bandSpacing * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
     var field = h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18;
     // Card B3: retail's bank lines fork, end and meet, because they trace a
     // rough surface rather than a smooth slope. The relief's ribs and lumps
@@ -1258,7 +1257,7 @@ fn bake(p: vec2f) -> vec4f {
     height += bands.x;
     var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
-    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall, banding, height).x * columnBandLine() * (1.0 - route); }
+    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall, banding, height).x * u.bandLine * (1.0 - route); }
     var sand = sandCover(p, slope, height) * (1.0 - route);
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
@@ -1341,7 +1340,7 @@ fn bake(p: vec2f) -> vec4f {
             bedG = mix(cliff.gradient, slope, cliff.local * (1.0 - u.cliffBed));
         }
         // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
-        if (u.columnOpts.z > 0.0) { bedH = h; }
+        if (u.columnSectionCount > 0) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
         // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
         // The form fades out over the face's foot, so no gully reaches the water plane.
