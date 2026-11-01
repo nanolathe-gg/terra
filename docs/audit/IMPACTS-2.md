@@ -44,6 +44,18 @@ Ranked from the baseline whole-window pairs, with G8's comments in `sculpt.py` a
 
 G8 deliberately replaced unlit pock dots with lit cups, set bands to zero to remove straight scratches, and limited folds to .55 to avoid a contour-map appearance. Cup size controls lattice spacing, not the fixed 1.3–2.0 by 2.8–4.2 pixel bowl axes. Cup depth changes the added normal but leaves the cavity mask. Ribs are two fixed-scale, fixed-axis noise octaves. Folds are height contours on gentle slopes; wrinkles are fixed-axis noise lines and pits. None is a broad relief fold aligned uphill. Trials must preserve useful fine marks without claiming to solve that missing geometry.
 
+**Three ideas, none kept.** All actual trial renders exit 0, mismatch 0, console `[]`. One-scene trials use baseline symlinks for the other two windows solely for the measurement tool; those zeros are not additional trials or visual verdicts.
+
+| Idea / assets | MAD; slope blocks | Viewed 1x verdict |
+|---|---|---|
+| 1. Fewer lit cups: `moonCups` 1→.4; `trials-2/moon-cups-low` | moon-1 1.529; 21.19% | Further: the dark flank loses the hammered hollows and the fine streaks dominate. Still no uphill fold. Not extended to -2/-3. |
+| 2. Remove fine ribs: `moonRibs` 1→0; reuse `off-2/moonRibs` | 2.925/.925/1.374; 21.19/14.48/20.12% | moon-1 mixed, -2 and -3 same in the main form mismatch: less fine hair, but more isolated, regular cups on smooth shade. No clear closer whole-window result. All three whole pairs and the 2x sheet viewed. |
+| 3. Existing joined wrinkles instead: cups 1→0, ribs 1→0, wrinkles 0→.4; `trials-2/moon-wrinkles` | moon-1 6.754; 56.72% | Further: broad, flat dark blotches and scratch-like segments replace the lit pits. Not rounded uphill relief. Not extended to -2/-3. |
+
+Both single-scene trials' whole pairs and 2x sheets were viewed. The ribs-off candidate also passed the statistics guard (75 cells, no newly outside): moon-1 `pic.band_2px` 6.927924→6.589927, `pic.luma_sd` 42.419250→40.263390 and `pic.thin_dark_density` .0153925→.0122654 went outside→inside. Those numbers alone do not justify keeping it. Log: `stats-ribs-off-2.log` (exit 0).
+
+No further attempt at the same texture target. Increasing cup spacing or reducing its depth cannot grow or connect the fixed bowl axes; restoring pockmarks returns unlit dots; more folds strengthens contours rather than uphill relief. The missing fissures need authored paths. The rounded radial/upper formations need shape work, not a global replacement of G8's fine marks. Moon values, variants and scenes remain unchanged.
+
 ## Crystal craters
 
 Only crystal-1 has authored craters. Its retail walls have broad lit planes and a few thin cracks; the baseline west walls have a heavy dark web. The cell drawer `markCells`, `crystalField`, `crystalShallowWater` and all shore cell sizes are protected. `crystalCraterPx` is crater facet size, not shore size. `crystalCraterLight` changes contrast, not an additive light; `crystalCraterGap` omits seams, not their thickness.
