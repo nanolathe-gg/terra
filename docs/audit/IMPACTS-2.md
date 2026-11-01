@@ -60,6 +60,18 @@ No further attempt at the same texture target. Increasing cup spacing or reducin
 
 Only crystal-1 has authored craters. Its retail walls have broad lit planes and a few thin cracks; the baseline west walls have a heavy dark web. The cell drawer `markCells`, `crystalField`, `crystalShallowWater` and all shore cell sizes are protected. `crystalCraterPx` is crater facet size, not shore size. `crystalCraterLight` changes contrast, not an additive light; `crystalCraterGap` omits seams, not their thickness.
 
+| Idea / assets under `trials-2` | crystal-1 MAD; crater blocks | Whole-window 1x verdict |
+|---|---|---|
+| 1. `crystalCraterWeb` 1→.35; `crystal-web-light` | .189; 17.51% | Closer in seam weight, but the west wall still reads dark. 75 statistics flags unchanged. |
+| 2. Web .35 plus `crystalCraterLight` 1.6→1; `crystal-web-contrast` | .389; 29.18% | Closer: less dark, busy wall texture, with the lit planes and a faint web retained. 75 flags unchanged. **Kept.** |
+| 3. Broader cells on idea 2: crater facet size 16→32 and web size 18→36; `crystal-broad` | 1.444; 54.64% | Further: large angular rims/steps replace the finer planes, while the dark enclosing edge becomes prominent. Rejected on the viewed pair; not extended. |
+
+All three target pairs and 2x sheets were viewed. The web-off diagnostic is not kept: its coupled gate adds an enclosing ink rim. The final world's own defaults were then rendered in `trials-2/crystal-world` and all three whole pairs viewed: **crystal-1 closer, crystal-2 same, crystal-3 same**. The change is limited: it lightens the heavy web/contrast but does not supply retail's complete broad-plane geometry. No thin-mark exception is needed: the combination changes 29.18% of crater-class blocks.
+
+The world-table render equals idea 2 exactly on crystal-1 (MAD .389075597, 21,800 changed pixels). crystal-2 has one changed pixel at (556,86), MAD .000011444, max channel 16; crystal-3 is byte-identical. The skin classifier is a neighbourhood test around field value .74, not an authored-crater ID, so its gate is not an absolute exclusion of non-crater scenes. That one-pixel reach is reported rather than rounded into a claim of byte equality. Heights are exact in all three. All renders exit 0, mismatch 0, console `[]`. `stats-crystal-world-2` checks the actual defaults; no flag changed and none became newly outside.
+
+Only the two world values above are changed. `craterFacets`, facet/web sizes, step/skin, wobble, gap and tone stay as before. No shader, function, uniform, control or scene is added or removed; shader lines remain 1978/140/1383/1612. This is a table-only change, with one explanatory comment line added.
+
 ## Red craters
 
 Only red-1 has authored craters. Any tuning must preserve its rim rings and the other two Red windows.
