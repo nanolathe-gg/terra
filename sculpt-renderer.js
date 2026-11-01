@@ -1022,15 +1022,15 @@ export class TerrainRenderer {
   // the pass share one column.
   setColumn() {
     const column = this.config.column, v = this.variant;
-    const {beds, starts} = columnRows(column, this.config.variant);
+    const {beds, starts, sections, bands} = columnRows(column, this.config.variant);
     const x = Number(v.get('columnContrast'));
-    this.i('uColumnSectionCount', starts.length);
+    this.i('uColumnSectionCount', sections);
     this.set('uColumnContrast', Number.isFinite(x) && v.has('columnContrast') ? x : 1);
-    this.set('uColumnBeds', beds.length ? beds : [[5, .5, 0, 0]]);
-    this.set('uColumnSections', starts.length ? starts : [[0, 0, 1, 0]]);
+    this.set('uColumnBeds', beds);
+    this.set('uColumnSections', starts);
     this.set('uColumnWander', [column?.wander?.value ?? 0, column?.wander?.erosion ?? 0, 0, 0]);
     this.set('uColumnTerrain', [...(column?.wander?.terrain || [0, 0, 0]), 0]);
-    this.set('uColumnOpts', [column?.vary ? 1 : 0, column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0, column?.ledges ? 1 : 0, 0]);
+    this.set('uColumnOpts', [column?.vary ? 1 : 0, column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0, column?.ledges ? 1 : 0, bands]);
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.
@@ -1108,9 +1108,7 @@ export class TerrainRenderer {
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
     set('uBoulderRound', number('boulderRound', 0));
-    set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
-    set('uBandLine', number('bandLine', 0.5));
     set('uBandWidth', number('bandWidth', 0));
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));

@@ -50,7 +50,7 @@ KNOB_DEFAULTS = dict(
     shadeBlue=0,
     # Ice frost band (card E5): its cells skip the wet-band darkening (0: every world as before).
     frostWet=0, frostNeedles=.5,
-    banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
+    banding=0, bandSoftness=.35, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataContrast=.6, strataGrain=1,
     fingers=0, bankPx=0,
     # Coast pass (card E4): fingers on the joined coast and flat shore layers cut as heights
@@ -230,8 +230,8 @@ ENGINE_KNOBS = {
 WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
-    # crackDark also darkens band lines, so bandLine keeps their darkness.
-    'green': dict(banding=.8, bandLine=.84, crackDark=.4,
+    # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
+    'green': dict(banding=.8, crackDark=.4,
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -313,7 +313,7 @@ WORLD_KNOBS = {
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
     # Red's faces show none).
-    'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3, bandLine=1,
+    'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
                 jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160, jointGaps=.4,
@@ -358,7 +358,7 @@ WORLD_KNOBS = {
     # Water (card E1): the shallows are the lit sand bed under a blue tint. Their
     # edge is a fade by default (retail's halo round an island and its reef bars
     # fade over 30-40 px); a stroke may set a hard step, which sits at depth 20.
-    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, bandLine=.68, flatBank=1,
+    'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, flatBank=1,
                         undulation=0, shadeDepth=.3,
                         # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
                         # against retail's (102, 92, 76) in windows 2 and 3, with 15% of them under
@@ -407,8 +407,8 @@ WORLD_KNOBS = {
     # mesa in repro/scenes/desert.json). Sunlit faces are no brighter than
     # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
     # 1.07-1.14), so no highlight above level.
-    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataContrast=1, banding=.4, bandSpacing=6,
-                   bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
+    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataContrast=1, banding=.4,
+                   strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
                    # 6 height units thick, level on the height so they ring each butte), long
@@ -440,7 +440,7 @@ WORLD_KNOBS = {
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
-                 worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6, bandLine=.63,
+                 worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
@@ -473,7 +473,7 @@ WORLD_KNOBS = {
     # Painted sand keeps a raised bar sand to its crown (the river sections'
     # sand bars rise ~100 units from the bed with no rock).
     'zhon': dict(crackSeverity=.4, crackMajor=.6, boulderRound=1, boulderMoss=0, rockCrown=1, apron=0, sandBanding=1,
-                 beachWidth=.6, banding=.3, bandLine=.5, crackDark=.45, sandCrown=1),
+                 beachWidth=.6, banding=.3, crackDark=.45, sandCrown=1),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
     # colour-by-depth ramp, so no depth averaging (authored from the
@@ -483,7 +483,7 @@ WORLD_KNOBS = {
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=0, banding=0, bandStyle=1, bandSpacing=7, bandLine=1,
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=0, bandStyle=1,
                  fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
                  # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
                  bankPx=60,
@@ -649,7 +649,7 @@ WORLD_VARIANTS = {
         # Thin dark lines per pixel in green-1 / green-3: retail .0559 / .0449,
         # smooth variant .0445 / .0425, this .0547 / .0504.
         'evad': dict(label='Evad River: broken slopes',
-                     knobs=dict(banding=.35, bandLine=.84, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
+                     knobs=dict(banding=.35, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
                                 crackReach=.75, reliefAmount=.5, microRock=.7)),
     },
     'ice': {
@@ -721,7 +721,7 @@ WORLD_VARIANTS = {
         # shaded flanks and long dark cracks, beside Painted Desert's broad
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: grey buttes',
-                      knobs=dict(bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
+                      knobs=dict(bedSpacing=4, faceDark=.4, banding=.9, crackSeverity=.5, crackMajor=.7,
                                  crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
                                  # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
                                  # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and

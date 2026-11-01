@@ -175,9 +175,7 @@ struct Uniforms {
     worms: f32,           // wormy regolith relief on slopes (lunar)
     boulderRound: f32,    // 0: angular boulders; 1: rounded domes
     bandStyle: i32,       // 0 tonal steps (Green), 1 bank lines (Lava)
-    bandSpacing: f32,     // height between bands, height units
     bandSoftness: f32,    // share of each band that is riser
-    bandLine: f32,        // darkness of the line along each riser
     bandWidth: f32,       // bank lines (style 1): width at half depth, px (0: 1.6)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
@@ -385,13 +383,13 @@ struct Uniforms {
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
     // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
-    columnSectionCount: i32,   // sections of the column, 1..6 (0: the world has no column; each bed's thickness and strength come from a hash)
+    columnSectionCount: i32,   // geology sections of the column (0: the world has no column; each bed's thickness and strength come from a hash)
     columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
-    columnBeds: array<vec4f, 24>,       // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
-    columnSections: array<vec4f, 6>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w unused
+    columnBeds: array<vec4f, 32>,       // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
+    columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w unused; the geology sections, then the band row's
     columnWander: vec4f,  // the wander the coordinate takes from value noise (height units): x its amplitude in the bake, y in the Time pass
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    columnOpts: vec4f,    // x: 1 varies each cycle's share of a two-bed section; y: the height the coordinate counts from (the plain's, or 0); z: 1 lets the bake's beds, the Time pass's hardness and the rock blocks read the column
+    columnOpts: vec4f,    // x: 1 varies each cycle's share of a two-bed section; y: the height the coordinate counts from (the plain's, or 0); z: 1 lets the bake's beds, the Time pass's hardness and the rock blocks read the column; w: sections of the band row
     materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
@@ -559,6 +557,17 @@ fn columnBedIn(c: f32, s: i32, ramp: bool) -> ColumnBed {
     return bed;
 }
 fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), true); }
+
+// The band row, the sections after the geology ones (every world has one): the contour bands' steps. A bed's thickness is the height
+// between two risers, its hardness the darkness of the line along its riser. columnBandSpacing is the row's mean step, the scale of the
+// noise that wanders the lines.
+fn columnBandAt(c: f32) -> ColumnBed {
+    var s = u.columnSectionCount;
+    for (var i = u.columnSectionCount + 1; i < u.columnSectionCount + i32(u.columnOpts.w); i++) { if (c >= u.columnSections[i].x) { s = i; } }
+    return columnBedIn(c, s, false);
+}
+fn columnBandSpacing() -> f32 { return columnPeriod(u.columnSectionCount) / max(u.columnSections[u.columnSectionCount].z, 1.0); }
+fn columnBandLine() -> f32 { return u.columnBeds[i32(u.columnSections[u.columnSectionCount].y)].y; }
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
