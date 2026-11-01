@@ -6923,8 +6923,9 @@ water branch and the second table go, and Red-3's waterline follows the ground.
   cosine between the bearing and the direction from the stroke to the cell, default lean 1.7 facing north (bit-
   identical, 24 scenes 0.00). The shouldered hill: lean is `sBack`, its face vector is the bearing turned round
   (north: the old pi/2, exactly), a side forces `faceSide`. Other kinds have lean 1 by default; a lean stretches the
-  slope toward the bearing by `(lean - 1) toward^2` of its reach and widens the footprint. The plateau family keeps
-  its additive widening and the others stretch the reach: two ideas, left as two. `northFace` and `mesaFlank` are gone.
+  slope toward the bearing by `(lean - 1) toward^2` of its reach and widens the footprint. The review made that one
+  factor, `leaned`: it stretches the reach, or on the plateau family moves the shoulder and stretches a px face.
+  `northFace` and `mesaFlank` are gone.
 - *Variability (slice 3).* One host table (`variability`): outline `amp` .95 / .85 / 1.1 / .2, width noise 1.3 [.55, 1.7]
   and 1.6 [.45, 1.9], height lumps `.09 nDet` and `.75 nCW + .30 nDet`; five uniforms and one `lumps()` function in the
   shader replace the per-kind branches. Sliders for outline, width (plateau, offset, deep) and height (hill, mountain),
@@ -6940,21 +6941,19 @@ water branch and the second table go, and Red-3's waterline follows the ground.
   drives it by CDP on Green and Desert (24 checks each: every form at 144 and 560 px, the knot operations, lean and
   facing, editing a selected stroke and undo, autosave and reload with the same knots and the same heights).
 - *Checks.* Lines at b7bfa42 -> now: `engine-shape.wgsl` 1650 -> 1628, `sculpt-gpu-fields.js` 1484 -> 1486, `sculpt.js`
-  1659 -> 1713, `sculpt-shape-presets.js` 104 -> 129; node uniform fields 192 -> 188. 27 scenes against `outReview`: all 22
+  1659 -> 1713, `sculpt-shape-presets.js` 104 -> 134; node uniform fields 192 -> 188. 27 scenes against `outReview`: all 22
   scenes that carried no section at most .13 (green-2 .05, lava-3 .13, green-1 .04); desert-1/2/3 12.3, 3.1, 10.2, red-2
-  3.3, red-3 1.5. `stats.py`: one mark newly outside (red-2 `edge_diagonal` .481 -> .491), one back inside (red-2
-  `slope_0.03-0.08`). `section_check`: default kinds against `classic-ref.json` RMS at most .00, max .03; each form against
+  2.8, red-3 1.5. `stats.py`: one mark newly outside (red-2 `edge_diagonal` .481 -> .501, band top .487, retail .467).
+  `section_check`: default kinds against `classic-ref.json` RMS at most .00, max .03; each form against
   its knots at 140 and 560 px (bilinear lattice reproduced) RMS .00-.08, max .32. `regional` 0 on all 27, smoke clean on six
   worlds (also `--page8`), `gate.sh` 0, 27 node tests. Drag (`perf.mjs map4 --only drag`, three alternating rounds against
   the review head): rAF p95 16.7-16.8 ms both, edit latency p50 41.9-44.4 against 42.3-44.8 ms, p95 47.5-48.5 against
   47.5-47.8 ms.
-- *Judged against retail (viewed at 1x, 0.45 scale, and a 256 px crop at 2x).* Desert-1: the same layout, a few more
-  rings round the foot, closer in band count and no further. Desert-2 and Desert-3: the same. Red-2: the lake and its
-  terraces the same; the hill is now a shouldered curve and reads larger and lopsided against retail's round mound,
-  a little further. Red-3: the shallows are as wide as before and the bank as speckled (the Shores card's), the dark
-  bank band a little more continuous on the lower left at 2x: the same, not worse.
-- *Departures and approximations.* The hill with its own curve is shouldered (as asked), so Red-2's old plain hill changed
-  shape. Desert's plateau preset is the mesa form at `facePx` 210 (the old apron 80 plus face 130). A face wider than the
+- *Judged against retail, at 1x and 2x.* Desert-1, -2 and -3: the same (mean |diff| is large because a small height
+  change moves every strata line; the layout and the bands read as before). Red-2: the lake, its terraces and the round
+  hill the same. Red-3: the shallows as wide as before and the bank as speckled (the Shores card's), the dark bank band
+  a little more continuous at 2x: the same.
+- *Departures and approximations.* Desert's plateau preset is the mesa form at `facePx` 210 (the old apron 80 plus face 130). A face wider than the
   reach is capped at .98 of it. A water knot above 1 digs below the bed. The cliff and terrace forms and the lean strip are
   new shapes of ours, not fitted to retail (step D). The diameter slider steps by 8, so the editor was driven at 144 px;
   the engine check is at 140. Scene files were converted by a throwaway script: each old section's table, resampled to 24
@@ -6963,6 +6962,27 @@ water branch and the second table go, and Red-3's waterline follows the ground.
   names its form. The editor reads `FORMS[name](softness)`, so a world's form appears in the picker by being in `FORMS`.
   Lean and facing are per stroke. The dense forms' table size matters (the lighting reads kinks): keep a fitted form at
   48 intervals or more, or check the 27 scenes.
+
+**Step C, the coordinator's review.** Reading the diff and then moving every control on the real engine
+(`measure/shape_controls.mjs`, new) found what the step's checks could not, because they only proved controls were stored:
+- *Dead on the default hill:* Face width, terraces, ledge and terrace variation. Decision 3 said one face width for every
+  kind, and the shouldered branch never read it. `hillWidths` now does; terraces run there too.
+- *Dead on a stroke with a Face width:* lean and facing on the plateau family, which is Desert's mesa. `faceOf` takes the
+  lean now. A px stroke still has no default north lean, so no scene moved.
+- *Shown with nothing to act on:* face variation with no face to vary, softness on a ridge's dome. `shapeControlAvailable`
+  gates both on what reads them.
+- *Red-2's hill.* The conversion left it shouldered, which read lopsided against retail's round mound, and even a shouldered
+  hill at lean 1 is a diamond: its curve runs across the crest only, and it wanders .85 of the roughness to the plain
+  hill's .2. So a hill's shouldered geometry is now its lean, and a hill at lean 1 is the plain radial one (`isShouldered`).
+  That is how a round mound is drawn; Red-2's hill carries `lean: 100`. The shape steps at 100%, between the two geometries.
+- *Smaller.* A chosen bearing wandered up to 1.8 radians with the default's coast noise. A hill's back jumped to the front's
+  knots on the first drag, and the preview read a different back from the engine; a stroke's back now stays its form's.
+  Two unused exports and one stale test key.
+- *Corrected from the report:* it called Desert-1 closer in band count; viewed, it is the same.
+- *Left.* Height lumps on a mountain or ridge are weak (.3 units at 200%, roughness 40): live, under the 5% bar, for the
+  combine-or-drop list. `repro/audit` still names the old keys and its profile trial no longer applies.
+After the fixes all 27 scenes match the step's final render but Red-2 (.76, the hill); no control prints dead; tests 27,
+gate, regional on 27, smoke with `--page8`, `curveedit` on two worlds and `section_check` all exit 0.
 
 *For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
 with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
