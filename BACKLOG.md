@@ -7144,6 +7144,41 @@ edge widths are the column's own rules, not options.
   (47.2-47.2) on green-2 and 42.9 (41.6-56.0) against 42.1 (41.9-56.1) on desert-1; GPU relief bake 784 / 785 ms (green-2) and 625 / 621 ms
   (desert-1), terrain pass 541 / 553 ms (green-2) and 390 / 362 ms (desert-1: +8%, two of three rounds, not seen in the frame times).
 
+**Part 2, the coordinator's review (e3c88c1, main merged at 9fb8a29).** Where this and the Done entry disagree, this stands.
+- *The perf check read too few lines.* The drag logs also hold the load's passes, and the Time pass had gone from 45 to 145 ms on Desert
+  and 180 to 268 ms on Green. A stroke's release runs it too, and rAF and edit latency never see it. `columnAt` built a thickness array per
+  call in the erosion loop, and Desert read one hardness for every bed. Each section now holds its period, a two-bed section keeps a share
+  in place of the array, and Desert's `columnContrast` is 0, so its Time pass reads no hardness, as on main. The value-noise wander is
+  skipped at amplitude 0. A perf report reads every pass in the log, not only the two it was asked for.
+- *Options no world needs went.* `vary` is the column's rule (only two-bed sections have it, and only Desert has those). `ledges` is "has
+  sections", now that both worlds with sections draw them. The n-bed ramp goes. `bands` is two numbers, a step and a line strength, held in
+  main's `bandSpacing` and `bandLine` uniforms: no world had more than one bed in its row, so `contourBands` and `lavaLines` are main's,
+  unchanged. No world's bands read its beds, and Green's read further when they do. Bands are a setting of the column block, not beds of
+  the column.
+- *One wander.* `wander.erosion`, its `#ifdef` and the `TODO(question)` go: the bake and the Time pass share one amplitude. Green moves
+  .93 / 1.73 / .81 and reads the same against retail at 1x and 2x (`sheetR2w`; luma, edge energy and share under 30 unchanged to two
+  places). Main's 153fd4b made the same fix from the other side, so Green is 0.00 against main after the merge.
+- *Two small faults.* `strata` on a world with no sections drew one flat slot: it now needs a column, and the panel says so. Two
+  `repro/demo` scenes carried `columnBeds`, which nothing reads now: the key goes. They draw Green's own beds.
+- *Step 3 is kept on Desert's Time pass as main's.* desert-1/2/3 against main .46 / .27 / .80 (were .74 / .70 / 1.08). I viewed all three
+  windows whole at 1x and the crops at 2x against retail: the same as main, the grey butte grey, the band round the cap thick.
+- *The count after review.* 83 knobs to 77 (part 1's 70 was a narrower family). Three tables to one block of four options (`colors`,
+  `origin`, `wander.value`, `wander.terrain`), `sections`, `bands` and one variant row (Desert's `triad`), in six worlds. Uniform fields 378
+  to 376 on main's count. Lines against main: `engine-common.wgsl` 774 to 815, `engine-bake.wgsl` 1439 to 1439, `engine-frag.wgsl` 1984 to
+  1959, `sculpt-renderer.js` 1249 to 1237, and `sculpt-column.js`, 19 lines. `columnContrast` is measured now: 8.0 / 4.7 / 5.9% of the class
+  on Green (it moves off the "none measured" list), and Desert sets it to 0.
+- *What the card did not do.* The code did not shrink: about 16 lines more across the engine, for one function in place of three
+  mechanisms. The column has no panel: `bandSpacing`, `bandLine`, `strataSpacing` and `strataWarp` were sliders, and their numbers now live
+  in the table, so a bed or a band step moves only in `materials/<world>.json`. Decision 16's "one main geology control" needs that panel;
+  it is on the leftovers list. Rings and layers stay out, as the card said.
+- *Final checks, 9fb8a29 against a fresh render of main at 76c18fa.* 27 scenes, `mismatch` 0 and a clean console on all 27; every scene 0.00
+  but Desert's. `repro/stats.py` cell by cell: 675 cells, none newly outside retail, none back inside, containment 535 of 668 and family
+  4312 of 5040 on both. `node --test repro/*.test.mjs` 33 pass, 0 fail. `repro/gate.sh` 0, `measure/shape_controls.mjs` 0 with no `!`,
+  `measure/section_check.mjs` 0, `repro/regional.mjs` 0 on all 27, `repro/smoke.mjs` 0, `repro/curveedit.mjs` 0 on Green and Desert. Perf,
+  drag on map4, four alternating rounds, medians head / main: Time pass 41.3 / 41.0 ms (desert-1) and 163 / 178 ms (green-2); relief bake on
+  load 68.0 / 68.1 and 100.0 / 99.7 ms; terrain pass on load 46.4 / 45.7 and 73.5 / 74.8 ms; edit latency p95 19.8 / 19.6 and 22.6 / 23.8 ms;
+  rAF p95 16.8 on all four.
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H16`, branch
 `H16-geology`; assets `$R/agent-H16`.
 
