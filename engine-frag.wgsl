@@ -1082,7 +1082,18 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     if (field < outer * 0.3 || field > 0.65) { return base; }
     let zone = smoothstep(outer * 0.3, outer * 1.5, field) * (1.0 - smoothstep(0.45, 0.7, field));
     if (zone <= 0.0) { return base; }
-    let count = i32(clamp(u.ringCount, 1.0, 24.0));
+    var count = i32(clamp(u.ringCount, 1.0, 24.0));
+    // H16 proof: the copies are the beds of the table's ring section (count, level spacing from the thicknesses, line weight from the
+    // hardness with ringContrast and ringTaper folded in, tone from the slot as a blend 0..1); drift, scallop, reach and fill stay options.
+    let geoRings = u.geology > 0.0 && u.geoCount > 0.0 && u.geoOpts.w > 0.0;
+    let ring0 = i32(u.geoSections[1].y);
+    var geoTotal = 1.0;
+    if (geoRings) {
+        count = i32(clamp(u.geoSections[1].z, 1.0, 24.0));
+        geoTotal = 0.0;
+        for (var i = 0; i < count; i++) { geoTotal += u.geoBeds[ring0 + i].x; }
+    }
+    var geoStart = geoTotal;
     let inner = sqrt(-log(0.45));
     let far = sqrt(-log(outer));
     let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
@@ -1097,7 +1108,16 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let j = f32(count - 1 - n);
         let t = j / max(f32(count - 1), 1.0);
         let vis = 1.0 - smoothstep(reach - 0.12, reach + 0.12, t);
-        let level = mix(inner, far, (j + 0.5) / f32(count));
+        var level = mix(inner, far, (j + 0.5) / f32(count));
+        var weight = (1.0 - u.ringTaper * t) * u.ringContrast;
+        var toneBlend = t;
+        if (geoRings) {
+            let bed = u.geoBeds[ring0 + i32(j)];
+            geoStart -= bed.x;
+            level = mix(inner, far, (geoStart + 0.5 * bed.x) / geoTotal);
+            weight = bed.y;
+            toneBlend = bed.z;
+        }
         let wander = (shelfNoise(p / 170.0 + j * 7.3) - 0.5) * 2.0;
         let angle = radians(u.ringShiftDir) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * u.ringScatter * 3.14159;
         let shift = u.ringShift * (0.45 + 0.55 * ringHash(j + 41.0));
@@ -1114,8 +1134,8 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let inside = 1.0 - smoothstep(-0.7, 0.7, d);
         rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
         // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
-        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
-        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
+        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), toneBlend), u.ringTone);
+        rgb = mix(rgb, lineTone, line * gap * zone * vis * weight);
     }
     return rgb;
 }

@@ -1046,7 +1046,7 @@ export class TerrainRenderer {
 
   // H16 (branch only, never lands): the geology proof's table. geology 0, or a world without a table, leaves every uniform at zero. The strings are
   // "thickness:hardness:slot,..." (geoBeds, up to 24), "start:firstBed:count:jitter;..." (geoSections, up to six), "px:amplitude:fine:finest"
-  // (geoWander) and "blend:ledge" (geoOpts).
+  // (geoWander) and "blend:ledge:bands" (geoOpts).
   setGeology() {
     const v = this.variant;
     const list = (key, size) => String(v.get(key) || '').split(/[;,]/).map(s => s.trim()).filter(Boolean).map(s => { const a = s.split(':').map(Number); while (a.length < size) a.push(0); return a.slice(0, size); });

@@ -220,6 +220,12 @@ GEOLOGY_PROOF = {
         geoBeds='4.8:.5:0,1.2:.5:1,3.6:.5:0,2.4:.5:1,3.6:.5:0,2.4:.5:1,.3:.5:0,5.7:.5:1,7.7:.5:2,3.3:.5:3',
         geoSections='1:0:2:.45;17:2:2:.45;53:4:2:.45;58:6:2:.45;69:8:2:.45',
         geoWander='40:2:.4:.15', geoOpts='1:1'),
+    # Archipelago: bed 0 is the hill foot's band bed (bandSpacing 3.7, bandLine .68); beds 1-22 are the fringe's copies, inner to outer,
+    # hardness = ringContrast .95 * (1 - ringTaper .35 * j / 21) and slot = j / 21 (the tone blend). Section 1 is read by index, never by coordinate.
+    'archipelago': dict(geoBeds='3.7:.68:0,1:0.9500:0.0000,1:0.9342:0.0476,1:0.9183:0.0952,1:0.9025:0.1429,1:0.8867:0.1905,1:0.8708:0.2381,1:0.8550:0.2857,1:0.8392:0.3333,1:0.8233:0.3810,1:0.8075:0.4286,1:0.7917:0.4762,1:0.7758:0.5238,1:0.7600:0.5714,1:0.7442:0.6190,1:0.7283:0.6667,1:0.7125:0.7143,1:0.6967:0.7619,1:0.6808:0.8095,1:0.6650:0.8571,1:0.6492:0.9048,1:0.6333:0.9524,1:0.6175:1.0000',
+                        geoSections='-1000:0:1:0;1000000000:1:22:0', geoOpts='0:1:1:1'),
+    'red': dict(geoBeds='3.7:1:0', geoSections='-1000:0:1:0', geoOpts='0:1:1'),
+    'lava': dict(geoBeds='7:1:0', geoSections='-1000:0:1:0', geoOpts='0:1:1'),
 }
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
