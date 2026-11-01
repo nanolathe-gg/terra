@@ -142,3 +142,39 @@ Fresh post-H19 trials use H15's exact proposed values, not retail tuning: moonLo
 The structural limit is decisive: baseVary's maximum displacement is .15 radius, with fixed 55/21 px wavelengths and a foot mask; moonLobes .5 uses radius-scaled .5/.18/.07 wavelengths through the face. baseBump only lifts the foot. Increasing these numbers cannot reproduce the current family of radius-scaled outlines at multiple brush sizes. Both already call the same outlineShift kernel, so there is no duplicate kernel to delete. **Keep moonLobes; no control/value/shape change and zero claimed saving for this rejected merge.** A future owner-approved outline redesign could unify parameterization; that is outside part 1.
 
 The first six pair-tool calls exited 1 because the trial folders lacked retail heights.npy (the render and image sheets succeeded). Copied the baseline's existing retail height/crop metadata into those own folders; all six pair-tool retries exited 0. No render was rerun or deleted for that packaging error.
+
+## Shared lighting merge
+
+`engine-frag.wgsl` now computes cast-shadow visibility, the unperturbed ambient/diffuse denominator, shade-facing weight and broad-facing weight once for the fine marks. Cups and ribs retain their distinct gradients, clamps, cavity and darkening; pockmarks retain their density; slopeMarks and wrinkles retain their gates. Shine reads the same visibility term before its own flat-bank/close-visibility multipliers. No helper, alternate path, new uniform, feature gate, preset or shape change.
+
+This merges the common expression group identified in the inventory. Physical runtime lines: fragment **2015→2010 (-5)**, bake 1397→1397, bridge 150→150, shape 1628→1628; these four files **5190→5185**. All other runtime files are untouched. Measurement tools add 32 net lines for the requested family/fixtures/classes; documentation and scalar evidence are counted separately, not claimed as runtime savings.
+
+**No compiler drift:** all 27 final RGBA buffers and all 27 height arrays are exactly equal to fresh archived main, not merely rounded 0.00. `compare.py --worlds none` exits 0; both render sets have 27 mismatch-zero/console-empty records. Extra moon-1 probes for pitted, cracked, slopeMarks=1 and cups-off are also exactly equal to their pre-merge equivalents. The nonzero control is cups 1→0: **2.521682 MAD, 7.004261% pixels moved** on moon-1 (35.30% slope blocks in the sweep). The test therefore detects a real mark change while the consolidation moves zero channels. The preliminary one-scene merge check was exact too.
+
+All 27 regional replays pass: 837 reported field comparisons, zero mismatches, each command exits 0. The source-equivalent regional copy preserves its temporary profiles instead of deleting them, as the handoff requires.
+
+## Final validation and handoff
+
+| Check | Result | Exit |
+|---|---|---|
+| Archived-main and final all.sh | 27 scenes each; mismatch 0, console [] | 0 / 0 |
+| compare.py --worlds none; exact pixel/height assertions | 27/27 equal, zero changed channels | 0 / 0 |
+| Four active probes; positive cups-off comparison | All four exact pre/post; real cups-off change measured above | each 0 |
+| stats.py baseline / final | 675 `outside.ours` cells and 675 metric cells identical; none newly outside | 0 / 0; comparison 0 |
+| regional.mjs, profile-preserving copy | 27 scenes, 837 field comparisons exact | each 0 |
+| smoke --page8 --worlds8 green,lava,ice,zhon,red,archipelago | 135 brush/undo checks; 8 exports; Zhon export disabled by design; six page8 checks; console [] | 0 |
+| node --test repro/*.test.mjs | 35 passed | 0 |
+| repro/gate.sh | No world-ID gates introduced | 0 |
+| measure/shape_controls.mjs | 161 cases, 131 shown; no shown control marked `!`, console [] | 0 |
+| section_check --against agent-H15/classic-ref.json | 288 classic cases: maximum RMS .003291, sample .029237; 12 form cases: RMS .078932, sample .315024; console [] | 0 |
+| curveedit Green / Desert | 48 checks, including knot editing, undo, save/reload and render equality; console [] | 0 |
+| JS syntax, git diff --check | Clean | 0 |
+| Owned server shutdown and port check | Verified cwd/command for PIDs 44547/44558 before SIGTERM; 8895/8896/9695/9696 closed | 0 |
+
+Section comparisons against historical samples/analytic knots are approximate as their numbers show; this is separate from the exact 27-scene before/after shader result. No perf rounds were run, as rules.md explicitly forbids them; the owner measures performance on a quiet machine.
+
+**Viewed:** H15 `sheets-moonlobes/1x.png`, `2x.png`; H21 `before/moon-{1,2,3}/pair.png`; `sheets-lobes/{1x,2x}.png`, `sheets-lobes-all/{1x,2x}.png`; all six `lobes*/moon-{1,2,3}/pair.png`. **Not visually judged:** other worlds' baseline pairs, control-sweep outputs, final exact-comparison renders, active-path probes and height-layout sheets. Those have numeric checks only; no retail-closeness claim is made for them.
+
+**Departures and limits:** H21's four requested steps replace the H18 coast-specific work and historical attribution/session footer. The measurement adds two conservative classes, with projection/coverage and registration-floor limitations stated above; no universal dead-control conclusion. A source-equivalent regional copy leaves profiles behind to comply with the no-delete rule. Six initial pair-layout exits 1 were repaired by supplying missing copied metadata; all retries passed. No dependency or repository test harness added, no controls deleted, no preset tuning, no main edit, merge or push, and no part 2.
+
+Commits for steps 1–3: `35295cd`, `733308b`, `b612561`; the fourth commit contains this final report and the lighting consolidation. Asset map and logs: `/private/tmp/nanolathe-map-editor/agent-H21/NOTES.md`. All generated data stays there. Cleanup candidates **after review**: the archived `main-src`, `before`/`after`, sweep/probe/outline render folders, smoke exports in `documents`, and every owned Chrome profile; nothing was deleted. Shared symlink targets and `assets-*` are not cleanup candidates.

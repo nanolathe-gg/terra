@@ -7791,6 +7791,34 @@ window at 1x and 2x. No perf rounds: the owner runs those on a quiet machine.
 branch `H21-impacts`; assets `$R/agent-H21`. Results and exact command exits go in
 its `NOTES.md`; no asset or render is committed.
 
+**Done (part 1).** Inventory and evidence: [Impacts](docs/audit/IMPACTS.md), with
+31 controls and their actual readers/owners, and what draws on moon-2 (crater
+spurs and regolith marks; no authored fissure). The effective-card sweep covers
+38 states / 123 renders: 27 clear the 5% screen, 11 do not. The report distinguishes
+inactive gates from weak probes and records the higher Moon/Crystal registration
+floor; nothing is called globally dead or deleted.
+
+`moonLobes` stays. Six fresh H15-style substitution renders, including inherited
+crater spurs, were viewed against retail at 1x/2x: foot controls lose face folds
+and have different support, amplitude and scale. The combine-or-drop row now
+recommends keep. No preset or shape value changed.
+
+One common surface-lighting expression group replaces the duplicated visibility,
+base-light and facing calculations: `engine-frag.wgsl` 2015→2010 (-5 lines);
+bake/bridge/shape unchanged (1397/150/1628). All 27 RGBA buffers and height arrays
+are exactly equal to archived main `28e623d`; four enabled-mark probes are exact
+too. Turning cups off moves moon-1 2.521682 MAD / 7.004261% pixels, so the comparison
+detects a real change. No compiler drift.
+
+Checks all exit 0: 27-scene renders/compare, 675 retail flags and 675 metric cells
+unchanged, regional all 27 (837 field comparisons), smoke (135 brushes, eight
+exports plus Zhon disabled, six page8 worlds), 35 Node tests, gate, shape controls
+(no shown `!`), H15 section comparison, and 48 curve-editor checks on Green/Desert.
+The report lists exact section errors and all viewed/not-viewed images. No perf
+rounds, per the handoff rules. Assets/logs and cleanup candidates are in
+`$R/agent-H21/NOTES.md`; all files retained. Own servers stopped after cwd/PID
+verification. Part 2 not started; branch `H21-impacts` is for owner review.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
