@@ -1309,9 +1309,11 @@ fn bake(p: vec2f) -> vec4f {
             // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
             // (the beds come first, as the offset is keyed on the bed's index; bedFlow 0 anyway lets joints leave them alone).
             bed = bedRelief(p, bedH + carved.x * u.bedBend, 0.0, bedG);
-            joint = jointFieldAt(pf, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5));
+            // A joint of no depth cuts nothing, and here nothing else reads it.
+            if (u.jointDepth > 0.0) { joint = jointFieldAt(pf, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5)); }
         } else {
-            joint = jointField(pf);
+            // The joint's shift reaches the beds only through bedFlow, and its cut only through its depth.
+            if (u.jointDepth > 0.0 || u.bedFlow != 0.0) { joint = jointField(pf); }
             joint.y *= u.bedFlow;
             bed = bedRelief(p, bedH + carved.x * u.bedBend, joint.y, bedG);
         }
