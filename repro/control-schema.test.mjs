@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {shapeControlAvailable as available,controlLabel,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
-test('classic and explicit profiles expose only effective alternatives',()=>{
- assert.equal(available('mesaFlank','plateau',{profile:1}),false);
- assert.equal(available('northFace','offset',{profile:1}),false);
- assert.equal(available('baseVary','hill',{profile:0}),false);
- assert.equal(available('baseBump','hill',{profile:1}),true);
- assert.equal(available('baseVary','hill',{profile:0,spurCount:3}),true);
+test('a stroke with its own section keys exposes only effective alternatives',()=>{
+ assert.equal(available('mesaFlank','plateau',{apronPx:40}),false);
+ assert.equal(available('northFace','offset',{facePx:90}),false);
+ assert.equal(available('baseVary','hill',{}),false);
+ assert.equal(available('baseBump','hill',{apronPx:40}),true);
+ assert.equal(available('baseVary','hill',{spurCount:3}),true);
  assert.equal(available('moonLobes','mountain',{baseVary:15}),false);
  assert.equal(available('iceFacetSize','hill',{iceFacets:1}),false);
  assert.equal(available('iceFacetSize','mountain',{iceFacets:1}),true);

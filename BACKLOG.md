@@ -6842,6 +6842,26 @@ plain hill, deep and shallow. "Exact" in part 1 now reads "to within interpolati
 most .007. 27 scenes: mean |diff| at most .18; no mark newly outside retail; regional 0 on
 all 27. `curveAt` clamps at 0 below; a lip that dips below 0 needs that lifted.
 
+**Done (part 2, step B).** The classic path is gone: the shader's per-kind curve lines, `hillSection` and its
+tangents, `landSection`, `waterSection`, `faceRise`, `crossSection`, the `?shapePresets` switch, `profile`
+(control, default and the CPU preview engine in `sculpt.js`) and 19 uniforms. Every kind reads its table.
+The stored section keys (`apronPx`, `apronHeight`, `facePx`, `faceCurve`, `crown`, `lip`, `shelfPx`,
+`shelfDepth`, `shelfSteps`) are read by one host function, `strokeCurve` in `sculpt-shape-presets.js`
+(`landSection`, `waterSection`), which step C deletes. A stroke carries a section when any of them is set
+(`carriesSection`; crown counts only when it differs from its .5 default). Table size is now 64 intervals:
+Catmull-Rom over 33 left Desert's plateaus (the section path) at .34 and .27 against step A, 65 brings
+them to .15 and .13. Terraces stay in the shader on the curve's value (`terraced`, between `cvLo` and
+`cvHi`); the lip stays an additive lift per cell (`lipRim`), because as a curve it needs `w` above 1 and
+every consumer of `w` clamps or subtracts it: the kind-4/5 `clamp(w, 0, 1)`, `1 - influence` on routes,
+protection and the cover brushes, the mask writes' gain, and its unit is height, not a share of the amount
+(a plateau's `PT + amount - base` is unknown to the host). A carried section's apron and face keep their
+own width noise (`ka`, `kw`), so the shader maps each cell's distance back onto the table's nominal px
+(`carried`). Water is two tables (`P` the bank, `Q` the shelf and bed in height units) combined per cell with
+the ground's height, so Red-3 reads the ground exactly as the classic did. Approximations, all measured by
+`section_check --against` on the saved classic samples: shelf steps are baked without jitter (RMS .4, max
+3.5), a bank with terraces and a negative lip (RMS .19, max 6.9), a dome whose face is wider than its reach
+(RMS .23, max 2.4). Desert's tool preset sets no `profile` now; its plateau keys carry the section.
+
 *For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
 with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
 `sBack` is read only by the shouldered-hill branch in `engine-shape.wgsl`; a

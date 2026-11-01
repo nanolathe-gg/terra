@@ -1,7 +1,6 @@
 import {shapePaths} from './sculpt-paths.js';
-import {curveTables, hillTangents} from './sculpt-shape-presets.js';
+import {strokeCurve, carriesSection} from './sculpt-shape-presets.js';
 // H15 comparison only (not for landing): ?shapePresets draws every kind through its cross-section preset instead of its classic curve.
-const SHAPE_PRESETS_ALL = typeof location !== 'undefined' && /[?&]shapePresets/.test(location.search);
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -47,11 +46,11 @@ function shapeMaskWrites(kind, q, sat) {
 const NODE_FIELDS = [
   ...['cgForm', 'fcMode', 'fcSkin'].map(k => [k, 'u']), ...['fcL', 'fcStrength', 'fcStep', 'fcShare'].map(k => [k, 'f']), ...['cgSize', 'cgFacet', 'cgSizeVar', 'cgSmooth', 'cgTiers', 'cgStep', 'cgVar', 'bgFace', 'bgTilt', 'bgFlat', 'bgRough', 'bgTx', 'bgTy', 'bgJit', 'bgAlign', 'bgBreak', 'bgTurn'].map(k => [k, 'f']),
   ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plScale', 'plSeam', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'sOn', 'cvOn', 'curveBase', 'backBase', 'sWater', 'sDome', 'sSteps', 'sShelfSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'coFlatOn'].map(k => [k, 'u']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'curveBase', 'backBase', 'cvWater', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'coFlatOn'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'tg0', 'tg1', 'tg2', 'tg3', 'mexp', 'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sBed', 'sApron', 'sApronH', 'sFace', 'sShare', 'sCurve', 'sFlat', 'sJit', 'sLip', 'sCapW', 'sCapRise', 'sCapExp', 'sBank', 'sShelf', 'sShelfD', 'sVary', 'sP', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
+    'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'sLip', 'cvPx', 'cvA', 'cvD', 'cvCap', 'cvFs', 'cvLo', 'cvHi', 'lipAt', 'lipDir', 'lipF', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -124,15 +123,7 @@ function fissurePieces(f, path, s, seed, radius) {
   }
   return out;
 }
-const BASE_KINDS = ['plateau', 'offset', 'hill', 'mountain'], SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
-// sectionSetup(): the cross-section's constants for a stroke, as shader uniforms (the per-step wobble weights are computed in the shader).
-function sectionUniforms(kind, q, c) {
-  if (!(q.profile >= .5) || !SECTION_KINDS.includes(kind)) return {};
-  const water = kind === 'deep' || kind === 'shallow', dome = kind === 'hill' || kind === 'mountain', crown = dome ? q.crown : 0;
-  return {sOn: 1, sWater: water ? 1 : 0, sDome: dome ? 1 : 0, sBed: c.sea + (kind === 'deep' ? -55 : -7), sApron: q.apronPx, sApronH: q.apronHeight, sFace: q.facePx, sShare: clamp(.38 + (q.softness - .5) * .6, .1, .88),
-    sCurve: q.faceCurve, sP: 2.4, sSteps: Math.round(clamp(q.terraces, 0, 8)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter, sLip: q.lip, sCapW: .55 * crown, sCapRise: .45 * crown, sCapExp: 1 + 2 * crown,
-    sBank: q.bankPx, sShelf: q.shelfPx, sShelfD: q.shelfDepth, sShelfSteps: Math.round(clamp(q.shelfSteps, 0, 6)), sVary: (q.faceVariation ?? .8) * .5};
-}
+const BASE_KINDS = ['plateau', 'offset', 'hill', 'mountain'];
 // H9: the outline displacement of baseOutline (Desert's baseVary, px) and moonOutline (Moon's moonLobes, a share of the radius) as the parameters of
 // one shader function: amplitude in radius units, the smoothstep window on r (none for an offset), and up to three noise terms (weight, wavelength px, salt).
 function outlineUniforms(kind, q, radius) {
@@ -225,7 +216,7 @@ export function prepareNode(n, geom, c) {
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), allPoints = n.points, paths = shapePaths(n), radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
-  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), plainHill = kind === 'hill' && (q.profile >= .5 || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
+  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), carries = carriesSection(kind, q), plainHill = kind === 'hill' && (carries || ridgeOn(kind, q)), shouldered = kind === 'hill' && !plainHill;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
@@ -234,7 +225,7 @@ export function prepareNode(n, geom, c) {
     return {kf, hw0, hw, net, jag, amp: famp, reach: net ? radius * 1.05 + hw + 8 : hw * 3.5 + famp + 6};
   })() : null;
   const amp = kind === 'crater' ? q.rough * radius * .45 : kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * (naturalWater ? 1.1 : naturalPlateau ? .95 : shouldered ? .85 : .2);
-  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp + (water && !(q.profile >= .5) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
+  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp + (water && !carries ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
@@ -394,10 +385,10 @@ export function prepareNode(n, geom, c) {
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
       shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
-      ...outlineUniforms(kind, q, radius), ...sectionUniforms(kind, q, c), bankFlat: (kind === 'deep' || kind === 'shallow') && !(q.profile >= .5) ? Math.max(0, q.bankPx || 0) : 0, bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
+      ...outlineUniforms(kind, q, radius), bankFlat: (kind === 'deep' || kind === 'shallow') && !carries ? Math.max(0, q.bankPx || 0) : 0, bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
-      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, tg0: hillTangents[0], tg1: hillTangents[1], tg2: hillTangents[2], tg3: hillTangents[3], mexp: kind === 'hill' ? 2 : 3.5 * 2 ** ((.5 - q.softness) * 1.5), plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,
+      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,
       hole: n.hole ? 1 : 0, hx: n.hole?.x ?? 0, hy: n.hole?.y ?? 0, hR: n.hole?.R ?? 0, hRough: n.hole?.rough ?? 0, hSeed: n.hole?.seed ?? 0,
       nSect: rim ? rim.sect.length : 0, nGap: rim ? rim.gaps.length : 0, gapHw: rim?.hw ?? 0}};
   if (kind === 'crystal') {
@@ -408,10 +399,10 @@ export function prepareNode(n, geom, c) {
   const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : kind === 'mountain' && q.iceFacets > 0 && q.amount >= 8 ? 2 : 0;
   if ((water || (kind === 'offset' && q.shorePlates > 0) || facetMode) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.
-  const cv = SHAPE_PRESETS_ALL && !(q.profile >= .5) ? curveTables(kind, q, {shouldered}) : null;
+  const cv = strokeCurve(kind, q, {shouldered, radius, bankScale, sea: c.sea});
   if (cv) {
     const put = t => { const at = main.extra.length; for (let j = 0; j < t.length; j += 4) main.extra.push([t[j], t[j + 1] ?? 0, t[j + 2] ?? 0, t[j + 3] ?? 0]); return at; };
-    main.u.cvOn = 1; main.u.curveBase = put(cv.front); if (cv.back) main.u.backBase = put(cv.back);
+    Object.assign(main.u, cv.u); main.u.curveBase = put(cv.front); if (cv.back) main.u.backBase = put(cv.back);
     if (shouldered) main.u.sBack = backWidth / faceWidth;
   }
   if (kind !== 'crater' || n.satellite) return main;
@@ -434,7 +425,7 @@ export function prepareNode(n, geom, c) {
     }
     const pieces = spurPieces(rs, roots, .4, q.crestJag);
     out.push(prepareNode({kind: 'mountain', satellite: true, points: [roots[0]], frame: n.frame, seed, pieces, hole: {x: centre.x, y: centre.y, R: radius, rough: q.rough, seed},
-      params: {...n.params, radius, amount: q.amount * q.rimHeight, rough: q.rough * .8, softness: .8, cracks: 0, craterlets: 0, craterEjecta: 0, spurCount: 0, rimSectors: 0, rimGaps: 0, crestJag: 0, crestVary: 0, crestTaper: 0, profile: 0}}, geom, c));
+      params: {...n.params, radius, amount: q.amount * q.rimHeight, rough: q.rough * .8, softness: .8, cracks: 0, craterlets: 0, craterEjecta: 0, spurCount: 0, rimSectors: 0, rimGaps: 0, crestJag: 0, crestVary: 0, crestTaper: 0, apronPx: 0, facePx: 0, faceCurve: 0, lip: 0, shelfPx: 0, shelfSteps: 0, crown: .5, terraces: 0}}, geom, c));
   }
   return {multi: out};
 }

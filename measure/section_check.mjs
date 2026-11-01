@@ -2,14 +2,15 @@
 // amounts and softnesses the scenes use. One stroke of three collinear points (the audit's: 240,380,500 at y 330, moved 200 px right onto a 4 x 4 map),
 // ground left flat, roughness and every wobble off. Heights are the authored field, sampled every STEP px. A cell counts when either
 // render is at least one unit from the flat ground (the audit's "raised region").
-//   node measure/section_check.mjs --out DIR [--server http://127.0.0.1:8885] [--port 9685] [--kinds plateau,hill,...]
+//   node measure/section_check.mjs --out DIR [--server http://127.0.0.1:8885] [--port 9685] [--kinds plateau,hill,...] [--against classic-ref.json]
+// --against: the classic path is gone (H15 step B); compare the current engine with the samples step A saved from it (one array per case, keyed as `samples`).
 // Writes DIR/section-check.json (one row per case) and DIR/<kind>.svg (classic against preset along the stroke's cross-section).
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {spawn} from 'node:child_process';
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const server = opt('--server', 'http://127.0.0.1:8885'), port = Number(opt('--port', 9685)), out = opt('--out', 'section-check');
-const only = opt('--kinds', '') ? opt('--kinds', '').split(',') : null;
+const against = opt('--against', ''), only = opt('--kinds', '') ? opt('--kinds', '').split(',') : null;
 const STEP = 4, W = 1100, H = 600, YC = 500, Y0 = YC - H / 2;
 const path = [[440, YC], [580, YC], [700, YC]];
 const SIZES = [140, 280, 560], AMOUNTS = [30, 80, 160];
@@ -59,7 +60,7 @@ async function run(query) {
   } finally { chrome.kill(); }
 }
 mkdirSync(out, {recursive: true});
-const classic = await run(''), preset = await run('&shapePresets');
+const classic = against ? {res: JSON.parse(readFileSync(against, 'utf8')), logs: []} : await run(''), preset = await run(against ? '' : '&shapePresets');
 const rows = [];
 for (const c of cases) {
   const key = JSON.stringify([c.name, c.size, c.amount, c.soft]), a = classic.res[key], b = preset.res[key];
@@ -67,5 +68,5 @@ for (const c of cases) {
   for (let i = 0; i < a.length; i++) { if (Math.abs(a[i] - ground) < 1 && Math.abs(b[i] - ground) < 1) continue; const d = a[i] - b[i]; s += d * d; n++; mx = Math.max(mx, Math.abs(d)); }
   rows.push({kind: c.name, size: c.size, amount: c.amount, softness: c.soft, cells: n, rms: n ? Math.sqrt(s / n) : 0, max: mx});
 }
-writeFileSync(`${out}/section-check.json`, JSON.stringify({rows, console: [...classic.logs, ...preset.logs].slice(0, 10), samples: Object.fromEntries(Object.entries(classic.res).map(([k, v]) => [k, {classic: v, preset: preset.res[k]}]))}));
+writeFileSync(`${out}/section-check.json`, JSON.stringify({rows, console: [...classic.logs, ...preset.logs].slice(0, 10), samples: against ? {} : Object.fromEntries(Object.entries(classic.res).map(([k, v]) => [k, {classic: v, preset: preset.res[k]}]))}));
 for (const kind of Object.keys(KINDS)) { const r = rows.filter(x => x.kind === kind); if (!r.length) continue; console.log(kind.padEnd(10), 'RMS', Math.min(...r.map(x => x.rms)).toFixed(2), '-', Math.max(...r.map(x => x.rms)).toFixed(2), ' max', Math.max(...r.map(x => x.max)).toFixed(2), ' cases', r.length); }

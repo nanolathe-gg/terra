@@ -68,7 +68,7 @@ export function mountEditorUI(){
 export function groupToolControls(fields){
  const root=$('shape-options'),groups=[],claimed=new Set();
  const definitions=[
- ['profile','Cross-section',['profile','apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps']],
+ ['','Cross-section',['apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps']],
  ['fingers','Shore lobes',['fingers','fingerAmount','fingerSize','fingerSpread','fingerHeight']],
  ['shoreLayers','Shore layers',['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle','layerVary','layerCircle','lavaMeander','lavaSpread','lavaCircleVary']],
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb']],
@@ -91,7 +91,7 @@ export function groupToolControls(fields){
  const basicIds=['tool-style','tool-mode','diameter','amount','roughness','softness','bank-width','shallow-mode'];
  const basics=make('Brush settings',basicIds.map(id=>$(id).closest('.control')));basics.open=true;basics.classList.add('brush-basics');root.before(basics);
  basics.after(make('Seed',[$('seed').closest('.control')]));
- for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));const controls=present.map(f=>$(f[1]+'-control'));if(key==='profile')controls.push($('section-preview-control'));root.append(make(label,controls,key?$(present.find(f=>f[0]===key)[1]):null));}
+ for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));const controls=present.map(f=>$(f[1]+'-control'));if(label==='Cross-section')controls.push($('section-preview-control'));root.append(make(label,controls,key?$(present.find(f=>f[0]===key)[1]):null));}
  for(const [key,id,label,,lo] of fields){if(claimed.has(key))continue;root.append(make(controlLabel(key,label).replace(/ \(.*$/,''),[$(id+'-control')],lo<=0&&!['crystalForm','bergTiltDir','bankPx'].includes(key)?$(id):null));}
  for(const [id,label] of [['cracks','Cracks'],['shelves','Automatic shallows'],['beach-flatness','Beach flatness']])root.prepend(make(label,[$(id).closest('.control')],$(id)));
  return context=>{for(const g of groups){g.d.hidden=g.controls.every(c=>c.hidden);g.d.dataset.context=context;if(!g.master){if(g.lastContext!==context&&!g.d.classList.contains('brush-basics'))g.d.open=g.controls.some(c=>c.id==='crystal-form-control'||c.id==='paint-channel-control');g.lastContext=context;continue;}const on=Number(g.master.value)!==0;if(on)g.memory.set(context,Number(g.master.value));g.box.checked=on;g.d.classList.toggle('is-off',!on);if(g.lastContext!==context||g.lastOn!==on)g.d.open=on;g.lastContext=context;g.lastOn=on;}};

@@ -1,7 +1,7 @@
 {"biome": "red", "source": {"map": "red river", "x": 2560, "y": 2880},
  "ground": true, "query": "",
  "strokes": [
-  ["offset", [[150, 400], [320, 390], [480, 300], [540, 140], [500, -40]], {"card": {"diameter": 560, "amount": -40, "roughness": 30, "softness": 60, "profile": 1, "apronPx": 40, "apronHeight": 15, "facePx": 200, "faceCurve": 0, "terraces": 7, "ledge": 40, "terraceJitter": 60}}],
+  ["offset", [[150, 400], [320, 390], [480, 300], [540, 140], [500, -40]], {"card": {"diameter": 560, "amount": -40, "roughness": 30, "softness": 60, "apronPx": 40, "apronHeight": 15, "facePx": 200, "faceCurve": 0, "terraces": 7, "ledge": 40, "terraceJitter": 60}}],
   ["plateau", [[470, 40], [480, 90]], {"card": {"diameter": 120, "amount": 40, "roughness": 20, "softness": 50}}],
-  ["hill", [[680, 885]], {"card": {"diameter": 300, "amount": 70, "roughness": 25, "softness": 50, "profile": 1, "crown": 70, "apronPx": 20, "apronHeight": 10, "facePx": 90, "maskChannel": 1, "maskAmount": 80}}]
+  ["hill", [[680, 885]], {"card": {"diameter": 300, "amount": 70, "roughness": 25, "softness": 50, "crown": 70, "apronPx": 20, "apronHeight": 10, "facePx": 90, "maskChannel": 1, "maskAmount": 80}}]
  ]}

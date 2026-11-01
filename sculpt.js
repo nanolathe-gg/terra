@@ -1,6 +1,7 @@
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
 import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
+import {carriesSection,sectionPreview,SECTION_KINDS} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -51,7 +52,7 @@ let revision=0, autosaveTimer, ready=false;
 const TOOL_PRESETS={
   green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,profile:1,apronPx:80,apronHeight:25,facePx:130,faceCurve:0},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,apronPx:80,apronHeight:25,facePx:130,faceCurve:0},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks.
@@ -68,7 +69,6 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:[
 // Cross-section (card C1): the kinds that take the parametric profile, and the
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
 // card scriptedScene builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
-const SECTION_KINDS=['plateau','offset','hill','mountain','deep','shallow'];
 // Card E8: the kinds whose feet may be ragged and bumpy (baseVary, baseBump).
 const BASE_KINDS=['plateau','offset','hill','mountain'];
 // Line features (card C4): spurs, crest variation and crater rim sectors. All
@@ -79,7 +79,7 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
-const SECTION_KEYS=['profile','apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
+const SECTION_KEYS=['apronPx','apronHeight','facePx','faceCurve','terraces','ledge','terraceJitter','lip','crown','shelfPx','shelfDepth','shelfSteps'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -121,7 +121,6 @@ const SHAPE_FIELDS=[
   ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
   ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighbouring risers meet and part and no two layers run parallel for long.'],
   ['layerStyle','layer-style','Layer style',['deep','shallow'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2).',[[0,'Contour'],[1,'Circular']]],
-  ['profile','sec-profile','Cross-section (0 classic, 1 parametric)',SECTION_KINDS,0,1,1,1,'0 keeps this kind\'s own curve. 1 builds the profile from the options below, in pixels from the outer edge, so it keeps its size whatever the brush diameter. Mesa flanks, Wider north faces and Beach flatness are then ignored; Slope softness and (on water) Dry bank only set the default face width.'],
   ['apronPx','sec-apron-px','Apron width (px)',SECTION_KINDS,0,160,2,1,'A gentle concave skirt at the foot (talus, desert aprons; on water, the beach at the waterline).'],
   ['apronHeight','sec-apron-height','Apron height',SECTION_KINDS,0,60,5,100,'Share of the whole rise (of the bank, on water) reached at the apron\'s top.'],
   ['facePx','sec-face-px','Face width (px)',SECTION_KINDS,0,240,2,1,'Width of the steep face above the apron (0: a share of the brush set by Slope softness; on water, from Dry bank).'],
@@ -248,7 +247,6 @@ function buildShapeOptions() {
   const root=$('shape-options');
   root.replaceChildren(...SHAPE_FIELDS.map(([key,id,label,,lo,hi,step,,help,choices]) => {
     label=controlLabel(key,label);
-    if(key==='profile')choices=[[0,'Classic'],[1,'Custom cross-section']];
     if(key==='crystalForm')choices=[[0,'Faceted shards'],[1,'Column mound'],[2,'Planar blocks']];
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
     if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
@@ -260,7 +258,7 @@ function buildShapeOptions() {
   // The cross-section preview sits right under its switch (card C1).
   const preview=document.createElement('div'); preview.className='control'; preview.id='section-preview-control'; preview.hidden=true;
   preview.innerHTML='<canvas id="section-preview" width="222" height="84" style="width:100%;background:#172119;border:1px solid #465344;border-radius:4px"></canvas><p class="small">Cross-section, foot to cap (water: bank top to bed), before the outline noise.</p>';
-  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='profile')].after(preview);
+  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='apronPx')].after(preview);
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -370,9 +368,6 @@ function updateControls() {
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
   $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
-  const parametric=Number($('sec-profile').value)>=.5;
-  // Face width variation also drives the parametric widths of hill, mountain and water, where the classic curves ignore it.
-  const profileOnly=key => (key!=='profile' && SECTION_KEYS.includes(key)) || (key==='faceVariation' && ['hill','mountain','deep','shallow'].includes(tool));
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
   const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerAmount:'fingers',fingerSize:'fingers',fingerSpread:'fingers',fingerHeight:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
   // On a crater, the crest options only shape its spurs.
@@ -385,10 +380,11 @@ function updateControls() {
   const bergOff=key => tool==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
   const shapeOptions=Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)]));
   const gated=key => !shapeControlAvailable(key,tool,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
-  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || (profileOnly(key) && !parametric) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
-  if(parametric){$('beach-control').hidden=true;if(shapeOptions.facePx>0)$('softness-control').hidden=true;}
+  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
+  const carries=carriesSection(tool,shapeOptions);
+  if(carries){$('beach-control').hidden=true;if(shapeOptions.facePx>0)$('softness-control').hidden=true;}
   if(shapeOptions.bankPx>0)$('bank-control').hidden=true;
-  $('section-preview-control').hidden=!SECTION_KINDS.includes(tool) || !parametric;
+  $('section-preview-control').hidden=!carries;
   if (!$('section-preview-control').hidden) drawSection();
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
@@ -433,103 +429,25 @@ const about=(pivot,m) => compose([1,0,0,1,pivot.x,pivot.y],compose(m,[1,0,0,1,-p
 const rotation=a => [Math.cos(a),Math.sin(a),-Math.sin(a),Math.cos(a),0,0];
 const scaling=k => [k,0,0,k,0,0];
 const isIdentity=m => !m || m.every((v,i) => Math.abs(v-IDENTITY[i])<1e-9);
-let sectionLift=0;
-function sectionSetup(s) {
-  if (!(s.profile>=.5) || !SECTION_KINDS.includes(s.kind)) return null;
-  const water=s.kind==='deep' || s.kind==='shallow',dome=s.kind==='hill' || s.kind==='mountain',crown=dome?s.crown:0;
-  // Per-step height wobble weights: each riser level mixes two noise fields
-  // with its own phase, so neighbouring risers wander independently.
-  const wobC=new Float32Array(10),wobS=new Float32Array(10);
-  for (let m=0;m<10;m++) { wobC[m]=Math.cos(2.4*m+1); wobS[m]=Math.sin(2.4*m+1); }
-  return {water,dome,bed:config.seaLevel+(s.kind==='deep'?-55:-7),
-    apron:s.apronPx,apronHeight:s.apronHeight,face:s.facePx,faceShare:clamp(.38+(s.softness-.5)*.6,.1,.88),curve:s.faceCurve,
-    steps:Math.round(clamp(s.terraces,0,8)),flat:Math.min(s.ledge,.95),jitter:s.terraceJitter,lip:s.lip,
-    // A dome's face stops short of the crest; the crown is what is left, rising the last 45% of the way.
-    capWidth:.55*crown,capRise:.45*crown,capExp:1+2*crown,
-    bank:s.bankPx,shelf:s.shelfPx,shelfDepth:s.shelfDepth,shelfSteps:Math.round(clamp(s.shelfSteps,0,6)),vary:(s.faceVariation??.8)*.5,wobC,wobS};
-}
-// Level of riser m of n (0 at the foot, 1 at the top), wobbled between the ends.
-const terraceLevel=(c,m,n,nA,nB) => m/n+(m>0 && m<n?c.jitter*.3/n*(nA*c.wobC[m]+nB*c.wobS[m]):0);
-// Step the unstepped face share g (card formula): q = g n + jitter noise, level
-// floor(q) then a smooth riser over the last (1 - ledge) of the step. The
-// noise is windowed to 0 at the foot and the top, so the cap stays at full
-// height, and bounded so q stays monotone in g.
-function terrace(c,g,n,nj,nA,nB) {
-  const a=clamp(c.jitter*nj,-.22*n,.22*n),q=g*n+a*4*g*(1-g),k=Math.max(0,Math.min(Math.floor(q),n-1));
-  const lo=terraceLevel(c,k,n,nA,nB),hi=terraceLevel(c,k+1,n,nA,nB);
-  return lo+(hi-lo)*smooth(c.flat,1,q-k);
-}
-// Rise at d px from the foot, as a share of the whole amount: the apron (a
-// concave skirt reaching apronHeight) then the face up to pt. Convex faces
-// are steep at the foot and round over; concave ones start soft and end crisp.
-function faceRise(c,d,A,F,pt,n,nj,nA,nB) {
-  if (d<=0) return 0;
-  const ah=A>0?Math.min(c.apronHeight,.9*pt):0;
-  if (d<A) return ah*Math.pow(d/A,1.5);
-  if (d>=A+F) return pt;
-  const u=(d-A)/F,k=Math.abs(c.curve);
-  let g=smooth(0,1,u);
-  if (k>0) g+=((c.curve>0?1-Math.pow(1-u,2.4):Math.pow(u,2.4))-g)*k;
-  return ah+(pt-ah)*(n>0?terrace(c,g,n,nj,nA,nB):g);
-}
-// The lip's shape: t px down the face from its top (negative on the cap side).
-const lipRim=(t,F) => t>=0?1-smooth(0,.45*F,t):1-smooth(0,clamp(.4*F,5,30),-t);
-function landSection(c,d,reach,kw,ka,nj,nA,nB) {
-  let A=c.apron*ka,F=(c.face>0?c.face:c.dome?Math.max((1-c.capWidth)*reach-c.apron,.1*reach):c.faceShare*reach)*kw;
-  if (A+F>.98*reach) { const k=.98*reach/(A+F); A*=k; F*=k; }
-  const top=A+F,pt=1-c.capRise;
-  let p=1;
-  if (d<top) p=faceRise(c,d,A,F,pt,c.steps,nj,nA,nB);
-  else if (c.capRise>0) p=pt+c.capRise*(1-Math.pow(1-Math.min((d-top)/Math.max(reach-top,1e-3),1),c.capExp));
-  sectionLift=c.lip!==0?c.lip*lipRim(top-d,F):0;
-  return p;
-}
-// Surface height of a deep or shallow stroke at d px from its outer edge, on
-// ground of height base. The dry bank is the land profile run from the
-// waterline (its foot) up to the plain; the lip needs room beyond the bank's
-// top to fade out, so a lipped bank starts that far inside the stroke.
-function waterSection(c,d,reach,base,kw,ka,nj,nA,nB) {
-  const sea=config.seaLevel;
-  let A=c.apron*ka,F=(c.face>0?c.face:c.bank>0?Math.max(c.bank-c.apron,6):.4*reach)*kw,S=c.shelf>0 && c.shelfDepth>0?c.shelf*ka:0;
-  let I=c.lip!==0?clamp(.4*F,5,30):0;
-  const total=I+A+F+S;
-  if (total>.92*reach) { const k=.92*reach/total; I*=k; A*=k; F*=k; S*=k; }
-  const B=A+F,rest=I+B+S,depth=Math.min(c.shelfDepth,.7*(sea-c.bed));
-  let v;
-  if (d<I) v=base;
-  else if (d<I+B) { const p=faceRise(c,B-(d-I),A,F,1,c.steps,nj,nA,nB); v=base>sea?sea+(base-sea)*p:base; }
-  else if (d<rest) { const u=(d-I-B)/S; v=Math.min(base,sea-depth*(c.shelfSteps>0?1-terrace(c,1-u,c.shelfSteps,nj,nA,nB):smooth(0,.35,u))); }
-  else { const top=S>0?sea-depth:sea; v=Math.min(base,top+(c.bed-top)*smooth(0,1,(d-rest)/(.7*(reach-rest)))); }
-  sectionLift=c.lip!==0?c.lip*lipRim(d-I,F):0;
-  return v;
-}
-// The one call the brush dab makes (engine-shape.wgsl): the weight w (0 at the foot, 1 at the full rise or
-// the bed) for the cell at index i, r of the way out to the foot, whose
-// outline reaches `reach` px. The lip is left in sectionLift for the caller.
+// The cross-section preview: the carried section (sculpt-shape-presets.js sectionPreview) from foot to cap, before the outline noise.
 function drawSection() {
   const cv=$('section-preview'),g=cv.getContext('2d'),W=cv.width,H=cv.height,kind=tool;
-  const probe={kind,softness:Number($('softness').value)/100,faceVariation:0,bankPx:shapeValue('bankPx'),...Object.fromEntries(SECTION_KEYS.map(k => [k,shapeValue(k)]))};
-  const c=sectionSetup(probe);
   g.clearRect(0,0,W,H);
-  if (!c) return;
-  const radius=Number($('diameter').value)/2,reach=radius*(c.water?2**((Number($('bank-width').value)/100-.5)*1.3):1);
-  const sea=config.seaLevel,top=config.baseHeight,amount=Number($('amount').value);
-  const n=160,ys=new Float32Array(n+1);
-  let lo=Infinity,hi=-Infinity;
-  for (let k=0;k<=n;k++) {
-    const d=reach*k/n;
-    ys[k]=c.water?waterSection(c,d,reach,top,1,1,0,0,0)+sectionLift:landSection(c,d,reach,1,1,0,0,0)*amount+sectionLift;
-    lo=Math.min(lo,ys[k]); hi=Math.max(hi,ys[k]);
-  }
-  if (c.water) { lo=Math.min(lo,c.bed); hi=Math.max(hi,top); } else { lo=Math.min(lo,0); hi=Math.max(hi,amount); }
+  const probe={...shapeDefaults(),softness:Number($('softness').value)/100,amount:Number($('amount').value),faceVariation:0,bankPx:shapeValue('bankPx'),...Object.fromEntries(SECTION_KEYS.map(k => [k,shapeValue(k)]))};
+  const radius=Number($('diameter').value)/2,bankScale=2**((Number($('bank-width').value)/100-.5)*1.3),sea=config.seaLevel,top=config.baseHeight,amount=probe.amount;
+  const prev=sectionPreview(kind,probe,{radius,bankScale,sea,baseH:top});
+  if (!prev) return;
+  const {water,ys,bed}=prev,n=ys.length-1;
+  let lo=Math.min(...ys),hi=Math.max(...ys);
+  if (water) { lo=Math.min(lo,bed); hi=Math.max(hi,top); } else { lo=Math.min(lo,0); hi=Math.max(hi,amount); }
   const pad=8,X=k => pad+(W-2*pad)*k/n,Y=v => H-pad-(H-2*pad)*(v-lo)/Math.max(hi-lo,1);
-  g.strokeStyle='#465344'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(pad,Y(c.water?sea:0)); g.lineTo(W-pad,Y(c.water?sea:0)); g.stroke(); g.setLineDash([]);
+  g.strokeStyle='#465344'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(pad,Y(water?sea:0)); g.lineTo(W-pad,Y(water?sea:0)); g.stroke(); g.setLineDash([]);
   g.beginPath(); g.moveTo(X(0),H-pad);
   for (let k=0;k<=n;k++) g.lineTo(X(k),Y(ys[k]));
-  g.lineTo(X(n),H-pad); g.closePath(); g.fillStyle=c.water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
+  g.lineTo(X(n),H-pad); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
   g.beginPath(); for (let k=0;k<=n;k++) g[k?'lineTo':'moveTo'](X(k),Y(ys[k]));
   g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
-  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(c.water?'bank top':'foot',pad,10); g.textAlign='right'; g.fillText(c.water?'bed':'cap',W-pad,10); g.textAlign='left';
+  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(water?'bank top':'foot',pad,10); g.textAlign='right'; g.fillText(water?'bed':'cap',W-pad,10); g.textAlign='left';
 }
 // Line features (card C4). A ridge (a hill or mountain with spurs or crest
 // options) is swept as short pieces, each with width and height multipliers at

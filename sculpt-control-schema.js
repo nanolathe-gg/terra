@@ -1,3 +1,4 @@
+import {carriesSection} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -25,12 +26,12 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
  crystalTiers:'Stepped column tops',crystalAlign:'Align blocks to shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
  craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreScale:'Slab size multiplier',crystalShoreSeam:'Slab seam weight',
  iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',moonLobes:'Outline lobes',lavaMeander:'Layer meander',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
- profile:'Profile',fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerAmount:'Lobe coverage',fingerSize:'Lobe size',fingerSpread:'Lobe clustering',fingerHeight:'Lobe height',
+ fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerAmount:'Lobe coverage',fingerSize:'Lobe size',fingerSpread:'Lobe clustering',fingerHeight:'Lobe height',
  styleErosion:'Local relaxation',styleDeposits:'Local deposits',styleVegetation:'Local vegetation',styleExposure:'Local rock exposure',
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
 export function shapeControlAvailable(key,kind,p){
- const section=p.profile>=.5,form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
+ const section=carriesSection(kind,p),form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
  if(section&&['mesaFlank','northFace'].includes(key))return false;
  // The classic shouldered ridge uses a different footprint; its settled path
  // bypasses these foot effects. Custom/variable ridges use the shared profile.
@@ -45,9 +46,9 @@ export function shapeControlAvailable(key,kind,p){
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreScale','crystalShoreSeam'].includes(key))return plates&&(key==='frostNeedles'?!slab:key.startsWith('crystalShore')?slab:true);
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  if(key==='iceFacetSize')return kind==='mountain'&&p.iceFacets>0;
- if(['ledge','terraceJitter'].includes(key))return section&&p.terraces>0;
- if(['shelfDepth','shelfSteps'].includes(key))return section&&p.shelfPx>0;
- if(key==='apronHeight')return section&&p.apronPx>0;
+ if(['ledge','terraceJitter'].includes(key))return p.terraces>0;
+ if(['shelfDepth','shelfSteps'].includes(key))return p.shelfPx>0;
+ if(key==='apronHeight')return p.apronPx>0;
  if(['lavaMeander','lavaSpread'].includes(key))return p.shoreLayers>0&&p.layerStyle<.5;
  if(['layerCircle','lavaCircleVary'].includes(key))return p.shoreLayers>0&&p.layerStyle>=.5;
  return true;
