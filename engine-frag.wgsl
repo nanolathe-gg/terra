@@ -946,6 +946,10 @@ fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
     return vec4f(shine.xyz * gate, mix(1.0, shine.w, gate));
 }
 
+// The step's 2-px block jitter, -.5..+.5, and the bank's slope in height per px (the water section's two readers).
+fn stepJitter(pixel: vec2f) -> f32 { return fract(sin(dot(floor(pixel / 2.0), vec2f(39.3467, 11.135))) * 43758.5453) - 0.5; }
+fn bankGrad(p: vec2f) -> f32 { return 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)), baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0)))); }
+
 // The shallow-to-deep step (card E1). Retail's step is a hard edge with
 // ragged stairs, not the ramp's gradual blend: the step sits at one depth (the
 // ramp's midpoint unless the world names one), is read off the bed's own depth
@@ -953,8 +957,7 @@ fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
 // broad wobble. hard 0 is the ramp, 1 the step; between, both narrow together.
 fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) -> f32 {
     let at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
-    let block = floor(pixel / 2.0);
-    let jitter = fract(sin(dot(block, vec2f(39.3467, 11.135))) * 43758.5453) - 0.5;
+    let jitter = stepJitter(pixel);
     let reach = mix(0.5 * (u.deepDepth - u.shallowDepth), 0.8, hard);
     let d = mix(colorDepth, depth, hard) + (jitter * 2.6 + (n.r - 0.5) * 5.0) * hard;
     return smoothstep(at - reach, at + reach, d);
@@ -989,10 +992,8 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
         let notch = vec2f(shelfNoise(p / 6.0 + 3.0), shelfNoise(p / 6.0 + 41.0)) - 0.5;
         depth = depth + baseHeight(p) - baseHeight(p + (stairs * 0.8 + notch * 1.6) * u.shoalRag);
     }
-    let grad = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
-                                  baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
-    let block = floor(pixel / 2.0);
-    let jitter = fract(sin(dot(block, vec2f(39.3467, 11.135))) * 43758.5453) - 0.5;
+    let grad = bankGrad(p);
+    let jitter = stepJitter(pixel);
     let q = p / max(u.shelfScale, 8.0);
     let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
     // The wander fades in with depth, so the shore side of the band keeps its own width.
@@ -1904,9 +1905,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
                 // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
                 // banks) and each pixel is cut against its own hash.
-                let gradS = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
-                                               baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
-                let cover = clamp((depth - 0.6) / (max(gradS, 0.15) * u.shoalShoreSoft) + 0.5, 0.0, 1.0);
+                let cover = clamp((depth - 0.6) / (max(bankGrad(p), 0.15) * u.shoalShoreSoft) + 0.5, 0.0, 1.0);
                 crisp = step(shelfHash(floor(pixel) + 71.0), cover);
             }
             submerged = mix(submerged, crisp, shoreHard);
