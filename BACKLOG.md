@@ -6969,7 +6969,7 @@ cells with the sea off; Zhon from the four `repro-r7/zhon-*/heights.npy` windows
 units, a top at least 8 units up, at least 40 px foot to top), the mean height share against distance share from the foot per feature height bin
 (0-30, 30-80, 80+; water the same going down), 9-knot fits, and eight-sector slope lengths. Output for all nine worlds is in `$R/agent-H15/fit-D`.
 - *What the cells say.* Features under 80 units are two to four cells from foot to top, so any shape reads as a near-linear ramp at that sampling: they give a
-  width (about 30-60 px at 30-80 units, 100-500 px for the tall bin), not a form. The measured plateau curve sits .06-.08 (rms) from our smoothstep, about the
+  width (about 40-65 px at 30-80 units, Desert 150; 85-320 px for the tall bin), not a form. The measured plateau curve sits .06-.08 (rms) from our smoothstep, about the
   split-half noise of the world's own maps (.02-.14). Foot and top rounding is below one cell, so a fit has a hard foot and shoulder.
 - *Tried on Green and Red, read worse or the same.* The 30-80 curve as plateau, hill (both sides) and radial hill at lean 100, the 80+ curve as mountain, and
   water curves from the shore: Green hills lose the rock arc at their south foot (further, 1x), the radial hill at lean 100 gets a hard outline ring and a flat
@@ -6990,6 +6990,9 @@ units, a top at least 8 units up, at least 40 px foot to top), the mean height s
   cells); each feature weighs the same in a pooled, [1 2 1]-smoothed bin mean. Only Green and Red were rendered (nine worlds were not tried wholesale: the
   first two read worse and the coordinator settled the rest). A per-world `forms` block, `setWorldForms` and a water-form seam were built and removed again, so
   `sculpt-shape-presets.js` is as at step C.
+- *The coordinator's review.* I viewed the Red and Green sheets and agree the fits read further; only 1x was viewed, enough to reject them. The diff against step
+  C is `measure/fit_forms.py`, this entry and one table row; all 27 scenes are 0.00. So decision 23's shared forms stand for every world, each world's own
+  look comes from a stroke's curve and the world's tool presets, and retail's heights are too coarse to set a form. **H15 is done.**
 
 **Step C, the coordinator's review.** Reading the diff and then moving every control on the real engine
 (`measure/shape_controls.mjs`, new) found what the step's checks could not, because they only proved controls were stored:
