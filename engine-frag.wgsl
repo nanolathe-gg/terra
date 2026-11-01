@@ -325,7 +325,7 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     }
     if (r5.z > 0.0) { exposed *= smoothstep(r5.z, r5.w, slope); }   // H8: mineral margins keep rock to the steep ground
     exposed *= 1.0 - route * (1.0 - smoothstep(r5.x, r5.y, slope));
-    let sandBar = bridgeSandBar(p);
+    let sandBar = sandBarAt(p);
     exposed *= 1.0 - sandBar;
     exposed = 1.0 - clamp((1.0 - clamp(exposed * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
     // H5: the vegetation override also scales how much rock shows: +1 lets grass and moss take 40% of it back, -1 bares 40% more.
@@ -693,6 +693,18 @@ fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
     return line * mix(0.45, 1.0, rs.w) * step(id.x, keep) * step(0.25, rs.z) * step(0.35, fract(run));
 }
 
+// The beach (Zhon, the one world with the beach layer): sand where the bake found water within reach (beachField), sand bars painted to their crown
+// (the baked alpha, negative) and the beach's own colour. Beach sand is a shore material, so every read of the baked beach comes through here.
+fn beachColour(pixel: vec2f) -> vec3f { return based(genColor(6, pixel), u.beachTexMean, u.beachBase); }
+fn beachMean() -> vec3f { return select(u.beachTexMean, u.beachBase.rgb, u.beachBase.a > 0.5); }
+// The beach's cover at p, its inland edge ragged by speck (0.5: smooth); the sand bars' own cover, before sandCrown scales it.
+fn beachSand(p: vec2f, speck: f32) -> f32 { return smoothstep(0.25, 0.75, beachField(p) + (speck - 0.5) * 0.5); }
+fn barCover(p: vec2f) -> f32 { return smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0)); }
+fn sandBarAt(p: vec2f) -> f32 {
+    if (u.sandCrown <= 0.0) { return 0.0; }
+    return u.sandCrown * barCover(p);
+}
+
 // Painted material masks (card C5). paintCoverage turns the planes into 0..1
 // coverage of rock, snow or ice, wet ground and moss with a ragged edge, so a
 // painted border breaks up as painted sand's does; an unpainted cell (raw 0)
@@ -715,7 +727,7 @@ fn snowMaterial(pixel: vec2f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     var snow = groundBased(groundSource(pixel));
     var mean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
-    bridgeSnow(pixel, &snow, &mean);
+    if (u.beach != 0 && dot(beachMean(), luma) > dot(mean, luma)) { snow = beachColour(pixel); mean = beachMean(); }   // snow takes the beach when it is lighter
     return saturate(mix(mix(snow, mean, 0.50), vec3f(1.0), 0.55));
 }
 // Moss: the world's slope cover (leaning toward its ground by Moss from
@@ -855,7 +867,7 @@ fn shineNoise(q: vec2f) -> vec2f {
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32, faceCover: f32,
              slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32) -> vec4f {
     var sand = smoothstep(0.35, 0.95, bakedFields(p).a);
-    sand = bridgeBeachSand(p, sand);
+    if (u.beach != 0) { sand = max(sand, beachSand(p, 0.5)); }   // beach sand is lit as sand
     // Crystal tops only: the risers between columns stay dark and take the
     // surrounding material's lobe (the world's own note: faces are dark at every facing).
     let crystal = smoothstep(0.05, 0.3, crystalMask) * (1.0 - smoothstep(1.2, 2.5, length(g)));
@@ -934,6 +946,10 @@ fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
     return vec4f(shine.xyz * gate, mix(1.0, shine.w, gate));
 }
 
+// The step's 2-px block jitter, -.5..+.5, and the bank's slope in height per px (the water section's two readers).
+fn stepJitter(pixel: vec2f) -> f32 { return fract(sin(dot(floor(pixel / 2.0), vec2f(39.3467, 11.135))) * 43758.5453) - 0.5; }
+fn bankGrad(p: vec2f) -> f32 { return 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)), baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0)))); }
+
 // The shallow-to-deep step (card E1). Retail's step is a hard edge with
 // ragged stairs, not the ramp's gradual blend: the step sits at one depth (the
 // ramp's midpoint unless the world names one), is read off the bed's own depth
@@ -941,8 +957,7 @@ fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
 // broad wobble. hard 0 is the ramp, 1 the step; between, both narrow together.
 fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) -> f32 {
     let at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
-    let block = floor(pixel / 2.0);
-    let jitter = fract(sin(dot(block, vec2f(39.3467, 11.135))) * 43758.5453) - 0.5;
+    let jitter = stepJitter(pixel);
     let reach = mix(0.5 * (u.deepDepth - u.shallowDepth), 0.8, hard);
     let d = mix(colorDepth, depth, hard) + (jitter * 2.6 + (n.r - 0.5) * 5.0) * hard;
     return smoothstep(at - reach, at + reach, d);
@@ -977,10 +992,8 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
         let notch = vec2f(shelfNoise(p / 6.0 + 3.0), shelfNoise(p / 6.0 + 41.0)) - 0.5;
         depth = depth + baseHeight(p) - baseHeight(p + (stairs * 0.8 + notch * 1.6) * u.shoalRag);
     }
-    let grad = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
-                                  baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
-    let block = floor(pixel / 2.0);
-    let jitter = fract(sin(dot(block, vec2f(39.3467, 11.135))) * 43758.5453) - 0.5;
+    let grad = bankGrad(p);
+    let jitter = stepJitter(pixel);
     let q = p / max(u.shelfScale, 8.0);
     let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
     // The wander fades in with depth, so the shore side of the band keeps its own width.
@@ -1228,7 +1241,7 @@ fn flowBank(color: vec3f, p: vec2f) -> vec3f {
     let grain = terrainNoise(p * 1.7 + vec2f(37.0, 13.0)).g + terrainNoise(p * 5.0 + vec2f(8.0, 71.0)).a * 0.6 - 0.8;
     let held = smoothstep(0.02, 0.2, sediment.w);
     let stain = smoothstep(0.12, 0.45, sediment.w * 1.5 + (lobes * 0.9 + grain * 0.7) * held) * u.flowBank;
-    let sand = max(smoothstep(0.35, 0.95, bakedFields(p).a), smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0)));
+    let sand = max(smoothstep(0.35, 0.95, bakedFields(p).a), barCover(p));
     let level = dot(color, vec3f(0.299, 0.587, 0.114));
     let tinted = saturate(sediment.rgb * (0.55 + level * 2.2));
     // Only low ground: the raised sand bars and hills in the water are not stained.
@@ -1405,10 +1418,19 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let timeMaps = timeMapsAt(p);
     exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
-    let sandBar = bridgeSandBar(p);
+    let sandBar = sandBarAt(p);
     let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
     var material = mix(grass, rock, exposed);
-    material = bridgeBeach(material, p, pixel, h, slope, slopeShare, exposed);   // H8 bridge
+    if (u.beach != 0 && h > u.sea - 1.0) {
+        // Beach sand within reach of the water (baked), or failing that a low band above the waterline; its inland edge is ragged and breaks into grains.
+        let speck = terrainNoise(p * 6.0 + vec2f(61.0, 3.0)).b;
+        let top = u.beachHeight * u.beachWidth * (0.65 + 0.7 * terrainNoise(p * 0.45 + vec2f(29.0, 5.0)).g);
+        // The low band only within the water's reach: inland hollows of a low world are not beaches; steep banks stay bare.
+        var beach = max(beachSand(p, speck), (1.0 - smoothstep(top * 0.6, top, h - u.sea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)) * smoothstep(0.0, 0.15, beachField(p)));
+        // A sandy slope keeps its own streaked material over the beach sand.
+        if (u.slopeSand != 0) { beach *= 1.0 - slopeShare; }
+        material = mix(material, beachColour(pixel), beach * (1.0 - exposed * 0.7));
+    }
     material = bridgeTransition(material, pixel, rock, exposed, materialWeather);
     if (u.microRock > 0.0) {
         // TA-style faces: moss and rock interleave at lump scale. The broad
@@ -1883,9 +1905,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
                 // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
                 // banks) and each pixel is cut against its own hash.
-                let gradS = 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)),
-                                               baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0))));
-                let cover = clamp((depth - 0.6) / (max(gradS, 0.15) * u.shoalShoreSoft) + 0.5, 0.0, 1.0);
+                let cover = clamp((depth - 0.6) / (max(bankGrad(p), 0.15) * u.shoalShoreSoft) + 0.5, 0.0, 1.0);
                 crisp = step(shelfHash(floor(pixel) + 71.0), cover);
             }
             submerged = mix(submerged, crisp, shoreHard);

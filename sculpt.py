@@ -385,7 +385,9 @@ WORLD_KNOBS = {
                         # 4.5-px bumps at 3 read as chunky cobbles): a mottle of 1.6 and faint lit bumps of
                         # 9 px, a few dots, and no palette dither (3-px-blurred luma s.d. retail 7.6, before
                         # 4.7, now 5.8; see Green).
-                        bedMottle=.09, bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
+                        # H18 part 2: bedMottle .09 printed noisy blotches on the bars where retail's are smooth and soft
+                        # (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); 0 reads closer on that window.
+                        bedMottle=0, bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
                         shoalRag=4,
                         # G1 (round 8: "the default should still have a small blur on the edge"): the world's own

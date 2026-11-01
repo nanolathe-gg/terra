@@ -17,6 +17,12 @@ Classes, read on the base render's heights (the sea is subtracted; the dry base 
   face    H17: slope at least .50 (material_classes.py's rock face), where the structured face (joints, gullies, scratches, facets,
           blocks) is cut. Both are 16-px blocks with a 40-px margin dropped, as measure/impact.py reads its classes; a `slope` or
           `face` row also carries the other class's share under `slope_changed` / `face_changed`
+  The water side (H18). The waterline is the sea's edge on the displayed heights (g = height - sea; dry above 0.5, wet below -0.5). Distances are
+  in window px to the nearest ground of the other side:
+  shallows  wet ground within 64 px of dry ground: the shallow bed, the shelf and the step to deep, where the water's colour and bed marks act
+  edge      either side within 6 px of the waterline: the waterline's stairs, blur and rim, thin marks that 16-px block means barely see
+  beach     dry ground within 200 px of wet ground: sand, aprons and bars (Zhon's beach reaches ~107-178 px)
+  shore     either side within 120 px of the waterline: what a stroke's coast pass cuts (layers, fingers, plates, the dry bank)
 """
 import json
 import sys
@@ -56,6 +62,17 @@ def class_mask(root, world, n, cls):
         return m
     h = ndi.zoom(g, 1024 / g.shape[0], order=1)
     base = BASE.get(world, 24)
+    if cls in ('shallows', 'edge', 'beach', 'shore'):
+        dry, wet = h > .5, h < -.5
+        if not dry.any() or not wet.any():
+            return np.zeros_like(dry)
+        toWet, toDry = ndi.distance_transform_edt(~wet), ndi.distance_transform_edt(~dry)
+        if cls == 'shallows':
+            return wet & (toDry <= 64)
+        if cls == 'beach':
+            return dry & (toWet <= 200)
+        reach = 6 if cls == 'edge' else 120
+        return (dry & (toWet <= reach)) | (wet & (toDry <= reach))
     if cls == 'raised':
         return h >= base + 1.5
     if cls == 'bank':
