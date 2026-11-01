@@ -3,7 +3,8 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,PLACEMENT_ROW,strataZoneWidths} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,PLACEMENT_ROW} from './sculpt-material-model.js';
+import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
@@ -462,24 +463,12 @@ export class TerrainRenderer {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }
-    // Strata colours: the world's, else a painted-desert set.
-    const strataDefaults = this.config.strataColors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
+    // The column's slot colours: the world's, else a painted-desert set.
+    const strataDefaults = this.config.column?.colors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
     this.set('uStrataColors', strata);
-    // Bed zones (start above the plain, slot A, slot B, B's share); by
-    // default two colours alternating evenly from just above the plain.
-    const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
-    this.set('uStrataZones', [...zones, ...new Array(6 - zones.length).fill([0, 0, 0, 0])]);
-    // Card E8: a bed thickness per zone (the grey buttes' beds are 2-3 times the apron's); none keeps strataSpacing.
-    this.setStrataSpacing();
-    this.i('uStrataZoneCount', zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
-  }
-
-  setStrataSpacing() {
-    const space=strataZoneWidths(this.config,this.variant.get('strataSpacing'));
-    this.set('uStrataZoneSpace',[...space.map(x=>[x,0,0,0]),...new Array(6-space.length).fill([0,0,0,0])]);
   }
 
   // GLSL uniform uFooBar is the uniform block's field fooBar. A value is a
@@ -847,7 +836,6 @@ export class TerrainRenderer {
   // Surface knobs read from the variant; callable again after a change.
   applyKnobs() {
     const variant = this.variant;
-    this.setStrataSpacing();
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in the generated materials.
     this.set('uMaterialTable', this.placementTable(variant));
@@ -929,8 +917,6 @@ export class TerrainRenderer {
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : 0);
     this.f('uRockCrown', variant.has('rockCrown') ? Number(variant.get('rockCrown')) : 0);
     this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
-    this.f('uStrataSpacing', variant.has('strataSpacing') ? Number(variant.get('strataSpacing')) : 10);
-    this.f('uStrataWarp', variant.has('strataWarp') ? Number(variant.get('strataWarp')) : 12);
     this.f('uStrataContrast', variant.has('strataContrast') ? Number(variant.get('strataContrast')) : 0.6);
     this.f('uStrataGrain', variant.has('strataGrain') ? Number(variant.get('strataGrain')) : 1);
     this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
@@ -1036,19 +1022,15 @@ export class TerrainRenderer {
   // the pass share one column.
   setColumn() {
     const column = this.config.column, v = this.variant;
-    const sections = (column?.variants?.[this.config.variant]?.sections || column?.sections || []).slice(0, 6);
-    const beds = [], starts = [];
-    for (const s of sections) {
-      starts.push([s.start, beds.length, s.beds.length, 0]);
-      for (const b of s.beds) beds.push([b[0], Math.min(1, Math.max(0, b[1])), b[2], 0]);
-    }
-    if (beds.length > 24) throw new Error('nanolathe: a rock column holds at most 24 beds');
+    const {beds, starts} = columnRows(column, this.config.variant);
     const x = Number(v.get('columnContrast'));
     this.i('uColumnSectionCount', starts.length);
     this.set('uColumnContrast', Number.isFinite(x) && v.has('columnContrast') ? x : 1);
     this.set('uColumnBeds', beds.length ? beds : [[5, .5, 0, 0]]);
     this.set('uColumnSections', starts.length ? starts : [[0, 0, 1, 0]]);
     this.set('uColumnWander', [column?.wander?.value ?? 0, column?.wander?.erosion ?? 0, 0, 0]);
+    this.set('uColumnTerrain', [...(column?.wander?.terrain || [0, 0, 0]), 0]);
+    this.set('uColumnOpts', [column?.vary ? 1 : 0, column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0, column?.ledges ? 1 : 0, 0]);
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.

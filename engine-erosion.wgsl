@@ -54,8 +54,8 @@ fn ground(s: vec4f) -> f32 { return s.x + s.y; }
 
 // Hardness of the rock at the surface of a sample (0 with no column: every bed alike).
 fn hardnessOf(rock: f32, offset: f32) -> f32 {
-    if (u.columnSectionCount <= 0) { return 0.0; }
-    return columnAt(rock + offset).hardness;
+    if (u.columnOpts.z <= 0.0) { return 0.0; }
+    return columnAt(rock - u.columnOpts.y + offset).hardness;
 }
 
 @compute @workgroup_size(8, 8)

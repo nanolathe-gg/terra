@@ -36,9 +36,26 @@ fn groundBased(c: vec3f) -> vec3f {
     }
     return based(u.groundTexMean + (c - u.groundTexMean) * u.groundContrast, u.groundTexMean, u.groundBase);
 }
-// Strata: coloured bands by height on raised ground (painted desert).
-fn strataHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
+// Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).
 fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
+// The colour of the column's section s at coordinate c. A bed meets the next one over edge, a share of the cycle: a boundary inside a
+// cycle is softened on both sides, the cycle's top (topFade) inside its top bed. hold (0..1) holds ground that is nearly all one bed
+// (the widest bed's share of the cycle over .88) to that bed's colour: retail's pale caps are one sheet of the cool bed (card G4).
+fn columnColour(c: f32, s: i32, ramp: bool, edge: f32, topFade: bool, hold: f32) -> vec3f {
+    let bed = columnBedIn(c, s, ramp);
+    let w = edge * bed.period;
+    let r = bed.through * bed.thick;
+    var rgb = strataSlot(bed.slot);
+    if (bed.j > 0 && r < w) {
+        rgb = mix(strataSlot(u.columnBeds[bed.first + bed.j - 1].z), rgb, smoothstep(-w, w, r));
+    } else if (bed.j < bed.n - 1 && bed.thick - r < w) {
+        rgb = mix(rgb, strataSlot(u.columnBeds[bed.first + bed.j + 1].z), smoothstep(-w, w, r - bed.thick));
+    }
+    if (topFade && bed.j == bed.n - 1 && bed.thick - r < w) {
+        rgb = mix(rgb, strataSlot(u.columnBeds[bed.first].z), smoothstep(bed.thick - w, bed.thick, r));
+    }
+    return mix(rgb, strataSlot(bed.widestSlot), hold * smoothstep(0.88, 0.94, bed.widest));
+}
 // Card E8 (Painted Desert): the grey band at the foot of retail's raised ground. Retail's
 // neutral grey (mean (118,115,112)) sits in a thin height window on the first rise of the
 // raised ground (world height 9-12 on a plain of 2-3; ribbons median 9 px wide on gently
@@ -46,19 +63,6 @@ fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[cla
 // the middle of a lobe's rim, where its slope makes the ribbon that wide; the bumpy apron
 // wanders it and the gaps break it into stretches.
 // hf: the height above the plain; slope: units per px, which sets the edge softness.
-// Card E8: the beds of one zone at height hr as a colour, for painted rock, whose height is
-// not the zone's (the same split and share as the strata block; no edge softening, as a
-// painted mesa's rock is mostly gentle).
-fn rockStrata(hr: f32, zone: i32, paint: f32) -> vec3f {
-    if (paint <= 0.0) { return strataSlot(u.strataZones[zone].y); }
-    let z = u.strataZones[zone];
-    let S = max(u.strataZoneSpace[zone].x, 0.5);
-    let t = hr / S;
-    let k = floor(t);
-    let split = clamp(1.0 - z.w * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
-    let isB = smoothstep(split - 0.04, split + 0.04, fract(t));
-    return mix(strataSlot(z.y), strataSlot(z.z), isB);
-}
 fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     let wander = (terrainNoise(p * 0.03 + vec2f(41.0, 7.0)).r - 0.5) * 2.0 * u.baseBandWander
                + (terrainNoise(p * 0.35 + vec2f(5.0, 63.0)).g - 0.5) * 1.5;
@@ -67,18 +71,6 @@ fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     let inside = smoothstep(u.baseBandLow - e, u.baseBandLow + e, hh) * (1.0 - smoothstep(u.baseBandHigh - e, u.baseBandHigh + e, hh));
     let gap = terrainNoise(p * 0.07 + vec2f(77.0, 3.0)).b;
     return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
-}
-
-// Card G4 (Painted Desert): retail's pale caps are one sheet of the cool bed. The cap pixels (height 56 and up on slopes
-// under .35 per px) are 9.6-12% orange in retail and 22% in ours, hue 64-77 against 42: the beds' fine warp and the
-// spread of a zone's split (up to 48% orange within one bed) push a flat top across a bed edge in blotches. In a zone
-// that is nearly all cool bed (share over .9), level ground is held to the cool bed. Returns how far to hold it.
-// (Retail keeps one ragged orange patch of 40-150 px per cap. A threshold on noise drew smooth stains or thin veins, so
-// ours draws none.)
-fn capHold(slope: f32, share: f32) -> f32 {
-    let cap = smoothstep(0.88, 0.94, share);
-    let level = 1.0 - smoothstep(0.05, 0.22, slope);
-    return u.desertCapFlat * cap * level;
 }
 
 fn visibility(p: vec2f, h: f32) -> f32 {
@@ -1458,52 +1450,35 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         exposed = max(exposed, crown);
     }
     if (u.strata > 0.0) {
-        // Beds by height, measured on retail Painted Desert: a zone table
-        // (start above the plain; materials A and B as colour slots; B's
-        // share of each period). Within a zone A and B alternate every
-        // uStrataSpacing units, quasi-periodically (B's share varies per
-        // bed), and B's share ramps toward the next zone when both use the
-        // same pair. Beds colour all raised ground, level tops included
-        // (retail mesa caps take their band's colour); edges are hard (~3
-        // px); bed edges wander ~1-1.5 units at 5-25 px and meander broadly.
-        let warp = (terrainNoise(p * 0.08 + vec2f(5.0, 9.0)).r - 0.5) * u.strataWarp
-                 + (terrainNoise(p * 0.7 + vec2f(17.0, 2.0)).g - 0.5) * 2.6
-                 + (terrainNoise(p * 2.1 + vec2f(3.0, 41.0)).b - 0.5) * 1.2;
-        let hr = h - u.base + warp;
-        var zone = 0;
-        for (var i = 1; i < 6; i++) { if (i < u.strataZoneCount && hr >= u.strataZones[i].x) { zone = i; } }
-        let z = u.strataZones[zone];
-        var share = z.w;
-        if (zone + 1 < u.strataZoneCount) {
-            let next = u.strataZones[zone + 1];
-            if (next.y == z.y && next.z == z.z) { share = mix(z.w, next.w, clamp((hr - z.x) / max(next.x - z.x, 0.1), 0.0, 1.0)); }
-        }
-        var S = max(u.strataSpacing, 0.5);
-        // Card E8: retail's beds thicken up the buttes (lit flanks above 60: line gaps
-        // of 11-15 units, against the apron's 6), so a zone may carry its own thickness.
-        if (u.strataZoneSpace[zone].x > 0.0) { S = u.strataZoneSpace[zone].x; }
-        let t = hr / S;
-        let k = floor(t);
-        let f = fract(t);
-        let split = clamp(1.0 - share * (0.55 + 0.9 * strataHash(k + 0.37)), 0.03, 0.97);
-        let edge = clamp(1.5 * max(slope, 0.05) / S, 0.01, 0.2);
-        var isB = smoothstep(split - edge, split + edge, f) * (1.0 - smoothstep(1.0 - edge, 1.0, f));
-        if (u.desertCapFlat > 0.0) { isB = mix(isB, 1.0, capHold(slope, share)); }
-        // Painted rock (card C5) in a world with beds takes the colour its
-        // highest ground is painted with (its top zone's main bed: Painted
-        // Desert's grey buttes), not the alternating beds or the brown rock art.
-        let topZone = max(u.strataZoneCount - 1, 0);
-        var rockBed = strataSlot(u.strataZones[topZone].y);
-        // Card E8: the strata run through the rock itself, so painted rock carries the top
-        // zone's own beds (its grey with the lines), not one flat colour, wherever it is painted.
-        if (u.strataZoneSpace[topZone].x > 0.0) { rockBed = rockStrata(hr, topZone, painted.x); }
-        let bed = mix(mix(strataSlot(z.y), strataSlot(z.z), isB), rockBed, painted.x);
+        // Beds by height, measured on retail Painted Desert: the column's sections (a start above the plain, a pair of beds as
+        // colour slots with B's share of each period). Within a section A and B alternate every period, quasi-periodically (B's
+        // share varies per cycle), and B's share ramps toward the next section when both use the same pair. Beds colour all
+        // raised ground, level tops included (retail mesa caps take their band's colour); edges are hard (~3 px); bed edges
+        // wander ~1-1.5 units at 5-25 px and meander broadly.
+        let hr = columnCoord(p, h);
+        let zone = columnSectionAt(hr);
+        // Card G4: retail's pale caps are one sheet of the cool bed. The cap pixels (height 56 and up on slopes under .35 per px)
+        // are 9.6-12% orange in retail and 22% in ours, hue 64-77 against 42: the beds' fine warp and the spread of a section's
+        // split push a flat top across a bed edge in blotches, so level ground in a section that is nearly all cool bed is held to it.
+        // (Retail keeps one ragged orange patch of 40-150 px per cap. A threshold on noise drew smooth stains or thin veins, so
+        // ours draws none.)
+        let level = 1.0 - smoothstep(0.05, 0.22, slope);
+        let edge = clamp(1.5 * max(slope, 0.05) / columnPeriod(zone), 0.01, 0.2);
+        let stratum = columnColour(hr, zone, true, edge, true, u.desertCapFlat * level);
+        // Painted rock (card C5) in a world with beds takes the colour its highest ground is painted with (its top section's
+        // main bed: Painted Desert's grey buttes), and (card E8) the strata run through the rock itself, so painted rock carries
+        // the top section's own beds (its grey with the lines), not one flat colour, wherever it is painted. A painted mesa's
+        // rock is mostly gentle: a fixed edge, no ramp.
+        let topZone = max(u.columnSectionCount - 1, 0);
+        var rockBed = vec3f(0.0);
+        if (painted.x > 0.0) { rockBed = columnColour(hr, topZone, false, 0.04, false, 0.0); }
+        let bed = mix(stratum, rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
-        let onRaised = smoothstep(u.strataZones[0].x, u.strataZones[0].x + 1.5, hr) * (1.0 - route);
+        let onRaised = smoothstep(u.columnSections[0].x, u.columnSections[0].x + 1.5, hr) * (1.0 - route);
         material = mix(material, bedColour, max(u.strata * u.strataContrast * onRaised, u.strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }

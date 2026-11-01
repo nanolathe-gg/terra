@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-noise.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
+    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -51,7 +51,7 @@ KNOB_DEFAULTS = dict(
     # Ice frost band (card E5): its cells skip the wet-band darkening (0: every world as before).
     frostWet=0, frostNeedles=.5,
     banding=0, bandSpacing=3.7, bandSoftness=.35, bandLine=.5, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
-    strata=0, strataSpacing=10, strataWarp=12, strataContrast=.6, strataGrain=1,
+    strata=0, strataContrast=.6, strataGrain=1,
     fingers=0, bankPx=0,
     # Coast pass (card E4): fingers on the joined coast and flat shore layers cut as heights
     # (layerPx px a layer, riser 0 shares the bank's rise out, ledge and irregularity in shares).
@@ -407,7 +407,7 @@ WORLD_KNOBS = {
     # mesa in repro/scenes/desert.json). Sunlit faces are no brighter than
     # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
     # 1.07-1.14), so no highlight above level.
-    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataSpacing=6, strataWarp=4, strataContrast=1, banding=.4, bandSpacing=6,
+    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataContrast=1, banding=.4, bandSpacing=6,
                    bandLine=.2, strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
@@ -633,7 +633,7 @@ WORLD_KNOBS = {
 # Variants (card C5 stage 3): named presets laid over a world's own, for the
 # places where one retail family splits into distinct looks. A variant is knob
 # values on top of WORLD_KNOBS, plus optionally world colours ('colors') and
-# other config keys ('config', e.g. strataZones). A world's own preset is its
+# other config keys ('config'). A world's own preset is its
 # default, so nothing changes unless a variant is chosen (World panel, or
 # `variant=<id>` in the page's address). Every knob must be in KNOB_DEFAULTS.
 WORLD_VARIANTS = {
@@ -721,17 +721,15 @@ WORLD_VARIANTS = {
         # shaded flanks and long dark cracks, beside Painted Desert's broad
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: grey buttes',
-                      knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
+                      knobs=dict(bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
                                  crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
                                  # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
                                  # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
                                  # 0.4%). Ambient .12 gives 0% and 1.0%.
-                                 ambient=.12),
-                      # Card E8: retail's grey buttes carry rust-pink lines (slot 4, (175,111,90), the nearest
-                      # slot to the measured (149,88,86)) 15 units apart (median over the lit flanks above 60,
-                      # 14 px) and ~4.4 units wide, not 4 apart.
-                      config=dict(strataZones=[[1, 0, 1, .25], [14, 2, 3, .3], [60, 2, 3, .3], [95, 1, 2, .35]],
-                                  strataZoneSpacing=[4, 12, 14, 14])),
+                                 ambient=.12)),
+    # Its beds are the `triad` row of the column block in materials/desert.json. Card E8: retail's grey buttes carry
+    # rust-pink lines (slot 4, (175,111,90), the nearest slot to the measured (149,88,86)) 15 units apart (median over the
+    # lit flanks above 60, 14 px) and ~4.4 units wide, not 4 apart.
     },
 }
 for _world, _variants in WORLD_VARIANTS.items():

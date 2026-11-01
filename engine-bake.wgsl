@@ -465,7 +465,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
 }
 
 fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
-    if (u.columnSectionCount > 0) { return columnBedRelief(p, h, gOver); }
+    if (u.columnOpts.z > 0.0) { return columnBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let tilt = u.bedDip * dot(p, dip);
@@ -1340,7 +1340,7 @@ fn bake(p: vec2f) -> vec4f {
             bedG = mix(cliff.gradient, slope, cliff.local * (1.0 - u.cliffBed));
         }
         // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
-        if (u.columnSectionCount > 0) { bedH = h; }
+        if (u.columnOpts.z > 0.0) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
         // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
         // The form fades out over the face's foot, so no gully reaches the water plane.
