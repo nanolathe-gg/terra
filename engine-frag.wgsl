@@ -1510,7 +1510,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
         let wetMoss = (0.25 + 1.6 * timeMaps.wet);   // H5 3a: moss grows where water runs
         let want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
-        let fleck = step(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
+        // A wall's flecks are drawn in screen pixels, or each dash would be stretched into a streak down it.
+        let ticket = mix(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, cellHash(vec2f(floor(pixel.x * 0.5), floor(pixel.y)) + 311.0).x, faceRelief);
+        let fleck = step(ticket, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
         material = mix(material, saturate(slopeBased * vec3f(1.0, 1.25, 0.95)), fleck);
     }
     if (u.rockCrown > 0.0) {
