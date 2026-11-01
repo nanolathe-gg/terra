@@ -1257,7 +1257,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // TA's fixed camera permits a native-pixel material grain. World-XY
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
-    let pixel = vec2f(fragCoord.x, u.size - fragCoord.y);
+    var pixel = vec2f(fragCoord.x, u.size - fragCoord.y);
+#ifdef CHUNK
+    // Stable, stratified native-pixel sampling: retain the material distribution
+    // without locking every preview texel to one phase of a repeating grain.
+    if (u.chunkScale > 1.0) {
+        let cell = vec2u(floor(pixel / u.chunkScale));
+        var h = cell.x * 374761393u + cell.y * 668265263u;
+        h = (h ^ (h >> 13u)) * 1274126177u; h = h ^ (h >> 16u);
+        let phase = vec2f(f32(h & 65535u), f32(h >> 16u)) / 65536.0;
+        pixel = vec2f(cell) * u.chunkScale + floor(phase * u.chunkScale) + 0.5;
+    }
+#endif
     // Sand grains read the rock at a noise-scattered coordinate; GLSL took
     // that lookup's level from implicit derivatives. WGSL allows derivatives
     // only in uniform control flow, so they are taken here, before any branch.
@@ -1943,7 +1954,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Ordered dither before the palette lookup: a fixed per-pixel
         // threshold pattern, so edits change only local pixels and level
         // ground keeps a repeating pattern. Strength is in palette-LUT steps.
-        let fc = floor(fragCoord);
+        var fc = floor(fragCoord);
+#ifdef CHUNK
+        if (u.chunkScale > 1.0) { fc = floor(vec2f(pixel.x, u.size - pixel.y)); }
+#endif
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
         let ditherStrength = select(u.dither * u.landDither, u.dither * mix(1.0, u.shoalDither, shoalWeight), h < u.sea + 1.0);

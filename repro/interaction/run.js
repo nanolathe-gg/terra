@@ -67,3 +67,14 @@ $('gputest').onclick=()=>run(async()=>{const a=await load(),{changedWeatherTiles
 $('captureone').onclick=()=>run(async()=>{const name=$('scene').value,label=$('label').value,a=await load(name,4);a.canvas.setBusy(true);await png(label+'/references/'+name+'.png',await a.capture());await save(label+'/references/'+name+'-heights.json',await a.heights());a.canvas.setBusy(false);line('Saved '+name);});
 
 $('stable').onclick=()=>run(async()=>{const name=$('scene').value,label=$('label').value+'/'+name+'-4',a=await load(name,4);a.canvas.setBusy(true);const first=await a.capture();a.refine();await a.settle();const second=await a.capture(),x=first.getContext('2d').getImageData(0,0,first.width,first.height).data,y=second.getContext('2d').getImageData(0,0,second.width,second.height).data;let max=0,count=0;for(let i=0;i<x.length;i++){const d=Math.abs(x[i]-y[i]);max=Math.max(max,d);if(d)count++;}await png(label+'/refined-again.png',second);await save(label+'/stability.json',{max,changedChannels:count});a.canvas.setBusy(false);line('Repeated refinement: max '+max+', changed channels '+count);});
+
+$('colors').onclick=()=>run(async()=>{
+ const name=$('scene').value,label=$('label').value+'/'+name,a=await load(name,4);a.canvas.setBusy(true);
+ const capture=async(tag,level)=>{const b=await a.canvas.debugBake({x:0,y:0,width:1024,height:1024},level),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();await png(label+'/'+tag+'.png',c);};
+ try{
+  await capture('settled-full',1);await capture('settled-preview',2);
+  const index=a.nodes.findLastIndex(n=>n.points?.length);a.region.beginMove(index);a.region.previewMove({dx:32,dy:16});
+  await capture('moving-preview',2);await capture('moving-full',1);
+  a.region.endMove(true);await a.settle();await capture('moved-final',1);
+ }finally{a.canvas.setBusy(false);}line('Saved color comparison '+label);
+});

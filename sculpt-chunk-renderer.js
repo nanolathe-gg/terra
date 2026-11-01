@@ -130,14 +130,16 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       fieldsX,fieldsY,fieldsWidth:fieldsEndX-fieldsX+1,fieldsHeight:fieldsEndY-fieldsY+1,
       screenOrigin:[x,y+shift],mesh:{col0,col1,row0,row1,resolution},reach};
   }
-  // H7b: at scale s (2 for a quarter bake) the fields lattice and the output have one texel per s world pixels each way.
+  // Relief and cached output use scale s. Color is evaluated at up to four
+  // native samples per output pixel, then filtered after shading and palette mapping.
   estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,includeCache=true) {
     // input per texel: height 4 + routes 4 + weather/material 4 layers x 4 (as allocate() makes them), then 4 a mask layer.
     const field=pow2(Math.ceil(region.fieldsWidth/scale))*pow2(Math.ceil(region.fieldsHeight/scale))*8;
     const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(24+maskLayers*4);
     const m=region.mesh,cols=m.col1-m.col0,rows=m.row1-m.row0;
     const meshKey=Object.values(m).join(','),otherMeshes=[...this.meshCache].reduce((n,[k,v])=>n+(k===meshKey?0:v.bytes),0);
-    const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24)+(includeCache?otherMeshes:0),output=Math.ceil(width/scale)*Math.ceil(height/scale)*12;
+    const rasterScale=Math.max(1,scale/2);
+    const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24)+(includeCache?otherMeshes:0),output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/scale)*Math.ceil(height/scale)*4;
     return {field,input,mesh,output,maskPlaneCount,maskLayers,workingBytes:field+input+mesh+output,
       retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+mesh+output,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:Math.max(input,mesh),cpuPeakBytes:this.cpuRetainedBytes+Math.max(input,mesh)};
@@ -165,7 +167,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     return this.track(this.device.createTexture({label,size:[width,height,layers],format,usage}),label,width*height*layers*bytes,kind);
   }
   allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
-    const width=Math.ceil(world_width/scale),height=Math.ceil(world_height/scale);   // H7b: the output has one texel per `scale` world pixels
+    const rasterScale=Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
     const fw=pow2(Math.ceil(region.fieldsWidth/scale)),fh=pow2(Math.ceil(region.fieldsHeight/scale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
     let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale);
     // Cached meshes are expendable; they must never make an otherwise valid bake fail its budget.
@@ -176,7 +178,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, mesh ${mb(e.mesh)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
       throw new Error(`nanolathe: chunk needs ${mb(required)} MB of GPU memory (${parts}); use chunks of ${this.chunkSize()} px or smaller`);
     }
-    const allocationKey=[fw,fh,gw,gh,width,height,this.maskLayers,fed].join(',');
+    const allocationKey=[fw,fh,gw,gh,width,height,Math.ceil(world_width/scale),Math.ceil(world_height/scale),this.maskLayers,fed].join(',');
     const reuse=this.allocationKey===allocationKey&&Boolean(this.heightTexture);
     if(!reuse){this.evict(true);this.allocationKey=allocationKey;}
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);   // H6b: the feed pass writes these four
@@ -188,20 +190,21 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.maskTexture=this.texture('chunk masks',gw,gh,this.maskLayers,'rgba8snorm',4,read);
     this.fieldsTexture=this.texture('chunk fields',fw,fh,1,'rgba16float',8,T.STORAGE_BINDING|T.TEXTURE_BINDING);
     this.fieldsOut=this.device.createBindGroup({label:'chunk fields out',layout:this.bakePipeline.getBindGroupLayout(1),entries:[{binding:0,resource:this.fieldsTexture.createView()}]});
-    this.canvas.width=width;this.canvas.height=height;this.outputBytes=width*height*8;
-    this.outputCanvas??=new OffscreenCanvas(width,height);this.outputCanvas.width=width;this.outputCanvas.height=height;
+    this.canvas.width=width;this.canvas.height=height;this.outputBytes=width*height*4+Math.ceil(world_width/scale)*Math.ceil(world_height/scale)*4;
+    this.outputCanvas??=new OffscreenCanvas(width,height);this.outputCanvas.width=Math.ceil(world_width/scale);this.outputCanvas.height=Math.ceil(world_height/scale);
     this.depthTexture=this.texture('chunk depth',width,height,1,'depth32float',4,T.RENDER_ATTACHMENT);this.depthView=this.depthTexture.createView();
     }
     this.bakeWidth=fw;this.bakeHeight=fh;
     const rasterSize=world_width>this.limit?this.size:Math.min(this.size,this.limit),span=rasterSize/2;
     const rasterOrigin=this.size<=this.limit?[0,0]:region.screenOrigin.map(v=>Math.floor(v/span)*span);
     this.f('uChunkRasterOrigin',rasterOrigin);this.f('uChunkRasterSize',rasterSize);
-    this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/scale,(rasterOrigin[1]-region.screenOrigin[1])/scale,rasterSize/scale,rasterSize/scale];   // clip space stays in world units; the viewport is what scales
+    this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/rasterScale,(rasterOrigin[1]-region.screenOrigin[1])/rasterScale,rasterSize/rasterScale,rasterSize/rasterScale];   // clip space stays in world units; the viewport is what scales
     this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
-    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',scale);   // Shared shader coordinates stay in world pixels at every display scale.
-    // H7b: a drawn texel covers scale x scale final pixels, so the generated materials read their mip for that footprint (the variant's own foot, times the scale).
-    this.f('uMaterialFoot',(this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1)*scale);
+    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',scale);   // Shared shader coordinates stay in world pixels at every display scale.
+    // Keep native material variance before nonlinear coverage and palette mapping.
+    // Averaging these inputs first changes the mean rendered color at lower resolutions.
+    this.f('uMaterialFoot',this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1);
     const meshKey=Object.values(region.mesh).join(',');
     let mesh=this.meshCache.get(meshKey);
     if(mesh){this.meshHits++;this.meshCache.delete(meshKey);this.meshCache.set(meshKey,mesh);}
@@ -363,7 +366,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const result=super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)});
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
-      this.outputCanvas.getContext('2d').drawImage(this.canvas,0,0);
+      const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';
+      copy.drawImage(this.canvas,0,0,this.outputCanvas.width,this.outputCanvas.height);
       await this.device.queue.onSubmittedWorkDone();
       return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};
     } finally { this._busy=false;this.cpuWorkingBytes=0; }

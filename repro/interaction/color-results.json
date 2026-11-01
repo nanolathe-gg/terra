@@ -1,0 +1,195 @@
+{
+  "baseline": "153fd4b",
+  "color": {
+    "green-2": {
+      "Previous live preview": {
+        "meanRGBBias": [
+          -2.5454111099243164,
+          3.050814628601074,
+          -1.238398551940918
+        ],
+        "meanChromaBias": [
+          -2.301079432169596,
+          3.2951463063557944,
+          -0.9940668741861979
+        ],
+        "chromaBiasMagnitude": 4.140184136460419
+      },
+      "Updated live preview": {
+        "meanRGBBias": [
+          1.105238914489746,
+          1.4394559860229492,
+          0.868596076965332
+        ],
+        "meanChromaBias": [
+          -0.03252474466959643,
+          0.3016923268636067,
+          -0.2691675821940105
+        ],
+        "chromaBiasMagnitude": 0.4056196573248998
+      },
+      "chromaBiasReduction": 0.9020285948750875
+    },
+    "red-2": {
+      "Previous live preview": {
+        "meanRGBBias": [
+          -2.03402042388916,
+          -5.435546875,
+          5.608948707580566
+        ],
+        "meanChromaBias": [
+          -1.4138142267862954,
+          -4.815340677897136,
+          6.229154904683431
+        ],
+        "chromaBiasMagnitude": 7.999296677747101
+      },
+      "Updated live preview": {
+        "meanRGBBias": [
+          0.01800060272216797,
+          0.012340545654296875,
+          -0.01676464080810547
+        ],
+        "meanChromaBias": [
+          0.013475100199381512,
+          0.007815043131510418,
+          -0.021290143330891926
+        ],
+        "chromaBiasMagnitude": 0.026380360641595893
+      },
+      "chromaBiasReduction": 0.9967021649897069
+    }
+  },
+  "performance": {
+    "before": {
+      "green4": [
+        {
+          "name": "fit",
+          "activeMs": 3.899999976158142,
+          "settleMs": 318.89999997615814,
+          "frameP95": 9.200000000000273,
+          "freshTilesDuringInput": 0
+        },
+        {
+          "name": "draw",
+          "activeMs": 829.2000000476837,
+          "settleMs": 547.2999999523163,
+          "frameP95": 9.099999999999909,
+          "freshTilesDuringInput": 33
+        },
+        {
+          "name": "drag",
+          "activeMs": 803.8999999761581,
+          "settleMs": 576.5,
+          "frameP95": 9.399999999999636,
+          "freshTilesDuringInput": 38
+        },
+        {
+          "name": "slider",
+          "activeMs": 556.5999999046326,
+          "settleMs": 528.3000000715256,
+          "frameP95": 16.5,
+          "freshTilesDuringInput": 20
+        },
+        {
+          "name": "path-point",
+          "activeMs": 545.4000000953674,
+          "settleMs": 474.5,
+          "frameP95": 9.100000000000364,
+          "freshTilesDuringInput": 24
+        }
+      ],
+      "desert40Fit": {
+        "activeMs": 1073.7000000476837,
+        "settleMs": 225.39999997615814,
+        "frameP95": 25,
+        "peakGPUBytes": 362466040
+      },
+      "measurement": "Single-run, same-machine Chrome WebGPU; synthetic input once per animation frame; not hardware latency."
+    },
+    "after": {
+      "green4": [
+        {
+          "name": "fit",
+          "activeMs": 3.399999976158142,
+          "settleMs": 505.2999999523163,
+          "frameP95": 16.59999999999991,
+          "freshTilesDuringInput": 0
+        },
+        {
+          "name": "draw",
+          "activeMs": 805.5,
+          "settleMs": 540.7000000476837,
+          "frameP95": 9.199999999999818,
+          "freshTilesDuringInput": 29
+        },
+        {
+          "name": "drag",
+          "activeMs": 836.6000000238419,
+          "settleMs": 549.5,
+          "frameP95": 9.199999999999818,
+          "freshTilesDuringInput": 31
+        },
+        {
+          "name": "slider",
+          "activeMs": 777.8999999761581,
+          "settleMs": 562.7000000476837,
+          "frameP95": 16.699999999999818,
+          "freshTilesDuringInput": 17
+        },
+        {
+          "name": "path-point",
+          "activeMs": 562.8999999761581,
+          "settleMs": 585.2000000476837,
+          "frameP95": 16.69999999999891,
+          "freshTilesDuringInput": 19
+        }
+      ],
+      "desert40Fit": {
+        "activeMs": 1115,
+        "settleMs": 251,
+        "frameP95": 25,
+        "peakGPUBytes": 363830776
+      },
+      "measurement": "Single-run, same-machine Chrome WebGPU; synthetic input once per animation frame; not hardware latency."
+    }
+  },
+  "fidelity": {
+    "lava-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "crystal-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "green-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "ice-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "desert-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "zhon-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "moon-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "red-2": {
+      "max": 0,
+      "changedChannels": 0
+    },
+    "archipelago-2": {
+      "max": 0,
+      "changedChannels": 0
+    }
+  }
+}

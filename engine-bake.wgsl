@@ -999,7 +999,7 @@ fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
     // Convert the global integer texel once, just as the whole-map bake does;
     // every hash/noise call receives that same world position.
     // H7b: texel (x, y) is the bake at origin + (x, y) * scale + (scale - 1) / 2, the centre of the block of final pixels it stands for.
-    textureStore(fieldsOut, id.xy, bake(vec2f(id.xy) * u.chunkScale + u.chunkFieldsOrigin + (u.chunkScale - 1.0) * 0.5));
+    textureStore(fieldsOut, id.xy, bake(vec2f(id.xy) * u.chunkFieldScale + u.chunkFieldsOrigin + (u.chunkFieldScale - 1.0) * 0.5));
 #else
     textureStore(fieldsOut, id.xy, bake(vec2f(id.xy)));
 #endif

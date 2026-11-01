@@ -431,7 +431,8 @@ struct Uniforms {
     chunkScreenSize: vec2f,
     chunkRasterOrigin: vec2f,
     chunkRasterSize: f32,
-    chunkScale: f32,          // H7b: world px per output texel (1 at final, 2 at quarter): the fields lattice and the drawn pixel are this coarse
+    chunkScale: f32,          // World pixels per raster texel.
+    chunkFieldScale: f32,     // Relief bake spacing, independent of color sampling.
 #endif
 }
 
@@ -658,8 +659,8 @@ fn routeProtection(p: vec2f) -> f32 {
 // for); at scale 1 every term below is x * 1, x / 1 or x - 0, so the lookup is the one it replaced.
 fn bakedFields(p: vec2f) -> vec4f {
     let q = clamp(p, vec2f(0.0), vec2f(u.size - 1.0));
-    let centre = (u.chunkScale - 1.0) * 0.5;
-    return textureSampleLevel(fieldsTex, linearClamp, (((q + 0.5 * u.chunkScale) - u.chunkFieldsOrigin) - centre) / u.chunkScale / u.chunkFieldsSize, 0.0);
+    let centre = (u.chunkFieldScale - 1.0) * 0.5;
+    return textureSampleLevel(fieldsTex, linearClamp, (((q + 0.5 * u.chunkFieldScale) - u.chunkFieldsOrigin) - centre) / u.chunkFieldScale / u.chunkFieldsSize, 0.0);
 }
 #else
 fn bakedFields(p: vec2f) -> vec4f { return textureSampleLevel(fieldsTex, linearClamp, (p + 0.5) / u.size, 0.0); }

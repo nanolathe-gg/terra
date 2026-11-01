@@ -29,3 +29,6 @@ The performance prototype intentionally fixes the Green refinement initializatio
 A `present` event includes cached redraws and **must not be reported as fresh-terrain FPS**. Use `bake-end` events before the `release` marker to count new tile results. `frameP95` measures animation-frame intervals across the phase, including settling. GPU timings use timestamp queries when supported. A tile completion is not a whole-viewport frame.
 
 The instrumentation deliberately destroys the old iframe's GPU device during fixture replacement. Abort errors from pending reads at that teardown are excluded from the fixture's unhandled-rejection reporting; unexpected errors during a live fixture remain visible.
+
+
+Use **Compare preview colors** to capture identical settled terrain at final and preview resolution, then capture a translated shape during input at both resolutions and after refinement. The five PNGs are saved under `<label>/<scene>/`. Compare color means at matching coverage; a lower-resolution image is not expected to match every final pixel. See `color-results.json` for the follow-up measurements against `153fd4b`.
