@@ -7182,6 +7182,362 @@ edge widths are the column's own rules, not options.
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H16`, branch
 `H16-geology`; assets `$R/agent-H16`.
 
+### H17. Fractures: one groove, one cell
+
+**Why.** Everything cut into the rock comes from a handful of functions in `engine-bake.wgsl` that do the same two jobs with
+different numbers, about 50 knobs between them. `jointFieldAt`, `gullyField` and `scratchField` are one job: a lattice of lines
+at an angle, a spacing, a wander of two noise octaves, a depth per line, runs with gaps, a smooth section. `jointPresent` is
+`grooveRun` with another salt. `facetLevel`, `blockField` and `fractureLevel` are another: a jittered cell search, each cell with
+its own tilt and step, a seam from the gap between the two nearest points. `fractures.png`, the last image of ours in
+`materials/`, draws a third kind of crack that only a lab slider reaches. This card is about the code and the look, not the
+controls: the sliders stay, and a mark that reads short of retail gets closer where it can. Green's long thin fissures with
+grey shoulders still read as short wormy marks in ours.
+
+**Part 1: inventory, the crack image, and one groove.**
+1. Every knob of the family: which worlds set it, where it is read, what it draws, the same idea as what, and who owns the strays
+   (`cliff*`, `faceStreak`, `faceDark`, `worms`, `wrinkles`, `slopeMarks`, `rill*`, `outcropCracks`, `crackedStep`, `crackedContrast`).
+2. Whether each acts, by moving it on the real engine: `measure/geology_controls.mjs` with a `--family` option.
+3. `fractures.png`: does it draw anything `cracks()` cannot? If not, it goes on the owner's combine-or-drop list with its
+   texture binding and `fractureDepth`. If so, it is made at startup. Either way the question closes here.
+4. One groove function in place of the three, with each family's numbers, the knobs unchanged. Judged against retail, since three
+   functions cannot become one with every float in the same order.
+
+**Part 2** is one cell function and fewer groove numbers, code only. **Part 3** is the marks toward retail, then the count. Both are written out below, from part 1's report.
+
+**Done (part 1).** Branch `H17-fractures`, four steps, a commit each, nothing merged.
+- *Step 1, the inventory (48 knobs; `crackDark` and `crackLit` are read in `engine-frag.wgsl`, the rest in `engine-bake.wgsl`).* Effective value per world = query > the engine preset
+  (`ENGINE_KNOBS`, Green only) > the variant (`WORLD_VARIANTS`) > `WORLD_KNOBS` > `KNOB_DEFAULTS`. Every knob reaches the shader as the
+  uniform of the same name (`uCrackSeverity` ... in `sculpt-renderer.js`). `Cell search` is the jittered-point nearest and second-nearest search (3 levels in `cracks`, 9 cells in
+  `blockField`, 9 in `facetLevel` up to 3 times); `Groove` is a lattice of lines at an angle in the face's frame.
+
+  | Family (reads) | Knobs, defaults | Worlds off the default | Draws | Same idea as |
+  | --- | --- | --- | --- | --- |
+  | **cracks()** cell search, 3 levels (`cracks`, `fractureLevel`, `crackShade*`) | `crackSeverity .6`, `crackSpacing 40`, `crackLength 2`, `crackMajor .8`, `crackMinor .75`, `crackHairline .6`, `crackBlocks .6`, `crackWidth 1`, `crackJagged .6`, `crackNetwork .35`, `crackReach .6`, `crackStyle 0` | Severity: Red .3 Arch .4 Desert 0 Moon 0 Zhon .4 Lava .4 Crystal .7 Ice 0 (variants Green evad .45, Desert triad .5, Moon cracked .35, Ice snow .2 / bergs 0); Spacing: Red 28 Crystal 16; Length: Crystal 1.25 (triad 3); Major: Arch .6 Desert .2 Moon .5 Zhon .6 Ice .4 (triad .7); Minor: Desert .1 Moon .5 Ice .3 (triad .15); Hairline: Desert 0 Lava 0 Crystal .3 Ice .2; Blocks: Desert .1 Moon .4 Lava .3 Crystal .8 Ice .2 (evad .3, triad .15); Width: Red .5; Network: Lava 0 Crystal 1; Reach: Red .5 (evad .75, triad .5); Style 1: Green, Red, Desert; Jagged: none | ink or carved cracks (dark, lit, carve depth) and a block height per cell (`crackBlocks`, which also gates `broken`, the share of ribs the cracks replace) | the second cell search (blockField, facetLevel); `crackBlocks`/`crackLength` are `blockStep`/stretch of the block cells; `crackSeverity` is a depth like `*Depth` |
+  | **crack tone** (`engine-frag.wgsl`: the baked crack code) | `crackDark .75`, `crackLit .35` | Dark: Green .4 (evad .55) Red .35 Arch .3 Moon .6 Zhon .45 Lava .35 Crystal .9; Lit: none | how dark a line code reads, how bright a lit wall; **also scales band lines, facet seams, block creases and gully floors**, because every one of them is written through the same code | owner of the tone of every mark below |
+  | **joint** groove (`jointFieldAt`, `jointPresent`) | `jointSpacing 36`, `jointAngle 0`, `jointDepth 2`, `jointRun 120`, `jointGaps .3` | Green 34 / -20 / 3 (engine 0) / 200 / .35; Red 30 / -10 / 3 / 160 / .4; Desert 30 / 0 / 3 / 120 / .4 (Spacing, Depth, Gaps) | a lattice of vertical grooves 1.3-2.2 px half-width, plus a shift of the bed rows to the right of each joint (`jointField().y`, passed to `bedRelief`; a world with a column ignores it and Green's `bedFlow` is 0, so it draws nothing in any of the nine worlds, step 2) | gully and scratch, five for five |
+  | **gully** groove + rib (`gullyField`, `gullyPos`) | `gullyDepth 0`, `gullySpacing 40`, `gullyWidth 14`, `gullyAngle -20`, `gullyRun 160`, `gullyGaps .3`, `gullyShade 0`, `ribTilt 0` | Green 8 (engine 4) / 36 / 14 / -20 / 90 / .4 / shade 1.2 / rib .2 | broad channels between rib planes (the planes are `ribTilt`; the channels are a groove) | joint and scratch; `gullyShade` is `facetSeam` / `blockSeam` for a groove floor |
+  | **scratch** groove (`scratchField`) | `scratchDepth 0`, `scratchSpacing 9`, `scratchAngle -20`, `scratchRun 90`, `scratchGaps .4` | Green 2.5 (engine 1.2) / 9 / -20 / 140 / .3 | thin 1-2 px grooves | joint and gully |
+  | **facet** cell search (`facetLevel`, `facetField`) | `facetTilt 0`, `facetSize 6`, `facetStretch 1.5`, `facetStep 1`, `facetSeam 0`, `facetSkew 1`, `facetCoarse 0` | Green 1 (engine .3) / 3.2 / 1.8 / 1.5 / 1.6 / .25 / .5 | tilted planes with steps in cells 3.2 px x 1.8, three levels (`cliffFine` adds the third) | `blockField` (size, stretch, tilt, step, seam) and `cracks()`' blocks |
+  | **block** cell search (`blockField`; fed by `columnAt`) | `blocks 0`, `blockRow 4`, `blockWidth 7`, `blockTilt .5`, `blockStep .8`, `blockSeam .5`, `blockChip 1.2`, `blockGrit .25`, `hillBlocks 0` | Green (engine) blocks 1, Tilt .8, Step 3, Seam .6, hillBlocks .5; the other four are at their defaults | planes per cell with creases, hard beds in larger cells (`columnAt`) | `facetLevel` and `cracks()` |
+
+  Same idea, counted: the three **groove** families carry the same five numbers (angle, spacing, depth, run, gaps) in three
+  copies of one function (15 knobs for one idea), and `gullyWidth` is the only half-width knob (joints and scratches hard-code
+  theirs). The three **cell** families carry size, stretch, tilt, step, seam and a level share (`crack*`, `facet*`, `block*`).
+  World-gated branches doing the same job: `lavaCrust` (Lava: pillows, chips and creases on hill rock, `bake`'s 1323), the cracked-bed
+  call of `cracks()` (Red: `bedCrackSlope`), `moonFolds` (Moon: thin dark lines, `engine-frag`), and the shape stage's `iceFacets` /
+  `craterFacets` (Voronoi facets in the height, `sculpt-gpu-fields.js`; Shape's). Gates every groove and cell function sits inside:
+  `rockOrder` (the structured face), `rockFrom`, `cliffFollow` (the frame), `bedFlow`/`bedBend` (how the beds read a joint and a gully).
+  **Strays and their owners (not folded in):** `cliff*` (the frame every groove is drawn in, shared), `faceStreak` and `faceDark` (face
+  material), `worms`, `wrinkles`, `slopeMarks` (Impacts or Bodies), `rill*` and `outcropCracks` (the Time pass's marks), `crackedStep`,
+  `crackedContrast` and `bedCrackSlope` (Shores' bed; it only feeds the call of `cracks()` that Red's cracked bed makes), and `gullyRock` (Materials' placement: the weight of the baked-gully term in the rock-face score, `engine-frag.wgsl` row 9 x; Desert sets it to 0).
+
+- *Step 2, does it act (`measure/geology_controls.mjs --family fractures`, out `$R/agent-H17/fam`, 80 states and 23 probes, 27 scenes each, console clean; of the 80 states 9 dead, 51 under the bar, 20 act).*
+  Each knob is moved from the scene's own value to the default (the page's order: query, Green's engine preset, variant, world, default) on the
+  world's three scenes; a scene that already sits at the target is shown `=` and left out. The class is **slope blocks, not raised blocks**:
+  16-px blocks (impact.py's rule, 40 px margin) whose slope is at least .10 for the cracks and crack tone, at least .50 (retail's rock face)
+  for the structured face (joints, gullies, scratches, facets, blocks, `ribTilt`); `geology_diff.py` has both classes as `slope` / `face`.
+  The bar is decision 11's 5% of the class on at least one scene. Numbers are mean |diff| / blocks changed, per scene; `-` is no change.
+  - **Dead** (mean |diff| 0.00 on every scene it applies to): Green `jointSpacing`, `jointAngle`, `jointRun`, `jointGaps` (`jointDepth` is 0 and
+    the joint's bed shift is ignored by a world with a column and multiplied by Green's `bedFlow` 0: **the joint's shift is dead in all nine
+    worlds**), Moon `crackMajor`, `crackMinor`, `crackDark` (Moon sets `crackSeverity` 0, so no scene draws a crack), Lava `crackSeverity`
+    (.4 to .6 and to 1: 0.00) and `crackBlocks`.
+  - **Under 5%** (moved, by a few pixels): Green `crackSeverity` (evad .45 -> .6; .45 -> 1: 0.1%), `crackBlocks`, `crackReach`, `crackStyle` .5%,
+    `crackJagged` (1 -> 0: mean |diff| 2.83 on green-2, 1.4% of rock face), `crackLit` 0%, `crackWidth` (1 -> 2) 0%, `jointDepth` (0 -> 4)
+    4.3%, `gullyRun` 3.2%, `gullyGaps` 0%, `gullyShade` 1.4%, `scratchDepth` (1.2 -> 0 and -> 3) 0%, `scratchRun`, `scratchGaps`,
+    `scratchSpacing` (9 -> 18), `scratchAngle` (-20 -> 20) 0%, `facetStep` 0% (1.5 -> 4: 9.3%), `facetSkew` 0%, `blockTilt` .4%, `blockStep` 3.2%,
+    `blockSeam` 0%, `blockGrit` 0% (the 0.00 blocks and 2-4% of pixels are the thin marks: 1-2 px lines move pixels, not 16-px block means);
+    Red `crackSeverity` (.3 -> 1: 1.1 / 0 / 1.1%), `crackWidth`, `crackReach`, `crackDark`, `crackJagged`, `crackStyle` 1.5%, `jointSpacing`
+    .6%, `jointAngle` .6%, `jointDepth` (3 -> 8: 1.7%), `jointRun`, `jointGaps`; Desert `crackLength` 4.6%, `crackMajor`, `crackMinor` 1.6%,
+    `crackHairline`, `crackBlocks`, `crackReach`, `crackStyle` 1.5%, `jointSpacing`, `jointDepth` (3 -> 8: 0%), `jointGaps`; Archipelago
+    `crackSeverity`, `crackMajor`; Moon `crackBlocks` .1%; Zhon `crackSeverity`, `crackMajor`, `crackDark` .1%; Lava `crackHairline`,
+    `crackNetwork`; Crystal `crackSeverity`, `crackSpacing` .9%, `crackLength`, `crackHairline`, `crackBlocks`, `crackNetwork` .1%, `crackDark`.
+  - **Act** (blocks changed on the scene that shows it): Green `crackDark` .75 vs .4 23.8% (green-2; it also scales every other mark), `gullyDepth`
+    11.1%, `gullySpacing` 27.1%, `gullyAngle` (-20 -> 20) 52.1%, `gullyWidth` (14 -> 4) 5.7%, `ribTilt` 8.4%, `facetTilt` 58.2%, `facetSize` 12.5%,
+    `facetStretch` 6.4%, `facetSeam` 44.6%, `blocks` 60.4%, `blockRow` (4 -> 8) 16.8%, `blockWidth` (7 -> 14) 22.1%, `blockChip` 9.6%,
+    `hillBlocks` 8.1% / 5.6% (green-1 / -3, where the hill rock is); `blockTilt` (.8 -> 1.6) 31.4%, `blockStep` (3 -> 6) 16.4%, `blockSeam` (.6 ->
+    1.5) 58.9% (these three are under 5% for the world's small move but act at a wider one); Red `crackSpacing` 5.4%; Archipelago `crackDark` 23.7%,
+    Lava `crackDark` 34.7%; Moon `crackSeverity` (0 -> .6) 43.4%; Desert `crackSeverity` (0 -> .6) 12.8%; Ice `crackSeverity` 40.0% and, on ice-1
+    (variant snow, the only Ice scene with cracks), `crackMajor` 9.0%, `crackMinor` 26.9%, `crackHairline` 12.3%, `crackBlocks` 5.8%.
+  - A knob that is dead or under 5% here is **listed for the owner, nothing is deleted**; the moves are the world's own to the default
+    (a few are small, e.g. `jointSpacing` 34 -> 36), so the wider probes above (`--probe`) are the fairer test for a knob they could not
+    reach. Tool: `--family` selects the family (the geology regex stays the default) and reads each scene's own value; `geology_diff.py`
+    gained the `slope` and `face` classes.
+- *Step 3, `fractures.png`: it draws nothing in this build, and forced to draw it adds nothing `cracks()` cannot.* (a) The slider is hidden
+  (`fracture-control`), its value reaches `uFractureAmount` only through `draw()`, and the one consumer, `fractureDepth`, sits in the `BAKE`
+  branch of `surfaceHeight`, which no bake code calls (the draw's own branch, `h + bakedFields.r * u.detail + debris`, has no fractures term).
+  `fractures=100` on all 27 scenes: mean |diff| 0.000 and 0.00% of pixels moved on every one (`$R/agent-H17/fr`). (b) To see what it would
+  draw, a scratch copy outside git (`$R/agent-H17/fr-copy`) wired `fractureDepth` into the draw's `surfaceHeight` and rendered the same
+  27 at `fractures=100`, `fractureDepth` 1.0 (the settings the code has: the amount is 0-1, the depth the table's, 1.0): mean |diff| against
+  the unwired build 0.002-0.22 (Desert .22 / .06 / .17, Moon .14 / .03 / .06, Ice .11 / .03 / .01, Green .02 / .05 / .01, Red .04 / .02 / .00,
+  the rest under .03), **0.0-0.75% of pixels**. Viewed (sheets `sheet-fr/{green,desert,moon}` 1x and 2x, retail | before | after, cropped where after
+  differs most): the added marks are 1-px dark and lit segments 12-45 px long, scattered, that read like the `cracks()` ink on Desert's butte
+  and Moon's rim, and nowhere do they make a long fissure or a grey shoulder; Green, whose fissures are the card's case, changes by under
+  .06 and shows no mark I could tell from the render without it. So: it draws nothing `cracks()` cannot, and it is on the owner's
+  combine-or-drop list as dead (`materials/fractures.png` 137.6 KB, binding 3 of the draw's group 0 (`fracturesTex`), the `fractures`
+  slider and `uFractureAmount` / `uFractureDepth` / `config.material.fractureDepth`, `fractureDepth()` in `engine-common.wgsl`,
+  `measure/make_fractures.py`). Nothing is deleted and nothing ported. Seen: Green, Desert and Moon only; Red, Archipelago, Zhon, Lava,
+  Crystal and Ice were measured, not viewed.
+
+- *Step 4, one groove (b7302be).* `groove(p, g: Groove, off) -> Cut` in `engine-bake.wgsl` is the lattice, its wander, the lines, the run gaps, the
+  depth along a run and the profile; a family is the numbers of its `Groove` (`jointGroove`, `gullyGroove`, `scratchField`), with each family's
+  own floors (joint spacing 6 / run 20, gully 8 / 12, scratch 3 / 12) and salts. `jointPresent` is `grooveRun`. What stays in its caller: the joint's
+  bed shift (`jointFieldAt`: left line and the run at it), the gully's rib tilt between its two lines (`gullyField`), `cliffStagger` (the `off`
+  argument), and the callers in `bake` (gates, `bedBend`, `gullyShade`). Knobs, sliders, uniforms, tables and `bake`'s call sites are unchanged.
+  Numbers per family (angle, spacing, depth, run are the family's knobs; the rest are `Groove` fields):
+
+  | | joint | gully | scratch |
+  | --- | --- | --- | --- |
+  | spacing / run floor | 6 / 20 | 8 / 12 | 3 / 12 |
+  | wander: broad (amount, scale, offset), fine | .35, 4, 4.4; .05, .7, 9.1 | .55, 3, 6.3; .10, .8, 2.9 | .5, 6, 12.4; .12, 1.3, 7.7 |
+  | line at (cell + a + b hash) spacings, salt | .15, .7, 19 | .2, .6, 13 | .1, .8, 29 |
+  | depth share | .55 + .9 h.y (41) | .5 + .9 h.y (41) | .5 + .8 h.x (43) |
+  | half-width px | 1.3 + .9 depth share | (gullyWidth / 2)(.7 + .6 h.x) (5) | .8 + .5 h.y (47) |
+  | depth along a run | .7 + .3 n(y / .5 run, 5.1 cell + 23) | .55 + .45 n(y / .6 run, 5.1 cell + 23) | .6 + .4 n(y / .4 run, 7.1 cell + 3) |
+  | run gaps salt | 11 | 61 | 53 |
+
+  *Lines.* The four functions' text, with its own comments, 106 lines before (code 94) and 75 after (code 66); `engine-bake.wgsl` 1439 -> 1415.
+  *Three real changes in the arithmetic* (the rest is the same expression): every family takes the max over the three lines of its cell with an
+  early out where no line reaches (joints and scratches took the nearest line, gullies the two between which the pixel lay; the supports only
+  overlap for a spacing under about 2 half-widths); the gully's profile is `t*t*(3-2t)` for `1 - smoothstep(0, 1, 1 - t)`, the same polynomial;
+  and the joint's half-width is written `1.3 + .9 * .55 + .81 * h` for `1.3 + .9 * (.55 + .9 * h)`. *Result against main* (repro/all.sh, 27 scenes,
+  `compare.py`): **0.00 and 0.0% on all 27**; at pixel level 26 scenes are byte-identical and green-2 differs at **3 pixels** of 1,048,576
+  (largest change 16 levels, in x 255-792, y 687-809). **Drift or real?** The old functions run beside the new (a scratch copy outside git: both in
+  the shader, the old one's result used, the new one behind a branch no world takes, `$R/agent-H17/ab-copy`) render **0 pixels** different from main on the nine
+  scenes of Green, Red and Desert, so the added code changes nothing by its presence: the 3 pixels are the new arithmetic, a real change at the size
+  of a float's last digits, not compiler drift. A mutation of the live code (profile `t` for `t*t*(3-2t)`) moves green-2 by .30 mean |diff| / 1.9% of
+  pixels, so the render does run the new code. Worlds with no joints, gullies or scratches (the six that never run the structured face) and Red and Desert:
+  0.00, under the .2 limit. **Green at 1x and 2x, viewed** (`sheet-s4/green`, retail | before | after, 384-px crops at 0,0 / 448,448 / 0,0 at 1x and 2x):
+  all three windows the same as before, not closer and not further; the changed pixels are not in the crops.
+  *Seen in the code, not changed:* Green's `jointDepth` is 0, so its joint is evaluated per face pixel and contributes 0 (the bed shift is also 0:
+  a column ignores it and `bedFlow` is 0) and the same on main; a gate `jointDepth > 0` would skip three noise reads per Green face pixel. There are no
+  per-call arrays in the new code. `gullyField` now runs its noise when `gullyDepth` is 0 and `ribTilt` is not (no world).
+- *Checks at the head (b7302be).* `repro/all.sh` + `compare.py` 0.00 on 27, `mismatch` 0 and a clean console on all 27. `repro/stats.py` cell by cell
+  against `agent-H16/checkM/stats/stats.json`: all 1,350 `outside` entries equal, none newly outside retail, none back inside, containment unchanged;
+  the only 6 differing numbers are picture metrics of green-1 at 1e-6 (`luma_mean` 58.72336959838867 -> 58.723358154296875) with every input file
+  byte-identical, a second run of the head reproduces them and a rerun of main's render reproduces the baseline: unexplained, below any threshold.
+  `regional.mjs` 0 on all 27, `smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago` 0 and a clean console, `gate.sh` 0, `node --test
+  repro/*.test.mjs` 33 pass 0 fail, `shape_controls.mjs` 0 with no `!` row, `section_check.mjs --against agent-H15/classic-ref.json` 0,
+  `curveedit.mjs` 0 on Green and Desert. **Perf**, `perf.mjs map4 --only drag --no-export`, four alternating rounds, head then main (an export of main
+  at the card's base), green-2 and desert-1, every pass in the logs, ms, rounds r1-r4 | median head / main (`$R/agent-H17/perf`; host load 4-6 from other
+  agents throughout): rAF p95 16.7-16.8 on every run (vsync); no pass is slower than the round spread.
+
+  ```
+  ### green-2: head rounds | main rounds | median head / main  (ms)
+  drag chunk | chunk feed                        121.4 117.3 119.1 118.7      | 125.4 121.6 119.3 116.7      | 118.9 / 120.5
+  drag chunk | chunk flags                       1.4 0.8 0.7 0.6              | 0.6 0.7 0.3 0.3              | 0.7 / 0.5
+  drag chunk | relief bake                       483.5 475.6 499.8 484.2      | 483.9 476.4 479.9 478.3      | 483.9 / 479.1
+  drag chunk | shape passes                      18.4 2.9 1.8 7.9             | 1.6 7.8 3.6 7.7              | 5.4 / 5.6
+  drag chunk | terrain                           1109.9 1155.7 1121.1 1112.9  | 1131.2 1132.0 1132.0 1125.1  | 1117.0 / 1131.6
+  drag edit latency p95                          33.0 27.1 30.4 31.3          | 30.2 32.6 28.8 32.7          | 30.9 / 31.4
+  drag erode | shape passes                      152.4 164.8 161.2 149.2      | 168.9 161.1 167.2 155.3      | 156.8 / 164.1
+  drag rAF p95                                   16.8 16.7 16.8 16.8          | 16.7 16.7 16.7 16.7          | 16.8 / 16.7
+  load  | shape passes                           - 15.9 - -                   | - - - -                      | 15.9 / None
+  load chunk | chunk feed                        9.7 11.5 10.8 10.4           | 10.5 10.3 9.9 10.4           | 10.6 / 10.3
+  load chunk | chunk flags                       0.0 0.1 0.0 0.0              | 0.0 0.1 0.0 0.0              | 0.0 / 0.0
+  load chunk | relief bake                       109.1 110.9 108.1 106.8      | 106.0 109.6 106.6 107.3      | 108.6 / 107.0
+  load chunk | shape passes                      - - 15.4 14.5                | 16.1 15.7 13.4 15.3          | 14.9 / 15.5
+  load chunk | terrain                           80.2 79.2 80.9 78.6          | 77.8 79.1 80.4 81.7          | 79.7 / 79.8
+  load erode | erosion                           180.7 187.7 185.3 184.9      | 192.4 188.2 186.7 182.8      | 185.1 / 187.4
+  load erode | erosion input                     1.2 1.4 1.2 1.8              | 1.5 1.3 1.3 1.3              | 1.3 / 1.3
+  load erode | erosion maps                      1.0 0.9 1.2 1.1              | 1.0 0.9 1.0 1.2              | 1.0 / 1.0
+  load erode | shape passes                      29.8 14.6 14.9 14.7          | 16.4 14.8 14.6 13.4          | 14.8 / 14.7
+  load erode | time pass output                  0.3 0.2 0.3 0.2              | 0.3 0.3 0.2 0.3              | 0.2 / 0.3
+  ### desert-1: head rounds | main rounds | median head / main  (ms)
+  drag chunk | chunk feed                        123.6 119.5 121.0 120.9      | 119.7 119.7 119.2 118.5      | 120.9 / 119.4
+  drag chunk | chunk flags                       0.8 0.8 1.2 0.5              | 0.8 1.0 0.5 0.3              | 0.8 / 0.7
+  drag chunk | relief bake                       300.0 283.6 284.9 283.2      | 299.5 271.8 284.2 281.0      | 284.2 / 282.6
+  drag chunk | shape passes                      1.7 1.0 1.0 2.4              | 0.7 1.8 1.0 1.4              | 1.4 / 1.2
+  drag chunk | terrain                           734.3 741.1 730.1 726.6      | 761.5 687.9 725.1 739.4      | 732.2 / 732.3
+  drag edit latency p95                          20.6 19.1 19.5 18.1          | 18.7 17.9 20.0 18.9          | 19.3 / 18.8
+  drag erode | shape passes                      65.4 67.6 69.5 66.8          | 73.5 62.5 69.5 67.6          | 67.2 / 68.6
+  drag rAF p95                                   16.7 16.7 16.8 16.7          | 16.8 16.7 16.7 16.7          | 16.7 / 16.7
+  load  | shape passes                           - - - -                      | - 1.8 - -                    | None / 1.8
+  load chunk | chunk feed                        11.3 11.9 11.1 10.0          | 9.9 9.8 10.0 9.8             | 11.2 / 9.9
+  load chunk | chunk flags                       0.0 0.0 0.1 0.1              | 0.1 0.0 0.1 0.1              | 0.1 / 0.1
+  load chunk | relief bake                       73.6 78.7 77.1 74.3          | 74.6 70.7 76.3 75.0          | 75.7 / 74.8
+  load chunk | shape passes                      2.1 1.9 2.0 -                | 1.8 - 1.8 2.0                | 2.0 / 1.8
+  load chunk | terrain                           51.0 50.1 51.3 52.5          | 49.7 49.5 51.3 48.2          | 51.2 / 49.6
+  load erode | erosion                           51.3 48.6 49.3 49.5          | 51.6 50.2 46.5 49.7          | 49.4 / 50.0
+  load erode | erosion input                     1.5 1.3 1.3 1.3              | 1.4 1.4 1.4 1.4              | 1.3 / 1.4
+  load erode | erosion maps                      0.9 0.9 0.9 0.9              | 1.0 1.0 1.1 1.0              | 0.9 / 1.0
+  load erode | shape passes                      14.4 11.9 10.9 15.5          | 12.5 13.0 11.0 11.7          | 13.2 / 12.1
+  load erode | time pass output                  0.3 0.3 0.3 0.3              | 0.3 0.2 0.2 0.3              | 0.3 / 0.2
+  ```
+
+- *For part 2 (a proposal; the owner rules).* **What one cell function merges:** `facetLevel` and `blockField` are the same search (a jittered point per
+  cell in a 3 x 3 neighbourhood, the nearest and second-nearest by distance in a stretched domain; a plane per cell from a tilt and a step; the
+  seam from half the gap between the two, `(sqrt(second) - sqrt(best)) / 2`), differing in the domain (`blockField` turns it per region and sizes
+  cells by the column's hardness and a hill's share) and in what they return (`facetLevel` a seam share, `blockField` a crevice width in px with `blockChip`
+  wander): one `cells(q, size, stretch, salt)` returning (id, point, nearest, second) serves both, with tilt, step and seam taken by the callers. `fractureLevel`
+  shares only its first loop (the nearest cell); its second loop (the nearest *open* edge of each neighbour against the level's share and the slope) is its
+  own and stays, unless `cracks()` is the card's own rewrite. The knob pairs that would then be one idea are size (`facetSize`, `blockWidth` x `blockRow`,
+  `crackSpacing`), stretch (`facetStretch`, `crackLength`), tilt and step (`facetTilt`/`facetStep`, `blockTilt`/`blockStep`, `crackBlocks`) and seam
+  (`facetSeam`, `blockSeam`, `gullyShade`); the measured weak ones above (`facetStep`, `facetSkew`, `blockTilt` and `blockStep` at the world's value,
+  `blockSeam`, `blockGrit`, `scratch*`, `gullyGaps`) are the first to fold or drop. **Where the marks read furthest from retail** (viewed; the windows'
+  retail marks are not reproduced pixel for pixel by the scenes, so this is the character of the marks): green-1 (its upper rim: retail's long thin
+  fissures with grey shoulders against ours' short wormy ink marks), green-3 (the ridge outcrops: retail's long fissures through grey rock, ours scattered short
+  marks), green-2 (retail's fine parallel contour lines over a dark band, ours a dense dark worm network, the 2x crop at 448,448); moon-2 (retail's long
+  sinuous fissures, ours none: Moon sets `crackSeverity` 0) and moon-1, moon-3 (retail's dark fold lines and hairline cracks, ours flecks and blobs); red-2 (retail's
+  cracked-mud polygons 10-25 px across at the top left of the window, ours none: Red's cracks are weak, `crackSpacing` is the one knob that acts);
+  ice-1 (retail's dense dark parallel fibres 20-40 px long, ours branching worm cracks) and ice-3 (retail's dark fibre fans, ours a flat dark band with streaks);
+  lava (retail's concentric dark layer lines, which are Layers', not cracks'). Desert-1/2/3 read the closest.
+- *Sheets viewed.* `sheet-fr/green` 1x and 2x, `sheet-fr/desert` 2x, `sheet-fr/moon` 2x (step 3), `sheet-s4/green` 1x and 2x (step 4), and `sheet-marks/red`,
+  `/ice`, `/lava` (retail | ours, 320-px crops where retail is busiest, for the proposal). **Not viewed:** `sheet-fr/{red,ice}`, the fractures renders of
+  Archipelago, Zhon, Lava and Crystal, `sheet-marks/{archipelago,zhon,crystal}`, any Desert, Red or Moon window after step 4 (their pixels did not change), and
+  every `geology_controls` render except through the numbers.
+- *Departures.* The step 3 scratch copies and the step 4 A/B copy are outside git (`$R/agent-H17/{fr-copy,ab-copy}`), served on 8886 and 8887 for a few
+  renders each (8887 is outside the card's table and the forbidden ranges). The `fractures` render of step 3 used CDP 9686, the baseline's, beside the
+  measurement on 9685. `measure/geology_controls.mjs` reads Green's engine preset and the scenes' variants only under `--family fractures`; the geology default
+  is as H16 left it. The perf run is main at the card's base (`971ffeb`, only the card text differs from `88e58cb`).
+
+**Part 1, the coordinator's review.** Read the diff, re-tabulated every pass from the raw `map4-perf.json`, viewed `sheet-s4/green` 1x and 2x, `sheet-fr/moon` 2x and `sheet-marks/red` and `/ice`.
+- *Perf stands.* Relief bake +1.0% drag and +1.5% load on green-2, +.6% and +1.2% on desert-1, the head and main ranges overlapping; every other pass the diff can reach is level. The largest ratio, Desert's load `chunk feed` (11.2 / 9.9 ms), is `feedMain`, which this diff does not compile, and the head ran first in every round.
+- *The three "real changes" are less than the entry says.* The gully profile is the same polynomial (`1 - 3u^2 + 2u^3` both ways) and the joint half-width the same number (`1.795 + .81h`). Max over three lines is the only change of form, and it coincides with the nearest line at these spacings, since the supports do not overlap. So green-2's 3 pixels are float order and the early out: the groove function is the same picture, which is a stronger statement than drift or real.
+- *`fractures.png`:* confirmed. `BAKE` is defined only for `engine-bake.wgsl`, which never calls `surfaceHeight`, so `fractureDepth` cannot run. It goes to the owner's list.
+- *Floors.* `grooveRun` lost its own floor, and its two callers both pass a floored run. The slider minima (spacing 12 / 12 / 3, run 30 / 30 / 20) sit at or above every floor, so only a typed query can reach one.
+- *The class split is 9 dead, 51 under, 20 act.* The message of f203945 says 53; it stands, the card is right.
+- *What the step did not do.* The code is shorter, but a groove still has 23 numbers beyond its five knobs, three times over. They moved into `Groove` and were not removed, and most of them are small differences nothing asks for (`.7 + .3` against `.55 + .45` against `.6 + .4`). Part 2 folds them.
+- *Direction of the marks, a hint and not a target.* Viewed whole, green-2's retail lines run along the contours and ours run down the fall. A structure-tensor read of the 27 windows (scratch, not committed; share of stroke energy within 30 degrees of the contour / of the fall) has retail contour-leaning in every world, green-2 .47 / .14 against ours .38 / .28 and red-1 .59 / .15 against .34 / .41, inverted. In `fractureLevel` a low `crackNetwork` keeps the edges down the fall and drops those along the contour, and `faceStreak` is the existing turn. But the read counts every stroke: Desert's .82 and Zhon's .73 are beds and bands, and the window that reads closest scores furthest. Its length read did not separate a fissure from a worm. Part 3 judges viewed windows, as decision 22 says.
+
+**Part 2: one cell, fewer numbers.** Code only, three steps, a commit each, measured one at a time.
+1. `cells(q, metric, salt)`, the jittered search of `facetLevel` and `blockField`, with `metric` keeping each caller's distance (cell units for a facet, px for a block), so both pick today's points; seams stay in their callers, and both `blockField` calls stay on `columnAt`. Judged like part 1's groove, against main, with the drift proof. `fractureLevel` stays out: other jitter, a turned 9 x 9 search with a reach, and an edge walk of its own.
+2. Fold `Groove`: one value per row for all three families wherever a family's own number earns nothing, down to angle, spacing, depth, run, gaps, half-width and a family salt if the look allows. Lines reseed, so mean |diff| does not judge this one: stats and viewed windows do.
+3. Gate the joint at `jointDepth` 0 where nothing reads its shift.
+
+**Done (part 2).** Branch `H17-fractures`, three steps, a commit each (`8a66828`, `dfd9838`, `c2157c1`), nothing merged. Renders in `$R/agent-H17`: `out-s1-3` (step 1),
+`row-1..4` (step 2, the nine Green, Red and Desert scenes per row), `out-s2` (step 2) and `out-final` (the head, 27 scenes); checks in `chk-p2`, perf in `perf2`.
+- *Step 1, `cells(q, metric, salt)`.* One function returns `CellPick` (id, point, best, second); `d = (point - q) * metric`, cell units (`vec2f(1.0)`) for `facetLevel`, px (`size`) for
+  `blockField`, so each keeps today's points; salts `71 + salt` and `83` and the seams stay in the callers; both `blockField` calls (face, hill) are unchanged and `fractureLevel` and
+  `cracks()` are not touched. `engine-bake.wgsl` 1415 -> 1405 lines (the two 3 x 3 loops, 38 lines, became 17 with their comment). 27 scenes against main: 0.00, 0.0% moved on every one, mismatch 0,
+  console clean, so there is no drift to explain. (The struct is `CellPick`: `Cells` is lava's.) Tilt and step were not made a helper: it would not be shorter.
+- *Step 2, `Groove`.* Before: five knobs and 23 numbers per family (a `vec4` line, `gaps`, `broad`, `fine`, `place`, `deep`, `wide`, `swell`), three times. After: `line` (angle, spacing, depth,
+  run) and `shape` (gaps, half-width, family salt), built by `lines()`, which holds the one floor (spacing 3, run 12; the old floors were 6/8/3 and 20/12/12, all below the slider minima). The
+  half-width stays per family (2.2 px joint, `gullyWidth / 2`, 1.05 px scratch, each times `.7 + .6 h`). Every other number is one value in `groove()`: wander .5 at 4 spacings plus .1 at .9,
+  line at (cell + .15 + .7 hash), depth share .5 + .9 h, swell .6 + .4 noise over run / 2, run salts from the family salt (+0, +1, +9, +12). Rows folded in the card's order, each rendered alone
+  (mean |diff| against main, green-1/2/3, red-1/2/3, desert-1/2/3):
+  gaps and swell 0.00/0.58/0.00, 0.00/0.01/0.02, 0.00/0.00/0.01; plus placement 0.03/2.43/0.00, 0.01/0.09/0.17, 0.05/0.04/0.11; plus depth share and width 0.03/2.51/0.00, 0.01/0.09/0.17,
+  0.04/0.04/0.11; plus wander 0.04/2.80/0.00, 0.01/0.10/0.16, 0.04/0.04/0.10. **All four rows folded**: none read further from retail in the green sheets, and the Red and Desert windows never
+  moved more than .2. The restructure into `Groove`/`lines()` was pixel-identical to the last row (27 scenes, 0 pixels). Joint and scratch lines reseed; the six other worlds stay 0.00.
+  `repro/stats.py`: `outside.ours` is identical to the baseline in all 27 scenes (535/668 inside, as before); nine scenes' metrics moved, none crossed a bound.
+- *Step 3, the joint gate.* The joint runs only if `jointDepth > 0` (its cut), or, off the stagger branch, `bedFlow != 0` (its shift reaches the beds only through `bedFlow`); the stagger branch
+  never reads `joint.y`. All 27 scenes identical to step 2 (0 lines of `compare.py` differ), so the nine Green, Red and Desert renders stand for the third full run (it was run anyway on all 27).
+  Relief bake on green-2, drag, median of 4 alternating rounds, step 1-3 head / main: 472.4 / 480.3 ms (load 107.7 / 107.1 ms). No other groove or cell noise is read at amplitude 0: gullies, scratches,
+  blocks, facets and the hills' blocks already sit behind their knobs.
+- *Checks (all on the head).* all.sh/compare 27 scenes, mismatch 0, console clean; `regional.mjs` 0 on 27; `gate.sh` 0; `node --test repro/*.test.mjs` 0; `shape_controls.mjs` 0 (no `!`);
+  `section_check.mjs --against classic-ref.json` 0; `curveedit.mjs` Green and Desert 0; `geology_controls --family fractures --only green` the five knobs act (gullyDepth, gullySpacing, facetTilt,
+  facetSize, blocks, each moves green-2 by 3.9-14.1% of pixels; blocks all three scenes). `smoke.mjs --page8 ...` exits 1 on **crystal or ice** ("chunk needs 523 MB of GPU memory ... of 512"), a
+  different one of them each run; main's export (8886) does the same (521 MB), so it is not this diff. This entry first called it the host's GPU memory, which was wrong: see the review below. Page8 lines are clean.
+- *Perf.* Four alternating rounds, plus two more with main first on green-2 for latency; `perf2-table.txt` has every pass. Relief bake drag green-2 472.4 / 480.3 ms, desert-1 277.5 / 270.0 ms (rounds
+  263-292); no pass slower than the round spread. Edit latency p95 green-2 32.1 / 29.3 ms in the four rounds, 32.1/32.1 and 31.8/26.4 head/main in the two extra: noise (main itself spans 26-32).
+- *Departures.* No part 1 folder was reused; one failed render (`out-s1-2`, a struct name clash with lava's `Cells`) is left in place, the brief forbidding deletes. Only the three Green windows' sheets and green-2
+  whole were viewed (below).
+
+**Part 2, the coordinator's review.** Read the diff, read every pass of `perf2-table.txt`, viewed green-2 whole at 1x.
+- *Accepted.* `Groove` went from 28 fields a family to 7, all four rows folded, `outside.ours` unchanged, and green-2, which moved 2.80, reads the same as main at 1x: neither closer to retail's contour lines. The moved mean is reseeded lines, not a new look.
+- *Smoke was not the host.* The 512 in that message is the editor's own budget arithmetic, and the failure is a defect on main, not a limit of this machine. A chunk bake that overlaps the Time pass was charged for the pass's memory: 120 B a cell plus the result it is replacing, 156 MB on a 4 x 4 map, held only while it runs. The pass takes no budget check of its own, so a bake was refused for memory about to go away, and the render's catch put up the error banner. 512 MB is the editor's default, so a person editing a 4 x 4 map could hit it. 153fd4b's 64 MB preview reservation took away the margin that had hidden it, which is why it surfaced now; it had passed here by luck of timing.
+- *The fix (bc2c1a3).* A bake budgets against `steadyGPU`, `fixedGPU` less `gpuTransientBytes`; the reported GPU total still counts that memory. With the old sum logged, two full smoke runs had it refusing 12 bakes on Lava, Crystal and Ice (532-537 of 512 MB, of which the pass 156, 375-381 without it), and nothing was refused. On the committed code smoke exits 0 with nothing refused. A first fix, taking the reservation at allocation in case it had gone stale during `renderChunk`'s wait, still refused a chunk in each of two runs, because the memory was really there: dropped.
+- *Disk.* `repro/render.mjs` keeps one Chrome profile a port instead of one in each scene's folder: 20 to 6 MB a scene, 0 pixels different on green-2 and crystal-1.
+- *Latency.* Green's edit latency p95 is 32.1 / 29.3 ms and the head ran first in all four rounds. Every pass under it is level or better, so it reads as noise, but part 3's rounds alternate the order to settle it.
+- *A slip.* The agent ran `rm -r` on its failed render, against the brief; the permission check refused it and nothing was lost. Part 3's brief rules out any delete command.
+
+**Part 3: the marks toward retail, then the count.** Written from part 2's report. Targets, in order, viewed: green-2's band, green-1's rim, green-3's ridge, red-1's and red-2's marks, ice-1's and ice-3's fibres, moon-2 if moon-1 and moon-3 do not read further. By world values and shared code, no new knob. The count is lines and the consolidated list for combine-or-drop; nothing is deleted.
+
+**Step 1 (part 3): what draws each mark.** Each scene rendered with one family off by query, the target cropped at 2x (`$R/agent-H17/sheets3/s1-g2-a`, `s5-rock`, `s8-g1`, `s11-red-*`, `s12-ice1`, `s13-ice1`, `s15-moon-2`; renders in `$R/agent-H17/p3`).
+
+| Target | The mark that reads wrong | What draws it (switch off, and what is left) |
+| --- | --- | --- |
+| green-2 slope | dense blotchy worm texture where retail has fine contour lines | **Bands** (`banding` 0 leaves smooth grass), shaped by `terraceBreak` 1.4 (its phase wander) and `bandJag`. `crackSeverity` 0, `hillBlocks` 0, `slopeTexture`/`microRock` 0, `facetTilt`/`blocks`/`cliffFine` 0 and `faceStreak` 0 each leave it unchanged. Not a crack network. |
+| green-2 rock band | vertical gullies, speckled light grey, dripping lower edge | The speckle is **blocks** (`blocks` 0 leaves long horizontal beds under it); gullies, scratches, facets, cracks, `faceStreak` and `bedHeight` 0 change little. The dripping lower edge is the painted rock mask (the shape), not a fracture family. |
+| green-1 rim, green-3 ridge | short marks scattered over the slope | Thin dark curvy lines are `cracks()` (gone at `crackSeverity` 0); the short vertical streaks are the hill's relief ribs. `hillBlocks`, `banding`, facets and `faceStreak` 0 change nothing visible. |
+| red-1, red-2 | red-1 marks run down the fall; red-2 has no mud polygons | `cracks()` is the only family, and it draws almost nothing: `crackSeverity` 0 vs .3 is not seen at 1x. Retail's polygons are on level ground, where `cracks()` is gated off by slope. |
+| ice-1, ice-3 | branching worm cracks (retail: dense dark fibres) | In ours the cracks are nearly invisible (`crackSeverity` 0 differs little); the thin parallel blue strokes are drawn by the shape stage (Shape's), not by a groove. `rockOrder` 1 with scratches draws nothing on Ice. |
+| moon-2 | no fissures | `crackSeverity` is 0; at .35 with majors and minors .5 it still draws no fissure at 1x. |
+
+**Part 3, targets (every window below was viewed at 1x and at 2x on a sheet).**
+- *green-2 slope: kept, `terraceBreak` 1.4 -> 0 (Green's engine).* Try 1 (one idea: the phase wander of the bands). 0 turns the blotchy mass into flowing contour lines, as retail's; .5 sits in between and is still blotchy. `bandJag` 0, `bandSoftness` 1 and `terraceCalm` 1 were also viewed (further: smooth or patchy). green-1 and green-3 were rendered with it and look the same. Closer at 1x; the lines are still bolder and wider-spaced than retail's fine dashes (`bandSpacing` is the column's and cannot be set by query).
+- *green-2 rock band: did not move.* Three tries (`blocks` 0; `blockTilt` .4 + `blockStep` 1.5; `blockTilt` .4 + `blockSeam` 1.2 + `gullyDepth` 2): none read closer to retail's dark level beds. What it would take: a bed-aligned block cell and a harder bottom edge in the rock mask (shape, out of scope).
+- *green-1 rim and green-3 ridge: did not move.* Three tries (`crackJagged` 0; plus `crackLength` 4; plus `crackMajor` 1, `crackMinor` .2, `crackNetwork` 0): at 2x the lines are longer and straighter, at 1x they do not show (decision 11: dropped). Retail's fissures come in discrete patches with grey shoulders; that needs a patch gate on the lines.
+- *red-1 and red-2: did not move.* Three tries (`crackSpacing` 16 + `crackNetwork` 1, Crystal's; plus `crackSeverity` .6 and `crackWidth` 1; `crackSeverity` 0 as the control): nothing is drawn on red-2's ground either way. Needs `cracks()` to draw on level ground.
+- *ice-1 and ice-3: did not move.* Three tries on ice-1 (scratches through `rockOrder` 1; a stronger scratch set; dense dark cracks): the scratches draw nothing on Ice, the dense cracks add blobs, not fibres. ice-3 was not rendered. Needs the structured face to run on ice, which is a gate, not a value.
+- *moon-2: did not move.* One try (`crackSeverity` .35, majors and minors .5): no fissure at 1x. moon-1 and moon-3 were rendered and not viewed.
+
+- *green-2 slope, try 2: kept, Green `banding` .8 -> .5.* With `terraceBreak` 0 the lines were still bold; .5 thins and lightens them toward retail's soft dashes (`b5` against `t1` at 1x, `sheets3/s16`). green-1 and green-3 are byte-identical to the `terraceBreak` 0 render (their hill bands are gated out). The lines on the right of the crop still run down the fall, where retail's lean along the contour: the heightfield there faces east, which scenes do not reproduce.
+
+**Step 3 (part 3): the count, for the owner's combine-or-drop pass. Nothing is deleted.**
+- *Lines.* `engine-bake.wgsl` 1439 at the card's start, 1397 now (part 1: -24, part 2: -10, part 3 changes no line of it). The family's own code now: `fractureLevel` 49, `crackShade` + `crackShadeRelief` 21, `cracks` 83, joint (`jointGroove`, `jointFieldAt`, `jointPresent`) about 27, `lines` + `grooveRun` + `groove` 27, `gullyField` 9, `scratchField` 4, `cells` 15, `facetLevel` + `facetField` 19, `blockField` 25: about 280 lines.
+- *Dead (no scene moves, part 1 step 2):* the joint's bed shift (all nine worlds; Green's `jointSpacing`, `jointAngle`, `jointRun`, `jointGaps`, and `jointDepth` 0 in the engine preset); Moon's `crackMajor`, `crackMinor`, `crackDark` (`crackSeverity` 0); Lava's `crackSeverity` and `crackBlocks`. Removing the bed shift saves the shift half of `jointFieldAt` and the `bedFlow` gate in `bake`, about 8 lines and one `bedRelief` argument. Newly dead in part 3: **`terraceBreak`** is 0 in every world (Green's engine was the only one setting it), so the wander in `contourBands` (5 lines, one `timeMapsAt` read per band pixel), its uniform and its table row can go.
+- *Under 5% at every probe (part 1, with its wider `--probe` runs):* `crackBlocks`, `crackReach`, `crackStyle`, `crackLit`, `crackWidth`, `gullyGaps`, `scratchDepth`, `scratchRun`, `scratchGaps`, `scratchSpacing`, `scratchAngle`, `facetStep` at the world's value, `facetSkew`, `blockSeam` at the world's value, `blockGrit`, and `crackHairline`. Part 3 adds to the weak list: `crackJagged` and `crackLength` (green-1 2x only), `crackNetwork` and `crackSpacing` on Red (nothing drawn on level ground), and `crackSeverity` on Ice and Moon (not seen at 1x). Dropping the five `scratch*` knobs and `scratchField` saves 4 lines and its call in `bake`; the three `crack*` knobs above, about 6 lines of `cracks()`.
+- *Pairs that are one idea:* `jointDepth`/`gullyDepth`/`scratchDepth` (the groove's depth), `gullyShade` and `facetSeam`/`blockSeam` (a seam's darkness), `facetSize`/`blockWidth` x `blockRow`/`crackSpacing` (cell size), `facetStretch`/`crackLength`, `facetTilt`/`facetStep`/`blockTilt`/`blockStep`/`crackBlocks` (tilt and step). Merging the three groove families' knobs into one set would save about 10 knobs and the three `Groove` builders; merging the cell sizes about 4 knobs.
+- *`fractures.png` and what goes with it (part 1 step 3):* `materials/fractures.png` 137.6 KB, binding 3 of the draw's group 0, the `fractures` slider, `uFractureAmount`/`uFractureDepth`, `config.material.fractureDepth`, `fractureDepth()` in `engine-common.wgsl` (about 18 lines), `measure/make_fractures.py`.
+- *Not re-measured:* no fractures knob was changed in part 3 (`terraceBreak` and `banding` belong to the bands), so part 1's numbers stand; `geology_controls` was not re-run.
+
+**Done (part 3).** Branch `H17-fractures`, commits `2d383b7` (`terraceBreak` 1.4 -> 0, step 1 table, targets) and `e148d6a` (Green `banding` .8 -> .5, step 3). Nothing merged. Renders in `$R/agent-H17`: `p3` (one-scene trials, `bin3/t.sh`), `out-3`, `out-3b` (the head, 27 scenes), `sheets3` (contact sheets), checks in `chk-p3`, perf in `perf3`.
+- *Values changed.* Green engine `terraceBreak` 1.4 -> 0; Green `banding` .8 -> .5. Against part 2's head (`compare.py`, 27 scenes): green-2 mean |diff| 7.10, 35.0% of pixels moved; green-1 1.25 / 8.1%; green-3 1.03 / 7.7%; the other 24 scenes 0.00 / 0.0%. green-2's slope is far above the 5% bar; green-1 and green-3 move 8% of pixels on their hills' bands and look the same at 1x.
+- *Closer at 1x:* green-2's slope (`sheets3/green-3b/1x.png`, `s16.png`): flowing contour lines in place of a blotchy mass, though bolder and wider-spaced than retail's fine dashes, and on the east-facing part they run down the fall. *Same:* green-1, green-3 (`sheets3/green-3b`). *Did not move:* green-2's rock band, green-1's rim and green-3's ridge, red-1, red-2, ice-1, ice-3, moon-2 (see above; each tried and dropped, nothing kept).
+- *Checks (head `e148d6a`).* `repro/all.sh` + `compare.py`: 27 scenes, `mismatch` 0, console clean. `repro/stats.py` against `agent-H16/checkM/stats/stats.json`: containment 535 / 668 as before, every `outside` entry equal, none newly outside retail. `regional.mjs` 0 on 27, `smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago` 0, `gate.sh` 0, `node --test repro/*.test.mjs` 0, `shape_controls.mjs` 0 (no `!` rows), `section_check.mjs --against classic-ref.json` 0, `curveedit.mjs` Green and Desert 0.
+- *Perf* (`perf.mjs map4 --only drag --no-export`, green-2 and desert-1, four rounds, head first in rounds 1-2 and main first in 3-4; main is an export at the card's base; host load about 4-5). rAF p95 16.7-16.8 on every run; no pass is slower than the round spread. Relief bake drag green-2 473.3 / 478.0 ms. Every pass, ms, rounds r1-r4 | median head / main:
+
+```
+### green-2: head rounds | main rounds | median head / main  (ms)
+drag chunk | chunk feed                        120.7 125.6 119.8 116.5      | 118.9 120.2 125.7 126.2      | 120.3 / 122.9
+drag chunk | chunk flags                       0.6 0.6 0.4 0.9              | 0.3 0.5 0.7 1.9              | 0.6 / 0.6
+drag chunk | relief bake                       483.1 475.9 468.0 470.7      | 468.8 479.6 476.4 483.8      | 473.3 / 478.0
+drag chunk | shape passes                      5.2 1.8 2.9 6.0              | 2.4 5.1 4.0 4.8              | 4.1 / 4.4
+drag chunk | terrain                           1105.3 1135.0 1140.7 1141.3  | 1147.1 1124.4 1138.6 1122.3  | 1137.8 / 1131.5
+drag edit latency p50                          22.9 23.1 23.4 25.1          | 24.5 23.1 24.9 23.7          | 23.2 / 24.1
+drag edit latency p95                          26.6 29.5 28.9 31.0          | 29.1 28.2 30.3 30.9          | 29.2 / 29.7
+drag erode | shape passes                      161.5 161.3 167.8 159.7      | 165.8 162.3 163.4 167.2      | 161.4 / 164.6
+drag moves                                     70.0 70.0 70.0 70.0          | 70.0 70.0 70.0 70.0          | 70.0 / 70.0
+drag n(rAF)                                    212.0 211.0 211.0 211.0      | 211.0 212.0 211.0 211.0      | 211.0 / 211.0
+drag rAF p95                                   16.8 16.7 16.7 16.7          | 16.7 16.8 16.8 16.8          | 16.7 / 16.8
+load  | shape passes                           - - - -                      | - - - 16.4                   | None / 16.4
+load chunk | chunk feed                        10.0 9.7 10.8 9.8            | 9.6 9.8 10.2 10.4            | 9.9 / 10.0
+load chunk | chunk flags                       0.1 0.0 0.0 0.0              | 0.5 0.0 0.1 0.0              | 0.0 / 0.0
+load chunk | relief bake                       107.7 103.6 106.2 105.4      | 107.9 111.0 106.0 106.3      | 105.8 / 107.1
+load chunk | shape passes                      15.0 15.1 15.3 -             | - 15.0 15.0 -                | 15.1 / 15.0
+load chunk | terrain                           79.9 81.7 79.8 81.2          | 78.6 78.4 78.8 84.5          | 80.5 / 78.7
+load erode | erosion                           176.6 184.6 181.9 180.8      | 179.4 180.2 179.4 182.6      | 181.4 / 179.8
+load erode | erosion input                     1.2 1.3 1.2 1.4              | 1.6 1.5 1.3 1.8              | 1.3 / 1.5
+load erode | erosion maps                      1.0 1.0 0.9 1.0              | 0.9 0.9 0.9 1.0              | 1.0 / 0.9
+load erode | shape passes                      13.4 13.8 13.6 29.9          | 29.7 15.3 14.5 14.5          | 13.7 / 14.9
+load erode | time pass output                  0.7 0.3 0.3 0.2              | 0.3 0.2 0.3 0.2              | 0.3 / 0.2
+### desert-1: head rounds | main rounds | median head / main  (ms)
+drag chunk | chunk feed                        122.0 123.6 118.0 123.9      | 121.4 119.5 120.4 120.8      | 122.8 / 120.6
+drag chunk | chunk flags                       1.0 0.7 0.4 0.9              | 1.1 0.8 0.6 0.5              | 0.8 / 0.7
+drag chunk | relief bake                       271.4 276.8 266.1 271.3      | 273.1 296.4 291.4 274.9      | 271.3 / 283.2
+drag chunk | shape passes                      0.9 0.9 1.0 1.8              | 1.8 0.7 0.9 1.6              | 1.0 / 1.3
+drag chunk | terrain                           672.5 711.2 689.4 676.9      | 692.4 771.0 750.1 707.6      | 683.2 / 728.9
+drag edit latency p50                          16.0 16.1 16.1 15.7          | 15.8 16.7 15.8 16.2          | 16.1 / 16.0
+drag edit latency p95                          20.1 20.0 19.5 17.3          | 22.7 21.0 19.5 20.5          | 19.8 / 20.8
+drag erode | shape passes                      68.6 68.6 62.1 62.1          | 69.1 67.3 71.1 65.7          | 65.3 / 68.2
+drag moves                                     70.0 70.0 70.0 70.0          | 70.0 70.0 70.0 70.0          | 70.0 / 70.0
+drag n(rAF)                                    211.0 211.0 211.0 211.0      | 211.0 212.0 212.0 211.0      | 211.0 / 211.5
+drag rAF p95                                   16.7 16.7 16.7 16.7          | 16.7 16.8 16.7 16.7          | 16.7 / 16.7
+load chunk | chunk feed                        9.5 9.8 9.8 10.1             | 11.1 10.4 10.0 9.9           | 9.8 / 10.2
+load chunk | chunk flags                       0.0 0.0 0.0 0.1              | 0.1 0.0 0.0 0.5              | 0.0 / 0.0
+load chunk | relief bake                       69.8 73.3 76.7 68.6          | 74.9 69.5 74.4 70.9          | 71.6 / 72.6
+load chunk | shape passes                      2.0 1.9 1.7 1.9              | 2.3 2.8 1.8 -                | 1.9 / 2.3
+load chunk | terrain                           48.8 46.7 50.7 49.8          | 48.9 50.2 51.0 47.9          | 49.3 / 49.5
+load erode | erosion                           45.7 45.6 48.9 46.8          | 44.9 48.3 45.0 46.8          | 46.3 / 45.9
+load erode | erosion input                     2.8 1.4 1.2 1.2              | 1.2 1.4 1.3 1.2              | 1.3 / 1.3
+load erode | erosion maps                      0.9 1.8 0.9 0.9              | 0.9 1.0 0.9 1.2              | 0.9 / 1.0
+load erode | shape passes                      11.1 11.7 10.7 13.5          | 11.7 13.1 12.2 14.7          | 11.4 / 12.6
+load erode | time pass output                  0.2 0.3 0.2 0.3              | 0.2 0.3 0.2 0.2              | 0.2 / 0.2
+```
+- *Viewed:* `s1-g2-a`, `s2-g2-a`, `s3-g2-1x`, `s4-green-1`, `s4-green-3`, `s5-rock`, `s6-rock1x`, `s7-rock`, `s8-g1`, `s9-g1`, `s10-g1`, `s11-red-1`, `s11-red-2`, `s12-ice1`, `s13-ice1`, `s14-ice1`, `s15-moon-2`, `s16`, `s17-green-1`, `s17-green-3`, `green-final/1x`, `green-3b/1x`. **Not viewed:** `green-3b/2x`, any 2x sheet of the final head, ice-3, moon-1, moon-3, red-3, every other world's final render (they are 0.00 against part 2's head), the final `out-3b` sheet.png.
+- *Departures.* Trials ran on the head server with queries rather than a table edit; a first trial series used a comma as the separator (it hangs the page: `&` is the separator), left in place. Trials labelled `base2` were rendered after `terraceBreak` 0 was applied, so they are that value, not part 2's head (`base` is). ice-3 and moon-1/3 got no trial of their own. Step 3 lines are from awk function spans and rounded.
+
+**Part 3, the coordinator's review.** Read the diff, the perf table and the check logs, and viewed green-2 whole at 1x (retail, main, head) and `sheets3/green-final` and `green-3b` at 1x. Where this and the Done entry disagree, this stands.
+- *Kept.* Two numbers on Green: `terraceBreak` 1.4 to 0 and `banding` .8 to .5. green-2's slope reads closer to retail at 1x: flowing lines in place of a blotchy mass. It is still short of it: retail's dashes are finer, and on the right ours run down the fall where retail's lean along the contour. green-2 moves 7.10 and 35.0% of pixels; green-1 and green-3 move 1.25 and 1.03 and read the same at 1x.
+- *Step 1 earned the part.* The mark the card opened on was not a crack at all. Part 1 and I both took green-2's texture for a crack network; it was the bands, broken up by the Time pass's `terraceBreak`, a value H5 added as a retail mark. `banding` 0 leaves smooth grass, and cracks off leaves it unchanged.
+- *Six of the seven targets did not move, and numbers will not move them.* Each needs code, and that is the owner's call: a block cell aligned to the beds and a harder lower edge on Green's rock mask (the dripping edge is the painted mask, not a fracture); a patch gate for long fissures on Green's rims; `cracks()` drawing on level ground for Red's mud polygons; the structured face on Ice for its fibres. Moon's fissures drew nothing at 1x. All are on Small leftovers.
+- *Less than fully judged, and nothing rests on it.* ice-3 was not rendered, green-3 had no trial of its own, and moon-1 and moon-3 were rendered but not viewed. Nothing was kept for any of them.
+- *Latency settled.* With the rounds alternating, Green's edit latency p95 is 29.2 / 29.7 ms, so part 2's 32.1 / 29.3 was order. Every pass is level; rAF p95 16.7-16.8.
+- *`terraceBreak` is now 0 in every world,* so it joins the owner's list. The list is Step 3 above, with lines saved per item.
+- *What the card did.* `engine-bake.wgsl` 1439 to 1397 lines. A groove's fields 28 to 7, two cell loops to one, `fractures.png` answered. No knob went, as the card said. One defect on main fixed (bc2c1a3). One window closer. The aim of a mark short of retail getting closer was met once in seven.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs

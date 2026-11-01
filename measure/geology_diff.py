@@ -12,6 +12,11 @@ Classes, read on the base render's heights (the sea is subtracted; the dry base 
   bank    ground between the sea and the plain (sea + .5 to base - .3): the coast layers act here
   halo    dry ground within 100 px of ground at least 4 above the base, outside it: the fringe's rings act here
   window  every pixel: for knobs with no ground class of their own
+  slope   H17: ground whose slope is at least .10 (measure/material_classes.py's grass slope and rock face together), the blocks a mark
+          on slopes is cut into; the family option of geology_controls.mjs reads cracks and crack tone here, not the raised class
+  face    H17: slope at least .50 (material_classes.py's rock face), where the structured face (joints, gullies, scratches, facets,
+          blocks) is cut. Both are 16-px blocks with a 40-px margin dropped, as measure/impact.py reads its classes; a `slope` or
+          `face` row also carries the other class's share under `slope_changed` / `face_changed`
 """
 import json
 import sys
@@ -20,6 +25,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from scipy import ndimage as ndi
+
+exec(open(Path(__file__).resolve().parent / 'material_classes.py').read().split('def main')[0])  # LUMA, CLASSES, slope_map
 
 B, MEAN, SD, COLOUR = 16, 6, 4, 8
 LUMA = np.array([.299, .587, .114])
@@ -43,6 +50,10 @@ def class_mask(root, world, n, cls):
         return np.ones((1024, 1024), bool)
     o = json.loads((Path(root) / f'{world}-{n}' / 'ours-heights.json').read_text())
     g = np.array(o['heights'], float).reshape(o['grid'], o['grid']) - o['sea']
+    if cls in ('slope', 'face'):
+        m = slope_map(g, 2) >= (.10 if cls == 'slope' else .50)
+        m[:40] = m[-40:] = False; m[:, :40] = m[:, -40:] = False
+        return m
     h = ndi.zoom(g, 1024 / g.shape[0], order=1)
     base = BASE.get(world, 24)
     if cls == 'raised':
@@ -57,6 +68,9 @@ def class_mask(root, world, n, cls):
 def main():
     base, state, world, cls = sys.argv[1:5]
     out = {'mad': [], 'moved': [], 'class_share': [], 'class_changed': []}
+    more = ('slope', 'face') if cls in ('slope', 'face') else ()
+    for k in more:
+        out[k + '_changed'] = []; out[k + '_share'] = []
     for n in (1, 2, 3):
         a = np.asarray(Image.open(Path(base) / f'{world}-{n}' / 'ours.png').convert('RGB'), np.int16)
         b = np.asarray(Image.open(Path(state) / f'{world}-{n}' / 'ours.png').convert('RGB'), np.int16)
@@ -69,6 +83,10 @@ def main():
         ch = changed(a.astype(np.uint8), b.astype(np.uint8))
         out['class_share'].append(round(float(cb.mean()), 4))
         out['class_changed'].append(round(float(ch[cb].mean()), 4) if cb.any() else None)
+        for k in more:
+            ob = class_mask(base, world, n, k)[:bh, :bw].reshape(bh // B, B, bw // B, B).mean((1, 3)) > .5
+            out[k + '_share'].append(round(float(ob.mean()), 4))
+            out[k + '_changed'].append(round(float(ch[ob].mean()), 4) if ob.any() else None)
     print(json.dumps(out))
 
 

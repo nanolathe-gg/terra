@@ -8,6 +8,8 @@
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
@@ -35,7 +37,7 @@ if (sceneConfig.biomeId !== scene.biome) {
 const url = `${server}/sculpt?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
 await cdpPortFree(port);
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
-  `--remote-debugging-port=${port}`, `--user-data-dir=${out}/.profile-${port}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
+  `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-render-${port}`)}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 try {
   let ws;

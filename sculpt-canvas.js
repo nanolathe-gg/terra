@@ -47,6 +47,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function visibleSample(x,y){return heightSample(x,y)??sourceSample(x,y);}
   function keepHeight(r){return {fields:{h:r.fields.h},gridWidth:r.gridWidth,gridHeight:r.gridHeight,gridSpacing:r.gridSpacing,gridOrigin:r.gridOrigin,bytes:r.fields.h.byteLength};}
   function fixedGPU(external=true) { return (external?(api.gpuBytes?.()??0):0)+(previewReserved?64*MB:0)+(canvas.width*canvas.height+overlay.width*overlay.height+coarse.width*coarse.height+navigatorCanvas.width*navigatorCanvas.height)*4+(features?.stats?.().imageBytes||0); }
+  function steadyGPU() { return fixedGPU()-(api.gpuTransientBytes?.()??0); }   // what a bake budgets against: fixedGPU less the Time pass's memory, gone when the pass ends
   function gpuResident() { return renderer.stats().residentBytes+cacheBytes+fixedGPU(); }
   const originalKnobs=renderer.applyKnobs.bind(renderer),originalColors=renderer.setColors.bind(renderer);
   renderer.applyKnobs=(...args)=>{const r=originalKnobs(...args);configureChunks();clear();return r;};
@@ -104,8 +105,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
       const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8;
-      trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
-      renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
+      trimTo(gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
+      renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
       const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,deferCompletion:!fit&&!exportArt});bakes++;
       const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
@@ -115,8 +116,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
     const required=renderer.requiredRegion(request,options),estimate=renderer.estimate({...required,gridWidth:fields.gridWidth,gridHeight:fields.gridHeight},rect.width,rect.height,fields.maskPlanes?.length??api.maskKeys.length);
     checkHeap(fields,estimate.cpuPeakBytes);
-    const copyBytes=rect.width*rect.height*8;trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
-    renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
+    const copyBytes=rect.width*rect.height*8;trimTo(gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
+    renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
     const result=await renderer.renderChunk(fields,{...options,quality:'full',deferCompletion:!exportArt});bakes++;
     const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
     const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
