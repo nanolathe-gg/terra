@@ -17,16 +17,6 @@ var<private> bTransShared: bool;
 // A world whose plain is one quilted image takes the generated layer its table's `quilt` material makes; the 16-tile plain stays in groundTile.
 fn bridgeGround(pixel: vec2f) -> vec3f { return genColor(u.groundLayer, pixel); }
 
-// Replaced by: Bodies (ice slabs). Slate faces: all face, all rock, and no snow lumps in them.
-fn bridgeSlateFace(face: f32, share: f32, faceSlope: f32, route: f32, sandBar: f32) -> vec2f {
-    if (u.iceSlate <= 0.0) { return vec2f(face, share); }
-    return vec2f(max(face, smoothstep(0.12, 0.3, faceSlope) * (1.0 - route) * (1.0 - sandBar) * u.iceSlate), mix(share, 1.0, u.iceSlate));
-}
-fn bridgeSlateRock(rockMask: f32, lowGate: f32) -> f32 {
-    if (u.iceFall <= 0.0) { return rockMask; }
-    return mix(rockMask, lowGate, u.iceFall * u.iceSlate);
-}
-
 // Replaced by: Layered rock (mineral margins are the beds' crown and foot) and Materials (the fringe and ring images).
 // Mineral margins: nearby fractured slopes feed outcrops into their level crown and foot, with the fringe, ring veins and the
 // sediment transition of Red, Painted Desert and Archipelago. It edits the slope cover and, for the shared transition, the

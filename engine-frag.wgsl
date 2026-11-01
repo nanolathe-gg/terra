@@ -346,10 +346,9 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     let top = clamp((h - around) / 1.5, -1.0, 1.0);
     let edgeNoise = terrainNoise(p * 1.5 + vec2f(53.0, 11.0));
     let faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * r6.z);
-    var face = smoothstep(r6.x, r6.y, faceSlope) * (1.0 - route) * (1.0 - sandBar);
-    var share = mix(r7.x, r7.y, smoothstep(r6.y, r6.y * 1.8, slope));
-    let slate = bridgeSlateFace(face, share, faceSlope, route, sandBar);
-    face = slate.x; share = slate.y;
+    // Ice slate (iceSlate): every face from the first gentle slope up is all rock, with no snow lumps in it.
+    var face = max(smoothstep(r6.x, r6.y, faceSlope), smoothstep(0.12, 0.3, faceSlope) * u.iceSlate) * (1.0 - route) * (1.0 - sandBar);
+    var share = mix(mix(r7.x, r7.y, smoothstep(r6.y, r6.y * 1.8, slope)), 1.0, u.iceSlate);
     var lowGate = lowBank;
     if (u.styleOn != 0) {
         let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));
@@ -367,8 +366,7 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     let topTerm = r8.y * top * (1.0 - r9.y * painted.x);
     let faceScore = r8.x * length(g) / max(slope, 0.25) - topTerm + r9.x * gully + (fine.g - 0.5) * r8.z + (n.r - 0.5) * r8.w;
     let threshold = mix(1.4, -0.9, share);
-    var rockMask = smoothstep(threshold - 0.12, threshold + 0.12, faceScore) * lowGate;
-    rockMask = bridgeSlateRock(rockMask, lowGate);
+    var rockMask = mix(smoothstep(threshold - 0.12, threshold + 0.12, faceScore) * lowGate, lowGate, u.iceFall * u.iceSlate);
     // Inside painted rock the face is rock; moss stays at its edges and on the ledges below.
     if (u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * r9.z); }
     rockMask = 1.0 - clamp((1.0 - clamp(rockMask * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);

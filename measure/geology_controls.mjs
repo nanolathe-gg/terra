@@ -2,7 +2,7 @@
 // world's three reproduction scenes (repro/scenes), on the real engine, and the render is compared with the unmoved one: repro/compare.py's
 // mean |diff| and share of pixels moved, and measure/impact.py's block share of the knob's class (decision 11: a kept control must move at least
 // 5% of its class at 1x, beside a noise floor of 1-3%). A knob that prints 0.00 and 0.0% is dead on that world.
-//   node measure/geology_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores] [--list]
+//   node measure/geology_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores|bodies] [--list]
 // --family fractures (H17): the crack, joint, gully, scratch, facet and block knobs. Each scene's own value is read as the page reads it (the query, then
 // Green's engine preset, then the scene's variant, then the world's table, then the default), a scene where a knob already sits at its target is shown as `=`
 // and left out of the verdict, and the class is the slope blocks of measure/geology_diff.py (cracks and crack tone: slope at least .10; the structured face:
@@ -22,7 +22,7 @@ const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Lip|Heigh
 const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSharp|stepSoftPx|deepEdge\w*|bed(Lit|Tint|Flat|Mottle|MottleScale|Dots|DotCell|Relief|Contrast|Bright|CrackSlope)|crackedStep|crackedContrast|flatBank|bankPx|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Meander|Spread|CircleVary|CreaseVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Shore|Deep|Bed))$/;
 const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|waterShore|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease|lavaCreaseVary)$/.test(k) ? 'bank'
   : /^(bankPx|bankWidth|beachFlatness|fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Meander|Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
-const CLASS = k => shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) || k === 'bandFoot' ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
+const CLASS = k => bodies ? BODY_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) || k === 'bandFoot' ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
 // Card units of the stroke options (sculpt.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
 const CARD_SCALE = {fingers: 100, fingerAmount: 100, fingerSize: 100, fingerSpread: 100, fingerHeight: 10, bankPx: 1, shorePlates: 1, plateWaterPx: 1, plateLandPx: 1, plateSize: 1, plateGap: 10, plateHeight: 10, plateMaterial: 1,
   crystalShoreScale: 100, crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterShore: 1, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaMeander: 100, lavaSpread: 100, lavaCircleVary: 100};
@@ -30,7 +30,15 @@ const CARD_SCALE = {fingers: 100, fingerAmount: 100, fingerSize: 100, fingerSpre
 const CARD_ONLY = [{world: 'red', knob: 'terraces', from: 7, to: 0}, {world: 'red', knob: 'ledge', from: 40, to: 90}, {world: 'red', knob: 'terraceJitter', from: 60, to: 0}];
 const family = opt('--family', 'geology');
 const FRACTURES = /^(crack(Severity|Spacing|Length|Major|Minor|Hairline|Blocks|Width|Jagged|Network|Reach|Style|Dark|Lit)|joint(Spacing|Angle|Depth|Run|Gaps)|gully(Depth|Spacing|Width|Angle|Run|Gaps|Shade)|ribTilt|scratch(Depth|Spacing|Angle|Run|Gaps)|facet(Tilt|Size|Stretch|Step|Seam|Skew|Coarse)|blocks|block(Row|Width|Tilt|Step|Seam|Chip|Grit)|hillBlocks)$/;
-const shores = family === 'shores', fractures = family === 'fractures' || shores;   // both read each scene's own effective value
+const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust|Dusk|Pillow|Veins))$/;
+const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
+// The stroke kinds that carry each shape option (sculpt.js SHAPE_FIELDS), and the scale of the card's unit.
+const KINDS = {crystalForm: ['crystal'], crystalTiers: ['crystal'], crystalSides: ['crystal'], crystalSize: ['crystal'], crystalStep: ['crystal'], crystalCount: ['crystal'], crystalTop: ['crystal'], crystalLean: ['crystal'], crystalVariation: ['crystal'],
+  crystalAlign: ['crystal'], crystalFacet: ['crystal'], crystalSizeVar: ['crystal'], crystalSmooth: ['crystal'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
+  crystalShoreScale: ['deep', 'shallow', 'offset'], crystalShoreSeam: ['deep', 'shallow', 'offset'], frostNeedles: ['deep', 'shallow', 'offset'], iceFacets: ['mountain'], iceFacetSize: ['hill', 'mountain']};
+const BODY_SCALE = {crystalForm: 1, crystalTiers: 100, crystalSides: 1, crystalSize: 1, crystalStep: 1, crystalCount: 1, crystalTop: 100, crystalLean: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100, crystalSmooth: 100,
+  crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreScale: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
+const shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies;   // both read each scene's own effective value
 const scenes = {};   // world -> the three scenes' variants, for the page's own values
 const queries = {};   // world -> the three scenes' own query pairs (zhon-1: beachWidth=0), which win over every table
 for (const world of ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice']) {
@@ -51,16 +59,17 @@ const states = [];
 // A stroke card that carries the option wins over the page's default for that stroke (lava-2 asks for four circular layers, ice-3 for no plates). Water strokes that
 // disagree (lava-1's first stroke asks for no fingers, the rest take the world's) read `a|b`, and the scene counts as one where the option is not yet at its target.
 const cardOf = (world, i, knob, fallback) => {
-  const scale = CARD_SCALE[knob];
+  const scale = bodies ? BODY_SCALE[knob] : CARD_SCALE[knob];
   if (!scale) return undefined;
-  const water = JSON.parse(readFileSync(`${here}repro/scenes/${world}-${i + 1}.json`, 'utf8')).strokes.filter(st => ['deep', 'shallow'].includes(st[0]));
+  const water = JSON.parse(readFileSync(`${here}repro/scenes/${world}-${i + 1}.json`, 'utf8')).strokes.filter(st => (bodies ? KINDS[knob] : ['deep', 'shallow']).includes(st[0]));
   const values = [...new Set(water.map(st => st[2]?.card && knob in st[2].card ? st[2].card[knob] / scale : fallback))];
   return values.length ? values.join('|') : undefined;
 };
 const effective = (world, knob) => dump.e[world].map((e, i) => queries[world][i].has(knob) ? queries[world][i].get(knob) : cardOf(world, i, knob, e[knob]) ?? e[knob]);   // each scene's own value
 const same = (a, b) => String(a) === String(b) || (Number(a) === Number(b) && a !== '' && b !== '');
 for (const world of fractures ? Object.keys(scenes) : Object.keys(dump.w)) for (const knob of Object.keys(dump.d)) {
-  const re = shores ? SHORES : fractures ? FRACTURES : FAMILY;
+  const re = bodies ? BODIES : shores ? SHORES : fractures ? FRACTURES : FAMILY;
+  if (bodies && /^lava(Meander|Spread|CircleVary|CreaseVary)$/.test(knob)) continue;   // Shores'
   if (!re.test(knob) || (only.length && !only.includes(world)) || (knobsOnly.length && !knobsOnly.includes(knob))) continue;
   if (fractures) {
     const at = effective(world, knob);
@@ -92,8 +101,9 @@ function render(world, dir, query, edit) {
       if (own.has(key)) { own.delete(key); s.query = own.toString(); }
       // A stroke option is read from the stroke's card, never from the query: --family shores sets it on every water stroke (the card wins over the world's default).
       if (edit) for (const st of s.strokes) {
-        if (shores && !st[2]?.card && ['deep', 'shallow'].includes(st[0])) st[2] = {...st[2], card: {}};
-        if (st[2]?.card && (edit.knob in st[2].card || (shores && ['deep', 'shallow'].includes(st[0])))) st[2].card[edit.knob] = edit.value;
+        const mine = bodies ? KINDS[edit.knob]?.includes(st[0]) : shores && ['deep', 'shallow'].includes(st[0]);
+        if (mine && !st[2]?.card) st[2] = {...st[2], card: {}};
+        if (st[2]?.card && (edit.knob in st[2].card || mine)) st[2].card[edit.knob] = edit.value;
       }
       scene = `${dir}/${world}-${n}.scene.json`; mkdirSync(dir, {recursive: true}); writeFileSync(scene, JSON.stringify(s));
     }
@@ -107,7 +117,7 @@ const rows = [];
 for (const s of states) {
   if (!base.has(s.world)) { if (!existsSync(`${out}/base/${s.world}-3/ours.png`)) render(s.world, `${out}/base`); base.add(s.world); }
   const id = `${s.world}.${s.knob}`;
-  const scale = s.card ? 1 : CARD_SCALE[s.knob];
+  const scale = s.card ? 1 : bodies ? BODY_SCALE[s.knob] : CARD_SCALE[s.knob];
   if (s.card) render(s.world, `${out}/${id}`, '', {knob: s.knob, value: s.to});
   else render(s.world, `${out}/${id}`, `${s.knob}=${encodeURIComponent(s.to)}`, scale ? {knob: s.knob, value: Number(s.to) * scale} : null);
   const r = JSON.parse(execFileSync(py, [`${here}measure/geology_diff.py`, `${out}/base`, `${out}/${id}`, s.world, s.cls]).toString());
