@@ -14,13 +14,3 @@ test('placement edits change only intended table cells, including valid zero',()
  assert.deepEqual(changed,[[base+6,2],[base+9,0],[base+9,1]]);
  assert.deepEqual(tablePlacementRows(table,new URLSearchParams({faceEdge:'bad',faceSlope:'bad,1',faceScore:'1,2'})),old);
 });
-test('global bed spacing scales authored zones without changing the preset',async()=>{
- const {strataZoneWidths}=await import('../sculpt-material-model.js');
- const config={presetDefaults:{strataSpacing:6},defaults:{strataSpacing:12},strataZoneSpacing:[6,6,0,11]};
- assert.deepEqual(strataZoneWidths(config,6),[6,6,0,11]);
- assert.deepEqual(strataZoneWidths(config,null),[6,6,0,11]);
- assert.deepEqual(strataZoneWidths(config,undefined),[6,6,0,11]);
- assert.deepEqual(strataZoneWidths(config,12),[12,12,0,22]);
- assert.deepEqual(strataZoneWidths(config,3),[3,3,0,5.5]);
- assert.deepEqual(strataZoneWidths({defaults:{strataSpacing:10}},10),[]);
-});

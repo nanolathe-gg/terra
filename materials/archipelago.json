@@ -2069,6 +2069,9 @@
    "hillSteps": "8",
    "lavaTread": "0"
   },
+  "column": {
+   "bands": [3.7, 0.68]
+  },
   "export": {
    "planet": "Archipelago",
    "defaultSeaLevel": 84,

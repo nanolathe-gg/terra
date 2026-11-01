@@ -61,6 +61,7 @@ export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>n(parent)<=0?`Enable ${label} to use this setting.`:'';
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
  if(['bedHeight','bedVary','bedPunch','bedFlow'].includes(key)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';
+ if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir'&&n('bedDip')===0)return 'Set Bed tilt above or below zero to choose its direction.';
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedFlow','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','scratchDepth','scratchSpacing','scratchAngle','scratchRun','scratchGaps','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['bandWidth','bandRelief','bandWander','bandGaps'].includes(key)&&n('bandStyle')<.5)return 'Choose Bank lines in Contour bands to use this setting.';
@@ -90,7 +91,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'boulders','boulderSize','debris','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','crackLength','crackStyle','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
- 'banding','bandSpacing','bandStyle','sandBanding','strata','strataSpacing','strataContrast',
+ 'banding','bandStyle','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','deepEdgeDepth','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
  'baseBand','desertCapFlat','rockMoss','rockDetail','gullyDepth','gullySpacing','scratchDepth','facetTilt','facetSize','cliffFollow',
  'stepSharp','shelfWander','bedFlat','bedMottle','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',

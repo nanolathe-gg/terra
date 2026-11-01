@@ -1193,6 +1193,9 @@
    "hillSteps": "8",
    "lavaTread": "0"
   },
+  "column": {
+   "bands": [3.7, 0.63]
+  },
   "export": {
    "planet": "Lunar",
    "defaultSeaLevel": 1,

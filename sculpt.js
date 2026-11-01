@@ -1367,8 +1367,8 @@ const KNOBS = [
   ['Rock structure', [['rockOrder','Order (0 scattered, 1 beds and joints)',0,1,.05,0],['rockFrom','Beds and joints from slope (painted rock always)',.3,2,.05,.6],['bedSpacing','Bed thickness (px along the ground, or height units)',3,80,1,12],['bedHeight','Beds spaced by height (0 px along the ground)',0,1,.05,0],['bedVary','Bed thickness variation',0,1,.05,.5],
     ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledge step strength',0,1,.05,.5],['bedLip','Ledge lip and notch (height)',0,4,.1,1],
     ['jointSpacing','Joint spacing (px)',12,120,2,36],['jointAngle','Joint lean from north-south (deg)',-60,60,1,0],['jointDepth','Joint depth (height)',0,6,.1,2],['jointRun','Joint run (px)',30,400,10,120],['jointGaps','Joint gaps',0,1,.05,.3]]],
-  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSpacing','Height per band',1,12,.25,3.7],['bandSoftness','Riser share',.05,1,.05,.35],['bandLine','Line darkness',0,1,.05,.5],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandRelief','Bank lines bent by relief',0,1,.05,0],['bandWander','Bank line wander',0,2,.05,0],['bandGaps','Bank line gaps',0,1,.05,0],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
-  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataSpacing','Bed thickness (height)',3,40,1,10],['strataWarp','Bed waviness',0,40,1,12],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
+  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandRelief','Bank lines bent by relief',0,1,.05,0],['bandWander','Bank line wander',0,2,.05,0],['bandGaps','Bank line gaps',0,1,.05,0],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
+  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
   ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
   // E8 (Painted Desert): the gray band at the foot of the raised ground (strata color 5); its heights are above the plain.
@@ -1425,7 +1425,7 @@ function worldColors() { const out={}; for (const [k,v] of Object.entries(merged
 function defaultColor(key) {
   const m=renderer.means,w=config.water||{},mat=config.material||{};
   const rgb=v => v&&v.map(x => x/255);
-  const strata=(config.strataColors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
+  const strata=(config.column?.colors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
@@ -1549,7 +1549,7 @@ function buildKnobs() {
       box.append(wrap);
     }
   }
-  syncWorldControls=mountWorldControlIndex(root,()=>Object.fromEntries(renderer.variant));
+  syncWorldControls=mountWorldControlIndex(root,()=>({...Object.fromEntries(renderer.variant),column:config.column?.sections?1:0}));
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);

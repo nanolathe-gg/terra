@@ -46,11 +46,3 @@ export function tablePlacementRows(table, overrides = null) {
   }
   return rows;
 }
-
-// A global bed-spacing edit scales each authored zone by the same ratio;
-// zero zone widths continue to defer to the global spacing.
-export function strataZoneWidths(config,value){
-  const reference=Math.max(.5,Number(config.presetDefaults?.strataSpacing??config.defaults?.strataSpacing??10));
-  const current=value==null||value===''?reference:Number(value),scale=Number.isFinite(current)?Math.max(.5,current)/reference:1;
-  return (config.strataZoneSpacing||[]).slice(0,6).map(x=>x>0?x*scale:0);
-}

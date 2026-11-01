@@ -3,7 +3,8 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,PLACEMENT_ROW,strataZoneWidths} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,PLACEMENT_ROW} from './sculpt-material-model.js';
+import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
@@ -462,24 +463,12 @@ export class TerrainRenderer {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }
-    // Strata colours: the world's, else a painted-desert set.
-    const strataDefaults = this.config.strataColors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
+    // The column's slot colours: the world's, else a painted-desert set.
+    const strataDefaults = this.config.column?.colors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
     this.set('uStrataColors', strata);
-    // Bed zones (start above the plain, slot A, slot B, B's share); by
-    // default two colours alternating evenly from just above the plain.
-    const zones = (this.config.strataZones || [[1, 0, 1, 0.5]]).slice(0, 6);
-    this.set('uStrataZones', [...zones, ...new Array(6 - zones.length).fill([0, 0, 0, 0])]);
-    // Card E8: a bed thickness per zone (the grey buttes' beds are 2-3 times the apron's); none keeps strataSpacing.
-    this.setStrataSpacing();
-    this.i('uStrataZoneCount', zones.length);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
-  }
-
-  setStrataSpacing() {
-    const space=strataZoneWidths(this.config,this.variant.get('strataSpacing'));
-    this.set('uStrataZoneSpace',[...space.map(x=>[x,0,0,0]),...new Array(6-space.length).fill([0,0,0,0])]);
   }
 
   // GLSL uniform uFooBar is the uniform block's field fooBar. A value is a
@@ -847,7 +836,6 @@ export class TerrainRenderer {
   // Surface knobs read from the variant; callable again after a change.
   applyKnobs() {
     const variant = this.variant;
-    this.setStrataSpacing();
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in the generated materials.
     this.set('uMaterialTable', this.placementTable(variant));
@@ -929,8 +917,6 @@ export class TerrainRenderer {
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : 0);
     this.f('uRockCrown', variant.has('rockCrown') ? Number(variant.get('rockCrown')) : 0);
     this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
-    this.f('uStrataSpacing', variant.has('strataSpacing') ? Number(variant.get('strataSpacing')) : 10);
-    this.f('uStrataWarp', variant.has('strataWarp') ? Number(variant.get('strataWarp')) : 12);
     this.f('uStrataContrast', variant.has('strataContrast') ? Number(variant.get('strataContrast')) : 0.6);
     this.f('uStrataGrain', variant.has('strataGrain') ? Number(variant.get('strataGrain')) : 1);
     this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
@@ -1030,21 +1016,25 @@ export class TerrainRenderer {
   // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
   preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
 
-  // H2 rock column (0: the hash beds, as before). columnBeds is "thickness:hardness:slot,..." (up to eight, height
-  // units, 0..1, H3's material slot); erosion reads the same uniforms, so the bake and the pass share one column.
+  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json; sculpt-column.js). No sections: no column, the
+  // hash beds as before. Erosion reads the same uniforms, so the bake and the pass share one column.
   setColumn() {
-    const v = this.variant;
+    const column = this.config.column, v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
-    const beds = String(v.get('columnBeds') || '5:.5:0').split(',').slice(0, 8).map(s => s.split(':').map(Number))
-      .filter(b => b[0] > 0).map(b => [b[0], Math.min(1, Math.max(0, b[1] || 0)), b[2] || 0, 0]);
+    const {beds, starts, bands} = columnRows(column, this.config.variant);
     // Refinement can run before any relief bake; its column offset must not depend on the last displayed view.
     this.set('uBedSpacing', number('bedSpacing', 12));
     this.set('uBedDip', number('bedDip', 0));
     this.set('uBedDipDir', number('bedDipDir', 90));
-    this.set('uColumn', number('column', 0));
+    this.i('uColumnSectionCount', starts.length);
     this.set('uColumnContrast', number('columnContrast', 1));
-    this.set('uColumnCount', Math.max(1, beds.length));
-    this.set('uColumnBeds', beds.length ? beds : [[5, .5, 0, 0]]);
+    this.set('uColumnBeds', beds);
+    this.set('uColumnSections', starts);
+    this.set('uColumnWander', column?.wander?.value ?? 0);
+    this.set('uColumnTerrain', [...(column?.wander?.terrain || [0, 0, 0]), 0]);
+    this.set('uColumnOrigin', column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0);
+    this.set('uBandSpacing', bands[0]);
+    this.set('uBandLine', bands[1]);
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.
@@ -1119,9 +1109,7 @@ export class TerrainRenderer {
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
     set('uBoulderRound', number('boulderRound', 0));
-    set('uBandSpacing', number('bandSpacing', 3.7));
     set('uBandSoftness', number('bandSoftness', 0.35));
-    set('uBandLine', number('bandLine', 0.5));
     set('uBandWidth', number('bandWidth', 0));
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));

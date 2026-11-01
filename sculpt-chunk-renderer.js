@@ -1,6 +1,7 @@
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
+import {columnRows} from './sculpt-column.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
@@ -99,7 +100,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const severity=Math.max(n('crackSeverity',.6),.6),major=n('crackSpacing',40),minor=major/3.2;
     const blocks=(.5*(1+3*severity)+1.225*major+.5*(.6+1.6*severity)+4.41*minor)*Math.max(n('crackBlocks',.6),.6);
     const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+1.8*Math.abs(n('bedLip',1)))*Math.abs(n('rockOrder',0));
-    const bands=Math.abs(n('bandSpacing',3.7))*Math.max(Math.abs(n('banding',0))*4,.8);
+    const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('gullySpacing',8),8),F=Math.max(n('facetSize',2),2),coarse=Math.max(n('facetCoarse',0),0);
     const facetRise=1.85*F*Math.abs(n('facetTilt',0))*(Math.max(n('facetStretch',.25),.25)+Math.abs(n('facetSkew',1)))*(1+2.4*coarse)+.5*Math.abs(n('facetStep',0))*(1+coarse);

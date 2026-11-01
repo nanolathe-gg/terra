@@ -87,14 +87,9 @@ struct Uniforms {
     bandWater: f32,
     rockCrown: f32,
     strata: f32,
-    strataSpacing: f32,
-    strataWarp: f32,
     strataContrast: f32,
     strataGrain: f32,
-    strataColors: array<vec4f, 5>,   // rgb; uniform arrays take a 16-byte stride
-    // Zone table: x start (height above the plain), y slot A, z slot B, w B's share.
-    strataZones: array<vec4f, 6>,
-    strataZoneCount: i32,
+    strataColors: array<vec4f, 5>,   // rgb of the column's material slots; uniform arrays take a 16-byte stride
     paletteMix: i32,
     transitionDetail: f32,
     rockStart: f32,
@@ -180,9 +175,9 @@ struct Uniforms {
     worms: f32,           // wormy regolith relief on slopes (lunar)
     boulderRound: f32,    // 0: angular boulders; 1: rounded domes
     bandStyle: i32,       // 0 tonal steps (Green), 1 bank lines (Lava)
-    bandSpacing: f32,     // height between bands, height units
+    bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
-    bandLine: f32,        // darkness of the line along each riser
+    bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
     bandWidth: f32,       // bank lines (style 1): width at half depth, px (0: 1.6)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
@@ -262,7 +257,6 @@ struct Uniforms {
     crystalSeamEnd: f32,       // the field value where a seam's ink has faded out (0.74 as before; lower draws thinner seams)
     crystalShallowInk: f32,    // shallow cells' seam ink (0.55 as before)
     // E8 (Painted Desert)
-    strataZoneSpace: array<vec4f, 6>,   // x: bed thickness of each zone of strataZones, height units (0: the world's strataSpacing)
     baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off
     baseBandLow: f32,      // lower edge of its height window, above the plain
     baseBandHigh: f32,     // upper edge
@@ -390,11 +384,14 @@ struct Uniforms {
     // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
-    // H2 (rock column, Green). Every default is the earlier look.
-    column: f32,          // 0: each bed's thickness and strength come from a hash; 1: from the rock column below (columnAt)
+    // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
+    columnSectionCount: i32,   // sections of the column (0: the world has no column; each bed's thickness and strength come from a hash)
     columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
-    columnCount: f32,     // beds in the column, 1..8, that repeat upward
-    columnBeds: array<vec4f, 8>,   // per bed: x thickness (height units), y hardness 0..1, z material slot (H3, unused here)
+    columnOrigin: f32,    // the height the coordinate counts from (the plain's, or 0)
+    columnBeds: array<vec4f, 32>,       // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
+    columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
+    columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
+    columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
     materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
@@ -458,43 +455,87 @@ fn valueNoise(q: vec2f) -> f32 {
 // rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both
 // call it with the surface height of the grid they hold, so a ledge erosion leaves
 // stands where the bake draws one: it depends only on (p, z), not on the smoothed
-// ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip) and the broad wander are the
-// hash beds' own, at the same scale (the bed spacing).
+// ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip)
+// and the broad wander are the hash beds' own.
 fn columnOffset(p: vec2f) -> f32 {
     let a = radians(u.bedDipDir);
-    let tilt = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
-    let S = max(u.bedSpacing, 2.0);
-    let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
-    return tilt + wander;
+    var offset = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
+    let S = u.columnWander;
+    if (S != 0.0) { offset += valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1; }
+#ifndef EROSION
+    // Painted Desert's beds meander broadly and wander about a unit at 5-25 px: three octaves of the terrain noise. The Time pass
+    // has no noise texture, and a world that draws this has no hardness for it to read.
+    if (u.columnTerrain.x != 0.0 || u.columnTerrain.y != 0.0 || u.columnTerrain.z != 0.0) {
+        offset += (terrainNoise(p * 0.08 + vec2f(5.0, 9.0)).r - 0.5) * u.columnTerrain.x
+                + (terrainNoise(p * 0.7 + vec2f(17.0, 2.0)).g - 0.5) * u.columnTerrain.y
+                + (terrainNoise(p * 2.1 + vec2f(3.0, 41.0)).b - 0.5) * u.columnTerrain.z;
+    }
+#endif
+    return offset;
 }
-fn columnCoord(p: vec2f, z: f32) -> f32 { return z + columnOffset(p); }
+fn columnCoord(p: vec2f, z: f32) -> f32 { return z - u.columnOrigin + columnOffset(p); }
 
-struct ColumnBed { index: f32, hardness: f32, through: f32, thick: f32 }
+// The bed's running index, hardness, material slot, how far through it c lies, its thickness, its place j among the section's n beds
+// (first: the section's first bed in columnBeds), the cycle's period, and a two-bed section's wider bed: its share of the cycle and its slot.
+struct ColumnBed { index: f32, hardness: f32, slot: f32, through: f32, thick: f32, period: f32, widest: f32, widestSlot: f32, first: i32, j: i32, n: i32 }
+
+fn columnCycleHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.5453); }
 
 // The bed at coordinate c: its running index (unique along the whole column, so
 // hashes keyed on it differ from cycle to cycle), hardness 0..1, how far through the bed
-// c lies (0 at its foot, 1 at its top) and its thickness. The column repeats upward.
-fn columnAt(c: f32) -> ColumnBed {
-    let n = max(i32(u.columnCount), 1);
-    var period = 0.0;
-    for (var i = 0; i < n; i++) { period += u.columnBeds[i].x; }
+// c lies (0 at its foot, 1 at its top) and its thickness. The column is a list of sections from low to high; each repeats its
+// beds upward from coordinate 0, and the one whose start c has passed (the lowest, below them all) is the one that answers.
+fn columnSectionAt(c: f32) -> i32 {
+    var s = 0;
+    for (var i = 1; i < u.columnSectionCount; i++) { if (c >= u.columnSections[i].x) { s = i; } }
+    return s;
+}
+// Section s at coordinate c. A two-bed section's second bed has a share of the cycle (the period stays the section's): where the next
+// section has the same two slots the share runs toward the next one's between their starts, and retail Painted Desert's beds vary from
+// cycle to cycle (measured on the retail map), so a hash of the cycle scales it by .55 to 1.45.
+fn columnBedIn(c: f32, s: i32) -> ColumnBed {
+    let sec = u.columnSections[s];
+    let first = i32(sec.y);
+    let n = i32(sec.z);
+    let period = sec.w;
     let cycle = floor(c / period);
     let r = c - cycle * period;
     var bed: ColumnBed;
+    bed.period = period;
+    bed.first = first;
+    bed.n = n;
+    var second = 0.0;
+    if (n == 2) {
+        var share = u.columnBeds[first + 1].x / period;
+        if (s + 1 < u.columnSectionCount) {
+            let nx = u.columnSections[s + 1];
+            let next = i32(nx.y);
+            if (nx.z == 2.0 && u.columnBeds[next].z == u.columnBeds[first].z && u.columnBeds[next + 1].z == u.columnBeds[first + 1].z) {
+                share = mix(share, u.columnBeds[next + 1].x / nx.w, clamp((c - sec.x) / max(nx.x - sec.x, 0.1), 0.0, 1.0));
+            }
+        }
+        bed.widest = max(share, 1.0 - share);
+        bed.widestSlot = u.columnBeds[first + select(0, 1, share > 0.5)].z;
+        second = period * clamp(share * (0.55 + 0.9 * columnCycleHash(cycle + 0.37)), 0.03, 0.97);
+    }
     var lo = 0.0;
     for (var i = 0; i < n; i++) {
-        let t = u.columnBeds[i].x;
+        var t = u.columnBeds[first + i].x;
+        if (n == 2) { t = select(period - second, second, i == 1); }
         if (r < lo + t || i == n - 1) {
             bed.index = cycle * f32(n) + f32(i);
-            bed.hardness = u.columnBeds[i].y;
+            bed.hardness = u.columnBeds[first + i].y;
+            bed.slot = u.columnBeds[first + i].z;
             bed.through = clamp((r - lo) / t, 0.0, 1.0);
             bed.thick = t;
+            bed.j = i;
             return bed;
         }
         lo += t;
     }
     return bed;
 }
+fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;

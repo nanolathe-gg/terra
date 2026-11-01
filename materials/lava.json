@@ -1229,6 +1229,9 @@
    "hillSteps": "8",
    "lavaTread": "0.6"
   },
+  "column": {
+   "bands": [7, 1]
+  },
   "export": {
    "planet": "Lava",
    "defaultSeaLevel": 23,

@@ -1477,6 +1477,9 @@
    "hillSteps": "8",
    "lavaTread": "0"
   },
+  "column": {
+   "bands": [3.7, 1]
+  },
   "export": {
    "planet": "Red Planet",
    "defaultSeaLevel": 48,
