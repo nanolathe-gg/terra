@@ -1,5 +1,5 @@
 import {shapePaths} from './sculpt-paths.js';
-import {strokeCurve, CV_N} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, CV_N} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -47,9 +47,9 @@ const NODE_FIELDS = [
   ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plScale', 'plSeam', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
   ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'curveBase', 'backBase', 'cvLip', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'coFlatOn'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
-  ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'northWiden', 'bankScale', 'amp', 'faceVar', 'shelves',
+  ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'leanK', 'bearX', 'bearY', 'leanSide', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'gAmp', 'gWave', 'gCover', 'mesaFlank', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'facePx', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
+    'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'facePx', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -217,14 +217,14 @@ export function prepareNode(n, geom, c) {
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
   const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), plainHill = kind === 'hill' && ridgeOn(kind, q), shouldered = kind === 'hill' && !plainHill;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
-  const faceWidth = .66 + (q.softness - .5) * .9, backWidth = q.softness === .5 ? 1.34 : 2 - faceWidth;
+  const lean = leanSetup(kind, q), faceWidth = .66 + (q.softness - .5) * .9, backWidth = lean.ratio ? lean.ratio * faceWidth : q.softness === .5 ? 1.34 : 2 - faceWidth;
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
   const fis = kind === 'fissure' ? (() => {
     const kf = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1, hw0 = Math.max(q.fissureWidth, 1) * .5, hw = hw0 * kf, net = q.fissureNetwork >= .5, jag = q.fissureJag, famp = hw * (.5 + 2.2 * jag) + 1;
     return {kf, hw0, hw, net, jag, amp: famp, reach: net ? radius * 1.05 + hw + 8 : hw * 3.5 + famp + 6};
   })() : null;
   const amp = kind === 'crater' ? q.rough * radius * .45 : kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * (naturalWater ? 1.1 : naturalPlateau ? .95 : shouldered ? .85 : .2);
-  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale + 2 * amp + (water && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
+  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (naturalWater ? Math.min(1.9, 1 + q.rough * 1.6) : naturalPlateau ? Math.min(1.7, 1 + q.rough * 1.3) : shouldered ? Math.max(1.4, backWidth) : 1) * bankScale * (!shouldered && !lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp + (water && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
@@ -248,12 +248,13 @@ export function prepareNode(n, geom, c) {
   for (const indices of paths) {
   const pts=indices.map(i=>allPoints[i]),segmentStart=segs.length;
   if (shouldered) {
-    face = [Math.cos(Math.PI / 2 + sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8 + turn), Math.sin(Math.PI / 2 + sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8 + turn)];
+    const fa = Math.atan2(-lean.by, -lean.bx) + sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8 + turn;
+    face = [Math.cos(fa), Math.sin(fa)];
     const path = [pts[0]];
     for (const p of pts.slice(1)) if (Math.hypot(p.x - path[path.length - 1].x, p.y - path[path.length - 1].y) >= .2) path.push(p);
     if (path.length >= 3) {
       const sx = path[1].x - path[0].x, sy = path[1].y - path[0].y;
-      faceSide = (-sy * face[0] + sx * face[1]) < 0 ? -1 : 1;
+      faceSide = lean.side || ((-sy * face[0] + sx * face[1]) < 0 ? -1 : 1);
       settle = true;
       // settleHill: round the corners twice, sweep the rounded path in a few sections, soften the weights.
       let rounded = [path[0]];
@@ -281,7 +282,7 @@ export function prepareNode(n, geom, c) {
     } else if (path.length === 2) {
       // One span: the point preview is discarded when the first span arrives, and settleHill returns on a path under three points.
       const sx = path[1].x - path[0].x, sy = path[1].y - path[0].y;
-      faceSide = (-sy * face[0] + sx * face[1]) < 0 ? -1 : 1;
+      faceSide = lean.side || ((-sy * face[0] + sx * face[1]) < 0 ? -1 : 1);
       dab(path[0], path[1]);
     } else dab(path[0]);
   } else if (kind === 'crystal') {
@@ -382,8 +383,8 @@ export function prepareNode(n, geom, c) {
   if (rim) { for (const c of rim.sect) extra.push([c.a, c.h, c.w, c.rel]); for (const g of rim.gaps) extra.push([g, 0, 0, 0]); }
   const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
-      radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, northWiden: q.northFace ?? 0, bankScale, amp, faceVar: q.faceVariation ?? .8,
-      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, mesaFlank: kind === 'plateau' ? q.mesaFlank || 0 : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
+      radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, leanK: lean.k, bearX: lean.bx, bearY: lean.by, leanSide: lean.side, bankScale, amp, faceVar: q.faceVariation ?? .8,
+      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
       ...outlineUniforms(kind, q, radius), bankFlat: (kind === 'deep' || kind === 'shallow') && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0, facePx: Math.max(0, q.facePx || 0), bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),

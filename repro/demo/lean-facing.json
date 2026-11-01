@@ -1,0 +1,11 @@
+{"biome": "green", "ground": false, "query": "",
+ "strokes": [
+  ["hill", [[120, 140], [300, 150], [480, 120]], {"card": {"diameter": 160, "amount": 70, "roughness": 15}}],
+  ["hill", [[620, 140], [800, 150], [940, 120]], {"card": {"diameter": 160, "amount": 70, "roughness": 15, "facing": 5, "lean": 300}}],
+  ["mountain", [[120, 420], [300, 430], [480, 400]], {"card": {"diameter": 160, "amount": 70, "roughness": 15, "facing": 7, "lean": 300}}],
+  ["plateau", [[620, 420], [800, 430], [940, 400]], {"card": {"diameter": 160, "amount": 50, "roughness": 15, "facing": 1, "lean": 300}}],
+  ["plateau", [[120, 700], [300, 710], [480, 680]], {"card": {"diameter": 160, "amount": 50, "roughness": 15}}],
+  ["deep", [[620, 700], [800, 710], [940, 680]], {"card": {"diameter": 200, "roughness": 15, "facing": 2, "lean": 200}}],
+  ["hill", [[120, 900], [300, 910], [480, 880]], {"card": {"diameter": 160, "amount": 70, "roughness": 15, "facing": 1}}],
+  ["hill", [[620, 900], [800, 910], [940, 880]], {"card": {"diameter": 160, "amount": 70, "roughness": 15, "facing": 2, "lean": 100}}]
+ ]}

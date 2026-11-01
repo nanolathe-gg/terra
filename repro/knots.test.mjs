@@ -27,3 +27,12 @@ test('every form is a knot list from the foot to the top, and mountain follows s
  assert.deepEqual(strokeKnots('plateau',{softness:.5,curve:{form:'cliff'}},false).knots,FORMS.cliff(.5).knots);
  const own=[[0,0],[1,1]];assert.deepEqual(strokeKnots('plateau',{softness:.5,curve:{form:'cliff',knots:own}},false).knots,own);
 });
+
+import {leanSetup} from '../sculpt-shape-presets.js';
+test('lean: the plateau family keeps the old north term by default, facing picks a bearing or a side',()=>{
+ assert.equal(leanSetup('plateau',{}).k,.7);assert.equal(leanSetup('mountain',{}).k,0);
+ assert.deepEqual([leanSetup('plateau',{}).bx,leanSetup('plateau',{}).by],[0,-1]);
+ assert.equal(leanSetup('plateau',{lean:1}).k,0);assert.equal(leanSetup('mountain',{lean:3}).k,2);
+ assert.deepEqual([leanSetup('hill',{facing:5}).bx,leanSetup('hill',{facing:5}).by],[1,0]);
+ assert.equal(leanSetup('hill',{facing:1}).side,1);assert.equal(leanSetup('hill',{facing:2}).side,-1);
+});

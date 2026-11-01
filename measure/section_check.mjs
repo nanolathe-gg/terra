@@ -44,7 +44,7 @@ async function run(query) {
     await send('Page.navigate', {url: `${server}/sculpt?biome=green&mapX=4&mapY=4&scratch=sc${Date.now()}&gpuMB=512&heapMB=1536${query}`}); await ready();
     const res = {};
     for (const c of cases) {
-      const card = {diameter: c.size, amount: c.amount, roughness: 0, softness: Math.round(c.soft * 100), cracks: 0, faceVariation: 0, northFace: 0, mesaFlank: 0, baseVary: 0, baseBump: 0, moonLobes: 0, ...c.extra};
+      const card = {diameter: c.size, amount: c.amount, roughness: 0, softness: Math.round(c.soft * 100), cracks: 0, faceVariation: 0, lean: c.kind === 'plateau' || c.kind === 'offset' ? 100 : 0, baseVary: 0, baseBump: 0, moonLobes: 0, ...c.extra};
       await ev(`sculptDebug.scene(${JSON.stringify([[c.kind, path, {card}]])},{ground:false})`); await ready();
       await ev('sculptCanvas.idle()');
       res[JSON.stringify([c.name, c.size, c.amount, c.soft])] = await ev(`(() => { const o = []; for (let y = 0; y < ${H}; y += ${STEP}) for (let x = 0; x < ${W}; x += ${STEP}) o.push(sculptDebug.corner(x, y + ${Y0}).authored); return o; })()`);

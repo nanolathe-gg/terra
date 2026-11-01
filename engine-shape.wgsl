@@ -188,6 +188,16 @@ fn faceOf(own: f32, reach: f32, nCW: f32) -> f32 {
   let kw = clamp(1.0 + 0.5 * u.faceVar * nCW, 0.4, 1.8);
   return min(u.facePx * kw / reach, 0.98);
 }
+// How far a cell lies toward the side the stroke leans (0..1: the cosine between the stroke's bearing and the direction from the stroke to the cell, never
+// below 0). The lean side is a map bearing (bearX, bearY) or, with leanSide, the left (+1) or right (-1) of the drawn direction (none on a point).
+fn leanToward(ddx: f32, ddy: f32, sx: f32, sy: f32, span2: f32) -> f32 {
+  var bx = u.bearX; var by = u.bearY;
+  if (u.leanSide != 0.0) {
+    if (span2 <= 0.0) { return 0.0; }
+    let len = sqrt(span2); bx = u.leanSide * sy / len; by = -u.leanSide * sx / len;
+  }
+  return max(0.0, (ddx * bx + ddy * by) / max(1e-3, sqrt(ddx * ddx + ddy * ddy)));
+}
 
 // H9: a landform's or water stroke's mask writes, once the node is settled: plane, target, gain, flat per write (maskSetup/paintCell of sculpt.js).
 fn shapeMasks(i: u32, f: f32) {
@@ -312,6 +322,8 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     else if (kind == 0u || kind == 1u) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
     var reach = radius * width * u.bankScale;
     if (u.ridge != 0u) { reach = reach * (s1.x + (s1.y - s1.x) * t); }
+    // Lean on a kind with no shoulder to widen: the slope toward the lean side runs leanK of its length longer (shorter below 0).
+    if (kind >= 2u && !shouldered && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); reach = reach * (1.0 + u.leanK * ln * ln); }
     var r = sqrt(dx * dx + dy * dy) / reach;
     var lobe = 0.0;
     if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
@@ -333,8 +345,8 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
       var north = 0.0;
-      if (u.northWiden > 0.0) { north = max(0.0, -(wy - cy)) / max(1e-3, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy))); }
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.northWiden * 0.32 * north * north, 0.12, 0.90);
+      if (u.leanK != 0.0) { north = leanToward(wx - cx, wy - cy, sx, sy, span2); }
+      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.leanK * 0.32 * north * north, 0.12, 0.90);
       c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW));
     } else if (kind == 2u || kind == 3u) {
       c = curveAt(u.curveBase, (1.0 - r) / faceOf(0.9, reach, nCW));
@@ -625,7 +637,8 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (natural) { width = clamp(1.0 + u.rough * 1.3 * nCW, 0.55, 1.7); }
-    let reach = radius * width * u.bankScale;
+    var reach = radius * width * u.bankScale;
+    if (!natural && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); reach = reach * (1.0 + u.leanK * ln * ln); }
     var r = sqrt(dx * dx + dy * dy) / reach;
     if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / (width * u.bankScale); }
     if (r >= 1.0) { continue; }
@@ -634,15 +647,9 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
       var north = 0.0;
-      if (u.northWiden > 0.0) { north = max(0.0, -(wy - cy)) / max(1e-3, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy))); }
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.northWiden * 0.32 * north * north, 0.12, 0.90);
-      let face = faceOf(1.0 - shoulder, reach, nCW);
-      c = curveAt(u.curveBase, (1.0 - r) / face);
-      if (kind == 6u && u.mesaFlank > 0.0) {
-        // The mesa curve is the back table over the cap's share; a fractional mesaFlank blends it with the plateau curve.
-        let cap = shoulder * (1.0 - 0.45 * u.mesaFlank);
-        c = c + (curveAt(u.backBase, (1.0 - r) / (1.0 - cap)) - c) * u.mesaFlank;
-      }
+      if (u.leanK != 0.0) { north = leanToward(wx - cx, wy - cy, sx, sy, span2); }
+      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - u.leanK * 0.32 * north * north, 0.12, 0.90);
+      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW));
     } else {
       c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW));
       if (kind == 8u) { c = keepLip(c * (1.0 + u.rough * 0.09 * nDet)); }

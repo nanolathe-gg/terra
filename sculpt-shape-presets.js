@@ -53,6 +53,19 @@ export const FORM_NAMES = ['hill', 'mountain', 'plateau', 'mesa', 'cliff', 'terr
 export const defaultForm = (kind, shouldered) => kind === 'hill' ? (shouldered ? 'hill' : 'dome') : kind === 'mountain' ? 'mountain' : 'plateau';
 export const formKnots = (name, softness) => FORMS[name](softness);
 
+// Lean and facing. Lean is the back's length over the face's: the slope toward the lean side runs `ratio` times the length of the other (0: the kind's own,
+// which is the shouldered hill's softness-driven back and, for the plateau family, 1.7: the face widened .7 * .32 north^2 on the side toward north).
+// Facing is the lean side: a map bearing, or the left or right of the drawn direction. A shouldered hill's face is the side opposite.
+export const FACING_CHOICES = [[0, 'World default (north)'], [1, 'Left of the line'], [2, 'Right of the line'], [3, 'North'], [4, 'North-east'], [5, 'East'], [6, 'South-east'],
+  [7, 'South'], [8, 'South-west'], [9, 'West'], [10, 'North-west']];
+const R2 = Math.SQRT1_2, BEARINGS = [[0, -1], [R2, -R2], [1, 0], [R2, R2], [0, 1], [-R2, R2], [-1, 0], [-R2, -R2]];
+const FAMILY = ['paint', 'erase', 'plateau', 'offset', 'sand', 'grass'];
+export function leanSetup(kind, q) {
+  const f = Math.round(q.facing || 0), side = f === 1 ? 1 : f === 2 ? -1 : 0, [bx, by] = BEARINGS[side ? 0 : Math.max(f, 3) - 3];
+  const ratio = q.lean > 0 ? clamp(q.lean, .25, 4) : null;
+  return {ratio, k: (ratio ?? (FAMILY.includes(kind) ? 1.7 : 1)) - 1, side, bx, by, family: FAMILY.includes(kind)};
+}
+
 // The kinds that take a cross-section curve, its face width and terraces.
 export const SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
 export const hasCurve = q => Boolean(q.curve);
