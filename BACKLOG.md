@@ -7728,6 +7728,30 @@ edit latency p95                           21.0 20.7 21.0 22.6        | 28.5 23.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H18`, branch `H18-shores`; assets `$R/agent-H18`.
 
+### H19. Face relief: lit rock on stretched walls
+
+> **Owner, 2026-11-01:** "I had another agent try to improve vertical or near-vertical faces to add proper relief and lighting for rock structure and texture ... To my eye it's a visual
+> improvement, but feel free to push back or suggest alternative approaches."
+
+**Why.** TA's camera is fixed and oblique, so a wall facing the viewer spreads one world pixel over several screen pixels. Everything baked in world space (the fine normal, the crack codes,
+the cavity) stretches into a vertical smear there. The owner's prototype, `prototype/cliff-surface-detail` at 5ae5365, fixes that: the height gradient the material tables already hold is cached at startup and
+lit on the wall, in screen pixels, so the rock keeps its grain. On a tall wall that is a clear win.
+
+**The coordinator's review of the prototype.** Rendered all 27 scenes from an export, against retail, plus the prototype's own painted cliff through `repro/render.mjs` on Green, Desert and Ice.
+- *What holds.* The idea, the cached gradients (`mmRelief`), the tangent frame, the fix to `shineTerm`, which was rebuilding a top-down normal and cancelling the relief. No terrain height, palette or world branch moves. It merges with main with no conflicts, and nothing is newly outside retail by `repro/stats.py` (535 of 668, as before).
+- *What does not, as it stands.* It gates on slope, so it reaches ground where nothing has stretched, and the retail windows pay for walls they do not have. green-2's rock goes darker where main was close: median luma retail 43, main 42, prototype 31; near-black share 14%, 23%, 38%. Its long cracks and H17's marks go, since slopes over 1 lose the fine normal and the crack code. ice-3's smooth slab top takes dark gouges. Desert's strata take black scribbles at relief 1, which .3 clears. Moon takes isolated white pixels. The cavity darkens twice (in `cav`, then `material *=`), and `shineOutside` is bypassed in every world, which adds pale grit to Green's natural rock.
+- *Against the owner's direction.* Four modes (`surfaceMapping`), two of them rejected experiments kept for comparison: the owner has said not to drag two render paths along. Layer 0 of the atlas, the analytic footprint and the triplanar code serve only those two. Mode 3 reads level 0 at any footprint where `genColor` follows `materialFoot`, so a quarter draw does not match the final one, and the seven mips go unread.
+- *A stricter gate, tried in a scratch copy (`$R/agent-H18/cliff/stretch-gate.patch`).* Relief only where the projection stretches: `smoothstep(1.5, 3.0, 1.0 - 0.5 * broad.y)`, the prototype's own `denom0`. One cavity, `shineOutside` left alone. green-2 0.00 against main, the largest move on any of the 27 scenes .10 mean |diff|, 535 of 668 unchanged, console clean. The tall walls keep the win (`$R/agent-H18/cliff/variant/row-*.png`) at the right tone, and the crowns keep their cracks. Desert's wall wants relief about .4.
+
+**The build.** A port by hand from 5ae5365 onto main, not a merge. One path, one control.
+1. One atlas layer: `makeSurface`'s lit gradient, or `blockSurfaceHeight` for a table with no `lit` block (Green, Lava, Zhon). Read at the footprint's level, as `genColor` reads, with `textureLoad`, so no sampler binding.
+2. The stretch gate, the one place relief is decided. Inside it the relief replaces the fine normal, the crack code and the top-down cavity. Outside it, nothing changes. No sample is taken outside it.
+3. One knob, `faceRelief`, a world value, with one slider in Rock face. No `surfaceMapping`, no `surfaceScale`, no colour path: `genColor` already gives the wall its colour.
+4. Authored wall scenes in `repro/walls/`, one a world, since no retail window holds a tall wall.
+5. No prototype notes, results file, harness buttons or diagnostic views.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H19`, branch `H19-face-relief`; assets `$R/agent-H19`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
