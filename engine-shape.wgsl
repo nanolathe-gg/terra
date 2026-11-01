@@ -1332,8 +1332,9 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
     if (keep > 1.0 - sm(0.2, 1.0, d / width)) { return; }
     let wob = vnoise(lx / 6.0, ly / 6.0, u.seed ^ 0x317u) * 0.5;
     var edge = (k.d2 - k.d1) / (2.0 * max(1.0, length(k.b - k.n))) * scale + wob;
-    // H20b: a plate whose centre reads low in a slow noise breaks into a mesh of cells 0.4 of L; its own outline is kept as the nearer seam.
-    if (u.plVary > 0.0 && 0.5 + 0.5 * vnoise(k.b.x / (L * 4.0), k.b.y / (L * 4.0), u.seed ^ 0x5d1u) < u.plVary) {
+    // H20b: a wet plate whose centre reads low in a slow noise breaks into a mesh of cells 0.4 of L, its own outline kept as the nearer seam. Wet only: on land a mesh this fine
+    // inks its seams into black clumps (retail's fine mesh is the water band). The noise sits close to .5, so the cut is pulled toward it (0.72) to make the share about plVary.
+    if (wet && u.plVary > 0.0 && 0.5 + 0.5 * vnoise(k.b.x / (L * 4.0), k.b.y / (L * 4.0), u.seed ^ 0x5d1u) < 0.5 + 0.72 * (u.plVary - 0.5)) {
       let f = plCells(lx, ly, L * 0.4, 0x6a9u, 0x2e3u, 0.4);
       edge = min(edge, (f.d2 - f.d1) / (2.0 * max(1.0, length(f.b - f.n))) * scale + wob);
       shade = 0.8 + 0.2 * plHalf(f.bi, f.bj, 0x1f5u);

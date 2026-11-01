@@ -592,7 +592,7 @@ WORLD_KNOBS = {
                     crystalShoreSeam=.56, crystalSeamEnd=.68,
                     # H20b: in patches a slab breaks into a fine mesh inside its outline (retail: crystal-3's band
                     # beside larger plates, small cells among the big ones on crystal-1's mound).
-                    plateVary=.35,
+                    plateVary=.5,
                     # G7: the shallow mosaic's cells 8 px (were 10) under fainter seams (.45, were .55).
                     crystalShallowInk=.45),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
