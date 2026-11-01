@@ -7085,6 +7085,65 @@ readings do not.
   (both tables); Desert's ledges on the colours' coordinate; bands, Green last, since it runs two
   mechanisms today. Only merged knobs go. The rest are listed for combine-or-drop, with numbers.
 
+**Done (part 2).** Branch `H16-geology`, five commits, nothing merged. One `column` block per world in `materials/<world>.json`
+(`sculpt-column.js` builds its uniform rows; `columnAt`, `columnBedIn`, `columnBandAt` in `engine-common.wgsl`; `columnColour` in
+`engine-frag.wgsl`): `sections` (a start coordinate and a bed list, thickness / hardness / material slot, repeating upward), `bands` (the
+contour bands' row, the same shape; a world with none takes the default 3.7 / .5), `colors` (the slot colours), and the options the worlds
+proved: `vary` (main's `strataHash` and its `.55 + .9 h` on the second bed of a two-bed cycle), `origin` (`plain`: count from the plain's
+height, as the strata did), `ledges` (the bake's beds, the Time pass's hardness and the rock blocks read the column), `wander`
+(`value`: Green's three octaves of value noise, `erosion`: the Time pass's own amplitude, `terrain`: main's three octaves of `terrainNoise`).
+A variant is a row of the block: `triad` under `variants` carries Desert's grey-butte sections and its 4 / .6 band row. A world with no
+block has no geology column (the `column` knob is gone), and a share ramp to the next section, the cap hold on the widest bed and the
+edge widths are the column's own rules, not options.
+- *Step 1 (525f104).* The proof and its `?geology` switch gone; `columnAt` reads sections, Green's table is one. 27 scenes 0.00 against
+  `agent-H15/outD`, mismatch 0, console clean. **Finding:** main's Time pass ran before the bake had set `bedSpacing`, so its wander
+  amplitude was the 2-unit floor and the bake's was 5; one amplitude for both moves Green by .93 / 1.73 / .81 (`wander.erosion` keeps
+  both; `TODO(question)` in `columnOffset`: the owner's call).
+- *Step 2 (932082b).* Desert's colours exactly: desert-1 .001, desert-2 0.00, desert-3 0.00 (limit .5), other scenes 0.00. The first try
+  read .48 / .28 / .80, then .45 / .22 / .77 once a thin bed took both of its edges; the rest was not the strata formula (checked in the shader against
+  the old one on the same coordinate: 6e-6) but the bake: a world with a table switched to the column's ledges, which is why `ledges` is
+  an option and Desert's is off until step 3. Goes:
+  `strataSpacing`, `strataWarp`, `strataZones`, `strataZoneSpacing`, `strataColors` (the key), the zone uniforms, two sliders and
+  `strataZoneWidths`. New test `repro/column.test.mjs`: a table with sections and a variant row reads the right bed on each side of a
+  section start.
+- *Step 3 (b5429bd), kept.* Desert's ledges on the colours' coordinate, every bed at hardness .5 (the hash bed's own ledge). desert-1/2/3
+  move .74 / .70 / 1.08 against main, every other scene 0.00. At 1x and 2x (sheet3-2, and a 4x crop of desert-2) the three windows read
+  the same as before, not closer; edge energy (mean |gradient|, retail 43.4 / 51.3 / 37.5) 44.2 / 54.3 / 41.7 before, 44.2 / 54.3 / 41.6 after.
+  The hash beds stay: Archipelago, Moon, Zhon and Lava draw them, so `bedSpacing`, `bedVary`, `bedPunch` and `bedHeight` stay (dead on
+  Desert now, below).
+- *Step 4 (cc69cd9).* `contourBands` and `lavaLines` read the band row; `bandSpacing`, `bandLine` and their sliders go. Every world 0.00
+  against step 3's renders, Desert and its `triad` window included. Rows: Green 3.7 / .84, Red 3.7 / 1, Archipelago 3.7 / .68, Moon 3.7 / .63,
+  Lava 7 / 1, Desert 6 / .2 and 4 / .6; Zhon, Ice and Crystal the default. **Green's bands on its eight beds were tried and not kept:** green-1/2/3
+  moved 1.29 / 7.70 / 1.13 and green-2 read further from retail at 1x and 2x (retail's fine parallel terrace lines became broken blotches, mean
+  luma 47.6 -> 46.8 against retail 50.1), so Green's table carries a separate fine row for its bands.
+- *Step 5.* Knobs part 1 never moved (`measure/geology_controls.mjs --probe`): ringScatter .5 -> 0 moves 12.4 / 8.6 / 10.8% of the halo
+  class, ringShiftDir 315 -> 45 17.6 / 19.5 / 26.9%, baseBandLow 4 -> 2 5.3 / 10.3 / 2.4%, baseBandHigh 6.5 -> 9 19.2 / 16.2 / 2.8%,
+  baseBandWander 1 -> 0 7.1 / 3.1 / .7%, baseBandGaps .45 -> 1 10.4 / 15.5 / 2.8%: all act. On Green's three scenes bedLedge .4 -> .5 moves
+  0.0 / .3 / 0.0% of the raised class (1.13 mean |diff| on green-2), bedLip 2 -> 1 0.0 / 3.8 / 0.0%, bedBend 1 -> 0 0.0 / 4.7 / 0.0%: under 5%.
+- *Control count.* The geology family of `measure/geology_controls.mjs` (bed, band, strata, ring, layer, baseBand, cliff, joint, column,
+  rockOrder, rockFrom, desertCapFlat, mineralDetail): 83 knobs and three tables (`strataColors`, `strataZones`, `strataZoneSpacing`) before;
+  77 knobs and the one `column` block after. Gone: `bandSpacing`, `bandLine`, `strataSpacing`, `strataWarp`, `column`, `columnBeds` (on part 1's
+  count of 70, 64). The block's options are seven (`colors`, `origin`, `vary`, `ledges`, `wander.value`, `wander.erosion`, `wander.terrain`),
+  its data two lists (`sections`, `bands`), one variant row (Desert's `triad`), and six worlds carry one (Green, Desert, Red, Archipelago,
+  Moon, Lava). Uniform fields 377 -> 373; lines `engine-common.wgsl` 773 -> 847, `engine-bake.wgsl` 1439 -> 1440, `engine-frag.wgsl` 1966 -> 1941,
+  `sculpt-renderer.js` 1248 -> 1236 (plus `sculpt-column.js`, 37 lines).
+- *For the owner's combine-or-drop pass, measured at head (`gc3-2`, 88 states, class share = the share of 16-px blocks of the knob's class
+  that changed; the bar is 5%).* **Dead** (no pixel moves on any world that sets them): `bedHeight`, `bedVary` (Green and Desert), `bedFlow`,
+  `bedPunch`, `cliffStagger` (Green), `sandBanding` (Zhon), Lava's `bandStyle`, `bandWidth`, `bandRelief`, `bandWander`, `bandGaps`
+  (its `banding` is 0), `layerLedge`, `layerRough`, `layerVary`, `lavaMeander`, `lavaSpread`, `lavaCircleVary`; and on Desert alone
+  `bedSpacing` (the column ledges' thickness cancels it). **Under 5% everywhere they are set:** `jointGaps` 0.0%, `cliffFine` 0.0%,
+  `cliffBed` 0.0%, `cliffRise` 0.0%, `lavaCreaseVary` 0.0%, `jointDepth` 0.0%, `bedSpacing` 0.0% (Green, 5.6% of pixels moved), `jointAngle`
+  .1%, `jointRun` .1%, `bedLedge` .3%, `jointSpacing` .3%, `bandFoot` 2.4%, `ringTaper` 3.3%, `desertCapFlat` 3.5%, `bedLip` 3.8%,
+  `cliffReach` 4.3%, `bedBend` 4.7%; Red's stroke options `terraces`, `ledge`, `terraceJitter` 0.0% of the raised class (13.0 / 14.2 / 8.9%
+  of the pixels). **No world sets them off their default, so none was measured:** `bandFade`, `bandSoftness`, `bandWater`, `bedDip`,
+  `bedDipDir`, `cliffDomain`, `cliffFlat`, `cliffWide`, `columnContrast`, `layerCircle`, `layerRiser`, `layerStyle`, `sandBandSpacing`.
+  `strataContrast` and `strataGrain` stay (97% and 96% of Desert's raised class).
+- *Checks at the final head (out4-2).* `repro/stats.py` cell by cell against `statsD`: the containment (535 of 668) and every window's list of
+  marks outside retail are unchanged; the only cells that moved are Desert's (by up to a few percent) and a few picture cells of Green and Red at 1e-5. Perf, `drag` on map4, three alternating rounds against a
+  main export: rAF p95 16.7 / 16.8 (vsync) on green-2 and 16.8 / 16.8 on desert-1; edit latency p95 (median of three) 48.5 (rounds 46.7-48.8) against 47.2 ms
+  (47.2-47.2) on green-2 and 42.9 (41.6-56.0) against 42.1 (41.9-56.1) on desert-1; GPU relief bake 784 / 785 ms (green-2) and 625 / 621 ms
+  (desert-1), terrain pass 541 / 553 ms (green-2) and 390 / 362 ms (desert-1: +8%, two of three rounds, not seen in the frame times).
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H16`, branch
 `H16-geology`; assets `$R/agent-H16`.
 

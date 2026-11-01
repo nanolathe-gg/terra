@@ -2,7 +2,7 @@
 // world's three reproduction scenes (repro/scenes), on the real engine, and the render is compared with the unmoved one: repro/compare.py's
 // mean |diff| and share of pixels moved, and measure/impact.py's block share of the knob's class (decision 11: a kept control must move at least
 // 5% of its class at 1x, beside a noise floor of 1-3%). A knob that prints 0.00 and 0.0% is dead on that world.
-//   node measure/geology_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--only desert,lava] [--knobs bandLine,strata]
+//   node measure/geology_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0]
 // Writes DIR/geology-controls.json and prints one row per (world, knob). Python is $PYTHON (default the main checkout's venv). Exit 1 on a console error.
 import {execFileSync} from 'node:child_process';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -26,6 +26,11 @@ for (const [world, knobs] of Object.entries(dump.w)) for (const [knob, value] of
   if (!FAMILY.test(knob) || String(value) === String(dump.d[knob])) continue;
   if ((only.length && !only.includes(world)) || (knobsOnly.length && !knobsOnly.includes(knob))) continue;
   states.push({world, knob, from: value, to: dump.d[knob], cls: CLASS(knob)});
+}
+// --probe world.knob=value,...: knobs a world sets to the default's own value are skipped above; these move one from the world's value to a given one.
+for (const p of opt('--probe', '').split(',').filter(Boolean)) {
+  const [id, to] = p.split('='), [world, knob] = id.split('.');
+  states.push({world, knob, from: dump.w[world]?.[knob] ?? dump.d[knob], to, cls: CLASS(knob)});
 }
 for (const s of CARD_ONLY) if ((!only.length || only.includes(s.world)) && (!knobsOnly.length || knobsOnly.includes(s.knob))) states.push({...s, cls: 'raised', card: true});
 mkdirSync(out, {recursive: true});

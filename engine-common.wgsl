@@ -456,6 +456,8 @@ fn valueNoise(q: vec2f) -> f32 {
 // and the broad wander are the hash beds' own. The Time pass has its own wander amplitude (columnWander.y): until H16 it read the bed
 // spacing before the bake had set it, so its wander was the 2-unit floor and the bake's the spacing; the table keeps both as they drew.
 // TODO(question): one amplitude for both would put a ledge and its wear on one coordinate; it moves Green's three scenes by .8-1.7 mean |diff|.
+// The Time pass has no noise texture either, so the terrain wander (Desert's) is left out of the coordinate it reads hardness at: up to about
+// 3 units off the bake's, and the same for every bed there (hardness .5).
 fn columnOffset(p: vec2f) -> f32 {
     let a = radians(u.bedDipDir);
     let tilt = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
