@@ -1,8 +1,7 @@
-{"biome": "moon", "source": {"note": "authored for shapecheck (H9): ridge options (crest jag, variation, taper, spurs with forks and bulbs) on swept hills and mountains, a single-click spur star, and a ridge with a cross-section; moonLobes from the world"},
- "ground": true, "query": "",
+{"biome":"moon","source":{"note":"authored for shapecheck (H9): ridge options (crest jag, variation, taper, spurs with forks and bulbs) on swept hills and mountains, a single-click spur star, and a ridge with a cross-section; moonLobes from the world"},"ground":true,"query":"",
  "strokes": [
-  ["hill", [[200,300],[320,260],[450,300],[560,380]], {"card": {"diameter": 120, "amount": 60, "roughness": 35, "crestJag": 40, "crestVary": 80, "crestTaper": 50}}],
-  ["mountain", [[200,650],[330,700],[470,640],[600,690]], {"card": {"diameter": 140, "amount": 70, "roughness": 30, "spurCount": 5, "spurLength": 160, "spurForks": 50, "spurBulb": 40, "crestJag": 30}}],
-  ["hill", [[780,260]], {"card": {"diameter": 120, "amount": 50, "roughness": 30, "spurCount": 6, "spurLength": 140}}],
-  ["hill", [[700,600],[820,680],[930,620]], {"card": {"diameter": 110, "amount": 55, "roughness": 30, "spurCount": 3, "crestTaper": 60, "facePx": 50, "apronPx": 15, "apronHeight": 8}}]
+  ["hill",[[200,300],[320,260],[450,300],[560,380]],{"card":{"diameter":120,"amount":60,"roughness":35,"crestJag":40,"crestVary":80,"crestTaper":50}}],
+  ["mountain",[[200,650],[330,700],[470,640],[600,690]],{"card":{"diameter":140,"amount":70,"roughness":30,"spurCount":5,"spurLength":160,"spurForks":50,"spurBulb":40,"crestJag":30}}],
+  ["hill",[[780,260]],{"card":{"diameter":120,"amount":50,"roughness":30,"spurCount":6,"spurLength":140}}],
+  ["hill",[[700,600],[820,680],[930,620]],{"card":{"diameter":110,"amount":55,"roughness":30,"spurCount":3,"crestTaper":60,"facePx":66,"curve":{"form":"hill","knots":[[0,0],[0.042,0.006],[0.083,0.018],[0.125,0.033],[0.167,0.05],[0.208,0.07],[0.25,0.082],[0.292,0.095],[0.333,0.118],[0.375,0.149],[0.417,0.189],[0.458,0.235],[0.5,0.286],[0.542,0.341],[0.583,0.397],[0.625,0.455],[0.667,0.512],[0.708,0.566],[0.75,0.617],[0.792,0.664],[0.833,0.704],[0.875,0.736],[0.917,0.76],[0.958,0.773],[1,1]]}}}]
  ]}

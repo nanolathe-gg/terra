@@ -61,10 +61,8 @@ KNOB_DEFAULTS = dict(
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
     # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
     flatBank=0,
-    # Cross-section (card C1): a stroke that sets any of these carries its own section
-    # (px, units or shares as labelled; sculpt-shape-presets.js carriesSection).
-    apronPx=0, apronHeight=.2, facePx=0, faceCurve=0, terraces=0, ledge=.6, terraceJitter=.35,
-    lip=0, crown=.5, shelfPx=0, shelfDepth=6, shelfSteps=0,
+    # Cross-section (card C1): the face width in px (0: a share of the brush) and the terraces on the curve (sculpt-shape-presets.js).
+    facePx=0, terraces=0, ledge=.6, terraceJitter=.35,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,

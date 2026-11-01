@@ -1,4 +1,3 @@
-import {carriesSection} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -31,11 +30,10 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
 export function shapeControlAvailable(key,kind,p){
- const section=carriesSection(kind,p),form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
- if(section&&['mesaFlank','northFace'].includes(key))return false;
+ const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
  // The classic shouldered ridge uses a different footprint; its settled path
  // bypasses these foot effects. Custom/variable ridges use the shared profile.
- if(kind==='hill'&&['baseVary','baseBump'].includes(key)&&!section&&!(Math.round(p.spurCount)>=1||p.crestJag>0||p.crestVary>0||p.crestTaper>0))return false;
+ if(kind==='hill'&&['baseVary','baseBump'].includes(key)&&!(Math.round(p.spurCount)>=1||p.crestJag>0||p.crestVary>0||p.crestTaper>0))return false;
  if(key==='moonLobes'&&p.baseVary>0)return false;
  if(kind==='crystal'){
   if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;
@@ -47,8 +45,6 @@ export function shapeControlAvailable(key,kind,p){
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  if(key==='iceFacetSize')return kind==='mountain'&&p.iceFacets>0;
  if(['ledge','terraceJitter'].includes(key))return p.terraces>0;
- if(['shelfDepth','shelfSteps'].includes(key))return p.shelfPx>0;
- if(key==='apronHeight')return p.apronPx>0;
  if(['lavaMeander','lavaSpread'].includes(key))return p.shoreLayers>0&&p.layerStyle<.5;
  if(['layerCircle','lavaCircleVary'].includes(key))return p.shoreLayers>0&&p.layerStyle>=.5;
  return true;

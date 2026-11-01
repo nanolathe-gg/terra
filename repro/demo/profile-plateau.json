@@ -1,5 +1,4 @@
-{"biome": "green", "ground": false, "query": "",
+{"biome":"green","ground":false,"query":"",
  "strokes": [
-  ["plateau", [[400, 560], [620, 520]], {"card": {"diameter": 400, "amount": 90, "roughness": 14, "cracks": 0,
-    "profile": 1, "apronPx": 50, "apronHeight": 15, "facePx": 130, "faceCurve": 0, "terraces": 4, "ledge": 55, "terraceJitter": 35, "lip": 4}}]
+  ["plateau",[[400,560],[620,520]],{"card":{"diameter":400,"amount":90,"roughness":14,"cracks":0,"facePx":180,"terraces":4,"ledge":55,"terraceJitter":35,"curve":{"form":"plateau","knots":[[0,0],[0.042,0.009],[0.083,0.025],[0.125,0.045],[0.167,0.07],[0.208,0.097],[0.25,0.128],[0.292,0.151],[0.333,0.165],[0.375,0.192],[0.417,0.232],[0.458,0.283],[0.5,0.342],[0.542,0.408],[0.583,0.478],[0.625,0.55],[0.667,0.624],[0.708,0.697],[0.75,0.771],[0.792,0.842],[0.833,0.906],[0.875,0.962],[0.917,1.006],[0.958,1.034],[1,1.044]]}}}]
  ]}

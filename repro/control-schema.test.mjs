@@ -3,11 +3,9 @@ import assert from 'node:assert/strict';
 import {shapeControlAvailable as available,controlLabel,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
-test('a stroke with its own section keys exposes only effective alternatives',()=>{
- assert.equal(available('mesaFlank','plateau',{apronPx:40}),false);
- assert.equal(available('northFace','offset',{facePx:90}),false);
+test('a hill exposes foot effects only as a ridge',()=>{
  assert.equal(available('baseVary','hill',{}),false);
- assert.equal(available('baseBump','hill',{apronPx:40}),true);
+ assert.equal(available('baseBump','hill',{crestJag:.2}),true);
  assert.equal(available('baseVary','hill',{spurCount:3}),true);
  assert.equal(available('moonLobes','mountain',{baseVary:15}),false);
  assert.equal(available('iceFacetSize','hill',{iceFacets:1}),false);

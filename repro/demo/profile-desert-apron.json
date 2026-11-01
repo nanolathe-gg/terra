@@ -1,5 +1,4 @@
-{"biome": "desert", "ground": false, "query": "",
+{"biome":"desert","ground":false,"query":"",
  "strokes": [
-  ["plateau", [[512, 520]], {"card": {"diameter": 460, "amount": 67, "roughness": 12, "cracks": 0, "softness": 50,
-    "profile": 1, "apronPx": 120, "apronHeight": 25, "facePx": 70, "faceCurve": 30, "terraces": 0, "lip": 0}}]
+  ["plateau",[[512,520]],{"card":{"diameter":460,"amount":67,"roughness":12,"cracks":0,"softness":50,"facePx":190,"terraces":0,"curve":{"form":"plateau","knots":[[0,0],[0.042,0.004],[0.083,0.012],[0.125,0.022],[0.167,0.034],[0.208,0.047],[0.25,0.062],[0.292,0.078],[0.333,0.096],[0.375,0.114],[0.417,0.134],[0.458,0.155],[0.5,0.176],[0.542,0.199],[0.583,0.222],[0.625,0.246],[0.667,0.312],[0.708,0.406],[0.75,0.514],[0.792,0.629],[0.833,0.741],[0.875,0.843],[0.917,0.925],[0.958,0.98],[1,1]]}}}]
  ]}
