@@ -27,6 +27,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   let dirtyMarks=0,retainedInvalidations=0;
   const interacting=()=>Boolean(gesture||api.previewActive?.());
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
+  let paintedView=-1;
   const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
   let heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,documentLoading=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
   let hoveredNode=-1;
@@ -105,7 +106,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8;
       trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
       renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
-      const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale});bakes++;
+      const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,deferCompletion:!fit&&!exportArt});bakes++;
       const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
@@ -116,7 +117,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     checkHeap(fields,estimate.cpuPeakBytes);
     const copyBytes=rect.width*rect.height*8;trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
     renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
-    const result=await renderer.renderChunk(fields,{...options,quality:'full'});bakes++;
+    const result=await renderer.renderChunk(fields,{...options,quality:'full',deferCompletion:!exportArt});bakes++;
     const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
     const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
   }
@@ -147,7 +148,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(did)coarseColour=true;return coarseFirst.length+coarseRest.length>0;
   }
   markCoarse();
-  function drawCoarse() {
+  function drawCoarse(terrain=true) {
     // Sample in slices, but never during a gesture: the overview is stale under the edit and refreshes on release.
     if(!gesture&&coarseFirst.length+coarseRest.length&&stepCoarse(3)&&!gesture)schedule();
     if(coarseColour) {
@@ -158,7 +159,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       }
       cg.putImageData(image,0,0);coarseColour=false;
     }
-    const v=state(); g.imageSmoothingEnabled=false; g.drawImage(coarse,v.x/map.width*coarse.width,v.y/map.height*coarse.height,v.width/map.width*coarse.width,v.height/map.height*coarse.height,0,0,canvas.width,canvas.height);
+    const v=state(); if(terrain){g.imageSmoothingEnabled=false;g.drawImage(coarse,v.x/map.width*coarse.width,v.y/map.height*coarse.height,v.width/map.width*coarse.width,v.height/map.height*coarse.height,0,0,canvas.width,canvas.height);}
     ng.imageSmoothingEnabled=false; ng.drawImage(coarse,0,0,navigatorCanvas.width,navigatorCanvas.height); ng.strokeStyle='#fff0a0'; ng.lineWidth=1; ng.strokeRect(v.x/map.width*200+.5,v.y/map.height*200+.5,Math.min(200,v.width/map.width*200),Math.min(200,v.height/map.height*200));
   }
   function overlays() {
@@ -183,7 +184,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     updateDocumentControls();
     try {
       const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
-      drawCoarse();overlays();
+      // Existing terrain pixels already retain the cached view. Recompose only
+      // after navigation/resize (or before the first tile); edits paint fresh tiles.
+      const repaint=paintedView!==viewEpoch||cache.size===0;
+      drawCoarse(repaint);overlays();
       // H7 2b: while the Time pass is running, a bake would read the unweathered height and be redone when the weather lands.
       // The pass is submitted first (it starts with the edit) and chunks wait for it, for at most 8 s so a failed pass cannot hide the map.
       const weatherPending=api.canExport&&!api.canExport()&&!interacting()&&!features?.busy;
@@ -199,7 +203,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         const levelsOn=levels&&api.gpuFeedActive?.();
         jobs.sort((a,b)=>{const visible=intersects(b,v)-intersects(a,v);if(visible)return visible;if(previewing){const age=(cache.get(cacheKey(a,size))?.bakedAt||0)-(cache.get(cacheKey(b,size))?.bakedAt||0);if(age)return age;}return dist(a)-dist(b);});
         const near={x:v.x-size,y:v.y-size,width:v.width+size*2,height:v.height+size*2};for(const e of cache.values())if(!intersects(e,near))e.heightPatch=null;
-        for(const rect of jobs){const e=cache.get(cacheKey(rect,size));if(e&&intersects(rect,v))paint(e,v);}overlays();
+        if(repaint){for(const rect of jobs){const e=cache.get(cacheKey(rect,size));if(e&&intersects(rect,v))paint(e,v);}paintedView=viewEpoch;}overlays();
         // H7b: the plan. `want` 2 is a quarter image, 1 final. During a gesture every chunk without an image gets a quarter one and nothing
         // is refined; once it ends, a quarter image is replaced by a final one (visible chunks first, then the margin), and a chunk
         // whose final image is still current keeps it. Dirty images remain visible until a replacement arrives.
@@ -231,7 +235,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(cache.get(key)!==e)break;
           if(!baked)continue;   // The retained tiles were painted together above; only fresh tiles need another presentation.
           if(viewToken!==viewEpoch){rerun=true;break;}
-          if(intersects(rect,v)){paint(e,v);overlays();presented();}if(token!==epoch){rerun=true;break;}await (levels&&(interacting()||baked)?undefined:tick());
+          if(intersects(rect,v)){paint(e,v);overlays();presented();}if(token!==epoch){rerun=true;break;}
+          // Close-view snapshots overlap GPU work, so explicitly yield to input.
+          // Fit keeps its GPU completion wait: its larger tiles need backpressure
+          // before presentation to keep the full-map gesture responsive.
+          await (!overview||!levels?tick():undefined);
         }
       }
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
@@ -333,7 +341,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function budgets(){gpuBudget=clamp(Number(find('[data-gpu]').value)||512,128,4096)*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
   function sampleField(r,x,y){const a=r.fields.h,w=r.gridWidth,h=r.gridHeight,step=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/step),oy=Math.round(r.gridOrigin[1]/step),gx=clamp(x/step-ox,0,w-1),gy=clamp(y/step-oy,0,h-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,w-1),jy=Math.min(iy+1,h-1),fx=gx-ix,fy=gy-iy;return(a[iy*w+ix]*(1-fx)+a[iy*w+jx]*fx)*(1-fy)+(a[jy*w+ix]*(1-fx)+a[jy*w+jx]*fx)*fy;}
-  async function idle(){while(drawing||pending||renderer.busy)await tick();}
+  async function idle(){do{while(drawing||pending||renderer.busy)await tick();await renderer.previousChunk;}while(drawing||pending||renderer.busy);}
   async function sampleHeights(signal){
     await idle();const heights=new Uint8Array(map.widthCells*map.heightCells);let clipped=0;
     // Each corner is sampled from an awaited canonical weather field. No

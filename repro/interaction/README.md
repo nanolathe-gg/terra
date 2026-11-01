@@ -16,6 +16,8 @@ Open `http://127.0.0.1:8906/interaction/index.html` and its port-8907 counterpar
 - **Check cache & fit:** Add a distant shape, record visible rebakes, edit a nearby shape, then compare the retained view with a forced invalidation. For maps up to 8×8 it also assembles a full-resolution downsampled reference for judging Fit.
 - **Check refinement stability:** Render a scene, run refinement again without editing, and compare both images. This catches display-order dependencies in refinement inputs.
 - **Test dirty fields:** Candidate-only GPU fixture. Verify identical buffers produce no dirty tiles; change the second height plane, third packed map, fourth material channel, and the last edge tile; verify disabled maps force a reset.
+- **Check tile output:** Compare bounded relief dispatch with full padded dispatch at three tile positions and scales 1, 2 and 8. Evict resources between captures so previous texture contents cannot hide missing computation. Covers odd dimensions and map edges; use 40×40 to exercise paged fields.
+- **Check retained view:** Verify hovering causes no terrain paints, then return through Fit, 1×, scrolling and resize and compare the resulting pixels exactly.
 - **Capture scene:** Select each of the 27 committed scenes in turn. Full-resolution 1024×1024 captures of the selected retail-comparison scene, plus a fixed 128×128 authored-height sample lattice. The helper rejects empty captures and waits for iframe navigation before accessing the new device.
 
 Compare the reference captures with:
@@ -26,7 +28,7 @@ python repro/interaction/compare.py --before /tmp/interaction-before/LABEL/refer
 
 The performance prototype intentionally fixes the Green refinement initialization bug described in `REPORT.md`. Comparing initial captures therefore reports three Green differences. **Check refinement stability** reproduces the same differences in the unmodified baseline and verifies that its second result exactly matches the candidate; repeating refinement in the candidate changes zero pixels. Keep both initial and repeated baseline captures when reviewing this correction.
 
-A `present` event includes cached redraws and **must not be reported as fresh-terrain FPS**. Use `bake-end` events before the `release` marker to count new tile results. `frameP95` measures animation-frame intervals across the phase, including settling. GPU timings use timestamp queries when supported. A tile completion is not a whole-viewport frame.
+A `present` event includes cached redraws and **must not be reported as fresh-terrain FPS**. Use `freshPresents` / `freshTilesPerSecond`, which count the first paint of each new ImageBitmap before the iframe's release marker. They are fresh tile deliveries to the viewport, not whole-viewport FPS or physical display timing. `bake-end` now records CPU render submission, so it is not a completion metric when snapshot preparation overlaps GPU execution. `frameP95` measures animation-frame intervals across the phase, including settling; `activeFrameP95` restricts them to active input. GPU timings use timestamp queries when supported. See `speed-results.json` for repeated close-view trials against `80aad36`, full-map Fit results and output checks.
 
 The instrumentation deliberately destroys the old iframe's GPU device during fixture replacement. Abort errors from pending reads at that teardown are excluded from the fixture's unhandled-rejection reporting; unexpected errors during a live fixture remain visible.
 

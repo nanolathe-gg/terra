@@ -1,11 +1,11 @@
 (() => {
 if(!new URLSearchParams(location.search).has('interaction'))return;
-const P=window.interactionPerf={events:[],stages:{},frames:[],long:[],inputs:[],samples:0};
+const P=window.interactionPerf={events:[],stages:{},frames:[],frameRecords:[],long:[],inputs:[],samples:0};
 addEventListener('unhandledrejection',e=>{if(P.disposing&&e.reason?.name==='AbortError')e.preventDefault();});
 const now=()=>performance.now(),add=(name,ms)=>{const s=P.stages[name]??={n:0,ms:0,max:0};s.n++;s.ms+=ms;s.max=Math.max(s.max,ms);};
 P.mark=(type,data={})=>P.events.push({t:now(),type,...data});
-const di=CanvasRenderingContext2D.prototype.drawImage;
-CanvasRenderingContext2D.prototype.drawImage=function(src,...args){if(this.canvas.id==='terrain')P.mark('present',{detail:src instanceof ImageBitmap});return di.call(this,src,...args);};
+const di=CanvasRenderingContext2D.prototype.drawImage,seenBitmaps=new WeakSet();
+CanvasRenderingContext2D.prototype.drawImage=function(src,...args){if(this.canvas.id==='terrain'){const detail=src instanceof ImageBitmap,fresh=detail&&!seenBitmaps.has(src);if(detail)seenBitmaps.add(src);P.mark('present',{detail,fresh});}return di.call(this,src,...args);};
 new PerformanceObserver(list=>{P.long.push(...list.getEntries().map(x=>({t:x.startTime,ms:x.duration})));}).observe({type:'longtask',buffered:true});
 const devices=new WeakMap(),create=GPUDevice.prototype.createCommandEncoder;
 GPUDevice.prototype.createCommandEncoder=function(desc){const e=create.call(this,desc);devices.set(e,this);return e;};
@@ -30,7 +30,7 @@ Object.defineProperty(window,'sculptCanvas',{configurable:true,get:()=>canvas,se
  for(const k of ['previewStroke','previewMove']){const f=api[k];api[k]=function(...a){const t=now();const v=f.apply(this,a);P.inputs.push({t,ms:now()-t,revision:api.stats().revision});return v;};}
  api.subscribeSubmit?.(x=>P.mark('shape-submit',x));
 }});
-P.reset=()=>{P.events=[];P.stages={};P.frames=[];P.long=[];P.inputs=[];if(ring){ring.next=0;ring.labels=[];}};
-P.start=()=>{P.on=true;let last=0;const loop=t=>{if(last)P.frames.push(t-last);last=t;if(P.on)requestAnimationFrame(loop);};requestAnimationFrame(loop);};
+P.reset=()=>{P.events=[];P.stages={};P.frames=[];P.frameRecords=[];P.long=[];P.inputs=[];if(ring){ring.next=0;ring.labels=[];}};
+P.start=()=>{P.on=true;let last=0;const loop=t=>{if(last){P.frames.push(t-last);P.frameRecords.push({t,ms:t-last});}last=t;if(P.on)requestAnimationFrame(loop);};requestAnimationFrame(loop);};
 P.stop=()=>{P.on=false;};
 })();

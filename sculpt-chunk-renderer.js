@@ -194,7 +194,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.outputCanvas??=new OffscreenCanvas(width,height);this.outputCanvas.width=Math.ceil(world_width/scale);this.outputCanvas.height=Math.ceil(world_height/scale);
     this.depthTexture=this.texture('chunk depth',width,height,1,'depth32float',4,T.RENDER_ATTACHMENT);this.depthView=this.depthTexture.createView();
     }
-    this.bakeWidth=fw;this.bakeHeight=fh;
+    // The texture is padded for reuse, but only this region and one filtering
+    // guard texel can be sampled. Avoid shading the unused power-of-two tail.
+    this.bakeWidth=Math.min(fw,Math.ceil(region.fieldsWidth/scale)+1);
+    this.bakeHeight=Math.min(fh,Math.ceil(region.fieldsHeight/scale)+1);
     const rasterSize=world_width>this.limit?this.size:Math.min(this.size,this.limit),span=rasterSize/2;
     const rasterOrigin=this.size<=this.limit?[0,0]:region.screenOrigin.map(v=>Math.floor(v/span)*span);
     this.f('uChunkRasterOrigin',rasterOrigin);this.f('uChunkRasterSize',rasterSize);
@@ -348,11 +351,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // caller must count its retained bitmap/canvas bytes separately from stats.
   // H6b: options.feed (the GPU shape fields' buffers and the Time pass's, see sculpt.js gpuFeedSource) makes the chunk's textures by a compute pass
   // in place of the CPU read and `upload`; the request then carries no fields, only the chunk's rectangle.
-  async renderChunk(request,{feed=null,scale=1,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
+  async renderChunk(request,{feed=null,scale=1,deferCompletion=false,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
     if(this.disposed)throw new Error('nanolathe: chunk renderer is disposed');
     if(this.busy)throw new Error('nanolathe: chunk renderer is already rendering');
     this._busy=true;this.gpuFlags=false;   // set by a fed bake whose flags the GPU writes
     try {
+      // Bound live GPU work without delaying the preceding image snapshot.
+      // A queued shape edit can arrive while this wait yields to input.
+      await this.previousChunk;
       const passes=feed?await feedPasses(this.device):null;   // nothing awaits between here and the feed pass's submit: the buffers it reads stay current
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
       const region=this.requiredRegion(request,options),w=request.gridWidth??region.gridWidth,h=request.gridHeight??w;
@@ -368,7 +374,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       // synchronously before waiting for the queue, so the returned pixels live.
       const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';
       copy.drawImage(this.canvas,0,0,this.outputCanvas.width,this.outputCanvas.height);
-      await this.device.queue.onSubmittedWorkDone();
+      // Prepare the snapshot now; apply GPU backpressure at the next tile.
+      // Canvas copying preserves command order and owns this image before reuse.
+      this.previousChunk=this.device.queue.onSubmittedWorkDone();
+      this.previousChunk.catch(()=>{}); // Device errors are also reported by the renderer.
+      if(!deferCompletion)await this.previousChunk;
       return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};
     } finally { this._busy=false;this.cpuWorkingBytes=0; }
   }

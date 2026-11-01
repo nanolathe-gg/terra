@@ -88,3 +88,31 @@ User-visible labels, help, accessible names, preset descriptions and export mess
 Validation: 29 Node tests pass; one final reference from every biome (nine scenes) is pixel-identical to the preceding prototype. The cache fixture still matches a forced redraw with maximum channel difference 0. JavaScript syntax, Python compilation and diff whitespace checks pass. Normal standalone drawing and moving were checked, including visible Center / Colors labels.
 
 Review the [color comparison](http://127.0.0.1:8909/color-preview.html) and [updated prototype](http://127.0.0.1:8908/sculpt?biome=green&mapX=4&mapY=4&scratch=color-review). The visual report includes final / previous preview / updated preview images, the performance tradeoff and an editor screenshot.
+
+## Faster close-view editing follow-up
+
+This pass starts from `80aad36`, including the native color sampling correction. It keeps the same shaders, preview resolution choices and procedural output.
+
+- Keep unchanged terrain pixels on the viewport canvas. Only navigation, resize or an empty cache requires recomposing the retained tiles; ordinary edits paint new tiles directly. Selection overlays and hover no longer repaint the terrain.
+- Restrict relief compute dispatch to the region that can be sampled plus one filtering guard texel. Texture allocation remains padded for reuse, and shadow/projection dependency margins remain intact.
+- Prepare close-view snapshots while GPU work completes. The next terrain render waits for the previous submission, bounding outstanding terrain work to one render. Yield to input after each close-view tile. Fit, export and other default callers retain the completion wait; the canvas idle method also waits for outstanding GPU work.
+- Add fixtures for trimmed-dispatch equivalence, retained-view navigation and hover behavior. Measure first paints of new bitmaps separately from cached repaints, with event timestamps compared in the iframe's time domain.
+
+Four baseline and three candidate Green 4×4 trials produced these medians:
+
+| Action | Fresh tile deliveries/second, before → after | Change | Release settling, before → after |
+| --- | --- | --- | --- |
+| Drawing | 34.7 → 50.0 | +44% | 566 → 574 ms |
+| Dragging | 37.9 → 51.5 | +36% | 519 → 460 ms |
+| Slider edits | 20.5 → 31.6 | +54% | 604 → 473 ms |
+| Path-point edits | 42.1 → 54.1 | +29% | 552 → 511 ms |
+
+These are fresh tile deliveries during input, not whole-viewport FPS or physical display latency. The final baseline/candidate trial also measured active-only animation-frame p95: drawing 10.0 → 9.9 ms, dragging 10.3 → 10.3 ms, sliders 17.7 → 17.3 ms and path points 10.0 → 10.3 ms. This active-only measurement is a focused pair, not repeated-trial evidence. Phase-wide p95 includes settling; drawing increased from a median 10.2 to 16.6 ms there, while the other three phases stayed near their baseline values.
+
+Full-map Fit did **not** improve. Two 40×40 Desert trials had fresh delivery rates of 26.6–29.0 before and 23.2–25.9 after; active frame p95 was 25–32 ms before and 33–41 ms after. Active sequence duration increased from 1.21–1.35 seconds to 1.32–1.42 seconds. This small sample shows a regression, not a Fit speedup, and warrants a separate follow-up before landing. Peak accounted GPU memory was approximately 346 → 347 MiB. Aggressive snapshot scheduling at Fit was rejected because its larger tiles made input cadence worse.
+
+Validation: 90 tile/resolution cases match full padded rendering pixel for pixel: 81 across all nine biomes at 4×4, plus nine on paged Desert 40×40. Tests evict resources before captures to prevent old data hiding an incomplete dispatch. Hover produces zero terrain paints; Fit/zoom/resize returns identical pixels in Green and Desert. Retained-cache output matches forced redraw exactly. All 29 Node tests, JavaScript module syntax checks and `git diff --check` pass.
+
+Final refinement remains roughly half a second after close-view release. Further gains likely require reusing unchanged shape-graph prefixes or sharing relief computation across neighboring tiles. Marking only the newest path segment dirty would be incorrect: taper, smoothing, branching and endpoint-dependent forms can alter earlier portions of a path.
+
+Review the [editing-speed report](http://127.0.0.1:8909/editing-speed.html) and [prototype](http://127.0.0.1:8908/sculpt?biome=green&mapX=4&mapY=4&scratch=speed-review). `speed-results.json` includes the trial summaries and correctness checks. This remains an unmerged worktree prototype.

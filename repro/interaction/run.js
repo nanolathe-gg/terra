@@ -9,8 +9,8 @@ async function load(name=$('scene').value,units=Number($('units').value)){
  while(frame.contentWindow.location.href!==frame.src||!frame.contentWindow.interactionEditor?.ready()){if(performance.now()-t>90000)throw Error('Boot timeout');await delay(60);}
  line('  ready '+name);const a=frame.contentWindow.interactionEditor;a.canvas.setBusy(true);a.scene(s.strokes,{ground:s.ground!==false});await a.settle();a.canvas.setBusy(false);line('  scene ready');a.canvas.zoom(1);frame.contentDocument.getElementById('viewport').scrollTo(0,0);await a.settle();line('  view ready');current=name+':'+units;return a;
 }
-async function phase(name,fn,a){const P=frame.contentWindow.interactionPerf;await a.settle();await delay(100);P.reset();P.start();const start=performance.now();await fn();const release=performance.now();P.mark('release');await a.settle();P.stop();const end=performance.now(),gpu=await P.readGPU(),events=P.events.slice(),inputs=P.inputs.slice(),detail=events.filter(e=>e.type==='present'&&e.detail),frames=P.frames.slice().sort((x,y)=>x-y),quant=(xs,p)=>xs.length?xs[Math.min(xs.length-1,Math.floor(xs.length*p))]:null;const gaps=detail.slice(1).map((x,i)=>x.t-detail[i].t).sort((x,y)=>x-y);
- const row={name,activeMs:release-start,settleMs:end-release,inputCount:inputs.length,frameMedian:quant(frames,.5),frameP95:quant(frames,.95),frameMax:frames.at(-1),detailPresents:detail.length,detailGapMedian:quant(gaps,.5),detailGapP95:quant(gaps,.95),longTasks:P.long.slice(),stages:P.stages,gpu,events,inputs,stats:a.canvas.stats()};line(`${name}: active ${row.activeMs.toFixed(0)}ms; settle ${row.settleMs.toFixed(0)}ms; frame p95 ${row.frameP95?.toFixed(1)}; ${detail.length} detailed paints`);return row;}
+async function phase(name,fn,a){const P=frame.contentWindow.interactionPerf;await a.settle();await delay(100);P.reset();P.start();const start=performance.now();await fn();const release=performance.now();P.mark('release');await a.settle();P.stop();const end=performance.now(),gpu=await P.readGPU(),events=P.events.slice(),inputs=P.inputs.slice(),detail=events.filter(e=>e.type==='present'&&e.detail),releasedAt=events.find(e=>e.type==='release').t,activeFrames=P.frameRecords.filter(e=>e.t<releasedAt).map(e=>e.ms).sort((a,b)=>a-b),frames=P.frames.slice().sort((x,y)=>x-y),quant=(xs,p)=>xs.length?xs[Math.min(xs.length-1,Math.floor(xs.length*p))]:null;const gaps=detail.slice(1).map((x,i)=>x.t-detail[i].t).sort((x,y)=>x-y);
+ const row={name,activeMs:release-start,settleMs:end-release,inputCount:inputs.length,frameMedian:quant(frames,.5),frameP95:quant(frames,.95),activeFrameP95:quant(activeFrames,.95),frameMax:frames.at(-1),detailPresents:detail.length,freshPresents:detail.filter(e=>e.fresh&&e.t<releasedAt).length,freshTilesPerSecond:detail.filter(e=>e.fresh&&e.t<releasedAt).length/((release-start)/1000),detailGapMedian:quant(gaps,.5),detailGapP95:quant(gaps,.95),longTasks:P.long.slice(),stages:P.stages,gpu,events,inputs,stats:a.canvas.stats()};line(`${name}: active ${row.activeMs.toFixed(0)}ms; settle ${row.settleMs.toFixed(0)}ms; frame p95 ${row.frameP95?.toFixed(1)}; ${row.freshPresents} fresh tile deliveries during input`);return row;}
 const next=()=>new Promise(r=>frame.contentWindow.requestAnimationFrame(r));
 async function gestures(a,label){const w=frame.contentWindow,d=frame.contentDocument,o=d.getElementById('overlay');
  const capture=o.setPointerCapture.bind(o),release=o.releasePointerCapture.bind(o);o.setPointerCapture=id=>{if(id!==9042)capture(id);};o.releasePointerCapture=id=>{if(id!==9042)release(id);};
@@ -77,4 +77,36 @@ $('colors').onclick=()=>run(async()=>{
   await capture('moving-preview',2);await capture('moving-full',1);
   a.region.endMove(true);await a.settle();await capture('moved-final',1);
  }finally{a.canvas.setBusy(false);}line('Saved color comparison '+label);
+});
+
+$('tilecheck').onclick=()=>run(async()=>{
+ const name=$('scene').value,units=Number($('units').value),label=$('label').value+'/'+name+'-'+units,a=await load(name,units),renderer=a.renderer,normal=renderer.bakeFields,results=[];
+ a.canvas.setBusy(true);
+ const capture=async(rect,scale,reference)=>{
+  renderer.evict();
+  renderer.bakeFields=function(...args){if(reference){this.bakeWidth=this.fieldsTexture.width;this.bakeHeight=this.fieldsTexture.height;}return normal.apply(this,args);};
+  const b=await a.canvas.debugBake(rect,scale),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();return c;
+ };
+ try{
+  const m=a.config.map;
+  for(const rect of [{x:0,y:0,width:512,height:512},{x:509,y:513,width:511,height:257},{x:m.width-333,y:m.height-271,width:333,height:271}])for(const scale of [1,2,8]){
+   const actual=await capture(rect,scale,false),reference=await capture(rect,scale,true),x=actual.getContext('2d').getImageData(0,0,actual.width,actual.height).data,y=reference.getContext('2d').getImageData(0,0,reference.width,reference.height).data;
+   let max=0,count=0;for(let i=0;i<x.length;i++){const d=Math.abs(x[i]-y[i]);max=Math.max(max,d);if(d)count++;}results.push({rect,scale,max,changedChannels:count});
+  }
+ }finally{renderer.bakeFields=normal;a.canvas.setBusy(false);}
+ await save(label+'/tile-output.json',{results,errors:frame.contentDocument.getElementById('error').textContent});
+ if(results.some(r=>r.max))throw Error('Tile output differs: '+JSON.stringify(results.filter(r=>r.max)));
+ line('Exact match: '+results.length+' tile/resolution pairs, including map edges.');
+});
+
+$('viewcheck').onclick=()=>run(async()=>{
+ const name=$('scene').value,units=Number($('units').value),label=$('label').value+'/'+name+'-'+units,a=await load(name,units),w=frame.contentWindow,d=frame.contentDocument,o=d.getElementById('overlay'),c=d.getElementById('terrain'),P=w.interactionPerf;
+ const read=()=>c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+ const before=read();P.reset();const bounds=o.getBoundingClientRect();
+ for(let i=0;i<30;i++){o.dispatchEvent(new w.PointerEvent('pointermove',{clientX:bounds.left+150+i*3,clientY:bounds.top+120,pointerId:9042,pointerType:'mouse',bubbles:true,buttons:0}));await next();}
+ await a.settle();const hoverPaints=P.events.filter(e=>e.type==='present').length;
+ a.canvas.zoom('overview');await a.settle();a.canvas.zoom(1);d.getElementById('viewport').scrollTo(0,0);await a.settle();a.canvas.resize();await a.settle();
+ const after=read();let max=0,count=0;for(let i=0;i<before.length;i++){const e=Math.abs(before[i]-after[i]);max=Math.max(max,e);if(e)count++;}
+ const result={hoverPaints,viewRoundTrip:{max,changedChannels:count},errors:d.getElementById('error').textContent};await save(label+'/retained-view.json',result);
+ if(hoverPaints||max||result.errors)throw Error(JSON.stringify(result));line('Hover terrain paints: 0; Fit/zoom/resize round-trip: exact.');
 });
