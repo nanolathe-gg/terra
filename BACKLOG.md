@@ -7182,6 +7182,30 @@ edge widths are the column's own rules, not options.
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H16`, branch
 `H16-geology`; assets `$R/agent-H16`.
 
+### H17. Fractures: one groove, one cell
+
+**Why.** Everything cut into the rock comes from a handful of functions in `engine-bake.wgsl` that do the same two jobs with
+different numbers, about 50 knobs between them. `jointFieldAt`, `gullyField` and `scratchField` are one job: a lattice of lines
+at an angle, a spacing, a wander of two noise octaves, a depth per line, runs with gaps, a smooth section. `jointPresent` is
+`grooveRun` with another salt. `facetLevel`, `blockField` and `fractureLevel` are another: a jittered cell search, each cell with
+its own tilt and step, a seam from the gap between the two nearest points. `fractures.png`, the last image of ours in
+`materials/`, draws a third kind of crack that only a lab slider reaches. This card is about the code and the look, not the
+controls: the sliders stay, and a mark that reads short of retail gets closer where it can. Green's long thin fissures with
+grey shoulders still read as short wormy marks in ours.
+
+**Part 1: inventory, the crack image, and one groove.**
+1. Every knob of the family: which worlds set it, where it is read, what it draws, the same idea as what, and who owns the strays
+   (`cliff*`, `faceStreak`, `faceDark`, `worms`, `wrinkles`, `slopeMarks`, `rill*`, `outcropCracks`, `crackedStep`, `crackedContrast`).
+2. Whether each acts, by moving it on the real engine: `measure/geology_controls.mjs` with a `--family` option.
+3. `fractures.png`: does it draw anything `cracks()` cannot? If not, it goes on the owner's combine-or-drop list with its
+   texture binding and `fractureDepth`. If so, it is made at startup. Either way the question closes here.
+4. One groove function in place of the three, with each family's numbers, the knobs unchanged. Judged against retail, since three
+   functions cannot become one with every float in the same order.
+
+**Part 2** is written from its report: one cell function, then the marks toward retail, then the count.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
