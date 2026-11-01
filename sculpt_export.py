@@ -24,7 +24,7 @@ class ExportJob:
 
     def exchange(self, command=None):
         if self.cancelled:
-            raise ValueError('Export was cancelled')
+            raise ValueError('Export was canceled')
         if command is not None:
             self.process.stdin.write(json.dumps(command) + '\n')
             self.process.stdin.flush()

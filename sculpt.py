@@ -720,7 +720,7 @@ WORLD_VARIANTS = {
         # Desert Triad: tall grey buttes with thin reddish bed lines, dark
         # shaded flanks and long dark cracks, beside Painted Desert's broad
         # orange and cream mesas (repro window desert-2).
-        'triad': dict(label='Desert Triad: grey buttes',
+        'triad': dict(label='Desert Triad: gray buttes',
                       knobs=dict(strataSpacing=4, bedSpacing=4, faceDark=.4, banding=.9, bandSpacing=4, bandLine=.6, crackSeverity=.5, crackMajor=.7,
                                  crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
                                  # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window

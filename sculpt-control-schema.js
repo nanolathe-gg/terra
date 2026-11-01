@@ -7,7 +7,7 @@ export const RETIRED_WORLD_CONTROLS=new Set(['sandReach','windStrength','sandPat
 // crevices. Preserve recipes, but require fresh visual evidence before exposure.
 export const PARKED_WORLD_CONTROLS=new Set(['crevice']);
 export const WORLD_GROUP_NAMES={
- 'Light':'Lighting','Faces':'Material coverage','Desert foot band':'Foot colour band','Desert caps':'Cap colour',
+ 'Light':'Lighting','Faces':'Material coverage','Desert foot band':'Foot color band','Desert caps':'Cap color',
  'Shallow water, round 2':'Water detail','Shallow water, round 3':'Water detail',
  'Fringe lines (Archipelago)':'Contour fringe','Fringe copies (Archipelago)':'Contour fringe',
  'Lava hill rock':'Pillow crust','Lava banks':'Terrace creases','Pockmarks (Moon)':'Surface pits',
@@ -15,9 +15,9 @@ export const WORLD_GROUP_NAMES={
  'Ice frost lines':'Needle lines','Ice frost band':'Shore pockets',
  'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: scratches':'Scratches','Rock face: facets':'Microfacets'
 };
-export const WORLD_CHOICES={bandStyle:[[0,'Tonal steps'],[1,'Bank lines']],stepSharp:[[0,'Smooth transition'],[1,'Depth threshold']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest colour'],[1,'Mix colour pairs']]};
+export const WORLD_CHOICES={bandStyle:[[0,'Tonal steps'],[1,'Bank lines']],stepSharp:[[0,'Smooth transition'],[1,'Depth threshold']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
 const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
- desertCapFlat:'Uniform cap colour',rockMoss:'Vegetation tint in rock',shoreEdge:'Waterline rim and lip',
+ desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',shoreEdge:'Waterline rim and lip',
  stepSharp:'Threshold depth transition',bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
  lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
  moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
