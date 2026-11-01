@@ -7538,6 +7538,28 @@ load erode | time pass output                  0.2 0.3 0.2 0.3              | 0.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
 
+### H18. Shores: one coast
+
+**Why.** Everything between the water and the plain asks one question, how far away is the water, and each mark answers it in its own way. H10
+built one coast distance field on the GPU, and only the coast pass, fingers and plates read it (`engine-shape.wgsl`). `beachCover` searches for
+water in the bake. The shallows work from depth in the draw (`shoal*`, the shelf). Lava's bank lines and `layerCreaseTerm` read height between
+the sea and the plain. Four blocks of the bridge say "Replaced by: Shores", and the bridge's rule is that the card deletes its blocks. This card
+also inherits the sediment transition and Lava's layers from H16, and from H15 the water measurements in `$R/agent-H15/fit-D` and red-3's
+speckled bank. The sliders stay, as they did on H17: nothing a control does is removed before the owner rules. A shore that reads short of
+retail gets closer where numbers can take it.
+
+**Part 1: inventory, who asks, and the bridge's beach.**
+1. Every knob of the family: which worlds set it, where it is read, what it draws, the same idea as what, and who owns the strays.
+2. Who asks how far the water is: one row per reader, with what it reads (the coast field, a search, depth or height above the sea), its reach,
+   its resolution, the stage it runs in and its worlds. This table decides part 2.
+3. Whether each knob acts, on the real engine: `measure/geology_controls.mjs --family shores`.
+4. The bridge's four Shores blocks (`bridgeSnow`, `bridgeBeachSand`, `bridgeSandBar`, `bridgeBeach`) as one beach on the engine's own path, and
+   the blocks deleted. Judged against retail. The result must be shorter than what it replaces.
+
+**Part 2** is one coast read, code only. **Part 3** is the marks toward retail, then the count. Both are written out here from part 1's report.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H18`, branch `H18-shores`; assets `$R/agent-H18`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
