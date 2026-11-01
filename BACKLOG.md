@@ -7021,6 +7021,36 @@ with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
 parametric hill needs the shouldered geometry kept (face vector, end taper) with
 the cross-section in place of `hillSection`. `sculpt.py` serves the presets file.
 
+### H16. Geology: one rock column
+
+**Why.** Decision 16: *"One engine, one main geology control with options."* Every
+world's bands, strata, rings and layers should be settings of one rock column. Today
+Green reads the column (H2: beds with a thickness and a hardness, repeating upward,
+at a coordinate made of height plus dip and folds), and the other worlds draw with
+their own knobs: 13 `bed*`, 15 `band*`, 5 `strata*`, the ring and mineral margins, 6
+`layer*`, and the terraces H15 left for this card. That is about 40 knobs across
+`engine-bake.wgsl`, `engine-frag.wgsl`, `engine-bridge.wgsl` and `engine-common.wgsl`.
+Worlds: Green, Red, Desert, Archipelago, Lava.
+
+**Part 1: inventory, and a proof on the real engine.**
+1. Every geology knob: which worlds set it, where it is read, what it draws, and
+   whether moving it moves a render by at least 5% of its class at 1x (decision 16's
+   impact rule), measured on the real engine in the manner of
+   `measure/shape_controls.mjs`.
+2. The bridge's geology blocks (mineral margins, fringe, ring veins, the sediment
+   transition) and whether they belong here or to Materials.
+3. A branch-only switch that draws a world's banding from the column. Desert's strata
+   first, since it is the most visible, then Archipelago's rings, Lava's bands, Red.
+   Green stays on the column as it is. Each judged against the retail windows.
+4. What cannot be a column: for each, say what it is instead. `layer*` is a coast
+   pass and the terraces are heights, so they may not be.
+5. A proposed control table, before and after, with the real count.
+
+Nothing lands from part 1. **Part 2** (the build) is written from its report.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H16`, branch
+`H16-geology`; assets `$R/agent-H16`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
