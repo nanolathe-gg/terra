@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {columnRows} from '../sculpt-column.js';
+import {columnRows,copyColumn} from '../sculpt-column.js';
 
 // The shaders choose a bed by the last section whose start the coordinate has passed (columnSectionAt), then by its place in the
 // section's repeating cycle; a variant is a row of the world's block, never a knob override. This is that choice over the table's rows.
@@ -50,4 +50,28 @@ test('Green keeps one section of eight beds with the index the hashes are keyed 
   assert.equal(rows.starts.length, 1);
   assert.equal(rows.starts[0][3], 47, 'the section holds its period');
   assert.equal(columnBedAt(rows, 47.5).index, 8, 'the second cycle begins at index 8');
+});
+
+test('map columns round-trip without modifying defaults or another snapshot', () => {
+  const copy=copyColumn(desert,desert),saved=JSON.parse(JSON.stringify(copy));
+  copy.variants.triad.sections[0].beds[0][0]=7;
+  assert.equal(desert.variants.triad.sections[0].beds[0][0],3);
+  assert.equal(saved.variants.triad.sections[0].beds[0][0],3);
+  assert.deepEqual(copyColumn(saved,desert),desert);
+  const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
+  assert.equal(JSON.stringify(copyColumn(ordered(saved),desert)),JSON.stringify(desert),'server key ordering does not turn defaults into an override');
+  assert.equal(copyColumn(undefined,desert),null);
+  assert.equal(copyColumn(null,desert),null);
+  assert.throws(()=>copyColumn(desert,undefined));
+});
+
+test('invalid map column values and shapes are rejected before application', () => {
+  for(const mutate of [
+    c=>c.sections[0].beds[0][0]=0,c=>c.sections[0].beds[0][0]=1e-50,c=>c.sections[0].beds[0][1]=1.1,
+    c=>c.sections[0].beds[0][2]=.5,c=>c.sections[0].beds[0][2]=5,c=>c.sections[0].start=NaN,
+    c=>c.sections[1].start=c.sections[0].start,c=>{c.sections[0].start=1e10;c.sections[1].start=1e10+1;},
+    c=>c.sections[0].beds.forEach(b=>b[0]=3e38),c=>c.bands[0]=-1,c=>c.bands[1]=2,c=>c.colors[0][0]=256,
+    c=>c.wander.terrain[0]='4',c=>c.origin='unknown',c=>c.sections.push(c.sections[0]),
+    c=>c.variants.triad.sections[0].beds[0][1]=-1,c=>c.extra=1
+  ]){const bad=structuredClone(desert);mutate(bad);assert.throws(()=>copyColumn(bad,desert));}
 });
