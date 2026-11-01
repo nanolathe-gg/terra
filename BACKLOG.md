@@ -7204,6 +7204,33 @@ grey shoulders still read as short wormy marks in ours.
 
 **Part 2** is written from its report: one cell function, then the marks toward retail, then the count.
 
+**Done (part 1).** Branch `H17-fractures`, nothing merged. (Steps are added below as they land.)
+- *Step 1, the inventory (48 knobs; `crackDark` and `crackLit` are read in `engine-frag.wgsl`, the rest in `engine-bake.wgsl`).* Effective value per world = query > the engine preset
+  (`ENGINE_KNOBS`, Green only) > the variant (`WORLD_VARIANTS`) > `WORLD_KNOBS` > `KNOB_DEFAULTS`. Every knob reaches the shader as the
+  uniform of the same name (`uCrackSeverity` ... in `sculpt-renderer.js`). `Cell search` is the jittered-point nearest and second-nearest search (3 levels in `cracks`, 9 cells in
+  `blockField`, 9 in `facetLevel` up to 3 times); `Groove` is a lattice of lines at an angle in the face's frame.
+
+  | Family (reads) | Knobs, defaults | Worlds off the default | Draws | Same idea as |
+  | --- | --- | --- | --- | --- |
+  | **cracks()** cell search, 3 levels (`cracks`, `fractureLevel`, `crackShade*`) | `crackSeverity .6`, `crackSpacing 40`, `crackLength 2`, `crackMajor .8`, `crackMinor .75`, `crackHairline .6`, `crackBlocks .6`, `crackWidth 1`, `crackJagged .6`, `crackNetwork .35`, `crackReach .6`, `crackStyle 0` | Severity: Red .3 Arch .4 Desert 0 Moon 0 Zhon .4 Lava .4 Crystal .7 Ice 0 (variants Green evad .45, Desert triad .5, Moon cracked .35, Ice snow .2 / bergs 0); Spacing: Red 28 Crystal 16; Length: Crystal 1.25 (triad 3); Major: Arch .6 Desert .2 Moon .5 Zhon .6 Ice .4 (triad .7); Minor: Desert .1 Moon .5 Ice .3 (triad .15); Hairline: Desert 0 Lava 0 Crystal .3 Ice .2; Blocks: Desert .1 Moon .4 Lava .3 Crystal .8 Ice .2 (evad .3, triad .15); Width: Red .5; Network: Lava 0 Crystal 1; Reach: Red .5 (evad .75, triad .5); Style 1: Green, Red, Desert; Jagged: none | ink or carved cracks (dark, lit, carve depth) and a block height per cell (`crackBlocks`, which also gates `broken`, the share of ribs the cracks replace) | the second cell search (blockField, facetLevel); `crackBlocks`/`crackLength` are `blockStep`/stretch of the block cells; `crackSeverity` is a depth like `*Depth` |
+  | **crack tone** (`engine-frag.wgsl`: the baked crack code) | `crackDark .75`, `crackLit .35` | Dark: Green .4 (evad .55) Red .35 Arch .3 Moon .6 Zhon .45 Lava .35 Crystal .9; Lit: none | how dark a line code reads, how bright a lit wall; **also scales band lines, facet seams, block creases and gully floors**, because every one of them is written through the same code | owner of the tone of every mark below |
+  | **joint** groove (`jointFieldAt`, `jointPresent`) | `jointSpacing 36`, `jointAngle 0`, `jointDepth 2`, `jointRun 120`, `jointGaps .3` | Green 34 / -20 / 3 (engine 0) / 200 / .35; Red 30 / -10 / 3 / 160 / .4; Desert 30 / 0 / 3 / 120 / .4 (Spacing, Depth, Gaps) | a lattice of vertical grooves 1.3-2.2 px half-width, plus a shift of the bed rows to the right of each joint (`jointField().y`, read by `bedRelief`, so Green's engine preset, which sets `jointDepth` 0, still draws the shift) | gully and scratch, five for five |
+  | **gully** groove + rib (`gullyField`, `gullyPos`) | `gullyDepth 0`, `gullySpacing 40`, `gullyWidth 14`, `gullyAngle -20`, `gullyRun 160`, `gullyGaps .3`, `gullyShade 0`, `ribTilt 0` | Green 8 (engine 4) / 36 / 14 / -20 / 90 / .4 / shade 1.2 / rib .2 | broad channels between rib planes (the planes are `ribTilt`; the channels are a groove) | joint and scratch; `gullyShade` is `facetSeam` / `blockSeam` for a groove floor |
+  | **scratch** groove (`scratchField`) | `scratchDepth 0`, `scratchSpacing 9`, `scratchAngle -20`, `scratchRun 90`, `scratchGaps .4` | Green 2.5 (engine 1.2) / 9 / -20 / 140 / .3 | thin 1-2 px grooves | joint and gully |
+  | **facet** cell search (`facetLevel`, `facetField`) | `facetTilt 0`, `facetSize 6`, `facetStretch 1.5`, `facetStep 1`, `facetSeam 0`, `facetSkew 1`, `facetCoarse 0` | Green 1 (engine .3) / 3.2 / 1.8 / 1.5 / 1.6 / .25 / .5 | tilted planes with steps in cells 3.2 px x 1.8, three levels (`cliffFine` adds the third) | `blockField` (size, stretch, tilt, step, seam) and `cracks()`' blocks |
+  | **block** cell search (`blockField`; fed by `columnAt`) | `blocks 0`, `blockRow 4`, `blockWidth 7`, `blockTilt .5`, `blockStep .8`, `blockSeam .5`, `blockChip 1.2`, `blockGrit .25`, `hillBlocks 0` | Green (engine) blocks 1, Tilt .8, Step 3, Seam .6, hillBlocks .5; the other four are at their defaults | planes per cell with creases, hard beds in larger cells (`columnAt`) | `facetLevel` and `cracks()` |
+
+  Same idea, counted: the three **groove** families carry the same five numbers (angle, spacing, depth, run, gaps) in three
+  copies of one function (15 knobs for one idea), and `gullyWidth` is the only half-width knob (joints and scratches hard-code
+  theirs). The three **cell** families carry size, stretch, tilt, step, seam and a level share (`crack*`, `facet*`, `block*`).
+  World-gated branches doing the same job: `lavaCrust` (Lava: pillows, chips and creases on hill rock, `bake`'s 1323), the cracked-bed
+  call of `cracks()` (Red: `bedCrackSlope`), `moonFolds` (Moon: thin dark lines, `engine-frag`), and the shape stage's `iceFacets` /
+  `craterFacets` (Voronoi facets in the height, `sculpt-gpu-fields.js`; Shape's). Gates every groove and cell function sits inside:
+  `rockOrder` (the structured face), `rockFrom`, `cliffFollow` (the frame), `bedFlow`/`bedBend` (how the beds read a joint and a gully).
+  **Strays and their owners (not folded in):** `cliff*` (the frame every groove is drawn in, shared), `faceStreak` and `faceDark` (face
+  material), `worms`, `wrinkles`, `slopeMarks` (Impacts or Bodies), `rill*` and `outcropCracks` (the Time pass's marks), `crackedStep`,
+  `crackedContrast` and `bedCrackSlope` (Shores' bed; it only feeds the call of `cracks()` that Red's cracked bed makes), and `gullyRock` (Materials' placement: the weight of the baked-gully term in the rock-face score, `engine-frag.wgsl` row 9 x; Desert sets it to 0).
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
 
 ## After the cards
