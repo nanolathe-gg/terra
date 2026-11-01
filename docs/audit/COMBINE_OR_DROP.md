@@ -13,6 +13,10 @@ table-default keys and 33 named code/design candidates. Recommendations:
 **Bodies (H20):** 61 rows under [Bodies (H20)](#bodies-h20) restate 54 Bodies controls already counted above and add 7 code
 bundles; they leave the 477 and the group sizes unchanged. 3 merges are landed (65 shader lines already removed: not potential savings), 58 keeps; no drop is proposed.
 
+**Impacts (H21):** the 14 rows under [Impacts (H21)](#impacts-h21) are H21's part 2 review annotations: 11 existing controls
+and 3 unresolved bundles. They leave the historical 477-row snapshot and group sizes unchanged. All recommend keep (three pending bundle rulings).
+The one conditional shader line belongs to `crystalCraterWobble`, already counted in Bodies; do not add it again. No control is deleted by this update.
+
 Excluding **32 already-retired representations**, the current queue is
 **445 rows: 38 drop, 37 merge,
 370 keep**. This still includes obsolete table-default entries that
@@ -706,6 +710,38 @@ windows that set it, not that no world could use it. The last seven rows are cod
 | Shallow-mosaic fringe (no knob; H20 part 2 step 3) | crystal-2 0.21, crystal-1 0.05, crystal-3 0.01 mean abs diff against part 1: the open shallow sea stays smooth beyond 48 px of the slabs. | engine-frag.wgsl:`crystalShallowWater` (net +3 lines added) | 0 | Mosaic in open shallow water far from slabs. | keep |
 | Straight-line trio: `iceCrystal` / `iceFrost` (`iceHatch`, `iceFrostLines`) / `frostNeedles` | ice. One mark three ways; the two draw functions now share `markCells` but still differ in size, salts, angles and run rules. | engine-frag.wgsl:618-633, 686-698 | 0 | A merge would change pixels; not counted. | keep |
 | Two layers of cells in water (slabs `crystalSeam`, `crystalShallow`) | crystal-2, -3. The slabs draw the carpet in the sea (crystalSeam 0: smooth); the shallow layer drew the open sea. Different stages and data. | engine-frag.wgsl:755-785 | 0 | Unproven shorter replacement. | keep |
+
+## Impacts (H21)
+
+Checked against `H21-impacts-2` at `6113b32` (runtime `2997979`), after the coordinator's lighting-gate fix.
+These are every unique control under 5% or inactive in H21's part 1 sweep, plus `crystalCraterWeb`, newly under 5% in the broad impact class after tuning.
+Original evidence: [IMPACTS.md](IMPACTS.md#control-sweep-results), [impacts-controls.json](impacts-controls.json). Crystal's seven affected probes were rerun
+on the final values: [impacts-controls-2.json](impacts-controls-2.json), 21 renders, mismatch 0, console empty, exit 0. Moon/Red values and readers are unchanged;
+their historical numbers are labelled below. No image-quality claim is made from the count probes, whose images were not visually reviewed.
+
+**Count method:** physical shader lines, inclusive spans; a changed expression on a surviving line saves 0. Shared readers, packed declarations and JavaScript
+preparation are not counted as shader savings. Controls and their bundles are not added twice. `0` is no verified net whole-line removal, not dead code.
+All numbers below are scene 1/2/3, or scene 1 where scenes 2/3 have no crater. Percentages are changed 16-pixel class blocks, not pixels.
+H21's broad **impact** class includes unrelated hills; the narrower **crater** discs correct that dilution. The class name is part of every verdict.
+No shader line changed in part 2: frag/bridge/bake/shape 1978/140/1383/1612 before and after. Part 1's final lighting sharing saved 3 lines, already landed,
+not potential savings. `moonLobes` stays as ruled in part 1; its existing ledger row records the lost face folds on substitution.
+
+| Control or code | Worlds / finding and number | Current source check / reader | Counted shader lines | What a user loses | Recommendation |
+| --- | --- | --- | ---: | --- | --- |
+| `craterlets` | Moon/Red. Historical default probe: Moon .89/.63/.53 MAD, 3.25/2.85/1.88% impact; Red .06/0/0, .36/—/—%. Fresh off: Moon .402/.757/0 MAD, satellites visibly removed. Small affected area, not dead. | `sculpt-gpu-fields.js:412` child crater generation; shared `craterStamp` remains. | 0 | Automatic satellite bowls, independent of the main crater and explicitly disabled on some authored cards. | keep |
+| `pockSize` | Moon default: historical 7.5→5 is exactly 0 with pockmark 0. Pitted variant: 12.68/4.93/6.37 MAD, 32.60/27.67/28.61% impact. | `engine-frag.wgsl:1746`, `pockPits` at 501; size is an argument shared with the pit computation. | 0 | Spacing/size control for the live pitted variant and authored unlit dots. Default inactivity does not retire the variant. | keep |
+| `moonRibDepth` | Moon. Historical .9→1: .23/.07/.11 MAD, 0/0/0% slope; .9→0: 2.77/.86/1.28 MAD, 17.20/7.96/12.55%. Part 2 retains the ribs after visual trials. | `engine-frag.wgsl:1758`, normal perturbation; differs from the ribs' coverage/blend weight. | 0 | Relief depth independently of coverage and extra darkening. A tiny default probe does not establish equivalence. | keep |
+| `rimUnequal` | Moon gated fixture (sectors 4, gaps 2): historical .6→0 gives 3.00/1.00/.80 MAD, 3.02/4.39/2.78% impact. Inactive with sectors 0; conditional geometry is live. | `sculpt-gpu-fields.js:199–200`, sector widths/heights; shared rim shader remains. | 0 | Unequal sector heights and radii, retaining an even sector count and independently chosen gaps. | keep |
+| `crystalCraterStep` | Crystal 1→3: final .481 MAD, 2.09% impact but **10.34% crater**. | `sculpt-gpu-fields.js:456` → `engine-shape.wgsl:1571`, packed step/shade assignment. | 0 | Facet height offsets relative to the bowl; a change to the existing geometry, not another texture. | keep |
+| `crystalCraterWeb` | Crystal .35→0: final .325 MAD, 2.09% impact but **10.88% crater**. Zero also restores an enclosing ink rim; part 2 keeps .35. | `engine-frag.wgsl:1626,1642,1648–1652`, web plus skin-edge suppression; see coupled-gate bundle. | 0 | Fine skin cracks and the current suppression of unwanted ink at a skin boundary. Bundle savings unproved. | keep |
+| `crystalCraterWebPx` | Crystal 18→14: final .269 MAD, .42% impact / 2.12% crater. Historical H20 crater share 14.8% was at web 1; the weaker final web changes the screen result. | `engine-frag.wgsl:805`, cell scale; removing the option still needs a cell size. | 0 | Independent web spacing. The broader facet/web trial was visually rejected; shore cell sizes are separate. | keep |
+| `crystalCraterWobble` | Crystal 4→0: final .075 MAD, 0% impact / crater; moves pixels below the block bar. | `engine-frag.wgsl:806`: remove `warp` and use `p / size` on 807. This is the same one line counted in H20. | 1 | Up to 4-pixel wandering of crater cracks; cells otherwise remain. | keep (owner: weak thin mark; one-line saving) |
+| `crystalCraterGap` | Crystal .25→0: final .037 MAD, .05% impact / .27% crater. | `engine-frag.wgsl:810`, seam-presence threshold; width is separately fixed on 811. | 0 | Missing seam segments; this control is not line thickness. | keep (thin mark; removal not visually justified) |
+| `crystalCraterTone` | Crystal .12→0: final .090 MAD, 0% impact / crater. | `engine-frag.wgsl:813`, packed return expression; web-on gate remains .35. | 0 | Cell-to-cell brightness jitter independently of seam strength. | keep (weak probe; no verified whole-line saving) |
+| `crystalCraterLight` | Crystal now 1, equal to the global default; no world's preset pushes contrast. Final 1→1.6: .223 MAD, 2.51% impact but **12.73% crater**. Part 2 removed that extra default contrast. | `engine-frag.wgsl:1646`, shared push expression; crater skin also serves the web. | 0 | Authorable extra crater-wall light/dark contrast. A neutral shipped preset is not disconnected code. | keep |
+| Jittered marks: cups / pockmarks / slope marks | Moon default, pitted variant and authorable slope marks. Part 1: all act; different salts, placement frames, density gates, bowl profiles and lighting. No shorter equivalent kernel demonstrated. | `engine-frag.wgsl`: `slopeMark`, `pockPits` (501), `moonCups` (532). The common hash already exists. | 0 | Lit hollows vs unlit dots vs light-flanked isolated marks if merged by substitution. | keep pending owner bundle ruling |
+| Regolith noise: wrinkles / ribs / folds / worms | Moon and Lava. Fixed-axis cubic lines/pits, quintic noise derivatives, height contours and baked height ridges are distinct. Part 2's wrinkle substitution failed the viewed Moon target. | `engine-frag.wgsl:463,580,598`; `engine-bake.wgsl:1180–1189`. | 0 | Independent scale, orientation/support and actual baked relief; merging names is not a shared implementation. | keep pending owner bundle ruling |
+| Crater skin/web/edge gate | Crystal. Web off .35→0 changes 10.88% crater blocks partly by disabling skin-edge suppression; the final two-value tuning also reaches one non-crater pixel on crystal-2. | `engine-frag.wgsl:789–797,1626–1654`; the .74 neighbourhood classifier and edge gate. `markCells` already shared by H20 and protected here. | 0 | Thin web and boundary-ink behaviour; a shorter decoupling/reliable skin classification needs proof before counting savings. | keep pending owner bundle ruling |
 
 ## Table defaults and query readers
 
