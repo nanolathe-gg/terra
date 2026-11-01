@@ -7204,7 +7204,7 @@ grey shoulders still read as short wormy marks in ours.
 
 **Part 2** is written from its report: one cell function, then the marks toward retail, then the count.
 
-**Done (part 1).** Branch `H17-fractures`, nothing merged. (Steps are added below as they land.)
+**Done (part 1).** Branch `H17-fractures`, four steps, a commit each, nothing merged.
 - *Step 1, the inventory (48 knobs; `crackDark` and `crackLit` are read in `engine-frag.wgsl`, the rest in `engine-bake.wgsl`).* Effective value per world = query > the engine preset
   (`ENGINE_KNOBS`, Green only) > the variant (`WORLD_VARIANTS`) > `WORLD_KNOBS` > `KNOB_DEFAULTS`. Every knob reaches the shader as the
   uniform of the same name (`uCrackSeverity` ... in `sculpt-renderer.js`). `Cell search` is the jittered-point nearest and second-nearest search (3 levels in `cracks`, 9 cells in
@@ -7231,7 +7231,7 @@ grey shoulders still read as short wormy marks in ours.
   material), `worms`, `wrinkles`, `slopeMarks` (Impacts or Bodies), `rill*` and `outcropCracks` (the Time pass's marks), `crackedStep`,
   `crackedContrast` and `bedCrackSlope` (Shores' bed; it only feeds the call of `cracks()` that Red's cracked bed makes), and `gullyRock` (Materials' placement: the weight of the baked-gully term in the rock-face score, `engine-frag.wgsl` row 9 x; Desert sets it to 0).
 
-- *Step 2, does it act (`measure/geology_controls.mjs --family fractures`, out `$R/agent-H17/fam`, 80 states and 23 probes, 27 scenes each, console clean).*
+- *Step 2, does it act (`measure/geology_controls.mjs --family fractures`, out `$R/agent-H17/fam`, 80 states and 23 probes, 27 scenes each, console clean; of the 80 states 9 dead, 51 under the bar, 20 act).*
   Each knob is moved from the scene's own value to the default (the page's order: query, Green's engine preset, variant, world, default) on the
   world's three scenes; a scene that already sits at the target is shown `=` and left out. The class is **slope blocks, not raised blocks**:
   16-px blocks (impact.py's rule, 40 px margin) whose slope is at least .10 for the cracks and crack tone, at least .50 (retail's rock face)
@@ -7277,6 +7277,118 @@ grey shoulders still read as short wormy marks in ours.
   slider and `uFractureAmount` / `uFractureDepth` / `config.material.fractureDepth`, `fractureDepth()` in `engine-common.wgsl`,
   `measure/make_fractures.py`). Nothing is deleted and nothing ported. Seen: Green, Desert and Moon only; Red, Archipelago, Zhon, Lava,
   Crystal and Ice were measured, not viewed.
+
+- *Step 4, one groove (b7302be).* `groove(p, g: Groove, off) -> Cut` in `engine-bake.wgsl` is the lattice, its wander, the lines, the run gaps, the
+  depth along a run and the profile; a family is the numbers of its `Groove` (`jointGroove`, `gullyGroove`, `scratchField`), with each family's
+  own floors (joint spacing 6 / run 20, gully 8 / 12, scratch 3 / 12) and salts. `jointPresent` is `grooveRun`. What stays in its caller: the joint's
+  bed shift (`jointFieldAt`: left line and the run at it), the gully's rib tilt between its two lines (`gullyField`), `cliffStagger` (the `off`
+  argument), and the callers in `bake` (gates, `bedBend`, `gullyShade`). Knobs, sliders, uniforms, tables and `bake`'s call sites are unchanged.
+  Numbers per family (angle, spacing, depth, run are the family's knobs; the rest are `Groove` fields):
+
+  | | joint | gully | scratch |
+  | --- | --- | --- | --- |
+  | spacing / run floor | 6 / 20 | 8 / 12 | 3 / 12 |
+  | wander: broad (amount, scale, offset), fine | .35, 4, 4.4; .05, .7, 9.1 | .55, 3, 6.3; .10, .8, 2.9 | .5, 6, 12.4; .12, 1.3, 7.7 |
+  | line at (cell + a + b hash) spacings, salt | .15, .7, 19 | .2, .6, 13 | .1, .8, 29 |
+  | depth share | .55 + .9 h.y (41) | .5 + .9 h.y (41) | .5 + .8 h.x (43) |
+  | half-width px | 1.3 + .9 depth share | (gullyWidth / 2)(.7 + .6 h.x) (5) | .8 + .5 h.y (47) |
+  | depth along a run | .7 + .3 n(y / .5 run, 5.1 cell + 23) | .55 + .45 n(y / .6 run, 5.1 cell + 23) | .6 + .4 n(y / .4 run, 7.1 cell + 3) |
+  | run gaps salt | 11 | 61 | 53 |
+
+  *Lines.* The four functions' text, with its own comments, 106 lines before (code 94) and 75 after (code 66); `engine-bake.wgsl` 1439 -> 1415.
+  *Three real changes in the arithmetic* (the rest is the same expression): every family takes the max over the three lines of its cell with an
+  early out where no line reaches (joints and scratches took the nearest line, gullies the two between which the pixel lay; the supports only
+  overlap for a spacing under about 2 half-widths); the gully's profile is `t*t*(3-2t)` for `1 - smoothstep(0, 1, 1 - t)`, the same polynomial;
+  and the joint's half-width is written `1.3 + .9 * .55 + .81 * h` for `1.3 + .9 * (.55 + .9 * h)`. *Result against main* (repro/all.sh, 27 scenes,
+  `compare.py`): **0.00 and 0.0% on all 27**; at pixel level 26 scenes are byte-identical and green-2 differs at **3 pixels** of 1,048,576
+  (largest change 16 levels, in x 255-792, y 687-809). **Drift or real?** The old functions run beside the new (a scratch copy outside git: both in
+  the shader, the old one's result used, the new one behind a branch no world takes, `$R/agent-H17/ab-copy`) render **0 pixels** different from main on the nine
+  scenes of Green, Red and Desert, so the added code changes nothing by its presence: the 3 pixels are the new arithmetic, a real change at the size
+  of a float's last digits, not compiler drift. A mutation of the live code (profile `t` for `t*t*(3-2t)`) moves green-2 by .30 mean |diff| / 1.9% of
+  pixels, so the render does run the new code. Worlds with no joints, gullies or scratches (the six that never run the structured face) and Red and Desert:
+  0.00, under the .2 limit. **Green at 1x and 2x, viewed** (`sheet-s4/green`, retail | before | after, 384-px crops at 0,0 / 448,448 / 0,0 at 1x and 2x):
+  all three windows the same as before, not closer and not further; the changed pixels are not in the crops.
+  *Seen in the code, not changed:* Green's `jointDepth` is 0, so its joint is evaluated per face pixel and contributes 0 (the bed shift is also 0:
+  a column ignores it and `bedFlow` is 0) and the same on main; a gate `jointDepth > 0` would skip three noise reads per Green face pixel. There are no
+  per-call arrays in the new code. `gullyField` now runs its noise when `gullyDepth` is 0 and `ribTilt` is not (no world).
+- *Checks at the head (b7302be).* `repro/all.sh` + `compare.py` 0.00 on 27, `mismatch` 0 and a clean console on all 27. `repro/stats.py` cell by cell
+  against `agent-H16/checkM/stats/stats.json`: all 1,350 `outside` entries equal, none newly outside retail, none back inside, containment unchanged;
+  the only 6 differing numbers are picture metrics of green-1 at 1e-6 (`luma_mean` 58.72336959838867 -> 58.723358154296875) with every input file
+  byte-identical, a second run of the head reproduces them and a rerun of main's render reproduces the baseline: unexplained, below any threshold.
+  `regional.mjs` 0 on all 27, `smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago` 0 and a clean console, `gate.sh` 0, `node --test
+  repro/*.test.mjs` 33 pass 0 fail, `shape_controls.mjs` 0 with no `!` row, `section_check.mjs --against agent-H15/classic-ref.json` 0,
+  `curveedit.mjs` 0 on Green and Desert. **Perf**, `perf.mjs map4 --only drag --no-export`, four alternating rounds, head then main (an export of main
+  at the card's base), green-2 and desert-1, every pass in the logs, ms, rounds r1-r4 | median head / main (`$R/agent-H17/perf`; host load 4-6 from other
+  agents throughout): rAF p95 16.7-16.8 on every run (vsync); no pass is slower than the round spread.
+
+  ```
+  ### green-2: head rounds | main rounds | median head / main  (ms)
+  drag chunk | chunk feed                        121.4 117.3 119.1 118.7      | 125.4 121.6 119.3 116.7      | 118.9 / 120.5
+  drag chunk | chunk flags                       1.4 0.8 0.7 0.6              | 0.6 0.7 0.3 0.3              | 0.7 / 0.5
+  drag chunk | relief bake                       483.5 475.6 499.8 484.2      | 483.9 476.4 479.9 478.3      | 483.9 / 479.1
+  drag chunk | shape passes                      18.4 2.9 1.8 7.9             | 1.6 7.8 3.6 7.7              | 5.4 / 5.6
+  drag chunk | terrain                           1109.9 1155.7 1121.1 1112.9  | 1131.2 1132.0 1132.0 1125.1  | 1117.0 / 1131.6
+  drag edit latency p95                          33.0 27.1 30.4 31.3          | 30.2 32.6 28.8 32.7          | 30.9 / 31.4
+  drag erode | shape passes                      152.4 164.8 161.2 149.2      | 168.9 161.1 167.2 155.3      | 156.8 / 164.1
+  drag rAF p95                                   16.8 16.7 16.8 16.8          | 16.7 16.7 16.7 16.7          | 16.8 / 16.7
+  load  | shape passes                           - 15.9 - -                   | - - - -                      | 15.9 / None
+  load chunk | chunk feed                        9.7 11.5 10.8 10.4           | 10.5 10.3 9.9 10.4           | 10.6 / 10.3
+  load chunk | chunk flags                       0.0 0.1 0.0 0.0              | 0.0 0.1 0.0 0.0              | 0.0 / 0.0
+  load chunk | relief bake                       109.1 110.9 108.1 106.8      | 106.0 109.6 106.6 107.3      | 108.6 / 107.0
+  load chunk | shape passes                      - - 15.4 14.5                | 16.1 15.7 13.4 15.3          | 14.9 / 15.5
+  load chunk | terrain                           80.2 79.2 80.9 78.6          | 77.8 79.1 80.4 81.7          | 79.7 / 79.8
+  load erode | erosion                           180.7 187.7 185.3 184.9      | 192.4 188.2 186.7 182.8      | 185.1 / 187.4
+  load erode | erosion input                     1.2 1.4 1.2 1.8              | 1.5 1.3 1.3 1.3              | 1.3 / 1.3
+  load erode | erosion maps                      1.0 0.9 1.2 1.1              | 1.0 0.9 1.0 1.2              | 1.0 / 1.0
+  load erode | shape passes                      29.8 14.6 14.9 14.7          | 16.4 14.8 14.6 13.4          | 14.8 / 14.7
+  load erode | time pass output                  0.3 0.2 0.3 0.2              | 0.3 0.3 0.2 0.3              | 0.2 / 0.3
+  ### desert-1: head rounds | main rounds | median head / main  (ms)
+  drag chunk | chunk feed                        123.6 119.5 121.0 120.9      | 119.7 119.7 119.2 118.5      | 120.9 / 119.4
+  drag chunk | chunk flags                       0.8 0.8 1.2 0.5              | 0.8 1.0 0.5 0.3              | 0.8 / 0.7
+  drag chunk | relief bake                       300.0 283.6 284.9 283.2      | 299.5 271.8 284.2 281.0      | 284.2 / 282.6
+  drag chunk | shape passes                      1.7 1.0 1.0 2.4              | 0.7 1.8 1.0 1.4              | 1.4 / 1.2
+  drag chunk | terrain                           734.3 741.1 730.1 726.6      | 761.5 687.9 725.1 739.4      | 732.2 / 732.3
+  drag edit latency p95                          20.6 19.1 19.5 18.1          | 18.7 17.9 20.0 18.9          | 19.3 / 18.8
+  drag erode | shape passes                      65.4 67.6 69.5 66.8          | 73.5 62.5 69.5 67.6          | 67.2 / 68.6
+  drag rAF p95                                   16.7 16.7 16.8 16.7          | 16.8 16.7 16.7 16.7          | 16.7 / 16.7
+  load  | shape passes                           - - - -                      | - 1.8 - -                    | None / 1.8
+  load chunk | chunk feed                        11.3 11.9 11.1 10.0          | 9.9 9.8 10.0 9.8             | 11.2 / 9.9
+  load chunk | chunk flags                       0.0 0.0 0.1 0.1              | 0.1 0.0 0.1 0.1              | 0.1 / 0.1
+  load chunk | relief bake                       73.6 78.7 77.1 74.3          | 74.6 70.7 76.3 75.0          | 75.7 / 74.8
+  load chunk | shape passes                      2.1 1.9 2.0 -                | 1.8 - 1.8 2.0                | 2.0 / 1.8
+  load chunk | terrain                           51.0 50.1 51.3 52.5          | 49.7 49.5 51.3 48.2          | 51.2 / 49.6
+  load erode | erosion                           51.3 48.6 49.3 49.5          | 51.6 50.2 46.5 49.7          | 49.4 / 50.0
+  load erode | erosion input                     1.5 1.3 1.3 1.3              | 1.4 1.4 1.4 1.4              | 1.3 / 1.4
+  load erode | erosion maps                      0.9 0.9 0.9 0.9              | 1.0 1.0 1.1 1.0              | 0.9 / 1.0
+  load erode | shape passes                      14.4 11.9 10.9 15.5          | 12.5 13.0 11.0 11.7          | 13.2 / 12.1
+  load erode | time pass output                  0.3 0.3 0.3 0.3              | 0.3 0.2 0.2 0.3              | 0.3 / 0.2
+  ```
+
+- *For part 2 (a proposal; the owner rules).* **What one cell function merges:** `facetLevel` and `blockField` are the same search (a jittered point per
+  cell in a 3 x 3 neighbourhood, the nearest and second-nearest by distance in a stretched domain; a plane per cell from a tilt and a step; the
+  seam from half the gap between the two, `(sqrt(second) - sqrt(best)) / 2`), differing in the domain (`blockField` turns it per region and sizes
+  cells by the column's hardness and a hill's share) and in what they return (`facetLevel` a seam share, `blockField` a crevice width in px with `blockChip`
+  wander): one `cells(q, size, stretch, salt)` returning (id, point, nearest, second) serves both, with tilt, step and seam taken by the callers. `fractureLevel`
+  shares only its first loop (the nearest cell); its second loop (the nearest *open* edge of each neighbour against the level's share and the slope) is its
+  own and stays, unless `cracks()` is the card's own rewrite. The knob pairs that would then be one idea are size (`facetSize`, `blockWidth` x `blockRow`,
+  `crackSpacing`), stretch (`facetStretch`, `crackLength`), tilt and step (`facetTilt`/`facetStep`, `blockTilt`/`blockStep`, `crackBlocks`) and seam
+  (`facetSeam`, `blockSeam`, `gullyShade`); the measured weak ones above (`facetStep`, `facetSkew`, `blockTilt` and `blockStep` at the world's value,
+  `blockSeam`, `blockGrit`, `scratch*`, `gullyGaps`) are the first to fold or drop. **Where the marks read furthest from retail** (viewed; the windows'
+  retail marks are not reproduced pixel for pixel by the scenes, so this is the character of the marks): green-1 (its upper rim: retail's long thin
+  fissures with grey shoulders against ours' short wormy ink marks), green-3 (the ridge outcrops: retail's long fissures through grey rock, ours scattered short
+  marks), green-2 (retail's fine parallel contour lines over a dark band, ours a dense dark worm network, the 2x crop at 448,448); moon-2 (retail's long
+  sinuous fissures, ours none: Moon sets `crackSeverity` 0) and moon-1, moon-3 (retail's dark fold lines and hairline cracks, ours flecks and blobs); red-2 (retail's
+  cracked-mud polygons 10-25 px across at the top left of the window, ours none: Red's cracks are weak, `crackSpacing` is the one knob that acts);
+  ice-1 (retail's dense dark parallel fibres 20-40 px long, ours branching worm cracks) and ice-3 (retail's dark fibre fans, ours a flat dark band with streaks);
+  lava (retail's concentric dark layer lines, which are Layers', not cracks'). Desert-1/2/3 read the closest.
+- *Sheets viewed.* `sheet-fr/green` 1x and 2x, `sheet-fr/desert` 2x, `sheet-fr/moon` 2x (step 3), `sheet-s4/green` 1x and 2x (step 4), and `sheet-marks/red`,
+  `/ice`, `/lava` (retail | ours, 320-px crops where retail is busiest, for the proposal). **Not viewed:** `sheet-fr/{red,ice}`, the fractures renders of
+  Archipelago, Zhon, Lava and Crystal, `sheet-marks/{archipelago,zhon,crystal}`, any Desert, Red or Moon window after step 4 (their pixels did not change), and
+  every `geology_controls` render except through the numbers.
+- *Departures.* The step 3 scratch copies and the step 4 A/B copy are outside git (`$R/agent-H17/{fr-copy,ab-copy}`), served on 8886 and 8887 for a few
+  renders each (8887 is outside the card's table and the forbidden ranges). The `fractures` render of step 3 used CDP 9686, the baseline's, beside the
+  measurement on 9685. `measure/geology_controls.mjs` reads Green's engine preset and the scenes' variants only under `--family fractures`; the geology default
+  is as H16 left it. The perf run is main at the card's base (`971ffeb`, only the card text differs from `88e58cb`).
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
 
