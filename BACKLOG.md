@@ -8012,6 +8012,31 @@ verification. Part 2 not started; branch `H21-impacts` is for owner review.
 - *The lighting group cost every pixel.* `markLight` and `away` had moved out of their marks' gates, so Green paid for marks it does not draw: terrain 5.10 ms per pass against main's 5.02 over eight alternating rounds at the same `n`. They went back inside, which gives up two of the five lines. Now 5.00 against 5.04, with all 27 scenes 0.00 and pitted, cracked, `slopeMarks` and `wrinkles` on moon-1 byte for byte.
 - *Part 2* is `handoff/5-impacts-part2-H21.md`: a switch-off table, Moon, crystal-1's craters from H20, then its rows on the sheet.
 
+**Done (part 2; ready for review).** [Impacts part 2](docs/audit/IMPACTS-2.md)
+records the switch-off table (34 valid renders), three Moon ideas, three Crystal
+ideas and two Red ideas. Only Crystal's crater web (1→.35) and contrast (1.6→1)
+are kept: crystal-1 reads closer at 1x, mean |diff| .389075597. crystal-2 reads
+the same with one changed pixel (MAD .000011444); crystal-3 is exact. The other
+24 scenes are byte-identical RGBA and all 27 height arrays are exact. Moon and
+Red retain their settings; the missing uphill relief, fissure paths, crater
+planes and local broken rims are now in **Small leftovers** in TERRAIN_ENGINE.
+No shore cell size, shader, control or scene changed.
+
+The combine-or-drop sheet adds 14 H21 review rows: 11 controls and three
+unresolved bundles. Seven fresh Crystal states (21 renders) distinguish the
+crater class from the much broader historical impact class; no control is
+deleted and existing totals are not double-counted.
+
+All required checks exit 0: all 27 renders and compare, statistics (675 flags
+unchanged; all 17 changed metric cells listed), nine wall scenes (RGBA/heights
+exact), regional (837 exact field comparisons), smoke (135 brushes, eight
+exports plus Zhon disabled, six page8 worlds), world gate, 35 Node tests, shape
+controls (no shown `!`), H15 section check and 48 curve-editor checks on Green
+and Desert. The report gives exact section errors, viewed/not-viewed images and
+trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
+`*-2` folders; NOTES lists retained cleanup candidates. Six commits on
+`H21-impacts-2`, based on `f64afa1`, for the owner's review; no later work started.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs

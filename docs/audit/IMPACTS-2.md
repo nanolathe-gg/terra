@@ -89,4 +89,64 @@ Both whole retail pairs and 2x sheets viewed; both renders exit 0, mismatch 0, c
 
 The [Impacts count](COMBINE_OR_DROP.md#impacts-h21) has 14 review rows: 11 unique weak/inactive controls and three unresolved bundles. The fresh seven-state Crystal sweep covers the changed web/contrast context, 21 renders, exit 0, mismatch 0 and empty console. [Numeric results](impacts-controls-2.json) give both the historical impact class and the narrower crater class: Step, Web and Light are under 5% of impact but above 10% of crater blocks. No control deletion follows from the diluted screen. The one conditional wobble line was already counted by Bodies and is not added again. No knob or runtime code changes in the count step.
 
-Final validation results follow from the saved logs.
+### Final render and statistics delta
+
+Fresh `after-2` versus archived `before-2`, both all 27: only **crystal-1** (MAD .3890755971272786, closer at 1x) and **crystal-2** (MAD .000011444091796875, same at 1x; one pixel) move. **crystal-3** is exact and reads the same. All three final whole retail pairs and the final 1x/2x sheets were opened. The other 24 scenes are byte-identical RGBA, a numerical equality rather than a new visual ruling. All 27 height arrays are exact. All nine wall scenes are byte-identical RGBA and exact heights.
+
+`stats-before-2` and `stats-after-2` both exit 0. All **675** outside-retail flags are unchanged; none newly outside. **17 metric cells** change, all listed below; the other 658 cells are exact. Every listed cell remains inside its retail family range. Direction means numerical increase/decrease, not a visual quality judgment. Full precision is retained in `stats-delta-2.json` in the assets.
+
+| Window | Cell | Before | After | Direction |
+|---|---|---:|---:|---|
+| crystal-1 | `pic.band_2px` | 6.12593841552734 | 6.07579898834229 | down |
+| crystal-1 | `pic.band_32px` | 3.92586874961853 | 3.86748838424683 | down |
+| crystal-1 | `pic.band_8px` | 5.9058952331543 | 5.89603757858276 | down |
+| crystal-1 | `pic.edge_density` | 0.147225106950214 | 0.144088288176576 | down |
+| crystal-1 | `pic.edge_diagonal` | 0.571597773303328 | 0.575032271944923 | up |
+| crystal-1 | `pic.edge_horizontal` | 0.166686406885388 | 0.164519685886403 | down |
+| crystal-1 | `pic.edge_vertical` | 0.261715819811284 | 0.260448042168675 | down |
+| crystal-1 | `pic.lab_hist_dist` | 0.187716407155958 | 0.188208665983951 | up |
+| crystal-1 | `pic.luma_mean` | 62.7938995361328 | 63.0571479797363 | up |
+| crystal-1 | `pic.luma_sd` | 30.5093822479248 | 30.3090152740479 | down |
+| crystal-1 | `pic.thin_dark_density` | 0.00431191487382975 | 0.00397963295926592 | down |
+| crystal-2 | `pic.band_2px` | 6.14852809906006 | 6.14852857589722 | up |
+| crystal-2 | `pic.band_32px` | 4.10844802856445 | 4.10844755172729 | down |
+| crystal-2 | `pic.band_8px` | 6.26276254653931 | 6.2627592086792 | down |
+| crystal-2 | `pic.lab_hist_dist` | 0.118671920150449 | 0.118671593338098 | down |
+| crystal-2 | `pic.luma_mean` | 51.3677062988281 | 51.3677177429199 | up |
+| crystal-2 | `pic.luma_sd` | 29.7251644134521 | 29.7251567840576 | down |
+
+### Required checks
+
+All required commands exit **0**. The GPU suite records each of its exits in `checks-2.log`; the separate statistics, gate and Node test exits are recorded in NOTES. Individual logs and numeric outputs are retained. No perf rounds.
+
+| Check | Result / asset log |
+|---|---|
+| All 27 and compare | `after-2.log`, `compare-2.log`; render mismatch 0, console `[]`; only the two Crystal scenes above move |
+| Statistics | `stats-before-2.log`, `stats-after-2.log`; 675 flags unchanged, all 17 changed metric cells above |
+| Nine wall scenes | `wall-<world>-2.log`, `pixel-check-2.json`; all RGBA/heights exact, mismatch 0, console `[]` |
+| Regional, all 27 | `regional-<scene>-2.log`; 837 field comparisons, all exact |
+| Smoke | `smoke-2.log`; 135 brushes, eight exports and Zhon disabled by design; console `[]` |
+| Page8 | Green, Lava, Ice, Zhon, Red, Archipelago: paged 5, added 1, after undo 0 in each, console `[]` |
+| World gate | `gate-2.log`; passes, no new branch (existing world-named identifiers listed) |
+| Node tests | `node-tests-2.log`; 35/35 pass |
+| Shape controls | `shape-controls-2.log`; 161 cases, 131 shown, zero shown-but-dead `!`, console `[]` |
+| H15 section | `section-check-2.log`; 288 classic cases, max RMS .003290743572358273 and max sample .02923685213806948; 12 form cases, max RMS .07893175859126196 and max sample .31502373325007227; console `[]` |
+| Curve editing | `curveedit-2.log`; 48/48 checks across Green and Desert, console `[]` |
+
+Section errors are against H15's retained classic reference and the forms' analytical knots; they are not retail-image errors. Numeric equality checks do not imply that unchanged scenes already match retail.
+
+### What was viewed
+
+The switch-off and trial sections above identify the images used for each ruling. In addition, opened all three final Crystal whole pairs (`after-2/crystal-{1,2,3}/pair.png`) and `sheets-final-2/{1x,2x}.png` (retail, main, final); the retained world-labelled sheets `off-views-2/moon-craterEjecta-2x.png`, `red-crackSeverity-2x.png` and `red-craterEjecta-2x.png`; and the corrected shine-off sheet. The world-labelled sheets preserve crops from the original renders where the first driver's shared knob name had overwritten a different world's summary/diagnostic file. The original render files and per-render metrics in `off-2.log` remain available.
+
+Not viewed: the other 22 baseline whole pairs (apart from moon-1/2/3, red-1 and crystal-1), the 24 non-Crystal final whole pairs, the nine before/after wall images, the 21 final count-probe images, and the generated overview/layout images. Those checks are numerical only. No quality claim is made from these unviewed images. Trial-window symlinks are not renders and never count as extra visual evidence.
+
+### Left for the owner
+
+Added to **Small leftovers** in `docs/TERRAIN_ENGINE.md`: Moon's broad uphill folds and rounded formations need relief aligned with their formation, with rounded crests and variable widths; moon-2's missing sinuous fissures need authored paths with width/depth. Crystal's remaining broad-plane/rim mismatch needs facet/rim and skin-boundary work. Web-off currently also restores enclosing ink; an independent skin gate would need its own proof and owner ruling. The one changed non-crater pixel is consistent with the neighbourhood classifier, but its exact cause was not isolated; retain it for a targeted classifier check rather than treating the rounded MAD as exact zero. Red's stronger broken rims first need local authored shape work (radius/depth, rough outlines and rim cuts), rather than another global mark default. No new knob, shader branch, scene or shore-size change was made, and no further target was started after this step.
+
+### Departures and retained files
+
+No perf rounds and no delete commands. The regional runner is an asset-local copy that omits its profile deletion and uses an absolute import; the repository tool is unchanged. Failed `shineOn` probes are retained but excluded from the switch-off evidence. Single-scene trials were not extended after failing the visual gate. The three-try limit is a ceiling: Red stopped after two ideas. The old template's unrelated coast work and Claude attribution/session footer were not copied.
+
+All assets are retained under `/Users/daniel/terraform-assets/agent-H21`. After review, cleanup candidates are the part-2 archive `main-src-2`, before/after and wall renders, off/shine probes, trial fixtures and renders, count probes, sheets, statistics outputs, smoke exports, shape/section/curve outputs, and owned browser profiles (including `regional-profile-2-*`). Scratch helpers and their saved copies can also go; retain NOTES, command logs and numeric evidence while reviewing. Never remove the shared targets of `features`/`map-catalog.json` symlinks or `assets-*`. Shutdown and final commit details are recorded in the asset root's `NOTES.md`.
