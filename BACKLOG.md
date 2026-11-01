@@ -7404,6 +7404,34 @@ grey shoulders still read as short wormy marks in ours.
 2. Fold `Groove`: one value per row for all three families wherever a family's own number earns nothing, down to angle, spacing, depth, run, gaps, half-width and a family salt if the look allows. Lines reseed, so mean |diff| does not judge this one: stats and viewed windows do.
 3. Gate the joint at `jointDepth` 0 where nothing reads its shift.
 
+**Done (part 2).** Branch `H17-fractures`, three steps, a commit each (`8a66828`, `dfd9838`, `c2157c1`), nothing merged. Renders in `$R/agent-H17`: `out-s1-3` (step 1),
+`row-1..4` (step 2, the nine Green, Red and Desert scenes per row), `out-s2` (step 2) and `out-final` (the head, 27 scenes); checks in `chk-p2`, perf in `perf2`.
+- *Step 1, `cells(q, metric, salt)`.* One function returns `CellPick` (id, point, best, second); `d = (point - q) * metric`, cell units (`vec2f(1.0)`) for `facetLevel`, px (`size`) for
+  `blockField`, so each keeps today's points; salts `71 + salt` and `83` and the seams stay in the callers; both `blockField` calls (face, hill) are unchanged and `fractureLevel` and
+  `cracks()` are not touched. `engine-bake.wgsl` 1415 -> 1405 lines (the two 3 x 3 loops, 38 lines, became 17 with their comment). 27 scenes against main: 0.00, 0.0% moved on every one, mismatch 0,
+  console clean, so there is no drift to explain. (The struct is `CellPick`: `Cells` is lava's.) Tilt and step were not made a helper: it would not be shorter.
+- *Step 2, `Groove`.* Before: five knobs and 23 numbers per family (a `vec4` line, `gaps`, `broad`, `fine`, `place`, `deep`, `wide`, `swell`), three times. After: `line` (angle, spacing, depth,
+  run) and `shape` (gaps, half-width, family salt), built by `lines()`, which holds the one floor (spacing 3, run 12; the old floors were 6/8/3 and 20/12/12, all below the slider minima). The
+  half-width stays per family (2.2 px joint, `gullyWidth / 2`, 1.05 px scratch, each times `.7 + .6 h`). Every other number is one value in `groove()`: wander .5 at 4 spacings plus .1 at .9,
+  line at (cell + .15 + .7 hash), depth share .5 + .9 h, swell .6 + .4 noise over run / 2, run salts from the family salt (+0, +1, +9, +12). Rows folded in the card's order, each rendered alone
+  (mean |diff| against main, green-1/2/3, red-1/2/3, desert-1/2/3):
+  gaps and swell 0.00/0.58/0.00, 0.00/0.01/0.02, 0.00/0.00/0.01; plus placement 0.03/2.43/0.00, 0.01/0.09/0.17, 0.05/0.04/0.11; plus depth share and width 0.03/2.51/0.00, 0.01/0.09/0.17,
+  0.04/0.04/0.11; plus wander 0.04/2.80/0.00, 0.01/0.10/0.16, 0.04/0.04/0.10. **All four rows folded**: none read further from retail in the green sheets, and the Red and Desert windows never
+  moved more than .2. The restructure into `Groove`/`lines()` was pixel-identical to the last row (27 scenes, 0 pixels). Joint and scratch lines reseed; the six other worlds stay 0.00.
+  `repro/stats.py`: `outside.ours` is identical to the baseline in all 27 scenes (535/668 inside, as before); nine scenes' metrics moved, none crossed a bound.
+- *Step 3, the joint gate.* The joint runs only if `jointDepth > 0` (its cut), or, off the stagger branch, `bedFlow != 0` (its shift reaches the beds only through `bedFlow`); the stagger branch
+  never reads `joint.y`. All 27 scenes identical to step 2 (0 lines of `compare.py` differ), so the nine Green, Red and Desert renders stand for the third full run (it was run anyway on all 27).
+  Relief bake on green-2, drag, median of 4 alternating rounds, step 1-3 head / main: 472.4 / 480.3 ms (load 107.7 / 107.1 ms). No other groove or cell noise is read at amplitude 0: gullies, scratches,
+  blocks, facets and the hills' blocks already sit behind their knobs.
+- *Checks (all on the head).* all.sh/compare 27 scenes, mismatch 0, console clean; `regional.mjs` 0 on 27; `gate.sh` 0; `node --test repro/*.test.mjs` 0; `shape_controls.mjs` 0 (no `!`);
+  `section_check.mjs --against classic-ref.json` 0; `curveedit.mjs` Green and Desert 0; `geology_controls --family fractures --only green` the five knobs act (gullyDepth, gullySpacing, facetTilt,
+  facetSize, blocks, each moves green-2 by 3.9-14.1% of pixels; blocks all three scenes). `smoke.mjs --page8 ...` exits 1 on **crystal or ice** ("chunk needs 523 MB of GPU memory ... of 512"), a
+  different one of them each run; main's export (8886) does the same (521 MB), so it is the host's GPU memory, not this diff. Page8 lines are clean.
+- *Perf.* Four alternating rounds, plus two more with main first on green-2 for latency; `perf2-table.txt` has every pass. Relief bake drag green-2 472.4 / 480.3 ms, desert-1 277.5 / 270.0 ms (rounds
+  263-292); no pass slower than the round spread. Edit latency p95 green-2 32.1 / 29.3 ms in the four rounds, 32.1/32.1 and 31.8/26.4 head/main in the two extra: noise (main itself spans 26-32).
+- *Departures.* No part 1 folder was reused; one failed render (`out-s1-2`, a struct name clash with lava's `Cells`) is left in place, the brief forbidding deletes. Only the three Green windows' sheets and green-2
+  whole were viewed (below).
+
 **Part 3: the marks toward retail, then the count.** Written from part 2's report. Targets, in order, viewed: green-2's band, green-1's rim, green-3's ridge, red-1's and red-2's marks, ice-1's and ice-3's fibres, moon-2 if moon-1 and moon-3 do not read further. By world values and shared code, no new knob. The count is lines and the consolidated list for combine-or-drop; nothing is deleted.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
