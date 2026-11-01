@@ -1,7 +1,7 @@
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
 import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FORM_NAMES,formKnots,hasCurve,FACING_CHOICES} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,leanSetup} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -250,10 +250,17 @@ function buildShapeOptions() {
     wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"${choices?' hidden':''}></output></label>${input}<p class="small">${help}</p>`;
     return wrap;
   }));
-  // The cross-section preview sits right under its switch (card C1).
+  // The curve editor sits above the face width (H15 part 2, step C): a form to pick, the curve's knots to drag, and the lean.
   const preview=document.createElement('div'); preview.className='control'; preview.id='section-preview-control'; preview.hidden=true;
-  preview.innerHTML='<canvas id="section-preview" width="222" height="84" style="width:100%;background:#172119;border:1px solid #465344;border-radius:4px"></canvas><p class="small">Cross-section, foot to cap (water: bank top to bed), before the outline noise.</p>';
+  const cvStyle='width:100%;background:#172119;border:1px solid #465344;border-radius:4px;touch-action:none;display:block;margin-top:4px';
+  preview.innerHTML=`<label for="curve-form">Curve</label><select id="curve-form" style="width:100%"><option value="">The shape\'s own</option>${FORM_NAMES.map(f => `<option value="${f}">${f[0].toUpperCase()+f.slice(1)}</option>`).join('')}</select>`+
+    `<canvas id="section-preview" width="222" height="120" style="${cvStyle};cursor:crosshair"></canvas><canvas id="section-across" width="222" height="44" style="${cvStyle}"></canvas>`+
+    `<div style="display:flex;gap:6px;margin-top:4px;align-items:center"><button type="button" id="curve-reset" style="flex:none">Reset to the form</button><span class="small" id="curve-lean" style="flex:1"></span></div>`+
+    '<p class="small">Height share against distance share, foot to top. Drag a knot; click the line to add one; double-click a knot (or Shift-click) to remove it. A knot above 1 makes a lip (on water, below 0).</p>';
   root.children[SHAPE_FIELDS.findIndex(f => f[0]==='facePx')].before(preview);
+  $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
+  $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
+  curveEditorEvents();
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -423,22 +430,79 @@ const about=(pivot,m) => compose([1,0,0,1,pivot.x,pivot.y],compose(m,[1,0,0,1,-p
 const rotation=a => [Math.cos(a),Math.sin(a),-Math.sin(a),Math.cos(a),0,0];
 const scaling=k => [k,0,0,k,0,0];
 const isIdentity=m => !m || m.every((v,i) => Math.abs(v-IDENTITY[i])<1e-9);
-// The cross-section preview: the stroke's real table (sculpt-shape-presets.js sectionPreview), foot to top, before the outline noise.
-function drawSection() {
-  const cv=$('section-preview'),g=cv.getContext('2d'),W=cv.width,H=cv.height,kind=tool;
-  g.clearRect(0,0,W,H);
-  const q={softness:Number($('softness').value)/100,curve:currentCurve()},{water,ys}=sectionPreview(kind,q,kind==='hill'&&!ridgeOn(kind,shapeDefaults())),n=ys.length-1;
-  const lo=Math.min(0,...ys),hi=Math.max(1,...ys),pad=8,X=k => pad+(W-2*pad)*k/n,Y=v => H-pad-(H-2*pad)*(v-lo)/(hi-lo);
-  g.strokeStyle='#465344'; g.setLineDash([3,3]); for (const v of [0,1]) { g.beginPath(); g.moveTo(pad,Y(v)); g.lineTo(W-pad,Y(v)); g.stroke(); } g.setLineDash([]);
-  g.beginPath(); g.moveTo(X(0),H-pad);
-  for (let k=0;k<=n;k++) g.lineTo(X(k),Y(ys[k]));
-  g.lineTo(X(n),H-pad); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
-  g.beginPath(); for (let k=0;k<=n;k++) g[k?'lineTo':'moveTo'](X(k),Y(ys[k]));
-  g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
-  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(water?'ground':'foot',pad,10); g.textAlign='right'; g.fillText(water?'bed':'top',W-pad,10); g.textAlign='left';
-}
-// The curve the controls show: the selected shape's own, or the current brush's (a curve is kept beside the sliders in the tool's settings).
+// The curve editor (H15 part 2, step C). The curve a stroke carries is {form, knots?}: the form alone follows softness, knots (once one is dragged) are what
+// saves. The preview draws the real table (sculpt-shape-presets.js sectionPreview), foot to top, before the outline noise.
+const CV_LO=-.6,CV_HI=1.6,CV_PAD=9;
+const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].kind : tool;
 const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.curve : toolSettings[tool]?.curve) || null;
+function curveContext() {
+  const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),shouldered=kind==='hill' && !ridgeOn(kind,o);
+  return {kind,shouldered,water:kind==='deep' || kind==='shallow',q:{...o,softness:Number($('softness').value)/100,curve:currentCurve()}};
+}
+// Hand the curve to the shape being edited (or to the brush, for the next stroke); null goes back to the kind's own form.
+function setCurve(curve) {
+  if (selected>=0 && nodes[selected]?.params) {
+    const n=nodes[selected],p={...n.params}; if (curve) p.curve=curve; else delete p.curve; n.params=p;
+    updateControls(); editSelectedFromControls(); persistLater(); return;
+  }
+  const t={...toolSettings[tool],preset:'custom'}; if (curve) t.curve=curve; else delete t.curve; toolSettings[tool]=t;
+  updateControls(); schedule(); persistLater();
+}
+const cvXY=(x,v,W,H) => [CV_PAD+(W-2*CV_PAD)*x,H-CV_PAD-(H-2*CV_PAD)*(v-CV_LO)/(CV_HI-CV_LO)];
+function drawSection() {
+  const cv=$('section-preview'),g=cv.getContext('2d'),W=cv.width,H=cv.height,c=curveContext(),{water,ys,knots}=sectionPreview(c.kind,c.q,c.shouldered),n=ys.length-1;
+  g.clearRect(0,0,W,H);
+  g.strokeStyle='#465344'; g.setLineDash([3,3]); for (const v of [0,1]) { const [,y]=cvXY(0,v,W,H); g.beginPath(); g.moveTo(CV_PAD,y); g.lineTo(W-CV_PAD,y); g.stroke(); } g.setLineDash([]);
+  const [,y0]=cvXY(0,0,W,H); g.beginPath(); g.moveTo(CV_PAD,y0);
+  for (let k=0;k<=n;k++) g.lineTo(...cvXY(k/n,ys[k],W,H));
+  g.lineTo(W-CV_PAD,y0); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
+  g.beginPath(); for (let k=0;k<=n;k++) g[k?'lineTo':'moveTo'](...cvXY(k/n,ys[k],W,H));
+  g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
+  // The handles: the stroke's own knots, or its form's (a power law or a smoothstep shows nine, which a drag then makes its own).
+  g.fillStyle=c.q.curve?.knots?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [x,v] of (c.q.curve?.knots||knots.length<=12?knots:thinKnots(knots))) { g.beginPath(); g.arc(...cvXY(x,v,W,H),3.5,0,7); g.fill(); }
+  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(water?'ground':'foot',CV_PAD,10); g.textAlign='right'; g.fillText(water?'bed':'top',W-CV_PAD,10); g.textAlign='left';
+  $('curve-form').value=c.q.curve?.form||''; $('curve-reset').disabled=!c.q.curve?.knots;
+  // Lean: the whole cross-section, the long slope toward the lean side on the left (its back curve where the shape has one).
+  const ratio=leanRatio(c.kind,c.q,c.shouldered),across=$('section-across'),a=across.getContext('2d'),AW=across.width,AH=across.height,{back}=sectionPreview(c.kind,c.q,c.shouldered);
+  const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
+  $('curve-lean').textContent=`Lean ${(Math.round(ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
+  across.hidden=c.water; a.clearRect(0,0,AW,AH);
+  if (!c.water) {
+    const total=ratio+1,X=t => CV_PAD+(AW-2*CV_PAD)*t/total,Y=v => AH-6-(AH-12)*Math.min(Math.max(v,0),1.5)/1.5;
+    a.beginPath(); a.moveTo(X(0),Y(0));
+    for (let k=0;k<=n;k++) a.lineTo(X(ratio*(1-k/n)),Y(back[k]));
+    for (let k=n;k>=0;k--) a.lineTo(X(ratio+(1-k/n)),Y(ys[k]));
+    a.lineTo(X(total),Y(0)); a.closePath(); a.fillStyle='rgba(180,213,137,.25)'; a.fill(); a.strokeStyle='#b4d589'; a.stroke();
+  }
+}
+function curveEditorEvents() {
+  const cv=$('section-preview'); let drag=-1;
+  const at=e => { const r=cv.getBoundingClientRect(),W=cv.width,H=cv.height,px=(e.clientX-r.left)*W/r.width,py=(e.clientY-r.top)*H/r.height; return {px,py,x:clamp((px-CV_PAD)/(W-2*CV_PAD),0,1),v:CV_LO+(CV_HI-CV_LO)*(H-CV_PAD-py)/(H-2*CV_PAD)}; };
+  // The knots to edit: the stroke's own, or its form's (thinned when the form samples a power law or a smoothstep finely).
+  const knotsNow=() => { const c=curveContext(),k=strokeKnots(c.kind,c.q,c.shouldered).knots; return {c,knots:(c.q.curve?.knots||k.length<=12?k:thinKnots(k)).map(p => [...p])}; };
+  const store=(c,knots) => setCurve({form:c.q.curve?.form||defaultForm(c.kind,c.shouldered),knots:knots.map(([x,v]) => [Math.round(x*1000)/1000,Math.round(v*1000)/1000])});
+  const hit=(knots,p) => { let best=-1,d=8; knots.forEach(([x,v],i) => { const [kx,ky]=cvXY(x,v,cv.width,cv.height),dd=Math.hypot(kx-p.px,ky-p.py); if (dd<d) { d=dd; best=i; } }); return best; };
+  const remove=(c,knots,i) => { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(c,knots); return true; } return false; };
+  cv.addEventListener('contextmenu',e => e.preventDefault());
+  cv.addEventListener('pointerdown',e => {
+    const p=at(e),{c,knots}=knotsNow(),i=hit(knots,p); if (e.button===2) return;
+    if (i>=0 && e.shiftKey) { if (remove(c,knots,i) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if (i>=0) { drag=i; } else {
+      const x=clamp(p.x,.01,.99); let j=knots.findIndex(k => k[0]>x); if (j<0) j=knots.length-1;
+      knots.splice(j,0,[x,clamp(p.v,c.water?-.5:0,1.5)]); drag=j; store(c,knots);
+    }
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove',e => {
+    if (drag<0) return;
+    const p=at(e),{c,knots}=knotsNow(),k=knots[drag];
+    if (drag>0 && drag<knots.length-1) k[0]=clamp(p.x,knots[drag-1][0]+.01,knots[drag+1][0]-.01);
+    k[1]=clamp(p.v,c.water?-.5:0,1.5); store(c,knots);
+  });
+  const finish=() => { if (drag>=0) { drag=-1; if (selected>=0) { checkpoint(); queueWeather(); } } };
+  cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
+  cv.addEventListener('dblclick',e => { const p=at(e),{c,knots}=knotsNow(),i=hit(knots,p); if (i>=0 && remove(c,knots,i) && selected>=0) { checkpoint(); queueWeather(); } });
+}
 // Line features (card C4). A ridge (a hill or mountain with spurs or crest
 // options) is swept as short pieces, each with width and height multipliers at
 // its two ends that the brush dab reads as the piece, so the crest swells, narrows and
@@ -1589,7 +1653,7 @@ async function gpuRegionalCheck() {
     return {grid:G,planes,mismatches,gpuShape:true};
   } finally { engine.destroy(); }
 }
-window.sculptDebug = {pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
+window.sculptDebug = {curve:() => currentCurve(),pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),

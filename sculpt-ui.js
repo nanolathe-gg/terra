@@ -68,7 +68,8 @@ export function mountEditorUI(){
 export function groupToolControls(fields){
  const root=$('shape-options'),groups=[],claimed=new Set();
  const definitions=[
- ['','Cross-section',['facePx','terraces','ledge','terraceJitter']],
+ ['','Cross-section',['facePx','terraces','ledge','terraceJitter','lean','facing']],
+ ['','Variability',['faceVariation','outlineVar','widthVar','heightVar']],
  ['fingers','Shore lobes',['fingers','fingerAmount','fingerSize','fingerSpread','fingerHeight']],
  ['shoreLayers','Shore layers',['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle','layerVary','layerCircle','lavaMeander','lavaSpread','lavaCircleVary']],
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb']],

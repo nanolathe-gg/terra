@@ -107,8 +107,23 @@ export function strokeCurve(kind, q, {shouldered}) {
   return out;
 }
 
-// The editor's preview: the stroke's table, foot to top, as heights (land: share of the rise; water: share of the descent), n + 1 samples.
+// The table as the shader reads it (Catmull-Rom over the CV_N + 3 samples), so the editor draws what a stroke draws.
+export function readTable(tab, t) {
+  const x = clamp(t, 0, 1) * CV_N, k = Math.min(Math.floor(x), CV_N - 1), f = x - k, p0 = tab[k], p1 = tab[k + 1], p2 = tab[k + 2], p3 = tab[k + 3];
+  return p1 + .5 * f * (p2 - p0 + f * (2 * p0 - 5 * p1 + 4 * p2 - p3 + f * (3 * (p1 - p2) + p3 - p0)));
+}
+// The lean a stroke shows: its own, else the shouldered hill's softness-driven back over its face, else the kind's default.
+export function leanRatio(kind, q, shouldered) {
+  const L = leanSetup(kind, q);
+  if (L.ratio) return L.ratio;
+  if (shouldered) { const fw = .66 + (q.softness - .5) * .9; return (q.softness === .5 ? 1.34 : 2 - fw) / fw; }
+  return L.family ? 1.7 : 1;
+}
+// Knots for a form that has many (a power law or a smoothstep sampled finely): nine even ones, the starting point for dragging.
+export function thinKnots(knots, n = 9) { const f = knotCurve(knots); return Array.from({length: n}, (_, i) => [i / (n - 1), Math.round(f(i / (n - 1)) * 1000) / 1000]); }
+
+// The editor's preview: the stroke's table, foot to top, n + 1 samples (land: share of the rise; water: share of the descent), and its back's.
 export function sectionPreview(kind, q, shouldered, n = 160) {
-  const k = strokeKnots(kind, q, shouldered), f = knotCurve(k.knots);
-  return {water: isWater(kind), ys: Float32Array.from({length: n + 1}, (_, i) => f(i / n))};
+  const k = strokeKnots(kind, q, shouldered), tab = sampleKnots(k.knots), back = shouldered || k.back ? sampleKnots(k.back ?? k.knots) : tab, at = tb => Float32Array.from({length: n + 1}, (_, i) => readTable(tb, i / n));
+  return {water: isWater(kind), ys: at(tab), back: at(back), knots: k.knots};
 }
