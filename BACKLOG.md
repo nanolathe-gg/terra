@@ -6667,13 +6667,14 @@ crystals, fissures and ramps stay separate.
 | Control | After |
 | --- | --- |
 | `profile` | Goes |
-| `apronPx`, `apronHeight`, `faceCurve`, `crown`, `lip`, `shelfPx`, `shelfDepth`, `shelfSteps` | Absorbed by the curve |
+| `apronPx`, `apronHeight`, `faceCurve`, `crown`, `lip`, `shelfPx`, `shelfDepth`, `shelfSteps` | Absorbed by the curve. A lip is the curve going above 1 |
 | `mesaFlank` | Absorbed: Desert's plateau preset is the mesa curve |
 | `northFace` | Absorbed by lean, with facing set to north |
 | `facePx` | Stays: 0 scales with the stroke, above 0 keeps the face that wide |
 | `softness`, `faceVariation` | Stay |
 | `terraces`, `ledge`, `terraceJitter` | Stay until Geology |
 | New | The curve (a form to pick and knots to drag), lean, facing |
+| New, on top of the 9 | Variability sliders for outline, width and height; `faceVariation` is the face slider. So about 12 in all |
 
 **Step A: the table, with no change of look.** Replace only the line that computes
 each curve. Every per-kind noise term stays exactly as it is, so part 1's stand-in
@@ -6715,7 +6716,8 @@ its table. Keep a measured curve only where the three windows read at least as c
 *Acceptance:* each world's windows by eye at 1x and 2x against retail (decision 22),
 `stats.py`, and every check of step A.
 
-**Two dispatches:** A and B, then C and D, so each report can be reviewed.
+**Three dispatches:** A and B, then C, then D, so each report can be reviewed. C is
+larger than planned, and it works in slices that each leave a reviewable commit.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H15`,
 branch `H15-shape`; assets `$R/agent-H15`.
@@ -6849,7 +6851,7 @@ The stored section keys (`apronPx`, `apronHeight`, `facePx`, `faceCurve`, `crown
 `shelfDepth`, `shelfSteps`) are read by one host function, `strokeCurve` in `sculpt-shape-presets.js`
 (`landSection`, `waterSection`), which step C deletes. A stroke carries a section when any of them is set
 (`carriesSection`; crown counts only when it differs from its .5 default). Table size is now 64 intervals:
-Catmull-Rom over 33 left Desert's plateaus (the section path) at .34 and .27 against step A, 65 brings
+Catmull-Rom over 33 samples left Desert's plateaus (the section path) at .34 and .27 against step A, 65 samples bring
 them to .15 and .13. Terraces stay in the shader on the curve's value (`terraced`, between `cvLo` and
 `cvHi`); the lip stays an additive lift per cell (`lipRim`), because as a curve it needs `w` above 1 and
 every consumer of `w` clamps or subtracts it: the kind-4/5 `clamp(w, 0, 1)`, `1 - influence` on routes,
@@ -6867,6 +6869,27 @@ the footprint; cause not isolated; no scene or preset uses a lip); a dome whose 
 reach (RMS .23, max 2.4). Terraces on a carried water stroke run on the bank table `P` between the apron
 height and 1, before the ground combination. Desert's tool preset sets no `profile` now; its plateau keys
 carry the section. A saved document with `profile: 0` and any section key set now carries that section.
+
+**Steps A and B, the coordinator's review.** Steps A and B landed ahead of the card, so main
+does not drift from a deletion this large while C runs. I rendered the reviewed head myself:
+27 scenes against `merge-h14e` at most .22 (Red-3; Desert-1 .15, Desert-3 .13, everything else
+at most .06), `mismatch` 0 and clean consoles on all 27, no mark newly outside retail. All nine
+worlds read the same as before at 1x; Red also at 2x. So the table carries every curve, and
+the owner's claim holds for the kinds as they are.
+- **Fixed in review:** `regionalReadApron` still tested the deleted `profile`, so a hill
+  carrying a section read 4 extra cells; a stale comment; a help line naming "Cross-section 1".
+- **The report's reading of Red-3 was off:** our shallows band is a little wider than
+  retail's, not much wider. The real gap is the bank, which breaks into specks where retail
+  has a clean rock edge. That belongs to Shores.
+- **`secDeep` was missing from the approximations:** its maximum is 1.29, on a narrow stretch.
+  Red-3's own stroke moves .001 mean height.
+
+**Step C's changes to the plan.** A lip does not need `w` above 1. The shader splits the raw
+value, `w = min(c, 1)`, and the excess goes in `lift`, times the multiplier the kind already
+applies to `w`. That is a share of the stroke's own rise, so the host needs no ground height,
+and `lipRim` and its four uniforms go, along with the water-lip sliver. Water becomes one table
+too, from the ground to the bed, as every unsectioned water stroke already is, so `carried`'s
+water branch and the second table go, and Red-3's waterline follows the ground.
 
 *For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
 with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
