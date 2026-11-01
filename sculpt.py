@@ -550,7 +550,7 @@ WORLD_KNOBS = {
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
-                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=14,
+                    plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=28,
                     # Shine (card E2): retail Crystal is much shinier. Silver-lilac streaks run along
                     # the ground's grain on facets that face the sun's side; tops and the rock and
                     # slope plates round them take a sharp lobe over strong grain, and the level
@@ -581,9 +581,13 @@ WORLD_KNOBS = {
                     crystalCraterPx=16, crystalCraterStep=1, crystalCraterSkin=1,
                     crystalCraterWeb=1, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
                     crystalCraterTone=.12, crystalCraterLight=1.6,
-                    # G7: finer shore slabs and thinner seams (retail's crystal-3 band: cells 8-14 px, hairline
-                    # seams; the scenes ask for 14 and 24 px plates, which the scale draws at 70%).
-                    crystalShoreScale=.7, crystalShoreSeam=.56, crystalSeamEnd=.68,
+                    # G7/H20b: the shore slabs draw at 28 px, under thinner seams (.56, ending at .68).
+                    # G7 asked for finer cells (crystal-3's band reads 8-14 px) and drew plateSize 14 and 24 at
+                    # 70% through crystalShoreScale; retail's plates read larger elsewhere (30-50 px on
+                    # crystal-2, 15-30 on crystal-3), and the owner ruled for 28 ("For crystal go ahead with 28,
+                    # but maybe we also allow some variability"), so the plates draw at plateSize as given and
+                    # no world sets the scale.
+                    crystalShoreSeam=.56, crystalSeamEnd=.68,
                     # G7: the shallow mosaic's cells 8 px (were 10) under fainter seams (.45, were .55).
                     crystalShallowInk=.45),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
