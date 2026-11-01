@@ -1,6 +1,6 @@
 # Combine-or-drop evidence
 
-Snapshot: **main ` 12899bd`**, 2026-11-01. Recommendations for the owner's ruling;
+Snapshot: **main `12899bd`**, 2026-11-01. Recommendations for the owner's ruling;
 no control, code, table value or asset is changed by this sheet.
 
 **Totals:** 477 candidate rows: all **417/417 CSV keys**, 27 additional
@@ -19,7 +19,7 @@ remain in the files; those are real cleanup candidates, not past removals.
 conditional, nonoverlapping lower bounds for the named removals, **not work done**
 and not a proposal to apply every drop at once. The shader total includes an
 8-line `hardDeepStep` merge and a 1-line `bandWater` drop whose behavior has **not**
-been justified; do not treat the total as approved savings. ` 0` means no net
+been justified; do not treat the total as approved savings. `0` means no net
 whole-line saving verified, not no possible saving. Uniform layout, packed
 registry lines, table rows, assets and replacement implementations are excluded
 unless explicitly counted. There are **11 quantified shader removals**;
@@ -645,7 +645,7 @@ The server copies table defaults before overwriting registered world knobs
 ## Verification and unresolved work
 
 The source snapshot and every exact quoted line span were checked on this branch
-at ` 12899bd`. All 417 CSV identifiers appear exactly once as candidate rows; extra
+at `12899bd`. All 417 CSV identifiers appear exactly once as candidate rows; extra
 code bundles describe distinct code-level rulings and do not add their member
 keys' savings again. The counted recipes give every call site for their removed
 helpers; shared `shelfNoise`, `lines`, `groove`, column-band uniforms, painted bars
