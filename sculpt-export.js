@@ -28,7 +28,7 @@ export function mountMapExport(api) {
   };
   api.onUpdate(update);
   const responseJSON=async response => { const result=await response.json(); if (!response.ok) throw new Error(result.error||'Map export failed.'); return result; };
-  $('map-cancel').onclick=() => { abort?.abort(); $('map-cancel').disabled=true; $('map-export-state').textContent='Cancelling export…'; if (exportId) fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); };
+  $('map-cancel').onclick=() => { abort?.abort(); $('map-cancel').disabled=true; $('map-export-state').textContent='Canceling export…'; if (exportId) fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); };
   async function streamedExport(name,description,settings,placements,token) {
     const signal=abort.signal;
     $('map-export-state').textContent='Sampling TNT cell corners…';
@@ -78,7 +78,7 @@ export function mountMapExport(api) {
       $('map-export-state').textContent=completedWarning+`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
       for (const [label,key] of [['Download .ufo','archive'],['Indexed terrain image','indexed']]) { if (!result[key]) continue; const a=document.createElement('a'); a.textContent=label; a.href='/map-exports/'+encodeURIComponent(result[key]); a.download=result[key]; a.style.display='block'; $('map-download').append(a); }
       return {...result,clampedCells:result.clampedCells??sampled.clipped};
-    } catch (err) { if (exportId) await fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); exportId=null; $('map-export-state').textContent=err.name==='AbortError'?'Export cancelled. No partial archive was published.':warning+err.message; throw err; }
+    } catch (err) { if (exportId) await fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); exportId=null; $('map-export-state').textContent=err.name==='AbortError'?'Export canceled. No partial archive was published.':warning+err.message; throw err; }
     finally { api.restore?.(); abort=null; $('map-cancel').hidden=true; busy=false; $('map-controls').disabled=false; api.busy(false); update(); }
   }
   $('map-export').onclick=() => exportMap().catch(()=>{});

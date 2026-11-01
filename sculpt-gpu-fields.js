@@ -1,4 +1,5 @@
 import {shapePaths} from './sculpt-paths.js';
+import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
@@ -973,6 +974,7 @@ export function createPagedFields(opts) {
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
   const hits = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
   let revision = 0, engine = null, enginePromise = null, error = null, tick = 0, prep = new Map(), time = null, timeKey = '', staging = null, scratchT = null, firstError = null;
+  let coarseFilled = 0;
   let pendingStale = null, coarseDone = 0, coarseStart = 0, coarseFirstView = 0, focus = null;
   const coarseW = Math.floor((worldGrid - 1) / COARSE) + 1, coarse = new Float32Array(coarseW * coarseW).fill(baseHeight), coarseHave = new Uint8Array(coarseW * coarseW);
   const coarseQueue = new Map();   // page key -> the world rect to announce when it is done
@@ -1127,7 +1129,7 @@ export function createPagedFields(opts) {
         }
         if (pg.weather && !pg.stale) {
           const w = pg.weather, raw = await readBuffer(device(), w.weather, 0, 2 * CORE * CORE * 4);
-          if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE)};
+          if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE),source:w};
         }
       } catch (err) { error = err; fail(err); } finally { unpin(pg); }
     }
@@ -1159,7 +1161,7 @@ export function createPagedFields(opts) {
         const i0 = Math.ceil(best.x0 / COARSE), j0 = Math.ceil(best.y0 / COARSE), i1 = Math.floor((best.x0 + best.cw - 1) / COARSE), j1 = Math.floor((best.y0 + best.ch - 1) / COARSE);
         if (i1 >= i0 && j1 >= j0) {
           const out = await engine.decimate(target, {x0: i0 * COARSE, y0: j0 * COARSE, x1: i1 * COARSE, y1: j1 * COARSE}, COARSE);
-          for (let j = 0; j < out.h; j++) for (let i = 0; i < out.w; i++) { const at = (j0 + j) * coarseW + i0 + i; coarse[at] = out.values[j * out.w + i]; coarseHave[at] = 1; }
+          for (let j = 0; j < out.h; j++) for (let i = 0; i < out.w; i++) { const at = (j0 + j) * coarseW + i0 + i; coarse[at] = out.values[j * out.w + i]; if (!coarseHave[at]) { coarseHave[at] = 1; coarseFilled++; } }
         }
         coarseDone++;
         if (announce) { const ev = {revision, rect: announce}; for (const fn of listeners) fn(ev); }
@@ -1213,6 +1215,9 @@ export function createPagedFields(opts) {
       d.queue.submit([enc.finish()]);
       await d.queue.onSubmittedWorkDone();
       r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy();
+      // An edit can arrive while this page refines. Keep its invalid footprint
+      // on the late result too; the next settled read will compute it again.
+      if(pg.staleSeq!==seq){w.invalidRect=pg.weather?.invalidRect??coreRect(pg);pg.stale=true;}
       dropWeather(pg); pg.weather = w; if (pg.staleSeq === seq) pg.stale = false;
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
@@ -1244,6 +1249,7 @@ export function createPagedFields(opts) {
         if (o.x1 < o.x0 || o.y1 < o.y0) return;
         const u = d.createBuffer({label: 'gather uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(64));
         [src.ox, src.oy, src.pw, src.ph, o.x0, o.y0, o.x1, o.y1, rect.x0, rect.y0, gw, gh].forEach((v, i) => { if ([0, 1, 4, 5, 6, 7, 8, 9].includes(i)) dv.setInt32(i * 4, v, true); else dv.setUint32(i * 4, v, true); });
+        const invalid=pg.weather?.invalidRect;[invalid?.x0??1,invalid?.y0??1,invalid?.x1??0,invalid?.y1??0].forEach((v,i)=>dv.setInt32(48+i*4,v,true));
         d.queue.writeBuffer(u, 0, dv.buffer); tmp.push(u);
         const r = {'3.0': {buffer: u}, ...res}, pass = enc.beginComputePass({label: entry});
         pass.setPipeline(passes.pipes[entry]); for (const [g, bg] of passes.groups(entry, r)) pass.setBindGroup(g, bg);
@@ -1314,7 +1320,7 @@ export function createPagedFields(opts) {
     const pg = pageAt(ix, iy);
     if (!pg?.cpu || pg.cpuRev !== pg.rev) return coarseAt(ix, iy);
     const i = (iy - pg.y0 + RING) * SIDE + ix - pg.x0 + RING, h = pg.cpu.h[i];
-    if (!time || !pg.cpuW) return h;
+    if (!time || !pg.cpuW || !refinementValid(pg.cpuW.source?.invalidRect,ix,iy)) return h;
     const j = (iy - pg.y0) * CORE + ix - pg.x0, base = pg.cpuW.base[j];
     return h + (pg.cpuW.e[j] - base) * (1 - smooth(0, 10, Math.abs(h - base))) * (1 - pg.cpu.r[i]);
   };
@@ -1327,7 +1333,7 @@ export function createPagedFields(opts) {
     const announce = event.rect;
     for (const pg of pagesMap.values()) {
       if (!r) { dropShape(pg); dropWeather(pg); pg.staleSeq++; pg.stale = false; continue; }
-      if (pg.weather && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
+      if ((pg.weather||pg.weatherJob) && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { if(pg.weather)pg.weather.invalidRect=invalidateRefinement(pg.weather.invalidRect,r,worldGrid);pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
       if (pg.target && engine && hits(bufRect(pg), r)) { evalPage(pg, r); wantCpu(pg); }
     }
     if (!r) { pendingStale = null; for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }
@@ -1348,7 +1354,7 @@ export function createPagedFields(opts) {
     return {revision, residentBytes: cpuBytes() + coarse.byteLength, cacheBytes: cpuBytes(), cacheEntries: resident, lastWorkingBytes: 0, peakBytes: cpuBytes(), budget: shapeBudget() + weatherBudget(), hits: 0, misses: 0, replays: 0, evictions: 0,
       chunkCells: CORE, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: 52, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0, connectionTiles: 0, connectionCells: 0,
       gpuShape: {...g, gpuBytes: gpuBytes(), paged: true, core: CORE, ring: RING, ringChanges, apron: APRON, shapePages: resident, weatherPages: weathers, pagesTotal: np * np, shapeBytes: shapeBytes(), weatherBytes: weatherBytes(), stagingBytes: stagingBytes(), cpuCopyBytes: cpuBytes(),
-        coarse: {points: coarse.length, filled: coarseHave.reduce((a, b) => a + b, 0), done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, error: (error || firstError)?.message || null}};
+        coarse: {points: coarse.length, filled: coarseFilled, done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, error: (error || firstError)?.message || null}};
   };
 
   return {
@@ -1435,13 +1441,14 @@ export function feedPasses(device) {
   feedCache.set(device, cached);
   return cached;
 }
-// The feed passes' uniform (struct FU of engine-feed.wgsl): 16 words.
+// The feed passes' uniform (struct FU of engine-feed.wgsl): 20 words.
 export function feedUniform(device, f) {
-  const buffer = device.createBuffer({label: 'feed uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(64));
+  const buffer = device.createBuffer({label: 'feed uniform', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(80));
   const u = ['grid', 'cells', 'ox', 'oy', 'gw', 'gh', 'cw', 'ch', 'mode', 'rateMask'], fl = ['sea', 'spacing', 'envelope'];
   u.forEach((k, i) => { if (['ox', 'oy'].includes(k)) dv.setInt32(i * 4, f[k] ?? 0, true); else dv.setUint32(i * 4, (f[k] ?? 0) >>> 0, true); });
   fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
   dv.setUint32(13 * 4, f.tilesWide ?? 0, true);
+  const r=f.invalidRect;[r?.x0??1,r?.y0??1,r?.x1??0,r?.y1??0].forEach((v,i)=>dv.setInt32(64+i*4,v,true));
   device.queue.writeBuffer(buffer, 0, dv.buffer);
   return buffer;
 }

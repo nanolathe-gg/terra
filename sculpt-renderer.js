@@ -1020,10 +1020,14 @@ export class TerrainRenderer {
   // hash beds as before. Erosion reads the same uniforms, so the bake and the pass share one column.
   setColumn() {
     const column = this.config.column, v = this.variant;
+    const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const {beds, starts, bands} = columnRows(column, this.config.variant);
-    const x = Number(v.get('columnContrast'));
+    // Refinement can run before any relief bake; its column offset must not depend on the last displayed view.
+    this.set('uBedSpacing', number('bedSpacing', 12));
+    this.set('uBedDip', number('bedDip', 0));
+    this.set('uBedDipDir', number('bedDipDir', 90));
     this.i('uColumnSectionCount', starts.length);
-    this.set('uColumnContrast', Number.isFinite(x) && v.has('columnContrast') ? x : 1);
+    this.set('uColumnContrast', number('columnContrast', 1));
     this.set('uColumnBeds', beds);
     this.set('uColumnSections', starts);
     this.set('uColumnWander', column?.wander?.value ?? 0);
@@ -1085,10 +1089,7 @@ export class TerrainRenderer {
     set('uCrackMajor', number('crackMajor', 0.8));
     // Rock structure (card E3); 0 is the scattered rock every world had.
     set('uRockOrder', number('rockOrder', 0));
-    set('uBedSpacing', number('bedSpacing', 12));
     set('uBedVary', number('bedVary', 0.5));
-    set('uBedDip', number('bedDip', 0));
-    set('uBedDipDir', number('bedDipDir', 90));
     set('uBedLedge', number('bedLedge', 0.5));
     set('uBedLip', number('bedLip', 1));
     set('uJointSpacing', number('jointSpacing', 36));

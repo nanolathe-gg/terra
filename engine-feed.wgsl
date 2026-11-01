@@ -29,6 +29,7 @@ struct FU {
     tilesWide: u32,
     pad0: u32,
     pad1: u32,
+    invalidRect: vec4i, // authored edits since this refinement result; empty when current
 }
 
 @group(0) @binding(0) var<uniform> fu: FU;
@@ -156,7 +157,9 @@ fn feedMain(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_
         let i = u32(fu.oy + cy) * fu.grid + u32(fu.ox + cx);
         var h = F[i];
         let r = F[2u * fu.cells + i];
-        if ((fu.mode & 1u) != 0u) {
+        let cell = vec2i(fu.ox + cx, fu.oy + cy);
+        let valid = !all(cell >= fu.invalidRect.xy) || !all(cell <= fu.invalidRect.zw);
+        if ((fu.mode & 1u) != 0u && valid) {
             let base = W[i]; let refined = W[fu.cells + i];
             h = h + (refined - base) * (1.0 - sm(0.0, 10.0, abs(h - base))) * (1.0 - r);
         }
@@ -164,10 +167,10 @@ fn feedMain(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_
         let xy = vec2i(i32(id.x), i32(id.y));
         textureStore(outHeight, xy, vec4f(h - fu.sea, 0.0, 0.0, 0.0));
         textureStore(outRoutes, xy, vec4f(toByte(r), toByte(F[3u * fu.cells + i]), floor((clamp(F[4u * fu.cells + i], -1.0, 1.0) * 0.5 + 0.5) * 255.0 + 0.5) / 255.0, toByte(F[5u * fu.cells + i])));
-        textureStore(outGrid, xy, 0, select(vec4f(0.0), unpack4x8unorm(map0[i]), (fu.mode & 2u) != 0u));
-        if ((fu.mode & 8u) != 0u) { let m = fieldIn[i]; textureStore(outGrid, xy, 1, vec4f(toByte(m.x), toByte(m.y), toByte(m.z), toByte(m.w))); } else { textureStore(outGrid, xy, 1, vec4f(0.0)); }
-        textureStore(outGrid, xy, 2, select(vec4f(0.0), unpack4x8unorm(map1[i]), (fu.mode & 2u) != 0u));
-        textureStore(outGrid, xy, 3, select(vec4f(0.0), unpack4x8unorm(map2[i]), (fu.mode & 2u) != 0u));
+        textureStore(outGrid, xy, 0, select(vec4f(0.0), unpack4x8unorm(map0[i]), (fu.mode & 2u) != 0u && valid));
+        if ((fu.mode & 8u) != 0u && valid) { let m = fieldIn[i]; textureStore(outGrid, xy, 1, vec4f(toByte(m.x), toByte(m.y), toByte(m.z), toByte(m.w))); } else { textureStore(outGrid, xy, 1, vec4f(0.0)); }
+        textureStore(outGrid, xy, 2, select(vec4f(0.0), unpack4x8unorm(map1[i]), (fu.mode & 2u) != 0u && valid));
+        textureStore(outGrid, xy, 3, select(vec4f(0.0), unpack4x8unorm(map2[i]), (fu.mode & 2u) != 0u && valid));
         for (var l = 0u; l < 7u; l++) {
             let w = Mk[i * 7u + l];
             let b = vec4i(i32(w << 24u) >> 24u, i32(w << 16u) >> 24u, i32(w << 8u) >> 24u, i32(w) >> 24u);
@@ -202,10 +205,7 @@ struct GU {
     doy: i32,
     dw: u32,
     dh: u32,
-    pad0: u32,
-    pad1: u32,
-    pad2: u32,
-    pad3: u32,
+    invalidRect: vec4i,
 }
 @group(3) @binding(0) var<uniform> gu: GU;
 @group(3) @binding(1) var<storage, read> gsF: array<f32>;
@@ -226,6 +226,10 @@ fn gatherAt(id: vec3u) -> vec3i {   // (source index, destination index, valid)
     if (x > gu.x1 || y > gu.y1) { return vec3i(0, 0, 0); }
     return vec3i(i32(u32(y - gu.soy) * gu.spw + u32(x - gu.sox)), i32(u32(y - gu.doy) * gu.dw + u32(x - gu.dox)), 1);
 }
+fn gatherRefinementValid(id: vec3u) -> bool {
+    let cell = vec2i(gu.x0 + i32(id.x), gu.y0 + i32(id.y));
+    return !all(cell >= gu.invalidRect.xy) || !all(cell <= gu.invalidRect.zw);
+}
 
 @compute @workgroup_size(8, 8)
 fn gatherShape(@builtin(global_invocation_id) id: vec3u) {
@@ -241,7 +245,7 @@ fn gatherHeight(@builtin(global_invocation_id) id: vec3u) {
     let a = gatherAt(id);
     if (a.z == 0) { return; }
     let si = u32(a.x); let di = u32(a.y); let sc = gu.spw * gu.sph; let dc = gu.dw * gu.dh;
-    for (var p = 0u; p < 2u; p++) { gdW[p * dc + di] = gsW[p * sc + si]; }
+    for (var p = 0u; p < 2u; p++) { gdW[p * dc + di] = select(0.0, gsW[p * sc + si], gatherRefinementValid(id)); }
 }
 
 @group(3) @binding(13) var<storage, read> gsFd: array<vec4f>;
@@ -251,7 +255,7 @@ fn gatherHeight(@builtin(global_invocation_id) id: vec3u) {
 fn gatherField(@builtin(global_invocation_id) id: vec3u) {
     let a = gatherAt(id);
     if (a.z == 0) { return; }
-    gdFd[u32(a.y)] = gsFd[u32(a.x)];
+    gdFd[u32(a.y)] = select(vec4f(0.0), gsFd[u32(a.x)], gatherRefinementValid(id));
 }
 
 @compute @workgroup_size(8, 8)
@@ -259,5 +263,6 @@ fn gatherMaps(@builtin(global_invocation_id) id: vec3u) {
     let a = gatherAt(id);
     if (a.z == 0) { return; }
     let si = u32(a.x); let di = u32(a.y);
-    gdM0[di] = gsM0[si]; gdM1[di] = gsM1[si]; gdM2[di] = gsM2[si];
+    let valid = gatherRefinementValid(id);
+    gdM0[di] = select(0u, gsM0[si], valid); gdM1[di] = select(0u, gsM1[si], valid); gdM2[di] = select(0u, gsM2[si], valid);
 }

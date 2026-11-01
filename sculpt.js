@@ -1,3 +1,4 @@
+import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex} from './sculpt-ui.js';
 import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
@@ -19,8 +20,8 @@ const HELP = {
   plateau:'Paint a level crest above the height where this stroke begins. New strokes can build on top.',
   hill:'Paint a rounded ridge along any path. A later stroke adds more height to the existing ground.',
   mountain:'Paint a narrower, peaked ridge. New strokes add to the existing height, without a flat summit.',
-  ramp:'Draw between terrain levels. A smooth centre joins the endpoint heights with rounded approaches; shoulder roughness stays outside the route. Longer paths make gentler grades.',
-  deep:'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The centre stays deep until you paint over it.',
+  ramp:'Draw between terrain levels. A smooth center joins the endpoint heights with rounded approaches; shoulder roughness stays outside the route. Longer paths make gentler grades.',
+  deep:'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The center stays deep until you paint over it.',
   shallow:'Set the bed 7 below sea level. Paint through deep water to make a shallow passage, or through land to make shallows.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
@@ -43,6 +44,8 @@ let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
 let gpuWeather=null, gpuErosionMs=null, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
+let refinedInvalidRect=null;
+let controlsEditing=false;
 let tool='plateau', seed=2701, varySeed=true, refinementSeed=2701, stroke=null, pan=null, pointerId=null, loading=false;
 const randomSeed=current=>{const next=(Math.random()*4294967296)>>>0;return next===current?(next+1)>>>0:next;};
 let history=[], historyIndex=-1, historySerial=0;
@@ -122,7 +125,7 @@ const SHAPE_FIELDS=[
   ['layerPx','layer-px','Layer width (px)',['deep','shallow'],4,60,1,1,'Width of one layer, ledge and riser together: Shore layers times this is how far the terraces reach inland.'],
   ['layerRiser','layer-riser','Riser height (units; 0 fits the bank)',['deep','shallow'],0,80,1,10,'Height of each step. 0 shares the bank\'s whole rise out between the layers, so the last one meets the plain.'],
   ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
-  ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighbouring risers meet and part and no two layers run parallel for long.'],
+  ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighboring risers meet and part and no two layers run parallel for long.'],
   ['layerStyle','layer-style','Layer style',['deep','shallow'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2).',[[0,'Contour'],[1,'Circular']]],
   ['facePx','sec-face-px','Face width (px)',SECTION_KINDS,0,400,2,1,'Width of the whole curve, foot to top, kept the same whatever the brush size (0: a share of the brush set by Slope softness).'],
   ['terraces','sec-terraces','Terraces',SECTION_KINDS,0,8,1,1,'Cut the face into this many flat ledges with risers between them.'],
@@ -163,17 +166,17 @@ const SHAPE_FIELDS=[
   ['plateMaterial','plate-material','Plate material (1 rock slabs, 2 frost crystals)',['deep','shallow','offset'],1,2,1,1,'2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
   ['frostNeedles','frost-needles','Frost needle share (plate material 2)',['deep','shallow','offset'],0,100,5,100,'Frost crystals: the share of patches that carry needles at all; the rest of the band is plain ice. Needles in a patch are also dropped at random, so lines are sparse, fine and of varied length.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound, 2 berg)',['crystal'],0,2,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world). Berg: a rough ice block with an uneven outline, broken corners and rough faces that take the world\'s own slope relief (Ice); Sides, Width, Height and Variation apply.'],
-  ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbours.'],
+  ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbors.'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
   ['crystalSize','crystal-size','Crystal width (px)',['crystal'],6,640,2,1,'Crystals: typical base width. Column mound: column top width (retail ~15).'],
-  ['crystalStep','crystal-step','Column step',['crystal'],0,64,1,1,'Column mound: how far a column top steps up or down from its neighbours (retail ~16; ~40% flush).'],
+  ['crystalStep','crystal-step','Column step',['crystal'],0,64,1,1,'Column mound: how far a column top steps up or down from its neighbors (retail ~16; ~40% flush).'],
   ['crystalCount','crystal-count','Crystals per cluster',['crystal'],1,40,1,1,'How many crystals a click grows; a longer stroke grows more.'],
   ['crystalTop','crystal-top','Flat tops',['crystal'],0,95,5,100,'0: pointed; higher cuts the tops level (a flat-topped prism).'],
-  ['crystalLean','crystal-lean','Lean',['crystal'],0,100,5,100,'How far each apex leans off its base centre.'],
+  ['crystalLean','crystal-lean','Lean',['crystal'],0,100,5,100,'How far each apex leans off its base center.'],
   ['crystalVariation','crystal-variation','Variation',['crystal'],0,100,5,100,'Spread of sizes, heights and side counts.'],
   // Water looks (card E1): each stroke may keep the world's choice (0) or set its own.
   ['waterShore','water-shore','Shore edge (shore to shallow)',['deep','shallow'],0,2,1,1,'World default keeps the World panel\'s Crisp waterline. Hard: the water starts at the shoreline with ragged stairs, as retail draws it. Faded: the water fades in over a few pixels.',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
-  ['waterDeep','water-deep','Shallow-to-deep edge',['deep','shallow'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow colour stops at one depth with ragged stairs (retail Green). Faded: the colour follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
+  ['waterDeep','water-deep','Shallow-to-deep edge',['deep','shallow'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
   ['waterBed','water-bed','Shallow water look',['deep','shallow'],0,3,1,1,'World default keeps the World panel\'s Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture. Cracked bed: lit bed over cracked rock-like ground, tinted (Red\'s shelf shallows).',[[0,'World default'],[1,'Lit bed'],[2,'Noise water'],[3,'Cracked bed']]],
   ['crystalAlign','crystal-align','Align faces to the frame (berg)',['crystal'],0,100,5,100,'Berg: 0 turns each block at random, 100 sets its faces square to the shape\'s frame (four sides then make an axis-aligned box).'],
   ['bergFace','berg-face','Face steepness (berg, units per px)',['crystal'],20,200,5,100,'Berg: how fast the faces rise, in height units per px (shown in percent: 90% is 0.9 units per px). Each face varies by Outline jitter.'],
@@ -181,7 +184,7 @@ const SHAPE_FIELDS=[
   ['bergBreak','berg-break','Broken corners (berg)',['crystal'],0,8,1,1,'Berg: extra planes of their own steepness that cut corners off the block.'],
   ['bergRough','berg-rough','Face roughness (berg, units)',['crystal'],0,30,1,1,'Berg: fractal roughness added to the height, from 40 px lumps to 4 px grain.'],
   ['bergTilt','berg-tilt','Top tilt (berg, 1% = 1 unit per 100 px)',['crystal'],0,60,1,100,'Berg: the slope of the ramp that brings the top down away from the Tilt direction (the top is level toward it, at Height).'],
-  ['bergFlat','berg-flat','Level top toward the tilt (berg, share of radius)',['crystal'],-80,80,5,100,'Berg: how far from the centre, toward the tilt direction, the top stays level before it ramps down (negative: the ramp starts on the far side of the centre).'],
+  ['bergFlat','berg-flat','Level top toward the tilt (berg, share of radius)',['crystal'],-80,80,5,100,'Berg: how far from the center, toward the tilt direction, the top stays level before it ramps down (negative: the ramp starts on the far side of the center).'],
   ['bergTiltDir','berg-tilt-dir','Tilt direction (berg, degrees, 90 = south)',['crystal'],0,359,1,1,'Berg: the direction the top rises toward, turning with the shape\'s frame.'],
   ['paintChannel','paint-channel','Paint',['paint'],1,25,1,1,'What the brush paints. Denser scatter supplies its own stones where the World panel\'s Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world\'s own value; Strength is how far. Erase clears every mask and style under the brush.',[...MASK_CHOICES,...LUMP_CHOICES,...STYLE_CHOICES,[7,'Erase all masks and style']]],
   ['maskChannel','mask-channel','Paint inside the shape',MASK_SHAPES,0,6,1,1,'Also paint a mask over the shape\'s own footprint, strongest where the shape is (a rocky mesa, a mossy hill).',[[0,'Off'],...MASK_CHOICES]],
@@ -218,7 +221,7 @@ const SHAPE_FIELDS=[
   ['crystalShoreScale','crystal-shore-scale','Rock slab size (share of Plate size, crystal shores)',['deep','shallow','offset'],10,100,5,100,'Rock slabs (Plate material 1): scales Plate size down, so a preset or an old stroke asks for large plates and the shore draws finer ones (never under 8 px). 100 keeps Plate size as given.'],
   ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['deep','shallow','offset'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
   // G6 (Ice): angular facets that belong to the mountain.
-  ['iceFacets','ice-facets','Angular facets',['mountain'],0,100,5,100,'Ice: breaks part of the mountain into angular facets: tilted planes fitted to the mountain\'s own surface, a little steeper, stepped a few units off their neighbours and partly buried where the ground rises past them. They share the mountain\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth mountain.'],
+  ['iceFacets','ice-facets','Angular facets',['mountain'],0,100,5,100,'Ice: breaks part of the mountain into angular facets: tilted planes fitted to the mountain\'s own surface, a little steeper, stepped a few units off their neighbors and partly buried where the ground rises past them. They share the mountain\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth mountain.'],
   ['iceFacetSize','ice-facet-size','Facet size (px)',['hill','mountain'],16,96,2,1,'Ice facets: the typical width of one facet.'],
   // G8 (Moon): lumpy, folded outlines.
   ['moonLobes','moon-lobes','Outline lobes (share of radius)',['hill','mountain'],0,60,2,100,'How far the hill\'s whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline.'],
@@ -264,7 +267,7 @@ function buildShapeOptions() {
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
-  // cancelled. Without this the page stays "paused while editing" and Export
+  // canceled. Without this the page stays "paused while editing" and Export
   // never re-enables (review A1, 2026-10-27).
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
   syncToolGroups=groupToolControls(SHAPE_FIELDS);
@@ -344,7 +347,7 @@ function updateControls() {
   $('view-rendered').setAttribute('aria-pressed',String(!$('clay').checked));
   for(const id of ['save','load','view-clay','view-rendered','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
   const pointCount=nodes[selected]?.points?.length||0;
-  $('path-help').textContent=pathEditing?pathAdding?'Click to extend from the selected point. An interior point starts a branch. Escape finishes.':`${paths.length} path${paths.length===1?'':'s'} · ${pointCount} points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Select a point to insert, extend, or branch.`:'Drag to move · labelled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
+  $('path-help').textContent=pathEditing?pathAdding?'Click to extend from the selected point. An interior point starts a branch. Escape finishes.':`${paths.length} path${paths.length===1?'':'s'} · ${pointCount} points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Select a point to insert, extend, or branch.`:'Drag to move · labeled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
   // With Select active, show the selected shape's own controls.
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
@@ -527,10 +530,10 @@ const coastLayerReach=s => {
   return n*W*(1+.6*clamp(s.layerVary,0,1))+2*W;
 };
 // Circular layers (retail lava-2): round bites cut out of the bank, layer after layer. A bite is a disc
-// centred within a radius of the waterline, one per jittered lattice cell in the shape's own frame (so a
+// centered within a radius of the waterline, one per jittered lattice cell in the shape's own frame (so a
 // moved lake carries its circles along); a layer is counted from the nearest bite's edge, or the
 // waterline if that is nearer, so each riser is an arc round its bite, concentric with the bite's other
-// risers, meeting a neighbour's arcs at a cusp (the overlap of two discs).
+// risers, meeting a neighbor's arcs at a cusp (the overlap of two discs).
 function markViewChanged(invalidate=true) { revision++; $('export').disabled=true; if (mapCanvas && invalidate) mapCanvas.invalidate(); }
 function markChanged() { markViewChanged(false); error(); }
 
@@ -546,8 +549,8 @@ function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWa
 const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);
 // The crystal mark of a crater's skin (G7): the shader reads exactly this value, which no column's mark (.8 and over) or seam (.5) has.
 const craterletRand=(seed,k,a) => { let x=Math.imul((seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
-// Craterlet k of crater node n: centre and radius, from the crater's seed
-// alone (region replay needs the centres before it replays anything).
+// Craterlet k of crater node n: center and radius, from the crater's seed
+// alone (region replay needs the centers before it replays anything).
 function craterletSpot(n,seed,radius,k) {
   const first=shapePaths(n)[0],c=n.points[first[first.length>>1]],turn=isIdentity(n.frame)?0:Math.atan2(n.frame[1],n.frame[0]);
   const angle=craterletRand(seed,k,1)*Math.PI*2+turn,dist=radius*(.9+craterletRand(seed,k,2)*1.1),small=radius*(.1+.22*craterletRand(seed,k,3));
@@ -615,7 +618,7 @@ function regionalReadApron(n) {
     if (n.frame) cells+=Math.ceil(2*Math.max(Math.hypot(n.frame[0],n.frame[1]),Math.hypot(n.frame[2],n.frame[3])))+2;
   }
   if (hasCoastPass(n.kind,q)) {
-    // Signed-distance normals read ten neighbours and a derivative. A new
+    // Signed-distance normals read ten neighbors and a derivative. A new
     // tongue can reach another tongue before reaching its original shore,
     // so keep the connection band as well as the visible finger reach.
     if (q.fingers>0) cells+=Math.ceil(3*(.5*q.radius*bank+spacing*3)/spacing)+32;
@@ -627,7 +630,7 @@ function regionalReadApron(n) {
   }
   if(BASE_KINDS.includes(n.kind))cells+=Math.ceil(Math.max(0,q.baseVary||0)/spacing);
   if(['hill','mountain'].includes(n.kind))cells+=Math.ceil(Math.max(0,q.moonLobes||0)*(q.radius||40)/spacing);
-  // G6: a facet plane is fitted at its centre, up to half a facet away and three cells either side of it, in the stroke's frame.
+  // G6: a facet plane is fitted at its center, up to half a facet away and three cells either side of it, in the stroke's frame.
   if(n.kind==='mountain'&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
   if(n.kind==='crater'&&q.craterFacets>0){const f=n.frame??IDENTITY,L=craterFacetWidth(q);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+3;}
   if (['deep','shallow','offset'].includes(n.kind) && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
@@ -659,7 +662,7 @@ const pagedOn=() => Boolean(regionalFields?.paged && regionalFields.active());
 // H12: the paged fields fit their ring and page caps to the terrain GPU budget the canvas holds (gpuMB, or its field), less the canvas's minimum.
 const gpuBudget=() => ({total:(Number(document.querySelector('[data-gpu]')?.value)||Number(new URLSearchParams(location.search).get('gpuMB'))||512)*1048576,minimum:mapCanvas?.minimumBytes?.()??96*1048576});
 function makeRegionalFields() {
-  const common={worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving)};
+  const common={worldSize,worldGrid,baseHeight:config.baseHeight,keys:FIELD_KEYS,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing)};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
   return pagedWanted()?createPagedFields({...common,budget:gpuBudget,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
@@ -755,7 +758,7 @@ function currentDrawOptions() {
 }
 function regionalHeightCell(x,y) {
   const h=regionalFields.cell(x,y),i=y*worldGrid+x;
-  if (!refined || !refinedBase || !$('weather').checked) return h;
+  if (!refined || !refinedBase || !$('weather').checked || !refinementValid(refinedInvalidRect,x,y)) return h;
   return Math.fround(h+(refined[i]-refinedBase[i])*(1-smooth(0,10,Math.abs(h-refinedBase[i])))*(1-regionalFields.cell(x,y,'r')));
 }
 function sampleRegional(x,y) {
@@ -788,7 +791,7 @@ async function gpuWeatherCpu(withMaps) {
     if (w.loading) { await w.loading; continue; }
     w.loading=(async () => {
       if (gpuWeather!==w || w.destroyed) return;
-      if (!w.cpuHeight) { const raw=await readBuffer(renderer.device,w.weather,0,n*8); if (gpuWeather===w) { refinedBase=new Float32Array(raw,0,n); refined=new Float32Array(raw,n*4,n); w.cpuHeight=true; } }
+      if (!w.cpuHeight) { const raw=await readBuffer(renderer.device,w.weather,0,n*8); if (gpuWeather===w) { refinedBase=new Float32Array(raw,0,n); refined=new Float32Array(raw,n*4,n); refinedInvalidRect=w.invalidRect??null; w.cpuHeight=true; } }
       else if (w.mapsOn && !w.cpuMaps) {
         const [a,b,c]=await Promise.all(w.maps.map(m => readBuffer(renderer.device,m,0,n*4)));
         if (gpuWeather===w && w.mapsOn) { regionalWeather={p0:new Uint8Array(a),p1:new Uint8Array(b),p2:new Uint8Array(c)}; w.cpuMaps=true; }
@@ -838,7 +841,7 @@ async function gpuFeedSource(signal,regionFn) {
   const on=$('weather').checked;
   if (on && refined && !gpuWeather) return null;
   const w=on?gpuWeather:null;
-  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,release:w?leaseGpuWeather(w):() => {}};
+  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,get invalidRect(){return w?.invalidRect;},release:w?leaseGpuWeather(w):() => {}};
 }
 function readRegional(request) {
   if (pagedOn()) return regionalFields.readAsync(request);
@@ -855,7 +858,7 @@ function readRegional(request) {
   };
   for (let y=0;y<r.gridHeight;y++) for (let x=0;x<r.gridWidth;x++) {
     const i=y*r.gridWidth+x,j=(y+oy)*worldGrid+x+ox,h=r.fields.h[i];
-    fields.h[i]+=(refined[j]-refinedBase[j])*(1-smooth(0,10,Math.abs(h-refinedBase[j])))*(1-r.fields.r[i]);
+    if(refinementValid(refinedInvalidRect,x+ox,y+oy))fields.h[i]+=(refined[j]-refinedBase[j])*(1-smooth(0,10,Math.abs(h-refinedBase[j])))*(1-r.fields.r[i]);
   }
   ['flow','deposit','talus','sand','wear','wet','hard','slope','fx','fy','channel','ridge'].forEach((key,k) => {
     const packed=regionalWeather?.['p'+(k>>2)];
@@ -865,6 +868,9 @@ function readRegional(request) {
     weather[key]=out;
   });
   const materialField=crop(regionalWeather?.materialField,4),extra=[fields.h,...Object.values(weather),materialField].reduce((sum,a) => sum+(a?.byteLength??0),0);
+  if(refinedInvalidRect)for(let y=0;y<r.gridHeight;y++)for(let x=0;x<r.gridWidth;x++)if(!refinementValid(refinedInvalidRect,x+ox,y+oy)){
+    const i=y*r.gridWidth+x;for(const a of Object.values(weather))if(a)a[i]=0;if(materialField)materialField.fill(0,i*4,i*4+4);
+  }
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
 function setMapBusy(on) {
@@ -893,13 +899,14 @@ function regionalStats() {
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
+  previewScene:()=>({size:worldSize,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,nodes,context:shapeContext(),maskCount:MASK_KEYS.length,revision:regionalFields.stats().revision,fail:error}),
   fitGpuBudget:() => regionalFields?.refit?.(),
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch,maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
-  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),
+  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
   pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:tool,
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
@@ -938,7 +945,7 @@ function changeSelected(edit) {
   const n=nodes[selected]; if (!n?.points || stroke || moving || loading || !ready) return;
   const before=nodeBounds(n); cancelWeather(); edit(n);
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected);
-  flushEval(); markViewChanged(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected);pathAdding=adding;drawMode=mode;updateControls();schedule();
+  flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected);pathAdding=adding;drawMode=mode;updateControls();schedule();
 }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
@@ -964,6 +971,7 @@ function selectNode(i) {
 }
 function editSelectedFromControls() {
   const n=nodes[selected]; if (!n || !n.params) return;
+  controlsEditing=true;
   const before=nodeBounds(n);
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
     softness:Number($('softness').value)/100,bankWidth:Number($('bank-width').value)/100,beachFlatness:Number($('beach-flatness').value)/100,
@@ -1037,6 +1045,7 @@ function cancelWeather() {
   updateControls();
 }
 function queueWeather() {
+  controlsEditing=false;
   flushEval();
   if (pagedOn()) { queuePagedWeather(); return; }
   // H6b: a fed Time pass needs the GPU planes current, not the CPU copy; the copy a gesture left out is read in the background from here.
@@ -1072,12 +1081,20 @@ async function runFedWeather(job) {
     if (material && job===weatherJob && !stroke) result.field=await erosion.materialField({heightBuffer:result.weather,heightOffset:grid*grid,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
     gpuPassBytes=0;
     if (job!==weatherJob || stroke) { retireGpuWeather(result); return; }
+    const previous=gpuWeather,release=previous?leaseGpuWeather(previous):()=>{};let dirty;
+    try{dirty=await changedWeatherTiles(renderer.device,previous,result,grid,spacing);}finally{release();}
+    if(job!==weatherJob||stroke||moving){retireGpuWeather(result);return;}
+    const invalid=previous?.invalidRect;
     dropGpuWeather();
     gpuWeather={weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
-    markViewChanged(); updateControls(); schedule();
+    markViewChanged(false);if(dirty===null)mapCanvas.invalidate(null,{refinement:true});else {
+      if(invalid)dirty.push({x:invalid.x0*spacing,y:invalid.y0*spacing,width:(invalid.x1-invalid.x0+1)*spacing,height:(invalid.y1-invalid.y0+1)*spacing});
+      for(const rect of dirty)mapCanvas.invalidate(rect,{refinement:true});
+    }
+    updateControls(); schedule();
   } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message,err); }
 }
 function failWeather(message,err=null) {
@@ -1350,12 +1367,12 @@ const KNOBS = [
   ['Rock structure', [['rockOrder','Order (0 scattered, 1 beds and joints)',0,1,.05,0],['rockFrom','Beds and joints from slope (painted rock always)',.3,2,.05,.6],['bedSpacing','Bed thickness (px along the ground, or height units)',3,80,1,12],['bedHeight','Beds spaced by height (0 px along the ground)',0,1,.05,0],['bedVary','Bed thickness variation',0,1,.05,.5],
     ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledge step strength',0,1,.05,.5],['bedLip','Ledge lip and notch (height)',0,4,.1,1],
     ['jointSpacing','Joint spacing (px)',12,120,2,36],['jointAngle','Joint lean from north-south (deg)',-60,60,1,0],['jointDepth','Joint depth (height)',0,6,.1,2],['jointRun','Joint run (px)',30,400,10,120],['jointGaps','Joint gaps',0,1,.05,.3]]],
-  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandRelief','Bank lines bent by relief',0,1,.05,0],['bandWander','Bank line wander',0,2,.05,0],['bandGaps','Bank line gaps',0,1,.05,0],['bandWater','Rings in water colour',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
-  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Colour strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Colour depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandRelief','Bank lines bent by relief',0,1,.05,0],['bandWander','Bank line wander',0,2,.05,0],['bandGaps','Bank line gaps',0,1,.05,0],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
+  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
-  // E8 (Painted Desert): the grey band at the foot of the raised ground (strata colour 5); its heights are above the plain.
-  ['Desert foot band', [['baseBand','Grey band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
+  // E8 (Painted Desert): the gray band at the foot of the raised ground (strata color 5); its heights are above the plain.
+  ['Desert foot band', [['baseBand','Gray band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
   // G4 (Painted Desert): the pale cap kept as one sheet.
   ['Desert caps', [['desertCapFlat','Level cap kept cool (0 beds as before)',0,1,.05,0]]],
   // E9 (Green rock faces); every default is the earlier look.
@@ -1389,7 +1406,7 @@ const KNOBS = [
   ['Ice frost band', [['frostGaps','Melt pockets: share of cells at the coast',0,.6,.01,.17],['frostGapReach','Melt pockets: reach inland (share of the band)',.2,1.2,.05,.65],['frostGapSize','Melt pockets: size (px)',3,24,1,11],['frostGapDepth','Melt pockets: depth below the sea',.5,6,.1,3]]],
 ];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
-// plus the map-wide settings and base colours chosen for it. Built-in worlds
+// plus the map-wide settings and base colors chosen for it. Built-in worlds
 // can be adjusted; New world copies the current one under a new name. Kept in
 // this browser (localStorage) and exportable as JSON.
 const WORLD_STORE='nanolathe-map-editor-worlds';
@@ -1397,12 +1414,12 @@ const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
-// A variant's colours (card C5) stay in config.colors; the world keeps only its base ones, so choosing a variant never writes into the world's own store.
+// A variant's colors (card C5) stay in config.colors; the world keeps only its base ones, so choosing a variant never writes into the world's own store.
 function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.baseColors||config.colors||{})},knobs:{}}; }
 const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('');
 const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
-// A world's colours: the server's defaults for its base world, then the
-// world's own choices; null means explicitly off (the texture's own colour).
+// A world's colors: the server's defaults for its base world, then the
+// world's own choices; null means explicitly off (the texture's own color).
 function mergedColors() { return {...(config.colors||{}),...(activeWorld().colors||{})}; }
 function worldColors() { const out={}; for (const [k,v] of Object.entries(mergedColors())) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); return out; }
 function defaultColor(key) {
@@ -1441,20 +1458,20 @@ function buildWorldPanel() {
     if (key.startsWith('strata') && !(Number(experiment.get('strata'))>0)) continue;
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
-    row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base colour for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base colour" value="${set||hexColor(defaultColor(key))}">`;
+    row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
     const [box,pick]=row.querySelectorAll('input');
     const apply=() => { if (box.checked) world.colors[key]=pick.value; else if (config.colors?.[key]) world.colors[key]=null; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); markViewChanged(); schedule(); };
     box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
     rows.append(row);
   }
-  // Ground pattern: this world's own, or another world's, recoloured by
-  // the Ground base colour above.
+  // Ground pattern: this world's own, or another world's, recolored by
+  // the Ground base color above.
   const patterns=config.groundPatterns||{},patternRow=document.createElement('div'); patternRow.className='control';
-  patternRow.innerHTML=`<label for="ground-pattern">Ground pattern</label><select id="ground-pattern" style="width:100%"><option value="">This world's own</option>${Object.entries(patterns).filter(([id]) => id!==config.biomeId).map(([id,p]) => `<option value="${id}">${p.name}</option>`).join('')}</select><p class="small">Another world's ground grain, moved to this world's Ground colour. Contrast is under Ground below.</p>`;
+  patternRow.innerHTML=`<label for="ground-pattern">Ground pattern</label><select id="ground-pattern" style="width:100%"><option value="">This world's own</option>${Object.entries(patterns).filter(([id]) => id!==config.biomeId).map(([id,p]) => `<option value="${id}">${p.name}</option>`).join('')}</select><p class="small">Another world's ground grain, moved to this world's Ground color. Contrast is under Ground below.</p>`;
   rows.append(patternRow);
   $('ground-pattern').value=patterns[experiment.get('groundPattern')]?experiment.get('groundPattern'):'';
   $('ground-pattern').onchange=() => {
-    // Keep this world's ground colour when only the grain changes.
+    // Keep this world's ground color when only the grain changes.
     if (!mergedColors().ground && renderer.means.ground) { world.colors={...world.colors,ground:hexColor(renderer.means.ground)}; saveWorlds(); }
     setKnob('groundPattern',$('ground-pattern').value);
   };
@@ -1557,6 +1574,12 @@ async function bootMap() {
   // Outside a scoped regional replay, only the graph and empty placeholders
   // exist. In particular, opening a 40×40 map allocates no world field planes.
   seed=Number($('seed').value); refinementSeed=seed; regionalFields=makeRegionalFields();
+  regionalFields.subscribeSubmit(change=>{
+    if(regionalFields.paged)return;
+    const r=change.rect,rect=r?{x0:Math.floor(r.x/spacing),y0:Math.floor(r.y/spacing),x1:Math.ceil((r.x+r.width)/spacing),y1:Math.ceil((r.y+r.height)/spacing)}:null;
+    if(gpuWeather)gpuWeather.invalidRect=invalidateRefinement(gpuWeather.invalidRect,rect,worldGrid);
+    if(refined)refinedInvalidRect=invalidateRefinement(refinedInvalidRect,rect,worldGrid);
+  });
   addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
