@@ -6,7 +6,7 @@
 //   drag      a stroke drag with real mouse events: rAF frame intervals
 //   release   the stroke's release: time to weather ready and to every visible chunk at final
 //   scroll    a pan across several chunks: rAF frame intervals, coverage, time to final after it stops
-//   export    sculptMap.export (map modes; skipped with --no-export)
+//   export    sculptMap.export (skipped with --no-export)
 // and writes <out>/<mode>-perf.json.
 // The hooks time GPU passes with timestamp queries (added to every pass that has none), the queue waits, and the JS
 // stages a chunk bake runs through: region read (shape replay), field upload, draw encode, bitmap copy.
@@ -182,9 +182,7 @@ let longWait = false;
 const ev = async expression => { const r = await Promise.race([send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}), sleep(longWait ? 900000 : 240000).then(() => { throw new Error('evaluate timed out: ' + expression.slice(0, 80)); })]); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
 const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
 
-const isMap = true;   // the editor always works on a map
-const url = isMap ? `${server}/sculpt?biome=${scene.biome || 'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`
-  : `${server}/sculpt?biome=green&scratch=1${scene.query ? '&' + scene.query : ''}`;
+const url = `${server}/sculpt?biome=${scene.biome || 'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
 const result = {mode, label, query: extraQuery, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
 const stable = async (quietMs = 1500, limitMs = 120000) => {   // wait for no bake/erode/read event for quietMs
   const t0 = Date.now();
@@ -230,7 +228,7 @@ try {
   await send('Page.navigate', {url});
   const bootStart = Date.now();
   for (let i = 0; i < 1200; i++) {
-    if (await ev(isMap ? `!!window.sculptCanvas&&${scene.biome === 'zhon' ? 'true' : '!document.getElementById("map-export").disabled'}` : '!document.getElementById("export")?.disabled')) break;   // Zhon cannot export, by design
+    if (await ev(`!!window.sculptCanvas&&${scene.biome === 'zhon' ? 'true' : '!document.getElementById("map-export").disabled'}`)) break;   // Zhon cannot export, by design
     const e = await ev('document.getElementById("error")?.textContent'); if (e) throw new Error(e);
     await sleep(200);
   }
@@ -243,7 +241,7 @@ try {
   const strokes = JSON.stringify(scene.strokes), ground = scene.ground !== false;
   const visibleOf = async () => ev(`(() => { const v = sculptCanvas.view(), s = sculptCanvas.stats().canonicalChunkSize, keys = [];
     for (let y = Math.floor(v.y / s) * s; y < v.y + v.height; y += s) for (let x = Math.floor(v.x / s) * s; x < v.x + v.width; x += s) keys.push(x + ',' + y); return {keys, chunk: s, view: v}; })()`);
-  if (isMap) {
+  {
     const t0 = await ev(`(() => { const t = performance.now(); __perf.mark('load-start', {}); sculptDebug.scene(${strokes}, {ground: ${ground}}); sculptCanvas.zoom(1);
       const v = document.getElementById('viewport'); v.scrollLeft = 0; v.scrollTop = 300; return t; })()`);
     await sleep(500);
@@ -252,21 +250,13 @@ try {
     const a = analyse(events, vis.keys, t0), firstChunk = draws.find(d => d.chunk && d.t >= t0), firstAny = draws.find(d => d.t >= t0);
     result.load = {chunkSize: vis.chunk, view: vis.view, firstPictureAny: firstAny ? firstAny.t - t0 : null, firstChunkPicture: firstChunk ? firstChunk.t - t0 : null, ...a, split: await splitStages()};
     writeFileSync(`${out}/${mode}-events-load.json`, JSON.stringify({t0, events, draws: draws.length}));
-  } else {
-    const t0 = await ev(`(() => { const t = performance.now(); __perf.mark('load-start', {}); sculptDebug.scene(${strokes}, {ground: ${ground}}); return t; })()`);
-    let readyAt = null;
-    for (let i = 0; i < 2400 && readyAt === null; i++) { if (await ev('!document.getElementById("export")?.disabled')) readyAt = await ev('performance.now()'); else await sleep(25); }
-    await stable(1500);
-    const events = await ev('__perf.ev');
-    const ws_ = events.filter(e => e.type === 'weather-state' && e.t >= t0), ready = ws_.find(e => /Weathered edges/.test(e.text));
-    result.load = {finalReady: readyAt === null ? null : readyAt - t0, weatherReady: ready ? ready.t - t0 : null, weatherText: ws_.at(-1)?.text, erodeParts: await ev('window.lastErosionParts||null'), split: await splitStages()};
   }
 
   if (only === 'load') throw new Error('stopped after load (--only)');
   console.error('phase drag'); flush();
   // ------------------------------------------------------------ drag: a stroke with real mouse events
-  const box = await ev(`(() => { const r = document.getElementById(${isMap ? "'overlay'" : "'terrain'"}) ?.getBoundingClientRect() ?? document.querySelector('canvas').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
-  if (isMap) await ev(`document.querySelector('[data-tool="hill"]').click(); true`); else await ev(`document.querySelector('[data-tool="hill"]').click(); true`);
+  const box = await ev(`(() => { const r = document.getElementById('overlay')?.getBoundingClientRect() ?? document.querySelector('canvas').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
+  await ev(`document.querySelector('[data-tool="hill"]').click(); true`);
   await reset();
   const cx = box.x + box.w * .35, cy = box.y + box.h * .5;
   await ev('__perf.frameStart(); true');
@@ -317,23 +307,17 @@ try {
   await reset();
   const relT0 = await ev('performance.now()');
   await mouse('mouseReleased', cx + 70 * 9, cy + Math.sin(70 / 6) * 60);
-  if (isMap) {
+  {
     await sleep(500); await stable(2500);
     const events = await ev('__perf.ev'), vis = await visibleOf(), a = analyse(events, vis.keys, relT0);
     result.release = {...a, split: await splitStages()};
     writeFileSync(`${out}/${mode}-events-release.json`, JSON.stringify({t0: relT0, events}));
-  } else {
-    let readyAt = null;
-    for (let i = 0; i < 2400 && readyAt === null; i++) { if (await ev('!document.getElementById("export")?.disabled')) readyAt = await ev('performance.now()'); else await sleep(25); }
-    await stable(1500);
-    const events = await ev('__perf.ev'), ready = events.find(e => e.type === 'weather-state' && /Weathered edges/.test(e.text));
-    result.release = {finalReady: readyAt === null ? null : readyAt - relT0, weatherReady: ready ? ready.t - relT0 : null, erodeParts: await ev('window.lastErosionParts||null'), split: await splitStages()};
   }
 
   if (only === 'release') throw new Error('stopped after release (--only)');
   console.error('phase scroll'); flush();
-  // ------------------------------------------------------------ scroll (maps)
-  if (isMap) {
+  // ------------------------------------------------------------ scroll
+  {
     await reset();
     longWait = true;
     const sc = await ev(`(() => { const v = document.getElementById('viewport'); return {w: v.scrollWidth, h: v.scrollHeight, cw: v.clientWidth, ch: v.clientHeight, left: v.scrollLeft, top: v.scrollTop}; })()`);
@@ -352,14 +336,14 @@ try {
   console.error('phase export'); flush();
   longWait = false;
   // ------------------------------------------------------------ export
-  if (isMap && !noExport) {
+  if (!noExport) {
     await reset();
     const name = `Perf${mode}${port}x${Date.now() % 100000}`;
     await ev(`window.gateExport = {done: false}; const t = performance.now(); sculptMap.export(${JSON.stringify(name)}).then(r => window.gateExport = {done: true, ms: performance.now() - t, result: r}, e => window.gateExport = {done: true, error: e.message, ms: performance.now() - t}); true`);
     let g = null; for (let i = 0; i < 2400 && !g?.done; i++) { g = await ev('window.gateExport'); if (!g?.done) await sleep(500); }
     result.export = {name, ms: g?.ms ?? null, error: g?.error ?? null, split: await splitStages()};
   }
-  result.memory = isMap ? await ev('(() => { const m = sculptCanvas.stats(); return {gpuBytes: m.gpuBytes, peakGPUBytes: m.peakGPUBytes, heapBytes: m.heapBytes, peakHeapBytes: m.peakHeapBytes, cachedChunks: m.cachedChunks, bakes: m.bakes, rebakes: m.rebakes, cacheBytes: m.cacheBytes, levels: m.levels}; })()') : null;
+  result.memory = await ev('(() => { const m = sculptCanvas.stats(); return {gpuBytes: m.gpuBytes, peakGPUBytes: m.peakGPUBytes, heapBytes: m.heapBytes, peakHeapBytes: m.peakHeapBytes, cachedChunks: m.cachedChunks, bakes: m.bakes, rebakes: m.rebakes, cacheBytes: m.cacheBytes, levels: m.levels}; })()');
 } catch (e) {
   result.error = String(e.stack || e);
 } finally {
