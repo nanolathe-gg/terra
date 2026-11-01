@@ -5,6 +5,7 @@
 
 import {materialRows,tablePlacementRows,PLACEMENT_ROW,strataZoneWidths} from './sculpt-material-model.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
+import {setWorldForms} from './sculpt-shape-presets.js';
 
 // Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
 const MASK_PLANE_COUNT = 25;
@@ -243,6 +244,7 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
+    setWorldForms(this.materialData);
     // The water's grain is two more generated materials after the table's own, named by the config's water block (shared when the two are one).
     for (const name of [this.config.water.deep, this.config.water.shallow]) if (!this.materialData.order.includes(name)) this.materialData.order.push(name);
     // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.

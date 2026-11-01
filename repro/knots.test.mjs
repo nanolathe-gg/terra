@@ -47,3 +47,18 @@ test('variability: the sliders at 100% give the per-kind constants, 0 switches a
  assert.equal(variability('plateau',{naturalPlateau:true},{widthVar:0}).wK,0);
  assert.equal(variability('hill',{shouldered:true},{heightVar:2}).hgtA,1.5);
 });
+
+// H15 step D: a world's forms replace the shared form of the same name; a name the world does not give keeps the shared one, and no table is the shared forms.
+import {setWorldForms, formOf, defaultForm} from '../sculpt-shape-presets.js';
+test('a world form replaces the shared one and the fallback holds', () => {
+  const own = [[0, 0], [.5, .4], [1, 1]];
+  setWorldForms({forms: {plateau: {knots: own}, deep: {knots: [[0, 0], [1, 1]]}}});
+  assert.deepEqual(strokeKnots('plateau', {softness: .5}, false).knots, own);
+  assert.deepEqual(strokeKnots('deep', {softness: .5}, false).knots, [[0, 0], [1, 1]]);
+  assert.deepEqual(strokeKnots('plateau', {softness: .5, curve: {form: 'plateau'}}, false).knots, own);
+  assert.deepEqual(strokeKnots('mountain', {softness: .5}, false).knots, FORMS.mountain(.5).knots);
+  assert.equal(defaultForm('shallow', false), 'shallow');
+  assert.deepEqual(formOf('shallow', .5).knots, FORMS.plateau().knots);
+  setWorldForms({});
+  assert.deepEqual(strokeKnots('plateau', {softness: .5}, false).knots, FORMS.plateau().knots);
+});
