@@ -8012,6 +8012,20 @@ verification. Part 2 not started; branch `H21-impacts` is for owner review.
 - *The lighting group cost every pixel.* `markLight` and `away` had moved out of their marks' gates, so Green paid for marks it does not draw: terrain 5.10 ms per pass against main's 5.02 over eight alternating rounds at the same `n`. They went back inside, which gives up two of the five lines. Now 5.00 against 5.04, with all 27 scenes 0.00 and pitted, cracked, `slopeMarks` and `wrinkles` on moon-1 byte for byte.
 - *Part 2* is `handoff/5-impacts-part2-H21.md`: a switch-off table, Moon, crystal-1's craters from H20, then its rows on the sheet.
 
+### H20b. Crystal plates: 28 px, with some variety
+
+> **Owner, 2026-11-01:** "For crystal go ahead with 28, but maybe we also allow some variability. In retail there are examples of them being quite small in some places."
+
+**Why.** H20 left the size of Crystal's shore plates to the owner, since G7 had asked for smaller cells and retail's read larger: by eye 30 to 50 px on crystal-2 and 15 to 30 on crystal-3, with hairline seams. The owner's ruling is 28, and retail also keeps patches of fine mesh: crystal-3's band beside larger plates, crystal-1's mound among big cells. One size cannot draw that.
+
+**The build.**
+1. The plates draw at 28 px: `plateSize` 28, `crystalShoreScale` back to its default, the scene cards with them.
+2. One stroke option, `plateVary` (default 0, Crystal about .35): in patches, a plate breaks into a fine mesh inside its own outline, so the big seams stay.
+3. Thinner seams, by number.
+4. The shallow mosaic beside the new plates, by number.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H20b`, branch `H20b-plates`; assets `$R/agent-H20b`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
