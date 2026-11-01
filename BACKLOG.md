@@ -7762,6 +7762,23 @@ lit on the wall, in screen pixels, so the rock keeps its grain. On a tall wall t
 - *Checks* (all on the final head). regional 0 on all 27; smoke (page8 on six worlds) clean; gate 0; `node --test` 33 of 33; `shape_controls` no dead control; `section_check --against classic-ref.json` 0; `curveedit` green and desert 0. Quarter draw (`materialFoot=2`) against final on the green wall: same features, coarser grain, no pop. Indexed export of the red wall: the relief survives the palette and the dark faces stay brown (the export's offset to the render was matched by eye, so the crop is the same look, not the same pixels).
 - *Perf* (map4 `--only drag`, four rounds, order alternating): terrain 1070 / 1078 ms on green-2, 996 / 992 on the wall scene (head / main), relief bake 433 / 427 and 337 / 339, edit latency p95 36 / 42 and 37 / 38, rAF p95 16.7 on all. map40 on the wall scene: rAF p95 16.7 on both, edit latency p95 40 against 39.7; the prototype's 33 to 50 ms does not occur.
 
+### H20. Bodies: one cell, one body
+
+**Why.** Crystal, Ice and Lava each paint a body of one material: crystal mounds and columns, ice slabs, shelves and frost, lava flows. That is 59 knobs (33 `crystal*`, 10 `ice*`, 6 `frost*`, 10 `lava*`), and much of the code answers one question, which cell am I in and how far is its edge, in its own way: `shallowCell` in the draw, `lavaCells` in the bake, `iceHatch`'s domains, `stampCrystal` in the shape stage, while H17 already built one `cells` search for facets and blocks. Two blocks of the bridge say "Replaced by: Bodies", and the bridge's rule is that the card deletes its blocks. This card also inherits two marks from H18: crystal-2's whole-sea mosaic (`crystalShallowWater`) and ice-1's blue holes in the frost band. The sliders stay, as they did on H17 and H18: nothing a control does is removed before the owner rules. A body that reads short of retail gets closer where numbers can take it.
+
+**The owner's note to keep.** G7 asked for smaller shore and shallow crystals on crystal-2 and crystal-3. Retail's crystal-2 window shows water that is dark, with plates only as a fringe near shore, and larger plates than ours. Part 2 weighs the two with the retail window open, and if they truly conflict it is the owner's call: it does not undo G7 silently.
+
+**Part 1: inventory, one question, the bridge's blocks, and what reads furthest from retail.**
+1. Every knob of the family: which worlds set it, where it is read, what it draws, the same idea as what, and who owns the strays.
+2. Which cell am I in: one row per reader, with what it searches, what it returns, the stage it runs in, its worlds and its lines. This table decides part 2.
+3. Whether each knob acts, on the real engine: `measure/geology_controls.mjs --family bodies`.
+4. The bridge's two Bodies blocks (`bridgeSlateFace`, `bridgeSlateRock`) on the engine's own path, and the blocks deleted. The result must be shorter than what it replaces.
+5. A switch-off table for each world's three windows: what draws each mark, proved by turning it off, and where each body reads furthest from retail. Nothing is tuned yet.
+
+**Part 2** is the merges and the marks toward retail, then the count, written out here from part 1's report.
+
+**Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H20`, branch `H20-bodies`; assets `$R/agent-H20`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
