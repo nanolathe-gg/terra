@@ -1,3 +1,4 @@
+import {createPreviewFields} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds} from './sculpt-map.js';
@@ -18,11 +19,16 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   config.maskKeys=api.maskKeys; config.gpuBudgetBytes=128*MB;
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
+  const previewFields=createPreviewFields(renderer.device,api.previewScene);let previewReserved=false;
+  const displayLevel=()=>overview?Math.max(1,2**Math.floor(Math.log2(1/scale))):1;
+  const cacheKey=(rect,size=canonicalSize)=>[rect.x,rect.y,size,overview?'fit':'detail'].join(',');
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
   const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
+  let dirtyMarks=0,retainedInvalidations=0;
+  const interacting=()=>Boolean(gesture||api.previewActive?.());
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
   const bakedBefore=new Set(); let lastScroll=0,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let afterGesture=false,lastViewEpoch=-1,heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,documentLoading=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,documentLoading=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
   let hoveredNode=-1;
   let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(128,128),cg=coarse.getContext('2d');
@@ -39,7 +45,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function heightSample(x,y){for(const e of cache.values()){const r=e.heightPatch;if(r&&x>=r.gridOrigin[0]&&y>=r.gridOrigin[1]&&x<=r.gridOrigin[0]+(r.gridWidth-1)*r.gridSpacing&&y<=r.gridOrigin[1]+(r.gridHeight-1)*r.gridSpacing)return sampleField(r,x,y);}return null;}
   function visibleSample(x,y){return heightSample(x,y)??sourceSample(x,y);}
   function keepHeight(r){return {fields:{h:r.fields.h},gridWidth:r.gridWidth,gridHeight:r.gridHeight,gridSpacing:r.gridSpacing,gridOrigin:r.gridOrigin,bytes:r.fields.h.byteLength};}
-  function fixedGPU(external=true) { return (external?(api.gpuBytes?.()??0):0)+(canvas.width*canvas.height+overlay.width*overlay.height+coarse.width*coarse.height+navigatorCanvas.width*navigatorCanvas.height)*4+(features?.stats?.().imageBytes||0); }
+  function fixedGPU(external=true) { return (external?(api.gpuBytes?.()??0):0)+(previewReserved?64*MB:0)+(canvas.width*canvas.height+overlay.width*overlay.height+coarse.width*coarse.height+navigatorCanvas.width*navigatorCanvas.height)*4+(features?.stats?.().imageBytes||0); }
   function gpuResident() { return renderer.stats().residentBytes+cacheBytes+fixedGPU(); }
   const originalKnobs=renderer.applyKnobs.bind(renderer),originalColors=renderer.setColors.bind(renderer);
   renderer.applyKnobs=(...args)=>{const r=originalKnobs(...args);configureChunks();clear();return r;};
@@ -53,21 +59,21 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes(),accounted=heap+owned;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake`;
-    return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
+    return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,preview:previewFields.stats(),dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
   // its input (an edit elsewhere on the map, or a later move of the same stroke over other chunks, does not throw it away).
   let changeSeq=0;const changeLog=[];
   function changedSince(seq,input){return changeLog.length>=256&&changeLog[0].seq>seq+1||changeLog.some(c=>c.seq>seq&&(!c.rect||intersects(c.rect,input)));}
-  function clear(rect=null) { epoch++;changeLog.push({seq:++changeSeq,rect});if(changeLog.length>256)changeLog.shift();for(const [key,e] of cache)if(!rect||intersects(rect,e.input??e))remove(key);coarseColour=true;schedule(); }
+  function clear(rect=null,{refinement=false}={}) { if(!refinement)previewFields.invalidate(rect);epoch++;changeLog.push({seq:++changeSeq,rect});if(changeLog.length>256)changeLog.shift();for(const [key,e] of cache)if(!(refinement&&e.fit)&&(!rect||intersects(rect,e.input??e))){if(!e.dirty)dirtyMarks++;e.dirty=true;retainedInvalidations++;}coarseColour=true;schedule(); }
   function trimTo(limit){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
   function configureChunks() {
     if(budgetUpdating)return;budgetUpdating=true;
     try {
       // Every selected budget uses the same bake lattice. Budget changes evict
       // images, rather than change GPU interpolation and palette decisions.
-      const reserve=fixedGPU(false)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
+      const reserve=fixedGPU(false)-(previewReserved?64*MB:0)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
       renderer.setBudget(128*MB,reserve);const next=Math.min(512,renderer.recommendedChunkSize);
       if(next!==canonicalSize){for(const key of cache.keys())remove(key);canonicalSize=next;}
       trimTo(gpuBudget-fixedGPU()-renderer.stats().retainedBytes-32*MB);
@@ -88,10 +94,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function chunkSize() { return canonicalSize; }
   // H7b: `scale` 2 bakes a quarter image (half the width and height, drawn at 2x); only the GPU-fed path takes it, and export never asks.
-  async function bake(rect,exportArt=false,signal,stale=null,scale=1) {
-    const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
+  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false) {
+    const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:fit?512:(config.worldGrid??config.grid)};
+    if(fit)options.meshScale=scale;
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
-    const feed=await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options));   // H5b: a paged map prepares the pages under the chunk's lattice
+    const feed=fit?await previewFields.feed():await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options));   // H5b: a paged map prepares the pages under the chunk's lattice
     if(feed)try{
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
@@ -99,7 +106,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       trimTo(gpuBudget-fixedGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
       renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
       const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale});bakes++;
-      const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
     const fields=await region(request,options,signal);
@@ -142,7 +149,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   markCoarse();
   function drawCoarse() {
     // Sample in slices, but never during a gesture: the overview is stale under the edit and refreshes on release.
-    if(!gesture&&coarseFirst.length+coarseRest.length&&stepCoarse(coarseFirst.length?400:overview?12:6)&&!gesture)schedule();
+    if(!gesture&&coarseFirst.length+coarseRest.length&&stepCoarse(3)&&!gesture)schedule();
     if(coarseColour) {
       const image=cg.createImageData(coarse.width,coarse.height),base=config.baseHeight,sea=config.seaLevel,mean=renderer.means?.ground||[.2,.3,.15];
       for(let y=0;y<coarse.height;y++)for(let x=0;x<coarse.width;x++) {
@@ -166,7 +173,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
     ink.restore();
   }
-  function paint(entry,v=state()) { g.imageSmoothingEnabled=false;const k=entry.scale??1;g.drawImage(entry.bitmap,(entry.x-v.x)*scale,(entry.y-v.y)*scale,entry.bitmap.width*k*scale,entry.bitmap.height*k*scale); }
+  function paint(entry,v=state()) { g.imageSmoothingEnabled=scale<1;g.imageSmoothingQuality='high';const k=entry.scale??1;g.drawImage(entry.bitmap,(entry.x-v.x)*scale,(entry.y-v.y)*scale,entry.bitmap.width*k*scale,entry.bitmap.height*k*scale); }
   function presented() {
     const now=performance.now();if(lastPresented&&now-lastScroll<300&&now-lastPresented<3000){frameTimes.push(now-lastPresented);if(frameTimes.length>1024)frameTimes.shift();}lastPresented=now;
     if(pendingStrokeTime){strokeTimes.push(now-pendingStrokeTime);if(strokeTimes.length>256)strokeTimes.shift();pendingStrokeTime=0;}
@@ -179,58 +186,61 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       drawCoarse();overlays();
       // H7 2b: while the Time pass is running, a bake would read the unweathered height and be redone when the weather lands.
       // The pass is submitted first (it starts with the edit) and chunks wait for it, for at most 8 s so a failed pass cannot hide the map.
-      const weatherPending=api.canExport&&!api.canExport()&&!gesture&&!features?.busy;
+      const weatherPending=api.canExport&&!api.canExport()&&!interacting()&&!features?.busy;
       if(weatherPending){heldSince??=performance.now();}else heldSince=null;
       const holding=weatherPending&&performance.now()-heldSince<8000;
       if(holding)setTimeout(schedule,100);
-      if(!overview&&!busy){
-        const size=chunkSize(),v=state(),jobs=[],token=epoch,viewToken=viewEpoch;
+      if(!busy){
+        if(overview&&!previewReserved){previewReserved=true;api.fitGpuBudget?.();}
+        const size=overview?256*displayLevel():chunkSize(),v=state(),jobs=[],token=epoch,viewToken=viewEpoch,previewing=interacting();
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
         const dist=r=>Math.hypot(r.x+size/2-v.x-v.width/2,r.y+size/2-v.y-v.height/2);
         // H7b: with levels on, the visible chunks come before the margin, each group nearest the view's centre first.
         const levelsOn=levels&&api.gpuFeedActive?.();
-        jobs.sort((a,b)=>levelsOn?(intersects(b,v)-intersects(a,v))||dist(a)-dist(b):dist(a)-dist(b));
+        jobs.sort((a,b)=>{const visible=intersects(b,v)-intersects(a,v);if(visible)return visible;if(previewing){const age=(cache.get(cacheKey(a,size))?.bakedAt||0)-(cache.get(cacheKey(b,size))?.bakedAt||0);if(age)return age;}return dist(a)-dist(b);});
         const near={x:v.x-size,y:v.y-size,width:v.width+size*2,height:v.height+size*2};for(const e of cache.values())if(!intersects(e,near))e.heightPatch=null;
-        for(const rect of jobs){const e=cache.get(rect.x+','+rect.y+','+size);if(e&&intersects(rect,v))paint(e,v);}overlays();
+        for(const rect of jobs){const e=cache.get(cacheKey(rect,size));if(e&&intersects(rect,v))paint(e,v);}overlays();
         // H7b: the plan. `want` 2 is a quarter image, 1 final. During a gesture every chunk without an image gets a quarter one and nothing
         // is refined; once it ends, a quarter image is replaced by a final one (visible chunks first, then the margin), and a chunk
-        // that already shows final is never replaced by a quarter one. 
+        // whose final image is still current keeps it. Dirty images remain visible until a replacement arrives.
         const plan=[];
-        if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
+        if(overview)for(const rect of jobs)plan.push({rect,want:displayLevel()});
+        else if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
         else{
-          if(gesture)for(const rect of jobs)plan.push({rect,want:2});
+          if(interacting())for(const rect of jobs)plan.push({rect,want:2});
           else{
-            if(viewEpoch!==lastViewEpoch){afterGesture=false;lastViewEpoch=viewEpoch;}   // a new view (a scroll or a zoom) starts afresh; a release goes straight to final
             for(const rect of jobs)plan.push({rect,want:1});
           }
         }
         for(const {rect,want} of plan){
-          if(token!==epoch||viewToken!==viewEpoch||busy)break;
-          const key=rect.x+','+rect.y+','+size;let e=cache.get(key);const old=e;let baked=false;
-          if(want===2&&e)continue;   // a quarter plan item never replaces an image
+          if(token!==epoch||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
+          if(previewing&&!intersects(rect,v))continue;
+          const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
+          if(want===2&&e&&!e.dirty)continue;   // current detailed images also satisfy a preview request
           const upgrade=want===1&&e&&(e.scale??1)>1;
-          if((!e||upgrade)&&holding)continue;
-          if(!e||upgrade){e=await bake(rect,false,undefined,()=>token!==epoch||false,want);baked=true;if(token!==epoch){
-            // H6b: a finished fed bake is shown even when a later change touched it (the picture is at most one move old), but not kept: the chunk bakes again.
-            if(e.fed&&changedSince(e.seq,e.input)){if(intersects(rect,v)){paint(e,v);overlays();presented();}e.bitmap.close?.();break;}
+          if((!e||e.dirty||upgrade)&&holding&&!overview)continue;
+          if(!e||e.dirty||upgrade){e=await bake(rect,false,undefined,()=>token!==epoch||false,want,overview);baked=true;if(token!==epoch){
+            // Keep a completed preview even if a newer input touched it. It remains dirty until the latest revision is baked.
+            if(e.fed&&changedSince(e.seq,e.input))e.dirty=true;
             if(!e.fed){e.bitmap.close?.();break;}
           }
           // The image it replaces (a quarter one) is dropped now that the final one is in hand.
           const prior=cache.get(key);if(prior){prior.bitmap.close?.();cacheBytes-=prior.bytes;cache.delete(key);}
-          cache.set(key,e);cacheBytes+=e.bytes;}
+          e.bakedAt=performance.now();cache.set(key,e);cacheBytes+=e.bytes;}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch&&!e.fed){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{});checkHeap(input);e.heightPatch=keepHeight(input);}}
-          if(token!==epoch||cache.get(key)!==e)break;
+          if(cache.get(key)!==e)break;
+          if(!baked)continue;   // The retained tiles were painted together above; only fresh tiles need another presentation.
           if(viewToken!==viewEpoch){rerun=true;break;}
-          if(intersects(rect,v)){paint(e,v);overlays();presented();}await (levels&&(gesture||baked)?undefined:tick());
+          if(intersects(rect,v)){paint(e,v);overlays();presented();}if(token!==epoch){rerun=true;break;}await (levels&&(interacting()||baked)?undefined:tick());
         }
-      }else if(overview)presented();
+      }
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name!=='AbortError'){console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
     finally{drawing=false;if(rerun){rerun=false;schedule();}}
   }
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
   // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
-  function schedule() { if (!pending) { pending=true; if(levels&&gesture&&!drawing)queueMicrotask(frame);else requestAnimationFrame(frame); } }
+  function schedule() { if (!pending) { pending=true; if(levels&&interacting()&&!drawing)queueMicrotask(frame);else requestAnimationFrame(frame); } }
   function resize() {
     if(busy){resizePending=true;return;}resizePending=false;
     const centre=state();centre.x+=centre.width/2;centre.y+=centre.height/2;
@@ -316,7 +326,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     preview(event);refreshHover(event);if(gesture?.id===event.pointerId)schedule();overlays();
   });
   overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
-  const end=event=>{if(pan?.id===event.pointerId)pan=null;if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;afterGesture=true;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();queueSave();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
+  const end=event=>{if(pan?.id===event.pointerId)pan=null;if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();queueSave();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
   document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture){event.preventDefault();end({pointerId:gesture.id,type:'pointercancel'});}});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
   window.addEventListener('blur',()=>{space=false;pan=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});});
@@ -376,6 +386,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   function minimumBytes(){const size=canonicalSize,e=renderer.estimate(renderer.requiredRegion({x:Math.floor(renderer.size/2),y:Math.floor(renderer.size/2),width:size,height:size}),size,size,api.maskKeys?.length);return fixedGPU(false)+size*size*8+e.retainedBytes+e.workingBytes+8*MB;}
-  const result={renderer,minimumBytes,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];}};
+  const result={renderer,minimumBytes,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),seq:e.seq,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

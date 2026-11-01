@@ -150,6 +150,10 @@ fn palettePair(rgb: vec3f, threshold: f32) -> vec3f {
     let b = textureLoad(paletteTex, at + vec2i(0, 64), 0).rgb;
     let d = b - a;
     let t = clamp(dot(rgb - a, d) / max(dot(d, d), 1e-5), 0.0, 1.0);
+#ifdef CHUNK
+    // Subpixel palette checkerboards converge to their mixture when zoomed out.
+    if(u.chunkScale>1.0){return mix(a,b,t);}
+#endif
     return select(a, b, threshold < t);
 }
 fn paletteColor(rgb: vec3f) -> vec3f {

@@ -1037,6 +1037,10 @@ export class TerrainRenderer {
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const beds = String(v.get('columnBeds') || '5:.5:0').split(',').slice(0, 8).map(s => s.split(':').map(Number))
       .filter(b => b[0] > 0).map(b => [b[0], Math.min(1, Math.max(0, b[1] || 0)), b[2] || 0, 0]);
+    // Refinement can run before any relief bake; its column offset must not depend on the last displayed view.
+    this.set('uBedSpacing', number('bedSpacing', 12));
+    this.set('uBedDip', number('bedDip', 0));
+    this.set('uBedDipDir', number('bedDipDir', 90));
     this.set('uColumn', number('column', 0));
     this.set('uColumnContrast', number('columnContrast', 1));
     this.set('uColumnCount', Math.max(1, beds.length));
@@ -1095,10 +1099,7 @@ export class TerrainRenderer {
     set('uCrackMajor', number('crackMajor', 0.8));
     // Rock structure (card E3); 0 is the scattered rock every world had.
     set('uRockOrder', number('rockOrder', 0));
-    set('uBedSpacing', number('bedSpacing', 12));
     set('uBedVary', number('bedVary', 0.5));
-    set('uBedDip', number('bedDip', 0));
-    set('uBedDipDir', number('bedDipDir', 90));
     set('uBedLedge', number('bedLedge', 0.5));
     set('uBedLip', number('bedLip', 1));
     set('uJointSpacing', number('jointSpacing', 36));
