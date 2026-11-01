@@ -7202,7 +7202,7 @@ grey shoulders still read as short wormy marks in ours.
 4. One groove function in place of the three, with each family's numbers, the knobs unchanged. Judged against retail, since three
    functions cannot become one with every float in the same order.
 
-**Part 2** is written from its report: one cell function, then the marks toward retail, then the count.
+**Part 2** is one cell function and fewer groove numbers, code only. **Part 3** is the marks toward retail, then the count. Both are written out below, from part 1's report.
 
 **Done (part 1).** Branch `H17-fractures`, four steps, a commit each, nothing merged.
 - *Step 1, the inventory (48 knobs; `crackDark` and `crackLit` are read in `engine-frag.wgsl`, the rest in `engine-bake.wgsl`).* Effective value per world = query > the engine preset
@@ -7389,6 +7389,22 @@ grey shoulders still read as short wormy marks in ours.
   renders each (8887 is outside the card's table and the forbidden ranges). The `fractures` render of step 3 used CDP 9686, the baseline's, beside the
   measurement on 9685. `measure/geology_controls.mjs` reads Green's engine preset and the scenes' variants only under `--family fractures`; the geology default
   is as H16 left it. The perf run is main at the card's base (`971ffeb`, only the card text differs from `88e58cb`).
+
+**Part 1, the coordinator's review.** Read the diff, re-tabulated every pass from the raw `map4-perf.json`, viewed `sheet-s4/green` 1x and 2x, `sheet-fr/moon` 2x and `sheet-marks/red` and `/ice`.
+- *Perf stands.* Relief bake +1.0% drag and +1.5% load on green-2, +.6% and +1.2% on desert-1, the head and main ranges overlapping; every other pass the diff can reach is level. The largest ratio, Desert's load `chunk feed` (11.2 / 9.9 ms), is `feedMain`, which this diff does not compile, and the head ran first in every round.
+- *The three "real changes" are less than the entry says.* The gully profile is the same polynomial (`1 - 3u^2 + 2u^3` both ways) and the joint half-width the same number (`1.795 + .81h`). Max over three lines is the only change of form, and it coincides with the nearest line at these spacings, since the supports do not overlap. So green-2's 3 pixels are float order and the early out: the groove function is the same picture, which is a stronger statement than drift or real.
+- *`fractures.png`:* confirmed. `BAKE` is defined only for `engine-bake.wgsl`, which never calls `surfaceHeight`, so `fractureDepth` cannot run. It goes to the owner's list.
+- *Floors.* `grooveRun` lost its own floor, and its two callers both pass a floored run. The slider minima (spacing 12 / 12 / 3, run 30 / 30 / 20) sit at or above every floor, so only a typed query can reach one.
+- *The class split is 9 dead, 51 under, 20 act.* The message of f203945 says 53; it stands, the card is right.
+- *What the step did not do.* The code is shorter, but a groove still has 23 numbers beyond its five knobs, three times over. They moved into `Groove` and were not removed, and most of them are small differences nothing asks for (`.7 + .3` against `.55 + .45` against `.6 + .4`). Part 2 folds them.
+- *Direction of the marks, a hint and not a target.* Viewed whole, green-2's retail lines run along the contours and ours run down the fall. A structure-tensor read of the 27 windows (scratch, not committed; share of stroke energy within 30 degrees of the contour / of the fall) has retail contour-leaning in every world, green-2 .47 / .14 against ours .38 / .28 and red-1 .59 / .15 against .34 / .41, inverted. In `fractureLevel` a low `crackNetwork` keeps the edges down the fall and drops those along the contour, and `faceStreak` is the existing turn. But the read counts every stroke: Desert's .82 and Zhon's .73 are beds and bands, and the window that reads closest scores furthest. Its length read did not separate a fissure from a worm. Part 3 judges viewed windows, as decision 22 says.
+
+**Part 2: one cell, fewer numbers.** Code only, three steps, a commit each, measured one at a time.
+1. `cells(q, metric, salt)`, the jittered search of `facetLevel` and `blockField`, with `metric` keeping each caller's distance (cell units for a facet, px for a block), so both pick today's points; seams stay in their callers, and both `blockField` calls stay on `columnAt`. Judged like part 1's groove, against main, with the drift proof. `fractureLevel` stays out: other jitter, a turned 9 x 9 search with a reach, and an edge walk of its own.
+2. Fold `Groove`: one value per row for all three families wherever a family's own number earns nothing, down to angle, spacing, depth, run, gaps, half-width and a family salt if the look allows. Lines reseed, so mean |diff| does not judge this one: stats and viewed windows do.
+3. Gate the joint at `jointDepth` 0 where nothing reads its shift.
+
+**Part 3: the marks toward retail, then the count.** Written from part 2's report. Targets, in order, viewed: green-2's band, green-1's rim, green-3's ridge, red-1's and red-2's marks, ice-1's and ice-3's fibres, moon-2 if moon-1 and moon-3 do not read further. By world values and shared code, no new knob. The count is lines and the consolidated list for combine-or-drop; nothing is deleted.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
 
