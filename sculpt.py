@@ -201,8 +201,7 @@ KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, 
 KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # H2, H16 (rock column): a world with a `column` block in its table reads each bed's thickness and hardness from it (sections of
 # beds that repeat upward, materials/<world>.json) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
-# with erosion 1, wear). erosion 1 runs the GPU shallow-water pass in place of the droplet worker for the 1024-px study:
-# erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
+# with erosion 1, wear). The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
 KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
@@ -310,7 +309,7 @@ WORLD_KNOBS = {
                   # H2 (rock column): its `column` table (materials/green.json) has eight beds repeating every 47 height units (a hash
                   # bed averaged 5): thin hard beds that stand as ledges between thicker soft ones, so the hard ones read as lines and the
                   # soft ones as the space between.
-                  # H2 (erosion): the GPU shallow-water pass replaces the droplet worker's loop on the study.
+                  # H2 (erosion): the GPU shallow-water Time pass.
                   erosion=1, ),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
@@ -456,7 +455,7 @@ WORLD_KNOBS = {
                  # sees on our slopes, before and after E6 (diagnostic: banding 0 alone removes them; shine
                  # grain, cracks, worms, ejecta and the slope art leave them in). The variants 'pitted' and
                  # 'cracked' restore them.
-                 # G8: pits are lit cups (moonCups) from the visual study, not E6's dots (pockmark, now the
+                 # G8: pits are lit cups (moonCups) from the retail comparison, not E6's dots (pockmark, now the
                  # Moon variant 'pitted'): small, on shaded steep faces, few on lit ground, none on tops.
                  moonCups=1, moonCupSize=6.5,
                  # G8: steep faces turned from the sun are near black and stringy (strokes 1-2 px wide, 5-12 px
