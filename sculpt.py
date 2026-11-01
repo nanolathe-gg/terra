@@ -579,10 +579,11 @@ WORLD_KNOBS = {
                     # G7: craters read as holes under a thin wandering web (retail crystal-1: smooth lit and
                     # shaded walls, cells 12-20 px, hairline to 2 px lines, many left out): small facets with a
                     # 1-unit step, one skin mark, the web drawn by the shader, and the sun's light and shade
-                    # pushed 1.6 times harder on the wall.
+                    # pushed 1.6 times harder on the wall. H21: the west wall read too dark and busy;
+                    # ordinary contrast and a fainter web keep the planes visible (crystal-1).
                     crystalCraterPx=16, crystalCraterStep=1, crystalCraterSkin=1,
-                    crystalCraterWeb=1, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
-                    crystalCraterTone=.12, crystalCraterLight=1.6,
+                    crystalCraterWeb=.35, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
+                    crystalCraterTone=.12, crystalCraterLight=1,
                     # G7/H20b: the shore slabs draw at 28 px, under thinner seams (.56, ending at .68).
                     # G7 asked for finer cells (crystal-3's band reads 8-14 px) and drew plateSize 14 and 24 at
                     # 70% through crystalShoreScale; retail's plates read larger elsewhere (30-50 px on

@@ -8012,6 +8012,33 @@ verification. Part 2 not started; branch `H21-impacts` is for owner review.
 - *The lighting group cost every pixel.* `markLight` and `away` had moved out of their marks' gates, so Green paid for marks it does not draw: terrain 5.10 ms per pass against main's 5.02 over eight alternating rounds at the same `n`. They went back inside, which gives up two of the five lines. Now 5.00 against 5.04, with all 27 scenes 0.00 and pitted, cracked, `slopeMarks` and `wrinkles` on moon-1 byte for byte.
 - *Part 2* is `handoff/5-impacts-part2-H21.md`: a switch-off table, Moon, crystal-1's craters from H20, then its rows on the sheet.
 
+**Done (part 2).** [Impacts part 2](docs/audit/IMPACTS-2.md)
+records the switch-off table (34 valid renders), three Moon ideas, three Crystal
+ideas and two Red ideas. Only Crystal's crater web (1→.35) and contrast (1.6→1)
+are kept: crystal-1 reads closer at 1x, mean |diff| .389075597. crystal-2 reads
+the same with one changed pixel (MAD .000011444); crystal-3 is exact. The other
+24 scenes are byte-identical RGBA and all 27 height arrays are exact. Moon and
+Red retain their settings; the missing uphill relief, fissure paths, crater
+planes and local broken rims are now in **Small leftovers** in TERRAIN_ENGINE.
+No shore cell size, shader, control or scene changed.
+
+The combine-or-drop sheet adds 14 H21 review rows: 11 controls and three
+unresolved bundles. Seven fresh Crystal states (21 renders) distinguish the
+crater class from the much broader historical impact class; no control is
+deleted and existing totals are not double-counted.
+
+All required checks exit 0: all 27 renders and compare, statistics (675 flags
+unchanged; all 17 changed metric cells listed), nine wall scenes (RGBA/heights
+exact), regional (837 exact field comparisons), smoke (135 brushes, eight
+exports plus Zhon disabled, six page8 worlds), world gate, 35 Node tests, shape
+controls (no shown `!`), H15 section check and 48 curve-editor checks on Green
+and Desert. The report gives exact section errors, viewed/not-viewed images and
+trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
+`*-2` folders; NOTES lists retained cleanup candidates. Six commits on
+`H21-impacts-2`, based on `f64afa1`, for the owner's review; no later work started.
+
+**Part 2, the coordinator's review.** Read the diff and `docs/audit/IMPACTS-2.md`, recounted the sheet's rows, repeated crystal-1, -2, -3, moon-1 and red-1 from the branch (crystal-1 .389 and 21,800 pixels, crystal-2 one pixel, the rest byte for byte), and viewed the final sheet. crystal-1's web and tone read closer; its cracks are softer than retail's thin dark lines, and the broad planes stay out of reach. No shader changed, so no perf rounds.
+
 ### H20b. Crystal plates: 28 px, with some variety
 
 > **Owner, 2026-11-01:** "For crystal go ahead with 28, but maybe we also allow some variability. In retail there are examples of them being quite small in some places."
@@ -8036,6 +8063,11 @@ verification. Part 2 not started; branch `H21-impacts` is for owner review.
 - *Checks (head, `$R/agent-H20b`).* `all.sh` exit 0, mismatch 0 and console clean on 27; `compare.py` against `g7/f` exit 0, crystal-1/-2/-3 2.04 / 9.19 / 3.38 mean |diff| (6.5 / 31.6 / 11.0% moved), the other 24 0.00 (Ice byte for byte); `plateVary` 0 against the step 1 render: 0.00 on all three windows (byte for byte); the nine walls scenes equal main's (`cmp`); `regional.mjs` exit 0 on 27, 0 mismatches; `smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago,crystal` exit 0, 16 lines, console `[]` on all 16; `gate.sh` exit 0; `node --test repro/*.test.mjs` exit 0, 35 pass; `shape_controls.mjs` exit 0, only the legend's `!` (it measures heights on Green and does not cover `plateVary`); `section_check.mjs --against classic-ref.json` exit 0 (RMS .00-.08); `curveedit.mjs` Green and Desert exit 0.
 - *Perf (`$R/agent-H20b/perf`, `perf.mjs map4 --only drag --no-export`, crystal-2 and green-2, eight alternating rounds, head first in the odd ones; both builds ran crystal-2's head scene file; the host's 1-minute load at each start ran 5.1 to 7.4, the rounds agree within 6% and no round reversed the order of a sum over its neighbours by more than noise).* `ms / n`, median over the rounds, head / main, `n` equal in every row. crystal-2: terrain 3.454 / 3.568 (x0.97, n 211), relief bake 1.214 / 1.266 (n 211), **erode | shape passes 4.667 / 4.641 (x1.01, n 70)**, shape passes in the drag 4.481 / 4.533 (x0.99, n 70). green-2: terrain 5.111 / 5.122 (n 210), relief bake 2.101 / 2.106, **erode | shape passes 2.108 / 2.115 (x1.00, n 70)**. The one `chunk | shape passes` row has n 1 and is not a comparison. Crystal-2's head draws 28-px plates where main drew 19.6-px ones, so its shape passes do the same work either way within 1%.
 - *Departures.* The first cut broke every plate and is `5ef3606` (kept in the history). The trials moved `plateVary` through a scene copy's stroke options (the query does not reach stroke options). The `stats.py` three cells above are not worked around.
+
+**The coordinator's review.** Read the diff, viewed crystal-1, -2 and -3 against retail and main at 1x and whole at the kept .5, and merged main with H21's crater values.
+- *Stats.* The agent stopped on three cells newly outside retail: crystal-2 `band_8px` 6.40 against p90 6.30, crystal-3 `edge_diagonal` .5989 against .5986 and `edge_horizontal` .1515 against .1526. They come with the owner's 28 px, not with `plateVary`, which moves two of them back a little, and crystal-2's `edge_vertical` came back inside. Land plates read clearly closer on all three windows, so the ruling stands (decision 22).
+- *Crystal-3's band* reads closer in its mesh, though the unbroken plates beside it are paler and smoother than retail's, whose web runs across the whole band. The slider is there if the owner wants more or less of it. crystal-2's water reads slightly busier than retail's smooth plates, the cost of .5.
+- *Decision 11.* `plateVary` moves 2.3 / 12.9 / 18.9% of the `shore` class on crystal-1, -2 and -3. crystal-1 has few plates in the water.
 
 ## After the cards
 
