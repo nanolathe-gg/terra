@@ -7635,6 +7635,44 @@ retail gets closer where numbers can take it.
     `bankWidth` (11.7 / 7.7 mean |diff|) and `waterBed` 3 are shape and bed picks, not marks; `layerStyle`, `shoreLayers`, `layerPx`, `layerVary` and `lavaSpread` change Lava's banks wholesale; the plate options change Ice and Crystal's shores by half their blocks (`plateMaterial` 2 to 1: 18.45 mean |diff|).
   - **Reading.** Of the water-side controls the bed's tint, lit bed and contrast, the deep step's hardness, `flatBank` and Zhon's sand and depths carry the picture; the marks that were added to close a gap with retail (`shoalRag`, `shoalDither`, `shoalGrain`, `bedDots`, `stepSoftPx`, `deepEdgeDepth`, `crackedContrast`, `bedCrackSlope`) do not clear the bar on any world. The owner rules on them; nothing was removed.
 
+- *Step 4, one beach (`engine-frag.wgsl`, the four blocks gone from `engine-bridge.wgsl`).* `bridgeSnow`, `bridgeBeachSand`, `bridgeSandBar` and `bridgeBeach` are now `beachColour`, `beachMean`, `beachSand`, `barCover` and `sandBarAt` (one helper block before `paintCoverage`) and an inline beach block in `fragmentMain`. Merged where two blocks tested the same thing: the beach colour (`genColor(6)` through `based`) was built in `bridgeSnow` and `bridgeBeach` and is one function; the cover `smoothstep(.25, .75, beachField + (speck - .5) * .5)` was in `bridgeBeachSand` (no speck) and `bridgeBeach` (with it) and is one function, `speck` .5 being the plain read; the bars' cover `smoothstep(.15, .6, max(-alpha, 0))` was in `bridgeSandBar` and, a third time and ungated, in `flowBank`, and is one function; the beach mean luma test of `bridgeSnow` is two lines in `snowMaterial`. The bridge's call wrappers, early returns and pointer arguments go. No knob, slider, option or JSON field changed, no world-gated branch was added (`repro/gate.sh` exit 0), and `beachCover`'s search stays for part 2.
+  **Lines (counted across `engine-bridge.wgsl` and `engine-frag.wgsl`, the only files touched):** total 2,146 to 2,130 (bridge 187 to 150, frag 1,959 to 1,980), code lines without blanks and comments 1,544 to 1,532 (bridge 148 to 122, frag 1,396 to 1,410). The four blocks were 35 lines with their comments and 5 call-site lines; the new helper block is 12 lines, the inline beach 11 and the two call sites 2. The result is shorter by 16 lines, 12 of code; it is not a large cut because the beach's own arithmetic is kept as it was.
+  **Drift or real: neither.** All 27 scenes render byte for byte as main (`compare.py` 0.00 on all 27, and a pixel maximum of 0 over the 27), and so do six scenes that do draw a beach (`$R/agent-H18/scenes-beach`: `zhon-beach-1..3`, the Zhon scenes without `beachWidth=0`, and `zhon-snow-1..3`, with a snow paint stroke; main and head both 0.0000, max 0). None of the 27 draws a beach (all three Zhon scenes set `beachWidth=0`), but all three paint sand bars, so `sandBarAt` is exercised by them. The new scenes are sensitive to every merged condition, shown by replacing it with `false` on a copy: no beach block 18.23 mean |diff| (zhon-beach-1), no snow choice 1.25 (zhon-snow-1), bars off 7.01, no beach term in the shine 1.15 (with `shineSand=1&shineGround=1&shineRock=1`, since Zhon's own shine is off). Every float expression keeps its order, so 0.00 is what it should be.
+  Windows: none changed, so there is no before and after sheet; the shore reading below uses the 1x pair sheets of the head.
+
+- *Where each shore reads furthest from retail (for part 3; viewed, not tuned).* Seen on the 1x `pair.png` of `$R/agent-H18/out-head`: green-1, red-3, archipelago-1, lava-2 and crystal-2; not viewed: zhon (no retail map), ice, moon, desert, and no sheet at 2x.
+  - **Green** (green-1): retail's shore is a light, narrow shallow band with a stair-stepped edge and nothing dark on the land; ours has a dark irregular rim of shaded bank along the land side.
+  - **Red** (red-3): retail's bank is a wide dark cracked rock apron down to the water; ours is a thin dark rim and then smooth plain (the shallows' width and tint are close).
+  - **Archipelago** (archipelago-1): retail has a soft shallow halo hugging every island and organic reef bars; ours has no halo, a dark rim at the sand edge and straight-edged bars.
+  - **Lava** (lava-2): the layers are close in kind; ours are bolder, darker and doubled where retail's are thin faint arcs.
+  - **Crystal** (crystal-2): retail's water is dark, with plates only as a fringe near shore; ours covers the sea in small mosaic cells to the edge of the window.
+
+- *Checks on the head (`$R/agent-H18/chk`, all exit 0).* `repro/all.sh` 27 scenes, mismatch 0, console clean on all 27; `repro/compare.py` 0.00 on all 27; `repro/stats.py`: `stats.json` equals the baseline's (`chk-p3`) in every one of 9,551 leaves but its root path, so nothing is newly outside retail; `repro/regional.mjs` 0 mismatches on all 27 (864 plane checks); `repro/smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago` exit 0, console clean (15 lines); `repro/gate.sh` exit 0; `node --test repro/*.test.mjs` exit 0; `measure/shape_controls.mjs` exit 0, no `!` row; `measure/section_check.mjs --against agent-H15/classic-ref.json` exit 0 (RMS .00-.08); `repro/curveedit.mjs` Green and Desert exit 0.
+  **Perf** (`repro/perf.mjs map4 --only drag --no-export`, green-2 and `zhon-beach-1`, the only scene that draws a beach; four rounds, head first in rounds 1 and 2, main first in 3 and 4; every pass the log holds, gpu ms; `chunk | terrain` is the pass this diff reaches). Green-2's terrain pass: head 1056.0 / 1081.6 / 1066.7 / 1054.5, main 1050.1 / 1044.6 / 1061.5 / 1041.8, medians 1061.3 / 1047.3 (+1.3%, the ranges overlap and the head ran first in the two highest rounds; in rounds 3 and 4, main first, +0.5% and +1.2%). Zhon's: head 640.8 / 637.1 / 634.8 / 631.4, main 698.0 / 646.4 / 671.2 / 659.2, medians 636.0 / 665.2 (head 4% lower). Edit latency p95 27.6 / 26.6 and 21.0 / 22.6, rAF p95 16.7-16.8 throughout.
+
+```
+### green-2: rounds 1-4 (head first in 1,2; main first in 3,4) head | main | median head / main (ms)
+chunk | chunk feed                         117.7 118.6 119.8 121.4    | 122.5 116.9 120.7 116.0    | 119.2 / 118.8
+chunk | chunk flags                        0.7 0.5 0.8 0.5            | 0.5 0.7 0.8 0.5            | 0.6 / 0.6
+chunk | relief bake                        433.4 446.4 441.8 449.1    | 440.3 438.7 446.1 434.2    | 444.1 / 439.5
+chunk | shape passes                       1.7 2.0 4.2 3.9            | 5.4 4.3 1.7 6.5            | 2.9 / 4.8
+chunk | terrain                            1056.0 1081.6 1066.7 1054.5 | 1050.1 1044.6 1061.5 1041.8 | 1061.3 / 1047.3
+drag rAF p95                               16.7 16.8 16.7 16.7        | 16.8 16.8 16.7 16.7        | 16.7 / 16.8
+edit latency p50                           20.1 21.9 18.6 21.5        | 19.7 17.8 21.3 19.2        | 20.8 / 19.4
+edit latency p95                           30.3 28.6 26.5 25.9        | 24.1 25.6 27.5 32.8        | 27.6 / 26.6
+erode | shape passes                       161.7 158.4 153.3 158.5    | 149.0 153.3 150.3 159.6    | 158.5 / 151.8
+### zhon-beach-1: rounds 1-4 (head first in 1,2; main first in 3,4) head | main | median head / main (ms)
+ | shape passes                            129.0 126.8 130.8 133.5    | - 145.0 138.7 130.8        | 129.9 / 138.7
+chunk | chunk feed                         118.4 115.5 119.2 115.0    | 117.0 112.6 115.3 115.9    | 116.9 / 115.6
+chunk | chunk flags                        0.4 0.6 1.0 0.3            | 0.7 0.5 0.5 0.4            | 0.5 / 0.5
+chunk | relief bake                        420.5 412.5 423.3 412.8    | 455.6 423.0 450.4 439.0    | 416.6 / 444.7
+chunk | shape passes                       4.5 4.3 1.8 4.0            | 142.1 2.1 1.9 4.3          | 4.2 / 3.2
+chunk | terrain                            640.8 637.1 634.8 631.4    | 698.0 646.4 671.2 659.2    | 636.0 / 665.2
+drag rAF p95                               16.8 16.7 16.8 16.7        | 16.7 16.8 16.8 16.8        | 16.8 / 16.8
+edit latency p50                           16.9 16.7 17.0 16.6        | 16.9 17.9 16.2 16.6        | 16.8 / 16.8
+edit latency p95                           21.0 20.7 21.0 22.6        | 28.5 23.0 20.8 22.3        | 21.0 / 22.6
+```
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H18`, branch `H18-shores`; assets `$R/agent-H18`.
 
 ## After the cards

@@ -17,28 +17,6 @@ var<private> bTransShared: bool;
 // A world whose plain is one quilted image takes the generated layer its table's `quilt` material makes; the 16-tile plain stays in groundTile.
 fn bridgeGround(pixel: vec2f) -> vec3f { return genColor(u.groundLayer, pixel); }
 
-// Replaced by: Shores (beach sand is a shore material). The lightest of the ground and the beach: snow takes the beach when it is lighter.
-fn bridgeSnow(pixel: vec2f, snow: ptr<function, vec3f>, mean: ptr<function, vec3f>) {
-    const luma = vec3f(0.299, 0.587, 0.114);
-    let beachMean = select(u.beachTexMean, u.beachBase.rgb, u.beachBase.a > 0.5);
-    if (u.beach != 0 && dot(beachMean, luma) > dot(*mean, luma)) {
-        *snow = based(genColor(6, pixel), u.beachTexMean, u.beachBase);
-        *mean = beachMean;
-    }
-}
-
-// Replaced by: Shores. Beach sand is lit as sand.
-fn bridgeBeachSand(p: vec2f, sand: f32) -> f32 {
-    if (u.beach != 0) { return max(sand, smoothstep(0.25, 0.75, beachField(p))); }
-    return sand;
-}
-
-// Replaced by: Shores. Painted sand keeps a raised bar sand to its crown (sand bars; 0 where the knob is 0).
-fn bridgeSandBar(p: vec2f) -> f32 {
-    if (u.sandCrown <= 0.0) { return 0.0; }
-    return u.sandCrown * smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0));
-}
-
 // Replaced by: Bodies (ice slabs). Slate faces: all face, all rock, and no snow lumps in them.
 fn bridgeSlateFace(face: f32, share: f32, faceSlope: f32, route: f32, sandBar: f32) -> vec2f {
     if (u.iceSlate <= 0.0) { return vec2f(face, share); }
@@ -148,21 +126,6 @@ fn bridgeMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, grass: ve
         *slopeGrass = mix(mix(grass, *slopeGrass, *slopeCover), margin, materialWeather);
         *slopeCover = 1.0;
     }
-}
-
-// Replaced by: Shores. Beach sand within reach of the water (baked), or failing that a low band above the waterline; its inland edge is
-// ragged and breaks into grains, and steep banks stay bare.
-fn bridgeBeach(material: vec3f, p: vec2f, pixel: vec2f, h: f32, slope: f32, slopeShare: f32, exposed: f32) -> vec3f {
-    if (u.beach == 0 || h <= u.sea - 1.0) { return material; }
-    let sandBeach = based(genColor(6, pixel), u.beachTexMean, u.beachBase);
-    let speck = terrainNoise(p * 6.0 + vec2f(61.0, 3.0)).b;
-    var beach = smoothstep(0.25, 0.75, beachField(p) + (speck - 0.5) * 0.5);
-    let top = u.beachHeight * u.beachWidth * (0.65 + 0.7 * terrainNoise(p * 0.45 + vec2f(29.0, 5.0)).g);
-    // The low band only within the water's reach: inland hollows of a low world are not beaches.
-    beach = max(beach, (1.0 - smoothstep(top * 0.6, top, h - u.sea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)) * smoothstep(0.0, 0.15, beachField(p)));
-    // A sandy slope keeps its own streaked material over the beach sand.
-    if (u.slopeSand != 0) { beach *= 1.0 - slopeShare; }
-    return mix(material, sandBeach, beach * (1.0 - exposed * 0.7));
 }
 
 // Replaced by: Layered rock and Materials, with bridgeMargins. The shared transition's one join to warm mineral and sand: exposed rock
