@@ -4,7 +4,7 @@ import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,r
 import {selectionGeometry} from '../sculpt-selection.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 const line=()=>({kind:'mountain',points:[{x:40,y:40},{x:80,y:40},{x:120,y:40}],params:{radius:12,amount:30,rough:0,softness:.5}});
-const geom={grid:256,spacing:1},context={seed:1,baseHeight:99,sea:75,params:n=>new Proxy(n.params,{get:(q,k)=>q[k]??0})};
+const geom={grid:256,spacing:1},context={seed:1,baseHeight:99,sea:75,params:n=>new Proxy(n.params,{get:(q,k)=>q[k]??(k==='crown'?.5:0)})};
 
 test('legacy shapes keep one path; disconnected additions have no bridging edge',()=>{
   const n=line();assert.deepEqual(shapePaths(n),[[0,1,2]]);

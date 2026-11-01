@@ -6667,13 +6667,14 @@ crystals, fissures and ramps stay separate.
 | Control | After |
 | --- | --- |
 | `profile` | Goes |
-| `apronPx`, `apronHeight`, `faceCurve`, `crown`, `lip`, `shelfPx`, `shelfDepth`, `shelfSteps` | Absorbed by the curve |
+| `apronPx`, `apronHeight`, `faceCurve`, `crown`, `lip`, `shelfPx`, `shelfDepth`, `shelfSteps` | Absorbed by the curve. A lip is the curve going above 1 |
 | `mesaFlank` | Absorbed: Desert's plateau preset is the mesa curve |
 | `northFace` | Absorbed by lean, with facing set to north |
 | `facePx` | Stays: 0 scales with the stroke, above 0 keeps the face that wide |
 | `softness`, `faceVariation` | Stay |
 | `terraces`, `ledge`, `terraceJitter` | Stay until Geology |
 | New | The curve (a form to pick and knots to drag), lean, facing |
+| New, on top of the 9 | Variability sliders for outline, width and height; `faceVariation` is the face slider. So about 12 in all |
 
 **Step A: the table, with no change of look.** Replace only the line that computes
 each curve. Every per-kind noise term stays exactly as it is, so part 1's stand-in
@@ -6715,10 +6716,186 @@ its table. Keep a measured curve only where the three windows read at least as c
 *Acceptance:* each world's windows by eye at 1x and 2x against retail (decision 22),
 `stats.py`, and every check of step A.
 
-**Two dispatches:** A and B, then C and D, so each report can be reviewed.
+**Three dispatches:** A and B, then C, then D, so each report can be reviewed. C is
+larger than planned, and it works in slices that each leave a reviewable commit.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H15`,
 branch `H15-shape`; assets `$R/agent-H15`.
+
+**Done (part 1).**
+
+*1. Inventory.* `r` is the cell's distance from the stroke over its outline
+reach (0 at the stroke, 1 at the foot), `t = 1 - r`. Every curve is applied
+after the outline wobble and before the modifiers: the crest (`ridgeRise`
+multiplies `w`), `baseBump`, mask writes, the cracks mark, protection
+(`smoothstep(.65, .95, w)`) and the coast pass's footprint all read `w`.
+
+| Kinds (shader kind) | Classic curve `w` | Who reaches it (scenes) | Function of distance alone? |
+| --- | --- | --- | --- |
+| plateau (6), offset (7), erase (1), paint (0), sand (9), grass (10) | one curve under six names: `1 - smoothstep(shoulder, 1, r)`; width `1 + 1.3 rough nCW`; `shoulder = .56 + rough (nDet + .3 nCW) + faceVar .22 broad - (softness - .5) .6 - north term` | plateau: desert-1/2/3, lava-3, red-2; offset: crystal-1, desert-1, ice-1/2, red-1/2; paint: green-1/2, red-3 (as mask brushes); erase: green-2; sand: zhon-1/2/3 | no: the shoulder and width vary per cell with three noise fields, and the north term depends on the bearing. `mesaFlank` swaps in a concave-flank curve (plateau only) |
+| lower (8), smooth (11) | one curve under two names: `1 - smoothstep(0, 1, r)` (lower adds `1 + .09 rough nDet`) | moon-1 (lower); smooth is not in a scene | yes |
+| deep (2), shallow (3) | one curve under two names: `1 - smoothstep(.10, 1, r)`; the value is `base + (bed - base) w`. Deep natural adds width noise, a noise-driven shelf and a core; bank width/beach flatness stretch the dry part | 82 strokes in 20 scenes (every world but desert and moon) | no for natural deep (shelf noise, core); shallow yes |
+| mountain (4), plain hill (5, with `profile` 1 or ridge options) | one curve under two names: `(1 - r^2)^m`; `m = 3.5 * 2^((.5 - softness) 1.5)` for the mountain, 2 for the hill | mountain: 9 strokes in 7 scenes; plain hill: lava-3 (spurs) | yes (the crest adds `ridgeRise`) |
+| hill (5, shouldered, the default) | a monotone cubic through four knots (rise 1, .34, .02, 0) on the face side, a smoothstep on the back; along a signed cross coordinate, with an elliptical taper at the ends | 69 strokes in 17 scenes | **no**: asymmetric about the crest line, so a function of the signed side, not of distance |
+| ramp (12) | `1 - smoothstep(.55, 1, plain distance / radius)`, with edge noise | not in a scene | yes; the plateau curve at a fixed shoulder, in its own stamp |
+| crater (13) | bowl `1 - smoothstep(floor, 1, rb)` plus rim Gaussian plus apron | 29 strokes (moon, crystal, red) | no: lobed outline, rim sectors/gaps vary the height and width by bearing |
+| fissure (14) | cut `(1 - q) sqrt(1 - q)` | not in a scene | the network form uses the distance to a Voronoi edge |
+| crystal (15) | polygon, column and berg geometry | crystal, ice scenes | no |
+
+Under two names: erase = paint = plateau = offset = sand = grass; lower =
+smooth; deep = shallow; mountain = plain hill (different exponent); ramp is
+the plateau curve at shoulder .55. The six cover and plateau kinds reach one
+`stampN`/`stamp` branch; the comparison below covers the curves that are
+functions of a cross-section (the first five rows, and the shouldered hill).
+Crater, fissure and crystal are not cross-sections and are left alone.
+
+*Modifiers that are not curves (what each does, and whether it can be one shared control).*
+
+| Modifier | Where | One shared control? |
+| --- | --- | --- |
+| Settling (a hill's raw weights, then blur and compose) | shouldered hill, `settle` | no as a curve; it is a rounding pass over the result, one radius. It could be a shared "round the form" control. Untouched by the presets |
+| Outline wander (`amp`, `rough`) and per-cell width (`width = 1 + k rough nCW`) | every kind | yes: one roughness already feeds it; only the constants (.95, .85, 1.3, 1.6, .2) differ per kind |
+| Face-width noise (`rough (nDet + .3 nCW)`, `faceVar broad`) | plateau family | yes: the section's `faceVariation` (`sVary`) is the same idea with another noise |
+| Cross shift `rough .18 nDet`, local radius `1 + .75 rough nShelf`, height lumps `1 + rough (.75 nCW + .3 nDet)` | shouldered hill | the lumps yes (`1 + rough .09 nDet` on the mountain is the same with another constant); the cross shift and local radius could be one face-wander control |
+| Plateau level `rough 3 nDet` | plateau | yes, same lump idea |
+| `lift` (lip) | section only | already a section control |
+| Natural deep: noise shelf (`42 shelves`), core, `bankFlat`, `beachFlat` | deep, shallow | no: they shape the bed (shelf, core) or stretch the dry part by the ground height; `beachFlat` survives the preset, the shelf and core are untouched |
+| North term, `mesaFlank` | plateau | no as a section control: bearing-dependent, and `mesaFlank` swaps the curve. The presets leave them out |
+| Ridge crest (`ridgeRise`), `baseBump`, outline lobes | hill, mountain, plateau | already modifiers on top of `w` |
+
+*2. The wider cross-section.* Two numbers were added to `crossSection`; every
+other control it needed already existed.
+- **Face curve exponent** (`sP`, 2.4 before): how sharply the foot of a concave
+  face lifts or a convex face rounds. It was a hard-coded 2.4. Mountains need
+  about 2.4 with a full concave curve, the hill's face needs 3.35, a ridge hill
+  4. The classic profile passes 2.4, so nothing changed.
+- **Back slope** (`sBack`, 0 = symmetric): how many times longer the slope behind
+  the crest is than the face in front of it. It turns a hill into a two-sided
+  section that leans: the face side runs the cross-section, the back side a plain
+  smooth slope. The preset passes the classic's own ratio from softness (2.03 at
+  50).
+
+The widths the presets need are shares of the reach, not pixels, so a preset
+keeps its look at every brush size; the existing `sShare` (face share) carries
+them, and the apron/crown controls stay as they were.
+
+*3. Fit.* `measure/section_fit.mjs` fits in one dimension; `measure/section_check.mjs`
+repeats the audit's raised-region measure on the real engine (the audit's stroke,
+flat ground, every wobble off; 4 px sampling; 140, 280 and 560 px across, amounts
+30, 80 and 160, the softnesses the scenes use). Preset numbers are
+`sculpt-shape-presets.js`.
+
+| Kind (preset family) | Numbers (at softness 50) | RMS | max | The audit's classic-fit |
+| --- | --- | --- | --- | --- |
+| plateau, offset, paint, erase, sand, grass (shoulder) | face share .44 (+.6 per unit softness) | 0.00 | 0.00 | 6.40 / 13.59 |
+| deep, shallow (water descent) | face share .9, land section with the bed as target | 0.00 | 0.00 | - |
+| lower, smooth | face share 1 | 0.36-0.94 | 1.44 | - |
+| mountain | share .709, curve -1, exponent 2.39, crown .485 (share -.33 and crown +.57 per unit softness) | 0.59-8.89 (amount 30-160, softness 0-1) | 14.57 | - |
+| shouldered hill | face share .864, curve -1, exponent 3.35, crown .416, back slope 2.03 | 0.07-0.72 | 2.83 | 17.52 / 32.06 |
+| hill with ridge options (plain) | share .666, curve -.25, exponent 3.96, crown .469 | 0.01-0.04 | 0.12 | - |
+
+The mountain's worst cases are amount 160 at softness 0 or 1; at softness 50 it
+is 0.59-3.10 (max 7.6), at amounts 30-80 and softness 50 it is at most 1.56 (max
+3.8). The hill: a symmetric section about the crest line fits the classic
+shouldered hill at RMS 16.7 / max 31.0 in one dimension, which is the audit's
+17.52 / 32.06; letting the crest sit off-centre brings it to 6.4 / 11.8; the
+two-sided section brings it to 0.07-0.72 / 2.83 on the engine. So the audit's
+rejection was the missing lean, not the form. The plateau's 6.40 was its grid:
+the classic face share is .44 and the audit's search had 40, 80, ... px.
+
+*4. Comparison.* All 27 scenes with `?shapePresets` against the default
+(`merge-h14e` baseline). Default (switch off): all 27 scenes mean |diff| 0.00,
+`console` empty on every scene. With presets, mean |diff| per scene:
+archipelago 0.47 / 1.26 / 1.09; crystal 1.77 / 0.00 / 0.00; desert 4.76 / 0.24 /
+0.00; green 0.54 / 5.81 / 0.36; ice 7.35 / 0.00 / 0.00; lava 0.12 / 0.37 / 2.94;
+moon 1.28 / 0.82 / 0.33; red 1.59 / 0.13 / 0.31; zhon 0.86 / 0.40 / 0.17.
+`stats.py`: three marks newly outside the retail family (red-2 shore band 129.00,
+red-1 horizontal edge density .167, moon-2 steepness above 1.0 at .006); none went
+back inside. Reading by kind: hill, plateau, offset, deep and shallow reproduce
+the classic to within the noise of the other wobble terms, so they are as close
+to retail as classic is and no closer; the larger scene differences (green-2,
+ice-1, desert-1, lava-3) come from the shoulder family's noise (`sVary` stands for
+three classic noise terms and is only roughly the same amount) and from the
+world's contour bands moving with the height; none looks nearer to retail by
+eye and none looks further. Mountains are slightly softer-peaked than classic.
+
+*5. `moonLobes`.* Moon's three windows with `moonLobes` 0 and `baseVary` 22,
+`baseBump` 2.5 on every hill and mountain: the outline loses its folded, lumpy
+edge (a foot-only window, fixed wavelengths, at most .15 of the radius), and the
+retail windows' broken edge is further away. The look does not hold, so
+`moonLobes` stays as it is. Sheets: `$R/agent-H15/sheets-moonlobes`.
+
+*Not done.* Item "fit to retail slope profiles" (retail heights per world): not
+attempted; the presets are fitted to the classic curves and judged against retail
+by eye. The preset path does not cover terraces/lip/apron as presets (they stay
+authored controls), ramp, crater, fissure and crystal.
+
+**Done (part 2, step A).** One curve table per stroke, behind the same `?shapePresets`
+switch. The host samples the curve at 32 intervals plus one guard sample each side
+(35 values, four to an `MW` row after the node's extra rows: `u.curveBase`, and `u.backBase`
+for the shouldered hill's back and the plateau's mesa flank); the shader reads it with
+Catmull-Rom interpolation. A departure from the design note (linear, 33 or 65): linear 33
+moved green-2 by .87, linear 65 by .38 and Catmull-Rom 33 by .18, because piecewise-linear
+steps put slope kinks into the lighting. Only the line that computes each curve changed, so
+part 1's `sVary` stand-in is gone and Lava-3's rings and Crystal-1's clipped column are gone
+(Crystal-1 0.00, Lava-3 .18). `section_check` over sizes 140-560, amounts 30-160 and
+softness 0, .5, .88, 1: RMS at most .01, max .08 for plateau, offset, lower, mountain, hill,
+plain hill, deep and shallow. "Exact" in part 1 now reads "to within interpolation": RMS at
+most .007. 27 scenes: mean |diff| at most .18; no mark newly outside retail; regional 0 on
+all 27. `curveAt` clamps at 0 below; a lip that dips below 0 needs that lifted.
+
+**Done (part 2, step B).** The classic path is gone: the shader's per-kind curve lines, `hillSection` and its
+tangents, `landSection`, `waterSection`, `faceRise`, `crossSection`, the `?shapePresets` switch, `profile`
+(control, default and the CPU preview engine in `sculpt.js`) and 19 uniforms. Every kind reads its table.
+The stored section keys (`apronPx`, `apronHeight`, `facePx`, `faceCurve`, `crown`, `lip`, `shelfPx`,
+`shelfDepth`, `shelfSteps`) are read by one host function, `strokeCurve` in `sculpt-shape-presets.js`
+(`landSection`, `waterSection`), which step C deletes. A stroke carries a section when any of them is set
+(`carriesSection`; crown counts only when it differs from its .5 default). Table size is now 64 intervals:
+Catmull-Rom over 33 samples left Desert's plateaus (the section path) at .34 and .27 against step A, 65 samples bring
+them to .15 and .13. Terraces stay in the shader on the curve's value (`terraced`, between `cvLo` and
+`cvHi`); the lip stays an additive lift per cell (`lipRim`), because as a curve it needs `w` above 1 and
+every consumer of `w` clamps or subtracts it: the kind-4/5 `clamp(w, 0, 1)`, `1 - influence` on routes,
+protection and the cover brushes, the mask writes' gain, and its unit is height, not a share of the amount
+(a plateau's `PT + amount - base` is unknown to the host). A carried section's apron and face keep their
+own width noise (`ka`, `kw`), so the shader maps each cell's distance back onto the table's nominal px
+(`carried`; on water segment by segment: inset, face, apron, shelf, then the bed's descent over .7 of
+what is left of the cell's reach). Water is two tables (`P` the bank, `Q` the shelf and bed in height
+units) combined per cell with the ground's height, so Red-3 reads the ground as the classic did: with
+noise on, Red-3's deep stroke moves .001 mean height against step A (a first single-stretch mapping
+moved it 1.15 because it stretched the inset, shelf and bed with the face). Approximations, measured by
+`section_check --against` on the saved classic samples: shelf steps are baked without jitter (RMS .4,
+max 3.5); a water lip at the small brush sizes (RMS up to .3, max 6.7, a sliver of cells at the edge of
+the footprint; cause not isolated; no scene or preset uses a lip); a dome whose face is wider than its
+reach (RMS .23, max 2.4). Terraces on a carried water stroke run on the bank table `P` between the apron
+height and 1, before the ground combination. Desert's tool preset sets no `profile` now; its plateau keys
+carry the section. A saved document with `profile: 0` and any section key set now carries that section.
+
+**Steps A and B, the coordinator's review.** Steps A and B landed ahead of the card, so main
+does not drift from a deletion this large while C runs. I rendered the reviewed head myself:
+27 scenes against `merge-h14e` at most .22 (Red-3; Desert-1 .15, Desert-3 .13, everything else
+at most .06), `mismatch` 0 and clean consoles on all 27, no mark newly outside retail. All nine
+worlds read the same as before at 1x; Red also at 2x. So the table carries every curve, and
+the owner's claim holds for the kinds as they are.
+- **Fixed in review:** `regionalReadApron` still tested the deleted `profile`, so a hill
+  carrying a section read 4 extra cells; a stale comment; a help line naming "Cross-section 1".
+- **The report's reading of Red-3 was off:** our shallows band is a little wider than
+  retail's, not much wider. The real gap is the bank, which breaks into specks where retail
+  has a clean rock edge. That belongs to Shores.
+- **`secDeep` was missing from the approximations:** its maximum is 1.29, on a narrow stretch.
+  Red-3's own stroke moves .001 mean height.
+
+**Step C's changes to the plan.** A lip does not need `w` above 1. The shader splits the raw
+value, `w = min(c, 1)`, and the excess goes in `lift`, times the multiplier the kind already
+applies to `w`. That is a share of the stroke's own rise, so the host needs no ground height,
+and `lipRim` and its four uniforms go, along with the water-lip sliver. Water becomes one table
+too, from the ground to the bed, as every unsectioned water stroke already is, so `carried`'s
+water branch and the second table go, and Red-3's waterline follows the ground.
+
+*For part 2.* The switch is `SHAPE_PRESETS_ALL` in `sculpt-gpu-fields.js` (drop it
+with its commit); presets are `presetUniforms` in `sculpt-shape-presets.js`.
+`sBack` is read only by the shouldered-hill branch in `engine-shape.wgsl`; a
+parametric hill needs the shouldered geometry kept (face vector, end taper) with
+the cross-section in place of `hillSection`. `sculpt.py` serves the presets file.
 
 ## After the cards
 

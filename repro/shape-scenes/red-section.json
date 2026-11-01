@@ -1,9 +1,9 @@
 {"biome": "red", "source": {"note": "authored for shapecheck (H9): the cross-section on a lowering offset with terraces, a domed hill and mountain, and deep/shallow water with a shelf, a lip and stepped shelves"},
  "ground": true, "query": "",
  "strokes": [
-  ["offset", [[150,400],[320,390],[480,300],[540,140]], {"card": {"diameter": 460, "amount": -40, "roughness": 30, "softness": 60, "profile": 1, "apronPx": 40, "apronHeight": 15, "facePx": 200, "faceCurve": 0, "terraces": 7, "ledge": 40, "terraceJitter": 60}}],
-  ["hill", [[680,800]], {"card": {"diameter": 300, "amount": 70, "roughness": 25, "softness": 50, "profile": 1, "crown": 70, "apronPx": 20, "apronHeight": 10, "facePx": 90}}],
-  ["mountain", [[800,300]], {"card": {"diameter": 240, "amount": 80, "roughness": 30, "profile": 1, "crown": 30, "apronPx": 30, "apronHeight": 12, "lip": -5}}],
-  ["deep", [[100,700],[300,780],[520,820]], {"card": {"diameter": 260, "roughness": 35, "profile": 1, "apronPx": 20, "apronHeight": 10, "bankPx": 60, "shelfPx": 40, "shelfDepth": 12, "shelfSteps": 2, "terraces": 3, "ledge": 30, "lip": 4}}],
-  ["shallow", [[500,650],[600,700]], {"card": {"diameter": 160, "roughness": 30, "profile": 1, "facePx": 40, "shelfPx": 20, "shelfDepth": 6}}]
+  ["offset", [[150,400],[320,390],[480,300],[540,140]], {"card": {"diameter": 460, "amount": -40, "roughness": 30, "softness": 60, "apronPx": 40, "apronHeight": 15, "facePx": 200, "faceCurve": 0, "terraces": 7, "ledge": 40, "terraceJitter": 60}}],
+  ["hill", [[680,800]], {"card": {"diameter": 300, "amount": 70, "roughness": 25, "softness": 50, "crown": 70, "apronPx": 20, "apronHeight": 10, "facePx": 90}}],
+  ["mountain", [[800,300]], {"card": {"diameter": 240, "amount": 80, "roughness": 30, "crown": 30, "apronPx": 30, "apronHeight": 12, "lip": -5}}],
+  ["deep", [[100,700],[300,780],[520,820]], {"card": {"diameter": 260, "roughness": 35, "apronPx": 20, "apronHeight": 10, "bankPx": 60, "shelfPx": 40, "shelfDepth": 12, "shelfSteps": 2, "terraces": 3, "ledge": 30, "lip": 4}}],
+  ["shallow", [[500,650],[600,700]], {"card": {"diameter": 160, "roughness": 30, "facePx": 40, "shelfPx": 20, "shelfDepth": 6}}]
  ]}
