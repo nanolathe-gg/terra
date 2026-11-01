@@ -76,6 +76,15 @@ Only the two world values above are changed. `craterFacets`, facet/web sizes, st
 
 Only red-1 has authored craters. Any tuning must preserve its rim rings and the other two Red windows.
 
+The switch-off table identified one numeric target: the small closed rims against retail's stronger broken rim forms. Two ideas were sufficient to reject a global default change (the three-try limit is a ceiling):
+
+| Trial under `trials-2` | red-1 MAD; crater blocks | Viewed 1x result |
+|---|---|---|
+| `red-rim`: `rimHeight` .34→.6 | .148; 6.54% | Same in the main mismatch: a more pronounced small closed bowl, not the broader broken retail rim. No useful whole-window improvement. |
+| `red-broken-rim`: `rimGaps` 0→1, `rimSectors` 0→4 | .104; 1.87% | Same at whole-window scale; small lip breaks are visible at 2x, but insufficient at 1x. No thin-mark exception claimed. |
+
+Both whole retail pairs and 2x sheets viewed; both renders exit 0, mismatch 0, console `[]`. Neither was extended to red-2/-3 or sent through statistics, since it failed the visual gate first. No Red value or scene is changed. Stronger variation would be a change to the authored crater shapes (radius/depth, rough outline and local rim cuts), rather than a reason to alter every Red crater or its shared band/crack defaults. Red's bank and shallow-bed mismatches remain Shores' leftovers.
+
 ## Final checks and review record
 
 To be filled from the final logs, including every changed statistics flag and the exact viewed/not-viewed list.
