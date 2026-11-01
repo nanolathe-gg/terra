@@ -242,10 +242,11 @@ fn mmStrokes(p: vec2f, f: vec4f, width: f32, core: f32, salt: u32) -> f32 {
     return total * f.w;
 }
 
-// z of a lit material at a level-0 pixel, and the vein weight over it.
+// z of a lit material at a level-0 pixel, the vein weight over it, and the height gradient (per px) the light was taken from.
 fn mmSalt(id: u32) -> u32 { return id * 16u + 1u; }
 
-fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
+struct MaterialRelief { z: vec2f, gradient: vec2f }
+fn mmRelief(base: u32, id: u32, pixel: vec2f) -> MaterialRelief {
     let r0 = matRow(base);
     let r1 = matRow(base + 1u);
     let a = matRow(base + 39u);
@@ -317,8 +318,9 @@ fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f {
         let dist = abs(n.x) / max(length(n.yz), 1e-4);
         vein = mmLine(dist, c.z) * smoothstep(1.0 - 2.0 * v.w, 1.4 - 2.0 * v.w, gate);
     }
-    return vec2f(z, vein);
+    return MaterialRelief(vec2f(z, vein), a.x * g);
 }
+fn mmLitZ(base: u32, id: u32, pixel: vec2f) -> vec2f { return mmRelief(base, id, pixel).z; }
 fn mmLit(id: u32, pixel: vec2f) -> vec3f {
     let base = id * MM_ROWS;
     let r2 = matRow(base + 2u);
@@ -445,4 +447,45 @@ fn makeMaterial(@builtin(global_invocation_id) id: vec3u) {
     let pixel = (vec2f(id.xy) + 0.5) * params.foot;
     let rgb = mmColor(id.z, pixel, params.foot);
     textureStore(out, vec2i(id.xy), i32(id.z), vec4f(rgb, 1.0));
+}
+
+// H19: the rock's height gradient, one layer of 512 px with the same mip levels as the colours, for the lit face (engine-frag.wgsl
+// faceRelief). A lit material's gradient is the one its light was taken from; a table with no `lit` block gets compact angular blocks
+// from the generator's primitives, whose seams give the cavity. Levels above 0 are 2 x 2 box means, as a lit material's are.
+@group(0) @binding(4) var reliefOut: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(5) var reliefPrev: texture_2d<f32>;
+fn blockSurfaceHeight(id: u32, p: vec2f) -> f32 {
+    let salt = mmSalt(id) + 211u;
+    let cells = mmCells(7.0, 1.0);
+    let warp = vec2f(mmLattice(p, mmCells(32.0, 1.0), salt + 8u), mmLattice(p, mmCells(32.0, 1.0), salt + 9u));
+    let f = mmFacets(p + warp * 2.0, cells, 0.0, salt, 0.3);
+    let tilt = vec2f(mmHash(f.cell, salt + 3u), mmHash(f.cell, salt + 4u)) * 2.0 - 1.0;
+    let plane = dot(f.toward * params.size / cells, tilt) * 1.1;
+    let edge = max(0.0, (f.f2 - f.f1) * 0.5 * params.size / cells.x);
+    let seam = exp(-edge * edge / 0.32);
+    let grain = mmLattice(p, mmCells(2.0, 1.0), salt + 6u) * 0.5
+              + (1.0 - 2.0 * abs(mmLattice(p, mmCells(4.0, 1.0), salt + 7u))) * 0.85;
+    return plane - seam * 0.6 + grain;
+}
+@compute @workgroup_size(8, 8, 1)
+fn makeRelief(@builtin(global_invocation_id) id: vec3u) {
+    let n = u32(params.size / params.foot);
+    if (id.x >= n || id.y >= n) { return; }
+    if (params.foot > 1.5) {
+        let s = vec2i(id.xy) * 2;
+        let d = textureLoad(reliefPrev, s, 0) + textureLoad(reliefPrev, s + vec2i(1, 0), 0)
+              + textureLoad(reliefPrev, s + vec2i(0, 1), 0) + textureLoad(reliefPrev, s + vec2i(1), 0);
+        textureStore(reliefOut, vec2i(id.xy), d * 0.25);
+        return;
+    }
+    let p = vec2f(id.xy) + 0.5;
+    let source = 1u;   // the rock's layer
+    if (matRow(source * MM_ROWS + 39u).x > 0.0) {
+        textureStore(reliefOut, vec2i(id.xy), vec4f(mmRelief(source * MM_ROWS, source, p).gradient, 0.0, 0.0));
+    } else {
+        let h = blockSurfaceHeight(source, p);
+        let dx = blockSurfaceHeight(source, p + vec2f(0.5, 0.0)) - blockSurfaceHeight(source, p - vec2f(0.5, 0.0));
+        let dy = blockSurfaceHeight(source, p + vec2f(0.0, 0.5)) - blockSurfaceHeight(source, p - vec2f(0.0, 0.5));
+        textureStore(reliefOut, vec2i(id.xy), vec4f(dx, dy, clamp(-h * 0.15, 0.0, 0.35), 0.0));
+    }
 }

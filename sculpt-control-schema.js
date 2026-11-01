@@ -93,7 +93,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'crackSeverity','crackSpacing','crackLength','crackStyle','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
  'banding','bandStyle','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','deepEdgeDepth','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
- 'baseBand','desertCapFlat','rockMoss','rockDetail','gullyDepth','gullySpacing','scratchDepth','facetTilt','facetSize','cliffFollow',
+ 'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','gullySpacing','scratchDepth','facetTilt','facetSize','cliffFollow',
  'stepSharp','shelfWander','bedFlat','bedMottle','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
