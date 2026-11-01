@@ -777,7 +777,10 @@ fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: 
     let seam = 1.0 - smoothstep(0.3, 1.2, (c.d2 - c.d1) * 0.5 * px);
     let lean = dot(c.off, normalize(c.id.zw - 0.5 + vec2f(0.001))) * 0.5;
     let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * lean;
-    let w = u.crystalShallow * submerged * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
+    // Only a fringe round the slabs: the open sea beyond reach of the slab marks (eight taps 48 px out) stays smooth, as retail's does.
+    var near = smoothstep(0.05, 0.3, slab);
+    for (var k = 0; k < 8; k++) { near = max(near, smoothstep(0.05, 0.3, crystalField(p + vec2f(cos(f32(k) * 0.785398), sin(f32(k) * 0.785398)) * 48.0))); }
+    let w = u.crystalShallow * submerged * near * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
     return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * u.crystalShallowInk * seam);
 }
 
