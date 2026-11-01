@@ -502,7 +502,7 @@ fn blockField(p: vec2f, pf: vec2f, h: f32, hill: f32) -> vec4f {
     let size = vec2f(u.blockWidth, u.blockRow) * mix(vec2f(1.0), vec2f(HILL_WIDTH, HILL_LENGTH), hill) * mix(0.7, 1.5, hard);
     let chip = (valueNoise(p / 1.7 + 29.0) + 0.5 * valueNoise(p / 0.9 + 3.0)) * u.blockChip * mix(1.0, 0.4, hard);
     let q = r / size;
-    let n = cells(q, size, 83.0);
+    let n = cells(q, size, 83.0, vec2f(0.15, 0.7));
     let hc = cellHash(n.id + 37.0);
     let hs = cellHash(n.id + 19.0);
     let tilt = (hc - 0.5) * 2.0 * u.blockTilt * mix(1.3, 0.45, hard) * vec2f(1.0, 0.5);
@@ -590,20 +590,21 @@ fn scratchField(p: vec2f) -> f32 {
     return -groove(p, g, 0.0).depth;
 }
 
-// The jittered point of each cell in the 3 x 3 around q (cell units), at (.15 + .7 * hash) of its cell: the nearest, its cell's id, and the squared
-// distances to the nearest and second nearest, measured as (point - q) * metric (cell units: 1; the pieces' px: their size).
-struct CellPick { id: vec2f, point: vec2f, best: f32, second: f32 }
-fn cells(q: vec2f, metric: vec2f, salt: f32) -> CellPick {
+// The jittered point of each cell in the 3 x 3 around q (cell units), at jit.x + jit.y * hash of its cell (facets .15 + .7, Lava .12 + .76): the nearest, its
+// cell's id, and the squared distances to the nearest, second and third nearest, measured as (point - q) * metric (cell units: 1; the pieces' px: their size).
+struct CellPick { id: vec2f, point: vec2f, best: f32, second: f32, third: f32 }
+fn cells(q: vec2f, metric: vec2f, salt: f32, jit: vec2f) -> CellPick {
     let g = floor(q);
-    var n = CellPick(g, vec2f(0.0), 1e9, 1e9);
+    var n = CellPick(g, vec2f(0.0), 1e9, 1e9, 1e9);
     for (var j = -1; j <= 1; j++) {
         for (var i = -1; i <= 1; i++) {
             let c = g + vec2f(f32(i), f32(j));
-            let point = c + 0.15 + 0.7 * cellHash(c + salt);
+            let point = c + jit.x + jit.y * cellHash(c + salt);
             let d = (point - q) * metric;
             let dd = dot(d, d);
-            if (dd < n.best) { n.second = n.best; n.best = dd; n.id = c; n.point = point; }
-            else if (dd < n.second) { n.second = dd; }
+            if (dd < n.best) { n.third = n.second; n.second = n.best; n.best = dd; n.id = c; n.point = point; }
+            else if (dd < n.second) { n.third = n.second; n.second = dd; }
+            else if (dd < n.third) { n.third = dd; }
         }
     }
     return n;
@@ -619,7 +620,7 @@ fn cells(q: vec2f, metric: vec2f, salt: f32) -> CellPick {
 fn facetLevel(p: vec2f, F: f32, stretch: f32, tilt_: f32, step_: f32, salt: f32) -> vec2f {
     let size = vec2f(F * max(stretch, 0.25), F);
     let q = p / size;
-    let n = cells(q, vec2f(1.0), 71.0 + salt);
+    let n = cells(q, vec2f(1.0), 71.0 + salt, vec2f(0.15, 0.7));
     // The picture draws a point at row y - height / 2, so a facet tilted steeply in y is stretched or squeezed on the screen
     // (flat at 2 units per px): the tilt across the beds (x) carries the contrast, the tilt in y is held to facetSkew of it.
     let tilt = (cellHash(n.id + 37.0 + salt) - 0.5) * 2.0 * tilt_ * vec2f(1.0, u.facetSkew);
@@ -884,23 +885,6 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
 // facets, olive toward the sun and brown away from it, split by hairline cracks; and thin dark veins hang down the fall
 // line and fork. This builds that as height (lit by the sun like any relief) and as the dark of its creases, from the
 // world position only. Returns (height added, darkness as a crack code, how much of the fall-line relief to replace).
-struct Cells { d1: f32, d2: f32, d3: f32, id: vec2f, off: vec2f }
-fn lavaCells(q: vec2f, salt: f32) -> Cells {
-    let c0 = floor(q);
-    var r = Cells(8.0, 8.0, 8.0, vec2f(0.0), vec2f(0.0));
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let c = c0 + vec2f(f32(i), f32(j));
-            let hs = cellHash(c + salt);
-            let pt = c + 0.12 + 0.76 * hs;
-            let d = distance(q, pt);
-            if (d < r.d1) { r.d3 = r.d2; r.d2 = r.d1; r.d1 = d; r.id = cellHash(c + salt + 31.7); r.off = q - pt; }
-            else if (d < r.d2) { r.d3 = r.d2; r.d2 = d; }
-            else if (d < r.d3) { r.d3 = d; }
-        }
-    }
-    return r;
-}
 fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     // Raised ground only: hills and their flanks, not the banks between the sea and the plain.
     // Lava's plain undulates up to ~4 units over the base, so the crust starts above that (open ground keeps its own lumps).
@@ -913,26 +897,28 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     let warp = vec2f(valueNoise(p / 31.0 + 3.0), valueNoise(p / 31.0 + 17.0)) * 0.22 * u.lavaPillow;
     let pp = p + warp;
     let qp = vec2f(dot(pp, across) / (u.lavaPillow * 1.35), dot(pp, fall) / u.lavaPillow);
-    let pil = lavaCells(qp, 5.0);
-    let t = clamp(pil.d1 / max(pil.d2, 1e-3), 0.0, 1.0);
+    let pil = cells(qp, vec2f(1.0), 5.0, vec2f(0.12, 0.76));
+    let pd = sqrt(vec3f(pil.best, pil.second, pil.third));
+    let t = clamp(pd.x / max(pd.y, 1e-3), 0.0, 1.0);
     // A rounded dome that falls steeply at its border, each pillow standing a little higher or lower than the next.
     let dome = 1.0 - pow(t, 2.4);
     // Retail's small hills are nearly smooth (lava-1) or carry broad arcs (lava-2); the heaped pillows are the tall ones' (lava-3), so
     // the pillows and their creases grow with the height above the plain.
     let tall = smoothstep(u.base + 18.0, u.base + 70.0, h);
-    var height = u.lavaPillow * mix(0.035, 0.11, tall) * (dome + 0.7 * (pil.id.x - 0.5));
+    var height = u.lavaPillow * mix(0.035, 0.11, tall) * (dome + 0.7 * (cellHash(pil.id + 5.0 + 31.7).x - 0.5));
     // Crease on every border, deepest toward the shade; the wedge where three pillows meet is a cut-out.
     let border = smoothstep(0.80, 0.97, t);
-    let triple = 1.0 - smoothstep(0.0, 0.16, (pil.d3 - pil.d1));
+    let triple = 1.0 - smoothstep(0.0, 0.16, (pd.z - pd.x));
     height -= u.lavaPillow * mix(0.03, 0.08, tall) * triple;
     var dark = mix(0.2, 1.5, tall) * border + mix(0.6, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
     // Chips: flat facets tilted at random, hairline cracks on some of their borders.
     let qc = p / u.lavaChip;
-    let chip = lavaCells(qc, 11.0);
-    let tilt = (chip.id - 0.5) * 2.0;
-    height += dot(tilt, chip.off) * u.lavaChip * mix(0.07, 0.12, tall);
-    let seam = 1.0 - smoothstep(0.0, 0.16, chip.d2 - chip.d1);
-    dark = max(dark, mix(0.25, 0.9, tall) * seam * step(0.55, chip.id.x));
+    let chip = cells(qc, vec2f(1.0), 11.0, vec2f(0.12, 0.76));
+    let cid = cellHash(chip.id + 11.0 + 31.7);
+    let tilt = (cid - 0.5) * 2.0;
+    height += dot(tilt, qc - chip.point) * u.lavaChip * mix(0.07, 0.12, tall);
+    let seam = 1.0 - smoothstep(0.0, 0.16, sqrt(chip.second) - sqrt(chip.best));
+    dark = max(dark, mix(0.25, 0.9, tall) * seam * step(0.55, cid.x));
     // Veins hang down the fall line: zero lines of a noise stretched along it, in stretches that begin and end.
     if (u.lavaVeins > 0.0) {
         let qv = vec2f(dot(p, across) / 7.0, dot(p, fall) / 40.0) + 0.5 * vec2f(valueNoise(p / 23.0 + 5.0), valueNoise(p / 23.0 + 9.0));

@@ -394,6 +394,24 @@ fn markHash(c: vec2i) -> vec4f {
     s.x += s.y * s.w; s.y += s.z * s.x; s.z += s.x * s.y; s.w += s.y * s.z;
     return vec4f(s) / 4294967296.0;
 }
+// The two nearest points of a lattice of jittered cells, at q in cell units: each cell of the 3 x 3 around q has its point at the cell's centre plus
+// `jit` of a cell, from markHash(cell + salt). Returns the nearest's and second's hash, the nearest's cell, its offset from q's point, and both distances.
+struct MarkCells { id: vec4f, id2: vec4f, home: vec2i, off: vec2f, d1: f32, d2: f32 }
+fn markCells(q: vec2f, salt: vec2i, jit: f32) -> MarkCells {
+    let cell = vec2i(floor(q));
+    let at = fract(q);
+    var m = MarkCells(vec4f(0.0), vec4f(0.0), cell, vec2f(0.0), 8.0, 8.0);
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let h = markHash(cell + vec2i(i, j) + salt);
+            let pt = vec2f(f32(i), f32(j)) + 0.5 + (h.xy - 0.5) * jit - at;
+            let d = length(pt);
+            if (d < m.d1) { m.d2 = m.d1; m.id2 = m.id; m.d1 = d; m.id = h; m.off = -pt; m.home = cell + vec2i(i, j); }
+            else if (d < m.d2) { m.d2 = d; m.id2 = h; }
+        }
+    }
+    return m;
+}
 fn slopeMark(pixel: vec2f, density: f32) -> f32 {
     let cell = 9.0;
     let c = vec2i(floor(pixel / cell));
@@ -598,19 +616,9 @@ fn moonFolds(p: vec2f, base: f32, slope: f32, spacing: f32) -> f32 {
 // shallow, as the window's strokes run); the strokes break into segments. Domains
 // are the nearest of a jittered lattice's points. Returns 0..1, 1 on a stroke.
 fn iceHatch(pixel: vec2f) -> f32 {
-    let cell = 36.0;
-    let c = vec2i(floor(pixel / cell));
-    var best = 1e9;
-    var id = vec4f(0.0);
-    var home = c;
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let k = c + vec2i(i, j);
-            let r = markHash(k + vec2i(17, 53));
-            let d = length(pixel - (vec2f(k) + 0.15 + 0.7 * r.xy) * cell);
-            if (d < best) { best = d; id = r; home = k; }
-        }
-    }
+    let m = markCells(pixel / 36.0, vec2i(17, 53), 0.7);
+    let id = m.id;
+    let home = m.home;
     // Steep leaning right (72 degrees) in 45% of domains, steep leaning left (110) in 40%, shallow (29) in 15%.
     let angle = select(select(0.5, 1.92, id.z < 0.85), 1.26, id.z < 0.45) + (id.w - 0.5) * 0.25;
     let along = vec2f(cos(angle), sin(angle));
@@ -676,19 +684,9 @@ fn iceNearness(p: vec2f) -> f32 {
 // directions over a domain ~44 px across, the runs 8-34 px long with gaps; some domains are bare.
 // `keep` is the share of domains that carry lines (1 at the coast, less inland). Returns 0..1, 1 on a line.
 fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
-    let cell = 44.0;
-    let c = vec2i(floor(pixel / cell));
-    var best = 1e9;
-    var id = vec4f(0.0);
-    var home = c;
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let k = c + vec2i(i, j);
-            let r = markHash(k + vec2i(83, 29));
-            let d = length(pixel - (vec2f(k) + 0.15 + 0.7 * r.xy) * cell);
-            if (d < best) { best = d; id = r; home = k; }
-        }
-    }
+    let m = markCells(pixel / 44.0, vec2i(83, 29), 0.7);
+    let id = m.id;
+    let home = m.home;
     let angle = select(select(0.5, 1.92, id.z < 0.8), 1.26, id.z < 0.4) + (id.w - 0.5) * 0.2;
     let along = vec2f(cos(angle), sin(angle));
     let across = vec2f(-along.y, along.x);
@@ -769,36 +767,20 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
 // is drawn from position, not from heights. The cells fade out as the water
 // deepens, and stand aside where the larger shore slabs (the crystal field's
 // marks) already cover the water.
-// One layer of the mosaic: the nearest cell's hash, its lean and the distance to its seam, in cells of `size` px.
-struct ShallowCell { id: vec4f, lean: f32, edge: f32 }
-fn shallowCell(p: vec2f, size: f32, salt: i32) -> ShallowCell {
-    let q = p / size;
-    let cell = vec2i(floor(q));
-    let at = fract(q);
-    var d1 = 8.0;
-    var d2 = 8.0;
-    var id = vec4f(0.0);
-    var off = vec2f(0.0);
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let h = markHash(cell + vec2i(i + salt, j));
-            let pt = vec2f(f32(i), f32(j)) + 0.5 + (h.xy - 0.5) * 0.9 - at;
-            let d = length(pt);
-            if (d < d1) { d2 = d1; d1 = d; id = h; off = -pt; }
-            else if (d < d2) { d2 = d; }
-        }
-    }
-    return ShallowCell(id, dot(off, normalize(id.zw - 0.5 + vec2f(0.001))) * 0.5, (d2 - d1) * 0.5 * size);
-}
 fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: f32) -> vec3f {
     let size = max(u.crystalShallowPx, 4.0);
     // Two scales, as retail's mosaic has: a share of the water keeps cells 2.2 times as wide, the rest the fine ones.
-    let big = shallowCell(p, size * 2.2, 7919);
-    var c = shallowCell(p, size, 0);
-    if (big.id.y < 0.4) { c = big; }
-    let seam = 1.0 - smoothstep(0.3, 1.2, c.edge);
-    let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * c.lean;
-    let w = u.crystalShallow * submerged * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
+    let big = markCells(p / (size * 2.2), vec2i(7919, 0), 0.9);
+    var c = markCells(p / size, vec2i(0), 0.9);
+    var px = size;
+    if (big.id.y < 0.4) { c = big; px = size * 2.2; }
+    let seam = 1.0 - smoothstep(0.3, 1.2, (c.d2 - c.d1) * 0.5 * px);
+    let lean = dot(c.off, normalize(c.id.zw - 0.5 + vec2f(0.001))) * 0.5;
+    let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * lean;
+    // Only a fringe round the slabs: the open sea beyond reach of the slab marks (eight taps 48 px out) stays smooth, as retail's does.
+    var near = smoothstep(0.05, 0.3, slab);
+    for (var k = 0; k < 8; k++) { near = max(near, smoothstep(0.05, 0.3, crystalField(p + vec2f(cos(f32(k) * 0.785398), sin(f32(k) * 0.785398)) * 48.0))); }
+    let w = u.crystalShallow * submerged * near * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
     return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * u.crystalShallowInk * seam);
 }
 
@@ -822,27 +804,13 @@ fn craterSkin(p: vec2f, m: f32) -> f32 {
 fn craterWeb(p: vec2f) -> vec2f {
     let size = max(u.crystalCraterWebPx, 6.0);
     let warp = (terrainNoise(p * 0.25).rg - 0.5) * 2.0 * u.crystalCraterWobble;
-    let q = (p + warp) / size;
-    let cell = vec2i(floor(q));
-    let at = fract(q);
-    var d1 = 8.0;
-    var d2 = 8.0;
-    var id1 = vec4f(0.0);
-    var id2 = vec4f(0.0);
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let h = markHash(cell + vec2i(i, j));
-            let d = length(vec2f(f32(i), f32(j)) + 0.5 + (h.xy - 0.5) * 0.9 - at);
-            if (d < d1) { d2 = d1; id2 = id1; d1 = d; id1 = h; }
-            else if (d < d2) { d2 = d; id2 = h; }
-        }
-    }
-    let edge = (d2 - d1) * 0.5 * size;
-    let w = fract((id1.z + id2.z) * 7.31);
+    let m = markCells((p + warp) / size, vec2i(0), 0.9);
+    let edge = (m.d2 - m.d1) * 0.5 * size;
+    let w = fract((m.id.z + m.id2.z) * 7.31);
     let drawn = smoothstep(u.crystalCraterGap, u.crystalCraterGap + 0.08, w);
     let width = 0.6 + 1.0 * fract(w * 3.7 + 0.2);
     let line = (1.0 - smoothstep(width * 0.5, width * 0.5 + 0.6, edge)) * drawn;
-    return vec2f(line, 1.0 + u.crystalCraterTone * (id1.x - 0.5));
+    return vec2f(line, 1.0 + u.crystalCraterTone * (m.id.x - 0.5));
 }
 
 // Shine and roughness (card E2). Nanolathe look, not a retail claim: a

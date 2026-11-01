@@ -628,7 +628,7 @@ WORLD_KNOBS = {
                 # Card E6, frost band against retail ice-1 (x330-430, 32-132 px inland): luma s.d. 52
                 # against 42 and blue gaps in .22 of the pixels against .05, so finer needles in more
                 # patches and small melt pockets, half again as many.
-                frostNeedles=.8, frostGaps=.3, frostGapReach=.7, frostGapSize=7,
+                frostNeedles=.8, frostGaps=.1, frostGapReach=.7, frostGapSize=7,
                 # Card G6: retail's blocks (ice-3, Polar Range) are soft, snow-capped slate: the light reads the
                 # height blurred over ~13 px so crests are rounded and there are no hard creases, the flat top is
                 # snow, the faces are smooth slate crossed by fine fibres down the slope (rock art contrast .3,

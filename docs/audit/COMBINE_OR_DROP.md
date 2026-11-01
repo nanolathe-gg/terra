@@ -9,6 +9,9 @@ table-default keys and 33 named code/design candidates. Recommendations:
 **45 stale rows** are retained explicitly. The groups contain
 50, 11, 60, 143, 213 rows, surest first.
 
+**Bodies (H20):** 61 rows under [Bodies (H20)](#bodies-h20) restate 54 Bodies controls already counted above and add 7 code
+bundles; they leave the 477 and the group sizes unchanged. 3 merges are landed (65 shader lines already removed: not potential savings), 58 keeps; no drop is proposed.
+
 Excluding **32 already-retired representations**, the current queue is
 **445 rows: 38 drop, 38 merge,
 369 keep**. This still includes obsolete table-default entries that
@@ -629,6 +632,79 @@ to the existing cards, not new visual judgments.
 | `undulationCover` | all. Audit-only evidence: under 5% / unmeasured old screening; not current target-class proof. Audit R 0%, D 3.857%, 3 reference cases ([CSV row 6](controls.csv#L6)). | [sculpt.js:1212](../../sculpt.js#L1212) | 0 | Undulating share of land (Reusable plain tiles and rolling dry ground). | keep |
 | `wetSwath` | engine:green (explicit settings; other worlds inherit). Audit-only evidence: under 5% / unmeasured old screening; not current target-class proof. Audit 0 reference cases ([CSV row 418](controls.csv#L418)). | [engine-frag.wgsl:1583](../../engine-frag.wgsl#L1583); [sculpt-renderer.js:1049](../../sculpt-renderer.js#L1049); [engine-common.wgsl:410](../../engine-common.wgsl#L410) | 0 | wetSwath (See exact-key experiment provenance and pipeline source.). | keep |
 | `wind` | desert,archipelago. Audit-only evidence: under 5% / unmeasured old screening; not current target-class proof. Audit R 0%, 3 reference cases ([CSV row 73](controls.csv#L73)). | [engine-bake.wgsl:1237](../../engine-bake.wgsl#L1237); [sculpt-renderer.js:1105](../../sculpt-renderer.js#L1105); [sculpt-export.js:3](../../sculpt-export.js#L3); [sculpt.js:1363](../../sculpt.js#L1363) | 0 | Ripple direction (degrees) (Sand cover, deposit tint and ripple grain). | keep |
+
+## Bodies (H20)
+
+Rows from card H20 (branch `H20-bodies`, parts 1 and 2); the other groups keep their `12899bd` snapshot. Each of the first 54 rows is a Bodies control
+whose key also stands in groups 1-5: this heading restates it with H20's act measurement (`measure/geology_controls.mjs --family bodies`, 66 world x knob
+states: 45 act, 21 do not; numbers are mean abs diff per scene and share of 16-px blocks of the named class, scenes in order). `frostGaps` numbers are from before
+step 4 of part 2, which set Ice's default from .3 to .1. **Count method:** physical lines of the exclusive reader, inclusive, as above; a modified expression on a surviving
+line saves 0, and a reader shared with a control that stays saves 0. The Reader column cites the first non-comment engine reader. "Dead" means it drew nothing in the
+windows that set it, not that no world could use it. The last seven rows are code bundles.
+
+| Control or code | Worlds / finding and number | Current source check / reader | Counted shader lines | What a user loses | Recommendation |
+| --- | --- | --- | ---: | --- | --- |
+| `crystalAlign` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.00/0.00/0.00 mean abs diff, 0.0/0.0/0.0 blocks; ice =/=/7.74 mean abs diff, =/=/52.9 blocks. | sculpt-gpu-fields.js:313 | 0 | The named authoring option. | keep |
+| `crystalLean` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: dead; crystal 0.03/=/= mean abs diff, 0.0/=/= blocks; ice 0.02/0.00/0.00 mean abs diff, 0.1/0.0/0.0 blocks. | sculpt-gpu-fields.js:310 | 0 | The named option (draws nothing in the windows that set it). | keep (owner: dead where set, shared reader line saves 0) |
+| `crystalFace` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; ice =/0.00/= mean abs diff, =/0.0/= blocks; crystal 0.13/0.25/0.09 mean abs diff, 0.0/0.0/0.0 blocks. | engine-frag.wgsl:1623 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `crystalGrain` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice =/0.00/= mean abs diff, =/0.0/= blocks; crystal 0.50/1.30/0.44 mean abs diff, 7.8/21.8/13.7 blocks. | engine-frag.wgsl:1620 | 0 | The named authoring option. | keep |
+| `crystalStep` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 0.00/0.00/0.00 mean abs diff, 0.0/0.0/0.0 blocks; crystal 3.00/3.91/1.67 mean abs diff, 31.3/41.9/35.2 blocks. | sculpt-gpu-fields.js:399 | 0 | The named authoring option. | keep |
+| `crystalTone` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice =/0.00/= mean abs diff, =/0.0/= blocks; crystal 2.20/2.58/1.14 mean abs diff, 53.2/61.1/53.3 blocks. | engine-frag.wgsl:1622 | 0 | The named authoring option. | keep |
+| `crystalCount` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.09/0.19/1.35 mean abs diff, 0.0/0.0/1.9 blocks; ice 0.67/7.35/0.29 mean abs diff, 5.9/32.0/0.9 blocks. | sculpt-gpu-fields.js:301 | 0 | The named authoring option. | keep |
+| `crystalCraterTone` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; crystal 0.08/0.00/0.00 mean abs diff, 0.0/-/- blocks. | engine-frag.wgsl:813 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `crystalCraterWobble` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; crystal 0.17/0.00/0.00 mean abs diff, 0.3/-/- blocks. | engine-frag.wgsl:806 | 1 | The named authoring option. | keep (owner: drop saves the counted lines) |
+| `crystalInk` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; crystal 0.34/0.56/0.31 mean abs diff, 0.0/0.0/0.0 blocks. | engine-frag.wgsl:1637 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `crystalSeamEnd` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; crystal 0.10/0.36/0.22 mean abs diff, 0.0/0.0/0.0 blocks. | engine-frag.wgsl:756 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `crystalShallowInk` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; crystal 0.14/0.24/0.07 mean abs diff, 0.0/0.0/0.0 blocks. | engine-frag.wgsl:784 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `crystalSides` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.30/0.02/0.60 mean abs diff, 0.1/0.0/1.6 blocks; ice 0.24/0.16/14.53 mean abs diff, 2.2/1.0/57.9 blocks. | sculpt-gpu-fields.js:310 | 0 | The named authoring option. | keep |
+| `crystalTop` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; crystal 0.67/0.03/0.61 mean abs diff, 0.2/0.0/2.6 blocks; ice 0.10/0.00/0.00 mean abs diff, 1.2/0.0/0.0 blocks. | sculpt-gpu-fields.js:393 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `crystalVariation` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.61/0.81/0.56 mean abs diff, 2.0/2.4/1.8 blocks; ice 0.23/6.55/10.54 mean abs diff, 2.2/67.9/41.2 blocks. | sculpt-gpu-fields.js:302 | 0 | The named authoring option. | keep |
+| `frostGapReach` | ice. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; ice 0.48/0.00/0.00 mean abs diff, 2.3/0.0/0.0 blocks. | plumbing only | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `lavaCalm` | lava. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; lava 0.26/0.28/1.00 mean abs diff, 1.1/0.2/1.8 blocks. | engine-bake.wgsl:893 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `lavaChip` | lava. H20 step 3, `geology_controls.mjs --family bodies`: under 5%; lava 0.09/0.16/0.74 mean abs diff, 0.0/0.0/0.0 blocks. | engine-bake.wgsl:915 | 0 | The named authoring option. | keep (owner: thin mark, under the 5% bar) |
+| `crystalCraterGap` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.10/0.00/0.00 mean abs diff, 6.4/-/- blocks. | engine-frag.wgsl:810 | 0 | The named authoring option. | keep |
+| `crystalCraterLight` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.20/0.00/0.00 mean abs diff, 10.3/-/- blocks. | engine-frag.wgsl:1642 | 0 | The named authoring option. | keep |
+| `crystalCraterPx` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 1.14/0.00/0.00 mean abs diff, 35.3/-/- blocks. | sculpt-gpu-fields.js:454 | 0 | The named authoring option. | keep |
+| `crystalCraterSkin` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 1.04/0.00/0.00 mean abs diff, 48.8/-/- blocks. | sculpt-gpu-fields.js:456 | 0 | The named authoring option. | keep |
+| `crystalCraterStep` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.57/0.00/0.00 mean abs diff, 15.4/-/- blocks. | sculpt-gpu-fields.js:456 | 0 | The named authoring option. | keep |
+| `crystalCraterWeb` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.49/0.00/0.00 mean abs diff, 30.5/-/- blocks. | engine-frag.wgsl:1626 | 0 | The named authoring option. | keep |
+| `crystalCraterWebPx` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.56/0.00/0.00 mean abs diff, 14.8/-/- blocks. | engine-frag.wgsl:805 | 0 | The named authoring option. | keep |
+| `crystalFacet` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 3.37/3.56/1.77 mean abs diff, 40.1/45.1/39.4 blocks. | sculpt-gpu-fields.js:398 | 0 | The named authoring option. | keep |
+| `crystalForm` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 10.07/13.11/5.44 mean abs diff, 77.7/97.5/77.5 blocks; ice =/10.82/20.06 mean abs diff, =/98.4/79.8 blocks. | sculpt-gpu-fields.js:293 | 0 | The named authoring option. | keep |
+| `crystalSeam` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.69/3.07/1.14 mean abs diff, 20.3/27.6/32.4 blocks. | engine-frag.wgsl:759 | 0 | The named authoring option. | keep |
+| `crystalShallow` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.70/1.19/0.34 mean abs diff, 48.2/21.9/4.4 blocks. | engine-frag.wgsl:783 | 0 | The named authoring option. | keep |
+| `crystalShallowPx` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.85/1.43/0.41 mean abs diff, 21.0/8.7/1.8 blocks. | engine-frag.wgsl:771 | 0 | The named authoring option. | keep |
+| `crystalShoreScale` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 2.03/8.73/3.33 mean abs diff, 27.2/39.4/40.2 blocks. | sculpt-gpu-fields.js:478 | 0 | The named authoring option. | keep |
+| `crystalShoreSeam` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 0.26/0.84/0.49 mean abs diff, 5.9/1.9/17.6 blocks. | sculpt-gpu-fields.js:478 | 0 | The named authoring option. | keep |
+| `crystalSize` | crystal, ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 11.11/12.15/6.10 mean abs diff, 74.4/90.9/74.6 blocks; ice 0.39/14.33/20.53 mean abs diff, 2.7/100.0/79.9 blocks. | sculpt-gpu-fields.js:302 | 0 | The named authoring option. | keep |
+| `crystalSizeVar` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 3.59/5.50/2.65 mean abs diff, 31.9/48.6/45.1 blocks. | sculpt-gpu-fields.js:398 | 0 | The named authoring option. | keep |
+| `crystalSmooth` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 4.02/3.83/1.54 mean abs diff, 37.0/39.2/25.3 blocks. | sculpt-gpu-fields.js:398 | 0 | The named authoring option. | keep |
+| `crystalTiers` | crystal. H20 step 3, `geology_controls.mjs --family bodies`: acts; crystal 5.16/7.09/3.21 mean abs diff, 52.4/69.5/61.8 blocks. | sculpt-gpu-fields.js:399 | 0 | The named authoring option. | keep |
+| `frostGapDepth` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 0.89/0.00/0.00 mean abs diff, 6.5/0.0/0.0 blocks. | plumbing only | 0 | The named authoring option. | keep |
+| `frostGapSize` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 4.27/0.00/0.00 mean abs diff, 24.4/0.0/0.0 blocks. | plumbing only | 0 | The named authoring option. | keep |
+| `frostGaps` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 2.04/0.00/0.00 mean abs diff, 17.2/0.0/0.0 blocks. | plumbing only | 0 | The named authoring option. | keep |
+| `frostNeedles` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 0.87/0.00/0.00 mean abs diff, 8.5/0.0/0.0 blocks. | sculpt-gpu-fields.js:478 | 0 | The named authoring option. | keep |
+| `frostWet` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 1.24/0.00/0.00 mean abs diff, 18.1/0.0/0.0 blocks. | engine-frag.wgsl:1154 | 0 | The named authoring option. | keep |
+| `iceApron` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice =/=/1.13 mean abs diff, =/=/5.0 blocks. | engine-frag.wgsl:1271 | 0 | The named authoring option. | keep |
+| `iceCrest` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 3.23/1.54/4.90 mean abs diff, 35.4/48.4/48.3 blocks. | engine-frag.wgsl:1675 | 0 | The named authoring option. | keep |
+| `iceCrystal` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 0.43/0.00/1.61 mean abs diff, 17.4/0.0/42.8 blocks. | engine-frag.wgsl:1728 | 0 | The named authoring option. | keep |
+| `iceFacets` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 9.25/0.00/0.00 mean abs diff, 72.3/0.0/0.0 blocks. | sculpt-gpu-fields.js:401 | 0 | The named authoring option. | keep |
+| `iceFall` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice =/=/2.84 mean abs diff, =/=/55.1 blocks. | engine-frag.wgsl:369 | 0 | The named authoring option. | keep |
+| `iceFrost` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice 1.70/0.00/0.00 mean abs diff, 37.7/0.0/0.0 blocks. | engine-frag.wgsl:1721 | 0 | The named authoring option. | keep |
+| `iceSlate` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice =/=/5.15 mean abs diff, =/=/65.6 blocks. | engine-frag.wgsl:350 | 0 | The named authoring option. | keep |
+| `iceSnow` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice =/=/1.87 mean abs diff, =/=/18.6 blocks. | engine-frag.wgsl:1271 | 0 | The named authoring option. | keep |
+| `iceSoft` | ice. H20 step 3, `geology_controls.mjs --family bodies`: acts; ice =/=/1.56 mean abs diff, =/=/22.6 blocks. | engine-frag.wgsl:1271 | 0 | The named authoring option. | keep |
+| `lavaCrust` | lava. H20 step 3, `geology_controls.mjs --family bodies`: acts; lava 0.74/1.11/3.98 mean abs diff, 25.4/50.6/66.1 blocks. | engine-bake.wgsl:891 | 0 | The named authoring option. | keep |
+| `lavaDusk` | lava. H20 step 3, `geology_controls.mjs --family bodies`: acts; lava 0.00/0.01/0.37 mean abs diff, 0.0/0.0/7.1 blocks. | engine-frag.wgsl:1350 | 1 | The named authoring option. | keep |
+| `lavaPillow` | lava. H20 step 3, `geology_controls.mjs --family bodies`: acts; lava 0.22/0.55/2.91 mean abs diff, 0.0/1.5/8.6 blocks. | engine-bake.wgsl:897 | 0 | The named authoring option. | keep |
+| `lavaVeins` | lava. H20 step 3, `geology_controls.mjs --family bodies`: acts; lava 0.20/0.42/0.84 mean abs diff, 10.5/33.3/20.2 blocks. | engine-bake.wgsl:923 | 7 | The named authoring option. | keep |
+| `markCells` (draw) | crystal, ice. One lattice search for `shallowCell`, `craterWeb`, `iceHatch`, `iceFrostLines`. Landed in H20 part 2: 27 scenes 0.00; iceHatch (no scene) byte for byte on ice-1 with iceCrystal 1. | engine-frag.wgsl:397-414 | 35 | Nothing: landed, pixel-equal. Work done, not potential. | merge (landed) |
+| `cells` with a third distance (bake) | green blocks, lava hills. `lavaCells` removed; Lava's jitter .12 + .76 is an argument. 27 scenes 0.00 (one lava-2 pixel off by 7). | engine-bake.wgsl:593-611 | 14 | Nothing. Work done. | merge (landed) |
+| `cgPoint`, `cgWorld`, `plCells` (shape) | crystal columns, facets, ice frost. 27 scenes 0.00, regional 0 on 27 (see the card). | engine-shape.wgsl (`plCells` after `plHalf`, `cgPoint`/`cgWorld` before `stampColumns`) | 16 | Nothing. Work done. | merge (landed) |
+| Crystal dark apron (no knob) | crystal-1, -2. Switched off in a scratch copy: 1.70 and 1.07 mean abs diff. Retail's mounds have the dark rim. | engine-frag.wgsl:1657-1664 | 8 | A dark rim round a formation. | keep |
+| Shallow-mosaic fringe (no knob; H20 part 2 step 3) | crystal-2 0.21, crystal-1 0.05, crystal-3 0.01 mean abs diff against part 1: the open shallow sea stays smooth beyond 48 px of the slabs. | engine-frag.wgsl:`crystalShallowWater` (net +3 lines added) | 0 | Mosaic in open shallow water far from slabs. | keep |
+| Straight-line trio: `iceCrystal` / `iceFrost` (`iceHatch`, `iceFrostLines`) / `frostNeedles` | ice. One mark three ways; the two draw functions now share `markCells` but still differ in size, salts, angles and run rules. | engine-frag.wgsl:618-633, 686-698 | 0 | A merge would change pixels; not counted. | keep |
+| Two layers of cells in water (slabs `crystalSeam`, `crystalShallow`) | crystal-2, -3. The slabs draw the carpet in the sea (crystalSeam 0: smooth); the shallow layer drew the open sea. Different stages and data. | engine-frag.wgsl:755-785 | 0 | Unproven shorter replacement. | keep |
 
 ## Table defaults and query readers
 
