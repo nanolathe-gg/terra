@@ -1,4 +1,4 @@
-"""Build the local review artifact from audit evidence (no retail media in Git)."""
+"""Build the historical audit review, preserving its original keys and evidence."""
 import argparse,html,json,re,shutil,statistics
 from pathlib import Path
 import numpy as np

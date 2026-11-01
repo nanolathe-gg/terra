@@ -1,4 +1,4 @@
-"""Build a machine-readable control ledger from actual registries and GPU results.
+"""Build the historical control ledger; evidence keys name the controls measured.
 Run with the project's Python environment; media stay in the local audit folder.
 """
 import argparse,csv,json,re

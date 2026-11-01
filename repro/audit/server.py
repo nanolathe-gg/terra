@@ -13,8 +13,8 @@ from sculpt_export import MapExport
 from sculpt_document import MapDocument
 exports=MapExport(ASSETS,a.export_tool,[Path.home()/'TotalAnnihilation'],a.feature_tool,True)
 documents=MapDocument(a.out/'documents')
-configs={b:s.biome_config(b,ASSETS/f'assets-{b}',True) for b in s.BIOME_NAMES}
-patterns={b:{'name':s.BIOME_NAMES[b],'grass':c['textures']['grass'],'groundTiles':c['textures'].get('groundTiles')} for b,c in configs.items()}
+configs={b:s.biome_config(b) for b in s.BIOME_NAMES}
+patterns={b:{'name':s.BIOME_NAMES[b],'groundTable':c['materialTable']} for b,c in configs.items() if 'ground' in json.loads((ROOT/c['materialTable'].lstrip('/')).read_text())}
 for b,c in configs.items():c.update(biomes=s.BIOME_NAMES,groundPatterns=patterns,variants={k:v['label'] for k,v in s.WORLD_VARIANTS.get(b,{}).items()})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
