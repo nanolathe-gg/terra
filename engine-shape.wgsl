@@ -1359,7 +1359,7 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
   if (wet) {
     let across2 = (lx * ca + ly * sa) / scale;
     let field = vnoise(along / 64.0, across2 / 20.0, u.seed ^ 0x1a7u) * 0.45 + vnoise(along / 26.0, across2 / 6.0, u.seed ^ 0x2b1u) * 0.3 + vnoise(along / 10.0, across2 / 3.0, u.seed ^ 0x3d7u) * 0.18 + 0.5;
-    strip = max(strip, sm(0.0, 0.12, pow(support, 1.25) * 0.9 - field));
+    strip = max(strip, sm(0.0, 0.12, pow(support, 1.25) * 1.25 - field));
     if (strip <= 0.05) { return; }
     let top = sea + u.plHeight * (0.6 + 0.4 * plHalf(index, pid, 0x7b3u));
     F[ph] = clamp(raw + (max(raw, top) - raw) * strip, u.minH, u.maxH);
