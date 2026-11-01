@@ -23,6 +23,9 @@ Classes, read on the base render's heights (the sea is subtracted; the dry base 
   edge      either side within 6 px of the waterline: the waterline's stairs, blur and rim, thin marks that 16-px block means barely see
   beach     dry ground within 200 px of wet ground: sand, aprons and bars (Zhon's beach reaches ~107-178 px)
   shore     either side within 120 px of the waterline: what a stroke's coast pass cuts (layers, fingers, plates, the dry bank)
+  wall      H19: ground faceRelief's gate is above .5 on (1 - broad.y / 2 at least 2.25, engine-frag.wgsl), at the screen rows it is drawn on (a row
+            less g / 2), which are many more than its world rows. A retail window holds almost none, so each root holds <world>-1 alone, the
+            world's repro/walls scene
 """
 import json
 import sys
@@ -56,6 +59,14 @@ def class_mask(root, world, n, cls):
         return np.ones((1024, 1024), bool)
     o = json.loads((Path(root) / f'{world}-{n}' / 'ours-heights.json').read_text())
     g = np.array(o['heights'], float).reshape(o['grid'], o['grid']) - o['sea']
+    if cls == 'wall':
+        h = ndi.zoom(g, 1024 / g.shape[0], order=1)
+        broad = (np.roll(h, -5, 0) - np.roll(h, 5, 0)) / 10   # broadGradient's y
+        y, x = np.nonzero(1 - broad / 2 >= 2.25)
+        row = (y - h[y, x] / 2).astype(int)
+        m = np.zeros_like(h, bool)
+        m[row[(row >= 0) & (row < 1024)], x[(row >= 0) & (row < 1024)]] = True
+        return ndi.binary_closing(m, np.ones((12, 1), bool))   # one world row is up to 9 screen rows
     if cls in ('slope', 'face'):
         m = slope_map(g, 2) >= (.10 if cls == 'slope' else .50)
         m[:40] = m[-40:] = False; m[:, :40] = m[:, -40:] = False
@@ -88,7 +99,7 @@ def main():
     more = ('slope', 'face') if cls in ('slope', 'face') else ()
     for k in more:
         out[k + '_changed'] = []; out[k + '_share'] = []
-    for n in (1, 2, 3):
+    for n in (1,) if cls == 'wall' else (1, 2, 3):
         a = np.asarray(Image.open(Path(base) / f'{world}-{n}' / 'ours.png').convert('RGB'), np.int16)
         b = np.asarray(Image.open(Path(state) / f'{world}-{n}' / 'ours.png').convert('RGB'), np.int16)
         d = np.abs(a - b)
