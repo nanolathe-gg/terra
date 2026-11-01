@@ -7556,7 +7556,7 @@ retail gets closer where numbers can take it.
 4. The bridge's four Shores blocks (`bridgeSnow`, `bridgeBeachSand`, `bridgeSandBar`, `bridgeBeach`) as one beach on the engine's own path, and
    the blocks deleted. Judged against retail. The result must be shorter than what it replaces.
 
-**Part 2** is one coast read, code only. **Part 3** is the marks toward retail, then the count. Both are written out here from part 1's report.
+**Part 2** is the marks toward retail, then the count, written out below from part 1's report. The one coast read this card opened with was dropped: part 1's review says why.
 
 **Done (part 1).** Branch `H18-shores`, four steps, a commit each, nothing merged. Renders, logs and the timing runs are in `$R/agent-H18` (`NOTES.md` is its file map).
 - *Step 1, the inventory (68 knobs, in six groups).* Effective value per world = a scene's query > the stroke's own card > the variant (`WORLD_VARIANTS`) > `WORLD_KNOBS` > the world's table (`shallowDepth`, `deepDepth`) > `KNOB_DEFAULTS`
@@ -7672,6 +7672,20 @@ drag rAF p95                               16.8 16.7 16.8 16.7        | 16.7 16.
 edit latency p50                           16.9 16.7 17.0 16.6        | 16.9 17.9 16.2 16.6        | 16.8 / 16.8
 edit latency p95                           21.0 20.7 21.0 22.6        | 28.5 23.0 20.8 22.3        | 21.0 / 22.6
 ```
+
+**Part 1, the coordinator's review.** Read the diff, re-ran `repro/compare.py` against `$R/agent-H17/out-3b` (0.00 on all 27), read the check logs, and viewed green-1, red-3, archipelago-1, lava-2, crystal-2 and ice-1 at 1x (ice-1 was not in the agent's set). The beach merge is byte-identical and shorter, and needs no fix.
+- *The card's premise was wrong, and part 1's table is what shows it.* The card opened on one question asked many ways. Most readers ask depth or height, not distance, and a distance cannot answer them. The readers that do ask distance mostly share H10's field already (rows 1-4). What is left is `beachCover`, for Zhon alone, drawn by none of the 27 scenes, and `shoreEdge`, 8 px on Lava.
+- *No chunk flood: a decision, not a build.* Part 1 proposed a jump flood per baked chunk. It would not be one field: rows 1-4 keep theirs, so the engine would have two floods, and the shape stage's is about 100 lines of compute passes plus `emitCoast`, bound to the shape stage's buffers. That is more code than the 44 + 12 lines of marches it retires, for two marks in two worlds. "About 40 lines saved" counted only the removals. The march's cost is real (37.3 ms of a 75.8 ms Zhon load, when a beach is on) and goes on the owner's list with these numbers. Zhon's relief bake at a drag with the beach on is 417 ms, level with Green's 444 ms, so nothing forces it.
+- *The sediment transition has no card now.* H16 sent it here, and part 1 showed none of `bridgeMargins` or `bridgeTransition` is Shores': neither reads the sea. Their comments name Layered rock and Materials, both closed. They go to Small leftovers, or the bridge never empties.
+- *Step 3's tool change does not touch H17's findings.* A scene's query no longer beats the knob moved. No scene's query sets a crack, joint, gully, scratch, facet or block knob (checked by grep), so H17's dead rows, Lava's `crackSeverity` among them, stand.
+- *Marks and who owns them.* Crystal-2's whole-sea mosaic is `crystalShallowWater` (`plateWaterPx` is 80 and cannot reach that far), so it is Bodies', and the owner asked for smaller shore and shallow crystals on G7, which part 2 must not undo. Ice-1's blue holes in the frost band are Bodies' too. Archipelago's straight bars are how the scene was painted, not an engine mark; their noisy mottle is one.
+- *One more for the owner's list.* `beachWidth`, `beachCover`, the beach block, generated layer 6 and `hardDeepStep` with `stepSharp` 0 draw in no scene.
+
+**Part 2: the marks toward retail, then the count.** A small code step first, then H17 part 3's rules: a switch-off table before any tuning, three tries a target, retail the judge, world values and shared code only, nothing deleted.
+1. **One waterline.** The same few lines in `sharpDeepStep`, `hardDeepStep` and the waterline: the depth read at a displaced point, the bank's gradient, the step's depth. Code only, shorter, 0.00.
+2. **What draws each mark:** one table, by switch-off.
+3. **The targets, in order:** Archipelago's bars and halo, Green's dark rim, Red's bed and bank, Ice's offshore shelf, Lava's arcs last. H15's water curves were tried and read further, so one try at most, and then that item closes.
+4. **The count,** for combine-or-drop.
 
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H18`, branch `H18-shores`; assets `$R/agent-H18`.
 
