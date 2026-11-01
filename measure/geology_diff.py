@@ -23,6 +23,8 @@ Classes, read on the base render's heights (the sea is subtracted; the dry base 
   edge      either side within 6 px of the waterline: the waterline's stairs, blur and rim, thin marks that 16-px block means barely see
   beach     dry ground within 200 px of wet ground: sand, aprons and bars (Zhon's beach reaches ~107-178 px)
   shore     either side within 120 px of the waterline: what a stroke's coast pass cuts (layers, fingers, plates, the dry bank)
+  crater    H20: discs round the scene's crater strokes, each .75 of the card's diameter in radius (the bowl, rim and apron), at the stroke's points as the
+            scene file gives them (no height shift: the discs are wider than the shift); the class for the crystal craters' skin and web
   wall      H19: ground faceRelief's gate is above .5 on (1 - broad.y / 2 at least 2.25, engine-frag.wgsl), at the screen rows it is drawn on (a row
             less g / 2), which are many more than its world rows. A retail window holds almost none, so each root holds <world>-1 alone, the
             world's repro/walls scene
@@ -59,6 +61,16 @@ def class_mask(root, world, n, cls):
         return np.ones((1024, 1024), bool)
     o = json.loads((Path(root) / f'{world}-{n}' / 'ours-heights.json').read_text())
     g = np.array(o['heights'], float).reshape(o['grid'], o['grid']) - o['sea']
+    if cls == 'crater':
+        scene = json.loads((Path(__file__).resolve().parent.parent / 'repro' / 'scenes' / f'{world}-{n}.json').read_text())
+        yy, xx = np.mgrid[:1024, :1024]
+        m = np.zeros((1024, 1024), bool)
+        for kind, points, *opt in scene['strokes']:
+            if kind == 'crater':
+                r = .75 * (opt[0].get('card', {}).get('diameter', 100) if opt else 100)
+                for x, y in points:
+                    m |= (xx - x) ** 2 + (yy - y) ** 2 <= r * r
+        return m
     if cls == 'wall':
         h = ndi.zoom(g, 1024 / g.shape[0], order=1)
         broad = (np.roll(h, -5, 0) - np.roll(h, 5, 0)) / 10   # broadGradient's y
