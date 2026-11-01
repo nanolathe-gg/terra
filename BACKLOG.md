@@ -7471,6 +7471,62 @@ grey shoulders still read as short wormy marks in ours.
 - *`fractures.png` and what goes with it (part 1 step 3):* `materials/fractures.png` 137.6 KB, binding 3 of the draw's group 0, the `fractures` slider, `uFractureAmount`/`uFractureDepth`, `config.material.fractureDepth`, `fractureDepth()` in `engine-common.wgsl` (about 18 lines), `measure/make_fractures.py`.
 - *Not re-measured:* no fractures knob was changed in part 3 (`terraceBreak` and `banding` belong to the bands), so part 1's numbers stand; `geology_controls` was not re-run.
 
+**Done (part 3).** Branch `H17-fractures`, commits `2d383b7` (`terraceBreak` 1.4 -> 0, step 1 table, targets) and `e148d6a` (Green `banding` .8 -> .5, step 3). Nothing merged. Renders in `$R/agent-H17`: `p3` (one-scene trials, `bin3/t.sh`), `out-3`, `out-3b` (the head, 27 scenes), `sheets3` (contact sheets), checks in `chk-p3`, perf in `perf3`.
+- *Values changed.* Green engine `terraceBreak` 1.4 -> 0; Green `banding` .8 -> .5. Against part 2's head (`compare.py`, 27 scenes): green-2 mean |diff| 7.10, 35.0% of pixels moved; green-1 1.25 / 8.1%; green-3 1.03 / 7.7%; the other 24 scenes 0.00 / 0.0%. green-2's slope is far above the 5% bar; green-1 and green-3 move 8% of pixels on their hills' bands and look the same at 1x.
+- *Closer at 1x:* green-2's slope (`sheets3/green-3b/1x.png`, `s16.png`): flowing contour lines in place of a blotchy mass, though bolder and wider-spaced than retail's fine dashes, and on the east-facing part they run down the fall. *Same:* green-1, green-3 (`sheets3/green-3b`). *Did not move:* green-2's rock band, green-1's rim and green-3's ridge, red-1, red-2, ice-1, ice-3, moon-2 (see above; each tried and dropped, nothing kept).
+- *Checks (head `e148d6a`).* `repro/all.sh` + `compare.py`: 27 scenes, `mismatch` 0, console clean. `repro/stats.py` against `agent-H16/checkM/stats/stats.json`: containment 535 / 668 as before, every `outside` entry equal, none newly outside retail. `regional.mjs` 0 on 27, `smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago` 0, `gate.sh` 0, `node --test repro/*.test.mjs` 0, `shape_controls.mjs` 0 (no `!` rows), `section_check.mjs --against classic-ref.json` 0, `curveedit.mjs` Green and Desert 0.
+- *Perf* (`perf.mjs map4 --only drag --no-export`, green-2 and desert-1, four rounds, head first in rounds 1-2 and main first in 3-4; main is an export at the card's base; host load about 4-5). rAF p95 16.7-16.8 on every run; no pass is slower than the round spread. Relief bake drag green-2 473.3 / 478.0 ms. Every pass, ms, rounds r1-r4 | median head / main:
+
+```
+### green-2: head rounds | main rounds | median head / main  (ms)
+drag chunk | chunk feed                        120.7 125.6 119.8 116.5      | 118.9 120.2 125.7 126.2      | 120.3 / 122.9
+drag chunk | chunk flags                       0.6 0.6 0.4 0.9              | 0.3 0.5 0.7 1.9              | 0.6 / 0.6
+drag chunk | relief bake                       483.1 475.9 468.0 470.7      | 468.8 479.6 476.4 483.8      | 473.3 / 478.0
+drag chunk | shape passes                      5.2 1.8 2.9 6.0              | 2.4 5.1 4.0 4.8              | 4.1 / 4.4
+drag chunk | terrain                           1105.3 1135.0 1140.7 1141.3  | 1147.1 1124.4 1138.6 1122.3  | 1137.8 / 1131.5
+drag edit latency p50                          22.9 23.1 23.4 25.1          | 24.5 23.1 24.9 23.7          | 23.2 / 24.1
+drag edit latency p95                          26.6 29.5 28.9 31.0          | 29.1 28.2 30.3 30.9          | 29.2 / 29.7
+drag erode | shape passes                      161.5 161.3 167.8 159.7      | 165.8 162.3 163.4 167.2      | 161.4 / 164.6
+drag moves                                     70.0 70.0 70.0 70.0          | 70.0 70.0 70.0 70.0          | 70.0 / 70.0
+drag n(rAF)                                    212.0 211.0 211.0 211.0      | 211.0 212.0 211.0 211.0      | 211.0 / 211.0
+drag rAF p95                                   16.8 16.7 16.7 16.7          | 16.7 16.8 16.8 16.8          | 16.7 / 16.8
+load  | shape passes                           - - - -                      | - - - 16.4                   | None / 16.4
+load chunk | chunk feed                        10.0 9.7 10.8 9.8            | 9.6 9.8 10.2 10.4            | 9.9 / 10.0
+load chunk | chunk flags                       0.1 0.0 0.0 0.0              | 0.5 0.0 0.1 0.0              | 0.0 / 0.0
+load chunk | relief bake                       107.7 103.6 106.2 105.4      | 107.9 111.0 106.0 106.3      | 105.8 / 107.1
+load chunk | shape passes                      15.0 15.1 15.3 -             | - 15.0 15.0 -                | 15.1 / 15.0
+load chunk | terrain                           79.9 81.7 79.8 81.2          | 78.6 78.4 78.8 84.5          | 80.5 / 78.7
+load erode | erosion                           176.6 184.6 181.9 180.8      | 179.4 180.2 179.4 182.6      | 181.4 / 179.8
+load erode | erosion input                     1.2 1.3 1.2 1.4              | 1.6 1.5 1.3 1.8              | 1.3 / 1.5
+load erode | erosion maps                      1.0 1.0 0.9 1.0              | 0.9 0.9 0.9 1.0              | 1.0 / 0.9
+load erode | shape passes                      13.4 13.8 13.6 29.9          | 29.7 15.3 14.5 14.5          | 13.7 / 14.9
+load erode | time pass output                  0.7 0.3 0.3 0.2              | 0.3 0.2 0.3 0.2              | 0.3 / 0.2
+### desert-1: head rounds | main rounds | median head / main  (ms)
+drag chunk | chunk feed                        122.0 123.6 118.0 123.9      | 121.4 119.5 120.4 120.8      | 122.8 / 120.6
+drag chunk | chunk flags                       1.0 0.7 0.4 0.9              | 1.1 0.8 0.6 0.5              | 0.8 / 0.7
+drag chunk | relief bake                       271.4 276.8 266.1 271.3      | 273.1 296.4 291.4 274.9      | 271.3 / 283.2
+drag chunk | shape passes                      0.9 0.9 1.0 1.8              | 1.8 0.7 0.9 1.6              | 1.0 / 1.3
+drag chunk | terrain                           672.5 711.2 689.4 676.9      | 692.4 771.0 750.1 707.6      | 683.2 / 728.9
+drag edit latency p50                          16.0 16.1 16.1 15.7          | 15.8 16.7 15.8 16.2          | 16.1 / 16.0
+drag edit latency p95                          20.1 20.0 19.5 17.3          | 22.7 21.0 19.5 20.5          | 19.8 / 20.8
+drag erode | shape passes                      68.6 68.6 62.1 62.1          | 69.1 67.3 71.1 65.7          | 65.3 / 68.2
+drag moves                                     70.0 70.0 70.0 70.0          | 70.0 70.0 70.0 70.0          | 70.0 / 70.0
+drag n(rAF)                                    211.0 211.0 211.0 211.0      | 211.0 212.0 212.0 211.0      | 211.0 / 211.5
+drag rAF p95                                   16.7 16.7 16.7 16.7          | 16.7 16.8 16.7 16.7          | 16.7 / 16.7
+load chunk | chunk feed                        9.5 9.8 9.8 10.1             | 11.1 10.4 10.0 9.9           | 9.8 / 10.2
+load chunk | chunk flags                       0.0 0.0 0.0 0.1              | 0.1 0.0 0.0 0.5              | 0.0 / 0.0
+load chunk | relief bake                       69.8 73.3 76.7 68.6          | 74.9 69.5 74.4 70.9          | 71.6 / 72.6
+load chunk | shape passes                      2.0 1.9 1.7 1.9              | 2.3 2.8 1.8 -                | 1.9 / 2.3
+load chunk | terrain                           48.8 46.7 50.7 49.8          | 48.9 50.2 51.0 47.9          | 49.3 / 49.5
+load erode | erosion                           45.7 45.6 48.9 46.8          | 44.9 48.3 45.0 46.8          | 46.3 / 45.9
+load erode | erosion input                     2.8 1.4 1.2 1.2              | 1.2 1.4 1.3 1.2              | 1.3 / 1.3
+load erode | erosion maps                      0.9 1.8 0.9 0.9              | 0.9 1.0 0.9 1.2              | 0.9 / 1.0
+load erode | shape passes                      11.1 11.7 10.7 13.5          | 11.7 13.1 12.2 14.7          | 11.4 / 12.6
+load erode | time pass output                  0.2 0.3 0.2 0.3              | 0.2 0.3 0.2 0.2              | 0.2 / 0.2
+```
+- *Viewed:* `s1-g2-a`, `s2-g2-a`, `s3-g2-1x`, `s4-green-1`, `s4-green-3`, `s5-rock`, `s6-rock1x`, `s7-rock`, `s8-g1`, `s9-g1`, `s10-g1`, `s11-red-1`, `s11-red-2`, `s12-ice1`, `s13-ice1`, `s14-ice1`, `s15-moon-2`, `s16`, `s17-green-1`, `s17-green-3`, `green-final/1x`, `green-3b/1x`. **Not viewed:** `green-3b/2x`, any 2x sheet of the final head, ice-3, moon-1, moon-3, red-3, every other world's final render (they are 0.00 against part 2's head), the final `out-3b` sheet.png.
+- *Departures.* Trials ran on the head server with queries rather than a table edit; a first trial series used a comma as the separator (it hangs the page: `&` is the separator), left in place. Trials labelled `base2` were rendered after `terraceBreak` 0 was applied, so they are that value, not part 2's head (`base` is). ice-3 and moon-1/3 got no trial of their own. Step 3 lines are from awk function spans and rounded.
+
 **Server and guard:** port 8885, CDP 9685; worktree `../terraform-wt-H17`, branch `H17-fractures`; assets `$R/agent-H17`.
 
 ## After the cards
