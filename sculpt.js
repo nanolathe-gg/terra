@@ -109,7 +109,7 @@ const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough'
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
   ['craterEjecta','crater-ejecta','Ejecta',['crater'],0,100,5,100,'Ragged patches of throw-out beyond the rim.'],
-  ['faceVariation','face-variation','Face width variation',['plateau','offset','erase',...SECTION_KINDS.slice(2)],0,150,5,100,'How much the edge face widens and narrows along the outline (with Cross-section 1, every width of the profile).'],
+  ['faceVariation','face-variation','Face width variation',['plateau','offset','erase',...SECTION_KINDS.slice(2)],0,150,5,100,'How much the edge face widens and narrows along the outline (on a carried cross-section, every width of it).'],
   ['mesaFlank','mesa-flank','Mesa flanks',['plateau'],0,100,5,100,'A narrower cap with a sharp edge and wide, even flanks to a concave foot (Painted Desert mesas).'],
   ['northFace','north-face','Wider north faces',['plateau','offset'],0,100,5,100,'TA\'s view squashes faces that look north; this widens them.'],
   ['fingers','fingers','Finger coasts',['deep','shallow'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
@@ -553,7 +553,7 @@ function regionalStages(list=nodes) {
 function regionalReadApron(n) {
   if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
   const q={...shapeDefaults(),...n.params},bank=2**(((q.bankWidth??.5)-.5)*1.3);
-  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):n.kind==='hill' && !(q.profile>=.5) && !ridgeOn(n.kind,q)?4:0;
+  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):n.kind==='hill' && !carriesSection(n.kind,q) && !ridgeOn(n.kind,q)?4:0;
   // A framed finger cache is keyed on authoring cells; include every world
   // cell that can share that key. Radial thumbs can share a coastal key from
   // both sides of the radial band, so their first-call order needs that band.

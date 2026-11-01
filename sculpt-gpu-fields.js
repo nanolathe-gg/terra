@@ -1,6 +1,5 @@
 import {shapePaths} from './sculpt-paths.js';
 import {strokeCurve, carriesSection} from './sculpt-shape-presets.js';
-// H15 comparison only (not for landing): ?shapePresets draws every kind through its cross-section preset instead of its classic curve.
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
