@@ -1093,10 +1093,10 @@ export class TerrainRenderer {
     set('uBedVary', number('bedVary', 0.5));
     set('uBedLedge', number('bedLedge', 0.5));
     set('uBedLip', number('bedLip', 1));
-    set('uJointSpacing', number('jointSpacing', 36));
-    set('uJointAngle', number('jointAngle', 0));
     set('uJointDepth', number('jointDepth', 2));
-    set('uJointRun', number('jointRun', 120));
+    set('uGrooveSpacing', number('grooveSpacing', 36));
+    set('uGrooveAngle', number('grooveAngle', 0));
+    set('uGrooveRun', number('grooveRun', 120));
     set('uCrackStyle', number('crackStyle', 0));
     set('uBedHeight', number('bedHeight', 0));
     set('uRockFrom', number('rockFrom', 0.6));
@@ -1119,10 +1119,7 @@ export class TerrainRenderer {
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
     // E9 (Green rock faces).
     set('uGullyDepth', number('gullyDepth', 0));
-    set('uGullySpacing', number('gullySpacing', 40));
     set('uGullyWidth', number('gullyWidth', 14));
-    set('uGullyAngle', number('gullyAngle', -20));
-    set('uGullyRun', number('gullyRun', 160));
     set('uGullyShade', number('gullyShade', 0));
     set('uRibTilt', number('ribTilt', 0));
     set('uBedBend', number('bedBend', 0));

@@ -41,9 +41,13 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.equal(requirement('bedVary',{column:0,rockOrder:1,bedLedge:.5}),'');
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
- assert.match(requirement('gullySpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
- assert.match(requirement('jointRun',{rockOrder:1,jointDepth:0}),/Joint depth/);
- assert.equal(requirement('jointRun',{rockOrder:1,jointDepth:2}),'');
+ assert.match(requirement('grooveSpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
+ assert.match(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:0}),/Joint depth or Gully depth/);
+ assert.equal(requirement('grooveRun',{rockOrder:1,jointDepth:2}),'');
+ assert.equal(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:4}),'');   // Green cuts gullies and no joints
+ assert.match(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:0}),/Joint depth, Gully depth or Rib tilt/);
+ assert.equal(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),'');   // ribs stand between the lines
+ assert.match(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),/Joint depth or Gully depth/);   // a rib cuts nothing
  assert.match(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:0}),/Gully depth or Rib tilt/);
  assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:0,ribTilt:.2}),'');
  assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:4,ribTilt:0}),'');

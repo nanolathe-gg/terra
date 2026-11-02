@@ -38,7 +38,7 @@ KNOB_DEFAULTS = dict(
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5, bedLip=1,
-    jointSpacing=36, jointAngle=0, jointDepth=2, jointRun=120, crackStyle=0, bedHeight=0, rockFrom=.6,
+    jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, crackStyle=0, bedHeight=0, rockFrom=.6,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
@@ -112,7 +112,7 @@ KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander
 KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
-                     gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyShade=0, ribTilt=0,
+                     gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
                      bedBend=0, bedPunch=0,
                      facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
@@ -249,7 +249,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
-                  bedLip=2, bedLedge=.4, jointAngle=-20, jointSpacing=34, jointDepth=3, jointRun=200,
+                  bedLip=2, bedLedge=.4, grooveAngle=-20, jointDepth=3,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -272,7 +272,7 @@ WORLD_KNOBS = {
                   # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
                   # bedBend 0, bedPunch 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
-                  gullyDepth=8, gullySpacing=36, gullyRun=90, gullyShade=1.2, ribTilt=.2,
+                  gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
                   bedBend=1, bedPunch=1,
                   facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
@@ -317,8 +317,8 @@ WORLD_KNOBS = {
     'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
-                jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160,
-                # G2: joints run down the fall line of the ground they are cut in (jointAngle is the lean from it), and painted
+                jointDepth=3, grooveSpacing=30, grooveAngle=-10, grooveRun=160,
+                # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
                 # rock on level ground fades into plain broken rock. Red has no beds.
                 cliffFollow=1, cliffReach=40,
                 # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
@@ -422,7 +422,7 @@ WORLD_KNOBS = {
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
-                   jointDepth=3, jointSpacing=30, jointAngle=0, crackStyle=1, faceFill=0, ambient=.3,
+                   jointDepth=3, grooveSpacing=30, crackStyle=1, faceFill=0, ambient=.3,
                    # G2: joints run down the fall line (its beds are height contours already, kept on the grid's own heights
                    # so the lit ledges stay with the strata colours: cliffBed 0).
                    cliffFollow=1, cliffReach=40, cliffBed=0,

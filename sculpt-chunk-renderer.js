@@ -102,7 +102,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+1.8*Math.abs(n('bedLip',1)))*Math.abs(n('rockOrder',0));
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('gullySpacing',8),8),F=Math.max(n('facetSize',2),2),coarse=Math.max(n('facetCoarse',0),0);
+    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),F=Math.max(n('facetSize',2),2),coarse=Math.max(n('facetCoarse',0),0);
     const facetRise=1.85*F*Math.abs(n('facetTilt',0))*(Math.max(n('facetStretch',.25),.25)+Math.abs(n('facetSkew',1)))*(1+2.4*coarse)+.5*Math.abs(n('facetStep',0))*(1+coarse);
     const extra=gullyRise+facetRise+relief+blocks+beds+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('boulderSize',9))+Math.abs(n('debrisSize',6))*.35+Math.abs(n('rippleHeight',1.4));
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);

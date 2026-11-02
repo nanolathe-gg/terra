@@ -381,10 +381,10 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 // than as scattered gravel. Nothing here is ink.
 //
 // Joints: grooves close to the screen's north-south with a slight lean,
-// spaced irregularly, each running in unbroken stretches (jointRun px) with
+// spaced irregularly, each running in unbroken stretches (grooveRun px) with
 // gaps (GROOVE_GAPS) and deepest mid-stretch; they wander a little. The beds run
 // on across them. Returns the groove height offset (<= 0).
-fn jointGroove() -> Groove { return lines(u.jointAngle, u.jointSpacing, u.jointDepth, u.jointRun, 2.2, 11.0); }
+fn jointGroove() -> Groove { return lines(u.grooveAngle, u.grooveSpacing, u.jointDepth, u.grooveRun, 2.2, 11.0); }
 // G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
 fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), off).depth; }
 
@@ -558,14 +558,14 @@ fn groove(p: vec2f, g: Groove, off: f32) -> Cut {
     return cut;
 }
 
-// Gullies and ribs. Gully lines lean gullyAngle from the screen's north-south
-// and sit gullySpacing apart (0.6-1.4 of it), bending with broad noise. A rib is
+// Gullies and ribs. Gully lines lean grooveAngle from the screen's north-south
+// and sit grooveSpacing apart (0.6-1.4 of it), bending with broad noise. A rib is
 // the stretch of face between two gully lines: a plane tilted by its own random
 // slope (ribTilt, height per px at most), so a stripe faces the sun or turns from
 // it as a whole. A gully is carved into the line as a smooth channel gullyWidth
-// across and up to gullyDepth deep, in runs of gullyRun px with gaps (GROOVE_GAPS),
+// across and up to gullyDepth deep, in runs of grooveRun px with gaps (GROOVE_GAPS),
 // deepest mid-run. Returns (height offset, how deep the gully floor is here, 0..1).
-fn gullyGroove() -> Groove { return lines(u.gullyAngle, u.gullySpacing, u.gullyDepth, u.gullyRun, 0.5 * max(u.gullyWidth, 2.0), 61.0); }
+fn gullyGroove() -> Groove { return lines(u.grooveAngle, u.grooveSpacing, u.gullyDepth, u.grooveRun, 0.5 * max(u.gullyWidth, 2.0), 61.0); }
 fn gullyField(p: vec2f) -> vec2f {
     let g = gullyGroove();
     let cut = groove(p, g, 0.0);
@@ -626,7 +626,7 @@ fn facetField(p: vec2f) -> vec2f {
 // Rock structure that follows the ground (card G2). Retail's strata lie along the contours of the
 // hill they are cut in and its joints run down the fall line, so on a face turned east the beds
 // are vertical on the screen and the joints run across it. The fixed screen directions above
-// (bedDip, jointAngle, gullyAngle) are the earlier look; with cliffFollow 1 the
+// (bedDip, grooveAngle) are the earlier look; with cliffFollow 1 the
 // ground gives the directions instead, from heights smoothed at two scales, so the direction
 // does not shiver with the grid's own roughness. Where the smoothed slope is small even at the
 // wide scale (painted rock on level ground) there is no fall line to follow, and the structure
@@ -1233,7 +1233,7 @@ fn bake(p: vec2f) -> vec4f {
         // (the offset is keyed on the bed's index). A joint of no depth cuts nothing.
         var joint = 0.0;
         if (u.jointDepth > 0.0) {
-            let stagger = select(0.0, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5), cliffOn && u.cliffStagger > 0.0);
+            let stagger = select(0.0, u.cliffStagger * max(u.grooveSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5), cliffOn && u.cliffStagger > 0.0);
             joint = jointFieldAt(pf, stagger);
         }
         height += order * steep * (bed.x + joint);

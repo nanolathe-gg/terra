@@ -209,10 +209,10 @@ struct Uniforms {
     bedDipDir: f32,       // direction the beds tilt down toward, degrees (0 east, 90 south)
     bedLedge: f32,        // how far each bed steps (0 the smooth face, 1 flat treads and short risers)
     bedLip: f32,          // lit lip on each ledge and the shaded notch under it, height units
-    jointSpacing: f32,    // distance between joints, world px
-    jointAngle: f32,      // joints' lean from the screen's north-south, degrees
-    jointDepth: f32,      // groove depth, height units
-    jointRun: f32,        // typical length of an unbroken joint, world px
+    jointDepth: f32,      // joint depth, height units
+    grooveSpacing: f32,   // distance between joint lines, and between gully lines, world px
+    grooveAngle: f32,     // their lean from the screen's north-south, degrees
+    grooveRun: f32,       // typical length of an unbroken joint or gully, world px
     crackStyle: f32,      // cracks: 0 ink (dark floor), 1 relief (carved groove with a lit lip)
     bedHeight: f32,       // 0 beds spaced along the ground (px), 1 by height units (as the strata colours)
     rockFrom: f32,        // slope where beds and joints start on steep ground (painted rock always counts)
@@ -259,10 +259,7 @@ struct Uniforms {
     faceRelief: f32,      // share of the rock relief lit on a wall that faces the viewer (0: the world-space look; engine-frag.wgsl)
     rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
     gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
-    gullySpacing: f32,    // distance between gully lines, world px
     gullyWidth: f32,      // gully width across, world px
-    gullyAngle: f32,      // gully lean from the screen's north-south, degrees
-    gullyRun: f32,        // typical length of an unbroken gully, world px
     gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
     bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
