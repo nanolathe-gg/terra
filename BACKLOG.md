@@ -8166,6 +8166,21 @@ trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 - *Counts.* Requirement code: 41 lines in, 4 out in `sculpt-control-schema.js` (the new lines are in groups of one comment and a few rules); 83 in and 6 out in the node tests; 7 lines in `sculpt.js` and 3 in `sculpt-ui.js` (the panel's values, the Palette rows); the tool 321 lines.
 - *Departures.* The ground rules have no check list; rule 11 is new. The tool cannot report "under 8" (palette steps). Page sliders the world hides are not swept (they are not shown). Rows disabled by a fact of the material (`column`, a layer, tiled ground, sand slopes) are proved only by the worlds that have the fact moving them. The audit host's busy map disables the rendering switches, so the tool reads a row's reason line, not its disabled flag. A run on a memory-starved host loses a world to a killed browser; the pool reruns it twice. Folders that can go: `first`, `first2`, `first3`, `sweep2` (superseded), `probes`, `t1` to `t3`, `final` to `final5`, every `dbgprofile-*` and `profile-*`.
 
+### H23. Rock: the merge trials
+
+> **Owner, 2026-11-01,** on the combine-or-drop page: approved as trials, not as removals: joints; crack fine tuning; facet, block and gully tuning; bed shape; whole families as one control. The record is under "Rulings" in `docs/audit/COMBINE_OR_DROP.md`.
+
+**Why.** The owner's direction is simplification. Rock carries controls that no world tells apart, or that one world sets and nothing reads there. The sheet's rule decides each: a merge lands if it is shorter and reads no further from retail; otherwise it is reported as tried and the controls stay.
+
+**The build.**
+1. *Tier 1, no pixel may move.* Constant groove gaps; one `grooveAngle`, `grooveSpacing`, `grooveRun` for the joint and gully pairs; `crackJagged`, `crackLit`, `blockGrit` constants; `bedBend` constant; `bedLip` derived from `bedLedge`; `facetSkew` constant if nothing else draws facets. One commit each.
+2. *Tier 2, pixels move, judged at 1x against retail on two or three maps a world (decision 22).* `crackReach`, `crackLength`, `crackWidth`, `crackStyle`; the cell family, where "tried" is the expected end.
+3. *The rock rows on the sweep's `OPEN` list.* `styleFace` on deep strokes, `styleRelief` on Lava, `desertCapFlat` on Green, `lean`, `facing` and `faceVariation` on Desert's plateau: traced to a cause, settled, off the list.
+
+**The bar.** Tier 1: 27 scenes 0.00 against main, byte for byte. Tier 2: no further from retail, shown side by side. `measure/world_controls.mjs` exits 0 with `OPEN` shorter by H23's rows and no row added. Every removed control leaves no name behind, in the panels, audit lists, requirement lines, `KNOB_DEFAULTS` or docs. Old saves still load.
+
+**Server and guard:** port 8885, CDP 9685; baseline 8886, 9686; worktree `../terraform-wt-H23`, branch `H23-rock`; assets `$R/agent-H23`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
