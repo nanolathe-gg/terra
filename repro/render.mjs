@@ -16,6 +16,7 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450));
 const extraQuery = opt('--query', '');
 const MAPX = 4, MAPY = 4, WINDOW = 1024;
+const TILE_PX = 16;   // the most pixels of a window the tile size may move
 const clayOn = args.includes('--clay') && args.splice(args.indexOf('--clay'), 1).length > 0;
 const OX = Number(opt('--offset', 0)), OY = OX, seaArg = opt('--sea', '');
 const [sceneFile, out] = args;
@@ -78,6 +79,10 @@ try {
   await ev(sampleWindow); await sleep(1500); await ev('sculptCanvas.idle()');
   const hs = {out: await ev(sampleWindow)};
   writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: 512, sea: await ev('sculptDebug.sea'), heights: hs.out}));
-  console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), console: logs.slice(0, 8)}));
+  // The picture must not depend on how the map is cut into tiles: the window's four 512 px tiles, baked alone, match the canvas's 256 px view tiles. A fed tile once
+  // took its lattice's height from its width, so rows past that were one row repeated; every render reads this now. Triangles landing a hair apart leave a few single pixels.
+  const tiles = await ev(`(async () => { const c = document.getElementById('terrain').getContext('2d'); let px = 0; for (const y of [0, 512]) for (const x of [0, 512]) { const b = await sculptCanvas.debugBake({x: ${OX} + x, y: ${OY} + y, width: 512, height: 512}, 1), o = new OffscreenCanvas(512, 512).getContext('2d'); o.drawImage(b, 0, 0); const A = c.getImageData(x, y, 512, 512).data, B = o.getImageData(0, 0, 512, 512).data; for (let i = 0; i < A.length; i += 4) if (A[i] !== B[i] || A[i + 1] !== B[i + 1] || A[i + 2] !== B[i + 2]) px++; } return px; })()`);
+  if (tiles > TILE_PX) { console.error(`render.mjs: ${sceneFile}: ${tiles} pixels change with the tile size`); process.exitCode = 1; }
+  console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), tiles, console: logs.slice(0, 8)}));
   ws.close();
 } finally { chrome.kill(); }
