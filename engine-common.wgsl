@@ -378,7 +378,6 @@ struct Uniforms {
     blockStep: f32,       // largest step of a block against the next, height units (hard beds 0.4 of it)
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
     blockChip: f32,       // px an edge wanders, chipping the block outline (hard beds 0.4 of it)
-    blockGrit: f32,       // per-pixel height grit on blocks, height units
     weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet

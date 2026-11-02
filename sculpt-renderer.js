@@ -1142,7 +1142,7 @@ export class TerrainRenderer {
     {
       set('uBlocks', number('blocks', 0)); set('uBlockRow', number('blockRow', 4.5)); set('uBlockWidth', number('blockWidth', 9)); set('uBlockTilt', number('blockTilt', .5));
       set('uBlockStep', number('blockStep', .8)); set('uBlockSeam', number('blockSeam', .5)); set('uBlockChip', number('blockChip', 1.2));
-      set('uBlockGrit', number('blockGrit', .25)); set('uHillBlocks', number('hillBlocks', 0));
+      set('uHillBlocks', number('hillBlocks', 0));
     }
     this.setColumn();
     const own = !encoder;

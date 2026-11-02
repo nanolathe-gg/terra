@@ -472,6 +472,8 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
 }
 
 // H4b: a hill's pieces against a face's: width and length (down the fall line) as shares of blockWidth and blockRow.
+// H23: the per-pixel height grit on every block (height units), the same on every world.
+const BLOCK_GRIT = 0.25;
 const HILL_WIDTH = 0.6;
 const HILL_LENGTH = 2.2;
 const HILL_RELIEF = 1.8;   // a hill's piece heights against a face's (the hills' pieces are small, so their planes need more to light)
@@ -507,7 +509,7 @@ fn blockField(p: vec2f, pf: vec2f, h: f32, hill: f32) -> vec4f {
     let here = mix(step(0.25, hs.y), 1.0, hard);
     let crevice = (1.0 - smoothstep(0.0, mix(1.2, HILL_SEAM, hill), edge)) * here;
     height -= crevice * u.blockSeam * 0.8;
-    height += (cellHash(floor(p)).x - 0.5) * 2.0 * u.blockGrit;
+    height += (cellHash(floor(p)).x - 0.5) * 2.0 * BLOCK_GRIT;
     // .w: this piece's own draw, for the hills (which pieces are bare rock).
     return vec4f(height, crevice, hard, hs.x);
 }
