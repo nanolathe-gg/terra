@@ -79,6 +79,9 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('cliffFine',{rockOrder:1,cliffFollow:1,facetTilt:0}),/Facet tilt/);
  assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
+ shows('bedSpacing',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
+ assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge or Lip/,'the rise is relief only');
+ shows('bedBend',{rockOrder:1,gullyDepth:4,blocks:.5});   // blocks read the bed height
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  shows('bedSpacing',{rockOrder:1,bedLip:2});
  // strata: bands and caps need a column and the strata switch
@@ -89,8 +92,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('baseBandGaps',{column:1,strata:1,baseBand:.5});
  assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Strata/);
  assert.match(requirement('bedSpacing',{column:1,rockOrder:1,bedLedge:1}),/authored bed profile/);
- assert.match(requirement('boulderFoot',{boulders:0}),/Boulders/);
- shows('boulderFoot',{boulders:.4});
+ shows('bedSpacing',{column:1,rockOrder:1,bedLedge:1,cliffRise:8});   // a column's ledge scales by thickness over spacing once it has a rise
+ assert.equal(requirement('boulderFoot',{boulders:0}),'','painted scatter sources its stones by this at Density 0, as it reads boulderSize');
  assert.match(requirement('crackedStep',{stepSharp:0,deepEdge:1}),/true threshold/);
  assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
  shows('strataContrast',{column:1,strata:.4});
@@ -129,4 +132,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.equal(available('facing','mountain',{lean:0}),false);
  assert.equal(available('facing','mountain',{lean:2}),true);
  assert.equal(available('facing','hill',{lean:0}),true,'a hill leans on its own');
+ assert.equal(available('facing','plateau',{lean:0}),true,'a plateau leans on its own');
+ assert.equal(available('facing','plateau',{lean:0,facePx:6}),false,'until a Face width takes that away');
+ assert.equal(available('facing','plateau',{lean:2,facePx:6}),true);
 });

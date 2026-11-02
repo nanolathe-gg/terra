@@ -39,8 +39,8 @@ export function shapeControlAvailable(key,kind,p){
  if(key==='faceVariation')return sharedFace||p.facePx>0;
  if(key==='softness')return sharedFace||shoulderedHill||(!p.curve?.knots&&['mountain','cliff'].includes(p.curve?.form||(kind==='mountain'?'mountain':'')));
  if(key==='moonLobes'&&p.baseVary>0)return false;
- // A hill, plateau or offset leans on its own; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
- if(key==='facing')return ['plateau','offset','hill'].includes(kind)||p.lean>0;
+ // A hill leans on its own, and a plateau or offset too until a Face width takes that away; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
+ if(key==='facing')return kind==='hill'||['plateau','offset'].includes(kind)&&!(p.facePx>0)||p.lean>0;
  if(kind==='crystal'){
   if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;
   if(['crystalCount','crystalSides','crystalVariation'].includes(key))return form!==1;
@@ -56,12 +56,14 @@ export function shapeControlAvailable(key,kind,p){
  return true;
 }
 
+// The two water switches a deep or shallow stroke can also turn on for its own footprint (worldPanelValues passes that in).
+const HARD_STEP='Hard shallow-to-deep step, or a water stroke\'s Hard edge',LIT_BED='Lit bed under shallow water, or a water stroke\'s Lit bed';
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
- if(['bedSpacing','bedHeight','bedVary','bedPunch'].includes(key)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';
+ if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
@@ -81,7 +83,9 @@ export function worldControlRequirement(key,v){
  if(['rockFrom','cliffFollow','cliffReach','cliffWide','cliffFlat','cliffRise','cliffBed','cliffStagger','cliffFine','cliffDomain'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['cliffReach','cliffWide','cliffFlat','cliffBed','cliffFine','cliffDomain'].includes(key)&&n('cliffFollow')<=0)return 'Choose Follow terrain in Structure orientation to use this setting.';
  if(['facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse','cliffFine'].includes(key))return needs('facetTilt','Facet tilt');
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','bedBend','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&n('bedLip')<=0)return 'Set Ledge or Lip above zero in Rock structure to give the beds relief.';
+ // A joint's stagger is keyed on its bed and blocks read the bed height, so the beds' shape outlives their relief there.
+ const bedsMoveJoints=n('jointDepth')>0&&n('cliffFollow')>0&&n('cliffStagger')>0&&['bedSpacing','bedHeight','bedVary','bedDip','bedBend','cliffBed'].includes(key),bedsMoveBlocks=n('blocks')>0&&['bedBend','cliffBed'].includes(key);
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','bedBend','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&n('bedLip')<=0&&!bedsMoveJoints&&!bedsMoveBlocks)return 'Set Ledge or Lip above zero in Rock structure to give the beds relief.';
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
  if(['baseBand','desertCapFlat'].includes(key))return n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');
@@ -93,21 +97,20 @@ export function worldControlRequirement(key,v){
  if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
- if(key==='boulderFoot')return needs('boulders','Density in Boulders');
  if(key==='crackedStep')return needs('stepSharp','Step is a true threshold');
- if(key==='crackedContrast')return needs('bedLit','Lit bed under shallow water');
+ if(key==='crackedContrast')return needs('bedLit',LIT_BED);
  if(key==='repose')return needs('debris','Amount in Debris');
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
  if(['dither','landDither','shoalDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
- if(key==='shoalDither')return needs('deepEdge','Hard shallow-to-deep step');
+ if(key==='shoalDither')return needs('deepEdge',HARD_STEP);
  if(key==='lavaCreaseVary')return needs('layerCrease','Dark crease at each step foot');
  // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.
- if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit','Lit bed under shallow water');
- if(['stepSharp','deepEdgeDepth'].includes(key))return needs('deepEdge','Hard shallow-to-deep step');
+ if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit',LIT_BED);
+ if(['stepSharp','deepEdgeDepth'].includes(key))return needs('deepEdge',HARD_STEP);
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('stepSharp','Step is a true threshold');
  if(key==='shelfScale')return needs('shelfWander','Shelf wander');
- if(key==='shoalBump')return n('bedLit')<=0?'Enable Lit bed under shallow water to use this setting.':needs('deepEdge','Hard shallow-to-deep step');
+ if(key==='shoalBump')return needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach layer.';

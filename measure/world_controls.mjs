@@ -9,8 +9,9 @@
 // Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885; --assets DIR is that host's assets root: it needs map-catalog.json and features/, as a card's own root has): terraformAudit exists only on that host's ?audit pages.
 // Writes DIR/world-controls.json and prints one row per control and world. Exit 1 on a console error or on an unexplained exact 0, that is a
 // row that reads 0 on every fixture (the first, the other two scenes, the diagnostic fixture; stroke rows the second stroke fixture) and is not on
-// ALLOWED below. A row the panel disables with a reason is not swept in that state; it is swept again with its parents set (state "gated"), which
-// proves it comes back. --set puts values in before the sweep, to probe a row under a gate.
+// ALLOWED below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
+// stands on every fixture while its reason holds (state "hidden"), which proves the reason true: it fails if the row moves HIDDEN_PX pixels or more,
+// since a wrong gate hides a live control and nothing else would show it. --set puts values in before the sweep, to probe a row under a gate.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {worldControlRequirement, shapeControlAvailable, PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
@@ -69,9 +70,13 @@ const OPEN = {
   wind: {worlds: ["zhon"], note: 'zhon: reads 0 on every fixture including the sand brush; moves with Deposit supply above 0 (probe) and, with the brush, in the other eight'},
 };
 
+// A cancelled term leaves float rounding (Desert's bedSpacing, 1 px), not a control.
+const HIDDEN_PX = 8;
 const reasonFor = r => ALLOWED[(r.stroke ? r.stroke + ':' : '') + r.key] || ALLOWED[r.key] || null;
 const openFor = r => { const e = OPEN[r.key]; return e && e.worlds.includes(r.world) && (!e.kinds || e.kinds.includes(r.stroke)) ? e.note : null; };
-const judge = rows => { for (const r of rows) if (r.zero) { r.allowed = reasonFor(r); r.open = openFor(r); } return rows.filter(r => (r.zero && !r.allowed && !r.open) || r.leak).map(r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}`); };
+const failed = r => (r.zero && !r.allowed && !r.open) || r.leak || r.hides;
+const named = r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}${r.hides ? ' moves while the panel says "' + r.reason + '"' : ''}`;
+const judge = rows => { for (const r of rows) if (r.zero) { r.allowed = reasonFor(r); r.open = openFor(r); } return rows.filter(failed).map(named); };
 // --recheck DIR: judge a finished sweep's file again against the lists above, with no browser.
 if (args.includes('--recheck')) {
   const f = JSON.parse(readFileSync(join(resolve(opt('--recheck', '.')), 'world-controls.json'), 'utf8')), bad = judge(f.rows), open = f.rows.filter(r => r.open).length;
@@ -114,7 +119,7 @@ if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   const merged = WORLDS.map(w => JSON.parse(readFileSync(join(out, w, 'world-controls.json'), 'utf8')));
   const all = merged.flatMap(m => m.rows), bad = judge(all), con = merged.flatMap(m => m.console);
   writeFileSync(join(out, 'world-controls.json'), JSON.stringify({server, seconds: (Date.now() - t0) / 1000, rows: all, unexplained: bad, console: con}));
-  console.log(`\n${all.filter(r => r.type === 'knob' && r.state === 'enabled').length} enabled world rows, ${all.filter(r => r.type === 'knob' && r.state === 'gated').length} gated, ${all.filter(r => r.type === 'shape').length} stroke rows, ${all.filter(r => r.type === 'surface').length} sliders; ${all.filter(r => r.zero).length} read 0 (${all.filter(r => r.open).length} open ?, ${all.filter(r => r.allowed).length} allowed), ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
+  console.log(`\n${all.filter(r => r.type === 'knob' && r.state === 'enabled').length} enabled world rows, ${all.filter(r => r.type === 'knob' && r.state === 'gated').length} gated, ${all.filter(r => r.type === 'shape').length} stroke rows, ${all.filter(r => r.type === 'surface').length} sliders; ${all.filter(r => r.zero).length} read 0 (${all.filter(r => r.open).length} open ?, ${all.filter(r => r.allowed).length} allowed), ${all.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
   if (con.length) console.log('console:', con.slice(0, 5));
   process.exit(codes.some(c => c > 1) || con.length || bad.length ? 1 : 0);
 }
@@ -175,7 +180,7 @@ try {
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
   // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount.
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: variant ? 260 : 180, amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
-  const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? (r.open ? '  ?' : '  !') : ''}`;
+  const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? (r.open ? '  ?' : '  !') : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
   const add = r => { rows.push(r); if (process.stdout.isTTY || !process.env.QUIET) console.log(fmt(r)); };
   for (const world of WORLDS) {
     const tw = Date.now(), fixtures = [[`${world}-1`, strokes(world).strokes, strokes(world).ground !== false, strokes(world).query], [`${world}-2`, scenes[`${world}-2`].strokes, scenes[`${world}-2`].ground !== false, scenes[`${world}-2`].query], [`${world}-3`, scenes[`${world}-3`].strokes, scenes[`${world}-3`].ground !== false, scenes[`${world}-3`].query], [`${world}-diagnostic`, diagnostic(world), true, strokes(world).query], [`${world}-painted`, painted(), true, strokes(world).query]];
@@ -219,11 +224,22 @@ try {
       const hi = k.key === 'wind' || k.key.endsWith('Dir') ? 180 : k.hi, m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${hi})`);
       return {world, type: 'knob', key: k.key, group: k.group, fixture, state, gates, lo: k.lo, hi, ...m};
     };
+    // The mirror of the gated pass: on this fixture, every row whose reason holds now, read as it stands. The reason is asked again here, because a scene's
+    // strokes or query can clear it (a water stroke's Hard edge, Ice's variants).
+    const idle = async fixture => {
+      const now = await ev('terraformAudit.panelValues()');
+      for (const k of live) {
+        const reason = worldControlRequirement(k.key, now); if (!reason) continue;
+        const hi = k.key === 'wind' || k.key.endsWith('Dir') ? 180 : k.hi, m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${hi})`);
+        if (m.px >= HIDDEN_PX) add({world, type: 'knob', key: k.key, group: k.group, fixture, state: 'hidden', reason, lo: k.lo, hi, hides: true, ...m});
+      }
+    };
     const stage = (name, t) => console.log(`   ${world} ${name} ${((Date.now() - t) / 1000).toFixed(0)} s`); let ts = Date.now();
     // Fixture 1: every enabled row; gated rows with their parents set.
     await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`); await ev('__wc.remember()');
     const results = new Map();
     for (const k of on) { const r = await sweepKnob(k, fixtures[0][0], 'enabled', {}); results.set(k.key, r); }
+    await idle(fixtures[0][0]);
     for (const k of off) {
       const sets = gatesFor(k.key); if (!sets.length) { add({world, type: 'knob', key: k.key, group: k.group, fixture: fixtures[0][0], state: 'gated', gates: null, max: -1, px: -1, note: 'no knob clears the reason'}); continue; }
       let best = null;
@@ -240,10 +256,9 @@ try {
     // Leak check: the first fixture drawn again must match its first capture, so no row left a value behind.
     await restoreAll(); await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`);
     { const same = await ev('__wc.same()'); add({world, type: 'leak', key: 'world-end', fixture: fixtures[0][0], state: 'check', ...same, leak: same.max > 0}); }
-    // A zero gets the other scenes and the diagnostic fixture before it counts.
+    // A zero gets the other scenes and the diagnostic fixture before it counts; every fixture checks the gates.
     for (let f = 1; f < fixtures.length; f++) {
       const zeros = [...results.entries()].filter(([, r]) => r.max === 0);
-      if (!zeros.length) break;
       if ((fixtures[f][3] || '') !== (fixtures[f - 1][3] || '')) { await load(world, fixtures[f][3] || ''); base = (await setUp()).variant; }
       await ev(`__wc.scene(${JSON.stringify(fixtures[f][1])}, ${fixtures[f][2]})`);
       for (const [name, r] of zeros) {
@@ -253,6 +268,7 @@ try {
         r.tried = [...(r.tried || [fixtures[0][0]]), fixtures[f][0]];
         if (m.max > 0) { Object.assign(r, m, {fixture: fixtures[f][0]}); }
       }
+      await idle(fixtures[f][0]);
     }
     for (const r of results.values()) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
     stage('zero retries', ts); ts = Date.now();
@@ -327,10 +343,10 @@ try {
     for (const r of sresults) { delete r._r; delete r._ctx; delete r._i; r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
     console.log(`-- ${world}: ${((Date.now() - tw) / 1000).toFixed(0)} s`);
   }
-  const bad = rows.filter(r => (r.zero && !r.allowed && !r.open) || r.leak);
-  writeFileSync(`${out}/world-controls.json`, JSON.stringify({server, seconds: (Date.now() - t0) / 1000, rows, unexplained: bad.map(r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}`), console: logs.slice(0, 20)}));
+  const bad = rows.filter(failed);
+  writeFileSync(`${out}/world-controls.json`, JSON.stringify({server, seconds: (Date.now() - t0) / 1000, rows, unexplained: bad.map(named), console: logs.slice(0, 20)}));
   const count = (t, p) => rows.filter(r => r.type === t && p(r)).length;
-  console.log(`\n${count('knob', r => r.state === 'enabled')} enabled world rows, ${count('knob', r => r.state === 'gated')} gated, ${count('shape', () => true)} stroke rows, ${count('surface', () => true)} sliders; ${rows.filter(r => r.zero).length} read 0, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
+  console.log(`\n${count('knob', r => r.state === 'enabled')} enabled world rows, ${count('knob', r => r.state === 'gated')} gated, ${count('shape', () => true)} stroke rows, ${count('surface', () => true)} sliders; ${rows.filter(r => r.zero).length} read 0, ${rows.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
   if (logs.length) console.log('console:', logs.slice(0, 5));
   finish(logs.length || bad.length ? 1 : 0);
 } catch (e) { console.error(e); finish(2); }

@@ -9,7 +9,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
 const editorUI=mountEditorUI();
-let syncWorldControls=()=>{},syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
+let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -304,6 +304,7 @@ function showTool(state={},kind=tool) {
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
+  const picks=JSON.stringify(strokeWaterPicks());if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice wakes or idles world rows
   const featureActive=Boolean(mapFeatures?.active);
   for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&b.dataset.tool===tool));
   $('feature-tool').setAttribute('aria-pressed',String(featureActive));
@@ -1570,10 +1571,15 @@ function buildKnobs() {
   }
   syncWorldControls=mountWorldControlIndex(root,worldPanelValues);
 }
-// What worldControlRequirement may read: the renderer's settings and the facts of the world's material that no slider sets.
+// A deep or shallow stroke's own water choices, which turn the hard step and the lit bed on inside its footprint whatever the world says (engine-frag.wgsl's `pick`).
+function strokeWaterPicks() {
+  const water=nodes.filter(n=>['deep','shallow'].includes(n.kind)),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
+  return {deepEdge:picked('waterDeep',1),bedLit:picked('waterBed',1,3)};
+}
+// What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 function worldPanelValues() {
-  const layers=config.layers||[];
-  return {...Object.fromEntries(renderer.variant),column:config.column?.sections?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),column:config.column?.sections?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
