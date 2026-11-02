@@ -14,7 +14,7 @@ Classes, read on the base render's heights (the sea is subtracted; the dry base 
   window  every pixel: for knobs with no ground class of their own
   slope   H17: ground whose slope is at least .10 (measure/material_classes.py's grass slope and rock face together), the blocks a mark
           on slopes is cut into; the family option of geology_controls.mjs reads cracks and crack tone here, not the raised class
-  face    H17: slope at least .50 (material_classes.py's rock face), where the structured face (joints, gullies, scratches, facets,
+  face    H17: slope at least .50 (material_classes.py's rock face), where the structured face (joints, gullies, facets,
           blocks) is cut. Both are 16-px blocks with a 40-px margin dropped, as measure/impact.py reads its classes; a `slope` or
           `face` row also carries the other class's share under `slope_changed` / `face_changed`
   The water side (H18). The waterline is the sea's edge on the displayed heights (g = height - sea; dry above 0.5, wet below -0.5). Distances are

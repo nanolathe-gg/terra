@@ -5,7 +5,7 @@
 //   node measure/geology_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
 // --family impacts (H21): crater/rim/skin and regolith controls. Shape cards and top-level options win over query defaults;
 // only matching stroke kinds count. --scenes DIR supplies probe scenes (missing files fall back to repro/scenes).
-// --family fractures (H17): the crack, joint, gully, scratch, facet and block knobs. Each scene's own value is read as the page reads it (the query, then
+// --family fractures (H17): the crack, joint, gully, facet and block knobs. Each scene's own value is read as the page reads it (the query, then
 // Green's engine preset, then the scene's variant, then the world's table, then the default), a scene where a knob already sits at its target is shown as `=`
 // and left out of the verdict, and the class is the slope blocks of measure/geology_diff.py (cracks and crack tone: slope at least .10; the structured face:
 // at least .50), not the raised class. A seeded base in DIR/base is reused (copy a main render of the 27 scenes there to skip the 27 renders).
@@ -41,7 +41,7 @@ const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt.js`, 'ut
 const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]) || (knob === 'moonLobes' && st[0] === 'crater' && (st[2]?.spurCount ?? st[2]?.card?.spurCount ?? 0) > 0);
 for (const [k, f] of Object.entries(impactFields)) CARD_SCALE[k] = f.scale;
 const family = opt('--family', 'geology');
-const FRACTURES = /^(crack(Severity|Spacing|Length|Major|Minor|Hairline|Blocks|Width|Jagged|Network|Reach|Style|Dark|Lit)|joint(Spacing|Angle|Depth|Run|Gaps)|gully(Depth|Spacing|Width|Angle|Run|Gaps|Shade)|ribTilt|scratch(Depth|Spacing|Angle|Run|Gaps)|facet(Tilt|Size|Stretch|Step|Seam|Skew|Coarse)|blocks|block(Row|Width|Tilt|Step|Seam|Chip|Grit)|hillBlocks)$/;
+const FRACTURES = /^(crack(Severity|Spacing|Length|Major|Minor|Hairline|Blocks|Width|Jagged|Network|Reach|Style|Dark|Lit)|joint(Spacing|Angle|Depth|Run|Gaps)|gully(Depth|Spacing|Width|Angle|Run|Gaps|Shade)|ribTilt|facet(Tilt|Size|Stretch|Step|Seam|Skew|Coarse)|blocks|block(Row|Width|Tilt|Step|Seam|Chip|Grit)|hillBlocks)$/;
 const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust|Dusk|Pillow|Veins))$/;
 const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
 // The stroke kinds that carry each shape option (sculpt.js SHAPE_FIELDS), and the scale of the card's unit.

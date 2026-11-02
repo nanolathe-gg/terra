@@ -1131,11 +1131,6 @@ export class TerrainRenderer {
     set('uRibTilt', number('ribTilt', 0));
     set('uBedBend', number('bedBend', 0));
     set('uBedPunch', number('bedPunch', 0));
-    set('uScratchDepth', number('scratchDepth', 0));
-    set('uScratchSpacing', number('scratchSpacing', 9));
-    set('uScratchAngle', number('scratchAngle', -20));
-    set('uScratchRun', number('scratchRun', 90));
-    set('uScratchGaps', number('scratchGaps', 0.4));
     set('uFacetTilt', number('facetTilt', 0));
     set('uFacetSize', number('facetSize', 6));
     set('uFacetStretch', number('facetStretch', 1.5));

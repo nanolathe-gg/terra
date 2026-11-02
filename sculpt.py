@@ -114,7 +114,6 @@ KNOB_DEFAULTS.update(desertCapFlat=0)
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
                      bedBend=0, bedPunch=0,
-                     scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
                      facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
 # shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
@@ -194,7 +193,7 @@ KNOB_DEFAULTS.update(ringTaper=0, ringFill=0, ringPatch=0, ringPatchSize=120)
 # G3: ringTone 1 draws the copies' lines in retail's rose, paler outward (0: the earlier crimson).
 KNOB_DEFAULTS.update(ringTone=0)
 # G2 (rock faces follow the slope): 0 keeps the fixed screen directions of every world; 1 runs beds along the
-# contours of the ground and joints, gullies, scratches and facets down its fall line. The reaches are the
+# contours of the ground and joints, gullies and facets down its fall line. The reaches are the
 # height smoothing radii (px) of the local and of the wide fall line, cliffFlat the wide slope under which
 # the structure fades into plain broken rock, cliffDomain the patch size of the joint lattice.
 KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffFine=0, cliffDomain=90)
@@ -215,15 +214,15 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
 # BUDGET 3, sculpt-erosion.js): its maps are made, its height moves no further than the worker's did.
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
-# Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
-# scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
+# Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies
+# are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
 # H17: terraceBreak 1.4 -> 0. Its phase wander broke green-2's slope into a dense blotchy mass; at 0 the band lines follow
 # the contours as retail's flowing lines do (viewed at 1x; green-1 and green-3 do not change). banding .8 -> .5 (WORLD_KNOBS)
 # lightens and thins those lines toward retail's soft dashes.
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
-                  facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
+                  facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4,
                   rockMoss=.4, hillBlocks=.5,
                   terraceBreak=0, terraceCalm=0, wetSwath=.35, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
@@ -243,7 +242,7 @@ WORLD_KNOBS = {
                   # scales, not long smooth lines (thin dark lines per
                   # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
                   bandJag=1,
-                  # Card E3 (retail green-2's big rock face): coherent level beds scratched
+                  # Card E3 (retail green-2's big rock face): coherent level beds cut
                   # by long joints leaning ~20 degrees (row period 8-12 px whatever the
                   # slope; thin-line direction shares vertical/horizontal .29/.27 against
                   # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
@@ -266,16 +265,15 @@ WORLD_KNOBS = {
                   # The undulation knobs and Level-ground lumps still work.
                   undulation=0, plainRelief=0,
                   # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
-                  # light or shade as a whole), layered in long ledges that bend with it, scored by thin scratches
+                  # light or shade as a whole), layered in long ledges that bend with it,
                   # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
                   # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
                   # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
                   # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
-                  # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  # bedBend 0, bedPunch 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, gullySpacing=36, gullyRun=90, gullyGaps=.4, gullyShade=1.2, ribTilt=.2,
                   bedBend=1, bedPunch=1,
-                  scratchDepth=2.5, scratchRun=140, scratchGaps=.3,
                   facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
@@ -296,7 +294,7 @@ WORLD_KNOBS = {
                   # G2: the owner's round 8 note on the rock face: beds and joints follow the hillside they are cut in, not the
                   # screen. Beds are the contours of the ground (smoothed over 40 px, 30% of the way from the grid's own
                   # heights), 6.5 height units apart (bedSpacing, was 28 against a tilt of 2 that made rows level on the screen:
-                  # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies, scratches and
+                  # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies and
                   # facets run down the fall line. bedDip is 0 now, and bedBend 1 (was 2.5) because a bed is a quarter as
                   # thick, so the ribs would fold it fourfold.
                   cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=8,

@@ -511,13 +511,12 @@ fn blockField(p: vec2f, pf: vec2f, h: f32, hill: f32) -> vec4f {
 
 // Rock face form (card E9). Retail's big green faces are carved: broad gullies
 // and ribs run down the face at a slight lean, tens of px apart, so whole
-// stripes read lit or shaded; the beds run on across them; long thin scratches
-// score the stripes; and the fine detail is angular facets, not rounded cells.
+// stripes read lit or shaded; the beds run on across them; and the fine detail is angular facets, not rounded cells.
 // Everything is height the sun lights; nothing here is ink.
 
-// One groove, for every mark cut as lines (joints, gullies, scratches): a lattice of lines `spacing` apart, leaning `angle` degrees from the
+// One groove, for every mark cut as lines (joints, gullies): a lattice of lines `spacing` apart, leaning `angle` degrees from the
 // screen's north-south and bending with two octaves of noise; each line a smooth channel up to `depth` deep in runs of about `run` px with
-// gaps, deepest mid-run. A family is the numbers of its Groove (jointGroove, gullyGroove, scratchField); the code is shared, and so is every
+// gaps, deepest mid-run. A family is the numbers of its Groove (jointGroove, gullyGroove); the code is shared, and so is every
 // number a family does not own: its half-width is the one thing it adds, and its salt (apart from the others') seeds every noise it draws.
 struct Groove {
     line: vec4f,    // angle (degrees), spacing (px), depth, run (px)
@@ -575,13 +574,6 @@ fn gullyField(p: vec2f) -> vec2f {
     return vec2f(mix(hl, hr, mix(t, smoothstep(0.0, 1.0, t), 0.4)) - cut.depth, select(0.0, cut.depth / u.gullyDepth, u.gullyDepth > 0.0));
 }
 
-// Weathering scratches: thin grooves leaning scratchAngle, scratchSpacing apart,
-// 1-2 px wide and up to scratchDepth deep, in runs of scratchRun px with gaps.
-fn scratchField(p: vec2f) -> f32 {
-    let g = lines(u.scratchAngle, u.scratchSpacing, u.scratchDepth, u.scratchRun, u.scratchGaps, 1.05, 53.0);
-    return -groove(p, g, 0.0).depth;
-}
-
 // The jittered point of each cell in the 3 x 3 around q (cell units), at jit.x + jit.y * hash of its cell (facets .15 + .7, Lava .12 + .76): the nearest, its
 // cell's id, and the squared distances to the nearest, second and third nearest, measured as (point - q) * metric (cell units: 1; the pieces' px: their size).
 struct CellPick { id: vec2f, point: vec2f, best: f32, second: f32, third: f32 }
@@ -632,7 +624,7 @@ fn facetField(p: vec2f) -> vec2f {
 // Rock structure that follows the ground (card G2). Retail's strata lie along the contours of the
 // hill they are cut in and its joints run down the fall line, so on a face turned east the beds
 // are vertical on the screen and the joints run across it. The fixed screen directions above
-// (bedDip, jointAngle, gullyAngle, scratchAngle) are the earlier look; with cliffFollow 1 the
+// (bedDip, jointAngle, gullyAngle) are the earlier look; with cliffFollow 1 the
 // ground gives the directions instead, from heights smoothed at two scales, so the direction
 // does not shiver with the grid's own roughness. Where the smoothed slope is small even at the
 // wide scale (painted rock on level ground) there is no fall line to follow, and the structure
@@ -1247,7 +1239,6 @@ fn bake(p: vec2f) -> vec4f {
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
-        if (u.scratchDepth > 0.0) { height += gate * scratchField(pf); }
         if (u.blocks > 0.0) {
             let block = blockField(p, pf, bedH + carved.x * u.bedBend, 0.0);
             height += gate * block.x;

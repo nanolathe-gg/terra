@@ -72,7 +72,6 @@ function worldGates(group,key){
  if(group==='Contour bands')x.banding=.7;
  if(group.includes('Shine'))for(const mat of ['Ground','Slope','Rock','Sand','Crystal']){x['shine'+mat]=.8;x['shine'+mat+'Rough']=.4;}
  if(group==='Rock face: gullies and ribs')x.gullyDepth=6;
- if(group==='Rock face: scratches')x.scratchDepth=2;
  if(group==='Rock face: facets')x.facetTilt=.8;
  if(group==='Rock face: follows the slope')x.cliffFollow=1;
  if(group==='Pockmarks (Moon)')x.pockmark=.7;
@@ -181,7 +180,7 @@ $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtur
  const world=$('world-filter').value,api=await load(world),rows=[];
  const fixture=[['plateau',[[270,300],[550,300]],{card:{diameter:400,amount:110,roughness:35,cracks:100}}],['mountain',[[800,150],[860,430]],{card:{diameter:320,amount:130,cracks:100}}],['deep',[[0,850],[1024,850]],{card:{diameter:600,shelves:70,roughness:40,shorePlates:100,plateMaterial:world==='ice'?2:1},waterShore:0,waterDeep:0,waterBed:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
  api.scene(fixture,{ground:true});await api.idle();const original=new Map(api.renderer.variant);
- const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','iceFrost']:world==='green'?['faceEdge','gullyRock','mineralDetail','rockOrder']:world==='archipelago'?['ringShiftDir','beachWidth','apron','bandFoot']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','faceEdge','gullyRock','bedHeight','bedVary','bedDipDir','jointSpacing','jointAngle','jointRun','jointGaps','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','bedPunch','cliffStagger','mineralDetail','debris','debrisReach','debrisSize','debrisSort','repose','scratchDepth','scratchSpacing','scratchAngle','scratchRun','scratchGaps','facetCoarse','cliffDomain','crackWidth','crackHairline','boulderRound'];
+ const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','iceFrost']:world==='green'?['faceEdge','gullyRock','mineralDetail','rockOrder']:world==='archipelago'?['ringShiftDir','beachWidth','apron','bandFoot']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','faceEdge','gullyRock','bedHeight','bedVary','bedDipDir','jointSpacing','jointAngle','jointRun','jointGaps','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','bedPunch','cliffStagger','mineralDetail','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','cliffDomain','crackWidth','crackHairline','boulderRound'];
  const tasks=inventory.knobs.flatMap(([group,list])=>list.map(f=>({group,f}))).filter(t=>keys.includes(t.f[0]));
  for(const {group,f:[key,,lo,hi,step]} of tasks){
   if(stop)break;const gates={...worldGates(group,key),undulation:10};

@@ -271,11 +271,6 @@ struct Uniforms {
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
     bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
-    scratchDepth: f32,    // weathering scratches: depth, height units (0: none)
-    scratchSpacing: f32,  // distance between scratches, world px
-    scratchAngle: f32,    // scratch lean from the screen's north-south, degrees
-    scratchRun: f32,      // typical length of an unbroken scratch, world px
-    scratchGaps: f32,     // share of each scratch's length that is missing
     facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
     facetSize: f32,       // facet height, world px
     facetStretch: f32,    // facet width as a multiple of its height
@@ -362,7 +357,7 @@ struct Uniforms {
     shoalGrain: f32,      // Red: the ground tile's own colour grain shows through the tint, this share of it (0: the tint replaces it, as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
     // G2 (rock faces follow the slope). Every default is the earlier look.
-    cliffFollow: f32,     // beds follow the contours and joints, gullies, scratches and facets the fall line of the ground round them (0: fixed screen directions, as before)
+    cliffFollow: f32,     // beds follow the contours and joints, gullies and facets the fall line of the ground round them (0: fixed screen directions, as before)
     cliffReach: f32,      // radius of the height smoothing that gives the local fall line, world px
     cliffWide: f32,       // radius of the larger smoothing that gives it where the ground under the rock is level, world px
     cliffFlat: f32,       // slope (height per px) at the wide scale under which the beds and joints fade into plain broken rock
