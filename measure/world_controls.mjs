@@ -36,7 +36,6 @@ const OPEN = {
   deepEdgeDepth: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   stepSoftPx: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shelfWander: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  shelfScale: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shoalRag: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   waterDeep: {worlds: ['ice', 'lava', 'moon', 'zhon'], kinds: ['deep', 'shallow'], note: 'a stroke\'s edge choice: as deepEdge'},
   crackedStep: {worlds: ['crystal', 'ice', 'zhon'], note: 'third colour; moves in green, archipelago, red'},

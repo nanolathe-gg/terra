@@ -114,8 +114,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('deepEdgeDepth',{deepEdge:1});
  assert.match(requirement('shelfWander',{deepEdge:0}),/Hard shallow-to-deep step/);
  shows('shelfWander',{deepEdge:1});
- assert.match(requirement('shelfScale',{deepEdge:1,shelfWander:0}),/Shelf wander/);
- shows('shelfScale',{deepEdge:1,shelfWander:5});
  assert.match(requirement('shoalBump',{bedLit:1,deepEdge:0}),/Hard shallow-to-deep step/);
  assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
  shows('shoalBump',{bedLit:1,deepEdge:1});

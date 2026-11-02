@@ -80,7 +80,6 @@ function worldGates(group,key){
  if(/^moonFold/.test(key))x.moonFolds=.7;
  if(/^bedDot/.test(key))x.bedDots=.8;
  if(/^shoalBump/.test(key))x.shoalBump=3;
- if(/^shelf/.test(key))x.shelfWander=15;
  if(/^ring/.test(key))Object.assign(x,{ringContrast:.8,ringShift:8,ringPatch:.6});
  return x;
 }

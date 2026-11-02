@@ -946,13 +946,15 @@ fn shelfNoise(q: vec2f) -> f32 {
     return mix(mix(shelfHash(i), shelfHash(i + vec2f(1.0, 0.0)), s.x), mix(shelfHash(i + vec2f(0.0, 1.0)), shelfHash(i + vec2f(1.0, 1.0)), s.x), s.y);
 }
 
+// H24: the size (world px) of the broad noise that wanders the step's depth, the same on every world.
+const SHELF_SCALE = 80.0;
 // The hard shallow-to-deep step (cards E1 and E11). Retail's step is a hard edge with
 // ragged stairs, not the ramp's gradual blend: it sits at one depth (the ramp's
 // midpoint unless deepEdgeDepth names one), read off the bed's own depth rather than
 // the soft disc average. The ragged stairs are pixel blocks in the picture, not in depth: depth units would turn a
 // flat shelf into a wide fuzzy band (green-3's blurry middle), so the 2-px block
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
-// noise (shelfWander units over shelfScale px), so the band's outline and width
+// noise (shelfWander units over SHELF_SCALE px), so the band's outline and width
 // vary along the shore instead of following it at a fixed offset.
 fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
     var at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
@@ -970,7 +972,7 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
     }
     let grad = bankGrad(p);
     let jitter = stepJitter(pixel);
-    let q = p / max(u.shelfScale, 8.0);
+    let q = p / SHELF_SCALE;
     let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
     // The wander fades in with depth, so the shore side of the band keeps its own width.
     let d = depth - jitter * 4.0 * max(grad, 0.05);
