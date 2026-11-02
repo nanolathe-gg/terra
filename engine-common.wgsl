@@ -152,7 +152,6 @@ struct Uniforms {
     crackSeverity: f32,   // crack depth
     crackWidth: f32,      // crack core width, world px
     crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
-    crackReach: f32,      // 0: steep faces only; 1: onto gentle slopes
     cracksOn: i32,        // the full bake computes cracks; previews skip them
     plainRelief: f32,     // faint lit lumps on level ground (appearance only)
     crackSpacing: f32,    // major crack block size, world px

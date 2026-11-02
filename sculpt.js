@@ -1372,7 +1372,7 @@ const KNOBS = [
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
   ['Cracks', [['crackSeverity','Depth',0,1,.05,.6],['crackSpacing','Block size (px)',16,96,2,40],['crackLength','Length down the slope',1,4,.25,2],
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
-    ['crackWidth','Width (px)',.5,2.5,.1,1],['crackNetwork','Majors: rills to plates',0,1,.05,.35],['crackReach','Reach onto gentle slopes',0,1,.05,.6],
+    ['crackWidth','Width (px)',.5,2.5,.1,1],['crackNetwork','Majors: rills to plates',0,1,.05,.35],
     ['crackDark','Floor darkness',0,1,.05,.75],['crackStyle','Style (0 ink, 1 lit relief)',0,1,.05,0]]],
   ['Rock structure', [['rockOrder','Order (0 scattered, 1 beds and joints)',0,1,.05,0],['rockFrom','Beds and joints from slope (painted rock always)',.3,2,.05,.6],['bedSpacing','Bed thickness (px along the ground, or height units)',3,80,1,12],['bedHeight','Beds spaced by height (0 px along the ground)',0,1,.05,0],['bedVary','Bed thickness variation',0,1,.05,.5],
     ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledge step strength',0,1,.05,.5],
@@ -1520,10 +1520,10 @@ function buildWorldPanel() {
 
 // Crack styles set several crack knobs at once; each stays editable.
 const CRACK_STYLES={
-  'Branching rock':{crackSeverity:.6,crackSpacing:40,crackLength:2,crackMajor:.8,crackMinor:.75,crackHairline:.6,crackBlocks:.6,crackWidth:1,crackNetwork:.35,crackReach:.6,crackDark:.75},
-  'Hairline':{crackSeverity:.35,crackSpacing:30,crackLength:2,crackMajor:.5,crackMinor:.5,crackHairline:1,crackBlocks:.2,crackWidth:.7,crackNetwork:.2,crackReach:.6,crackDark:.7},
-  'Polygonal plates':{crackSeverity:.7,crackSpacing:48,crackLength:1.25,crackMajor:.9,crackMinor:.9,crackHairline:.7,crackBlocks:1,crackWidth:1,crackNetwork:1,crackReach:.9,crackDark:.8},
-  'Deep fissures':{crackSeverity:.9,crackSpacing:56,crackLength:3,crackMajor:1,crackMinor:.4,crackHairline:.3,crackBlocks:.5,crackWidth:1.5,crackNetwork:0,crackReach:.8,crackDark:.85},
+  'Branching rock':{crackSeverity:.6,crackSpacing:40,crackLength:2,crackMajor:.8,crackMinor:.75,crackHairline:.6,crackBlocks:.6,crackWidth:1,crackNetwork:.35,crackDark:.75},
+  'Hairline':{crackSeverity:.35,crackSpacing:30,crackLength:2,crackMajor:.5,crackMinor:.5,crackHairline:1,crackBlocks:.2,crackWidth:.7,crackNetwork:.2,crackDark:.7},
+  'Polygonal plates':{crackSeverity:.7,crackSpacing:48,crackLength:1.25,crackMajor:.9,crackMinor:.9,crackHairline:.7,crackBlocks:1,crackWidth:1,crackNetwork:1,crackDark:.8},
+  'Deep fissures':{crackSeverity:.9,crackSpacing:56,crackLength:3,crackMajor:1,crackMinor:.4,crackHairline:.3,crackBlocks:.5,crackWidth:1.5,crackNetwork:0,crackDark:.85},
 };
 function buildKnobs() {
   const root = $('knobs'), params = experiment;

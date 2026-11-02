@@ -1081,7 +1081,6 @@ export class TerrainRenderer {
     set('uCrackLength', number('crackLength', 2));
     set('uCrackWidth', number('crackWidth', 1));
     set('uCrackNetwork', number('crackNetwork', 0.35));
-    set('uCrackReach', number('crackReach', 0.6));
     set('uCrackMinor', number('crackMinor', 0.75));
     set('uCrackHairline', number('crackHairline', 0.6));
     set('uCrackBlocks', number('crackBlocks', 0.6));

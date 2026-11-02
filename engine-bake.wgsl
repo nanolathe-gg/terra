@@ -272,8 +272,9 @@ fn crackShade(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
     return vec2f(max(core, shadow), lit) * c.open;
 }
 
-// H23: how far a crack's kinks and bends carry, the same on every world.
+// H23: how far a crack's kinks and bends carry, and how far the cracks reach onto gentle slopes (0: steep faces only, 1: onto gentle ground), the same on every world.
 const CRACK_JAGGED = 0.6;
+const CRACK_REACH = 0.6;
 
 // The relief style of crackShade (card E3, crackStyle 1): the groove is carved
 // and lit rather than inked. Its floor keeps only a light core, the wall
@@ -301,7 +302,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let hairShare = max(u.crackHairline, 0.6 * boost);
     let blockShare = max(u.crackBlocks, 0.6 * boost);
     if (u.cracksOn == 0 || mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
-    let start = mix(0.95, 0.10, u.crackReach);
+    let start = mix(0.95, 0.10, CRACK_REACH);
     // Rocky ground takes the whole hierarchy; gentle ground only majors.
     let rocky = smoothstep(start, start * 1.9, slope);
     let gentle = smoothstep(start * 0.35, start * 1.1, slope);

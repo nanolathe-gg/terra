@@ -35,7 +35,7 @@ KNOB_DEFAULTS = dict(
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
-    crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackReach=.6, crackDark=.75,
+    crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackDark=.75,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
     jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, crackStyle=0, bedHeight=0, rockFrom=.6,
@@ -314,7 +314,7 @@ WORLD_KNOBS = {
     # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
     # Red's faces show none).
-    'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3,
+    'red': dict(crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackStyle=1, crackSpacing=28, rockOrder=1, bedLedge=0,
                 jointDepth=3, grooveSpacing=30, grooveAngle=-10, grooveRun=160,
@@ -654,7 +654,7 @@ WORLD_VARIANTS = {
         # smooth variant .0445 / .0425, this .0547 / .0504.
         'evad': dict(label='Evad River: broken slopes',
                      knobs=dict(banding=.35, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
-                                crackReach=.75, reliefAmount=.5, microRock=.7)),
+                                reliefAmount=.5, microRock=.7)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
@@ -728,7 +728,7 @@ WORLD_VARIANTS = {
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: gray buttes',
                       knobs=dict(bedSpacing=4, faceDark=.4, banding=.9, crackSeverity=.5, crackMajor=.7,
-                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
+                                 crackMinor=.15, crackBlocks=.15, crackLength=3,
                                  # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
                                  # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
                                  # 0.4%). Ambient .12 gives 0% and 1.0%.
