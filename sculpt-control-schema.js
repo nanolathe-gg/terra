@@ -69,6 +69,10 @@ const HARD_STEP='Hard shallow-to-deep step, or a water stroke\'s Hard edge',LIT_
 const deepShows=(v,litStroke=false)=>Number(v.waterTones??2)===2||Number(v.bedLit)>0||litStroke||Number(v.crystalShallow)>0;
 const deepIdle=v=>`This world's water has ${Number(v.waterTones)===3?'a third colour that follows the depth':'one colour'}, so the shallow-to-deep step shows only where a lit bed or crystal shallows draw it. Enable Lit bed under shallow water, or give a water stroke a Lit bed, to use this setting.`;
 const RAMP_IDLE='The ramp is drawn only where the step is off: choose Ramp in Hard shallow-to-deep step, or give a water stroke a Faded edge, to use this setting.';
+// A Shallow water or Deep water base color (Colors panel) draws the water as two flat tones with the step's deep share between them, and skips the lit bed
+// and the third colour (worldPanelValues passes `waterColored`, and `waterTones` is 2). The bed's rows then draw nothing; a lit bed still sets how much
+// palette dither the hard step's shallows take.
+const LIT_REPLACED='A Shallow water or Deep water color replaces the lit bed: clear it in Colors to use this setting.';
 const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look) to use this setting.';
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.
@@ -118,13 +122,14 @@ export function worldControlRequirement(key,v){
  // The palette's ordered dither runs only when colors are not mixed in pairs.
  if(['dither','landDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
  // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.
- if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit',LIT_BED);
+ if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return n('waterColored')>0?LIT_REPLACED:needs('bedLit',LIT_BED);
+ if(key==='bedLit'&&n('waterColored')>0)return n('deepEdge')>0&&n('paletteMix')<=0&&n('dither')>0?'':LIT_REPLACED;
  if(key==='deepEdge')return deepShows(v)?'':deepIdle(v);
  if(['shallowDepth','deepDepth'].includes(key))return Number(v.waterTones)===3||deepShows(v)?'':deepIdle(v);   // a third colour is cut by these depths whatever the step does
  if(['waterSoft','bandWater'].includes(key))return Number(v.waterTones)===3?'':!deepShows(v)?deepIdle(v):n('rampWater')>0?'':RAMP_IDLE;
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
  if(key==='crackedStep')return needs('deepEdge',HARD_STEP)||(n('crackedBed')>0?'':CRACKED_BED);
- if(key==='shoalBump')return needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
+ if(key==='shoalBump')return n('waterColored')>0?LIT_REPLACED:needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach layer.';

@@ -1475,7 +1475,7 @@ function buildWorldPanel() {
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
     const [box,pick]=row.querySelectorAll('input');
-    const apply=() => { if (box.checked) world.colors[key]=pick.value; else if (config.colors?.[key]) world.colors[key]=null; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); markViewChanged(); schedule(); };
+    const apply=() => { if (box.checked) world.colors[key]=pick.value; else if (config.colors?.[key]) world.colors[key]=null; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
     box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
     rows.append(row);
   }
@@ -1490,7 +1490,7 @@ function buildWorldPanel() {
     if (!mergedColors().ground && renderer.means.ground) { world.colors={...world.colors,ground:hexColor(renderer.means.ground)}; saveWorlds(); }
     setKnob('groundPattern',$('ground-pattern').value);
   };
-  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); renderer.setColors(worldColors()); markViewChanged(); schedule(); };
+  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
   $('world-new').onclick=() => {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
@@ -1571,15 +1571,18 @@ function strokeWaterPicks() {
   const water=nodes.filter(n=>['deep','shallow'].includes(n.kind)),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
   return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2),bedLit:picked('waterBed',1,3),crackedBed:picked('waterBed',3)};
 }
-// How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2.
+// A Shallow water or Deep water base color picked in the Colors panel: the water is then two flat tones, whatever the world's own (engine-frag.wgsl skips the lit bed and the third colour).
+function waterColored() { const c=worldColors(); return Boolean(c.shallow||c.deep); }
+// How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2; a picked base color makes it 2.
 function waterTones() {
   const w=config.water||{};
+  if(waterColored())return 2;
   return w.midRGB&&config.material?.midDepth?3:w.shallow===w.deep&&String(w.shallowRGB)===String(w.deepRGB)?1:2;
 }
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 function worldPanelValues() {
   const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),waterColored:waterColored()?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);

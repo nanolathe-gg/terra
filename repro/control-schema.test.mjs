@@ -117,6 +117,14 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
  shows('shoalBump',{bedLit:1,deepEdge:1});
  shows('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2});
+ // a picked Shallow water or Deep water color: the bed's rows draw nothing, the lit bed itself only through the hard step's palette dither
+ for(const k of ['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'])assert.match(requirement(k,{bedLit:1,waterColored:1}),/Shallow water or Deep water color/);
+ assert.match(requirement('shoalBump',{bedLit:1,deepEdge:1,waterColored:1}),/Colors/);
+ assert.match(requirement('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2,waterColored:1}),/Colors/,'inherited from Lit bumps');
+ assert.match(requirement('bedLit',{waterColored:1,deepEdge:0,dither:2}),/Colors/);
+ assert.match(requirement('bedLit',{waterColored:1,deepEdge:1,dither:2,paletteMix:1}),/Colors/);
+ shows('bedLit',{waterColored:1,deepEdge:1,dither:2});
+ shows('bedTint',{waterColored:0,bedLit:1});
  // one water colour, or a third that follows the depth: the step shows only where something draws its deep share
  assert.match(requirement('deepEdge',{waterTones:1}),/one colour/);
  assert.match(requirement('deepEdge',{waterTones:3}),/third colour/);
