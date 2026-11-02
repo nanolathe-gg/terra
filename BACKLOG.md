@@ -8203,6 +8203,21 @@ trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 - *Review.* What it changed, beyond step 3 above. `repro/audit/runner.js` still passed the removed `bedLip` (a `git grep` with `\b` finds nothing here: `-w` does); `BED_LIP`, `BLOCK_GRIT` and `CRACK_LIT` sat between a comment and the code it describes. Why the hand-off's probe read 0 on everything, `radius` included: an edit is refused while the map is busy, and a ground node leads `nodes` only where the world's undulation is on. What it did not change: `blockGrit`'s two pixels (invisible, and the facets moved green-2 anyway) and `crackLength`'s +.003 and +.008 (decision 22) stand as landed, and the sheets for Green at 1x and 2x, Crystal and Red were viewed and agree with the entry. The drops in the join were read one by one: four rows are read on another fixture, two a different `hi` by the tool's max channel, the rest the reach and the blocks; a reading of 1 px counts as moving, so `shineGate` on Green stops at green-1, where main's stopped at green-2.
 - *Departures.* The groove, crack and cell merges changed what a user can do in three places the brief did not list: the Cracks style picker (it set `crackJagged`, `crackLit`, `crackReach`, `crackLength`), ordered rock always having lit relief cracks (2c) and the facets no longer having a size or step of their own (2d); each is named above. `jointDepth` and `gullyDepth` stay as the two switches; the groove rows sit in Rock structure beside `jointDepth`, and Gullies & ribs keeps width, shade and rib tilt.
 
+### H24. Water and coast: the merge trials
+
+> **Owner, 2026-11-01,** on the combine-or-drop page: approved as trials, not as removals: water step and shallow bed; fringe and band fading; coast lobes; Lava layers; whole families as one control. The record is under "Rulings" in `docs/audit/COMBINE_OR_DROP.md`. H23 took the rock half of "whole families".
+
+**Why.** The owner's direction is simplification. Water and coast carry settings that one world sets, settings no card reads apart, and 41 readings on the sweep's `OPEN` list where a row does nothing and the panel does not say why. The sheet's rule decides each merge: it lands if it is shorter and reads no further from retail; otherwise it is reported as tried and the controls stay.
+
+**The build.**
+1. *Tier 1, no pixel may move.* `shoalDither` derived from `stepSharp`; `bandFoot` derived from `flatBank`; `fingerSpread` a constant; `hardDeepStep`, once it is decided what a stroke's hard edge draws without it. One commit each.
+2. *Tier 2, pixels move, judged at 1x against retail on two or three maps a world (decision 22).* `bedCrackSlope`, `crackedContrast`, `shoalShoreSoft`, `stepSoftPx`, `deepEdgeDepth`, `ringTaper`; `fingerAmount`, `fingerHeight`; `lavaCreaseVary`, `lavaMeander`, `layerLedge`, `layerRough` (lava-2's card holds its own `layerLedge` and `layerRough`); one amplitude for the lit-bed marks; the step family, where "tried" is the expected end for location, softness and wander.
+3. *The water rows on the sweep's `OPEN` list.* Every one traced to a cause and settled: the one water colour, the third colour, the threshold step, a stroke's Faded edge (`waterDeep` 2 as a third pick in `strokeWaterPicks`), `crackedStep`, `bedCrackSlope`. A row that can do what its label says gets the fix; otherwise a requirement line; otherwise a removal.
+
+**The bar.** Tier 1: 27 scenes 0.00 against main, byte for byte. Tier 2: no further from retail, shown side by side. `measure/world_controls.mjs` exits 0 with `OPEN` holding only Small leftovers' three readings and no row added. The kept rulings (`bedDots`, `shoalRag`, `shoalGrain`) stay. Every removed control leaves no name behind. Old saves still load.
+
+**Server and guard:** port 8885, CDP 9685; baseline 8886, 9686; worktree `../terraform-wt-H24`, branch `H24-water`; assets `$R/agent-H24`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
