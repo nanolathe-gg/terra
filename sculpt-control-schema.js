@@ -42,6 +42,8 @@ export function shapeControlAvailable(key,kind,p){
  // p.world is what worldControlRequirement reads. A face share needs faces of rock and moss; deposits need sand or stones that a world can lay down, and a beach keeps the Sand brush for its bars.
  const world=p.world||{};
  if(key==='styleFace'&&Number(world.microRock??1)<=0)return false;
+ // A stroke's edge choice moves the step only where the step's deep share is drawn; its own Lit bed draws it.
+ if(key==='waterDeep'&&!deepShows(world,[1,3].includes(Math.round(p.waterBed||0))))return false;
  if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.stoneDensity)>0))return false;
  // A hill leans on its own, and a plateau or offset too until a Face width takes that away; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
  if(key==='facing')return kind==='hill'||['plateau','offset'].includes(kind)&&!(p.facePx>0)||p.lean>0;
@@ -62,6 +64,12 @@ export function shapeControlAvailable(key,kind,p){
 
 // The two water switches a deep or shallow stroke can also turn on for its own footprint (worldPanelValues passes that in).
 const HARD_STEP='Hard shallow-to-deep step, or a water stroke\'s Hard edge',LIT_BED='Lit bed under shallow water, or a water stroke\'s Lit bed';
+// The step's deep share reaches a pixel only where something draws it: two water tones, a lit bed (a world's or a stroke's), a crystal slab's shallows, a baked flow or tinted
+// water (worldPanelValues passes the facts in). With one colour, or a third that follows the depth, nothing else reads it.
+const deepShows=(v,litStroke=false)=>Number(v.waterTones??2)===2||Number(v.bedLit)>0||litStroke||Number(v.crystalShallow)>0||Number(v.flowOn)>0||Number(v.waterTinted)>0;
+const deepIdle=v=>`This world's water has ${Number(v.waterTones)===3?'a third colour that follows the depth':'one colour'}, so the shallow-to-deep step shows only where a lit bed, crystal shallows or a baked flow draws it. Enable Lit bed under shallow water, or give a water stroke a Lit bed, to use this setting.`;
+const RAMP_IDLE='The ramp is drawn only where the step is off: set Hard shallow-to-deep step to 0, or give a water stroke a Faded edge, to use this setting.';
+const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look) to use this setting.';
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
@@ -111,7 +119,11 @@ export function worldControlRequirement(key,v){
  if(['dither','landDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
  // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.
  if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit',LIT_BED);
- if(['crackedStep','stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
+ if(key==='deepEdge')return deepShows(v)?'':deepIdle(v);
+ if(['shallowDepth','deepDepth'].includes(key))return Number(v.waterTones)===3||deepShows(v)?'':deepIdle(v);   // a third colour is cut by these depths whatever the step does
+ if(['waterSoft','bandWater'].includes(key))return Number(v.waterTones)===3?'':!deepShows(v)?deepIdle(v):n('rampWater')>0?'':RAMP_IDLE;
+ if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
+ if(key==='crackedStep')return needs('deepEdge',HARD_STEP)||(n('crackedBed')>0?'':CRACKED_BED);
  if(key==='shoalBump')return needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';

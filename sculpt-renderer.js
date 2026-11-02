@@ -597,7 +597,8 @@ export class TerrainRenderer {
     this.i('uOverrideOn', painted.slice(14, 18).some(Boolean) ? 1 : 0);   // H3: planes 14-17 (erosion, deposits, vegetation, exposure)
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
-    this.i('uFlowOn', painted.slice(20, 25).some(Boolean) ? 1 : 0);
+    this.flowOn = painted.slice(20, 25).some(Boolean);   // the panel reads it: a baked flow reads the step's deep share too
+    this.i('uFlowOn', this.flowOn ? 1 : 0);
   }
 
   // The sediment colours of the flow bake (card F1): up to three [r,g,b] in 0..1.
