@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shapeControlAvailable as available,controlLabel,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
+import {shapeControlAvailable as available,controlLabel,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
 test('a hill exposes foot effects only as a ridge',()=>{
@@ -29,8 +29,7 @@ test('erase all masks includes all eight local style planes',()=>{
  assert.deepEqual(writes.map(w=>w[0]),Array.from({length:18},(_,i)=>i));
  assert.ok(writes.every(w=>w[1]===0));
 });
-test('retired controls are only the disconnected transport quartet',()=>{
- assert.deepEqual([...RETIRED_WORLD_CONTROLS],['sandReach','windStrength','sandPatchy','sandTail']);
+test('the parked control is only crevice',()=>{
  assert.deepEqual([...PARKED_WORLD_CONTROLS],['crevice']);
  assert.equal(controlLabel('moonCups','Moon cups'),'Slope cups');
  assert.equal(controlLabel('iceSoft','Ice lighting'),'Rounded lighting');

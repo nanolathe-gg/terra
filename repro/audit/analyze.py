@@ -6,7 +6,7 @@ from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('--root',type=Path,default=Path('/private/tmp/terraform-tool-audit'));p.add_argument('--out',type=Path,default=Path('docs/audit'));a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
 def read(p,default=None):return json.loads(p.read_text()) if p.exists() else default
 inv=read(a.root/'inventory.json');defaults=read(a.root/'defaults.json');before=a.root/'results/before/baseline';after=a.root/'results/after/prototype'
-world=[r for f in sorted(before.glob('world-*.json')) for r in read(f,[])];diag=[dict(r,phase=phase) for phase,folder in [('before',before),('after',after)] for f in sorted(folder.glob('diagnostic-*.json')) for r in read(f,[])];shapes=read(before/'shape-controls.json',[]);reg=read(after/'regressions.json',{});experiments=Path('EXPERIMENTS.md').read_text().splitlines();schema=Path('sculpt-control-schema.js').read_text();primary=set(re.findall(r"'([^']+)'",schema.split('export const WORLD_PRIMARY_CONTROLS=new Set([')[1].split(']);')[0]));retired={'sandReach','windStrength','sandPatchy','sandTail'};fixed={'frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','faceEdge','gullyRock','strataSpacing'}
+world=[r for f in sorted(before.glob('world-*.json')) for r in read(f,[])];diag=[dict(r,phase=phase) for phase,folder in [('before',before),('after',after)] for f in sorted(folder.glob('diagnostic-*.json')) for r in read(f,[])];shapes=read(before/'shape-controls.json',[]);reg=read(after/'regressions.json',{});experiments=Path('EXPERIMENTS.md').read_text().splitlines();schema=Path('sculpt-control-schema.js').read_text();primary=set(re.findall(r"'([^']+)'",schema.split('export const WORLD_PRIMARY_CONTROLS=new Set([')[1].split(']);')[0]));fixed={'frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','faceEdge','gullyRock','strataSpacing'}
 presentation={r['key']:r for r in read(a.root/'presentation.json',[])}
 internal=[r for f in sorted(after.glob('internal-*.json')) for r in read(f,[])]
 surface=[r for f in sorted(after.glob('surface-*.json')) for r in read(f,[])]
@@ -34,8 +34,7 @@ for group,ls in inv['knobs']:
  for key,label,lo,hi,step,*_ in ls:
   rr=[r for r in world if r['key']==key];dd=[r for r in diag if r['key']==key];mx=max([r['maxRGB'] for r in rr+dd]or[0]);blocks=max([r['changedBlocks'] for r in rr]or[0]);oper=max([r['operatingRange']['changedBlocks'] for r in dd]or[0]);decision='Primary' if key in primary else 'Fine tuning'
   note='Inherited feature; positive sensitivity proves output impact, not improved retail fidelity.'
-  if key in retired:decision='Retire';note='No runtime consumer after transport removal; zero pixels across all three retail-shape fixtures. Compatibility defaults retained.'
-  elif key=='crevice':decision='Park / hidden';note='Experiment 4 left this off: darkens broad faces rather than drawing useful crevices. Do not promote without a new target comparison.'
+  if key=='crevice':decision='Park / hidden';note='Experiment 4 left this off: darkens broad faces rather than drawing useful crevices. Do not promote without a new target comparison.'
   elif key in fixed:note='Repaired live wiring. Compare the diagnostic before/after evidence; default renders remain identical.'
   elif mx==0:decision='Investigate / hide until qualified';note='No rendered impact in tested contexts. Do not infer global death from an inactive dependency or absent material.'
   elif blocks<.05:note='Small or conditional whole-window impact. Inspect target region and nonzero operating range before promoting or removing.'

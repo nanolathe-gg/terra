@@ -2,7 +2,6 @@ import {isShouldered} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
-export const RETIRED_WORLD_CONTROLS=new Set(['sandReach','windStrength','sandPatchy','sandTail']);
 // Experiment 4 left this off: it darkens broad faces instead of making useful
 // crevices. Preserve recipes, but require fresh visual evidence before exposure.
 export const PARKED_WORLD_CONTROLS=new Set(['crevice']);

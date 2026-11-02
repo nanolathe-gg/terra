@@ -2,7 +2,7 @@ import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn} from './sculpt-column.js';
-import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
+import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
@@ -1369,8 +1369,8 @@ const KNOBS = [
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35],['boulderRound','Roundness',0,1,.05,0]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
-  ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
-    ['wind','Wind toward (deg)',0,360,5,20],['sandPatchy','Patchiness (flows and piles)',0,1,.05,.7],['sandTail','Fines carried beyond',0,1,.05,.6],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Grass regrowing over sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
+  ['Sand', [['sand','Weathering supply',0,2,.05,0],
+    ['wind','Wind toward (deg)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Grass regrowing over sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
   ['Cracks', [['crackSeverity','Depth',0,1,.05,.6],['crackSpacing','Block size (px)',16,96,2,40],['crackLength','Length down the slope',1,4,.25,2],
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
@@ -1560,7 +1560,7 @@ function buildKnobs() {
       box.append(wrap);
     }
     for (const [key, oldLabel, min, max, step, value] of knobs) {
-      if(RETIRED_WORLD_CONTROLS.has(key)||PARKED_WORLD_CONTROLS.has(key))continue;
+      if(PARKED_WORLD_CONTROLS.has(key))continue;
       const label=controlLabel(key,oldLabel);
       const wrap = document.createElement('div'); wrap.className = 'control';
       wrap.dataset.knob=key;
