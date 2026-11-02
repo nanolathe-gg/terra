@@ -2,6 +2,24 @@
 // root moves, while separate paths never acquire an implicit connecting edge.
 export const shapePaths=n=>n.paths??(n.points?.length?[n.points.map((_,i)=>i)]:[]);
 export const clonePaths=n=>n.paths?.map(path=>path.slice());
+// Ramer–Douglas–Peucker: keep endpoints and bends within tolerance of the
+// sampled polyline. Return original vertices without changing the input.
+// The iterative stack also handles long strokes without recursive calls.
+export function simplifyPath(points, tolerance) {
+  if (points.length < 3) return points.slice();
+  const keep = new Uint8Array(points.length); keep[0] = keep[points.length - 1] = 1;
+  const stack = [[0, points.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop(), pa = points[a], pb = points[b], dx = pb.x - pa.x, dy = pb.y - pa.y, l2 = dx * dx + dy * dy;
+    let worst = -1, at = -1;
+    for (let k = a + 1; k < b; k++) {
+      const q = points[k], t = l2 ? Math.max(0, Math.min(1, ((q.x - pa.x) * dx + (q.y - pa.y) * dy) / l2)) : 0, d = Math.hypot(q.x - pa.x - dx * t, q.y - pa.y - dy * t);
+      if (d > worst) { worst = d; at = k; }
+    }
+    if (worst > tolerance) { keep[at] = 1; stack.push([a, at], [at, b]); }
+  }
+  return points.filter((_, k) => keep[k]);
+}
 export function validatePaths(n){
   if(!n.points)return;
   if(!Array.isArray(n.points)||!n.points.length||n.points.some(p=>!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)))throw new Error('Invalid shape points.');
