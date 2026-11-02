@@ -787,3 +787,22 @@ No GPU renders, perf rounds, tests that exercise the renderer, server processes,
 asset writes, deletes, main-checkout edits or image claims were made. This is a
 documentation-only handoff. Validation commands and real exit statuses are in
 the accompanying handoff report.
+
+## H22b sweep: no control went, 261 readings are open
+
+`measure/world_controls.mjs` (H22b) moved every enabled control and found none
+dead by its test, so no row of this document changes. It leaves 27 world keys and
+9 stroke keys on its `OPEN` list, each an observation (where it reads 0, where it
+moves) that no one has traced to a feature. The merge cards that touch them
+should settle them, by a requirement line or by a removal ruled here:
+`slopeTexture` (Archipelago); `faceEdge`, `gullyRock`, `iceSlate`,
+`shineSlopeSharp`, `shineSlopeScale` (Red); the seven Sand rows (Zhon);
+`shallowDepth`, `deepDepth`, `waterSoft`, `bandWater`, `deepEdge` and its chain
+(`deepEdgeDepth`, `stepSharp`, `stepSoftPx`, `shelfWander`, `shelfScale`,
+`shoalRag`), `crackedStep`, `bedCrackSlope`, `desertCapFlat`; and the stroke
+rows `styleDeposits`, `styleVegetation`, `styleExposure` (zero in every world,
+with the paint choices 20 to 25), `styleFace`, `styleRelief`, `waterDeep`, and
+the plateau's `lean`, `faceVariation`, `facing` in Desert. The kept rulings
+(`terraceBreak`, `crevice`, `bedDots`, `shoalRag`, `shoalGrain`, the three kept
+bundles) were not touched; `bedDots`, `shoalRag` and `shoalGrain` now say which
+control they need (Lit bed, the threshold step).
