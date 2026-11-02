@@ -106,8 +106,8 @@ const OVERRIDE_CHOICES=[[18,'Relaxation: more'],[19,'Relaxation: less'],[20,'Dep
 const STYLE_CHOICES=[...OVERRIDE_CHOICES,[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
 const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace','styleErosion','styleDeposits','styleVegetation','styleExposure'];
 const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
-  // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
-  'fingerAmount','fingerSize','fingerHeight','layerVary','layerCircle',
+  // E10: finger size; layer width variation; the circles of scalloped layers.
+  'fingerSize','layerVary','layerCircle',
   // G5 (Lava): the layers' two-dimensional wander and extra width spread; the circles' variety; the lobes' tread tilt (the hill-lobe option rides this list, as E10's).
   'lavaMeander','lavaSpread','lavaCircleVary'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
@@ -209,9 +209,7 @@ const SHAPE_FIELDS=[
   ['baseVary','base-vary','Foot outline raggedness (px)',BASE_KINDS,0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
   ['baseBump','base-bump','Foot bumps (height units)',BASE_KINDS,0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
   // E10 (Lava): finger amount, size, distribution and height; layer width variation; circle size of the circular layers.
-  ['fingerAmount','finger-amount','Finger amount (share of sites)',['deep','shallow'],0,200,5,100,'Fingers on the joined coast: how many of the sites along the shore grow a finger. 100 is the usual; 200 grows one at nearly every site.'],
   ['fingerSize','finger-size','Finger size',['deep','shallow'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
-  ['fingerHeight','finger-height','Finger height (units; 0 the old tongue)',['deep','shallow'],0,120,5,10,'Fingers on the joined coast: a flat top this many units above the lava, with soft sides. 0 keeps the earlier tongue, as high as the lowest layer and lower at its tip.'],
   ['layerVary','layer-vary','Layer width variation',['deep','shallow'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
   // G7 (Crystal): craters with smaller, softer facets.
@@ -377,7 +375,7 @@ function updateControls() {
   $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerAmount:'fingers',fingerSize:'fingers',fingerHeight:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.

@@ -25,7 +25,7 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
  crystalTiers:'Stepped column tops',crystalAlign:'Align blocks to shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
  craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
  iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',moonLobes:'Outline lobes',lavaMeander:'Layer meander',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
- fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerAmount:'Lobe coverage',fingerSize:'Lobe size',fingerHeight:'Lobe height',
+ fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerSize:'Lobe size',
  styleErosion:'Local relaxation',styleDeposits:'Local deposits',styleVegetation:'Local vegetation',styleExposure:'Local rock exposure',
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}

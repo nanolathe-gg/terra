@@ -127,10 +127,9 @@ KNOB_DEFAULTS.update(crackedStep=0, bedDots=0, bedDotCell=14)
 # follow the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach
 # against the ring texture's own).
 KNOB_DEFAULTS.update(ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
-# E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
-# the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
-# (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
-KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerHeight=0, layerVary=0, layerCircle=26)
+# E10 (Lava): finger size; layer width variation (0 even layers) and the circle size in px of circular
+# layers. Every default is the earlier output.
+KNOB_DEFAULTS.update(fingerSize=1, layerVary=0, layerCircle=26)
 # E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
 KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
@@ -503,7 +502,7 @@ WORLD_KNOBS = {
                  # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
                  # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
                  # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
-                 layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
+                 layerVary=.8, layerCrease=.7, fingerSize=.65,
                  # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),
                  # its circles differ in size and spacing, and its step lines fade and break along their length.
                  lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.2,

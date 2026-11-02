@@ -7,9 +7,9 @@
   ["hill",[[262,535],[218,690]],{"card": {"diameter": 95,"amount": 33,"roughness": 15}}],
   ["hill",[[525,200],[505,300],[532,400],[505,520],[522,640],[490,760],[505,850]],{"card": {"diameter": 170,"amount": 5,"roughness": 35,"cracks": 0}}],
   ["shallow",[[295,150],[225,260]],{"card": {"diameter": 36,"roughness": 5,"bankWidth": 0,"fingers": 0,"shoreLayers": 0,"shallowMode": "area"}}],
-  ["deep",[[850,470],[1150,470]],{"card": {"diameter": 365,"roughness": 12,"fingerAmount": 140,"fingerSize": 170,"fingerHeight": 40}}],
-  ["deep",[[940,470],[940,1150]],{"card": {"diameter": 365,"roughness": 12,"fingerAmount": 140,"fingerSize": 170,"fingerHeight": 40}}],
-  ["deep",[[760,420],[760,510]],{"card": {"diameter": 230,"roughness": 15,"fingerAmount": 140,"fingerSize": 170,"fingerHeight": 40}}],
-  ["deep",[[765,720]],{"card": {"diameter": 130,"roughness": 15,"fingerAmount": 140,"fingerSize": 170,"fingerHeight": 40}}],
-  ["deep",[[690,930],[690,1100]],{"card": {"diameter": 160,"roughness": 15,"fingerAmount": 140,"fingerSize": 170,"fingerHeight": 40}}]
+  ["deep",[[850,470],[1150,470]],{"card": {"diameter": 365,"roughness": 12,"fingerSize": 170}}],
+  ["deep",[[940,470],[940,1150]],{"card": {"diameter": 365,"roughness": 12,"fingerSize": 170}}],
+  ["deep",[[760,420],[760,510]],{"card": {"diameter": 230,"roughness": 15,"fingerSize": 170}}],
+  ["deep",[[765,720]],{"card": {"diameter": 130,"roughness": 15,"fingerSize": 170}}],
+  ["deep",[[690,930],[690,1100]],{"card": {"diameter": 160,"roughness": 15,"fingerSize": 170}}]
  ]}
