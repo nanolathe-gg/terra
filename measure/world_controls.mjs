@@ -28,26 +28,16 @@ const ONLY = opt('--only', '') ? opt('--only', '').split(',') : null;
 const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map(s => s.split('=')).map(([k, v]) => [k, Number(v)]));
 // Rows that read 0 and are kept on purpose. A reason a reader can check, or the row is a finding, not an entry.
 const ALLOWED = {};
-// Rows that read 0 where nothing yet says why: reported, not failed, so the sweep can gate what is settled. An entry holds only in the worlds (and stroke kinds) listed,
-// taken from the final sweep, so a zero anywhere else fails; the card that touches a row settles it, and this list ends empty. Small leftovers holds the three that remain.
-const OPEN = {
-  // Small leftovers.
-  slopeTexture: {worlds: ['archipelago'], note: 'not traced; moves there only with a slope or ground gloss on, and directly in the other seven'},
-  shineSlopeSharp: {worlds: ['red'], note: 'not traced; red\'s slopeTexture is 0; moves in other worlds once their slope gloss is on'},
-  shineSlopeScale: {worlds: ['red'], note: 'as shineSlopeSharp'},
-};
-
 // A cancelled term leaves float rounding (Desert's bedSpacing, 1 px), not a control.
 const HIDDEN_PX = 8;
 const reasonFor = r => ALLOWED[(r.stroke ? r.stroke + ':' : '') + r.key] || ALLOWED[r.key] || null;
-const openFor = r => { const e = OPEN[r.key]; return e && e.worlds.includes(r.world) && (!e.kinds || e.kinds.includes(r.stroke)) ? e.note : null; };
-const failed = r => (r.zero && !r.allowed && !r.open) || r.leak || r.hides;
+const failed = r => (r.zero && !r.allowed) || r.leak || r.hides;
 const named = r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}${r.hides ? ' moves while the panel says "' + r.reason + '"' : ''}`;
-const judge = rows => { for (const r of rows) if (r.zero) { r.allowed = reasonFor(r); r.open = openFor(r); } return rows.filter(failed).map(named); };
+const judge = rows => { for (const r of rows) if (r.zero) { r.allowed = reasonFor(r); } return rows.filter(failed).map(named); };
 // --recheck DIR: judge a finished sweep's file again against the lists above, with no browser.
 if (args.includes('--recheck')) {
-  const f = JSON.parse(readFileSync(join(resolve(opt('--recheck', '.')), 'world-controls.json'), 'utf8')), bad = judge(f.rows), open = f.rows.filter(r => r.open).length;
-  console.log(`${f.rows.filter(r => r.zero).length} read 0: ${f.rows.filter(r => r.allowed).length} allowed, ${open} open, ${bad.length} unexplained`);
+  const f = JSON.parse(readFileSync(join(resolve(opt('--recheck', '.')), 'world-controls.json'), 'utf8')), bad = judge(f.rows);
+  console.log(`${f.rows.filter(r => r.zero).length} read 0: ${f.rows.filter(r => r.allowed).length} allowed, ${bad.length} unexplained`);
   for (const b of bad) console.log('!', b);
   process.exit(bad.length || f.console.length ? 1 : 0);
 }
@@ -86,7 +76,7 @@ if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   const merged = WORLDS.map(w => JSON.parse(readFileSync(join(out, w, 'world-controls.json'), 'utf8')));
   const all = merged.flatMap(m => m.rows), bad = judge(all), con = merged.flatMap(m => m.console);
   writeFileSync(join(out, 'world-controls.json'), JSON.stringify({server, seconds: (Date.now() - t0) / 1000, rows: all, unexplained: bad, console: con}));
-  console.log(`\n${all.filter(r => r.type === 'knob' && r.state === 'enabled').length} enabled world rows, ${all.filter(r => r.type === 'knob' && r.state === 'gated').length} gated, ${all.filter(r => r.type === 'shape').length} stroke rows, ${all.filter(r => r.type === 'surface').length} sliders; ${all.filter(r => r.zero).length} read 0 (${all.filter(r => r.open).length} open ?, ${all.filter(r => r.allowed).length} allowed), ${all.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
+  console.log(`\n${all.filter(r => r.type === 'knob' && r.state === 'enabled').length} enabled world rows, ${all.filter(r => r.type === 'knob' && r.state === 'gated').length} gated, ${all.filter(r => r.type === 'shape').length} stroke rows, ${all.filter(r => r.type === 'surface').length} sliders; ${all.filter(r => r.zero).length} read 0 (${all.filter(r => r.allowed).length} allowed), ${all.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
   if (con.length) console.log('console:', con.slice(0, 5));
   process.exit(codes.some(c => c > 1) || con.length || bad.length ? 1 : 0);
 }
@@ -156,7 +146,7 @@ try {
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
   const sandOver = () => [170, 500].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
-  const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? (r.open ? '  ?' : '  !') : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
+  const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? '  !' : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
   const add = r => { rows.push(r); if (process.stdout.isTTY || !process.env.QUIET) console.log(fmt(r)); };
   for (const world of WORLDS) {
     const tw = Date.now(), fixtures = [[`${world}-1`, strokes(world).strokes, strokes(world).ground !== false, strokes(world).query], [`${world}-2`, scenes[`${world}-2`].strokes, scenes[`${world}-2`].ground !== false, scenes[`${world}-2`].query], [`${world}-3`, scenes[`${world}-3`].strokes, scenes[`${world}-3`].ground !== false, scenes[`${world}-3`].query], [`${world}-diagnostic`, diagnostic(world), true, strokes(world).query], [`${world}-painted`, painted(), true, strokes(world).query], [`${world}-water`, waterPicks(), true, strokes(world).query]];
@@ -248,7 +238,7 @@ try {
       }
       await idle(fixtures[f][0]);
     }
-    for (const r of [...results.values(), ...facts.values()]) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
+    for (const r of [...results.values(), ...facts.values()]) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); add(r); }
     stage('zero retries', ts); ts = Date.now();
     // Stroke options, on the stroke fixture.
     const shapeRows = [];
@@ -320,7 +310,7 @@ try {
       }
       stage(name, ts); ts = Date.now();
     }
-    for (const r of sresults) { delete r._r; delete r._ctx; delete r._i; r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
+    for (const r of sresults) { delete r._r; delete r._ctx; delete r._i; r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); add(r); }
     console.log(`-- ${world}: ${((Date.now() - tw) / 1000).toFixed(0)} s`);
   }
   const bad = rows.filter(failed);

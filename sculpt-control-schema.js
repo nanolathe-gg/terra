@@ -111,7 +111,8 @@ export function worldControlRequirement(key,v){
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  const shine=['Ground','Slope','Rock','Sand','Crystal'],shiny=shine.some(m=>n('shine'+m)>0),rough=shine.some(m=>n('shine'+m+'Rough')>0);
  const lobe=/^shine(Ground|Slope|Rock|Sand|Crystal)(Sharp|Scale)$/.exec(key);
- if(lobe)return needs('shine'+lobe[1]+(lobe[2]==='Sharp'?'':'Rough'),(lobe[2]==='Sharp'?'Gloss':'Roughness')+' in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);
+ // The slope group's weight is the larger of the faces' moss share (microRock) and the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead).
+ if(lobe){const r=needs('shine'+lobe[1]+(lobe[2]==='Sharp'?'':'Rough'),(lobe[2]==='Sharp'?'Gloss':'Roughness')+' in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);return r||(lobe[1]==='Slope'&&n('slopeTexture')<=0&&n('slopeSand')<=0&&Number(v.microRock??1)<=0?'This world\'s faces are one material and Sampled slope texture is 0, so the slope cover has no share for the gloss to shape. Raise Sampled slope texture to use this setting.':'');}
  if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
@@ -119,6 +120,8 @@ export function worldControlRequirement(key,v){
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
+ // The sediment transition is built from the ground and replaces the slope cover's color outright at 100 percent Material weathering (worldPanelValues passes slopeReplaced); the texture then scales only the slope's share of the shine.
+ if(key==='slopeTexture'&&n('slopeReplaced')>0&&!shiny&&!rough)return 'The sediment transition replaces the slope color at 100 percent Material weathering, so this scales only the slope\'s gloss. Lower Material weathering, or set a Gloss or Roughness above zero in one of the Shine groups, to use this setting.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
  if(['dither','landDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
  // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.

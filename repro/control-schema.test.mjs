@@ -125,6 +125,16 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('bedLit',{waterColored:1,deepEdge:1,dither:2,paletteMix:1}),/Colors/);
  shows('bedLit',{waterColored:1,deepEdge:1,dither:2});
  shows('bedTint',{waterColored:0,bedLit:1});
+ // Sampled slope texture: the sediment transition replaces the slope color at full Material weathering; the slope group's lobe rows need a share
+ assert.match(requirement('slopeTexture',{slopeReplaced:1}),/Material weathering/);
+ shows('slopeTexture',{slopeReplaced:1,shineSlope:.5});
+ shows('slopeTexture',{slopeReplaced:0});
+ assert.match(requirement('shineSlopeSharp',{shineSlope:1,slopeTexture:0,microRock:0}),/Sampled slope texture/);
+ shows('shineSlopeSharp',{shineSlope:1,slopeTexture:.3,microRock:0});
+ shows('shineSlopeSharp',{shineSlope:1,slopeTexture:0,microRock:1});
+ shows('shineSlopeScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1,microRock:0});
+ assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss/);
+ shows('shineRockSharp',{shineRock:1,slopeTexture:0,microRock:0});
  // one water colour, or a third that follows the depth: the step shows only where something draws its deep share
  assert.match(requirement('deepEdge',{waterTones:1}),/one colour/);
  assert.match(requirement('deepEdge',{waterTones:3}),/third colour/);
