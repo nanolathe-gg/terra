@@ -8,8 +8,8 @@
 // --find key,key: instead of the sweep, set each other enabled row to its high end in turn and print which of the named rows then move (the search for a row's parent).
 // Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885; --assets DIR is that host's assets root: it needs map-catalog.json and features/, as a card's own root has): terraformAudit exists only on that host's ?audit pages.
 // Writes DIR/world-controls.json and prints one row per control and world. Exit 1 on a console error or on an unexplained exact 0, that is a
-// row that reads 0 on every fixture (the first, the other two scenes, the diagnostic fixture; stroke rows the second stroke fixture) and is not on
-// ALLOWED below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
+// row that reads 0 on every fixture (the world's three scenes, the diagnostic fixture, the painted fixture; stroke rows the second stroke fixture and
+// Sand over the first) and is on neither list below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
 // stands on every fixture while its reason holds (state "hidden"), which proves the reason true: it fails if the row moves HIDDEN_PX pixels or more,
 // since a wrong gate hides a live control and nothing else would show it. --set puts values in before the sweep, to probe a row under a gate.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
@@ -28,46 +28,36 @@ const ONLY = opt('--only', '') ? opt('--only', '').split(',') : null;
 const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map(s => s.split('=')).map(([k, v]) => [k, Number(v)]));
 // Rows that read 0 and are kept on purpose. A reason a reader can check, or the row is a finding, not an entry.
 const ALLOWED = {};
-// Rows that read 0 and have no settled cause yet: reported, not failed, so the sweep can gate what is settled. Each is a finding with the evidence that opened it.
+// Rows that read 0 where nothing yet says why: reported, not failed, so the sweep can gate what is settled. An entry holds only in the worlds (and stroke kinds) listed,
+// taken from the final sweep, so a zero anywhere else fails; the card that touches a row settles it, and this list ends empty. Water is H24's, rock H23's, the rest Small leftovers.
 const OPEN = {
-  // Observations from the sweeps and the probes, causes not traced; "moves" is a probe or another world that shows the row can. An entry holds only in the
-  // worlds (and stroke kinds) listed, taken from the final sweep: a zero anywhere else is a new finding and fails the sweep.
-  bandWater: {worlds: ["green", "lava", "moon", "red"], note: 'green, lava, moon, red: as waterSoft'},
-  bedCrackSlope: {worlds: ["desert", "moon"], note: 'desert, moon: reads 0 on every fixture including the cracked-bed stroke; moves in the other seven'},
-  crackedStep: {worlds: ["crystal", "ice", "zhon"], note: 'crystal, ice, zhon: reads 0 on every fixture including the cracked-bed stroke; moves in green, archipelago, red'},
-  deepDepth: {worlds: ["green"], note: 'green: as shallowDepth'},
-  deepEdge: {worlds: ["ice", "lava", "moon", "zhon"], note: 'ice, lava, moon, zhon: reads 0 on every fixture; ice and zhon draw three-colour water and lava and moon one colour; moves in the other five worlds'},
-  deepEdgeDepth: {worlds: ["ice", "zhon"], note: 'ice: as deepEdge'},
-  desertCapFlat: {worlds: ["green"], note: 'green: enabled (a column and strata are on), reads 0; moves in desert'},
-  faceEdge: {worlds: ["red"], note: 'red: reads 0 on every fixture and no single other row turns it on (find mode); moves in the other eight'},
-  faceVariation: {worlds: ["desert"], kinds: ["plateau"], note: 'see the Done entry of H22b'},
-  facing: {worlds: ["desert"], kinds: ["plateau"], note: 'see the Done entry of H22b'},
-  gullyRock: {worlds: ["red"], note: 'red: as faceEdge'},
-  iceSlate: {worlds: ["red"], note: 'see the Done entry of H22b'},
-  lean: {worlds: ["desert"], kinds: ["plateau"], note: 'desert: reads 0 on both stroke fixtures; moves on the other kinds and in the other eight'},
-  ripple: {worlds: ["zhon"], note: 'see the Done entry of H22b'},
-  rippleHeight: {worlds: ["zhon"], note: 'see the Done entry of H22b'},
-  sandDust: {worlds: ["zhon"], note: 'zhon: as wind'},
-  sandGrain: {worlds: ["zhon"], note: 'see the Done entry of H22b'},
-  sandGrass: {worlds: ["zhon"], note: 'see the Done entry of H22b'},
-  sandLight: {worlds: ["zhon"], note: 'see the Done entry of H22b'},
-  shallowDepth: {worlds: ["green"], note: 'green: reads 0 on every fixture; green draws the hard step (Hard shallow-to-deep step on); moves in the other eight'},
-  shelfScale: {worlds: ["ice", "zhon"], note: 'see the Done entry of H22b'},
-  shelfWander: {worlds: ["ice", "zhon"], note: 'see the Done entry of H22b'},
-  shineSlopeScale: {worlds: ["red"], note: 'red: as shineSlopeSharp'},
-  shineSlopeSharp: {worlds: ["red"], note: 'red: enabled with its gloss on, reads 0 on every fixture; moves in other worlds once their slope gloss is on'},
-  shoalRag: {worlds: ["ice", "zhon"], note: 'see the Done entry of H22b'},
-  slopeTexture: {worlds: ["archipelago"], note: 'archipelago: reads 0 on every fixture; it moves there only through the shine weights (slope or ground gloss on), and in the other seven worlds directly'},
-  stepSharp: {worlds: ["ice", "zhon"], note: 'see the Done entry of H22b'},
-  stepSoftPx: {worlds: ["ice", "zhon"], note: 'see the Done entry of H22b'},
-  styleDeposits: {worlds: ["archipelago", "crystal", "desert", "green", "ice", "lava", "moon", "red", "zhon"], kinds: ["crater", "deep", "hill", "mountain", "offset", "plateau", "shallow"], note: 'every kind, every world: reads 0 on both stroke fixtures and the paint choices Deposits more and fewer move nothing either (direct probe, green and zhon); Style: relief, cracks, banding and erosion move'},
-  styleExposure: {worlds: ["archipelago", "crystal", "desert", "green", "ice", "lava", "moon", "red", "zhon"], kinds: ["crater", "deep", "hill", "mountain", "offset", "plateau", "shallow"], note: 'see the Done entry of H22b'},
-  styleFace: {worlds: ["crystal", "green", "ice", "lava", "moon", "red"], kinds: ["crater", "deep", "hill", "mountain", "offset", "plateau", "shallow"], note: 'red on every kind, and deep in five more worlds: reads 0; moves elsewhere'},
-  styleRelief: {worlds: ["lava"], kinds: ["hill", "mountain"], note: 'lava on hill and mountain: reads 0; moves elsewhere'},
-  styleVegetation: {worlds: ["archipelago", "crystal", "desert", "green", "ice", "lava", "moon", "red", "zhon"], kinds: ["crater", "deep", "hill", "mountain", "offset", "plateau", "shallow"], note: 'as styleDeposits'},
-  waterDeep: {worlds: ["crystal", "ice", "lava", "moon", "zhon"], kinds: ["deep", "shallow"], note: 'crystal, ice, lava, moon, zhon: a deep or shallow stroke\'s edge choice reads 0; moves in the other four'},
-  waterSoft: {worlds: ["green", "lava", "moon", "red"], note: 'green, lava, moon, red: reads 0 on every fixture; moves in the other five worlds'},
-  wind: {worlds: ["zhon"], note: 'zhon: reads 0 on every fixture including the sand brush; moves with Deposit supply above 0 (probe) and, with the brush, in the other eight'},
+  // H24. One water colour (Lava and Moon: shallow and deep are equal), and the third-colour branch, which discards `deep` (Crystal, Ice, Zhon; Ice and Zhon have no lit bed to carry it).
+  deepEdge: {worlds: ['ice', 'lava', 'moon', 'zhon'], note: 'ice, zhon: third colour and no lit bed; lava, moon: one water colour'},
+  deepEdgeDepth: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
+  stepSharp: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
+  stepSoftPx: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
+  shelfWander: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
+  shelfScale: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
+  shoalRag: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
+  waterDeep: {worlds: ['crystal', 'ice', 'lava', 'moon', 'zhon'], kinds: ['deep', 'shallow'], note: 'a stroke\'s edge choice, as deepEdge'},
+  crackedStep: {worlds: ['crystal', 'ice', 'zhon'], note: 'third colour; moves in green, archipelago, red'},
+  // H24. The threshold step reads no colorDepth, and with deepEdgeDepth above 0 neither depth; a stroke's Faded edge brings them back, so a gate needs that pick first.
+  waterSoft: {worlds: ['green', 'lava', 'moon', 'red'], note: 'green, red: threshold step; lava, moon: one water colour'},
+  bandWater: {worlds: ['green', 'lava', 'moon', 'red'], note: 'as waterSoft'},
+  shallowDepth: {worlds: ['green'], note: 'threshold step at a set depth'},
+  deepDepth: {worlds: ['green'], note: 'as shallowDepth'},
+  bedCrackSlope: {worlds: ['desert', 'moon'], note: 'not traced; reads 0 on the cracked-bed stroke; moves in the other seven'},
+  // H23.
+  styleFace: {worlds: ['green', 'crystal', 'ice', 'lava', 'moon'], kinds: ['deep'], note: 'not traced; on deep strokes only, and moves on them in the other worlds'},
+  styleRelief: {worlds: ['lava'], kinds: ['hill', 'mountain'], note: 'not traced; moves on Lava\'s other kinds'},
+  desertCapFlat: {worlds: ['green'], note: 'not traced; enabled (a column and strata are on), moves in desert'},
+  lean: {worlds: ['desert'], kinds: ['plateau'], note: 'not traced; moves on the other kinds and in the other eight worlds'},
+  facing: {worlds: ['desert'], kinds: ['plateau'], note: 'as lean'},
+  faceVariation: {worlds: ['desert'], kinds: ['plateau'], note: 'as lean'},
+  // Small leftovers.
+  slopeTexture: {worlds: ['archipelago'], note: 'not traced; moves there only with a slope or ground gloss on, and directly in the other seven'},
+  shineSlopeSharp: {worlds: ['red'], note: 'not traced; red\'s slopeTexture is 0; moves in other worlds once their slope gloss is on'},
+  shineSlopeScale: {worlds: ['red'], note: 'as shineSlopeSharp'},
 };
 
 // A cancelled term leaves float rounding (Desert's bedSpacing, 1 px), not a control.

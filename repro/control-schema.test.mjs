@@ -128,8 +128,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('beachWidth',{beachLayer:1});
  assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
  shows('groundTiles',{groundTiled:1});
- assert.match(requirement('repose',{debris:0}),/Debris/);
- shows('repose',{debris:.5});
+ assert.equal(requirement('repose',{debris:0}),'','partial Denser scatter reads it at Amount 0');
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);

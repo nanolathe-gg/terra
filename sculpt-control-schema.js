@@ -106,7 +106,6 @@ export function worldControlRequirement(key,v){
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  if(key==='crackedStep')return needs('stepSharp','Step is a true threshold');
  if(key==='crackedContrast')return needs('bedLit',LIT_BED);
- if(key==='repose')return needs('debris','Amount in Debris');
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
  if(['dither','landDither','shoalDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
