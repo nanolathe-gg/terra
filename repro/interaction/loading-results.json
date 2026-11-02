@@ -1,0 +1,181 @@
+{
+  "baseline": "24775ec plus the preceding cached-navigation change; 512-pixel display tiles",
+  "fixture": "repro/interaction/loading.html?auto=1",
+  "environment": "Headless Chrome with WebGPU/Metal; 1280x900 editor iframe; Green 8x8; nine terrain shapes; repeated runs with browser shader caches warm.",
+  "measurement": "Application timings; final-tile gaps measure renderChunk return, not physical presentation. Visible completion is observed through the displayed tile cache. Cold shader compilation and competing system work can take longer.",
+  "before": {
+    "passed": true,
+    "firstDetailMs": 1001.1000000238419,
+    "detailCoverageMs": 1711.7999999523163,
+    "firstFinalMs": 1001.1000000238419,
+    "visibleFinalMs": 1711.7999999523163,
+    "visibleTiles": 6,
+    "weatherRuns": 9,
+    "weatherMs": 1342.6999999284744,
+    "coarsePagesDuringVisible": 26,
+    "order": [
+      {
+        "x": 2048,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 2048,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 1536,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 1536,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 2048,
+        "visible": true
+      }
+    ],
+    "forcedRefreshChangedChannels": 0,
+    "errors": ""
+  },
+  "after": {
+    "passed": true,
+    "displayChunkSize": 256,
+    "firstDetailMs": 212.70000004768372,
+    "detailCoverageMs": 479.7999999523163,
+    "firstFinalMs": 1262.1000000238419,
+    "visibleFinalMs": 2012.7000000476837,
+    "visibleTiles": 16,
+    "finalGapMedian": 16.5,
+    "finalGapP95": 279.5,
+    "finalGapMax": 279.5,
+    "weatherRuns": 9,
+    "weatherMs": 1295.4999996423721,
+    "coarsePagesDuringVisible": 0,
+    "order": [
+      {
+        "x": 2048,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 2048,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2048,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2048,
+        "y": 2304,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 2304,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 2304,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 2304,
+        "visible": true
+      }
+    ],
+    "forcedRefreshChangedChannels": 0,
+    "fastView": {
+      "visibleMs": 272.89999997615814,
+      "weatherRuns": 0,
+      "exportChangedChannels": 0,
+      "restoredChangedChannels": 0
+    },
+    "errors": ""
+  },
+  "navigation": {
+    "map": "8x8",
+    "inputFrames": 45,
+    "presentFrames": 44,
+    "cachedPresents": 154,
+    "changedDuringWait": 1710092,
+    "frameMedian": 16.600000023841858,
+    "frameP95": 17.399999976158142,
+    "frameMax": 17.59999990463257,
+    "visibleFinalMs": 1876,
+    "settleMs": 2247.899999976158,
+    "coldPresentFrames": 45,
+    "coldFrameP95": 17.100000023841858,
+    "coldBakesDuringInput": 0,
+    "forcedRefreshDifference": 0,
+    "zoomRoundTripDifference": 0,
+    "errors": ""
+  },
+  "comparisonWith512PixelTiles": {
+    "pixels": 589760,
+    "changedPixels": 1,
+    "maxChannelDifference": 12,
+    "note": "One palette decision differs with the smaller display raster; exports retain canonical chunks. A forced refresh and weathered-view round trip match exactly."
+  },
+  "nodeTestsPassed": 40
+}

@@ -16,6 +16,31 @@ handlers on 1×1 (whole-map) and 5×5 (paged) maps: point reduction, endpoints,
 attached and disconnected paths, cancellation, click stamps, Undo / Redo, graph
 round-trip, and keeping raw points when disabled or supplied by a script.
 
+`/interaction/navigation.html?auto=1` checks an 8×8 map with nine terrain shapes.
+It stalls one tile render while sending 45 scrolling inputs with 6 ms of CPU
+work per frame, then checks a second cold route without the artificial stall.
+It counts frames that actually repaint terrain and fresh tiles delivered during
+continuous input. It checks that a small pan retains queued visible work, that
+detail appears before releasing a held pan, and that offscreen work is canceled.
+It exercises middle-button and minimap panning and compares settled pixels with
+a fresh render and a Fit/1× round trip. It saves
+`navigation.json`, `navigation-preview.png`, and `navigation-final.png` under the
+host's output directory. Add `&baseline=1` to record an older build without
+asserting the new responsiveness behavior. Frame timings measure application
+callbacks and canvas paints, not physical input-to-display latency. Visible
+completion and completion of the surrounding cache are reported separately.
+
+`/interaction/loading.html?auto=1` loads a nine-shape 8×8 server document and
+immediately switches to 1×. It measures the first detailed tile, intermediate
+coverage, final coverage, gaps between final tile submissions, and background
+coarse work during the visible fill. It asserts that visible final tiles precede
+offscreen tiles and that a forced refresh reproduces identical pixels. It also
+reloads with **Weathered view** off, verifies that no weather simulations run for
+the view, compares export art with the toggle on/off, and checks that restoring
+weathered view restores identical pixels. Results are saved as `loading.json`
+and `loading-final.png`. GPU completion and canvas presentation can lag a tile
+submission, so the submission gaps are not physical display-latency measurements.
+
 - **Run interactions:** Fit, 90 drawing inputs, 90 drag inputs, 60 slider inputs, and 60 path-point inputs. One input is sent per animation frame. Each phase waits for final visible refinement, saves timing and GPU-pass records, and captures the result. Synthetic pointer capture is bypassed for that test pointer only. This measures application handling, not hardware-to-display input latency.
 - **Draw at fit:** Nine large shapes distributed across the map, then a 90-point stroke at Fit. Try 40×40. It tests full-map editing without requesting a full-resolution image of the entire world.
 - **Check cache & fit:** Add a distant shape, record visible rebakes, edit a nearby shape, then compare the retained view with a forced invalidation. For maps up to 8×8 it also assembles a full-resolution downsampled reference for judging Fit.

@@ -239,7 +239,7 @@ try {
   console.error('phase load'); flush();
   // ------------------------------------------------------------ load: the scene applied, then zoomed to 1x at the top-left
   const strokes = JSON.stringify(scene.strokes), ground = scene.ground !== false;
-  const visibleOf = async () => ev(`(() => { const v = sculptCanvas.view(), s = sculptCanvas.stats().canonicalChunkSize, keys = [];
+  const visibleOf = async () => ev(`(() => { const v = sculptCanvas.view(), stats = sculptCanvas.stats(), s = stats.displayChunkSize ?? stats.canonicalChunkSize, keys = [];
     for (let y = Math.floor(v.y / s) * s; y < v.y + v.height; y += s) for (let x = Math.floor(v.x / s) * s; x < v.x + v.width; x += s) keys.push(x + ',' + y); return {keys, chunk: s, view: v}; })()`);
   {
     const t0 = await ev(`(() => { const t = performance.now(); __perf.mark('load-start', {}); sculptDebug.scene(${strokes}, {ground: ${ground}}); sculptCanvas.zoom(1);

@@ -1,0 +1,153 @@
+{
+  "baseline": "Previous working-tree implementation: cached presentation during scrolling, new terrain delayed until navigation stopped.",
+  "fixture": "repro/interaction/navigation.html?auto=1",
+  "environment": "Headless Chrome with WebGPU/Metal; 1280x900 editor iframe; Green 8x8; nine terrain shapes; 6 ms CPU work per input frame.",
+  "measurement": "Application animation callbacks and canvas paints, not physical display latency. Includes a deliberately stalled tile, continuous cold scrolling, retained work through a small held pan, and offscreen cancellation.",
+  "before": {
+    "map": "8x8",
+    "inputFrames": 45,
+    "presentFrames": 44,
+    "cachedPresents": 154,
+    "changedDuringWait": 1710092,
+    "frameMedian": 16.600000023841858,
+    "frameP95": 17.399999976158142,
+    "frameMax": 17.59999990463257,
+    "visibleFinalMs": 1876,
+    "settleMs": 2247.899999976158,
+    "coldPresentFrames": 45,
+    "coldFrameP95": 17.100000023841858,
+    "coldBakesDuringInput": 0,
+    "forcedRefreshDifference": 0,
+    "zoomRoundTripDifference": 0,
+    "errors": ""
+  },
+  "after": {
+    "map": "8x8",
+    "inputFrames": 45,
+    "presentFrames": 44,
+    "cachedPresents": 154,
+    "changedDuringWait": 1710092,
+    "frameMedian": 16.699999928474426,
+    "frameP95": 16.799999952316284,
+    "frameMax": 17.100000023841858,
+    "visibleFinalMs": 2177.1999999284744,
+    "settleMs": 2564,
+    "coldPresentFrames": 45,
+    "coldFrameP95": 17.600000023841858,
+    "coldBakesDuringInput": 26,
+    "coldFreshPresents": 30,
+    "retainedDuringSmallPan": true,
+    "abortedOffscreen": true,
+    "heldPanDifference": 0,
+    "forcedRefreshDifference": 0,
+    "zoomRoundTripDifference": 0,
+    "errors": ""
+  },
+  "nodeTestsPassed": 40,
+  "loadingRegression": {
+    "passed": true,
+    "displayChunkSize": 256,
+    "firstDetailMs": 7.600000023841858,
+    "detailCoverageMs": 593.2000000476837,
+    "firstFinalMs": 6362.399999976158,
+    "visibleFinalMs": 10460,
+    "visibleTiles": 16,
+    "finalGapMedian": 61.5,
+    "finalGapP95": 1580.6000000238419,
+    "finalGapMax": 1580.6000000238419,
+    "weatherRuns": 9,
+    "weatherMs": 8950.199999928474,
+    "coarsePagesDuringVisible": 0,
+    "order": [
+      {
+        "x": 2048,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 2048,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2048,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 1792,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 2048,
+        "visible": true
+      },
+      {
+        "x": 2048,
+        "y": 2304,
+        "visible": true
+      },
+      {
+        "x": 2304,
+        "y": 2304,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 1536,
+        "visible": true
+      },
+      {
+        "x": 1792,
+        "y": 2304,
+        "visible": true
+      },
+      {
+        "x": 2560,
+        "y": 2304,
+        "visible": true
+      }
+    ],
+    "forcedRefreshChangedChannels": 0,
+    "fastView": {
+      "visibleMs": 489,
+      "weatherRuns": 0,
+      "exportChangedChannels": 0,
+      "restoredChangedChannels": 0
+    },
+    "errors": ""
+  },
+  "loadingNote": "Server-load, Weathered view, and export isolation checks pass. Weather calculation time varies with system/GPU load; this change removes the navigation gate rather than promising a fixed refinement duration."
+}

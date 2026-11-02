@@ -948,6 +948,7 @@ export function createPagedFields(opts) {
   const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, device, context} = opts;
   const CORE = opts.core ?? 512, APRON = opts.apron ?? 128, COARSE = 8, SHIFT = Math.log2(CORE);
   const spacing = (worldSize - 1) / (worldGrid - 1), np = Math.ceil(worldGrid / CORE), gesture = opts.gesture || (() => false);
+  const foregroundPending = opts.foregroundPending || (() => false);
   // H6c: the ring is 4 cells (the hill's blur) plus the longest chain of overlapping smooth radii among the nodes, bucketed to RINGS; it follows the node list.
   const RINGS = [4, 16, 32, 64, 128, 192, 320];
   let RING = 4, SIDE = CORE + 2 * RING, SHAPE_BYTES = SIDE * SIDE * 52;
@@ -1105,7 +1106,7 @@ export function createPagedFields(opts) {
   async function pumpCpu() {
     cpuTimer = 0;
     for (const k of [...cpuWanted]) {
-      if (gesture()) { cpuTimer = setTimeout(pumpCpu, 100); return; }
+      if (gesture() || foregroundPending()) { cpuTimer = setTimeout(pumpCpu, 100); return; }
       cpuWanted.delete(k); const pg = pagesMap.get(k); if (!pg) continue;
       pg.pins++;   // not evicted while its buffers are read
       try {
@@ -1133,7 +1134,7 @@ export function createPagedFields(opts) {
     coarseTimer = 0; if (coarseRunning) return; coarseRunning = true;
     try {
       while (coarseQueue.size) {
-        if (gesture() || !engine) { coarseTimer = setTimeout(pumpCoarse, 150); return; }
+        if (gesture() || foregroundPending() || !engine) { coarseTimer = setTimeout(pumpCoarse, 150); return; }
         // the page nearest the focus (the view) first
         let best = null, bd = Infinity;
         for (const k of coarseQueue.keys()) { const pg = pagesMap.get(k), d = focus ? Math.hypot(pg.x0 + CORE / 2 - focus.x, pg.y0 + CORE / 2 - focus.y) : pg.key; if (d < bd) { bd = d; best = pg; } }
@@ -1212,17 +1213,25 @@ export function createPagedFields(opts) {
   let weatherRuns = 0, weatherMsTotal = 0;
 
   // ---- ensure a rectangle (cells) is ready to be read; returns a lease that pins its pages
-  async function prepareRect(rect, wantWeather) {
+  async function prepareRect(rect, wantWeather, signal) {
+    signal?.throwIfAborted();
     if (!engine) await getEngine();
+    signal?.throwIfAborted();
+    focus ??= {x: (rect.x0 + rect.x1) / 2, y: (rect.y0 + rect.y1) / 2};
     const need = overlapping(rect); for (const pg of need) pg.pins++;
     let released = false;
     const lease = {pages: need, release() { if (released) return; released = true; for (const pg of need) unpin(pg); trim(); }};
     try {
-      for (const pg of need) ensureShape(pg);
-      if (wantWeather && time) for (const pg of need) { if (!pg.weather || (pg.stale && !gesture())) await ensureWeather(pg); touch(pg); }
+      for (const pg of need) { signal?.throwIfAborted(); ensureShape(pg); }
+      if (wantWeather && time) for (const pg of need) {
+        signal?.throwIfAborted();
+        if (!pg.weather || (pg.stale && !gesture())) await ensureWeather(pg);
+        // Already-submitted GPU work finishes, but the old camera must not
+        // enqueue the remaining pages while the new camera is waiting.
+        signal?.throwIfAborted();touch(pg);
+      }
       trim();
     } catch (err) { lease.release(); throw err; }
-    focus = {x: (rect.x0 + rect.x1) / 2, y: (rect.y0 + rect.y1) / 2};
     return lease;
   }
 
@@ -1358,6 +1367,9 @@ export function createPagedFields(opts) {
     maskChunks: async () => {
       const out = [], T = 256;
       for (let ty = 0; ty < worldGrid; ty += T) for (let tx = 0; tx < worldGrid; tx += T) {
+        // Saving scans the map, including pages far outside the camera. Yield
+        // between reads so it cannot evict the visible working set mid-fill.
+        while (foregroundPending()) await new Promise(r => setTimeout(r, 50));
         const r = {x0: tx, y0: ty, x1: Math.min(tx + T, worldGrid) - 1, y1: Math.min(ty + T, worldGrid) - 1}, c = await readRect(r, {weather: false});
         if (!maskKeys.some(k => c.fields[k].some(v => v !== 0))) continue;
         out.push({key: [r.x0, r.y0, r.x1, r.y1].join('_'), rect: c.rect, gridWidth: c.gridWidth, gridHeight: c.gridHeight, gridOrigin: c.gridOrigin, gridSpacing: spacing, revision, version: revision, planes: maskKeys.map(k => c.fields[k]), masks: Object.fromEntries(maskKeys.map(k => [k, c.fields[k]]))});
@@ -1368,8 +1380,8 @@ export function createPagedFields(opts) {
     gpuReady: () => Promise.resolve(), gpuQuiet: () => Promise.resolve(), gpuPending: () => false,
     settle,
     // the map canvas's feed: pages ready for `rect` (cells), and a gather to encode into the bake's encoder
-    async feedSource(rect, wantWeather) {
-      const lease = await prepareRect(rect, wantWeather && Boolean(time));
+    async feedSource(rect, wantWeather, {signal} = {}) {
+      const lease = await prepareRect(rect, wantWeather && Boolean(time), signal);
       const weather = wantWeather && Boolean(time);
       return {paged: true, weather, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
         gather(enc, passes) {
