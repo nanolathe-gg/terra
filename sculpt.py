@@ -125,11 +125,10 @@ KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0)
 # bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
 # rocky faces are cut from ~1); bedDots / bedDotCell draw dark dots in the lit bed.
 KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots=0, bedDotCell=14)
-# E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
-# dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
-# the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
-# the ring texture's own).
-KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
+# E11 Archipelago: ringContrast / ringCount / ringSize draw contour lines in the red fringe that
+# follow the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach
+# against the ring texture's own).
+KNOB_DEFAULTS.update(ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
 # E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
 # the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
 # (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
@@ -374,7 +373,6 @@ WORLD_KNOBS = {
                         # contour pass draws from the mineral field's falloff (so they follow the
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
-                        bandFoot=8,
                         stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80,
                         # G1: the reef bars are soft blotches (retail: 8-16 px energy 1.8 against 1.3 at 4-8 px;
                         # 4.5-px bumps at 3 read as chunky cobbles): faint lit bumps of 9 px, a few dots, and no

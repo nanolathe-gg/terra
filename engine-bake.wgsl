@@ -1150,7 +1150,8 @@ fn bake(p: vec2f) -> vec4f {
     var bands = bandsAt.xy * (1.0 - route);
     // E11: the dark lines round Archipelago's hills were the first contour risers on the
     // hill's foot; retail has red fringe lines there instead (fringeContours draws those).
-    if (u.bandFoot > 0.0) { bands.y *= smoothstep(u.base + 0.5 * u.bandFoot, u.base + u.bandFoot, h); }
+    // The same flatBank worlds start them 8 units above the dry base.
+    if (u.flatBank > 0.0) { bands.y *= smoothstep(u.base + 4.0 * u.flatBank, u.base + 8.0 * u.flatBank, h); }
     height += bands.x;
     let bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;

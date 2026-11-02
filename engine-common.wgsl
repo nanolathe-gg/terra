@@ -269,7 +269,6 @@ struct Uniforms {
     bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
     bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
     stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
-    bandFoot: f32,        // Archipelago (bake): no band lines on the hill's foot below this height above the dry base (0: lines everywhere)
     ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
     ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
     ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
