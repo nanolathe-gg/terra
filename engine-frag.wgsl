@@ -1945,7 +1945,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
 #endif
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
-        let ditherStrength = select(u.dither * u.landDither, u.dither * mix(1.0, u.shoalDither, shoalWeight), h < u.sea + 1.0);
+        // The threshold step's bed carries lit bumps in place of the dither's noise.
+        let ditherStrength = select(u.dither * u.landDither, u.dither * mix(1.0, select(1.0, 0.0, u.stepSharp > 0.0), shoalWeight), h < u.sea + 1.0);
         // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
         // local checkerboards, which read as one colour; a noise threshold
         // clumped them into speckles.

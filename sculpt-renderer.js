@@ -1003,7 +1003,6 @@ export class TerrainRenderer {
     // G1: shallow water round 3; every default is the earlier look.
     this.f('uShoalBump', variant.has('shoalBump') ? Number(variant.get('shoalBump')) : 0);
     this.f('uShoalBumpPx', variant.has('shoalBumpPx') ? Number(variant.get('shoalBumpPx')) : 6);
-    this.f('uShoalDither', variant.has('shoalDither') ? Number(variant.get('shoalDither')) : 1);
     this.f('uShoalRag', variant.has('shoalRag') ? Number(variant.get('shoalRag')) : 0);
     this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
     this.f('uShoalGrain', variant.has('shoalGrain') ? Number(variant.get('shoalGrain')) : 0);

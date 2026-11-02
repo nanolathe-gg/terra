@@ -135,8 +135,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
  shows('dither',{paletteMix:0});
- assert.match(requirement('shoalDither',{paletteMix:0,deepEdge:0}),/Hard shallow-to-deep step/);
- shows('shoalDither',{paletteMix:0,deepEdge:1});
  assert.equal(available('facing','mountain',{lean:0}),false);
  assert.equal(available('facing','mountain',{lean:2}),true);
  assert.equal(available('facing','hill',{lean:0}),true,'a hill leans on its own');

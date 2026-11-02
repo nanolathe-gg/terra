@@ -332,7 +332,6 @@ struct Uniforms {
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
     shoalBump: f32,       // the shallow bed's lit bumps: slope of the lumps the sun lights (0: none, as before)
     shoalBumpPx: f32,     // size of those lumps, screen px
-    shoalDither: f32,     // the palette dither's strength on the lit shallow bed, as a share of the water's own (1: as before)
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
     shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
     shoalGrain: f32,      // Red: the ground tile's own colour grain shows through the tint, this share of it (0: the tint replaces it, as before)

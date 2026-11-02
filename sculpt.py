@@ -165,10 +165,8 @@ KNOB_DEFAULTS.update(iceFrost=0)
 # G6, Ice: angular facets on hills and mountains (share of the mountain broken into facets; facet width in px). Off by default everywhere.
 KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
 # G1 (shallow water round 3): shoalBump is the slope of the lit bumps the shallow bed carries
-# (0: none, the earlier bed), shoalBumpPx their size in screen px; shoalDither is the palette
-# dither's strength on the lit bed as a share of the water's (1: as before; the dither is white
-# noise that hides the bumps' clumps).
-KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6, shoalDither=1)
+# (0: none, the earlier bed), shoalBumpPx their size in screen px.
+KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6)
 # G1: shoalRag is how far (px) pixel notches move the shallow-to-deep step, independent of the
 # bed's slope (0: the step's earlier jitter, which a gentle shelf scales to nothing).
 KNOB_DEFAULTS.update(shoalRag=0)
@@ -285,7 +283,7 @@ WORLD_KNOBS = {
                   # palette dither's white noise went; lit bumps of 5 px take
                   # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
-                  shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
+                  shoalBump=1.8, shoalBumpPx=5,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
                   shoalRag=5,
                   # G1: the hard waterline steps in 1-3 px runs (retail's), up to 2 px off the depth contour.
@@ -335,7 +333,7 @@ WORLD_KNOBS = {
                 stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6,
                 crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15,
                 # G1: lit bumps of 8 px, and no palette dither (see Green).
-                shoalBump=2, shoalBumpPx=8, shoalDither=0,
+                shoalBump=2, shoalBumpPx=8,
                 # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is
                 # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
                 # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
@@ -383,7 +381,7 @@ WORLD_KNOBS = {
                         # palette dither (3-px-blurred luma s.d. retail 7.6, before 4.7, now 5.8; see Green).
                         # H18 part 2: a mottle of the bed's brightness printed noisy blotches on the bars where retail's are
                         # smooth and soft (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); none reads closer there.
-                        bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
+                        bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
                         shoalRag=4,
                         # G1 (round 8: "the default should still have a small blur on the edge"): the world's own

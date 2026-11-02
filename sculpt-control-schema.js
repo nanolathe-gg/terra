@@ -110,8 +110,7 @@ export function worldControlRequirement(key,v){
  if(key==='crackedContrast')return needs('bedLit',LIT_BED);
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
- if(['dither','landDither','shoalDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
- if(key==='shoalDither')return needs('deepEdge',HARD_STEP);
+ if(['dither','landDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
  if(key==='lavaCreaseVary')return needs('layerCrease','Dark crease at each step foot');
  // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.
  if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit',LIT_BED);
