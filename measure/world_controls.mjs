@@ -177,9 +177,13 @@ try {
   const painted = () => [['mountain', [[300, 220], [700, 220]], {card: {diameter: 420, amount: 130, cracks: 100}}], ['plateau', [[300, 760], [700, 760]], {card: {diameter: 420, amount: 100, cracks: 100}}],
     // two water strokes with the choices the panel cannot show on the world: frost-needle shore plates (Melt pockets), and a cracked bed under a hard shore and step
     ['deep', [[60, 960], [460, 960]], {card: {diameter: 200, shelves: 70, shorePlates: 100, plateMaterial: 2}}], ['deep', [[560, 960], [960, 960]], {card: {diameter: 200, shelves: 70}, waterShore: 1, waterDeep: 1, waterBed: 3}],
+    // a partial Denser scatter over the mountain's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
+    ['paint', [[240, 220], [760, 220]], {card: {diameter: 460, amount: 35, paintChannel: 5}}],
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
   // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount.
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: variant ? 260 : 180, amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
+  // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
+  const sandOver = () => [170, 500].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? (r.open ? '  ?' : '  !') : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
   const add = r => { rows.push(r); if (process.stdout.isTTY || !process.env.QUIET) console.log(fmt(r)); };
   for (const world of WORLDS) {
@@ -305,7 +309,7 @@ try {
     };
     // The panel's own test of a row on a kind, on the state the context sets (UI units for the availability test).
     const available = (key, kind, ctx, scales) => {
-      const ui = {...st.defaults[kind]}; for (const [k, v] of Object.entries(ctx)) ui[k] = v * (scales[k] ?? 1);
+      const ui = {...st.defaults[kind], world: values}; for (const [k, v] of Object.entries(ctx)) ui[k] = v * (scales[k] ?? 1);
       const net = kind === 'fissure' && Number(ui.fissureNetwork) >= .5;
       if (kind === 'fissure' && (net ? ['fissureBranches', 'fissureBranchLen', 'fissureBranchSpread', 'fissureTaper'].includes(key) : key === 'fissureCell')) return false;
       if (kind === 'crystal' && ['crystalAlign', 'bergFace', 'bergJitter', 'bergBreak', 'bergRough', 'bergTilt', 'bergTiltDir', 'bergFlat'].includes(key) && Number(ui.crystalForm) < 2) return false;
@@ -329,16 +333,17 @@ try {
     }
     await ev('__wc.putBack()');
     stage('stroke rows', ts); ts = Date.now();
-    const szeros = sresults.filter(r => r.max === 0);
-    if (szeros.length) {
-      await ev(`__wc.scene(${JSON.stringify(strokeFixture(1))}, true)`);
-      if ((await ev('__wc.kinds()')).join() !== nodeKinds.join()) throw new Error('the second stroke fixture has other strokes');
+    for (const [name, fixture] of [['strokes-B', strokeFixture(1)], ['strokes-sand', [...strokeFixture(0), ...sandOver()]]]) {
+      const szeros = sresults.filter(r => r.max === 0);
+      if (!szeros.length) break;
+      await ev(`__wc.scene(${JSON.stringify(fixture)}, true)`);
+      if ((await ev('__wc.kinds()')).slice(0, nodeKinds.length).join() !== nodeKinds.join()) throw new Error(name + ' has other strokes');
       for (const r of szeros) {
         const m = await ev(`__wc.strokePair(${r._i}, ${JSON.stringify(r.key)}, ${JSON.stringify(r._ctx)}, ${r.lo}, ${JSON.stringify(r._r.his)}, ${r._r.scale}, {x: 0, y: 0, width: 1024, height: 1024})`);
-        r.tried = ['strokes-A', 'strokes-B'];
-        if (m.max > 0) Object.assign(r, m, {fixture: 'strokes-B'});
+        r.tried = [...(r.tried || ['strokes-A']), name];
+        if (m.max > 0) Object.assign(r, m, {fixture: name});
       }
-      stage('stroke retries', ts);
+      stage(name, ts); ts = Date.now();
     }
     for (const r of sresults) { delete r._r; delete r._ctx; delete r._i; r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
     console.log(`-- ${world}: ${((Date.now() - tw) / 1000).toFixed(0)} s`);

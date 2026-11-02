@@ -94,6 +94,13 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('bedSpacing',{column:1,rockOrder:1,bedLedge:1}),/authored bed profile/);
  shows('bedSpacing',{column:1,rockOrder:1,bedLedge:1,cliffRise:8});   // a column's ledge scales by thickness over spacing once it has a rise
  assert.equal(requirement('boulderFoot',{boulders:0}),'','painted scatter sources its stones by this at Density 0, as it reads boulderSize');
+ assert.equal(requirement('lavaDusk',{lavaCrust:0}),'','the dusk darkens any rock turned from the sun, crust or none');
+ assert.match(requirement('faceEdge',{microRock:0}),/one material/);
+ shows('gullyRock',{microRock:.7});
+ shows('iceSlate',{});   // the world table's default is interleaved
+ assert.match(requirement('ripple',{beachLayer:1,sand:0}),/Weathering supply/);
+ shows('ripple',{beachLayer:1,sand:.5});
+ shows('ripple',{beachLayer:0,sand:0});   // the Sand brush feeds it where there is no beach
  assert.match(requirement('crackedStep',{stepSharp:0,deepEdge:1}),/true threshold/);
  assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
  shows('strataContrast',{column:1,strata:.4});
@@ -133,6 +140,13 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.equal(available('facing','mountain',{lean:2}),true);
  assert.equal(available('facing','hill',{lean:0}),true,'a hill leans on its own');
  assert.equal(available('facing','plateau',{lean:0}),true,'a plateau leans on its own');
+ assert.equal(available('styleFace','hill',{world:{microRock:0}}),false,'faces of one material have no rock share to set');
+ assert.equal(available('styleFace','hill',{world:{microRock:1}}),true);
+ assert.equal(available('styleFace','hill',{}),true);
+ assert.equal(available('styleDeposits','hill',{world:{beachLayer:1,sand:0}}),false,'a beach keeps the Sand brush for its bars');
+ assert.equal(available('styleDeposits','hill',{world:{beachLayer:1,sand:.5}}),true);
+ assert.equal(available('styleDeposits','hill',{world:{beachLayer:1,sand:0,stoneDensity:.2}}),true);
+ assert.equal(available('styleDeposits','hill',{world:{beachLayer:0,sand:0}}),true);
  assert.equal(available('facing','plateau',{lean:0,facePx:6}),false,'until a Face width takes that away');
  assert.equal(available('facing','plateau',{lean:2,facePx:6}),true);
 });

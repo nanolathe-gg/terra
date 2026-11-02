@@ -39,6 +39,10 @@ export function shapeControlAvailable(key,kind,p){
  if(key==='faceVariation')return sharedFace||p.facePx>0;
  if(key==='softness')return sharedFace||shoulderedHill||(!p.curve?.knots&&['mountain','cliff'].includes(p.curve?.form||(kind==='mountain'?'mountain':'')));
  if(key==='moonLobes'&&p.baseVary>0)return false;
+ // p.world is what worldControlRequirement reads. A face share needs faces of rock and moss; deposits need sand or stones that a world can lay down, and a beach keeps the Sand brush for its bars.
+ const world=p.world||{};
+ if(key==='styleFace'&&Number(world.microRock??1)<=0)return false;
+ if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.stoneDensity)>0))return false;
  // A hill leans on its own, and a plateau or offset too until a Face width takes that away; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
  if(key==='facing')return kind==='hill'||['plateau','offset'].includes(kind)&&!(p.facePx>0)||p.lean>0;
  if(kind==='crystal'){
@@ -76,7 +80,7 @@ export function worldControlRequirement(key,v){
  if(/^moonCup/.test(key)&&key!=='moonCups')return needs('moonCups','Slope cups');
  if(/^moonRib/.test(key)&&key!=='moonRibs')return needs('moonRibs','Slope ribs');
  if(key==='moonFoldSpacing')return needs('moonFolds','Contour folds');
- if(['lavaPillow','lavaChip','lavaVeins','lavaCalm','lavaDusk'].includes(key))return needs('lavaCrust','Pillow crust strength');
+ if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
  if(['gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade'].includes(key))return needs('gullyDepth','Gully depth');
  // Beds and joints draw only in ordered rock, and the bed profile only where a ledge or lip gives it relief.
@@ -97,6 +101,9 @@ export function worldControlRequirement(key,v){
  if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
+ if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'This world\'s faces are one material, not rock and moss interleaved, so there is nothing for this setting to place.';
+ // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
+ if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  if(key==='crackedStep')return needs('stepSharp','Step is a true threshold');
  if(key==='crackedContrast')return needs('bedLit',LIT_BED);
  if(key==='repose')return needs('debris','Amount in Debris');
