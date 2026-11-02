@@ -1072,7 +1072,6 @@ export class TerrainRenderer {
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
     set('uBedRelief', number('bedRelief', 0));
-    set('uBedCrackSlope', number('bedCrackSlope', 0.8));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackWidth', number('crackWidth', 1));

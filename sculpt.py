@@ -121,10 +121,9 @@ KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
 # shading across the shelf).
 KNOB_DEFAULTS.update(shelfWander=0, shelfScale=100, bedFlat=0)
 # E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
-# crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
-# bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
-# rocky faces are cut from ~1); bedDots / bedDotCell draw dark dots in the lit bed.
-KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots=0, bedDotCell=14)
+# crackedContrast carries a cracked bed's light and cracks through its tint, both sides;
+# bedDots / bedDotCell draw dark dots in the lit bed.
+KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedDots=0, bedDotCell=14)
 # E11 Archipelago: ringContrast / ringCount / ringSize draw contour lines in the red fringe that
 # follow the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach
 # against the ring texture's own).
@@ -330,7 +329,7 @@ WORLD_KNOBS = {
                 # cracked bed is cut as rocky ground and keeps its crevices through the tint
                 # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
                 shelfWander=6, shelfScale=80, bedFlat=.6,
-                crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15,
+                crackedStep=14, crackedContrast=.45, bedDots=.18, bedDotCell=15,
                 # G1: lit bumps of 8 px, and no palette dither (see Green).
                 shoalBump=2, shoalBumpPx=8,
                 # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is

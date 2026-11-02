@@ -45,7 +45,6 @@ const OPEN = {
   bandWater: {worlds: ['green', 'lava', 'moon', 'red'], note: 'as waterSoft'},
   shallowDepth: {worlds: ['green'], note: 'threshold step at a set depth'},
   deepDepth: {worlds: ['green'], note: 'as shallowDepth'},
-  bedCrackSlope: {worlds: ['desert', 'moon'], note: 'not traced; reads 0 on the cracked-bed stroke; moves in the other seven'},
   // Small leftovers.
   slopeTexture: {worlds: ['archipelago'], note: 'not traced; moves there only with a slope or ground gloss on, and directly in the other seven'},
   shineSlopeSharp: {worlds: ['red'], note: 'not traced; red\'s slopeTexture is 0; moves in other worlds once their slope gloss is on'},
