@@ -39,6 +39,8 @@ export function shapeControlAvailable(key,kind,p){
  if(key==='faceVariation')return sharedFace||p.facePx>0;
  if(key==='softness')return sharedFace||shoulderedHill||(!p.curve?.knots&&['mountain','cliff'].includes(p.curve?.form||(kind==='mountain'?'mountain':'')));
  if(key==='moonLobes'&&p.baseVary>0)return false;
+ // A hill, plateau or offset leans on its own; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
+ if(key==='facing')return ['plateau','offset','hill'].includes(kind)||p.lean>0;
  if(kind==='crystal'){
   if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;
   if(['crystalCount','crystalSides','crystalVariation'].includes(key))return form!==1;
@@ -65,7 +67,7 @@ export function worldControlRequirement(key,v){
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['jointSpacing','jointAngle','jointRun','jointGaps'].includes(key))return needs('jointDepth','Joint depth');
  if(key==='bedBend'&&n('gullyDepth')<=0&&n('ribTilt')<=0)return 'Set Gully depth or Rib tilt above zero to use this setting.';
- if(key==='cliffStagger')return n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':needs('jointDepth','Joint depth');
+ if(key==='cliffStagger')return n('rockOrder')<=0?'Enable ordered Rock structure to use this setting.':n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':needs('jointDepth','Joint depth');
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
@@ -75,6 +77,38 @@ export function worldControlRequirement(key,v){
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm','lavaDusk'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
  if(['gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade'].includes(key))return needs('gullyDepth','Gully depth');
+ // Beds and joints draw only in ordered rock, and the bed profile only where a ledge or lip gives it relief.
+ if(['rockFrom','cliffFollow','cliffReach','cliffWide','cliffFlat','cliffRise','cliffBed','cliffStagger','cliffFine','cliffDomain'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
+ if(['cliffReach','cliffWide','cliffFlat','cliffBed','cliffFine','cliffDomain'].includes(key)&&n('cliffFollow')<=0)return 'Choose Follow terrain in Structure orientation to use this setting.';
+ if(['facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key))return needs('facetTilt','Facet tilt');
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch'].includes(key)&&n('bedLedge')<=0&&n('bedLip')<=0)return 'Set Ledge or Lip above zero in Rock structure to give the beds relief.';
+ // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
+ if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
+ if(['baseBand','desertCapFlat'].includes(key))return n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');
+ if(['baseBandLow','baseBandHigh','baseBandWander','baseBandGaps'].includes(key))return needs('baseBand','Gray band strength');
+ // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
+ const shine=['Ground','Slope','Rock','Sand','Crystal'],shiny=shine.some(m=>n('shine'+m)>0),rough=shine.some(m=>n('shine'+m+'Rough')>0);
+ const lobe=/^shine(Ground|Slope|Rock|Sand|Crystal)(Sharp|Scale)$/.exec(key);
+ if(lobe)return needs('shine'+lobe[1]+(lobe[2]==='Sharp'?'':'Rough'),(lobe[2]==='Sharp'?'Gloss':'Roughness')+' in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);
+ if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
+ if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
+ if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
+ if(key==='repose')return needs('debris','Amount in Debris');
+ if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
+ // The palette's ordered dither runs only when colors are not mixed in pairs.
+ if(['dither','landDither','shoalDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
+ if(key==='shoalDither')return needs('deepEdge','Hard shallow-to-deep step');
+ if(key==='lavaCreaseVary')return needs('layerCrease','Dark crease at each step foot');
+ // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.
+ if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit','Lit bed under shallow water');
+ if(['stepSharp','deepEdgeDepth'].includes(key))return needs('deepEdge','Hard shallow-to-deep step');
+ if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('stepSharp','Step is a true threshold');
+ if(key==='shelfScale')return needs('shelfWander','Shelf wander');
+ if(key==='shoalBump')return n('bedLit')<=0?'Enable Lit bed under shallow water to use this setting.':needs('deepEdge','Hard shallow-to-deep step');
+ if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
+ if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
+ if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach layer.';
+ if(key==='groundTiles'&&n('groundTiled')<=0)return 'This world\'s ground is one texture, not tiles. Choose another world\'s Ground pattern to use this setting.';
  if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
  if(key==='ringPatchSize')return needs('ringPatch','Reach variation');
  return '';

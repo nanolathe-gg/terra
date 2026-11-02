@@ -38,7 +38,7 @@ test('the parked control is only crevice',()=>{
 test('world dependencies explain bypasses without biome gates',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
  assert.match(requirement('bedVary',{column:1,rockOrder:1}),/authored bed profile/);
- assert.equal(requirement('bedVary',{column:0,rockOrder:1}),'');
+ assert.equal(requirement('bedVary',{column:0,rockOrder:1,bedLedge:.5}),'');
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
  assert.match(requirement('gullySpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
@@ -47,9 +47,78 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:0}),/Gully depth or Rib tilt/);
  assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:.2}),'');
  assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:4,ribTilt:0}),'');
- assert.match(requirement('cliffStagger',{cliffFollow:0,jointDepth:2}),/Follow terrain/);
- assert.match(requirement('cliffStagger',{cliffFollow:1,jointDepth:0}),/Joint depth/);
- assert.equal(requirement('cliffStagger',{cliffFollow:1,jointDepth:2}),'');
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,jointDepth:2}),/Follow terrain/);
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:0}),/Joint depth/);
+ assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:2}),'');
  assert.equal(requirement('boulderSize',{boulders:0}),'','painted scatter still uses size when global density is zero');
  assert.equal(requirement('bandSoftness',{banding:0}),'','painted banding still uses the riser share when the world strength is zero');
+});
+
+test('H22b: rows that act only once another is on say so, and come back when it is',async()=>{
+ const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
+ const shows=(key,on)=>assert.equal(requirement(key,on),'',key);
+ // shine: a lobe needs its material's gloss, a grain its roughness, the shared rows any shining material
+ assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss in Shine: rock/);
+ shows('shineRockSharp',{shineRock:.5});
+ assert.match(requirement('shineSandScale',{shineSandRough:0,shineSand:1}),/Roughness in Shine: sand/);
+ shows('shineSandScale',{shineSandRough:.3});
+ assert.match(requirement('shineWhite',{shineRockRough:1}),/Gloss/);
+ shows('shineWhite',{shineCrystal:.2});
+ assert.match(requirement('shineStretch',{shineGround:1}),/Roughness/);
+ shows('shineStretch',{shineSlopeRough:.2});
+ assert.match(requirement('shineGate',{}),/Gloss or Roughness/);
+ shows('shineGate',{shineSlopeRough:.2});
+ shows('shineGate',{shineGround:.2});
+ // ordered rock: the follow-the-slope family, the facets and the bed profile
+ assert.match(requirement('rockFrom',{rockOrder:0}),/Rock structure/);
+ shows('rockFrom',{rockOrder:1});
+ assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
+ shows('cliffReach',{rockOrder:1,cliffFollow:1});
+ assert.match(requirement('facetSize',{rockOrder:1,facetTilt:0}),/Facet tilt/);
+ shows('facetSize',{rockOrder:1,facetTilt:.5});
+ assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
+ shows('bedSpacing',{rockOrder:1,bedLedge:.5});
+ shows('bedSpacing',{rockOrder:1,bedLip:2});
+ // strata: bands and caps need a column and the strata switch
+ assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);
+ assert.match(requirement('baseBand',{column:1,strata:0}),/Strata/);
+ shows('baseBand',{column:1,strata:.5});
+ assert.match(requirement('baseBandGaps',{column:1,strata:1,baseBand:0}),/Gray band/);
+ shows('baseBandGaps',{column:1,strata:1,baseBand:.5});
+ assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
+ shows('strataContrast',{column:1,strata:.4});
+ // water: the lit bed, the hard step, the threshold step
+ assert.match(requirement('bedDots',{bedLit:0}),/Lit bed/);
+ shows('bedDots',{bedLit:.5});
+ assert.match(requirement('stepSharp',{deepEdge:0}),/Hard shallow-to-deep step/);
+ shows('stepSharp',{deepEdge:1});
+ assert.match(requirement('shelfWander',{deepEdge:1,stepSharp:0}),/true threshold/);
+ shows('shelfWander',{stepSharp:1});
+ assert.match(requirement('shelfScale',{shelfWander:0}),/Shelf wander/);
+ shows('shelfScale',{shelfWander:5});
+ assert.match(requirement('shoalBump',{bedLit:1,deepEdge:0}),/Hard shallow-to-deep step/);
+ assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
+ shows('shoalBump',{bedLit:1,deepEdge:1});
+ shows('shoalBumpPx',{shoalBump:2});
+ assert.match(requirement('lavaCreaseVary',{layerCrease:0}),/crease/);
+ shows('lavaCreaseVary',{layerCrease:.5});
+ // facts of the world's material the panel passes in with the settings
+ assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
+ shows('ringContrast',{ringLayer:1});
+ assert.match(requirement('ringShiftDir',{ringLayer:1,ringShift:0}),/Offset between copies/);
+ assert.match(requirement('beachWidth',{beachLayer:0}),/no beach/);
+ shows('beachWidth',{beachLayer:1});
+ assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
+ shows('groundTiles',{groundTiled:1});
+ assert.match(requirement('repose',{debris:0}),/Debris/);
+ shows('repose',{debris:.5});
+ assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
+ shows('slopeTexture',{slopeSand:0});
+ assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
+ shows('dither',{paletteMix:0});
+ assert.match(requirement('shoalDither',{paletteMix:0,deepEdge:0}),/Hard shallow-to-deep step/);
+ shows('shoalDither',{paletteMix:0,deepEdge:1});
+ assert.equal(available('facing','mountain',{lean:0}),false);
+ assert.equal(available('facing','mountain',{lean:2}),true);
+ assert.equal(available('facing','hill',{lean:0}),true,'a hill leans on its own');
 });
