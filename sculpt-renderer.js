@@ -895,7 +895,6 @@ export class TerrainRenderer {
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
     this.f('uShelfScale', variant.has('shelfScale') ? Number(variant.get('shelfScale')) : 100);
     this.f('uCrackedStep', variant.has('crackedStep') ? Number(variant.get('crackedStep')) : 0);
-    this.f('uCrackedContrast', variant.has('crackedContrast') ? Number(variant.get('crackedContrast')) : 0);
     this.f('uBedDots', variant.has('bedDots') ? Number(variant.get('bedDots')) : 0);
     this.f('uBedDotCell', variant.has('bedDotCell') ? Number(variant.get('bedDotCell')) : 14);
     this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);

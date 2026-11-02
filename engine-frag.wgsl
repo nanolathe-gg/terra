@@ -1111,6 +1111,7 @@ fn shoalBumpLight(p: vec2f) -> f32 {
     return min((u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight, u.lightCap);
 }
 
+const CRACKED_CONTRAST = 0.45;   // H24: how much of a cracked bed's light and cracks carry through its tint, the same on every world
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
@@ -1120,11 +1121,11 @@ fn litBed(bed: vec3f, cracked: bool) -> vec3f {
     let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
     // as soft darker blue, never as black rims), so the dark side carries less.
-    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides.
-    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked && u.crackedContrast > 0.0), 2.0);
+    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides, at CRACKED_CONTRAST.
+    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked), 2.0);
     var contrast = u.bedContrast;
     var darkSide = 0.6;
-    if (cracked && u.crackedContrast > 0.0) { contrast = u.crackedContrast; darkSide = 1.0; }
+    if (cracked) { contrast = CRACKED_CONTRAST; darkSide = 1.0; }
     let light = pow(ratio, select(contrast * darkSide, contrast, ratio >= 1.0));
     let tint = u.shallowMean * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));

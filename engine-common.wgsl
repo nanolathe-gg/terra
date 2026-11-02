@@ -263,7 +263,6 @@ struct Uniforms {
     shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
     shelfScale: f32,      // size of that wander, world px
     crackedStep: f32,     // Red: depth of the shallow-to-deep step under a cracked-bed stroke (0: the world's own step)
-    crackedContrast: f32, // Red: how much of the cracked bed's light and cracks carry through its tint (0: bedContrast's own, compressed, path)
     bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
     bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
     stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)

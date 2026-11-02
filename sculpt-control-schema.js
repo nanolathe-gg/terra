@@ -106,7 +106,6 @@ export function worldControlRequirement(key,v){
  if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'This world\'s faces are one material, not rock and moss interleaved, so there is nothing for this setting to place.';
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
- if(key==='crackedContrast')return needs('bedLit',LIT_BED);
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
  if(['dither','landDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
@@ -138,7 +137,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','deepEdgeDepth','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
  'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','grooveSpacing','facetTilt','cliffFollow',
- 'shelfWander','bedFlat','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
+ 'shelfWander','bedFlat','bedDots','crackedStep','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceSlate','mineralDetail','iceCrystal','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
