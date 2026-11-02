@@ -8,7 +8,7 @@ window.terraformAudit={
  async select(i){selectNode(i);await this.idle();},
  async edit(i,values){selectNode(i);changeSelected(n=>{n.params={...n.params,...values};});await this.idle();},
  async exportPreview(){mapCanvas.setBusy(false);mapCanvas.zoom('overview');await this.idle();},defaults:toolDefaults,params:strokeParams,fields:SHAPE_FIELDS,knobs:KNOBS,
- get features(){return mapFeatures;},get metadata(){return mapMetadata;},setBusy:on=>mapCanvas.setBusy(on),get config(){return config;},get device(){return renderer.device;},get renderer(){return renderer;},get nodes(){return nodes;},
+ panelValues:worldPanelValues,get features(){return mapFeatures;},get metadata(){return mapMetadata;},setBusy:on=>mapCanvas.setBusy(on),get config(){return config;},get device(){return renderer.device;},get renderer(){return renderer;},get nodes(){return nodes;},
  async control(id,value){const e=$(id);if(e.type==='checkbox')e.checked=Boolean(value);else e.value=String(value);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));await this.idle();},
  async knob(key,value){setKnob(key,value);if(['erosion','erosionAge','erosionRain','erosionEnvelope'].includes(key)){cancelWeather();queueWeather();}await this.idle();},
  async capture(rect={x:0,y:0,width:1024,height:1024},level=1){await this.idle();const t=performance.now(),bitmap=await mapCanvas.debugBake(rect,level);await renderer.device.queue.onSubmittedWorkDone();const ms=performance.now()-t,c=new OffscreenCanvas(rect.width,rect.height),g=c.getContext('2d');g.drawImage(bitmap,0,0,rect.width,rect.height);return {canvas:c,ms};},

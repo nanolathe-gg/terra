@@ -787,3 +787,25 @@ No GPU renders, perf rounds, tests that exercise the renderer, server processes,
 asset writes, deletes, main-checkout edits or image claims were made. This is a
 documentation-only handoff. Validation commands and real exit statuses are in
 the accompanying handoff report.
+
+## H22b sweep: no control went, 55 readings are open
+
+`measure/world_controls.mjs` (H22b) moved every enabled control and found none
+dead, so no row of this document changes. `styleDeposits`, `styleVegetation`,
+`styleExposure` and the paint choices that write them looked dead and were a
+missing flag on the chunk path; they draw now. The tool leaves 17 world keys and 6
+stroke keys on its `OPEN` list, each entry with what is known of its cause and the
+card that settles it, and the list ends empty:
+
+- **H24:** `deepEdge` and its chain (`deepEdgeDepth`, `stepSharp`, `stepSoftPx`,
+  `shelfWander`, `shelfScale`, `shoalRag`), `waterDeep`, `crackedStep`, `waterSoft`,
+  `bandWater`, `shallowDepth`, `deepDepth`, `bedCrackSlope`.
+- **H23:** `styleFace` on deep strokes, `styleRelief` on Lava, `desertCapFlat` on
+  Green, and `lean`, `facing`, `faceVariation` on Desert's plateau.
+- **Small leftovers:** `slopeTexture` on Archipelago, `shineSlopeSharp` and
+  `shineSlopeScale` on Red.
+
+The kept rulings (`terraceBreak`, `crevice`, `bedDots`, `shoalRag`, `shoalGrain`,
+the three kept bundles) were not touched; `bedDots`, `shoalRag` and `shoalGrain`
+now say which control they need (a lit bed, the threshold step), and a water
+stroke's own choice counts.

@@ -100,7 +100,6 @@ struct Uniforms {
     faceSlope: vec2f,
     rockShare: vec2f,
     faceScore: vec4f,
-    faceEdge: f32,
     mossFromGround: f32,
     lightCap: f32,
     shadeDepth: f32,      // share of the directional shading kept (1: all)
@@ -118,7 +117,6 @@ struct Uniforms {
     flatOcclusion: f32,
     slopeTexture: f32,
     landDither: f32,
-    gullyRock: f32,
     waterSoft: f32,
     crispShore: f32,
     bankRock: f32,
