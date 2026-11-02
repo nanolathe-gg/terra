@@ -675,8 +675,7 @@ WORLD_VARIANTS = {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
         # window ice-2: block mean (177,196,247); the default's (220,225,232)).
         # The Ice blocks are Crystals-brush stamps, so their colour is the
-        # world's crystal colour; side faces are that colour times 0.38 times
-        # crystalFace.
+        # world's crystal colour; side faces are that colour times 0.38.
         # Berg faces and tops (card E5): retail's bergs are blue-tinted all over,
         # tops (125,150,236) darker than the lit faces (177,201,251), so the
         # variant's ground, slope cover and rock take those colours (the berg
@@ -689,7 +688,7 @@ WORLD_VARIANTS = {
                       # relief to .35 / .4: the owner found ice-2 too rough, and its 3x3 high-pass was 17.5 against retail's 11.7, now 13).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3, microRock=0,
+                      knobs=dict(crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3, microRock=0,
                                  # Card G6: the world's soft slate block look is not the berg's.
                                  iceSoft=0, iceSnow=0, iceFall=0, iceApron=0,
                                  # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
