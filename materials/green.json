@@ -1990,12 +1990,7 @@
    "transition": "soil",
    "material": "varied",
    "scree": "70",
-   "shade": "separate",
-   "flowTint": "1",
-   "flowShallow": "0.85",
-   "flowStreak": "0.5",
-   "flowStreakLen": "140",
-   "flowBank": "0.9"
+   "shade": "separate"
   },
   "column": {
    "sections": [

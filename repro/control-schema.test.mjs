@@ -117,10 +117,30 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
  shows('shoalBump',{bedLit:1,deepEdge:1});
  shows('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2});
+ // a picked Shallow water or Deep water color: the bed's rows draw nothing, the lit bed itself only through the hard step's palette dither
+ for(const k of ['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'])assert.match(requirement(k,{bedLit:1,waterColored:1}),/Shallow water or Deep water color/);
+ assert.match(requirement('shoalBump',{bedLit:1,deepEdge:1,waterColored:1}),/Colors/);
+ assert.match(requirement('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2,waterColored:1}),/Colors/,'inherited from Lit bumps');
+ assert.match(requirement('bedLit',{waterColored:1,deepEdge:0,dither:2}),/Colors/);
+ assert.match(requirement('bedLit',{waterColored:1,deepEdge:1,dither:2,paletteMix:1}),/Colors/);
+ shows('bedLit',{waterColored:1,deepEdge:1,dither:2});
+ shows('bedTint',{waterColored:0,bedLit:1});
+ // Sampled slope texture: the sediment transition replaces the slope color at full Material weathering; the slope group's lobe rows need a share
+ assert.match(requirement('slopeTexture',{slopeReplaced:1}),/Material weathering/);
+ shows('slopeTexture',{slopeReplaced:1,shineSlope:.5});
+ shows('slopeTexture',{slopeReplaced:0});
+ for(const k of ['shineSlope','shineSlopeRough','shineSlopeSharp','shineSlopeScale'])assert.match(requirement(k,{shineSlope:1,shineSlopeRough:1,slopeTexture:0,microRock:0}),/Sampled slope texture/);
+ assert.equal(requirement('shineSlopeGate',{shineSlope:1,slopeTexture:0,microRock:0}),requirement('shineSlopeGate',{}),'a slope group with no share is not a material shining');
+ shows('shineSlopeGate',{shineSlope:1,slopeTexture:.3,microRock:0});
+ shows('shineSlopeSharp',{shineSlope:1,slopeTexture:.3,microRock:0});
+ shows('shineSlopeSharp',{shineSlope:1,slopeTexture:0,microRock:1});
+ shows('shineSlopeScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1,microRock:0});
+ assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss/);
+ shows('shineRockSharp',{shineRock:1,slopeTexture:0,microRock:0});
  // one water colour, or a third that follows the depth: the step shows only where something draws its deep share
  assert.match(requirement('deepEdge',{waterTones:1}),/one colour/);
  assert.match(requirement('deepEdge',{waterTones:3}),/third colour/);
- for(const lit of [{bedLit:.5},{crystalShallow:1},{waterTinted:1}])shows('deepEdge',{waterTones:1,...lit});
+ for(const lit of [{bedLit:.5},{crystalShallow:1}])shows('deepEdge',{waterTones:1,...lit});
  shows('deepEdge',{waterTones:2});
  assert.match(requirement('shelfWander',{waterTones:1,deepEdge:1}),/one colour/,'a parent that is itself idle names its own reason');
  shows('shelfWander',{waterTones:1,deepEdge:1,bedLit:1});
@@ -138,6 +158,9 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.equal(available('waterDeep','deep',{waterBed:1,world:{waterTones:1}}),true);
  assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterTones:3,bedLit:1}}),true);
  assert.equal(available('waterDeep','shallow',{waterBed:0,world:{waterTones:2}}),true);
+ // under a picked water color Lit bed and Noise water need the hard step, but Cracked bed still draws, so a stroke's bed row stays
+ assert.equal(available('waterBed','deep',{waterDeep:2,world:{waterColored:1,waterTones:2}}),true);
+ assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterColored:1,waterTones:2}}),true,'a picked color makes two tones, so a stroke\'s edge shows');
  // facts of the world's material the panel passes in with the settings
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});

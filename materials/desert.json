@@ -1452,12 +1452,7 @@
    "transition": "mineral",
    "material": "single",
    "scree": "0",
-   "shade": "separate",
-   "flowTint": "1",
-   "flowShallow": "0.85",
-   "flowStreak": "0.5",
-   "flowStreakLen": "140",
-   "flowBank": "0.9"
+   "shade": "separate"
   },
   "column": {
    "colors": [[189, 140, 108], [190, 198, 185], [150, 144, 128], [175, 111, 90], [118, 115, 112]],

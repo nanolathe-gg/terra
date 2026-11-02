@@ -94,7 +94,8 @@ const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter'];
 // Card E1 adds five more: the water choices of a deep or shallow stroke (shore
 // edge, shallow-to-deep edge, bed; +127 hard / lit bed, -127 faded / noise
 // water), painted ground lumps (+127 more, -127 fewer) and the cracked-bed flag.
-// Planes 14-24 are unused placeholders (the flow bake's planes 20-24 went with it); the layout stays as the shaders read it.
+// Planes 0-17 are in use (14-17 are the override planes); 18-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
+// words a cell (28 planes), so the layout stays as they and the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
 const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
@@ -300,7 +301,7 @@ function showTool(state={},kind=tool) {
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
-  const picks=JSON.stringify(strokeWaterPicks());if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice wakes or idles world rows
+  const picks=JSON.stringify([strokeWaterPicks(),slopeReplaced()]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice, or the transition replacing the slope color, wakes or idles world rows
   const featureActive=Boolean(mapFeatures?.active);
   for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&b.dataset.tool===tool));
   $('feature-tool').setAttribute('aria-pressed',String(featureActive));
@@ -1484,7 +1485,7 @@ function buildWorldPanel() {
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
     const [box,pick]=row.querySelectorAll('input');
-    const apply=() => { if (box.checked) world.colors[key]=pick.value; else if (config.colors?.[key]) world.colors[key]=null; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); markViewChanged(); schedule(); };
+    const apply=() => { if (box.checked) world.colors[key]=pick.value; else if (config.colors?.[key]) world.colors[key]=null; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
     box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
     rows.append(row);
   }
@@ -1499,7 +1500,7 @@ function buildWorldPanel() {
     if (!mergedColors().ground && renderer.means.ground) { world.colors={...world.colors,ground:hexColor(renderer.means.ground)}; saveWorlds(); }
     setKnob('groundPattern',$('ground-pattern').value);
   };
-  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); renderer.setColors(worldColors()); markViewChanged(); schedule(); };
+  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
   $('world-new').onclick=() => {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
@@ -1513,7 +1514,7 @@ function buildWorldPanel() {
       const data=JSON.parse(await $('world-file').files[0].text()),w=data?.world;
       if (data?.format!=='nanolathe-map-world' || !w || typeof w.name!=='string' || !(w.base in (config.biomes||{}))) throw new Error('Not a world file for a world this server has.');
       const id=w.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
-      worlds[id]={name:w.name,base:w.base,flowColors:(Array.isArray(w.flowColors)?w.flowColors:[]).filter(v => /^#[0-9a-f]{6}$/i.test(v)).slice(0,12),colors:Object.fromEntries(Object.entries(w.colors||{}).filter(([,v]) => v===null || /^#[0-9a-f]{6}$/i.test(v))),knobs:Object.fromEntries(Object.entries(w.knobs||{}).map(([k,v]) => [k,String(v)]))};
+      worlds[id]={name:w.name,base:w.base,colors:Object.fromEntries(Object.entries(w.colors||{}).filter(([,v]) => v===null || /^#[0-9a-f]{6}$/i.test(v))),knobs:Object.fromEntries(Object.entries(w.knobs||{}).map(([k,v]) => [k,String(v)]))};
       saveWorlds(); goToWorld(w.base,id);
     } catch (err) { error(err.message); }
   };
@@ -1580,15 +1581,20 @@ function strokeWaterPicks() {
   const water=nodes.filter(n=>['deep','shallow'].includes(n.kind)),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
   return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2),bedLit:picked('waterBed',1,3),crackedBed:picked('waterBed',3)};
 }
-// How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2.
+// A Shallow water or Deep water base color picked in the Colors panel: the water is then two flat tones, whatever the world's own (engine-frag.wgsl skips the lit bed and the third colour).
+function waterColored() { const c=worldColors(); return Boolean(c.shallow||c.deep); }
+// How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2; a picked base color makes it 2.
 function waterTones() {
   const w=config.water||{};
+  if(waterColored())return 2;
   return w.midRGB&&config.material?.midDepth?3:w.shallow===w.deep&&String(w.shallowRGB)===String(w.deepRGB)?1:2;
 }
+// engine-frag.wgsl's sediment transition: at full Material weathering its color (built from the ground, before the slope cover is mixed in) replaces the slope cover's outright.
+function slopeReplaced() { const own=renderer.variant; return Boolean(renderer.transitionBody&&config.material?.groundFringe===true&&weatherOn()&&own.get('deposits')!=='off'&&own.get('transition')==='mineral'&&own.get('margins')!=='slope'&&Number($('material-weathering').value)>=100); }
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 function worldPanelValues() {
   const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),waterTinted:own.water==='tinted'?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),waterColored:waterColored()?1:0,slopeReplaced:slopeReplaced()?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);

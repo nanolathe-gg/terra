@@ -40,7 +40,6 @@ struct Uniforms {
     quantize: i32,
     shapeCoverage: i32,
     ledgeCoverage: i32,
-    nativeShallows: i32,
     diagnosticView: i32,   // GLSL uDiagnostic (diagnostic is a WGSL keyword)
     separateLight: i32,
     faceFill: f32,
@@ -268,14 +267,6 @@ struct Uniforms {
     ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
     ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
     bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
-    // F1 (flow bake): the current and the sediment it carries (mask planes 20-24).
-    flowOn: i32,          // 1 once any cell carries a baked current or sediment; 0 skips every read of it
-    flowTint: f32,        // how far a full concentration of sediment replaces the water's colour
-    flowShallow: f32,     // the share of that tint kept in the shallowest water (1: tinted alike at every depth)
-    flowStreak: f32,      // contrast of the streaks the current draws (0: none)
-    flowStreakLen: f32,   // length of a streak, world px
-    flowBank: f32,        // how strongly sediment tints the banks it reaches
-    sedimentColors: array<vec4f, 3>,   // rgb of the three sediments the bake carries (set by the bake's node)
     // E10 (Lava).
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
     shineSlopeGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)

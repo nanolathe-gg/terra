@@ -2688,12 +2688,7 @@
    "transition": "soil",
    "material": "single",
    "scree": "0",
-   "shade": "separate",
-   "flowTint": "1",
-   "flowShallow": "0.85",
-   "flowStreak": "0.5",
-   "flowStreakLen": "140",
-   "flowBank": "0.9"
+   "shade": "separate"
   },
   "colors": {
    "rock": "#3d5174"

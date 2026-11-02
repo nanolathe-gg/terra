@@ -7,7 +7,7 @@ import {materialRows,tablePlacementRows,PLACEMENT_ROW} from './sculpt-material-m
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
-// Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
+// Layers of the masks texture array (4 planes each): the plane count divided by 4. Planes 0-17 are in use, 18-24 are unused (see MASK_KEYS in sculpt.js).
 const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
@@ -167,15 +167,15 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', tableUrl.replace(/^\//, ''), 'engine-palette.wgsl', 'materials/palette.json'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl.replace(/^\//, ''), 'engine-palette.wgsl', 'materials/palette.json'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelTable = extra[2];
-    this.paletteSource = extra[3];
-    this.paletteColours = JSON.parse(extra[4]).colours;
+    const modelTable = extra[1];
+    this.paletteSource = extra[2];
+    this.paletteColours = JSON.parse(extra[3]).colours;
     this.materialsSource = extra[0];
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
@@ -196,7 +196,7 @@ export class TerrainRenderer {
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile('engine-frag.wgsl', preprocess(frag + '\n' + extra[1], common, defines)),
+      compile('engine-frag.wgsl', preprocess(frag, common, defines)),
       compile('engine-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
@@ -302,7 +302,6 @@ export class TerrainRenderer {
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
     this.i('uCoastalDetail', variant.get('shore') !== 'smooth');
-    this.i('uNativeShallows', variant.get('water') !== 'tinted');
     this.i('uLayered', ['layers', 'terraces'].includes(variant.get('geology')));
     this.i('uTerraced', variant.get('geology') === 'terraces');
     const material = this.config.material || {};
@@ -597,11 +596,7 @@ export class TerrainRenderer {
     this.i('uOverrideOn', painted.slice(14, 18).some(Boolean) ? 1 : 0);   // H3: planes 14-17 (erosion, deposits, vegetation, exposure)
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
-    this.i('uFlowOn', painted.slice(20, 25).some(Boolean) ? 1 : 0);
   }
-
-  // The sediment colours of the flow bake (card F1): up to three [r,g,b] in 0..1.
-  setSediment(colors) { this.set('uSedimentColors', [0, 1, 2].map(i => [...(colors?.[i] || [0, 0, 0]), 1])); }
 
   setMaterialField(field) {
     const bytes=new Uint8Array(this.grid*this.grid*4);
@@ -861,7 +856,9 @@ export class TerrainRenderer {
       const knob = (suffix, fallback) => variant.has(`shine${m}${suffix}`) ? Number(variant.get(`shine${m}${suffix}`)) : fallback;
       return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
     });
-    this.i('uShineOn', shine.some(m => m[0] > 0 || m[2] > 0));
+    // With no slope cover and faces of one material the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
+    const slopeShare = Number(variant.get('slopeTexture') ?? 0.3) > 0 || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
+    this.i('uShineOn', shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
     this.set('uShine', shine);
@@ -954,12 +951,6 @@ export class TerrainRenderer {
     this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
     this.f('uFaceRelief', variant.has('faceRelief') ? Number(variant.get('faceRelief')) : 1);
     this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);
-    // Flow bake (card F1): only read where a bake wrote planes 20-24 (uFlowOn).
-    this.f('uFlowTint', variant.has('flowTint') ? Number(variant.get('flowTint')) : 1);
-    this.f('uFlowShallow', variant.has('flowShallow') ? Number(variant.get('flowShallow')) : 0.85);
-    this.f('uFlowStreak', variant.has('flowStreak') ? Number(variant.get('flowStreak')) : 0.5);
-    this.f('uFlowStreakLen', variant.has('flowStreakLen') ? Number(variant.get('flowStreakLen')) : 140);
-    this.f('uFlowBank', variant.has('flowBank') ? Number(variant.get('flowBank')) : 0.9);
     // E6: shine roughness gate and headroom (0: the earlier shine exactly).
     this.f('uShineGate', variant.has('shineGate') ? Number(variant.get('shineGate')) : 0);
     this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
