@@ -39,7 +39,7 @@ const OPEN = {
   shelfWander: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shelfScale: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shoalRag: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  waterDeep: {worlds: ['crystal', 'ice', 'lava', 'moon', 'zhon'], kinds: ['deep', 'shallow'], note: 'a stroke\'s edge choice, as deepEdge'},
+  waterDeep: {worlds: ['crystal', 'ice', 'lava', 'moon', 'zhon'], kinds: ['deep', 'shallow'], note: 'a stroke\'s edge choice: as deepEdge on ice, lava, moon, zhon; crystal not traced, its deepEdge moves'},
   crackedStep: {worlds: ['crystal', 'ice', 'zhon'], note: 'third colour; moves in green, archipelago, red'},
   // H24. The threshold step reads no colorDepth, and with deepEdgeDepth above 0 neither depth; a stroke's Faded edge brings them back, so a gate needs that pick first.
   waterSoft: {worlds: ['green', 'lava', 'moon', 'red'], note: 'green, red: threshold step; lava, moon: one water colour'},
