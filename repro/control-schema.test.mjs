@@ -120,7 +120,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  // one water colour, or a third that follows the depth: the step shows only where something draws its deep share
  assert.match(requirement('deepEdge',{waterTones:1}),/one colour/);
  assert.match(requirement('deepEdge',{waterTones:3}),/third colour/);
- for(const lit of [{bedLit:.5},{crystalShallow:1},{waterTinted:1}])shows('deepEdge',{waterTones:1,...lit});
+ for(const lit of [{bedLit:.5},{crystalShallow:1}])shows('deepEdge',{waterTones:1,...lit});
  shows('deepEdge',{waterTones:2});
  assert.match(requirement('shelfWander',{waterTones:1,deepEdge:1}),/one colour/,'a parent that is itself idle names its own reason');
  shows('shelfWander',{waterTones:1,deepEdge:1,bedLit:1});

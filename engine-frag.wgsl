@@ -1753,7 +1753,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
         let grain = genColor(u.waterLayer, pixel) - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
-        if (u.nativeShallows != 0 && u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
+        if (u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
             var shallow = genColor(u.shallowLayer, pixel);
             let deepWater = genColor(u.waterLayer, pixel);
             // The lit bed: the ground under the water, lit by the same sun and

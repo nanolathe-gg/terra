@@ -40,7 +40,6 @@ struct Uniforms {
     quantize: i32,
     shapeCoverage: i32,
     ledgeCoverage: i32,
-    nativeShallows: i32,
     diagnosticView: i32,   // GLSL uDiagnostic (diagnostic is a WGSL keyword)
     separateLight: i32,
     faceFill: f32,

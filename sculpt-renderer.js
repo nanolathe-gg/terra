@@ -302,7 +302,6 @@ export class TerrainRenderer {
     this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
     this.i('uCoastalDetail', variant.get('shore') !== 'smooth');
-    this.i('uNativeShallows', variant.get('water') !== 'tinted');
     this.i('uLayered', ['layers', 'terraces'].includes(variant.get('geology')));
     this.i('uTerraced', variant.get('geology') === 'terraces');
     const material = this.config.material || {};
