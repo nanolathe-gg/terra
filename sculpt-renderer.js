@@ -942,7 +942,6 @@ export class TerrainRenderer {
     this.f('uHillLight', variant.has('hillLight') ? Number(variant.get('hillLight')) : 1);
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
-    this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
     // Card E8 (Painted Desert); 0 is every world as it was.
     this.f('uBaseBand', variant.has('baseBand') ? Number(variant.get('baseBand')) : 0);
     this.f('uBaseBandLow', variant.has('baseBandLow') ? Number(variant.get('baseBandLow')) : 4);

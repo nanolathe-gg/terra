@@ -70,7 +70,7 @@ KNOB_DEFAULTS = dict(
     # 1 or 2; the world knobs default to the earlier noise water, a ramp from
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
-    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=4,
+    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
@@ -245,8 +245,8 @@ WORLD_KNOBS = {
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
-                  # grid upsampled), so the step sits at 40 and nothing fades.
-                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=1, deepEdge=1, deepEdgeDepth=40,
+                  # grid upsampled), so the step sits at 40 (H24: the midpoint, 42) and nothing fades.
+                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=1, deepEdge=1,
                   # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
                   # lumps only in patches, which the Paint brush's Ground lumps makes. On
                   # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
@@ -348,7 +348,7 @@ WORLD_KNOBS = {
     # the directional share to 0.3 with a lift of the hill cover).
     # Water (card E1): the shallows are the lit sand bed under a blue tint. Their
     # edge is a fade by default (retail's halo round an island and its reef bars
-    # fade over 30-40 px); a stroke may set a hard step, which sits at depth 20.
+    # fade over 30-40 px); a stroke may set a hard step, which sits at the midpoint, depth 18 (20 before H24).
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, flatBank=1,
                         undulation=0, shadeDepth=.3,
                         # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
@@ -358,7 +358,7 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1.25, ringFade=1,
-                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20,
+                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
                         # E11 (round 7 report: "weird black/dark lines around the hills" and "more
                         # noticeable circle features in the red fringe"): the dark lines were the
                         # first band risers on the hill's foot (banding 0 removes them, crack knobs do

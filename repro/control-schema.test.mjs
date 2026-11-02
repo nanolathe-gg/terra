@@ -110,8 +110,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  // water: the lit bed, the hard step, the threshold step
  assert.match(requirement('bedDots',{bedLit:0}),/Lit bed/);
  shows('bedDots',{bedLit:.5});
- assert.match(requirement('deepEdgeDepth',{deepEdge:0}),/Hard shallow-to-deep step/);
- shows('deepEdgeDepth',{deepEdge:1});
  assert.match(requirement('shelfWander',{deepEdge:0}),/Hard shallow-to-deep step/);
  shows('shelfWander',{deepEdge:1});
  assert.match(requirement('shoalBump',{bedLit:1,deepEdge:0}),/Hard shallow-to-deep step/);

@@ -215,7 +215,6 @@ struct Uniforms {
     bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)
     bedRelief: f32,       // bed lumps (bake): faint embossed relief under shallow water, 0: none
     deepEdge: f32,        // shallow-to-deep step: 0 the depth ramp, 1 a hard step with ragged stairs
-    deepEdgeDepth: f32,   // depth of the hard step (0: the ramp's midpoint)
     waterOn: i32,         // 1 once any cell carries a painted water edge or bed choice (planes 9-11)
     lumpOn: i32,          // 1 once any cell carries painted ground lumps (plane 12)
     lumpRelief: f32,      // height of a fully painted lump field, in the units of plainRelief
