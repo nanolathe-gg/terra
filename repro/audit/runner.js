@@ -19,7 +19,7 @@ function shapeContext(key,kind){
  if(key.startsWith('fissureBranch'))p.fissureBranches=3;
  if(key==='fissureCell')p.fissureNetwork=1;
  if(key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore'))Object.assign(p,{shorePlates:1,plateMaterial:key.startsWith('frost')?2:1,plateWaterPx:100,plateLandPx:120,plateSize:40,plateGap:5,plateHeight:7});
- if(key.startsWith('finger'))Object.assign(p,{fingers:1,fingerAmount:1,fingerSize:1,fingerSpread:.5});
+ if(key.startsWith('finger'))Object.assign(p,{fingers:1,fingerAmount:1,fingerSize:1});
  if(key.startsWith('layer')||key.startsWith('lava')||key==='shoreLayers')Object.assign(p,{shoreLayers:5,layerPx:22,layerRiser:4,layerLedge:.7,layerRough:.5,layerVary:.4,layerStyle:key.includes('Circle')||key==='layerCircle'?1:0});
  if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))Object.assign(p,{crystalForm:1,crystalSize:32});
  if(key.startsWith('berg')||key==='crystalAlign')Object.assign(p,{crystalForm:2,crystalSize:200,crystalCount:3,bergTilt:.3});

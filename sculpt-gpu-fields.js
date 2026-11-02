@@ -50,7 +50,7 @@ const NODE_FIELDS = [
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'leanK', 'bearX', 'bearY', 'leanSide', 'wK', 'wLo', 'wHi', 'hgtA', 'hgtB', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'facePx', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSpread', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
+    'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'facePx', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'coFLow', 'cfAmount', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -478,7 +478,7 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, fac
       plMat: plates ? (q.plateMaterial >= 1.5 ? 2 : 1) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plSeam: q.crystalShoreSeam ?? .5, plVary: q.plateVary ?? 0, plNeedles: q.frostNeedles ?? 0,
       frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
       coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius * bankScale / 140, .35, 1), coFLow: q.fingerHeight, coFlatOn: flat ? 1 : 0,
-      cfAmount: q.fingerAmount ?? 1, cfSpread: q.fingerSpread ?? .5, cfSize: q.fingerSize ?? 1,
+      cfAmount: q.fingerAmount ?? 1, cfSize: q.fingerSize ?? 1,
       coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: clamp(q.lavaMeander || 0, 0, 3),
       coLReach: lReach, coRiser: q.layerRiser > 0 ? q.layerRiser : 0, coScal: scal ? 1 : 0, coRc: Rc, coCV: cv, coRs: 1.4 * Rc + cv * .1 * Rc + n * W * (1 + .45 * cv) + spacing,
       coSI0: sites.i0, coSJ0: sites.j0, coSNI: sites.ni, coSNJ: sites.nj, coBx0: box.x0, coBy0: box.y0, coBx1: box.x1, coBy1: box.y1,

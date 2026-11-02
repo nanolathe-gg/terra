@@ -71,7 +71,7 @@ const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ri
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
 const KIND_AT = {plateau: [130, 170], offset: [380, 170], hill: [630, 170], mountain: [880, 170], deep: [130, 500], shallow: [380, 500], crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830]};
 // The panel hides these until their switch is above 0 (updateControls in sculpt.js).
-const GATE = {layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerAmount: 'fingers', fingerSize: 'fingers', fingerSpread: 'fingers', fingerHeight: 'fingers',
+const GATE = {layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerAmount: 'fingers', fingerSize: 'fingers', fingerHeight: 'fingers',
   spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaMeander: 'shoreLayers', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
@@ -281,7 +281,7 @@ try {
       if (key.startsWith('fissureBranch')) p.fissureBranches = 3;
       if (key === 'fissureCell') p.fissureNetwork = 1;
       if (key.startsWith('plate') || key === 'shorePlates' || key.startsWith('frost') || key.startsWith('crystalShore')) Object.assign(p, {shorePlates: 1, plateMaterial: key.startsWith('frost') ? 2 : 1, plateWaterPx: 100, plateLandPx: 120, plateSize: 40, plateGap: 5, plateHeight: 7});
-      if (key.startsWith('finger')) Object.assign(p, {fingers: 1, fingerAmount: 1, fingerSize: 1, fingerSpread: .5});
+      if (key.startsWith('finger')) Object.assign(p, {fingers: 1, fingerAmount: 1, fingerSize: 1});
       if (key.startsWith('layer') || key.startsWith('lava') || key === 'shoreLayers') Object.assign(p, {shoreLayers: 5, layerPx: 22, layerRiser: 4, layerLedge: .7, layerRough: .5, layerVary: .4, layerStyle: key.includes('Circle') || key === 'layerCircle' || key === 'lavaCircleVary' ? 1 : 0});
       if (['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar', 'crystalSmooth'].includes(key)) Object.assign(p, {crystalForm: 1, crystalSize: 32});
       if (key.startsWith('berg') || key === 'crystalAlign') Object.assign(p, {crystalForm: 2, crystalSize: 200, crystalCount: 3, bergTilt: .3});
