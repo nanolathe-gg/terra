@@ -75,8 +75,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('rockFrom',{rockOrder:1});
  assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
- assert.match(requirement('facetSize',{rockOrder:1,facetTilt:0}),/Facet tilt/);
- shows('facetSize',{rockOrder:1,facetTilt:.5});
+ assert.match(requirement('facetCoarse',{rockOrder:1,facetTilt:0}),/Facet tilt/);
+ shows('facetCoarse',{rockOrder:1,facetTilt:.5});
  assert.match(requirement('cliffFine',{rockOrder:1,cliffFollow:1,facetTilt:0}),/Facet tilt/);
  assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledge above zero/);

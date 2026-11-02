@@ -258,10 +258,6 @@ struct Uniforms {
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
     facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
-    facetSize: f32,       // facet height, world px
-    facetStretch: f32,    // facet width as a multiple of its height
-    facetStep: f32,       // step between neighbouring facets, height units
-    facetSeam: f32,       // how dark the creases between facets are (0: lit like the facets)
     facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     stepSharp: f32,       // Green, Red: the shallow-to-deep step is a true threshold, ragged by pixels (0: the earlier smoothed step)

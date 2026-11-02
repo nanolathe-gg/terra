@@ -627,11 +627,13 @@ fn facetLevel(p: vec2f, F: f32, stretch: f32, tilt_: f32, step_: f32, salt: f32)
     return vec2f(dot(tilt, (q - n.point) * size) + step, seam);
 }
 fn facetField(p: vec2f) -> vec2f {
-    let F = max(u.facetSize, 2.0);
-    var f = facetLevel(p, F, u.facetStretch, u.facetTilt, u.facetStep, 0.0);
-    if (u.facetCoarse > 0.0) { f.x += facetLevel(p + vec2f(31.0, 17.0), F * 2.4, u.facetStretch, u.facetTilt * u.facetCoarse, u.facetStep * u.facetCoarse, 133.0).x; }
+    // H23: the facets are cut at the rock blocks' size (blockRow tall, blockWidth wide), step (blockStep) and crease darkness (blockSeam).
+    let F = max(u.blockRow, 2.0);
+    let stretch = u.blockWidth / F;
+    var f = facetLevel(p, F, stretch, u.facetTilt, u.blockStep, 0.0);
+    if (u.facetCoarse > 0.0) { f.x += facetLevel(p + vec2f(31.0, 17.0), F * 2.4, stretch, u.facetTilt * u.facetCoarse, u.blockStep * u.facetCoarse, 133.0).x; }
     // G2: a third level at 0.45 of the fine one's size, for the small bumps that retail's pieces carry.
-    if (u.cliffFine > 0.0) { f.x += facetLevel(p + vec2f(11.0, 47.0), F * 0.45, u.facetStretch, u.facetTilt * u.cliffFine, u.facetStep * u.cliffFine, 211.0).x; }
+    if (u.cliffFine > 0.0) { f.x += facetLevel(p + vec2f(11.0, 47.0), F * 0.45, stretch, u.facetTilt * u.cliffFine, u.blockStep * u.cliffFine, 211.0).x; }
     return f;
 }
 
@@ -1304,7 +1306,7 @@ fn bake(p: vec2f) -> vec4f {
     lineDark = max(lineDark, crustDark);
     lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
-    lineDark = max(lineDark, facetSeam * u.facetSeam * (1.0 - buried));
+    lineDark = max(lineDark, facetSeam * u.blockSeam * (1.0 - buried));
     lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));
     if (u.sandBanding > 0.0) {
         // Sand bars (sandCrown) are smooth rippled sand, not streaked dune slopes.

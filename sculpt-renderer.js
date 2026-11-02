@@ -1118,10 +1118,6 @@ export class TerrainRenderer {
     set('uRibTilt', number('ribTilt', 0));
     set('uBedPunch', number('bedPunch', 0));
     set('uFacetTilt', number('facetTilt', 0));
-    set('uFacetSize', number('facetSize', 6));
-    set('uFacetStretch', number('facetStretch', 1.5));
-    set('uFacetStep', number('facetStep', 1));
-    set('uFacetSeam', number('facetSeam', 0));
     set('uFacetCoarse', number('facetCoarse', 0));
     // G2 (rock faces follow the slope).
     set('uCliffFollow', number('cliffFollow', 0));
