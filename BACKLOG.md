@@ -8109,6 +8109,23 @@ trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 - *Left alone, as ruled.* `joint*`, `gully*`, `crack*`, `bed*` other than `bedFlow` and `bedMottle*`, `finger*`, `layer*`, the water step; `terraceBreak`, `crevice`, `bedDots`, `shoalRag`, `shoalGrain`. After the removals: `bandSoftness`, `bandWater` and `sandBanding` remain the Contour bands group with `banding`; `cliffStagger` and the `joint*` family read as one idle chain at `jointDepth` 0 (Green), which the merge cards will see; `lava-3.json` still carries `hillLobes` and `hillSteps` stroke options that nothing reads (scenes are not edited).
 
 
+### H22b. Every control does something, or says why not
+
+> **Owner, 2026-11-01:** "Let's make sure we also update the UI after the removals so there are no dead or semi-working controls."
+
+**Why.** H22 proved each row has a reader, not that moving it changes anything. The panel lists every control and disables an idle one with a reason, so a row that is enabled and does nothing is a defect: it is either waiting on something it does not name, or dead.
+
+**The build.**
+1. `measure/world_controls.mjs`: in each of the nine worlds, on one page load, move every enabled world control, every available shape option and the page's sliders low to high, on a fixture that holds the features, and report what changes. An unexplained exact 0 fails it.
+2. The first sweep, kept as evidence.
+3. Each exact 0 sorted, by a real check: it needs a named control (a requirement line and a node test), a painted or stroke path keeps it alive (the row stays enabled and the fixture proves it), or it is dead and goes whole. The eight kept rulings never go; `crevice` stays parked.
+4. Rows that move under 8 at most: a list for the owner, nothing changed.
+5. The tool joins the checks in "Ground rules (every card)", so H23 and H24 cannot leave a control half-alive.
+
+**The bar.** No pixel moves: 27 scenes 0.00 against main. Every disabled row gives a reason a user can act on, and comes back when its parent is set.
+
+**Server and guard:** port 8885, CDP 9685; baseline 8886, 9686; worktree `../terraform-wt-H22b`, branch `H22b-sweep`; assets `$R/agent-H22b`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
