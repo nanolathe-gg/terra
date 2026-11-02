@@ -129,7 +129,9 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('slopeTexture',{slopeReplaced:1}),/Material weathering/);
  shows('slopeTexture',{slopeReplaced:1,shineSlope:.5});
  shows('slopeTexture',{slopeReplaced:0});
- assert.match(requirement('shineSlopeSharp',{shineSlope:1,slopeTexture:0,microRock:0}),/Sampled slope texture/);
+ for(const k of ['shineSlope','shineSlopeRough','shineSlopeSharp','shineSlopeScale'])assert.match(requirement(k,{shineSlope:1,shineSlopeRough:1,slopeTexture:0,microRock:0}),/Sampled slope texture/);
+ assert.equal(requirement('shineSlopeGate',{shineSlope:1,slopeTexture:0,microRock:0}),requirement('shineSlopeGate',{}),'a slope group with no share is not a material shining');
+ shows('shineSlopeGate',{shineSlope:1,slopeTexture:.3,microRock:0});
  shows('shineSlopeSharp',{shineSlope:1,slopeTexture:.3,microRock:0});
  shows('shineSlopeSharp',{shineSlope:1,slopeTexture:0,microRock:1});
  shows('shineSlopeScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1,microRock:0});
@@ -156,6 +158,9 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.equal(available('waterDeep','deep',{waterBed:1,world:{waterTones:1}}),true);
  assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterTones:3,bedLit:1}}),true);
  assert.equal(available('waterDeep','shallow',{waterBed:0,world:{waterTones:2}}),true);
+ // under a picked water color Lit bed and Noise water need the hard step, but Cracked bed still draws, so a stroke's bed row stays
+ assert.equal(available('waterBed','deep',{waterDeep:2,world:{waterColored:1,waterTones:2}}),true);
+ assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterColored:1,waterTones:2}}),true,'a picked color makes two tones, so a stroke\'s edge shows');
  // facts of the world's material the panel passes in with the settings
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});

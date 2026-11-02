@@ -1588,9 +1588,9 @@ function waterTones() {
   if(waterColored())return 2;
   return w.midRGB&&config.material?.midDepth?3:w.shallow===w.deep&&String(w.shallowRGB)===String(w.deepRGB)?1:2;
 }
-// What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 // engine-frag.wgsl's sediment transition: at full Material weathering its color (built from the ground, before the slope cover is mixed in) replaces the slope cover's outright.
-function slopeReplaced() { const own=renderer.variant; return Boolean(renderer.transitionBody&&weatherOn()&&own.get('deposits')!=='off'&&own.get('transition')==='mineral'&&own.get('margins')!=='slope'&&Number($('material-weathering').value)>=100); }
+function slopeReplaced() { const own=renderer.variant; return Boolean(renderer.transitionBody&&config.material?.groundFringe===true&&weatherOn()&&own.get('deposits')!=='off'&&own.get('transition')==='mineral'&&own.get('margins')!=='slope'&&Number($('material-weathering').value)>=100); }
+// What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 function worldPanelValues() {
   const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
   return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),waterColored:waterColored()?1:0,slopeReplaced:slopeReplaced()?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};

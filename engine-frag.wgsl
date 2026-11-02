@@ -1155,11 +1155,9 @@ var<private> transitionPower: f32;
 var<private> transitionCore: f32;
 var<private> transitionShared: bool;
 
-// Mineral margins: nearby fractured slopes feed outcrops into their level crown and foot, with the fringe, ring veins and the
-// sediment transition of Red, Painted Desert and Archipelago. It edits the slope cover and, for the shared transition, the
-// private state that joinSedimentTransition finishes.
+// Edits the slope cover and, for the shared transition, leaves the state joinSedimentTransition finishes.
 fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, grass: vec3f, sediments: vec4f, brokenSediments: vec4f,
-                 materialWeather: f32, fringeVariation: f32, slopeGrass: ptr<function, vec3f>, slopeCover: ptr<function, f32>) {
+                      materialWeather: f32, fringeVariation: f32, slopeGrass: ptr<function, vec3f>, slopeCover: ptr<function, f32>) {
     transitionGround = grass; transitionFace = grass; transitionLow = grass; transitionPower = 1.0; transitionCore = 0.0; transitionShared = false;
     if (u.mineralMargins == 0) { return; }
     var cover = mineralMargin(p, slope, n);
@@ -1255,8 +1253,7 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
     }
 }
 
-// The shared transition's one join to warm mineral and sand: exposed rock
-// belongs inside the face family and cannot repaint a second hard perimeter.
+// The shared transition's one join to warm mineral and sand: exposed rock belongs inside the face family and cannot repaint a second hard perimeter.
 fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f32, materialWeather: f32) -> vec3f {
     if (!transitionShared) { return material; }
     let face = mix(transitionFace, rock, exposed);

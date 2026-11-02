@@ -9,9 +9,10 @@
 // Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885; --assets DIR is that host's assets root: it needs map-catalog.json and features/, as a card's own root has): terraformAudit exists only on that host's ?audit pages.
 // Writes DIR/world-controls.json and prints one row per control and world. Exit 1 on a console error or on an unexplained exact 0, that is a
 // row that reads 0 on every fixture (the world's three scenes, the diagnostic fixture, the painted fixture; stroke rows the second and wide stroke fixtures and
-// Sand over the first) and is on neither list below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
+// Sand over the first) and is not on `ALLOWED` below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
 // stands on every fixture while its reason holds (state "hidden"), which proves the reason true: it fails if the row moves HIDDEN_PX pixels or more,
-// since a wrong gate hides a live control and nothing else would show it. --set puts values in before the sweep, to probe a row under a gate.
+// since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
+// --set puts values in before the sweep, to probe a row under a gate.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {worldControlRequirement, shapeControlAvailable, PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
@@ -30,6 +31,8 @@ const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolea
 const ALLOWED = {};
 // A cancelled term leaves float rounding (Desert's bedSpacing, 1 px), not a control.
 const HIDDEN_PX = 8;
+// The rows a picked water color changes the answer for; no scene picks one, so the sweep does (H25).
+const COLORED_ROWS = new Set(['deepEdge', 'shallowDepth', 'deepDepth', 'waterSoft', 'bandWater', 'bedLit', 'bedTint', 'bedBright', 'bedContrast', 'bedFlat', 'bedDots', 'shoalGrain', 'shoalBump']);
 const reasonFor = r => ALLOWED[(r.stroke ? r.stroke + ':' : '') + r.key] || ALLOWED[r.key] || null;
 const failed = r => (r.zero && !r.allowed) || r.leak || r.hides;
 const named = r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}${r.hides ? ' moves while the panel says "' + r.reason + '"' : ''}`;
@@ -113,6 +116,8 @@ try {
         for (const hi of his) { await A.edit(i, {[key]: hi / scale}); const d = diff(a, await grab(crop)); if (d.max > best.max || (d.max === best.max && d.px > best.px)) best = {...d, hi}; }
         return best;
       },
+      // The Colors panel's own row: a hex picks the color, nothing clears it.
+      pickColor(label, hex) { const [box, pick] = [...document.querySelectorAll('#world-colors .color-row')].find(r => r.firstElementChild.textContent === label).querySelectorAll('input'); if (hex) { pick.value = hex; pick.dispatchEvent(new Event('input', {bubbles: true})); } else { box.checked = false; box.dispatchEvent(new Event('change', {bubbles: true})); } },
       kinds() { return A.nodes.map(n => n.kind); },
       async putBack() { for (let i = 1; i < saved.length; i++) await A.edit(i, saved[i]); },
       // a row is off by its reason line, not its disabled flag: the audit page's busy map disables the rendering switches too
@@ -240,6 +245,26 @@ try {
     }
     for (const r of [...results.values(), ...facts.values()]) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); add(r); }
     stage('zero retries', ts); ts = Date.now();
+    // A Shallow water color, picked through the panel's own row, on a plain scene and on the water picks: a row the panel disables must stay put, one it leaves on must move on one of the two.
+    await ev(`__wc.pickColor('Shallow water', '#c03030')`);
+    const colored = new Map();
+    for (const [fixture, list, ground] of [[fixtures[0][0], fixtures[0][1], fixtures[0][2]], [`${world}-water`, waterPicks(), true]]) {
+      await ev(`__wc.scene(${JSON.stringify(list)}, ${ground})`);
+      const now = await ev('terraformAudit.panelValues()');
+      for (const k of live.filter(k => COLORED_ROWS.has(k.key))) {
+        const reason = worldControlRequirement(k.key, now), m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${k.hi})`), row = {world, type: 'knob', key: k.key, group: k.group, fixture: fixture + ' + color', lo: k.lo, hi: k.hi, ...m};
+        if (reason) { if (m.px >= HIDDEN_PX) add({...row, state: 'hidden', reason, hides: true}); }
+        else if (!colored.has(k.key) || m.max > colored.get(k.key).max) colored.set(k.key, {...row, state: 'colored'});
+      }
+    }
+    // A stroke's edge under the color: H24 hid it on a world of one or three tones, where it draws. waterPicks' third stroke is the faded one, and a ground node leads only where the world's undulation is on.
+    await ev('terraformAudit.setBusy(false)');   // an edit is refused while the map is busy
+    const third = (await ev('__wc.kinds()')).indexOf('deep') + 2, shown = shapeControlAvailable('waterDeep', 'deep', {waterBed: 0, world: await ev('terraformAudit.panelValues()')});
+    const edge = await ev(`__wc.strokePair(${third}, 'waterDeep', {waterDeep: 0}, 0, [1, 2], 1, ${JSON.stringify({x: 40, y: 670, width: 440, height: 180})})`);
+    colored.set('~waterDeep', {world, type: 'shape', stroke: 'deep', key: 'waterDeep', fixture: `${world}-water + color`, state: shown ? 'colored' : 'hidden', reason: shown ? '' : 'hidden under a picked color', hides: !shown && edge.px >= HIDDEN_PX, ...edge});
+    await ev(`__wc.pickColor('Shallow water')`);
+    for (const r of colored.values()) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); add(r); }
+    stage('picked color', ts); ts = Date.now();
     // Stroke options, on the stroke fixture.
     const shapeRows = [];
     for (const f of st.fields) {
