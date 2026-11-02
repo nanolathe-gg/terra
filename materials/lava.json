@@ -1208,12 +1208,7 @@
    "scree": "0",
    "shade": "separate",
    "faceSlope": "1.4,2.2",
-   "rockShare": "0.1,0.8",
-   "flowTint": "1",
-   "flowShallow": "0.85",
-   "flowStreak": "0.5",
-   "flowStreakLen": "140",
-   "flowBank": "0.9"
+   "rockShare": "0.1,0.8"
   },
   "column": {
    "bands": [7, 1]

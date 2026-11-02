@@ -1142,84 +1142,6 @@ fn litBed(bed: vec3f, cracked: bool) -> vec3f {
 // level snow instead of the grey the wet band gives the bank near the sea.
 fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * smoothstep(0.02, 0.04, route)); }
 
-// ---- F1: the current and the sediment it carries (mask planes 20-24; sculpt-flow.js) ----
-// What the bake wrote at p: dir and speed of the current (the planes hold the direction times the
-// square root of the speed, so slow water keeps its direction in a signed byte), and the
-// concentration of each of the three sediments. On land the concentration planes carry the same
-// sediment fading with the distance from the shore, which tints the banks.
-struct FlowSample { dir: vec2f, speed: f32, conc: vec3f }
-fn flowSample(p: vec2f) -> FlowSample {
-    let a = textureSampleLevel(masksTex, linearClamp, maskUv(p), 5, 0.0);
-    let b = textureSampleLevel(masksTex, linearClamp, maskUv(p), 6, 0.0);
-    let m = length(a.xy);
-    var s: FlowSample;
-    s.speed = min(1.0, m * m);
-    s.dir = select(vec2f(1.0, 0.0), a.xy / m, m > 0.01);
-    s.conc = max(vec3f(a.z, a.w, b.x), vec3f(0.0));
-    return s;
-}
-// The colour the carried sediments make together (their colours weighted by concentration), and their total.
-fn sedimentMix(conc: vec3f) -> vec4f {
-    let total = conc.x + conc.y + conc.z;
-    let sum = u.sedimentColors[0].rgb * conc.x + u.sedimentColors[1].rgb * conc.y + u.sedimentColors[2].rgb * conc.z;
-    return vec4f(sum / max(total, 1e-4), total);
-}
-fn flowHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
-fn flowValue(q: vec2f) -> f32 {
-    let i = floor(q);
-    let f = fract(q);
-    let w = f * f * (3.0 - 2.0 * f);
-    return mix(mix(flowHash(i), flowHash(i + vec2f(1.0, 0.0)), w.x), mix(flowHash(i + vec2f(0.0, 1.0)), flowHash(i + vec2f(1.0, 1.0)), w.x), w.y);
-}
-// Streaks along the current: smooth noise averaged along the local flow direction (a short line
-// convolution), so the streaks follow a bending current wherever it goes. -1..1.
-fn flowStreaks(p: vec2f, dir: vec2f) -> f32 {
-    var sum = 0.0;
-    let step = u.flowStreakLen / 6.0;
-    for (var k = -6; k <= 6; k++) {
-        let q = p + dir * (f32(k) * step);
-        sum += 0.65 * flowValue(q / 26.0) + 0.35 * flowValue((q + vec2f(41.0, 17.0)) / 11.0);
-    }
-    return clamp((sum / 13.0 - 0.5) * 4.0, -1.0, 1.0);
-}
-// Water carrying sediment: its colour is moved toward the sediments' own as they thicken (less in
-// the shallows), keeping part of the water's light so grain and lit bed carry through; streaks run
-// along the current, stronger where it is fast.
-fn flowWater(water: vec3f, p: vec2f, deep: f32) -> vec3f {
-    let s = flowSample(p);
-    let sediment = sedimentMix(s.conc);
-    let carry = saturate(sediment.w * 1.1);
-    var out = water;
-    if (sediment.w > 0.003) {
-        let level = dot(water, vec3f(0.299, 0.587, 0.114));
-        let tinted = saturate(sediment.rgb * (0.8 + (level - 0.2) * 0.6));
-        out = mix(water, tinted, carry * u.flowTint * mix(u.flowShallow, 1.0, deep));
-    }
-    if (u.flowStreak > 0.0 && s.speed > 0.02) {
-        let streak = flowStreaks(p, s.dir) * u.flowStreak * smoothstep(0.04, 0.5, s.speed);
-        out *= 1.0 + 0.45 * streak * (0.6 + 0.4 * carry);
-    }
-    return out;
-}
-// Banks where the sediment reaches the shore: the stain the bake left on land, broken up by the
-// same kind of noise as a painted mask's edge, thinner on sand (bars and beaches), keeping the
-// ground's own light.
-fn flowBank(color: vec3f, p: vec2f) -> vec3f {
-    let s = flowSample(p);
-    let sediment = sedimentMix(s.conc);
-    if (sediment.w < 0.01) { return color; }
-    let lobes = terrainNoise(p * 0.07 + vec2f(11.0, 47.0)).b - 0.5 + (terrainNoise(p * 0.45 + vec2f(5.0, 91.0)).r - 0.5) * 0.6;
-    let grain = terrainNoise(p * 1.7 + vec2f(37.0, 13.0)).g + terrainNoise(p * 5.0 + vec2f(8.0, 71.0)).a * 0.6 - 0.8;
-    let held = smoothstep(0.02, 0.2, sediment.w);
-    let stain = smoothstep(0.12, 0.45, sediment.w * 1.5 + (lobes * 0.9 + grain * 0.7) * held) * u.flowBank;
-    let sand = max(smoothstep(0.35, 0.95, bakedFields(p).a), barCover(p));
-    let level = dot(color, vec3f(0.299, 0.587, 0.114));
-    let tinted = saturate(sediment.rgb * (0.55 + level * 2.2));
-    // Only low ground: the raised sand bars and hills in the water are not stained.
-    let low = 1.0 - smoothstep(22.0, 38.0, baseHeight(p) - u.sea);
-    return mix(color, tinted, saturate(stain * (1.0 - 0.85 * sand) * low));
-}
-
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -1791,7 +1713,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             color = min(color * (1.0 + 0.2 * away * gate * lines.y), max(color, material * 0.9));
         }
     }
-    if (u.flowOn != 0 && h > u.sea - 1.0) { color = flowBank(color, p); }
     var shoalWeight = 0.0;   // G1: how much of this pixel is lit shallow bed, for the palette dither below
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
@@ -1868,7 +1789,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
-        if (u.flowOn != 0) { water = flowWater(water, p, deep); }
         var submerged = smoothstep(-0.2, 2.8, depth);
         shoalWeight = (1.0 - deep) * submerged * bedLit * select(0.0, 1.0, edgeHard > 0.0);
         if (shoreHard > 0.0) {
