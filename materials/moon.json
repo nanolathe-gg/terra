@@ -1171,7 +1171,6 @@
    "surface": "slopes",
    "transition": "soil",
    "material": "single",
-   "fractures": "0",
    "scree": "40",
    "shade": "separate",
    "flowTint": "1",

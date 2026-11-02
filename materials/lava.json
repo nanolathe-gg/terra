@@ -1205,7 +1205,6 @@
    "surface": "slopes",
    "transition": "soil",
    "material": "single",
-   "fractures": "0",
    "scree": "0",
    "shade": "separate",
    "faceSlope": "1.4,2.2",

@@ -243,7 +243,7 @@ $('repeat-perf').onclick=()=>run('Warm interleaved alternatives',async()=>{
 
 $('surface').onclick=()=>run('Surface and legacy-control sensitivity',async()=>{
  const world=$('world-filter').value,api=await load(world),s=scenes[world+'-1'];api.scene(s.strokes,{ground:s.ground!==false});const rows=[];
- for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['mineral-ring',0,100],['ring-spread',0,100],['ring-variation',0,100],['fractures',0,100],['scree',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
+ for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['mineral-ring',0,100],['ring-spread',0,100],['ring-variation',0,100],['scree',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
   const original=frame.contentDocument.getElementById(id).value;await api.control(id,lo);const a=await api.capture();await api.control(id,hi);const b=await api.capture();await api.control(id,original);const r={key:id,world,lo,hi,...summarize(a.canvas,b.canvas)};rows.push(r);line(`${id}: ${(r.changedBlocks*100).toFixed(1)}% blocks, max RGB ${r.maxRGB}`);
  }await save(`${$('label').value}/surface-${world}.json`,rows);
 });

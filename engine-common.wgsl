@@ -19,8 +19,6 @@ struct Uniforms {
     sea: f32,
     materialWeathering: f32,
     materialReady: i32,
-    fractureAmount: f32,
-    fractureDepth: f32,
     rockyCoasts: i32,
     scree: i32,
     detail: f32,
@@ -540,7 +538,6 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
-@group(0) @binding(3) var fracturesTex: texture_2d<f32>;
 // Grid-resolution inputs in one array texture (a fragment stage may sample 16
 // textures): layer 0 the weathering worker's flow, deposit, talus, sand; layer
 // 1 the material field. Read through weatherAt and materialFieldAt.
@@ -554,7 +551,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 @group(0) @binding(6) var fieldsTex: texture_2d<f32>;
 #endif
 // The world fields (height, routes, fields, grid inputs) are
-// clamped and linearly filtered; noise and fractures repeat.
+// clamped and linearly filtered; noise repeats.
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -713,26 +710,6 @@ fn beachField(p: vec2f) -> f32 { return max(-bakedFields(p).g, 0.0); }
 fn crystalField(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(0.0, clamp(g - 2.0, 0.0, 1.0), g > 1.5); }
 #endif
 
-fn fractureDepth(p: vec2f, h: f32, slope: f32) -> f32 {
-    let floorHeight = select(u.base, u.sea, u.rockyCoasts != 0);
-    if (u.fractureAmount <= 0.0 || h < floorHeight + 1.0 || slope < 0.06) { return 0.0; }
-    let warp = vec2f(terrainNoise(p).g, terrainNoise(p + vec2f(71.0, 43.0)).g) - 0.5;
-    let crack = textureSampleLevel(fracturesTex, linearRepeat, (p + warp * 6.0) / 1024.0, 0.0);
-    let distance = (1.0 - crack.r) * 8.0;
-    let group = smoothstep(crack.g - 0.025, crack.g + 0.025, u.fractureAmount);
-    var ground = smoothstep(0.06, 0.28, slope) * (1.0 - smoothstep(1.30, 2.20, slope));
-    ground *= smoothstep(floorHeight + 1.0, floorHeight + 10.0, h);
-    // Grass may bridge the finite cleft. Carving and its lit edges share the
-    // same surface; this is optional authoring detail, not stored retail relief.
-    let bridge = smoothstep(0.30, 0.64, terrainNoise(p + vec2f(11.0, 68.0)).g);
-    // A shallow weathered shoulder carries the narrower cut. Varying its
-    // section avoids a constant-width ink stroke across the grass texture.
-    let width = mix(0.65, 1.15, terrainNoise(p + vec2f(91.0, 17.0)).b);
-    let shoulder = 1.0 - smoothstep(0.20, 3.50 * width, distance);
-    let core = 1.0 - smoothstep(0.05, 0.85 * width, distance);
-    return (shoulder * 0.8 + core * 1.6) * group * ground * bridge * crack.b * u.fractureDepth * (1.0 - routeProtection(p));
-}
-
 fn screeHeight(p: vec2f) -> f32 {
     if (u.scree == 0) { return 0.0; }
     let support = weatherAt(p / (u.size - 1.0)).b;
@@ -804,7 +781,7 @@ fn surfaceHeight(p: vec2f) -> f32 {
     }
     let facets = 2.0 + 14.0 * smoothstep(0.9, 2.6, slope);
     let detail = (n.g - 0.5) * 6.0 + (n.b - 0.5) * facets;
-    return h + detail * gain * u.detail * rough + debris - fractureDepth(p, h, slope);
+    return h + detail * gain * u.detail * rough + debris;
 #endif
 }
 

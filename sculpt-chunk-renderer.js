@@ -73,8 +73,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.track(loaded.texture,label,mipBytes(width,height,images.length,levels,4),'materials');return loaded;
   }
   number(key,fallback) { return this.variant?.has(key)?Number(this.variant.get(key)):fallback; }
-  // The shaders bound all neighbourhoods. Bake relief noise and fractures are
-  // functions of the queried point, not walks through adjacent baked pixels.
+  // The shaders bound all neighbourhoods. Bake relief noise is a
+  // function of the queried point, not walks through adjacent baked pixels.
   // Only height/mask/weather support extends the bake's field input apron.
   reaches(quality='full',heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),full=quality==='full';

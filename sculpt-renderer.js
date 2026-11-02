@@ -207,7 +207,7 @@ export class TerrainRenderer {
     const sampler = (binding, visibility) => ({binding, visibility, sampler: {type: 'filtering'}});
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
       {binding: 0, visibility: both, buffer: {type: 'uniform'}},
-      texture(1, both, 'unfilterable-float'), texture(2, both), texture(3, both), texture(4, both, 'float', '2d-array'), texture(6, both),
+      texture(1, both, 'unfilterable-float'), texture(2, both), texture(4, both, 'float', '2d-array'), texture(6, both),
       sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
     // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
@@ -232,7 +232,7 @@ export class TerrainRenderer {
       fragment: {module: mipModule, entryPoint: 'halve', targets: [{format: 'rgba8unorm'}]}});
 
     this.samplers = new Map();
-    // The world fields: clamped and linear; noise and fractures repeat.
+    // The world fields: clamped and linear; noise repeats.
     this.linearClamp = this.sampler({magFilter: 'linear', minFilter: 'linear'});
     this.linearRepeat = this.sampler({magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'});
     // The fields are baked once per height change: r relief height, g route
@@ -277,12 +277,6 @@ export class TerrainRenderer {
     this.means.ground = this.groundTiled ? meanColor(tiles) : this.materialData.measured.quilt.meanRGB.map(v => v / 255);
     this.textures.grass = this.materialTexture('grass', [tiles], {minFilter: 'nearest', magFilter: 'nearest', mipmaps: false});
     tiles.close();
-    // The crack field is ours, not retail's: one committed picture for every world (the Fractures card replaces it).
-    const response = await fetch('/materials/fractures.png');
-    if (!response.ok) throw new Error('Cannot load the fracture field');
-    const cracks = await createImageBitmap(await response.blob(), {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
-    this.textures.fractures = this.materialTexture('fractures', [cracks], {minFilter: 'linear', magFilter: 'linear', mipmaps: false});
-    cracks.close();
     // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
     this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
     this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
@@ -298,7 +292,6 @@ export class TerrainRenderer {
     this.f('uBase', this.config.baseHeight - this.config.seaLevel);
     this.f('uSea', 0);
     this.f('uDetail', variant.get('relief') === 'base' ? 0.0 : (this.config.material?.surfaceRelief ?? 1.0));
-    this.f('uFractureDepth', this.config.material?.fractureDepth ?? 1.0);
     this.i('uRockyCoasts', Boolean(this.config.material?.rockyCoasts));
     this.i('uSlopeMaterial', slopeMaterial);
     this.i('uSoilCover', variant.get('transition') === 'soil');
@@ -622,7 +615,7 @@ export class TerrainRenderer {
   commonBindGroup(kind) {
     return this.bindGroups[kind] ??= this.device.createBindGroup({label: kind, layout: this.commonLayout, entries: [
       {binding: 0, resource: {buffer: this.uniformBuffer}},
-      ...[this.heightTexture, this.textures.noise.texture, this.textures.fractures.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
+      ...[this.heightTexture, this.textures.noise.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
       {binding: 4, resource: this.gridTexture.createView({dimension: '2d-array'})},
       {binding: 6, resource: (kind === 'bake' ? this.routeTexture : this.fieldsTexture).createView()},
       {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat},
@@ -770,7 +763,7 @@ export class TerrainRenderer {
     };
   }
 
-  draw({quality = 'preview', clay = false, light = 'original', fractures = 0, scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
+  draw({quality = 'preview', clay = false, light = 'original', scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
     const full = quality === 'full';
     this.i('uFull', full);
@@ -781,7 +774,6 @@ export class TerrainRenderer {
     this.i('uMaterialReady', this.materialReady);
     const useBody=this.transitionBody && this.materialReady && weatherAmount>0;
     this.i('uTransitionBody', Boolean(useBody));
-    this.f('uFractureAmount', fractures);
     this.f('uDetail', this.variant.get('relief') === 'base' ? 0 : detail);
     this.f('uRingAmount', this.layers.has('ring') ? ring : 0);
     this.f('uRingSpread', ringSpread);

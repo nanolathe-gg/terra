@@ -782,7 +782,6 @@ def apply_variant(config, biome, variant):
 MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'desert': '/materials/desert.json', 'zhon': '/materials/zhon.json', 'lava': '/materials/lava.json', 'ice': '/materials/ice.json', 'red': '/materials/red.json', 'crystal': '/materials/crystal.json', 'archipelago': '/materials/archipelago.json'}
 SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
 SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
-SOURCES['materials/fractures.png'] = HERE / 'materials' / 'fractures.png'   # ours (measure/make_fractures.py made it): one crack field for every world
 
 
 def world_knobs(biome, config):

@@ -1989,7 +1989,6 @@
    "surface": "slopes",
    "transition": "soil",
    "material": "varied",
-   "fractures": "40",
    "scree": "70",
    "shade": "separate",
    "flowTint": "1",
