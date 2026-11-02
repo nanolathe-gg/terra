@@ -103,19 +103,19 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('ripple',{beachLayer:1,sand:0}),/Weathering supply/);
  shows('ripple',{beachLayer:1,sand:.5});
  shows('ripple',{beachLayer:0,sand:0});   // the Sand brush feeds it where there is no beach
- assert.match(requirement('crackedStep',{stepSharp:0,deepEdge:1}),/true threshold/);
+ assert.match(requirement('crackedStep',{deepEdge:0}),/Hard shallow-to-deep step/);
+ shows('crackedStep',{deepEdge:1});
  assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
  shows('strataContrast',{column:1,strata:.4});
  // water: the lit bed, the hard step, the threshold step
  assert.match(requirement('bedDots',{bedLit:0}),/Lit bed/);
  shows('bedDots',{bedLit:.5});
- assert.match(requirement('stepSharp',{deepEdge:0}),/Hard shallow-to-deep step/);
- shows('stepSharp',{deepEdge:1});
- assert.match(requirement('shelfWander',{deepEdge:1,stepSharp:0}),/true threshold/);
- shows('shelfWander',{deepEdge:1,stepSharp:1});
- assert.match(requirement('shelfWander',{deepEdge:0,stepSharp:1}),/Hard shallow-to-deep step/,'a parent that is itself idle names its own reason');
- assert.match(requirement('shelfScale',{deepEdge:1,stepSharp:1,shelfWander:0}),/Shelf wander/);
- shows('shelfScale',{deepEdge:1,stepSharp:1,shelfWander:5});
+ assert.match(requirement('deepEdgeDepth',{deepEdge:0}),/Hard shallow-to-deep step/);
+ shows('deepEdgeDepth',{deepEdge:1});
+ assert.match(requirement('shelfWander',{deepEdge:0}),/Hard shallow-to-deep step/);
+ shows('shelfWander',{deepEdge:1});
+ assert.match(requirement('shelfScale',{deepEdge:1,shelfWander:0}),/Shelf wander/);
+ shows('shelfScale',{deepEdge:1,shelfWander:5});
  assert.match(requirement('shoalBump',{bedLit:1,deepEdge:0}),/Hard shallow-to-deep step/);
  assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
  shows('shoalBump',{bedLit:1,deepEdge:1});

@@ -892,7 +892,6 @@ export class TerrainRenderer {
     this.f('uCrystalSeamEnd', variant.has('crystalSeamEnd') ? Number(variant.get('crystalSeamEnd')) : 0.74);
     this.f('uCrystalShallowInk', variant.has('crystalShallowInk') ? Number(variant.get('crystalShallowInk')) : 0.55);
     // E11: shallow water round 2; every default is the earlier look.
-    this.f('uStepSharp', variant.has('stepSharp') ? Number(variant.get('stepSharp')) : 0);
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
     this.f('uShelfScale', variant.has('shelfScale') ? Number(variant.get('shelfScale')) : 100);
     this.f('uCrackedStep', variant.has('crackedStep') ? Number(variant.get('crackedStep')) : 0);

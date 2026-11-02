@@ -935,19 +935,6 @@ fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
 fn stepJitter(pixel: vec2f) -> f32 { return fract(sin(dot(floor(pixel / 2.0), vec2f(39.3467, 11.135))) * 43758.5453) - 0.5; }
 fn bankGrad(p: vec2f) -> f32 { return 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)), baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0)))); }
 
-// The shallow-to-deep step (card E1). Retail's step is a hard edge with
-// ragged stairs, not the ramp's gradual blend: the step sits at one depth (the
-// ramp's midpoint unless the world names one), is read off the bed's own depth
-// rather than the soft disc average, and wanders by a block-sized jitter and a
-// broad wobble. hard 0 is the ramp, 1 the step; between, both narrow together.
-fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) -> f32 {
-    let at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
-    let jitter = stepJitter(pixel);
-    let reach = mix(0.5 * (u.deepDepth - u.shallowDepth), 0.8, hard);
-    let d = mix(colorDepth, depth, hard) + (jitter * 2.6 + (n.r - 0.5) * 5.0) * hard;
-    return smoothstep(at - reach, at + reach, d);
-}
-
 // E11: value noise for the shelf's wander (smooth, 0..1, four lattice hashes).
 fn shelfHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
 fn shelfNoise(q: vec2f) -> f32 {
@@ -957,8 +944,10 @@ fn shelfNoise(q: vec2f) -> f32 {
     return mix(mix(shelfHash(i), shelfHash(i + vec2f(1.0, 0.0)), s.x), mix(shelfHash(i + vec2f(0.0, 1.0)), shelfHash(i + vec2f(1.0, 1.0)), s.x), s.y);
 }
 
-// The shallow-to-deep step with a true threshold (E11, Green and Red). The ragged
-// stairs are pixel blocks in the picture, not in depth: depth units would turn a
+// The hard shallow-to-deep step (cards E1 and E11). Retail's step is a hard edge with
+// ragged stairs, not the ramp's gradual blend: it sits at one depth (the ramp's
+// midpoint unless deepEdgeDepth names one), read off the bed's own depth rather than
+// the soft disc average. The ragged stairs are pixel blocks in the picture, not in depth: depth units would turn a
 // flat shelf into a wide fuzzy band (green-3's blurry middle), so the 2-px block
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
 // noise (shelfWander units over shelfScale px), so the band's outline and width
@@ -1832,10 +1821,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
-        if (edgeHard > 0.0) {
-            if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
-            else { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
-        }
+        if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
         let grain = genColor(u.waterLayer, pixel) - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
         if (u.nativeShallows != 0 && u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
@@ -1945,8 +1931,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
 #endif
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
-        // The threshold step's bed carries lit bumps in place of the dither's noise.
-        let ditherStrength = select(u.dither * u.landDither, u.dither * mix(1.0, select(1.0, 0.0, u.stepSharp > 0.0), shoalWeight), h < u.sea + 1.0);
+        // The hard step's lit bed carries bumps in place of the dither's noise.
+        let ditherStrength = select(u.dither * u.landDither, u.dither * (1.0 - shoalWeight), h < u.sea + 1.0);
         // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
         // local checkerboards, which read as one colour; a noise threshold
         // clumped them into speckles.

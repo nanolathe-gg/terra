@@ -14,10 +14,10 @@ export const WORLD_GROUP_NAMES={
  'Ice frost lines':'Needle lines','Ice frost band':'Shore pockets',
  'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: facets':'Microfacets'
 };
-export const WORLD_CHOICES={stepSharp:[[0,'Smooth transition'],[1,'Depth threshold']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
+export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
 const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
  desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',shoreEdge:'Waterline rim and lip',
- stepSharp:'Threshold depth transition',bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
+ bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
  lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
  moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
  iceSlate:'Slate faces',iceCrystal:'Straight face fibres',iceCrest:'Cap lumps',iceSoft:'Rounded lighting',iceSnow:'Snow on level caps',iceFall:'Slope fibres',iceApron:'Hatched foot apron',iceFrost:'Needle hairlines',
@@ -106,7 +106,6 @@ export function worldControlRequirement(key,v){
  if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'This world\'s faces are one material, not rock and moss interleaved, so there is nothing for this setting to place.';
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
- if(key==='crackedStep')return needs('stepSharp','Step is a true threshold');
  if(key==='crackedContrast')return needs('bedLit',LIT_BED);
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
@@ -114,8 +113,7 @@ export function worldControlRequirement(key,v){
  if(key==='lavaCreaseVary')return needs('layerCrease','Dark crease at each step foot');
  // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.
  if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit',LIT_BED);
- if(['stepSharp','deepEdgeDepth'].includes(key))return needs('deepEdge',HARD_STEP);
- if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('stepSharp','Step is a true threshold');
+ if(['deepEdgeDepth','crackedStep','stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
  if(key==='shelfScale')return needs('shelfWander','Shelf wander');
  if(key==='shoalBump')return needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
@@ -140,7 +138,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','deepEdgeDepth','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
  'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','grooveSpacing','facetTilt','cliffFollow',
- 'stepSharp','shelfWander','bedFlat','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
+ 'shelfWander','bedFlat','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceSlate','mineralDetail','iceCrystal','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'

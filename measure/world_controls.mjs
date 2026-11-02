@@ -34,7 +34,6 @@ const OPEN = {
   // H24. One water colour (Lava and Moon: shallow and deep are equal), and the third-colour branch, which discards `deep` (Crystal, Ice, Zhon; Ice and Zhon have no lit bed to carry it).
   deepEdge: {worlds: ['ice', 'lava', 'moon', 'zhon'], note: 'ice, zhon: third colour and no lit bed; lava, moon: one water colour'},
   deepEdgeDepth: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  stepSharp: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   stepSoftPx: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shelfWander: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shelfScale: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},

@@ -115,11 +115,11 @@ KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
                      bedPunch=0,
                      facetTilt=0, facetCoarse=0)
-# E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
-# shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
-# its depth with broad noise so the band's width and outline vary along the shore; bedFlat
-# lights the lit bed by its own relief only (no slope shading across the shelf).
-KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0)
+# E11 (shallow water round 2): every default is the earlier look. shelfWander (depth units)
+# over shelfScale (px) moves the hard step's depth with broad noise so the band's width and
+# outline vary along the shore; bedFlat lights the lit bed by its own relief only (no slope
+# shading across the shelf).
+KNOB_DEFAULTS.update(shelfWander=0, shelfScale=100, bedFlat=0)
 # E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
 # crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
 # bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
@@ -277,7 +277,7 @@ WORLD_KNOBS = {
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
                   # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
-                  stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1,
+                  shelfWander=24, shelfScale=140, bedFlat=1,
                   # G1 (round 8 review: "reads as noise while retail reads as lit bumpy terrain"): the
                   # palette dither's white noise went; lit bumps of 5 px take
                   # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
@@ -329,7 +329,7 @@ WORLD_KNOBS = {
                 # the lake (red-2) is lilac to its full depth 24 and keeps the world's 22. The
                 # cracked bed is cut as rocky ground and keeps its crevices through the tint
                 # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
-                stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6,
+                shelfWander=6, shelfScale=80, bedFlat=.6,
                 crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15,
                 # G1: lit bumps of 8 px, and no palette dither (see Green).
                 shoalBump=2, shoalBumpPx=8,
@@ -373,7 +373,7 @@ WORLD_KNOBS = {
                         # contour pass draws from the mineral field's falloff (so they follow the
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
-                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80,
+                        stepSoftPx=14, shelfWander=6, shelfScale=80,
                         # G1: the reef bars are soft blotches (retail: 8-16 px energy 1.8 against 1.3 at 4-8 px;
                         # 4.5-px bumps at 3 read as chunky cobbles): faint lit bumps of 9 px, a few dots, and no
                         # palette dither (3-px-blurred luma s.d. retail 7.6, before 4.7, now 5.8; see Green).

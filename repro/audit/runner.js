@@ -186,7 +186,7 @@ $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtur
   if(stop)break;const gates={...worldGates(group,key),undulation:10};
   if(group.startsWith('Rock')||['faceEdge','gullyRock'].includes(key))Object.assign(gates,{rockOrder:1,bedLedge:.7,jointDepth:4,bedDip:.7,cliffFollow:key==='cliffStagger'||key==='cliffDomain'?1:0,cliffStagger:.5,blocks:0});
   if(group==='Contour bands')Object.assign(gates,{banding:.8,sandBanding:.8});
-  if(['shallowDepth','deepDepth','waterSoft','bandWater'].includes(key))Object.assign(gates,{deepEdge:0,stepSharp:0});
+  if(['shallowDepth','deepDepth','waterSoft','bandWater'].includes(key))Object.assign(gates,{deepEdge:0});
   if(key.startsWith('ring'))Object.assign(gates,{ringContrast:1,ringShift:20});
   if(key.startsWith('frost'))gates.frostGaps=.35;
   const saved={};for(const [k,v] of Object.entries(gates)){saved[k]=api.renderer.variant.get(k);await api.knob(k,v);}
