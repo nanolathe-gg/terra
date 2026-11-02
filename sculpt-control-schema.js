@@ -70,7 +70,7 @@ export function worldControlRequirement(key,v){
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointDepth','grooveSpacing','grooveAngle','grooveRun','bedPunch','gullyDepth','gullyWidth','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','jointDepth','grooveSpacing','grooveAngle','grooveRun','bedPunch','gullyDepth','gullyWidth','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  // The lines' places are cut by joints and gullies, and the ribs between gullies stand on the same lines; their length matters only to a cut.
  if(['grooveSpacing','grooveAngle'].includes(key))return n('jointDepth')>0||n('gullyDepth')>0||n('ribTilt')>0?'':'Set Joint depth, Gully depth or Rib tilt above zero to use this setting.';
  if(key==='grooveRun')return n('jointDepth')>0||n('gullyDepth')>0?'':'Set Joint depth or Gully depth above zero to use this setting.';
@@ -90,7 +90,7 @@ export function worldControlRequirement(key,v){
  if(['facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse','cliffFine'].includes(key))return needs('facetTilt','Facet tilt');
  // A joint's stagger is keyed on its bed and blocks read the bed height, so the beds' shape outlives their relief there.
  const bedsMoveJoints=n('jointDepth')>0&&n('cliffFollow')>0&&n('cliffStagger')>0&&['bedSpacing','bedHeight','bedVary','bedDip','cliffBed'].includes(key),bedsMoveBlocks=n('blocks')>0&&key==='cliffBed';
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&n('bedLip')<=0&&!bedsMoveJoints&&!bedsMoveBlocks)return 'Set Ledge or Lip above zero in Rock structure to give the beds relief.';
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&!bedsMoveJoints&&!bedsMoveBlocks)return 'Set Ledge above zero in Rock structure to give the beds relief.';
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
  if(['baseBand','desertCapFlat'].includes(key))return n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');

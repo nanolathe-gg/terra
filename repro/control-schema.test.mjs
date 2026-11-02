@@ -78,13 +78,12 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('facetSize',{rockOrder:1,facetTilt:0}),/Facet tilt/);
  shows('facetSize',{rockOrder:1,facetTilt:.5});
  assert.match(requirement('cliffFine',{rockOrder:1,cliffFollow:1,facetTilt:0}),/Facet tilt/);
- assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
- assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
+ assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
+ assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  shows('bedSpacing',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
- assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge or Lip/,'the rise is relief only');
+ assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge above zero/,'the rise is relief only');
  shows('cliffBed',{rockOrder:1,cliffFollow:1,blocks:.5});   // blocks read the bed height
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
- shows('bedSpacing',{rockOrder:1,bedLip:2});
  // strata: bands and caps need a column and the strata switch
  assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);
  assert.match(requirement('baseBand',{column:1,strata:0}),/Strata/);

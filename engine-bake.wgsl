@@ -402,13 +402,15 @@ fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), of
 // height units, as the strata colours are. Bed thickness
 // varies bed to bed. Each bed's surface is pulled toward a flat tread with a
 // short riser (bedLedge), and the riser's top edge carries a lip with a notch
-// at its foot (bedLip). Returns the height offset and the lip's rock cover
+// at its foot (H23: a bed with a riser has the lip, 2 height units, and one with none has none). Returns the height offset and the lip's rock cover
 // (0..1): a lip is a convex ridge, which the face material would take for
 // moss on a lump top.
 // H2 (column 1): the same bed shape read from the rock column. A bed's thickness is
 // its own, its hardness scales how tall its ledge stands (columnContrast), and the
 // bed coordinate is columnCoord at the surface height, the one erosion reads.
 // Returns the same (offset, lip cover, bed index) as bedRelief.
+const BED_LIP = 2.0;
+fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
 fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
@@ -429,7 +431,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     // Hard beds (hardness 1) stand 1.7 times a hash bed's mean ledge, soft ones (0) 0.3 times: the hash's own range.
     let punch = mix(1.0, 0.3 + 1.4 * bed.hardness, u.columnContrast);
     off *= punch;
-    off += punch * u.bedLip * (lip - 0.8 * notch);
+    off += punch * bedLip() * (lip - 0.8 * notch);
     return vec3f(off, lip, bed.index);
 }
 
@@ -467,7 +469,7 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     // and the eye can follow them (0: every bed alike, as before).
     let punch = mix(1.0, 0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y, u.bedPunch);
     off *= punch;
-    off += punch * u.bedLip * (lip - 0.8 * notch);
+    off += punch * bedLip() * (lip - 0.8 * notch);
     return vec3f(off, lip, k);
 }
 
@@ -1256,7 +1258,7 @@ fn bake(p: vec2f) -> vec4f {
             height += gate * facet.x;
             facetSeam = gate * facet.y;
         }
-        structureRock = order * steep * bed.y * step(0.01, u.bedLip);
+        structureRock = order * steep * bed.y * step(0.01, bedLip());
     }
     // H4b: the hills' rock (slope from .35, full at .65; the rock class of measure/material_classes.py starts at .5) off the structured face takes small
     // pieces, in patches, with the pieces' edges mostly down the fall line.

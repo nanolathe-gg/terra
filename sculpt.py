@@ -37,7 +37,7 @@ KNOB_DEFAULTS = dict(
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackReach=.6, crackDark=.75,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
-    rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5, bedLip=1,
+    rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
     jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, crackStyle=0, bedHeight=0, rockFrom=.6,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
@@ -249,7 +249,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
-                  bedLip=2, bedLedge=.4, grooveAngle=-20, jointDepth=3,
+                  bedLedge=.4, grooveAngle=-20, jointDepth=3,
                   crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -270,7 +270,7 @@ WORLD_KNOBS = {
                   # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
                   # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
                   # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
-                  # bedPunch 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  # bedPunch 0, facetTilt 0, shineOutside 1 and bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
                   bedPunch=1,
@@ -301,7 +301,7 @@ WORLD_KNOBS = {
                   # G2: the vertical bands break up: each bed's joints at their own offset (up to .35 of a spacing).
                   cliffStagger=.35,
                   # H1 (lit relief): ledges shade the ground 1-6 px behind them and crevices lose ambient light, so the
-                  # beds are lower than G2's (cliffRise 16 -> 8, bedLedge .6 -> .4, bedLip 3 -> 2): taller ledges now shade
+                  # beds are lower than G2's (cliffRise 16 -> 8, bedLedge .6 -> .4, the ledge lip 3 -> 2): taller ledges now shade
                   # the whole face. green-2 face (x 20-880, y 650-870) mean luma / s.d. / share under 30 / p90 gradient:
                   # retail 45.8 / 27.2 / .245 / 17.6, G2 46.9 / 23.3 / .143 / 14.8, here 44.7 / 26.4 / .247 / 17.6.
                   closeShadow=.8, cavity=.6,
@@ -316,7 +316,7 @@ WORLD_KNOBS = {
     # Red's faces show none).
     'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
-                crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
+                crackStyle=1, crackSpacing=28, rockOrder=1, bedLedge=0,
                 jointDepth=3, grooveSpacing=30, grooveAngle=-10, grooveRun=160,
                 # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
                 # rock on level ground fades into plain broken rock. Red has no beds.
@@ -421,7 +421,7 @@ WORLD_KNOBS = {
                    # from the sun, where ours shaded to a soft grey. No fill light and little
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
-                   rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
+                   rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1,
                    jointDepth=3, grooveSpacing=30, crackStyle=1, faceFill=0, ambient=.3,
                    # G2: joints run down the fall line (its beds are height contours already, kept on the grid's own heights
                    # so the lit ledges stay with the strata colours: cliffBed 0).

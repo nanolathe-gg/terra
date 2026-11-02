@@ -206,7 +206,6 @@ struct Uniforms {
     bedDip: f32,          // bed tilt, height units per px
     bedDipDir: f32,       // direction the beds tilt down toward, degrees (0 east, 90 south)
     bedLedge: f32,        // how far each bed steps (0 the smooth face, 1 flat treads and short risers)
-    bedLip: f32,          // lit lip on each ledge and the shaded notch under it, height units
     jointDepth: f32,      // joint depth, height units
     grooveSpacing: f32,   // distance between joint lines, and between gully lines, world px
     grooveAngle: f32,     // their lean from the screen's north-south, degrees

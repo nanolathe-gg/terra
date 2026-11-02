@@ -1090,7 +1090,6 @@ export class TerrainRenderer {
     set('uRockOrder', number('rockOrder', 0));
     set('uBedVary', number('bedVary', 0.5));
     set('uBedLedge', number('bedLedge', 0.5));
-    set('uBedLip', number('bedLip', 1));
     set('uJointDepth', number('jointDepth', 2));
     set('uGrooveSpacing', number('grooveSpacing', 36));
     set('uGrooveAngle', number('grooveAngle', 0));
