@@ -14,7 +14,7 @@ export const WORLD_GROUP_NAMES={
  'Ice frost lines':'Needle lines','Ice frost band':'Shore pockets',
  'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: scratches':'Scratches','Rock face: facets':'Microfacets'
 };
-export const WORLD_CHOICES={bandStyle:[[0,'Tonal steps'],[1,'Bank lines']],stepSharp:[[0,'Smooth transition'],[1,'Depth threshold']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
+export const WORLD_CHOICES={stepSharp:[[0,'Smooth transition'],[1,'Depth threshold']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
 const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
  desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',shoreEdge:'Waterline rim and lip',
  stepSharp:'Threshold depth transition',bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
@@ -63,7 +63,7 @@ export function worldControlRequirement(key,v){
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir'&&n('bedDip')===0)return 'Set Bed tilt above or below zero to choose its direction.';
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','scratchDepth','scratchSpacing','scratchAngle','scratchRun','scratchGaps','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
- if(['bandWidth','bandRelief','bandWander','bandGaps'].includes(key)&&n('bandStyle')<.5)return 'Choose Bank lines in Contour bands to use this setting.';
+ if(key==='bandSoftness')return needs('banding','Contour banding strength');
  if(['jointSpacing','jointAngle','jointRun','jointGaps'].includes(key))return needs('jointDepth','Joint depth');
  if(key==='bedBend'&&n('gullyDepth')<=0&&n('ribTilt')<=0)return 'Set Gully depth or Rib tilt above zero to use this setting.';
  if(key==='cliffStagger')return n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':needs('jointDepth','Joint depth');
@@ -92,7 +92,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'boulders','boulderSize','debris','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','crackLength','crackStyle','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
- 'banding','bandStyle','sandBanding','strata','strataContrast',
+ 'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','deepEdgeDepth','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
  'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','gullySpacing','scratchDepth','facetTilt','facetSize','cliffFollow',
  'stepSharp','shelfWander','bedFlat','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',

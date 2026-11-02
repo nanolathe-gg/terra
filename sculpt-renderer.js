@@ -1113,13 +1113,8 @@ export class TerrainRenderer {
     set('uWorms', number('worms', 0));
     set('uBoulderRound', number('boulderRound', 0));
     set('uBandSoftness', number('bandSoftness', 0.35));
-    set('uBandWidth', number('bandWidth', 0));
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));
-    set('uBandStyle', number('bandStyle', 0), 'i');
-    set('uBandRelief', number('bandRelief', 0));
-    set('uBandWander', number('bandWander', 0));
-    set('uBandGaps', number('bandGaps', 0));
     set('uBeachDistance', this.layers.has('beach') ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));

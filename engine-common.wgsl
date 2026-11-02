@@ -172,11 +172,9 @@ struct Uniforms {
     apron: f32,           // sand apron reach round raised ground, world px (0: none)
     worms: f32,           // wormy regolith relief on slopes (lunar)
     boulderRound: f32,    // 0: angular boulders; 1: rounded domes
-    bandStyle: i32,       // 0 tonal steps (Green), 1 bank lines (Lava)
     bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
-    bandWidth: f32,       // bank lines (style 1): width at half depth, px (0: 1.6)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
     sun: vec3f,           // the renderer's light, for lit crack walls
@@ -193,10 +191,6 @@ struct Uniforms {
     scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
     overrideOn: i32,      // 1 once any cell carries an H3 override (planes 14-17: erosion, deposits, vegetation, rock exposure)
     styleOn: i32,         // 1 once any cell carries a painted local style (relief, cracks, banding, face rock share)
-    // Lava bank lines (card B3): how the contour lines break up (all 0: the plain contours).
-    bandRelief: f32,      // share of the relief height that bends the lines, so they fold round ribs and lumps
-    bandWander: f32,      // phase wander of the lines, in line steps
-    bandGaps: f32,        // share of each line's stretches dropped, so lines break off and spacing widens
     // Moon joined wrinkles (card B3).
     wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
     // Crystal shore slabs (card C2).

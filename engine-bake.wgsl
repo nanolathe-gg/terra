@@ -814,51 +814,6 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
     return vec2f(line, dot(-fall, normalize(u.sun.xy + 1e-6)));
 }
 
-// Lava bank lines (retail section-built Lava maps, measure/lava_*.py):
-// continuous braided dark lines along the contours, spaced by distance on
-// the ground rather than by a fixed height step (about 10 (s/0.5)^-0.3 px
-// at broad slope s), from slope 0.15 up with no upper limit, denser and
-// darker on steep ground; a dark V 3 px wide at half depth (5-6 px on steep
-// shaded faces), dark on every facing, no light lines. The broad slope sets
-// the step, so neighbouring lines converge and merge where it changes.
-// Returns (line strength, facing).
-fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f32) -> vec2f {
-    if (banding <= 0.0 || h < u.sea + 0.5 || slope < 0.12) { return vec2f(0.0); }
-    // Broad slope of the dry land only: the lava bed would steepen a bank.
-    let broad = vec2f(max(baseHeight(p + vec2f(16.0, 0.0)), u.sea) - max(baseHeight(p - vec2f(16.0, 0.0)), u.sea),
-                      max(baseHeight(p + vec2f(0.0, 16.0)), u.sea) - max(baseHeight(p - vec2f(0.0, 16.0)), u.sea)) / 32.0;
-    // On a narrow steep bank the broad slope is gentler than the face, so
-    // the steeper of the two sets the step (lines no closer than ~7 px).
-    let S = u.bandSpacing * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
-    var field = h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18;
-    // Card B3: retail's bank lines fork, end and meet, because they trace a
-    // rough surface rather than a smooth slope. The relief's ribs and lumps
-    // bend the contours (they fold round every rib), a slow phase wander makes
-    // neighbouring lines meet and part, all as extra height in line steps.
-    if (u.bandRelief > 0.0) { field += u.bandRelief * relief; }
-    if (u.bandWander > 0.0) { field += u.bandWander * S * (valueNoise(p / 41.0 + 61.0) * 1.2 + valueNoise(p / 17.0 + 77.0) * 0.5); }
-    let uu = field / S;   // GLSL: u
-    let v = fract(uu);
-    let px = min(v, 1.0 - v) * S / max(slope, 0.05);
-    let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
-    // A dark V, wider on steep shaded faces. Its width at half depth is the
-    // tent's half-width: retail cores (luma 15-27 in 55-60 ground) are ~2.5
-    // px wide at half depth (measure/lava_bands.py lines profiles); 0 keeps
-    // the original 1.6.
-    let core = select(1.6, u.bandWidth, u.bandWidth > 0.0);
-    let halfWidth = core * mix(1.0, 1.375, smoothstep(0.8, 1.4, slope) * smoothstep(0.1, -0.4, facing));
-    let line = clamp(1.0 - px / halfWidth, 0.0, 1.0);
-    var strength = smoothstep(0.12, 0.25, slope) * (0.75 + 0.25 * smoothstep(0.3, 1.5, slope));
-    // Each line (its own level) is present only along stretches ~40 px long:
-    // wider and more irregular spacing, lines that break off (card B3).
-    if (u.bandGaps > 0.0) {
-        let level = floor(uu + 0.5);
-        let present = valueNoise(p / 38.0 + vec2f(level * 7.31, level * 3.17) + 13.0);
-        strength *= smoothstep(mix(-1.2, 0.15, u.bandGaps), mix(-0.9, 0.45, u.bandGaps), present);
-    }
-    return vec2f(line * strength * banding, facing);
-}
-
 // Sandiness from the weathering worker's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
@@ -1179,19 +1134,17 @@ fn bake(p: vec2f) -> vec4f {
         // The squiggles read as dark lines in the art: shade their troughs.
         wormDark = smoothstep(0.82, 0.97, max(worm, worm2 * 0.97)) * u.worms * on * 0.85;
     }
-    var bandsAt = vec3f(0.0);
     // Painted banding: fainter scales the world's strength down, stronger
     // doubles it up to twice and never drops below 0.8 times the painted amount.
     let banding = select(u.banding * (1.0 + style.z), max(u.banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
-    if (u.bandStyle != 1) { bandsAt = contourBands(p, h, slope, fall, banding); }
+    let bandsAt = contourBands(p, h, slope, fall, banding);
     var bands = bandsAt.xy * (1.0 - route);
     // E11: the dark lines round Archipelago's hills were the first contour risers on the
     // hill's foot; retail has red fringe lines there instead (fringeContours draws those).
     if (u.bandFoot > 0.0) { bands.y *= smoothstep(u.base + 0.5 * u.bandFoot, u.base + u.bandFoot, h); }
     height += bands.x;
-    var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
+    let bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
-    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall, banding, height).x * u.bandLine * (1.0 - route); }
     var sand = sandCover(p, slope, height) * (1.0 - route);
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
