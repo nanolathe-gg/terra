@@ -48,9 +48,6 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:0}),/Joint depth, Gully depth or Rib tilt/);
  assert.equal(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),'');   // ribs stand between the lines
  assert.match(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),/Joint depth or Gully depth/);   // a rib cuts nothing
- assert.match(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:0}),/Gully depth or Rib tilt/);
- assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:0,ribTilt:.2}),'');
- assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:4,ribTilt:0}),'');
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,jointDepth:2}),/Follow terrain/);
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:0}),/Joint depth/);
  assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:2}),'');
@@ -85,7 +82,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
  shows('bedSpacing',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
  assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge or Lip/,'the rise is relief only');
- shows('bedBend',{rockOrder:1,gullyDepth:4,blocks:.5});   // blocks read the bed height
+ shows('cliffBed',{rockOrder:1,cliffFollow:1,blocks:.5});   // blocks read the bed height
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  shows('bedSpacing',{rockOrder:1,bedLip:2});
  // strata: bands and caps need a column and the strata switch

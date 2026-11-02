@@ -1387,7 +1387,7 @@ const KNOBS = [
   ['Desert caps', [['desertCapFlat','Level cap kept cool (0 beds as before)',0,1,.05,0]]],
   // E9 (Green rock faces); every default is the earlier look.
   ['Rock face', [['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
-    ['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],
+    ['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],
     ['gullyShade','Gully floor shade (occlusion)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
   ['Rock face: facets', [['facetTilt','Facet tilt (height per px; 0 none)',0,2,.05,0],['facetSize','Facet height (px)',2,24,.5,6],['facetStretch','Facet width (x height)',.25,4,.05,1.5],['facetStep','Step between facets (height)',0,6,.1,1],['facetSeam','Facet crease darkness',0,2,.05,0],['facetSkew','Facet tilt in y (share of its tilt in x)',0,1,.05,1],['facetCoarse','Coarser second level of facets (share)',0,1.5,.05,0]]],

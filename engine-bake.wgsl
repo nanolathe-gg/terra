@@ -1228,11 +1228,11 @@ fn bake(p: vec2f) -> vec4f {
         // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
         if (u.columnSectionCount > 0) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
-        // them (bedBend) and run on across the joints.
+        // them (H23: all the way) and run on across the joints.
         // The form fades out over the face's foot, so no gully reaches the water plane.
         var carved = vec2f(0.0);
         if (u.gullyDepth > 0.0 || u.ribTilt > 0.0) { carved = gullyField(pf) * smoothstep(u.base + 2.0, u.base + 16.0, h); }
-        let bed = bedRelief(p, bedH + carved.x * u.bedBend, bedG);
+        let bed = bedRelief(p, bedH + carved.x, bedG);
         // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
         // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
         // (the offset is keyed on the bed's index). A joint of no depth cuts nothing.
@@ -1247,7 +1247,7 @@ fn bake(p: vec2f) -> vec4f {
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
         if (u.blocks > 0.0) {
-            let block = blockField(p, pf, bedH + carved.x * u.bedBend, 0.0);
+            let block = blockField(p, pf, bedH + carved.x, 0.0);
             height += gate * block.x;
             blockCrevice = gate * block.y;
         }

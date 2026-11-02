@@ -113,7 +113,7 @@ KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
-                     bedBend=0, bedPunch=0,
+                     bedPunch=0,
                      facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
 # shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
@@ -270,10 +270,10 @@ WORLD_KNOBS = {
                   # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
                   # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
                   # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
-                  # bedBend 0, bedPunch 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  # bedPunch 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
-                  bedBend=1, bedPunch=1,
+                  bedPunch=1,
                   facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
@@ -295,7 +295,7 @@ WORLD_KNOBS = {
                   # screen. Beds are the contours of the ground (smoothed over 40 px, 30% of the way from the grid's own
                   # heights), 6.5 height units apart (bedSpacing, was 28 against a tilt of 2 that made rows level on the screen:
                   # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies and
-                  # facets run down the fall line. bedDip is 0 now, and bedBend 1 (was 2.5) because a bed is a quarter as
+                  # facets run down the fall line. bedDip is 0 now, and the beds follow the ribs and gullies at 1 (was 2.5) because a bed is a quarter as
                   # thick, so the ribs would fold it fourfold.
                   cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=8,
                   # G2: the vertical bands break up: each bed's joints at their own offset (up to .35 of a spacing).

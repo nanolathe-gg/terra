@@ -260,7 +260,6 @@ struct Uniforms {
     gullyWidth: f32,      // gully width across, world px
     gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
-    bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
     facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
     facetSize: f32,       // facet height, world px
