@@ -1386,7 +1386,7 @@ const KNOBS = [
   ['Desert caps', [['desertCapFlat','Level cap kept cool (0 beds as before)',0,1,.05,0]]],
   // E9 (Green rock faces); every default is the earlier look.
   ['Rock face', [['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
-    ['bedFlow','Beds broken and shifted by joints (0 continuous)',0,1,.05,1],['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],
+    ['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullySpacing','Gully spacing (px)',12,120,2,40],['gullyWidth','Gully width (px)',4,40,1,14],['gullyAngle','Gully lean from north-south (deg)',-60,60,1,-20],
     ['gullyRun','Gully length (px)',30,400,10,160],['gullyGaps','Gully gaps',0,1,.05,.3],['gullyShade','Gully floor shade (occlusion)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
   ['Rock face: scratches', [['scratchDepth','Scratch depth (height; 0 none)',0,4,.1,0],['scratchSpacing','Scratch spacing (px)',3,40,1,9],['scratchAngle','Scratch lean from north-south (deg)',-60,60,1,-20],['scratchRun','Scratch length (px)',20,300,5,90],['scratchGaps','Scratch gaps',0,1,.05,.4]]],

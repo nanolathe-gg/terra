@@ -382,19 +382,11 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 //
 // Joints: grooves close to the screen's north-south with a slight lean,
 // spaced irregularly, each running in unbroken stretches (jointRun px) with
-// gaps (jointGaps) and deepest mid-stretch; they wander a little. A joint
-// also breaks the beds: the block to its right is shifted along the beds by
-// up to 0.25 of a bed wherever the joint is present, so rows end and step at
-// the joints instead of running on as contour lines. Returns (groove height
-// offset <= 0, block shift in bed thicknesses).
+// gaps (jointGaps) and deepest mid-stretch; they wander a little. The beds run
+// on across them. Returns the groove height offset (<= 0).
 fn jointGroove() -> Groove { return lines(u.jointAngle, u.jointSpacing, u.jointDepth, u.jointRun, u.jointGaps, 2.2, 11.0); }
-fn jointField(p: vec2f) -> vec2f { return jointFieldAt(p, 0.0); }
 // G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
-fn jointFieldAt(p: vec2f, off: f32) -> vec2f {
-    let g = jointGroove();
-    let cut = groove(p, g, off);
-    return vec2f(-cut.depth, (cellHash(vec2f(cut.left, 57.0)).x - 0.5) * 0.5 * grooveRun(cut.left, cut.y, g.line.w, g.shape.x, g.shape.z));
-}
+fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), off).depth; }
 
 // Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
 // wander broadly and wobble finely but stay continuous between joints, so the
@@ -438,7 +430,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     return vec3f(off, lip, bed.index);
 }
 
-fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
+fn bedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     if (u.columnSectionCount > 0) { return columnBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
@@ -449,7 +441,7 @@ fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
     let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
     let S = max(u.bedSpacing, 2.0) * pow(G, 1.0 - u.bedHeight);
     let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
-    let L = (h + tilt + wander) / S + shift;
+    let L = (h + tilt + wander) / S;
     // Bed boundaries sit within 0.4 of each whole step, so they never cross.
     var k = floor(L);
     var lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5);
@@ -535,7 +527,7 @@ fn lines(angle: f32, spacing: f32, depth: f32, run: f32, gaps: f32, half_: f32, 
     return Groove(vec4f(angle, max(spacing, 3.0), depth, max(run, 12.0)), vec3f(gaps, half_, salt));
 }
 // The deepest cut here (a depth), the lattice coordinates (x across the lines, with `off` px added; y along them) and the index of the line
-// left of x, where a joint shifts the beds and a gully's rib begins.
+// left of x, where a gully's rib begins.
 struct Cut { depth: f32, x: f32, y: f32, left: f32 }
 // A line sits at (cell + .15 + .7 * hash) spacings.
 fn groovePos(c: f32, g: Groove) -> f32 { return (c + 0.15 + 0.7 * cellHash(vec2f(c, g.shape.z)).x) * g.line.y; }
@@ -1284,26 +1276,20 @@ fn bake(p: vec2f) -> vec4f {
         // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
         if (u.columnSectionCount > 0) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
-        // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
+        // them (bedBend) and run on across the joints.
         // The form fades out over the face's foot, so no gully reaches the water plane.
         var carved = vec2f(0.0);
         if (u.gullyDepth > 0.0 || u.ribTilt > 0.0) { carved = gullyField(pf) * smoothstep(u.base + 2.0, u.base + 16.0, h); }
-        var joint = vec2f(0.0);
-        var bed = vec3f(0.0);
-        if (cliffOn && u.cliffStagger > 0.0) {
-            // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
-            // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
-            // (the beds come first, as the offset is keyed on the bed's index; bedFlow 0 anyway lets joints leave them alone).
-            bed = bedRelief(p, bedH + carved.x * u.bedBend, 0.0, bedG);
-            // A joint of no depth cuts nothing, and here nothing else reads it.
-            if (u.jointDepth > 0.0) { joint = jointFieldAt(pf, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5)); }
-        } else {
-            // The joint's shift reaches the beds only through bedFlow, and its cut only through its depth.
-            if (u.jointDepth > 0.0 || u.bedFlow != 0.0) { joint = jointField(pf); }
-            joint.y *= u.bedFlow;
-            bed = bedRelief(p, bedH + carved.x * u.bedBend, joint.y, bedG);
+        let bed = bedRelief(p, bedH + carved.x * u.bedBend, bedG);
+        // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
+        // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
+        // (the offset is keyed on the bed's index). A joint of no depth cuts nothing.
+        var joint = 0.0;
+        if (u.jointDepth > 0.0) {
+            let stagger = select(0.0, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5), cliffOn && u.cliffStagger > 0.0);
+            joint = jointFieldAt(pf, stagger);
         }
-        height += order * steep * (bed.x + joint.x);
+        height += order * steep * (bed.x + joint);
         // The form eases in over the painted edge (a smoothstep of the cover, not the cover itself), so the rim stays smooth.
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;

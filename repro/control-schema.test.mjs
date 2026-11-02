@@ -42,5 +42,13 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
  assert.match(requirement('scratchSpacing',{rockOrder:0,scratchDepth:1}),/Rock structure/);
+ assert.match(requirement('jointRun',{rockOrder:1,jointDepth:0}),/Joint depth/);
+ assert.equal(requirement('jointRun',{rockOrder:1,jointDepth:2}),'');
+ assert.match(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:0}),/Gully depth or Rib tilt/);
+ assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:.2}),'');
+ assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:4,ribTilt:0}),'');
+ assert.match(requirement('cliffStagger',{cliffFollow:0,jointDepth:2}),/Follow terrain/);
+ assert.match(requirement('cliffStagger',{cliffFollow:1,jointDepth:0}),/Joint depth/);
+ assert.equal(requirement('cliffStagger',{cliffFollow:1,jointDepth:2}),'');
  assert.equal(requirement('boulderSize',{boulders:0}),'','painted scatter still uses size when global density is zero');
 });

@@ -275,7 +275,6 @@ struct Uniforms {
     gullyGaps: f32,       // share of each gully's length that is missing
     gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
-    bedFlow: f32,         // how far joints break and shift the beds (1: as before; 0: continuous beds)
     bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
     scratchDepth: f32,    // weathering scratches: depth, height units (0: none)

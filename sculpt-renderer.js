@@ -1136,7 +1136,6 @@ export class TerrainRenderer {
     set('uGullyGaps', number('gullyGaps', 0.3));
     set('uGullyShade', number('gullyShade', 0));
     set('uRibTilt', number('ribTilt', 0));
-    set('uBedFlow', number('bedFlow', 1));
     set('uBedBend', number('bedBend', 0));
     set('uBedPunch', number('bedPunch', 0));
     set('uScratchDepth', number('scratchDepth', 0));

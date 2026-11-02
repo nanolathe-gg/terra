@@ -113,7 +113,7 @@ KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
-                     bedFlow=1, bedBend=0, bedPunch=0,
+                     bedBend=0, bedPunch=0,
                      scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
                      facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
@@ -271,11 +271,11 @@ WORLD_KNOBS = {
                   # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
                   # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
                   # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
-                  # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0, bedFlow 1,
+                  # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
                   # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, gullySpacing=36, gullyRun=90, gullyGaps=.4, gullyShade=1.2, ribTilt=.2,
-                  bedFlow=0, bedBend=1, bedPunch=1,
+                  bedBend=1, bedPunch=1,
                   scratchDepth=2.5, scratchRun=140, scratchGaps=.3,
                   facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
