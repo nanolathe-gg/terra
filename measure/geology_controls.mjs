@@ -41,7 +41,7 @@ const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt.js`, 'ut
 const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]) || (knob === 'moonLobes' && st[0] === 'crater' && (st[2]?.spurCount ?? st[2]?.card?.spurCount ?? 0) > 0);
 for (const [k, f] of Object.entries(impactFields)) CARD_SCALE[k] = f.scale;
 const family = opt('--family', 'geology');
-const FRACTURES = /^(crack(Severity|Spacing|Length|Major|Minor|Hairline|Blocks|Width|Jagged|Network|Reach|Style|Dark|Lit)|joint(Depth)|groove(Spacing|Angle|Run)|gully(Depth|Width|Shade)|ribTilt|facet(Tilt|Size|Stretch|Step|Seam|Skew|Coarse)|blocks|block(Row|Width|Tilt|Step|Seam|Chip|Grit)|hillBlocks)$/;
+const FRACTURES = /^(crack(Severity|Spacing|Length|Major|Minor|Hairline|Blocks|Width|Network|Reach|Style|Dark)|joint(Depth)|groove(Spacing|Angle|Run)|gully(Depth|Width|Shade)|ribTilt|facet(Tilt|Size|Stretch|Step|Seam|Skew|Coarse)|blocks|block(Row|Width|Tilt|Step|Seam|Chip|Grit)|hillBlocks)$/;
 const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust|Dusk|Pillow|Veins))$/;
 const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
 // The stroke kinds that carry each shape option (sculpt.js SHAPE_FIELDS), and the scale of the card's unit.

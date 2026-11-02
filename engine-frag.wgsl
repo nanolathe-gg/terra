@@ -822,6 +822,8 @@ fn craterWeb(p: vec2f) -> vec2f {
 // ground, so a sharp lobe lights facets and the grain decides which.
 // Retail's glints run as thin streaks ~27 degrees off the screen vertical (the
 // same axis as the slope marks), so the micro-normal noise is stretched along it.
+// H23: how much of the sun-facing crack wall's light the rock takes, the same on every world.
+const CRACK_LIT = 0.35;
 const SHINE_VIEW = vec3f(0.0, 0.4472136, 0.8944272);
 const SHINE_ALONG = vec2f(0.454, 0.891);
 const SHINE_ACROSS = vec2f(0.891, -0.454);
@@ -1556,7 +1558,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     {
         let coverOrCrack = bakedFields(p).b * (1.0 - faceRelief);
         // A crack wall facing the sun.
-        if (coverOrCrack > 1.0) { material *= 1.0 + u.crackLit * (coverOrCrack - 1.0); }
+        if (coverOrCrack > 1.0) { material *= 1.0 + CRACK_LIT * (coverOrCrack - 1.0); }
         else { material = mix(material, rock * 1.08, max(coverOrCrack, 0.0)); }
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are

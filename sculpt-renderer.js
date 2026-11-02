@@ -934,7 +934,6 @@ export class TerrainRenderer {
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
     this.f('uCrackDark', variant.has('crackDark') ? Number(variant.get('crackDark')) : 0.75);
-    this.f('uCrackLit', variant.has('crackLit') ? Number(variant.get('crackLit')) : 0.35);
     this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
@@ -1081,7 +1080,6 @@ export class TerrainRenderer {
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackLength', number('crackLength', 2));
     set('uCrackWidth', number('crackWidth', 1));
-    set('uCrackJagged', number('crackJagged', 0.6));
     set('uCrackNetwork', number('crackNetwork', 0.35));
     set('uCrackReach', number('crackReach', 0.6));
     set('uCrackMinor', number('crackMinor', 0.75));

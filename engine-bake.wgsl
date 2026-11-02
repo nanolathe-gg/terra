@@ -272,6 +272,9 @@ fn crackShade(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
     return vec2f(max(core, shadow), lit) * c.open;
 }
 
+// H23: how far a crack's kinks and bends carry, the same on every world.
+const CRACK_JAGGED = 0.6;
+
 // The relief style of crackShade (card E3, crackStyle 1): the groove is carved
 // and lit rather than inked. Its floor keeps only a light core, the wall
 // facing the sun is a wider lit lip, and the wall turned from the sun shades
@@ -308,7 +311,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let minorCell = major / 3.2;
     let hairCell = max(3.0, major / 9.0);
     // Shared warp: every level bends with the rock.
-    let w = p + u.crackJagged * major * (0.30 * vec2f(valueNoise(p / (major * 1.3) + 1.7), valueNoise(p / (major * 1.3) + 20.8))
+    let w = p + CRACK_JAGGED * major * (0.30 * vec2f(valueNoise(p / (major * 1.3) + 1.7), valueNoise(p / (major * 1.3) + 20.8))
                                        + 0.07 * vec2f(valueNoise(p / (major * 0.16) + 5.0), valueNoise(p / (major * 0.16) + 9.4)));
     // The shape's Cracks amount sets how cracked it is; the knobs set the
     // share of each level at full strength.
@@ -324,7 +327,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     // Minor lattice turned and shifted per major block.
     let h0 = cellHash(c0.id + 11.1);
     let r0 = turn(h0.x * TAU);
-    let q1 = r0 * w + h0 * minorCell * 7.0 + u.crackJagged * minorCell * 0.25 * vec2f(valueNoise(p / (minorCell * 0.5) + 2.2), valueNoise(p / (minorCell * 0.5) + 6.6));
+    let q1 = r0 * w + h0 * minorCell * 7.0 + CRACK_JAGGED * minorCell * 0.25 * vec2f(valueNoise(p / (minorCell * 0.5) + 2.2), valueNoise(p / (minorCell * 0.5) + 6.6));
     // Minor cracks also break gentle slopes, more sparsely (retail hill
     // slopes carry short cracks every 10 px or so).
     var c1 = fractureLevel(q1, r0 * fall, minorCell, 1.0 + (u.crackLength - 1.0) * 0.4, m * mix(0.5, 1.0, rocky) * gentle * minorShare, 1.0, 9.1);

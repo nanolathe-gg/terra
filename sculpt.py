@@ -35,7 +35,7 @@ KNOB_DEFAULTS = dict(
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
-    crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
+    crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackReach=.6, crackDark=.75,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5, bedLip=1,
     jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, crackStyle=0, bedHeight=0, rockFrom=.6,

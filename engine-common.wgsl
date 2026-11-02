@@ -79,7 +79,6 @@ struct Uniforms {
     crystalBase: vec4f,
     groundContrast: f32,
     groundBorrowed: i32,
-    crackLit: f32,
     sandDust: f32,
     sandGrass: f32,
     bandWater: f32,
@@ -152,7 +151,6 @@ struct Uniforms {
     sand: f32,            // 0 disables sand
     crackSeverity: f32,   // crack depth
     crackWidth: f32,      // crack core width, world px
-    crackJagged: f32,     // kinks and bends along a crack
     crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
     crackReach: f32,      // 0: steep faces only; 1: onto gentle slopes
     cracksOn: i32,        // the full bake computes cracks; previews skip them
