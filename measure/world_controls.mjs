@@ -138,7 +138,8 @@ try {
       },
       kinds() { return A.nodes.map(n => n.kind); },
       async putBack() { for (let i = 1; i < saved.length; i++) await A.edit(i, saved[i]); },
-      state() { return {values: A.panelValues(), panel: [...document.querySelectorAll('#knobs [data-knob], #rendering-host [data-knob]')].map(r => ({key: r.dataset.knob, off: Boolean(r.querySelector('.control-requirement')?.textContent), reason: r.querySelector('.control-requirement')?.textContent || ''})   // the reason line, not the disabled flag: the audit page's busy map disables the rendering switches too), variant: Object.fromEntries(A.renderer.variant), knobs: A.knobs, fields: A.fields, defaults: Object.fromEntries(Object.keys(KINDS).map(k => [k, A.defaults(k)])), nodes: A.nodes.map(n => n.kind)}; },
+      // a row is off by its reason line, not its disabled flag: the audit page's busy map disables the rendering switches too
+      state() { return {values: A.panelValues(), panel: [...document.querySelectorAll('#knobs [data-knob], #rendering-host [data-knob]')].map(r => ({key: r.dataset.knob, off: Boolean(r.querySelector('.control-requirement')?.textContent), reason: r.querySelector('.control-requirement')?.textContent || ''})), variant: Object.fromEntries(A.renderer.variant), knobs: A.knobs, fields: A.fields, defaults: Object.fromEntries(Object.keys(KINDS).map(k => [k, A.defaults(k)])), nodes: A.nodes.map(n => n.kind)}; },
       scenes: null
     };
   })()`;
