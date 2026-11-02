@@ -45,8 +45,8 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('jointRun',{rockOrder:1,jointDepth:0}),/Joint depth/);
  assert.equal(requirement('jointRun',{rockOrder:1,jointDepth:2}),'');
  assert.match(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:0}),/Gully depth or Rib tilt/);
- assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:.2}),'');
- assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:4,ribTilt:0}),'');
+ assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:0,ribTilt:.2}),'');
+ assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:4,ribTilt:0}),'');
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,jointDepth:2}),/Follow terrain/);
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:0}),/Joint depth/);
  assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:2}),'');
@@ -76,6 +76,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
  assert.match(requirement('facetSize',{rockOrder:1,facetTilt:0}),/Facet tilt/);
  shows('facetSize',{rockOrder:1,facetTilt:.5});
+ assert.match(requirement('cliffFine',{rockOrder:1,cliffFollow:1,facetTilt:0}),/Facet tilt/);
+ assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  shows('bedSpacing',{rockOrder:1,bedLip:2});
@@ -85,6 +87,11 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('baseBand',{column:1,strata:.5});
  assert.match(requirement('baseBandGaps',{column:1,strata:1,baseBand:0}),/Gray band/);
  shows('baseBandGaps',{column:1,strata:1,baseBand:.5});
+ assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Strata/);
+ assert.match(requirement('bedSpacing',{column:1,rockOrder:1,bedLedge:1}),/authored bed profile/);
+ assert.match(requirement('boulderFoot',{boulders:0}),/Boulders/);
+ shows('boulderFoot',{boulders:.4});
+ assert.match(requirement('crackedStep',{stepSharp:0,deepEdge:1}),/true threshold/);
  assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
  shows('strataContrast',{column:1,strata:.4});
  // water: the lit bed, the hard step, the threshold step
@@ -93,13 +100,14 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('stepSharp',{deepEdge:0}),/Hard shallow-to-deep step/);
  shows('stepSharp',{deepEdge:1});
  assert.match(requirement('shelfWander',{deepEdge:1,stepSharp:0}),/true threshold/);
- shows('shelfWander',{stepSharp:1});
- assert.match(requirement('shelfScale',{shelfWander:0}),/Shelf wander/);
- shows('shelfScale',{shelfWander:5});
+ shows('shelfWander',{deepEdge:1,stepSharp:1});
+ assert.match(requirement('shelfWander',{deepEdge:0,stepSharp:1}),/Hard shallow-to-deep step/,'a parent that is itself idle names its own reason');
+ assert.match(requirement('shelfScale',{deepEdge:1,stepSharp:1,shelfWander:0}),/Shelf wander/);
+ shows('shelfScale',{deepEdge:1,stepSharp:1,shelfWander:5});
  assert.match(requirement('shoalBump',{bedLit:1,deepEdge:0}),/Hard shallow-to-deep step/);
  assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
  shows('shoalBump',{bedLit:1,deepEdge:1});
- shows('shoalBumpPx',{shoalBump:2});
+ shows('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2});
  assert.match(requirement('lavaCreaseVary',{layerCrease:0}),/crease/);
  shows('lavaCreaseVary',{layerCrease:.5});
  // facts of the world's material the panel passes in with the settings

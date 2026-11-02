@@ -849,7 +849,6 @@ export class TerrainRenderer {
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
     this.set('uRockShare', (variant.get('rockShare') || '0.2,1.0').split(',').map(Number));
     this.set('uFaceScore', (variant.get('faceScore') || '0.2,2.0,0.5,0.3').split(',').map(Number));
-    this.f('uFaceEdge', variant.has('faceEdge') ? Number(variant.get('faceEdge')) : 0.8);
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
@@ -933,7 +932,6 @@ export class TerrainRenderer {
     this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
     this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
-    this.f('uGullyRock', variant.has('gullyRock') ? Number(variant.get('gullyRock')) : 0.5);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
     this.f('uCrackDark', variant.has('crackDark') ? Number(variant.get('crackDark')) : 0.75);
     this.f('uCrackLit', variant.has('crackLit') ? Number(variant.get('crackLit')) : 0.35);

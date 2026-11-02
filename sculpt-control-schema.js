@@ -59,11 +59,11 @@ export function shapeControlAvailable(key,kind,p){
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
- const n=k=>Number(v[k]??0),needs=(parent,label)=>n(parent)<=0?`Enable ${label} to use this setting.`:'';
+ const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
- if(['bedHeight','bedVary','bedPunch'].includes(key)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';
+ if(['bedSpacing','bedHeight','bedVary','bedPunch'].includes(key)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
- if(key==='bedDipDir'&&n('bedDip')===0)return 'Set Bed tilt above or below zero to choose its direction.';
+ if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['jointSpacing','jointAngle','jointRun','jointGaps'].includes(key))return needs('jointDepth','Joint depth');
  if(key==='bedBend'&&n('gullyDepth')<=0&&n('ribTilt')<=0)return 'Set Gully depth or Rib tilt above zero to use this setting.';
@@ -80,8 +80,8 @@ export function worldControlRequirement(key,v){
  // Beds and joints draw only in ordered rock, and the bed profile only where a ledge or lip gives it relief.
  if(['rockFrom','cliffFollow','cliffReach','cliffWide','cliffFlat','cliffRise','cliffBed','cliffStagger','cliffFine','cliffDomain'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['cliffReach','cliffWide','cliffFlat','cliffBed','cliffFine','cliffDomain'].includes(key)&&n('cliffFollow')<=0)return 'Choose Follow terrain in Structure orientation to use this setting.';
- if(['facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key))return needs('facetTilt','Facet tilt');
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch'].includes(key)&&n('bedLedge')<=0&&n('bedLip')<=0)return 'Set Ledge or Lip above zero in Rock structure to give the beds relief.';
+ if(['facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse','cliffFine'].includes(key))return needs('facetTilt','Facet tilt');
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','bedBend','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&n('bedLip')<=0)return 'Set Ledge or Lip above zero in Rock structure to give the beds relief.';
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
  if(['baseBand','desertCapFlat'].includes(key))return n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');
@@ -93,6 +93,9 @@ export function worldControlRequirement(key,v){
  if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
+ if(key==='boulderFoot')return needs('boulders','Density in Boulders');
+ if(key==='crackedStep')return needs('stepSharp','Step is a true threshold');
+ if(key==='crackedContrast')return needs('bedLit','Lit bed under shallow water');
  if(key==='repose')return needs('debris','Amount in Debris');
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
