@@ -6,7 +6,7 @@
 //   node measure/world_controls.mjs [--find key,key] [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--worlds green,lava] [--only key,key] [--set key=v,key=v] [--jobs 3]
 // --jobs splits the worlds over that many browsers (CDP ports --port, then --port+2, +3, ...): a world takes about four minutes alone.
 // --find key,key: instead of the sweep, set each other enabled row to its high end in turn and print which of the named rows then move (the search for a row's parent).
-// Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885): terraformAudit exists only on that host's ?audit pages.
+// Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885; --assets DIR is that host's assets root: it needs map-catalog.json and features/, as a card's own root has): terraformAudit exists only on that host's ?audit pages.
 // Writes DIR/world-controls.json and prints one row per control and world. Exit 1 on a console error or on an unexplained exact 0, that is a
 // row that reads 0 on every fixture (the first, the other two scenes, the diagnostic fixture; stroke rows the second stroke fixture) and is not on
 // ALLOWED below. A row the panel disables with a reason is not swept in that state; it is swept again with its parents set (state "gated"), which
@@ -20,7 +20,7 @@ import {dirname, join, resolve} from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url)), repo = resolve(here, '..');
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const JOBS = Number(opt('--jobs', 3)), CHILD = args.includes('--child');
-const port = Number(opt('--port', 9685)), out = resolve(opt('--out', 'world-controls')), auditPort = Number(opt('--audit-port', 8885));
+const assets = opt('--assets', ''), port = Number(opt('--port', 9685)), out = resolve(opt('--out', 'world-controls')), auditPort = Number(opt('--audit-port', 8885));
 const WORLDS = opt('--worlds', 'green,archipelago,crystal,desert,ice,lava,moon,red,zhon').split(',');
 const FIND = opt('--find', '') ? opt('--find', '').split(',') : null;
 const ONLY = opt('--only', '') ? opt('--only', '').split(',') : null;
@@ -77,7 +77,7 @@ let server = opt('--server', ''), audit = null;
 if (!server) {
   server = `http://127.0.0.1:${auditPort}`;
   const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
-  audit = spawn(py, [join(repo, 'repro/audit/server.py'), '--source', repo, '--port', String(auditPort), '--out', join(out, 'audit-out'), '--assets', out], {stdio: 'ignore'});
+  audit = spawn(py, [join(repo, 'repro/audit/server.py'), '--source', repo, '--port', String(auditPort), '--out', join(out, 'audit-out'), ...(assets ? ['--assets', assets] : [])], {stdio: 'ignore'});
   for (let i = 0; i < 100; i++) { try { if ((await fetch(server + '/audit/index.html')).ok) break; } catch {} await sleep(100); }
 }
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
