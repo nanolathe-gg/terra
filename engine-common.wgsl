@@ -282,7 +282,6 @@ struct Uniforms {
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
     shineSlopeGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)
     // G5 (Lava).
-    lavaCreaseVary: f32,  // how far the dark crease at the bank steps breaks into dashes of varying darkness along each line (0: unbroken, as before)
     lavaCrust: f32,       // hill rock as pillows, chips and creases on raised ground (0: none, as before; 1: full)
     lavaPillow: f32,      // size of a pillow, px
     lavaChip: f32,        // size of a chip, px

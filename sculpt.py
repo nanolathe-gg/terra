@@ -133,10 +133,8 @@ KNOB_DEFAULTS.update(fingerSize=1, layerVary=0, layerCircle=26)
 # E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
 KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
-# G5 (Lava): contour layers wander in two dimensions (layers of amplitude; 0 follows the shore only) and spread in width (0 none).
-KNOB_DEFAULTS.update(lavaMeander=0, lavaSpread=0, lavaCircleVary=0)
-# G5 (Lava), shader knob: the bank crease breaks into dashes of varying darkness (0: unbroken).
-KNOB_DEFAULTS.update(lavaCreaseVary=0)
+# G5 (Lava): contour layers spread in width (0 none).
+KNOB_DEFAULTS.update(lavaSpread=0, lavaCircleVary=0)
 # G5 (Lava), hill rock: crust strength (0: none), pillow and chip size in px, hanging veins, the share of the fall-line relief it replaces, and the dusk on shaded rock.
 KNOB_DEFAULTS.update(lavaCrust=0, lavaPillow=34, lavaChip=5.5, lavaVeins=0, lavaCalm=.6, lavaDusk=0)
 # E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
@@ -505,7 +503,7 @@ WORLD_KNOBS = {
                  layerVary=.8, layerCrease=.7, fingerSize=.65,
                  # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),
                  # its circles differ in size and spacing, and its step lines fade and break along their length.
-                 lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.2,
+                 lavaSpread=.7, lavaCircleVary=1,
                  # G5: hill rock as retail's crust, pillows and chips with creases and hanging veins, the fall-line relief it
                  # replaces, treads tilted toward the crown, and the tall hills' far sides near black.
                  lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8,

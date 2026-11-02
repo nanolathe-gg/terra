@@ -120,8 +120,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
  shows('shoalBump',{bedLit:1,deepEdge:1});
  shows('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2});
- assert.match(requirement('lavaCreaseVary',{layerCrease:0}),/crease/);
- shows('lavaCreaseVary',{layerCrease:.5});
  // facts of the world's material the panel passes in with the settings
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});

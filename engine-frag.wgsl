@@ -909,6 +909,8 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     return vec4f(glint, lit * dim);
 }
 
+// H24: how far the crease at the bank steps breaks into dashes of varying darkness along each line, the same on every world.
+const LAVA_CREASE_VARY = 0.2;
 // E10 (Lava): retail draws the step between two shore layers as a dark line whichever way it faces, where a
 // lit riser is only dark on the side turned from the sun. This is that line as a cavity: how far the four
 // neighbours 2.5 px round a point stand above it (the foot of a riser has higher ground on one side; a lip
@@ -920,7 +922,7 @@ fn layerCreaseTerm(p: vec2f) -> f32 {
     const r = 2.5;
     let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
     // G5: retail's step lines fade and break along their length; a noise of ~14 px takes whole stretches out and weakens others.
-    let dash = 1.0 - u.lavaCreaseVary * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
+    let dash = 1.0 - LAVA_CREASE_VARY * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
     return bank * smoothstep(0.1, 0.5, around - h) * dash;
 }
 // E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model

@@ -433,13 +433,14 @@ export function prepareNode(n, geom, c) {
 }
 
 // ---- the coast pass (H10): fingers on the joined coast and shore layers, after the stroke is swept (stampCoastShore in sculpt.js) ----
+// H24: how far the layer lines wander across the bank in two dimensions, in layer widths (retail's layers wander, loop and pinch), the same on every world.
+export const LAYER_MEANDER = 1.2;
 // How far the layers reach from the coast (px), the skip distance included (coastLayerReach). The mounds style (2) is not on the GPU path.
 const coastLayerReach = q => {
   const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), style = Math.round(q.layerStyle);
   if (style === 1) { const cv = clamp(q.lavaCircleVary || 0, 0, 1); return n * W * (1 + .45 * cv) + 2.8 * Math.max(8, q.layerCircle) * (1 + .07 * cv) + 2 * W; }
-  const meander = clamp(q.lavaMeander || 0, 0, 3), spread = clamp(q.lavaSpread || 0, 0, 2), vary = clamp(q.layerVary, 0, 1);
-  if (meander > 0 || spread > 0) { const wide = Math.max(1 + .6 * vary, Math.exp(.5 * (vary + spread))); return (n + 1 + meander) * W * wide + 2 * W; }
-  return n * W * (1 + .6 * vary) + 2 * W;
+  const spread = clamp(q.lavaSpread || 0, 0, 2), vary = clamp(q.layerVary, 0, 1), wide = Math.max(1 + .6 * vary, Math.exp(.5 * (vary + spread)));
+  return (n + 1 + LAYER_MEANDER) * W * wide + 2 * W;
 };
 // The coast pass of a deep or shallow stroke, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
 // beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
@@ -479,7 +480,7 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, fac
       frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
       coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius * bankScale / 140, .35, 1),
       cfSize: q.fingerSize ?? 1,
-      coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: clamp(q.lavaMeander || 0, 0, 3),
+      coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: LAYER_MEANDER,
       coLReach: lReach, coRiser: q.layerRiser > 0 ? q.layerRiser : 0, coScal: scal ? 1 : 0, coRc: Rc, coCV: cv, coRs: 1.4 * Rc + cv * .1 * Rc + n * W * (1 + .45 * cv) + spacing,
       coSI0: sites.i0, coSJ0: sites.j0, coSNI: sites.ni, coSNJ: sites.nj, coBx0: box.x0, coBy0: box.y0, coBx1: box.x1, coBy1: box.y1,
     },
