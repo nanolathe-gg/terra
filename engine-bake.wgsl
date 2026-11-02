@@ -382,9 +382,9 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 //
 // Joints: grooves close to the screen's north-south with a slight lean,
 // spaced irregularly, each running in unbroken stretches (jointRun px) with
-// gaps (jointGaps) and deepest mid-stretch; they wander a little. The beds run
+// gaps (GROOVE_GAPS) and deepest mid-stretch; they wander a little. The beds run
 // on across them. Returns the groove height offset (<= 0).
-fn jointGroove() -> Groove { return lines(u.jointAngle, u.jointSpacing, u.jointDepth, u.jointRun, u.jointGaps, 2.2, 11.0); }
+fn jointGroove() -> Groove { return lines(u.jointAngle, u.jointSpacing, u.jointDepth, u.jointRun, 2.2, 11.0); }
 // G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
 fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), off).depth; }
 
@@ -522,8 +522,10 @@ struct Groove {
     line: vec4f,    // angle (degrees), spacing (px), depth, run (px)
     shape: vec3f,   // the share of a run missing; the mean half-width of a channel (px); the family's salt
 }
-fn lines(angle: f32, spacing: f32, depth: f32, run: f32, gaps: f32, half_: f32, salt: f32) -> Groove {
-    return Groove(vec4f(angle, max(spacing, 3.0), depth, max(run, 12.0)), vec3f(gaps, half_, salt));
+// H23: every family's runs have the same gaps (two fifths of a line's length); the worlds that cut grooves all set that.
+const GROOVE_GAPS = 0.4;
+fn lines(angle: f32, spacing: f32, depth: f32, run: f32, half_: f32, salt: f32) -> Groove {
+    return Groove(vec4f(angle, max(spacing, 3.0), depth, max(run, 12.0)), vec3f(GROOVE_GAPS, half_, salt));
 }
 // The deepest cut here (a depth), the lattice coordinates (x across the lines, with `off` px added; y along them) and the index of the line
 // left of x, where a gully's rib begins.
@@ -561,9 +563,9 @@ fn groove(p: vec2f, g: Groove, off: f32) -> Cut {
 // the stretch of face between two gully lines: a plane tilted by its own random
 // slope (ribTilt, height per px at most), so a stripe faces the sun or turns from
 // it as a whole. A gully is carved into the line as a smooth channel gullyWidth
-// across and up to gullyDepth deep, in runs of gullyRun px with gaps (gullyGaps),
+// across and up to gullyDepth deep, in runs of gullyRun px with gaps (GROOVE_GAPS),
 // deepest mid-run. Returns (height offset, how deep the gully floor is here, 0..1).
-fn gullyGroove() -> Groove { return lines(u.gullyAngle, u.gullySpacing, u.gullyDepth, u.gullyRun, u.gullyGaps, 0.5 * max(u.gullyWidth, 2.0), 61.0); }
+fn gullyGroove() -> Groove { return lines(u.gullyAngle, u.gullySpacing, u.gullyDepth, u.gullyRun, 0.5 * max(u.gullyWidth, 2.0), 61.0); }
 fn gullyField(p: vec2f) -> vec2f {
     let g = gullyGroove();
     let cut = groove(p, g, 0.0);

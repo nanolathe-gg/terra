@@ -213,7 +213,6 @@ struct Uniforms {
     jointAngle: f32,      // joints' lean from the screen's north-south, degrees
     jointDepth: f32,      // groove depth, height units
     jointRun: f32,        // typical length of an unbroken joint, world px
-    jointGaps: f32,       // share of each joint's length that is missing (0: the whole face)
     crackStyle: f32,      // cracks: 0 ink (dark floor), 1 relief (carved groove with a lit lip)
     bedHeight: f32,       // 0 beds spaced along the ground (px), 1 by height units (as the strata colours)
     rockFrom: f32,        // slope where beds and joints start on steep ground (painted rock always counts)
@@ -264,7 +263,6 @@ struct Uniforms {
     gullyWidth: f32,      // gully width across, world px
     gullyAngle: f32,      // gully lean from the screen's north-south, degrees
     gullyRun: f32,        // typical length of an unbroken gully, world px
-    gullyGaps: f32,       // share of each gully's length that is missing
     gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
     bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)

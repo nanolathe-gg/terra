@@ -70,8 +70,8 @@ export function worldControlRequirement(key,v){
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
- if(['jointSpacing','jointAngle','jointRun','jointGaps'].includes(key))return needs('jointDepth','Joint depth');
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
+ if(['jointSpacing','jointAngle','jointRun'].includes(key))return needs('jointDepth','Joint depth');
  if(key==='bedBend'&&n('gullyDepth')<=0&&n('ribTilt')<=0)return 'Set Gully depth or Rib tilt above zero to use this setting.';
  if(key==='cliffStagger')return n('rockOrder')<=0?'Enable ordered Rock structure to use this setting.':n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':needs('jointDepth','Joint depth');
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
@@ -82,7 +82,7 @@ export function worldControlRequirement(key,v){
  if(key==='moonFoldSpacing')return needs('moonFolds','Contour folds');
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
- if(['gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade'].includes(key))return needs('gullyDepth','Gully depth');
+ if(['gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyShade'].includes(key))return needs('gullyDepth','Gully depth');
  // Beds and joints draw only in ordered rock, and the bed profile only where a ledge or lip gives it relief.
  if(['rockFrom','cliffFollow','cliffReach','cliffWide','cliffFlat','cliffRise','cliffBed','cliffStagger','cliffFine','cliffDomain'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['cliffReach','cliffWide','cliffFlat','cliffBed','cliffFine','cliffDomain'].includes(key)&&n('cliffFollow')<=0)return 'Choose Follow terrain in Structure orientation to use this setting.';

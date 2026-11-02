@@ -1097,7 +1097,6 @@ export class TerrainRenderer {
     set('uJointAngle', number('jointAngle', 0));
     set('uJointDepth', number('jointDepth', 2));
     set('uJointRun', number('jointRun', 120));
-    set('uJointGaps', number('jointGaps', 0.3));
     set('uCrackStyle', number('crackStyle', 0));
     set('uBedHeight', number('bedHeight', 0));
     set('uRockFrom', number('rockFrom', 0.6));
@@ -1124,7 +1123,6 @@ export class TerrainRenderer {
     set('uGullyWidth', number('gullyWidth', 14));
     set('uGullyAngle', number('gullyAngle', -20));
     set('uGullyRun', number('gullyRun', 160));
-    set('uGullyGaps', number('gullyGaps', 0.3));
     set('uGullyShade', number('gullyShade', 0));
     set('uRibTilt', number('ribTilt', 0));
     set('uBedBend', number('bedBend', 0));
