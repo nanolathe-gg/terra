@@ -100,7 +100,7 @@ KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFa
 KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
-KNOB_DEFAULTS.update(crystalShoreScale=1, crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
+KNOB_DEFAULTS.update(crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
 # H20b (Crystal): the share of shore slabs that break into a fine mesh inside their own outline (0: the earlier output).
 KNOB_DEFAULTS.update(plateVary=0)
 # E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
@@ -585,11 +585,10 @@ WORLD_KNOBS = {
                     crystalCraterWeb=.35, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
                     crystalCraterTone=.12, crystalCraterLight=1,
                     # G7/H20b: the shore slabs draw at 28 px, under thinner seams (.56, ending at .68).
-                    # G7 asked for finer cells (crystal-3's band reads 8-14 px) and drew plateSize 14 and 24 at
-                    # 70% through crystalShoreScale; retail's plates read larger elsewhere (30-50 px on
-                    # crystal-2, 15-30 on crystal-3), and the owner ruled for 28 ("For crystal go ahead with 28,
-                    # but maybe we also allow some variability"), so the plates draw at plateSize as given and
-                    # no world sets the scale.
+                    # G7 asked for finer cells (crystal-3's band reads 8-14 px); retail's plates read larger
+                    # elsewhere (30-50 px on crystal-2, 15-30 on crystal-3), and the owner ruled for 28 ("For
+                    # crystal go ahead with 28, but maybe we also allow some variability"), so the plates draw
+                    # at plateSize as given.
                     crystalShoreSeam=.56, crystalSeamEnd=.68,
                     # H20b: in patches a slab breaks into a fine mesh inside its outline (retail: crystal-3's band
                     # beside larger plates, small cells among the big ones on crystal-1's mound).

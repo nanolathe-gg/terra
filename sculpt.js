@@ -220,7 +220,6 @@ const SHAPE_FIELDS=[
   ['crystalCraterStep','crystal-crater-step','Facet step (units, crystal craters)',['crater'],0,60,5,10,'Crater facets: how far each facet may stand above or below the crater\'s own surface, in height units either way (shown in tenths: 3 is the earlier ragged crater). Retail\'s crater walls are smooth planes broken by a thin web, so a small step keeps the sun\'s light running smoothly across the wall.'],
   ['crystalCraterSkin','crystal-crater-skin','Web in the shader (crystal craters)',['crater'],0,100,100,100,'Crater facets: 100 marks the whole crater as one crystal skin (no seams in the crystal field) and leaves the thin web between the facets to the shader (World knobs crystalCraterWeb and its relatives), drawn at pixel size so its lines run thin and wander; 0 inks each facet\'s seam in the field as before.'],
   // G7 (Crystal): finer shore slabs.
-  ['crystalShoreScale','crystal-shore-scale','Rock slab size (share of Plate size, crystal shores)',['deep','shallow','offset'],10,100,5,100,'Rock slabs (Plate material 1): scales Plate size down, so a preset or an old stroke asks for large plates and the shore draws finer ones (never under 8 px). 100 keeps Plate size as given.'],
   // H20b (Crystal): some slabs break into a fine mesh.
   ['plateVary','plate-vary','Rock slab variety (share of slabs broken into fine mesh)',['deep','shallow','offset'],0,100,5,100,'Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole.'],
   ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['deep','shallow','offset'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
@@ -235,7 +234,7 @@ const SHAPE_FIELDS=[
   ['lavaSpread','lava-spread','Layer width spread',['deep','shallow'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
-const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreScale','crystalShoreSeam','plateVary'];
+const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreSeam','plateVary'];
 // G6 (Ice): the mountain facets' options, wired beside E7's (the card the stroke builds and strokeParams).
 const G6_KEYS=['iceFacets','iceFacetSize'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];

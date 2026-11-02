@@ -31,7 +31,7 @@ const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDar
 const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) || k === 'bandFoot' ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
 // Card units of the stroke options (sculpt.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
 const CARD_SCALE = {fingers: 100, fingerAmount: 100, fingerSize: 100, fingerSpread: 100, fingerHeight: 10, bankPx: 1, shorePlates: 1, plateWaterPx: 1, plateLandPx: 1, plateSize: 1, plateGap: 10, plateHeight: 10, plateMaterial: 1,
-  crystalShoreScale: 100, crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterShore: 1, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaMeander: 100, lavaSpread: 100, lavaCircleVary: 100};
+  crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterShore: 1, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaMeander: 100, lavaSpread: 100, lavaCircleVary: 100};
 // Shape options that no world sets: red-2's own stroke carries terraces 7, ledge 40, jitter 60 (card units). Moved on that scene's card.
 const CARD_ONLY = [{world: 'red', knob: 'terraces', from: 7, to: 0}, {world: 'red', knob: 'ledge', from: 40, to: 90}, {world: 'red', knob: 'terraceJitter', from: 60, to: 0}];
 // H21: read card limits/scales from the same declarations as toolDefaults. Top-level scriptedScene options use engine units and win over the card.
@@ -47,9 +47,9 @@ const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.
 // The stroke kinds that carry each shape option (sculpt.js SHAPE_FIELDS), and the scale of the card's unit.
 const KINDS = {crystalForm: ['crystal'], crystalTiers: ['crystal'], crystalSides: ['crystal'], crystalSize: ['crystal'], crystalStep: ['crystal'], crystalCount: ['crystal'], crystalTop: ['crystal'], crystalLean: ['crystal'], crystalVariation: ['crystal'],
   crystalAlign: ['crystal'], crystalFacet: ['crystal'], crystalSizeVar: ['crystal'], crystalSmooth: ['crystal'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
-  crystalShoreScale: ['deep', 'shallow', 'offset'], crystalShoreSeam: ['deep', 'shallow', 'offset'], frostNeedles: ['deep', 'shallow', 'offset'], iceFacets: ['mountain'], iceFacetSize: ['hill', 'mountain']};
+  crystalShoreSeam: ['deep', 'shallow', 'offset'], frostNeedles: ['deep', 'shallow', 'offset'], iceFacets: ['mountain'], iceFacetSize: ['hill', 'mountain']};
 const BODY_SCALE = {crystalForm: 1, crystalTiers: 100, crystalSides: 1, crystalSize: 1, crystalStep: 1, crystalCount: 1, crystalTop: 100, crystalLean: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100, crystalSmooth: 100,
-  crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreScale: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
+  crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value
 const scenes = {};   // world -> the three scenes' variants, for the page's own values
 const queries = {};   // world -> the three scenes' own query pairs (zhon-1: beachWidth=0), which win over every table

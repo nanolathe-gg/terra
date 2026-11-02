@@ -143,7 +143,7 @@ $('regressions').onclick=()=>run('GPU regression and alternative suite',async()=
  const initialMasks=await run([ground,...[18,20,22,24].map(paintChannel=>({kind:'paint',points:[{x:350,y:350}],params:{paintChannel,amount:100,radius:100,rough:0,softness:0}}))]);
  const erased=await run([ground,...[18,20,22,24,7].map(paintChannel=>({kind:'paint',points:[{x:350,y:350}],params:{paintChannel,amount:100,radius:100,rough:0,softness:0}}))]);
  result.maskErase={before:[14,15,16,17].map(i=>initialMasks.out.masks[i][175*384+175]),after:[14,15,16,17].map(i=>erased.out.masks[i][175*384+175])};
- for(const key of ['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreScale','crystalShoreSeam','baseVary','baseBump']){
+ for(const key of ['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','baseVary','baseBump']){
   const f=inventory.shapes.find(f=>f[0]===key),kind=key.startsWith('base')?'hill':'offset',params={...shapeContext(key,kind),amount:kind==='offset'?-70:70};
   for(const lean of kind==='hill'?[0,1]:[0]){const n={kind,seed:2701,points:path,params:{...params,lean}};const a=await run([ground,{...n,params:{...n.params,[key]:f[4]/f[7]}}]),b=await run([ground,{...n,params:{...n.params,[key]:f[5]/f[7]}}]);result.conditional.push({key,kind,lean,amount:params.amount,...fieldDelta(a.out,b.out)});}
  }
