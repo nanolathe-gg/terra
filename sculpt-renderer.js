@@ -1078,7 +1078,6 @@ export class TerrainRenderer {
     set('uBandFoot', number('bandFoot', 0));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
-    set('uCrackLength', number('crackLength', 2));
     set('uCrackWidth', number('crackWidth', 1));
     set('uCrackNetwork', number('crackNetwork', 0.35));
     set('uCrackMinor', number('crackMinor', 0.75));

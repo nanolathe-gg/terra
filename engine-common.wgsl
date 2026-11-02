@@ -155,7 +155,6 @@ struct Uniforms {
     cracksOn: i32,        // the full bake computes cracks; previews skip them
     plainRelief: f32,     // faint lit lumps on level ground (appearance only)
     crackSpacing: f32,    // major crack block size, world px
-    crackLength: f32,     // elongation of crack cells along the fall line
     windAngle: f32,       // direction the wind blows toward, degrees (0 = east)
     ripple: f32,          // ripple wavelength, world px (0: none)
     rippleHeight: f32,    // ripple amplitude, height units

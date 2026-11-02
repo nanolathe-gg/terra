@@ -275,6 +275,8 @@ fn crackShade(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
 // H23: how far a crack's kinks and bends carry, and how far the cracks reach onto gentle slopes (0: steep faces only, 1: onto gentle ground), the same on every world.
 const CRACK_JAGGED = 0.6;
 const CRACK_REACH = 0.6;
+// H23: the elongation of the crack cells along the fall line, the same on every world.
+const CRACK_LENGTH = 2.0;
 
 // The relief style of crackShade (card E3, crackStyle 1): the groove is carved
 // and lit rather than inked. Its floor keeps only a light core, the wall
@@ -324,14 +326,14 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
         let turnBy = u.faceStreak * smoothstep(u.faceStreakFrom, u.faceStreakFrom + 0.35, slope) * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + 71.0), 0.0, 1.0);
         majorFall = normalize(mix(fall, vec2f(-fall.y, fall.x), turnBy));
     }
-    let c0 = fractureLevel(w, majorFall, major, u.crackLength, m * gentle * majorShare, u.crackNetwork, 3.7);
+    let c0 = fractureLevel(w, majorFall, major, CRACK_LENGTH, m * gentle * majorShare, u.crackNetwork, 3.7);
     // Minor lattice turned and shifted per major block.
     let h0 = cellHash(c0.id + 11.1);
     let r0 = turn(h0.x * TAU);
     let q1 = r0 * w + h0 * minorCell * 7.0 + CRACK_JAGGED * minorCell * 0.25 * vec2f(valueNoise(p / (minorCell * 0.5) + 2.2), valueNoise(p / (minorCell * 0.5) + 6.6));
     // Minor cracks also break gentle slopes, more sparsely (retail hill
     // slopes carry short cracks every 10 px or so).
-    var c1 = fractureLevel(q1, r0 * fall, minorCell, 1.0 + (u.crackLength - 1.0) * 0.4, m * mix(0.5, 1.0, rocky) * gentle * minorShare, 1.0, 9.1);
+    var c1 = fractureLevel(q1, r0 * fall, minorCell, 1.0 + (CRACK_LENGTH - 1.0) * 0.4, m * mix(0.5, 1.0, rocky) * gentle * minorShare, 1.0, 9.1);
     c1.normal = transpose(r0) * c1.normal;
     let h1 = cellHash(c1.id + c0.id * 0.37 + 23.3);
     let r1 = turn(h1.x * TAU);

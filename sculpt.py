@@ -34,7 +34,7 @@ KNOB_DEFAULTS = dict(
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
-    crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
+    crackSeverity=.6, crackSpacing=40, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackDark=.75,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
@@ -534,7 +534,7 @@ WORLD_KNOBS = {
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
     # Its Crystals brush makes column mounds: Voronoi columns with ~15 px
     # tops stepped ~16 units (measure/crystal_geometry.py).
-    'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
+    'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
@@ -728,7 +728,7 @@ WORLD_VARIANTS = {
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: gray buttes',
                       knobs=dict(bedSpacing=4, faceDark=.4, banding=.9, crackSeverity=.5, crackMajor=.7,
-                                 crackMinor=.15, crackBlocks=.15, crackLength=3,
+                                 crackMinor=.15, crackBlocks=.15,
                                  # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
                                  # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
                                  # 0.4%). Ambient .12 gives 0% and 1.0%.
