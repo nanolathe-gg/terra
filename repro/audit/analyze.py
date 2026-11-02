@@ -15,7 +15,7 @@ intent={
  'Shine':('Glints and rough reflective material','crystal,ice'), 'Boulders':('Stones and vegetation-coloured caps','green,desert'), 'Debris':('Loose stone near cliff feet','green,desert'), 'Sand':('Sand cover, deposit tint and ripple grain','desert,archipelago'),
  'Cracks':('Fractured faces, hairlines and broken blocks','green,red,crystal'), 'Rock structure':('Beds, joints and ledges on exposed faces','green,red,desert'), 'Contour bands':('Tonal terraces and drawn contour lines','archipelago,lava'), 'Strata':('Coloured bands through raised forms','desert'),
  'Water':('Shelf depth colours, waterline, shallow bed and banks','all'), 'Palette':('TA palette and controlled quantization','all'), 'Desert foot band':('Pale/grey ribbon around raised feet','desert'), 'Desert caps':('Uniform pale cap above coloured beds','desert'),
- 'Rock face':('Material contrast and face structure','green,red,desert'), 'Shallow water':('Lit, mottled, cracked and grainy shallow beds','green,red,archipelago'), 'Fringe':('Repeated drifting outline margins','archipelago'),
+ 'Rock face':('Material contrast and face structure','green,red,desert'), 'Shallow water':('Lit, cracked and grainy shallow beds','green,red,archipelago'), 'Fringe':('Repeated drifting outline margins','archipelago'),
  'Lava hill':('Pillows, chips, creases and hanging veins','lava'), 'Lava banks':('Dark creases beneath terrace steps','lava'), 'Pockmarks':('Small pits across raised ground','moon'), 'Moon surface':('Cups, ribs and folds on steep forms','moon'),
  'Ice mountains':('Slate, straight fibres and cap lumps','ice,crystal'), 'Ice blocks':('Soft lighting, snow caps and hatched aprons','ice'), 'Ice frost':('Needle shore bands and low pockets','ice')}
 def purpose(group):

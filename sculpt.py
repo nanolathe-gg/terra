@@ -119,9 +119,8 @@ KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
 # shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
 # its depth with broad noise so the band's width and outline vary along the shore; bedFlat
-# lights the lit bed by its own relief only (no slope shading across the shelf); bedMottle is
-# the bed's mid-scale mottle as a share of brightness.
-KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0, bedMottle=0)
+# lights the lit bed by its own relief only (no slope shading across the shelf).
+KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0)
 # E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
 # crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
 # bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
@@ -130,8 +129,8 @@ KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots
 # E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
 # dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
 # the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
-# the ring texture's own); bedMottleScale sizes the bed's mottle lumps against Green's.
-KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, bedMottleScale=1, stepSoftPx=1)
+# the ring texture's own).
+KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
 # E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
 # the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
 # (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
@@ -286,8 +285,8 @@ WORLD_KNOBS = {
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
                   stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1,
                   # G1 (round 8 review: "reads as noise while retail reads as lit bumpy terrain"): the
-                  # mottle's clouds and the palette dither's white noise went; lit bumps of 5 px take
-                  # their place. After a 9-px blur the bed's lit / dark shares and clump sizes are
+                  # the palette dither's white noise went; lit bumps of 5 px take
+                  # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
                   shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
@@ -338,8 +337,8 @@ WORLD_KNOBS = {
                 # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
                 stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6,
                 crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15,
-                # G1: lit bumps of 8 px replace the mottle's clouds, and no palette dither (see Green).
-                bedMottle=0, shoalBump=2, shoalBumpPx=8, shoalDither=0,
+                # G1: lit bumps of 8 px, and no palette dither (see Green).
+                shoalBump=2, shoalBumpPx=8, shoalDither=0,
                 # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is
                 # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
                 # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
@@ -381,14 +380,13 @@ WORLD_KNOBS = {
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
                         bandFoot=8,
-                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottleScale=1.6,
+                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80,
                         # G1: the reef bars are soft blotches (retail: 8-16 px energy 1.8 against 1.3 at 4-8 px;
-                        # 4.5-px bumps at 3 read as chunky cobbles): a mottle of 1.6 and faint lit bumps of
-                        # 9 px, a few dots, and no palette dither (3-px-blurred luma s.d. retail 7.6, before
-                        # 4.7, now 5.8; see Green).
-                        # H18 part 2: bedMottle .09 printed noisy blotches on the bars where retail's are smooth and soft
-                        # (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); 0 reads closer on that window.
-                        bedMottle=0, bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
+                        # 4.5-px bumps at 3 read as chunky cobbles): faint lit bumps of 9 px, a few dots, and no
+                        # palette dither (3-px-blurred luma s.d. retail 7.6, before 4.7, now 5.8; see Green).
+                        # H18 part 2: a mottle of the bed's brightness printed noisy blotches on the bars where retail's are
+                        # smooth and soft (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); none reads closer there.
+                        bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
                         shoalRag=4,
                         # G1 (round 8: "the default should still have a small blur on the edge"): the world's own

@@ -1087,17 +1087,6 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     return rgb;
 }
 
-// E11: the lit bed's mid-scale mottle. Retail's shallows are lit ground whose lumps of 4-17 px
-// read as crisp patches, not clouds (luma s.d. after a 5-px blur 5.6-7.5 against ours 2.8-3.9
-// with the fine grain alone), so the noise is cut at a threshold roughened by a pixel hash.
-// pixel: the screen pixel (the grain). Returns -1..1.
-fn bedMottleField(p: vec2f, pixel: vec2f) -> f32 {
-    let z = u.bedMottleScale;
-    let m = shelfNoise(p / (3.2 * z) + 31.0) * 0.5 + shelfNoise(p / (6.5 * z) + 7.0) * 0.3 + shelfNoise(p / (15.0 * z) + 53.0) * 0.2;
-    let grain = fract(sin(dot(floor(pixel), vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
-    return smoothstep(0.3, 0.7, 0.5 + (m - 0.5) * 2.2 + grain * 0.45) * 2.0 - 1.0;
-}
-
 // E11: dark dots in the lit bed. Retail's lilac lake shows small dark dots (3-4 px, one every
 // 12-20 px, blue-purple) that the ground tiles' fine grain does not give (dark components
 // of >= 3 px average 6.5-11 px in retail against 4.3-6.7 in ours). One jittered dot per
@@ -1865,12 +1854,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
             // The bumps' light moves red and green more than blue, so a shaded lump goes toward deep blue
             // and a lit one toward pale blue, where a plain multiply lands between the palette's blues (teal).
-            // Only hard-step water takes them, as the mottle: Archipelago's lakes and channels stay smooth, as retail's.
+            // Only hard-step water takes them: Archipelago's lakes and channels stay smooth, as retail's.
             if (u.shoalBump > 0.0 && bedLit > 0.0 && edgeHard > 0.0) { shallow *= 1.0 + (shoalBumpLight(p) - 1.0) * vec3f(1.0, 1.0, 0.4) * bedLit; }
             // G1: retail's lilac lake keeps salmon and pink pixels of the ground under it; the tint alone replaces them.
             if (u.shoalGrain > 0.0 && bedLit > 0.0) { shallow += u.shoalGrain * (levelGround - groundBased(u.groundTexMean)) * bedShade * bedLit; }
             if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
-            if (u.bedMottle > 0.0 && bedLit > 0.0 && !crackedBed && edgeHard > 0.0) { shallow *= 1.0 + u.bedMottle * bedMottleField(p, pixel) * bedLit; }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.

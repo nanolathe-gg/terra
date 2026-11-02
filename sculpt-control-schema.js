@@ -68,7 +68,6 @@ export function worldControlRequirement(key,v){
  if(key==='bedBend'&&n('gullyDepth')<=0&&n('ribTilt')<=0)return 'Set Gully depth or Rib tilt above zero to use this setting.';
  if(key==='cliffStagger')return n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':needs('jointDepth','Joint depth');
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
- if(key==='bedMottleScale')return needs('bedMottle','Bed mottle');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
  if(/^moonCup/.test(key)&&key!=='moonCups')return needs('moonCups','Slope cups');
@@ -96,7 +95,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'banding','bandStyle','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','deepEdgeDepth','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
  'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','gullySpacing','scratchDepth','facetTilt','facetSize','cliffFollow',
- 'stepSharp','shelfWander','bedFlat','bedMottle','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
+ 'stepSharp','shelfWander','bedFlat','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceSlate','mineralDetail','iceCrystal','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
