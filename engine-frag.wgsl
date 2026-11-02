@@ -1035,6 +1035,8 @@ fn ringScallop(p: vec2f, seed: f32) -> f32 {
     return sqrt(1.0 - x * x) - 0.4;
 }
 fn ringReachMeasure(q: vec2f) -> f32 { return sqrt(max(-fringeField(q), 0.01)); }
+// H24: the outermost copy's line is this much fainter than the innermost's, the same on every world.
+const RING_TAPER = 0.35;
 fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     if (u.ringContrast <= 0.0 || u.materialReady == 0) { return base; }
     let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
@@ -1074,7 +1076,7 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
         // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
         let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
-        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
+        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
     }
     return rgb;
 }

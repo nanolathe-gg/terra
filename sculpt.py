@@ -182,9 +182,9 @@ KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGap
 # lines; ringCount copies), drifting towards ringShiftDir degrees clockwise from east with ringScatter of a half turn of
 # wander, and ringWobble px of waver in each outline (lobes ringLobe px across).
 KNOB_DEFAULTS.update(ringShift=0, ringShiftDir=315, ringScatter=.5, ringWobble=3, ringLobe=22)
-# G3: the stack fades into the sand: ringTaper (outer lines fainter), ringFill (pale tint, stepping lighter
-# outward), ringPatch over ringPatchSize px (the reach varies along the outline). 0: as the concentric look.
-KNOB_DEFAULTS.update(ringTaper=0, ringFill=0, ringPatch=0, ringPatchSize=120)
+# G3: the stack fades into the sand: ringFill (pale tint, stepping lighter outward), ringPatch over
+# ringPatchSize px (the reach varies along the outline). 0: as the concentric look.
+KNOB_DEFAULTS.update(ringFill=0, ringPatch=0, ringPatchSize=120)
 # G3: ringTone 1 draws the copies' lines in retail's rose, paler outward (0: the earlier crimson).
 KNOB_DEFAULTS.update(ringTone=0)
 # G2 (rock faces follow the slope): 0 keeps the fixed screen directions of every world; 1 runs beds along the
@@ -393,7 +393,7 @@ WORLD_KNOBS = {
                         # G3 fade: outer lines fainter, a pale lime skirt stepping lighter outward, and a
                         # reach that varies along the outline (retail's halo is wide on some sides of a hill
                         # and a few px on others). ringTone 1: retail's rose lines, paler outward.
-                        ringTaper=.35, ringFill=.45, ringPatch=.8, ringPatchSize=160, ringTone=1),
+                        ringFill=.45, ringPatch=.8, ringPatchSize=160, ringTone=1),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
