@@ -201,11 +201,13 @@ try {
       return {world, type: 'knob', key: k.key, group: k.group, fixture, state, gates, lo: k.lo, hi, ...m};
     };
     // The mirror of the gated pass: on this fixture, every row whose reason holds now, read as it stands. The reason is asked again here, because a scene's
-    // strokes or query can clear it (a water stroke's Hard edge, Ice's variants).
+    // strokes or query can clear it (a water stroke's Hard edge, Ice's variants). A row no knob can clear has no gated pass, so the fixture that clears it is its proof.
+    const facts = new Map();
     const idle = async fixture => {
       const now = await ev('terraformAudit.panelValues()');
       for (const k of live) {
-        const reason = worldControlRequirement(k.key, now); if (!reason) continue;
+        const reason = worldControlRequirement(k.key, now);
+        if (!reason) { const r = facts.get(k.key); if (r && r.max <= 0) Object.assign(r, await sweepKnob(k, fixture, 'gated', {}), {note: 'a fixture cleared the reason'}); continue; }
         const hi = k.key === 'wind' || k.key.endsWith('Dir') ? 180 : k.hi, m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${hi})`);
         if (m.px >= HIDDEN_PX) add({world, type: 'knob', key: k.key, group: k.group, fixture, state: 'hidden', reason, lo: k.lo, hi, hides: true, ...m});
       }
@@ -215,9 +217,8 @@ try {
     await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`); await ev('__wc.remember()');
     const results = new Map();
     for (const k of on) { const r = await sweepKnob(k, fixtures[0][0], 'enabled', {}); results.set(k.key, r); }
-    await idle(fixtures[0][0]);
     for (const k of off) {
-      const sets = gatesFor(k.key); if (!sets.length) { add({world, type: 'knob', key: k.key, group: k.group, fixture: fixtures[0][0], state: 'gated', gates: null, max: -1, px: -1, note: 'no knob clears the reason'}); continue; }
+      const sets = gatesFor(k.key); if (!sets.length) { facts.set(k.key, {world, type: 'knob', key: k.key, group: k.group, fixture: fixtures[0][0], state: 'gated', gates: null, max: -1, px: -1, note: 'no knob clears the reason'}); continue; }
       let best = null;
       for (const gates of sets) {
         for (const [g, x] of Object.entries(gates)) await ev(`terraformAudit.knob(${JSON.stringify(g)}, ${x})`);
@@ -226,6 +227,7 @@ try {
       }
       results.set('~' + k.key, best);
     }
+    await idle(fixtures[0][0]);
     // The page sliders.
     for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`!!document.getElementById(${JSON.stringify(sid)}).closest('[hidden]')`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
     stage('rows', ts); ts = Date.now();
@@ -246,7 +248,7 @@ try {
       }
       await idle(fixtures[f][0]);
     }
-    for (const r of results.values()) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
+    for (const r of [...results.values(), ...facts.values()]) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
     stage('zero retries', ts); ts = Date.now();
     // Stroke options, on the stroke fixture.
     const shapeRows = [];

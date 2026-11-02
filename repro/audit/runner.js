@@ -60,7 +60,7 @@ function worldFor(group,key){
  if(/^baseBand|^desert|^strata/.test(key))return 'desert';
  if(/^ring|^hillLight$/.test(key)||key==='apron'||key==='beachWidth')return 'archipelago';
  if(group.includes('Shine'))return 'crystal';
- if(/^bedDots|^bedDotCell|^cracked|^bedCrack|^shoalGrain/.test(key))return 'red';
+ if(/^bedDots|^bedDotCell|^cracked|^shoalGrain/.test(key))return 'red';
  return 'green';
 }
 function worldGates(group,key){

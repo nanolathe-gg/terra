@@ -208,7 +208,7 @@ const SHAPE_FIELDS=[
   // E8 (Painted Desert): ragged feet and bumpy aprons.
   ['baseVary','base-vary','Foot outline raggedness (px)',BASE_KINDS,0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
   ['baseBump','base-bump','Foot bumps (height units)',BASE_KINDS,0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
-  // E10 (Lava): finger amount, size, distribution and height; layer width variation; circle size of the circular layers.
+  // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
   ['fingerSize','finger-size','Finger size',['deep','shallow'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
   ['layerVary','layer-vary','Layer width variation',['deep','shallow'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
@@ -300,7 +300,7 @@ function showTool(state={},kind=tool) {
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
-  const picks=JSON.stringify([strokeWaterPicks(),renderer.flowOn]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice wakes or idles world rows
+  const picks=JSON.stringify(strokeWaterPicks());if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice wakes or idles world rows
   const featureActive=Boolean(mapFeatures?.active);
   for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&b.dataset.tool===tool));
   $('feature-tool').setAttribute('aria-pressed',String(featureActive));
@@ -1579,7 +1579,7 @@ function waterTones() {
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 function worldPanelValues() {
   const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),flowOn:renderer.flowOn?1:0,waterTinted:own.water==='tinted'?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),waterTinted:own.water==='tinted'?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);

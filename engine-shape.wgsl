@@ -1097,6 +1097,7 @@ fn packPlane(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) n
 // frame; the coast point at tangent offset tau from a site's axis reaches the finger's outline. Everything about a finger comes from its site's hashes.
 const THUMB_CELL = 44.0;
 const THUMB_SPREAD = 0.5;   // how much a cluster's noise raises a site's chance of a finger
+const THUMB_AMOUNT = 1.4;   // H24: the share of lattice sites that grow one, the same on every world
 fn uhash(i: i32, j: i32, salt: u32, k: u32) -> f32 { return hashi(i, j, salt ^ k) * 0.5 + 0.5; }
 fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
   let tx = -ny; let ty = nx; let salt = u.seed;
@@ -1106,7 +1107,7 @@ fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
   for (var j = cj - 1; j <= cj + 1; j++) { for (var i = ci - 1; i <= ci + 1; i++) {
     let ax = (f32(i) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x5a7u)) * THUMB_CELL;
     let ay = (f32(j) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x1d3u)) * THUMB_CELL;
-    let chance = clamp((0.7 + 1.5 * THUMB_SPREAD * vnoise(ax / 130.0, ay / 130.0, salt ^ 0x1f3u)) * THUMB_AMOUNT, 0.04 * clamp(THUMB_AMOUNT, 0.0, 1.0), 0.97);
+    let chance = clamp((0.7 + 1.5 * THUMB_SPREAD * vnoise(ax / 130.0, ay / 130.0, salt ^ 0x1f3u)) * THUMB_AMOUNT, 0.04, 0.97);
     if (uhash(i, j, salt, 0x31fu) >= chance) { continue; }
     // Only sites within half a cell of the coast along its normal grow a finger here.
     if (abs((lx - ax) * nx + (ly - ay) * ny) >= THUMB_CELL * 0.5) { continue; }
@@ -1145,9 +1146,8 @@ fn coastNormal(x: i32, y: i32, cells: u32) -> vec3f {
   if (len < 1.0e-3) { return vec3f(0.0, 0.0, 0.0); }
   return vec3f(gx / len, gy / len, 1.0);
 }
-// H24: the height (units above the sea) of a finger's flat top, and the share of lattice sites that grow one, the same on every world.
+// H24: the height (units above the sea) of a finger's flat top, the same on every world.
 const FINGER_LOW = 3.5;
-const THUMB_AMOUNT = 1.4;
 // At each cell near the coast the finger field is read at the nearest coast point (back along the normal) and the cell is raised to a flat tongue (or
 // sunk, for an inlet). U marks the raised cells for the connectivity march; F keeps a flat finger's height for the layers.
 @compute @workgroup_size(8, 8)

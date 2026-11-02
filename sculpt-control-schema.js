@@ -64,11 +64,11 @@ export function shapeControlAvailable(key,kind,p){
 
 // The two water switches a deep or shallow stroke can also turn on for its own footprint (worldPanelValues passes that in).
 const HARD_STEP='Hard shallow-to-deep step, or a water stroke\'s Hard edge',LIT_BED='Lit bed under shallow water, or a water stroke\'s Lit bed';
-// The step's deep share reaches a pixel only where something draws it: two water tones, a lit bed (a world's or a stroke's), a crystal slab's shallows, a baked flow or tinted
-// water (worldPanelValues passes the facts in). With one colour, or a third that follows the depth, nothing else reads it.
-const deepShows=(v,litStroke=false)=>Number(v.waterTones??2)===2||Number(v.bedLit)>0||litStroke||Number(v.crystalShallow)>0||Number(v.flowOn)>0||Number(v.waterTinted)>0;
-const deepIdle=v=>`This world's water has ${Number(v.waterTones)===3?'a third colour that follows the depth':'one colour'}, so the shallow-to-deep step shows only where a lit bed, crystal shallows or a baked flow draws it. Enable Lit bed under shallow water, or give a water stroke a Lit bed, to use this setting.`;
-const RAMP_IDLE='The ramp is drawn only where the step is off: set Hard shallow-to-deep step to 0, or give a water stroke a Faded edge, to use this setting.';
+// The step's deep share reaches a pixel only where something draws it: two water tones, a lit bed (a world's or a stroke's), a crystal slab's shallows or tinted water
+// (worldPanelValues passes the facts in). With one colour, or a third that follows the depth, nothing else reads it.
+const deepShows=(v,litStroke=false)=>Number(v.waterTones??2)===2||Number(v.bedLit)>0||litStroke||Number(v.crystalShallow)>0||Number(v.waterTinted)>0;
+const deepIdle=v=>`This world's water has ${Number(v.waterTones)===3?'a third colour that follows the depth':'one colour'}, so the shallow-to-deep step shows only where a lit bed or crystal shallows draw it. Enable Lit bed under shallow water, or give a water stroke a Lit bed, to use this setting.`;
+const RAMP_IDLE='The ramp is drawn only where the step is off: choose Ramp in Hard shallow-to-deep step, or give a water stroke a Faded edge, to use this setting.';
 const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look) to use this setting.';
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.

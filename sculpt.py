@@ -268,7 +268,7 @@ WORLD_KNOBS = {
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
-                  # 140 px (80 px since H24); the bed is lit by its own relief (green-3's blur was the shelf's slope
+                  # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
                   # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
                   shelfWander=24, bedFlat=1,
@@ -497,7 +497,7 @@ WORLD_KNOBS = {
                  crackDark=.35, reliefAmount=.9, reliefScale=20, reliefLumps=.9, wrinkles=.6,
                  # E10: lava-1's layers are many and uneven (11 of ~9 px, widths and risers vary along the shore,
                  # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
-                 # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
+                 # fingers are small, flat tongues (their size is a per-stroke option);
                  # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
                  layerVary=.8, layerCrease=.7, fingerSize=.65,
                  # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),

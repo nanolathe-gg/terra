@@ -21,11 +21,11 @@ const sceneRoot = opt('--scenes', `${here}repro/scenes`);
 const scenePath = (world, n) => existsSync(`${sceneRoot}/${world}-${n}.json`) ? `${sceneRoot}/${world}-${n}.json` : `${here}repro/scenes/${world}-${n}.json`;
 // The geology families: bed*, band*, strata*, ring*, layer*, the lava layer controls, the cap and foot bands, the column, and the rock structure
 // they share a coordinate with (cliff*, joint*). The water-bed knobs (bedLit, bedTint, ...) are Water's, not geology.
-const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Lip|Height|Bend|Punch)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Meander|Spread|CircleVary|CreaseVary)|baseBand\w*|desertCapFlat|cliff\w*|joint\w*|column\w*|mineralDetail)$/;
+const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Height|Punch)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Spread|CircleVary)|baseBand\w*|desertCapFlat|cliff\w*|joint\w*|column\w*|mineralDetail)$/;
 // The class each family acts on (measure/geology_diff.py).
-const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge\w*|bed(Lit|Tint|Flat|Dots|DotCell|Relief|Contrast|Bright)|crackedStep|flatBank|bankPx|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Meander|Spread|CircleVary|CreaseVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Shore|Deep|Bed))$/;
+const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge|bed(Lit|Tint|Flat|Dots|DotCell|Relief|Contrast|Bright)|crackedStep|flatBank|bankPx|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Shore|Deep|Bed))$/;
 const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|waterShore|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease)$/.test(k) ? 'bank'
-  : /^(bankPx|bankWidth|beachFlatness|fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Meander|Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
+  : /^(bankPx|bankWidth|beachFlatness|fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
 const IMPACTS = /^(moon\w*|crater\w*|pock\w*|crystalCrater\w*|rim(Sectors|Unequal|Gaps|GapWidth|Height)|worms|wrinkles|slopeMarks)$/;
 const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDark|Cups|CupSize|CupDepth))$/.test(k) ? 'slope' : /^moonFold/.test(k) ? 'fold' : 'impact';
 const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
@@ -89,7 +89,7 @@ const effective = (world, knob) => dump.e[world].map((e, i) => {
 const same = (a, b) => a === null || String(a) === String(b) || (Number(a) === Number(b) && a !== '' && b !== '');
 for (const world of fractures ? Object.keys(scenes) : Object.keys(dump.w)) for (const knob of Object.keys(dump.d)) {
   const re = bodies ? BODIES : impacts ? IMPACTS : shores ? SHORES : fractures ? FRACTURES : FAMILY;
-  if (bodies && /^lava(Meander|Spread|CircleVary|CreaseVary)$/.test(knob)) continue;   // Shores'
+  if (bodies && /^lava(Spread|CircleVary)$/.test(knob)) continue;   // Shores'
   if (!re.test(knob) || (only.length && !only.includes(world)) || (knobsOnly.length && !knobsOnly.includes(knob))) continue;
   if (fractures) {
     const at = effective(world, knob);

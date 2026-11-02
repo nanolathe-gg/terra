@@ -597,8 +597,7 @@ export class TerrainRenderer {
     this.i('uOverrideOn', painted.slice(14, 18).some(Boolean) ? 1 : 0);   // H3: planes 14-17 (erosion, deposits, vegetation, exposure)
     this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
     this.i('uLumpOn', painted[12] || 0);
-    this.flowOn = painted.slice(20, 25).some(Boolean);   // the panel reads it: a baked flow reads the step's deep share too
-    this.i('uFlowOn', this.flowOn ? 1 : 0);
+    this.i('uFlowOn', painted.slice(20, 25).some(Boolean) ? 1 : 0);
   }
 
   // The sediment colours of the flow bake (card F1): up to three [r,g,b] in 0..1.
@@ -869,7 +868,6 @@ export class TerrainRenderer {
     // E10 (Lava): crease at the foot of each bank step; shine only from this slope up (0: off).
     this.f('uLayerCrease', variant.has('layerCrease') ? Number(variant.get('layerCrease')) : 0);
     this.f('uShineSlopeGate', variant.has('shineSlopeGate') ? Number(variant.get('shineSlopeGate')) : 0);
-    // G5 (Lava): dashes in the bank crease.
     // H1 (Green): close shadow and cavity occlusion (0: off).
     this.f('uCloseShadow', variant.has('closeShadow') ? Number(variant.get('closeShadow')) : 0);
     this.f('uCavity', variant.has('cavity') ? Number(variant.get('cavity')) : 0);

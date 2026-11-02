@@ -947,11 +947,11 @@ fn shelfNoise(q: vec2f) -> f32 {
 }
 
 // H24: the size (world px) of the broad noise that wanders the step's depth, the same on every world.
-const SHELF_SCALE = 80.0;
-// The hard shallow-to-deep step (cards E1 and E11). Retail's step is a hard edge with
-// ragged stairs, not the ramp's gradual blend: it sits at one depth (the ramp's
-// midpoint), read off the bed's own depth rather than
-// the soft disc average. The ragged stairs are pixel blocks in the picture, not in depth: depth units would turn a
+const SHELF_SCALE = 140.0;
+// The hard shallow-to-deep step (cards E1 and E11). Retail's step is a hard edge
+// with ragged stairs, not the ramp's gradual blend: it sits at one depth (the ramp's
+// midpoint), read off the bed's own depth rather than the soft disc average. The
+// stairs are pixel blocks in the picture, not in depth: depth units would turn a
 // flat shelf into a wide fuzzy band (green-3's blurry middle), so the 2-px block
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
 // noise (shelfWander units over SHELF_SCALE px), so the band's outline and width
@@ -1117,7 +1117,8 @@ fn shoalBumpLight(p: vec2f) -> f32 {
     return min((u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight, u.lightCap);
 }
 
-const CRACKED_CONTRAST = 0.45;   // H24: how much of a cracked bed's light and cracks carry through its tint, the same on every world
+// H24: how much of a cracked bed's light and cracks carry through its tint, the same on every world.
+const CRACKED_CONTRAST = 0.45;
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
