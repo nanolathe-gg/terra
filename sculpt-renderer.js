@@ -7,7 +7,7 @@ import {materialRows,tablePlacementRows,PLACEMENT_ROW} from './sculpt-material-m
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
-// Layers of the masks texture array (4 planes each): the highest plane any card uses, divided by 4. Card F1 uses planes 20-24, layers 5-6.
+// Layers of the masks texture array (4 planes each): the plane count divided by 4. Planes 0-17 are in use, 18-24 are unused (see MASK_KEYS in sculpt.js).
 const MASK_PLANE_COUNT = 25;
 const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
@@ -167,15 +167,15 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', 'engine-bridge.wgsl', tableUrl.replace(/^\//, ''), 'engine-palette.wgsl', 'materials/palette.json'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl.replace(/^\//, ''), 'engine-palette.wgsl', 'materials/palette.json'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch('/' + name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelTable = extra[2];
-    this.paletteSource = extra[3];
-    this.paletteColours = JSON.parse(extra[4]).colours;
+    const modelTable = extra[1];
+    this.paletteSource = extra[2];
+    this.paletteColours = JSON.parse(extra[3]).colours;
     this.materialsSource = extra[0];
     this.commonSource = common;
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
@@ -196,7 +196,7 @@ export class TerrainRenderer {
     };
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile('engine-frag.wgsl', preprocess(frag + '\n' + extra[1], common, defines)),
+      compile('engine-frag.wgsl', preprocess(frag, common, defines)),
       compile('engine-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
 
     // Group 0: the uniforms and the world fields, shared by the draw and the

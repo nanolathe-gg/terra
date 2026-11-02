@@ -94,7 +94,8 @@ const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter'];
 // Card E1 adds five more: the water choices of a deep or shallow stroke (shore
 // edge, shallow-to-deep edge, bed; +127 hard / lit bed, -127 faded / noise
 // water), painted ground lumps (+127 more, -127 fewer) and the cracked-bed flag.
-// Planes 14-24 are unused placeholders (the flow bake's planes 20-24 went with it); the layout stays as the shaders read it.
+// Planes 0-17 are in use (14-17 are the override planes); 18-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
+// words a cell (28 planes), so the layout stays as they and the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
 const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
