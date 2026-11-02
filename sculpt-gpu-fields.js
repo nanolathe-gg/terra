@@ -1,4 +1,4 @@
-import {shapePaths} from './sculpt-paths.js';
+import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
@@ -70,21 +70,6 @@ const noiseValue = (f, s, x, y) => { const [[w1, a1, k1], [w2, a2, k2]] = NOISE[
 const invert = m => { const det = m[0] * m[3] - m[1] * m[2], a = m[3] / det, b = -m[1] / det, c = -m[2] / det, d = m[0] / det; return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])]; };
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 const isIdentity = m => !m || m.every((v, i) => Math.abs(v - IDENTITY[i]) < 1e-9);
-function simplifyPath(points, tolerance) {
-  if (points.length < 3) return points.slice();
-  const keep = new Uint8Array(points.length); keep[0] = keep[points.length - 1] = 1;
-  const stack = [[0, points.length - 1]];
-  while (stack.length) {
-    const [a, b] = stack.pop(), pa = points[a], pb = points[b], dx = pb.x - pa.x, dy = pb.y - pa.y, l2 = dx * dx + dy * dy;
-    let worst = -1, at = -1;
-    for (let k = a + 1; k < b; k++) {
-      const q = points[k], t = l2 ? clamp(((q.x - pa.x) * dx + (q.y - pa.y) * dy) / l2, 0, 1) : 0, d = Math.hypot(q.x - pa.x - dx * t, q.y - pa.y - dy * t);
-      if (d > worst) { worst = d; at = k; }
-    }
-    if (worst > tolerance) { keep[at] = 1; stack.push([a, at], [at, b]); }
-  }
-  return points.filter((_, k) => keep[k]);
-}
 // fissurePieces() of sculpt.js: the main cut cut into short pieces, and branches (each forking once) grown from roots along it. f: fissureSetup's values.
 const rand01 = (seed, a, b) => hash(a, b, seed) * .5 + .5;
 const mkPiece = (a, b, r0, r1, h0, h1, jag = 0) => ({a, b, r0, r1, h0, h1, jag, reach: Math.max(r0, r1)});

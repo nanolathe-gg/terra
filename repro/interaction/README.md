@@ -11,6 +11,11 @@ python repro/interaction/server.py --source /path/to/candidate --port 8907 --out
 
 Open `http://127.0.0.1:8906/interaction/index.html` and its port-8907 counterpart in the same WebGPU-capable browser. Run them serially so GPU work does not contaminate timings. Keep the browser foregrounded. The iframe is fixed at 1280×900. Use a new label for each trial.
 
+`/interaction/strokes.html` checks freehand simplification through the real pointer
+handlers on 1×1 (whole-map) and 5×5 (paged) maps: point reduction, endpoints,
+attached and disconnected paths, cancellation, click stamps, Undo / Redo, graph
+round-trip, and keeping raw points when disabled or supplied by a script.
+
 - **Run interactions:** Fit, 90 drawing inputs, 90 drag inputs, 60 slider inputs, and 60 path-point inputs. One input is sent per animation frame. Each phase waits for final visible refinement, saves timing and GPU-pass records, and captures the result. Synthetic pointer capture is bypassed for that test pointer only. This measures application handling, not hardware-to-display input latency.
 - **Draw at fit:** Nine large shapes distributed across the map, then a 90-point stroke at Fit. Try 40×40. It tests full-map editing without requesting a full-resolution image of the entire world.
 - **Check cache & fit:** Add a distant shape, record visible rebakes, edit a nearby shape, then compare the retained view with a forced invalidation. For maps up to 8×8 it also assembles a full-resolution downsampled reference for judging Fit.

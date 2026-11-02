@@ -116,6 +116,13 @@ are baked on demand. Scrolling uses an LRU image cache, while overview and the
 navigator use a coarse 128×128 height preview. A stroke, move, rotation, scale or
 height drag previews while held and commits one undo step; Escape cancels it.
 
+**Simplify strokes** (on by default in Draw) reduces a freehand path when you
+release the pointer, keeping its endpoints and bends within 3 terrain pixels of
+the sampled path. This leaves fewer points in **Edit path**. It also applies to
+**Add path**, keeping an attached branch's shared root and existing paths intact.
+Turn it off to keep every sampled point. Simplification is part of the stroke's
+single Undo / Redo step; loaded sketches and scripted scenes keep their points.
+
 River and Source strokes keep one cached flow-bake node. Its input heights
 are read in bounded prefix tiles before that node, while its stale hash still
 covers the entire bake region. Regional replay copies only the stored planes

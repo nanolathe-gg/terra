@@ -6,7 +6,7 @@ import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,W
 import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
-import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
+import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -331,6 +331,7 @@ function updateControls() {
   $('seed-vary').checked=varySeed;$('seed-vary-control').hidden=editingSeed;
   $('seed-help').textContent=editingSeed?'Controls this shape’s outline and generated details. All its paths share this seed.':varySeed?'Used for the next shape, then a fresh seed is chosen.':'Reuses this seed for each new shape. Randomize chooses another variation.';
   $('draw-new').disabled=locked||!ready;
+  $('simplify-strokes').disabled=locked;
   $('draw-add').disabled=locked||!hasSelection||selectedNode?.hidden;
   $('draw-new').setAttribute('aria-pressed',String(tool!=='move'&&drawMode!=='add'));
   $('draw-add').setAttribute('aria-pressed',String(drawMode==='add'));
@@ -703,8 +704,15 @@ function previewRegionalStroke(points) {
   }else node.points=next;
   evaluate(stroke.index,unionRect(before,nodeBounds(node)));schedule();return stroke.index;
 }
-function endRegionalStroke(commit=true) {
+function endRegionalStroke(commit=true,simplify=false) {
   if(!stroke?.regional)return false;
+  if(commit&&simplify){
+    // Simplify only the path just drawn, before its single undo checkpoint.
+    // Three terrain pixels gives the same fidelity at every canvas zoom.
+    // Reusing preview preserves shared branch roots and invalidates both bounds.
+    const points=shapePaths(stroke.node)[stroke.pathIndex].map(i=>stroke.node.points[i]),reduced=simplifyPath(points,3);
+    if(reduced.length<points.length)previewRegionalStroke(reduced);
+  }
   const gesture=stroke,rect=nodeBounds(gesture.node);stroke=null;
   const emptyBranch=gesture.original&&gesture.attachment>=0&&gesture.node.paths[gesture.pathIndex].length===1;
   if(!commit||emptyBranch){
@@ -906,7 +914,7 @@ const sculptRegion={
   sketch,loadSketch:(s,id)=>loadSketchFile(s,false,id),maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuTransientBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
-  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:endRegionalStroke,beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
+  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:(commit=true)=>endRegionalStroke(commit,$('simplify-strokes').checked),beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
   pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:tool,
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
