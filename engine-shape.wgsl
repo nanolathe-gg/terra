@@ -1326,7 +1326,7 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; scale = 1.0 / length(vec2f(u.inv0, u.inv1)); }
   let ph = PH * cells + i; let pp = PP * cells + i; let pr = PR * cells + i; let pv = PV * cells + i; let px = PX * cells + i;
   if (u.plMat == 1u) {
-    let L = max(8.0, u.plSize * clamp(u.plScale, 0.1, 1.0)); let seam = max(u.spacing * 0.5, max(0.0, u.plGap) * 0.5);
+    let L = max(8.0, u.plSize); let seam = max(u.spacing * 0.5, max(0.0, u.plGap) * 0.5);
     let k = plCells(lx, ly, L, 0x481u, 0x287u, 0.4);
     let keep = plHalf(k.bi, k.bj, 0x721u); var shade = 0.8 + 0.2 * plHalf(k.bi, k.bj, 0x3b9u); let lift = plHalf(k.bi, k.bj, 0x6d3u);
     if (keep > 1.0 - sm(0.2, 1.0, d / width)) { return; }

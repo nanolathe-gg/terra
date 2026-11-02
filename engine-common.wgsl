@@ -19,8 +19,6 @@ struct Uniforms {
     sea: f32,
     materialWeathering: f32,
     materialReady: i32,
-    fractureAmount: f32,
-    fractureDepth: f32,
     rockyCoasts: i32,
     scree: i32,
     detail: f32,
@@ -174,11 +172,9 @@ struct Uniforms {
     apron: f32,           // sand apron reach round raised ground, world px (0: none)
     worms: f32,           // wormy regolith relief on slopes (lunar)
     boulderRound: f32,    // 0: angular boulders; 1: rounded domes
-    bandStyle: i32,       // 0 tonal steps (Green), 1 bank lines (Lava)
     bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
-    bandWidth: f32,       // bank lines (style 1): width at half depth, px (0: 1.6)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
     sun: vec3f,           // the renderer's light, for lit crack walls
@@ -195,10 +191,6 @@ struct Uniforms {
     scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
     overrideOn: i32,      // 1 once any cell carries an H3 override (planes 14-17: erosion, deposits, vegetation, rock exposure)
     styleOn: i32,         // 1 once any cell carries a painted local style (relief, cracks, banding, face rock share)
-    // Lava bank lines (card B3): how the contour lines break up (all 0: the plain contours).
-    bandRelief: f32,      // share of the relief height that bends the lines, so they fold round ribs and lumps
-    bandWander: f32,      // phase wander of the lines, in line steps
-    bandGaps: f32,        // share of each line's stretches dropped, so lines break off and spacing widens
     // Moon joined wrinkles (card B3).
     wrinkles: f32,        // how much of the slope the connected wrinkle lines cover (0: none)
     // Crystal shore slabs (card C2).
@@ -277,14 +269,8 @@ struct Uniforms {
     gullyGaps: f32,       // share of each gully's length that is missing
     gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
-    bedFlow: f32,         // how far joints break and shift the beds (1: as before; 0: continuous beds)
     bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
-    scratchDepth: f32,    // weathering scratches: depth, height units (0: none)
-    scratchSpacing: f32,  // distance between scratches, world px
-    scratchAngle: f32,    // scratch lean from the screen's north-south, degrees
-    scratchRun: f32,      // typical length of an unbroken scratch, world px
-    scratchGaps: f32,     // share of each scratch's length that is missing
     facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
     facetSize: f32,       // facet height, world px
     facetStretch: f32,    // facet width as a multiple of its height
@@ -302,12 +288,10 @@ struct Uniforms {
     bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
     bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
     stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
-    bedMottleScale: f32,  // size of the bed's mottle lumps against Green's (1: 3-15 px; Archipelago's reef bars use larger blotches)
     bandFoot: f32,        // Archipelago (bake): no band lines on the hill's foot below this height above the dry base (0: lines everywhere)
     ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
     ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
     ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
-    bedMottle: f32,       // the lit bed's mid-scale mottle: lit lumps of 4-17 px, as a share of brightness (0: none; Green)
     bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
     // F1 (flow bake): the current and the sediment it carries (mask planes 20-24).
     flowOn: i32,          // 1 once any cell carries a baked current or sediment; 0 skips every read of it
@@ -373,7 +357,7 @@ struct Uniforms {
     shoalGrain: f32,      // Red: the ground tile's own colour grain shows through the tint, this share of it (0: the tint replaces it, as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
     // G2 (rock faces follow the slope). Every default is the earlier look.
-    cliffFollow: f32,     // beds follow the contours and joints, gullies, scratches and facets the fall line of the ground round them (0: fixed screen directions, as before)
+    cliffFollow: f32,     // beds follow the contours and joints, gullies and facets the fall line of the ground round them (0: fixed screen directions, as before)
     cliffReach: f32,      // radius of the height smoothing that gives the local fall line, world px
     cliffWide: f32,       // radius of the larger smoothing that gives it where the ground under the rock is level, world px
     cliffFlat: f32,       // slope (height per px) at the wide scale under which the beds and joints fade into plain broken rock
@@ -540,7 +524,6 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
-@group(0) @binding(3) var fracturesTex: texture_2d<f32>;
 // Grid-resolution inputs in one array texture (a fragment stage may sample 16
 // textures): layer 0 the weathering worker's flow, deposit, talus, sand; layer
 // 1 the material field. Read through weatherAt and materialFieldAt.
@@ -554,7 +537,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 @group(0) @binding(6) var fieldsTex: texture_2d<f32>;
 #endif
 // The world fields (height, routes, fields, grid inputs) are
-// clamped and linearly filtered; noise and fractures repeat.
+// clamped and linearly filtered; noise repeats.
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -713,26 +696,6 @@ fn beachField(p: vec2f) -> f32 { return max(-bakedFields(p).g, 0.0); }
 fn crystalField(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(0.0, clamp(g - 2.0, 0.0, 1.0), g > 1.5); }
 #endif
 
-fn fractureDepth(p: vec2f, h: f32, slope: f32) -> f32 {
-    let floorHeight = select(u.base, u.sea, u.rockyCoasts != 0);
-    if (u.fractureAmount <= 0.0 || h < floorHeight + 1.0 || slope < 0.06) { return 0.0; }
-    let warp = vec2f(terrainNoise(p).g, terrainNoise(p + vec2f(71.0, 43.0)).g) - 0.5;
-    let crack = textureSampleLevel(fracturesTex, linearRepeat, (p + warp * 6.0) / 1024.0, 0.0);
-    let distance = (1.0 - crack.r) * 8.0;
-    let group = smoothstep(crack.g - 0.025, crack.g + 0.025, u.fractureAmount);
-    var ground = smoothstep(0.06, 0.28, slope) * (1.0 - smoothstep(1.30, 2.20, slope));
-    ground *= smoothstep(floorHeight + 1.0, floorHeight + 10.0, h);
-    // Grass may bridge the finite cleft. Carving and its lit edges share the
-    // same surface; this is optional authoring detail, not stored retail relief.
-    let bridge = smoothstep(0.30, 0.64, terrainNoise(p + vec2f(11.0, 68.0)).g);
-    // A shallow weathered shoulder carries the narrower cut. Varying its
-    // section avoids a constant-width ink stroke across the grass texture.
-    let width = mix(0.65, 1.15, terrainNoise(p + vec2f(91.0, 17.0)).b);
-    let shoulder = 1.0 - smoothstep(0.20, 3.50 * width, distance);
-    let core = 1.0 - smoothstep(0.05, 0.85 * width, distance);
-    return (shoulder * 0.8 + core * 1.6) * group * ground * bridge * crack.b * u.fractureDepth * (1.0 - routeProtection(p));
-}
-
 fn screeHeight(p: vec2f) -> f32 {
     if (u.scree == 0) { return 0.0; }
     let support = weatherAt(p / (u.size - 1.0)).b;
@@ -804,7 +767,7 @@ fn surfaceHeight(p: vec2f) -> f32 {
     }
     let facets = 2.0 + 14.0 * smoothstep(0.9, 2.6, slope);
     let detail = (n.g - 0.5) * 6.0 + (n.b - 0.5) * facets;
-    return h + detail * gain * u.detail * rough + debris - fractureDepth(p, h, slope);
+    return h + detail * gain * u.detail * rough + debris;
 #endif
 }
 

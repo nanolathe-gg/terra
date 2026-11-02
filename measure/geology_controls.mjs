@@ -5,7 +5,7 @@
 //   node measure/geology_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
 // --family impacts (H21): crater/rim/skin and regolith controls. Shape cards and top-level options win over query defaults;
 // only matching stroke kinds count. --scenes DIR supplies probe scenes (missing files fall back to repro/scenes).
-// --family fractures (H17): the crack, joint, gully, scratch, facet and block knobs. Each scene's own value is read as the page reads it (the query, then
+// --family fractures (H17): the crack, joint, gully, facet and block knobs. Each scene's own value is read as the page reads it (the query, then
 // Green's engine preset, then the scene's variant, then the world's table, then the default), a scene where a knob already sits at its target is shown as `=`
 // and left out of the verdict, and the class is the slope blocks of measure/geology_diff.py (cracks and crack tone: slope at least .10; the structured face:
 // at least .50), not the raised class. A seeded base in DIR/base is reused (copy a main render of the 27 scenes there to skip the 27 renders).
@@ -21,9 +21,9 @@ const sceneRoot = opt('--scenes', `${here}repro/scenes`);
 const scenePath = (world, n) => existsSync(`${sceneRoot}/${world}-${n}.json`) ? `${sceneRoot}/${world}-${n}.json` : `${here}repro/scenes/${world}-${n}.json`;
 // The geology families: bed*, band*, strata*, ring*, layer*, the lava layer controls, the cap and foot bands, the column, and the rock structure
 // they share a coordinate with (cliff*, joint*). The water-bed knobs (bedLit, bedTint, ...) are Water's, not geology.
-const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Lip|Height|Flow|Bend|Punch)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Meander|Spread|CircleVary|CreaseVary)|baseBand\w*|desertCapFlat|cliff\w*|joint\w*|column\w*|mineralDetail)$/;
+const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Lip|Height|Bend|Punch)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Meander|Spread|CircleVary|CreaseVary)|baseBand\w*|desertCapFlat|cliff\w*|joint\w*|column\w*|mineralDetail)$/;
 // The class each family acts on (measure/geology_diff.py).
-const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSharp|stepSoftPx|deepEdge\w*|bed(Lit|Tint|Flat|Mottle|MottleScale|Dots|DotCell|Relief|Contrast|Bright|CrackSlope)|crackedStep|crackedContrast|flatBank|bankPx|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Meander|Spread|CircleVary|CreaseVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Shore|Deep|Bed))$/;
+const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSharp|stepSoftPx|deepEdge\w*|bed(Lit|Tint|Flat|Dots|DotCell|Relief|Contrast|Bright|CrackSlope)|crackedStep|crackedContrast|flatBank|bankPx|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Meander|Spread|CircleVary|CreaseVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Shore|Deep|Bed))$/;
 const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|waterShore|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease|lavaCreaseVary)$/.test(k) ? 'bank'
   : /^(bankPx|bankWidth|beachFlatness|fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Meander|Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
 const IMPACTS = /^(moon\w*|crater\w*|pock\w*|crystalCrater\w*|rim(Sectors|Unequal|Gaps|GapWidth|Height)|worms|wrinkles|slopeMarks)$/;
@@ -31,7 +31,7 @@ const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDar
 const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) || k === 'bandFoot' ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
 // Card units of the stroke options (sculpt.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
 const CARD_SCALE = {fingers: 100, fingerAmount: 100, fingerSize: 100, fingerSpread: 100, fingerHeight: 10, bankPx: 1, shorePlates: 1, plateWaterPx: 1, plateLandPx: 1, plateSize: 1, plateGap: 10, plateHeight: 10, plateMaterial: 1,
-  crystalShoreScale: 100, crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterShore: 1, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaMeander: 100, lavaSpread: 100, lavaCircleVary: 100};
+  crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterShore: 1, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaMeander: 100, lavaSpread: 100, lavaCircleVary: 100};
 // Shape options that no world sets: red-2's own stroke carries terraces 7, ledge 40, jitter 60 (card units). Moved on that scene's card.
 const CARD_ONLY = [{world: 'red', knob: 'terraces', from: 7, to: 0}, {world: 'red', knob: 'ledge', from: 40, to: 90}, {world: 'red', knob: 'terraceJitter', from: 60, to: 0}];
 // H21: read card limits/scales from the same declarations as toolDefaults. Top-level scriptedScene options use engine units and win over the card.
@@ -41,15 +41,15 @@ const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt.js`, 'ut
 const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]) || (knob === 'moonLobes' && st[0] === 'crater' && (st[2]?.spurCount ?? st[2]?.card?.spurCount ?? 0) > 0);
 for (const [k, f] of Object.entries(impactFields)) CARD_SCALE[k] = f.scale;
 const family = opt('--family', 'geology');
-const FRACTURES = /^(crack(Severity|Spacing|Length|Major|Minor|Hairline|Blocks|Width|Jagged|Network|Reach|Style|Dark|Lit)|joint(Spacing|Angle|Depth|Run|Gaps)|gully(Depth|Spacing|Width|Angle|Run|Gaps|Shade)|ribTilt|scratch(Depth|Spacing|Angle|Run|Gaps)|facet(Tilt|Size|Stretch|Step|Seam|Skew|Coarse)|blocks|block(Row|Width|Tilt|Step|Seam|Chip|Grit)|hillBlocks)$/;
+const FRACTURES = /^(crack(Severity|Spacing|Length|Major|Minor|Hairline|Blocks|Width|Jagged|Network|Reach|Style|Dark|Lit)|joint(Spacing|Angle|Depth|Run|Gaps)|gully(Depth|Spacing|Width|Angle|Run|Gaps|Shade)|ribTilt|facet(Tilt|Size|Stretch|Step|Seam|Skew|Coarse)|blocks|block(Row|Width|Tilt|Step|Seam|Chip|Grit)|hillBlocks)$/;
 const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust|Dusk|Pillow|Veins))$/;
 const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
 // The stroke kinds that carry each shape option (sculpt.js SHAPE_FIELDS), and the scale of the card's unit.
 const KINDS = {crystalForm: ['crystal'], crystalTiers: ['crystal'], crystalSides: ['crystal'], crystalSize: ['crystal'], crystalStep: ['crystal'], crystalCount: ['crystal'], crystalTop: ['crystal'], crystalLean: ['crystal'], crystalVariation: ['crystal'],
   crystalAlign: ['crystal'], crystalFacet: ['crystal'], crystalSizeVar: ['crystal'], crystalSmooth: ['crystal'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
-  crystalShoreScale: ['deep', 'shallow', 'offset'], crystalShoreSeam: ['deep', 'shallow', 'offset'], frostNeedles: ['deep', 'shallow', 'offset'], iceFacets: ['mountain'], iceFacetSize: ['hill', 'mountain']};
+  crystalShoreSeam: ['deep', 'shallow', 'offset'], frostNeedles: ['deep', 'shallow', 'offset'], iceFacets: ['mountain'], iceFacetSize: ['hill', 'mountain']};
 const BODY_SCALE = {crystalForm: 1, crystalTiers: 100, crystalSides: 1, crystalSize: 1, crystalStep: 1, crystalCount: 1, crystalTop: 100, crystalLean: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100, crystalSmooth: 100,
-  crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreScale: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
+  crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value
 const scenes = {};   // world -> the three scenes' variants, for the page's own values
 const queries = {};   // world -> the three scenes' own query pairs (zhon-1: beachWidth=0), which win over every table

@@ -32,7 +32,7 @@ KNOB_DEFAULTS = dict(
     faceVariation=.8, lean=0, facing=0, outlineVar=1, widthVar=1, heightVar=1, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
-    sand=0, sandReach=.6, windStrength=.5, wind=20, sandPatchy=.7, sandTail=.6, sandDust=.5, sandGrass=.6,
+    sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
@@ -50,12 +50,12 @@ KNOB_DEFAULTS = dict(
     shadeBlue=0,
     # Ice frost band (card E5): its cells skip the wet-band darkening (0: every world as before).
     frostWet=0, frostNeedles=.5,
-    banding=0, bandSoftness=.35, bandWidth=0, bandRelief=0, bandWander=0, bandGaps=0, bandWater=0, sandBanding=0, sandBandSpacing=2,
+    banding=0, bandSoftness=.35, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataContrast=.6, strataGrain=1,
     fingers=0, bankPx=0,
     # Coast pass (card E4): fingers on the joined coast and flat shore layers cut as heights
     # (layerPx px a layer, riser 0 shares the bank's rise out, ledge and irregularity in shares).
-    shoreLayers=0, layerPx=12, layerRiser=0, layerLedge=.75, layerRough=.5, layerStyle=0, shoreEdge=0, bandStyle=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    shoreLayers=0, layerPx=12, layerRiser=0, layerLedge=.75, layerRough=.5, layerStyle=0, shoreEdge=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
@@ -100,7 +100,7 @@ KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFa
 KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
-KNOB_DEFAULTS.update(crystalShoreScale=1, crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
+KNOB_DEFAULTS.update(crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
 # H20b (Crystal): the share of shore slabs that break into a fine mesh inside their own outline (0: the earlier output).
 KNOB_DEFAULTS.update(plateVary=0)
 # E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
@@ -113,15 +113,13 @@ KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
-                     bedFlow=1, bedBend=0, bedPunch=0,
-                     scratchDepth=0, scratchSpacing=9, scratchAngle=-20, scratchRun=90, scratchGaps=.4,
+                     bedBend=0, bedPunch=0,
                      facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
 # shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
 # its depth with broad noise so the band's width and outline vary along the shore; bedFlat
-# lights the lit bed by its own relief only (no slope shading across the shelf); bedMottle is
-# the bed's mid-scale mottle as a share of brightness.
-KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0, bedMottle=0)
+# lights the lit bed by its own relief only (no slope shading across the shelf).
+KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0)
 # E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
 # crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
 # bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
@@ -130,8 +128,8 @@ KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots
 # E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
 # dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
 # the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
-# the ring texture's own); bedMottleScale sizes the bed's mottle lumps against Green's.
-KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, bedMottleScale=1, stepSoftPx=1)
+# the ring texture's own).
+KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
 # E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
 # the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
 # (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
@@ -195,7 +193,7 @@ KNOB_DEFAULTS.update(ringTaper=0, ringFill=0, ringPatch=0, ringPatchSize=120)
 # G3: ringTone 1 draws the copies' lines in retail's rose, paler outward (0: the earlier crimson).
 KNOB_DEFAULTS.update(ringTone=0)
 # G2 (rock faces follow the slope): 0 keeps the fixed screen directions of every world; 1 runs beds along the
-# contours of the ground and joints, gullies, scratches and facets down its fall line. The reaches are the
+# contours of the ground and joints, gullies and facets down its fall line. The reaches are the
 # height smoothing radii (px) of the local and of the wide fall line, cliffFlat the wide slope under which
 # the structure fades into plain broken rock, cliffDomain the patch size of the joint lattice.
 KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffFine=0, cliffDomain=90)
@@ -216,15 +214,15 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
 # BUDGET 3, sculpt-erosion.js): its maps are made, its height moves no further than the worker's did.
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
-# Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies and
-# scratches are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
+# Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies
+# are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
 # H17: terraceBreak 1.4 -> 0. Its phase wander broke green-2's slope into a dense blotchy mass; at 0 the band lines follow
 # the contours as retail's flowing lines do (viewed at 1x; green-1 and green-3 do not change). banding .8 -> .5 (WORLD_KNOBS)
 # lightens and thins those lines toward retail's soft dashes.
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
-                  facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4, scratchDepth=1.2,
+                  facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4,
                   rockMoss=.4, hillBlocks=.5,
                   terraceBreak=0, terraceCalm=0, wetSwath=.35, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
@@ -244,7 +242,7 @@ WORLD_KNOBS = {
                   # scales, not long smooth lines (thin dark lines per
                   # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
                   bandJag=1,
-                  # Card E3 (retail green-2's big rock face): coherent level beds scratched
+                  # Card E3 (retail green-2's big rock face): coherent level beds cut
                   # by long joints leaning ~20 degrees (row period 8-12 px whatever the
                   # slope; thin-line direction shares vertical/horizontal .29/.27 against
                   # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
@@ -267,16 +265,15 @@ WORLD_KNOBS = {
                   # The undulation knobs and Level-ground lumps still work.
                   undulation=0, plainRelief=0,
                   # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
-                  # light or shade as a whole), layered in long ledges that bend with it, scored by thin scratches
+                  # light or shade as a whole), layered in long ledges that bend with it,
                   # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
                   # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
                   # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
-                  # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0, bedFlow 1,
-                  # bedBend 0, bedPunch 0, scratchDepth 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
+                  # bedBend 0, bedPunch 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, gullySpacing=36, gullyRun=90, gullyGaps=.4, gullyShade=1.2, ribTilt=.2,
-                  bedFlow=0, bedBend=1, bedPunch=1,
-                  scratchDepth=2.5, scratchRun=140, scratchGaps=.3,
+                  bedBend=1, bedPunch=1,
                   facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
@@ -286,8 +283,8 @@ WORLD_KNOBS = {
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
                   stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1,
                   # G1 (round 8 review: "reads as noise while retail reads as lit bumpy terrain"): the
-                  # mottle's clouds and the palette dither's white noise went; lit bumps of 5 px take
-                  # their place. After a 9-px blur the bed's lit / dark shares and clump sizes are
+                  # palette dither's white noise went; lit bumps of 5 px take
+                  # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
                   shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
@@ -297,7 +294,7 @@ WORLD_KNOBS = {
                   # G2: the owner's round 8 note on the rock face: beds and joints follow the hillside they are cut in, not the
                   # screen. Beds are the contours of the ground (smoothed over 40 px, 30% of the way from the grid's own
                   # heights), 6.5 height units apart (bedSpacing, was 28 against a tilt of 2 that made rows level on the screen:
-                  # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies, scratches and
+                  # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies and
                   # facets run down the fall line. bedDip is 0 now, and bedBend 1 (was 2.5) because a bed is a quarter as
                   # thick, so the ribs would fold it fourfold.
                   cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=8,
@@ -338,8 +335,8 @@ WORLD_KNOBS = {
                 # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
                 stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6,
                 crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15,
-                # G1: lit bumps of 8 px replace the mottle's clouds, and no palette dither (see Green).
-                bedMottle=0, shoalBump=2, shoalBumpPx=8, shoalDither=0,
+                # G1: lit bumps of 8 px, and no palette dither (see Green).
+                shoalBump=2, shoalBumpPx=8, shoalDither=0,
                 # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is
                 # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
                 # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
@@ -381,14 +378,13 @@ WORLD_KNOBS = {
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
                         bandFoot=8,
-                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80, bedMottleScale=1.6,
+                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80,
                         # G1: the reef bars are soft blotches (retail: 8-16 px energy 1.8 against 1.3 at 4-8 px;
-                        # 4.5-px bumps at 3 read as chunky cobbles): a mottle of 1.6 and faint lit bumps of
-                        # 9 px, a few dots, and no palette dither (3-px-blurred luma s.d. retail 7.6, before
-                        # 4.7, now 5.8; see Green).
-                        # H18 part 2: bedMottle .09 printed noisy blotches on the bars where retail's are smooth and soft
-                        # (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); 0 reads closer on that window.
-                        bedMottle=0, bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
+                        # 4.5-px bumps at 3 read as chunky cobbles): faint lit bumps of 9 px, a few dots, and no
+                        # palette dither (3-px-blurred luma s.d. retail 7.6, before 4.7, now 5.8; see Green).
+                        # H18 part 2: a mottle of the bed's brightness printed noisy blotches on the bars where retail's are
+                        # smooth and soft (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); none reads closer there.
+                        bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
                         shoalRag=4,
                         # G1 (round 8: "the default should still have a small blur on the edge"): the world's own
@@ -494,32 +490,22 @@ WORLD_KNOBS = {
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
-                 beachWidth=0, waterSoft=0, bankRock=0, banding=0, bandStyle=1,
+                 beachWidth=0, waterSoft=0, bankRock=0, banding=0,
                  fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
                  # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
                  bankPx=60,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
                  # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
-                 # a shaded riser) in place of the dark band lines (Banding 0 above; Banding, Band lines and the
-                 # B3 knobs stay in the World panel).
+                 # a shaded riser) in place of dark band lines (Banding 0 above).
                  shoreLayers=11, layerPx=9, layerLedge=.8, layerRough=.7,
                  # Fingers are low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
                  # Less ambient light, so the shaded risers read as retail's near-black lines.
                  ambient=.3,
-                 # Line cores are near black (luma 15-27 in 55-60 ground) and
-                 # ~2.5 px wide at half depth (measure/lava_bands.py lines
-                 # profiles); the thin 1.6 px V at 0.75 darkness read as faint
-                 # grain on the ground's palette noise.
-                 bandWidth=2.3,
                  # Card E4: hills and mountains are rough rock, not smooth cones crossed by black
                  # hairlines. Cracks stay but lose their ink (.95 -> .35); the relief is finer and
                  # lumpier (scale 28 -> 20, amount .5 -> .9, lumps .7 -> .9) and Moon's joined wrinkles
                  # and pits (card B3) roughen the slopes. Shine is card E2's, not set here.
                  crackDark=.35, reliefAmount=.9, reliefScale=20, reliefLumps=.9, wrinkles=.6,
-                 # Card B3: retail's lines (Kill the Middle, Red Hot Lava, Lava and
-                 # Two Hills) are 1-2 px wide and 10-14 px apart, break off, meet and
-                 # fork, where ours were 2-3 px wide, 5-6 px apart and nested without end.
-                 bandRelief=.4, bandWander=.5, bandGaps=.15,
                  # E10: lava-1's layers are many and uneven (11 of ~9 px, widths and risers vary along the shore,
                  # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
                  # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
@@ -585,11 +571,10 @@ WORLD_KNOBS = {
                     crystalCraterWeb=.35, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
                     crystalCraterTone=.12, crystalCraterLight=1,
                     # G7/H20b: the shore slabs draw at 28 px, under thinner seams (.56, ending at .68).
-                    # G7 asked for finer cells (crystal-3's band reads 8-14 px) and drew plateSize 14 and 24 at
-                    # 70% through crystalShoreScale; retail's plates read larger elsewhere (30-50 px on
-                    # crystal-2, 15-30 on crystal-3), and the owner ruled for 28 ("For crystal go ahead with 28,
-                    # but maybe we also allow some variability"), so the plates draw at plateSize as given and
-                    # no world sets the scale.
+                    # G7 asked for finer cells (crystal-3's band reads 8-14 px); retail's plates read larger
+                    # elsewhere (30-50 px on crystal-2, 15-30 on crystal-3), and the owner ruled for 28 ("For
+                    # crystal go ahead with 28, but maybe we also allow some variability"), so the plates draw
+                    # at plateSize as given.
                     crystalShoreSeam=.56, crystalSeamEnd=.68,
                     # H20b: in patches a slab breaks into a fine mesh inside its outline (retail: crystal-3's band
                     # beside larger plates, small cells among the big ones on crystal-1's mound).
@@ -681,6 +666,8 @@ WORLD_VARIANTS = {
         # tops (125,150,236) darker than the lit faces (177,201,251), so the
         # variant's ground, slope cover and rock take those colours (the berg
         # form carries no crystal mark; it is lit and covered like any slope).
+        # crystalFace, crystalTone and crystalGrain reach only Ice's default
+        # Crystals stroke (form 0): without them its shaded side goes near black (H22).
         'bergs': dict(label='Icy Bergs: blue blocks',
                       colors=dict(crystal='#8ea6ee', ground='#9db5fa', slope='#a5bef9', rock='#9ab2f4'),
                       # No slope cover, face rock or exposed rock: their dark slate and granite
@@ -784,7 +771,6 @@ def apply_variant(config, biome, variant):
 MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'desert': '/materials/desert.json', 'zhon': '/materials/zhon.json', 'lava': '/materials/lava.json', 'ice': '/materials/ice.json', 'red': '/materials/red.json', 'crystal': '/materials/crystal.json', 'archipelago': '/materials/archipelago.json'}
 SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
 SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
-SOURCES['materials/fractures.png'] = HERE / 'materials' / 'fractures.png'   # ours (measure/make_fractures.py made it): one crack field for every world
 
 
 def world_knobs(biome, config):

@@ -72,7 +72,6 @@ function worldGates(group,key){
  if(group==='Contour bands')x.banding=.7;
  if(group.includes('Shine'))for(const mat of ['Ground','Slope','Rock','Sand','Crystal']){x['shine'+mat]=.8;x['shine'+mat+'Rough']=.4;}
  if(group==='Rock face: gullies and ribs')x.gullyDepth=6;
- if(group==='Rock face: scratches')x.scratchDepth=2;
  if(group==='Rock face: facets')x.facetTilt=.8;
  if(group==='Rock face: follows the slope')x.cliffFollow=1;
  if(group==='Pockmarks (Moon)')x.pockmark=.7;
@@ -143,7 +142,7 @@ $('regressions').onclick=()=>run('GPU regression and alternative suite',async()=
  const initialMasks=await run([ground,...[18,20,22,24].map(paintChannel=>({kind:'paint',points:[{x:350,y:350}],params:{paintChannel,amount:100,radius:100,rough:0,softness:0}}))]);
  const erased=await run([ground,...[18,20,22,24,7].map(paintChannel=>({kind:'paint',points:[{x:350,y:350}],params:{paintChannel,amount:100,radius:100,rough:0,softness:0}}))]);
  result.maskErase={before:[14,15,16,17].map(i=>initialMasks.out.masks[i][175*384+175]),after:[14,15,16,17].map(i=>erased.out.masks[i][175*384+175])};
- for(const key of ['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreScale','crystalShoreSeam','baseVary','baseBump']){
+ for(const key of ['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','baseVary','baseBump']){
   const f=inventory.shapes.find(f=>f[0]===key),kind=key.startsWith('base')?'hill':'offset',params={...shapeContext(key,kind),amount:kind==='offset'?-70:70};
   for(const lean of kind==='hill'?[0,1]:[0]){const n={kind,seed:2701,points:path,params:{...params,lean}};const a=await run([ground,{...n,params:{...n.params,[key]:f[4]/f[7]}}]),b=await run([ground,{...n,params:{...n.params,[key]:f[5]/f[7]}}]);result.conditional.push({key,kind,lean,amount:params.amount,...fieldDelta(a.out,b.out)});}
  }
@@ -181,14 +180,13 @@ $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtur
  const world=$('world-filter').value,api=await load(world),rows=[];
  const fixture=[['plateau',[[270,300],[550,300]],{card:{diameter:400,amount:110,roughness:35,cracks:100}}],['mountain',[[800,150],[860,430]],{card:{diameter:320,amount:130,cracks:100}}],['deep',[[0,850],[1024,850]],{card:{diameter:600,shelves:70,roughness:40,shorePlates:100,plateMaterial:world==='ice'?2:1},waterShore:0,waterDeep:0,waterBed:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
  api.scene(fixture,{ground:true});await api.idle();const original=new Map(api.renderer.variant);
- const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','iceFrost']:world==='green'?['faceEdge','gullyRock','mineralDetail','rockOrder']:world==='archipelago'?['ringShiftDir','beachWidth','apron','bandFoot']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','faceEdge','gullyRock','bedHeight','bedVary','bedDipDir','jointSpacing','jointAngle','jointRun','jointGaps','bandWidth','bandRelief','bandWander','bandGaps','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','bedFlow','bedPunch','cliffStagger','bedMottleScale','mineralDetail','debris','debrisReach','debrisSize','debrisSort','repose','scratchDepth','scratchSpacing','scratchAngle','scratchRun','scratchGaps','facetCoarse','cliffDomain','crackWidth','crackHairline','boulderRound'];
+ const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','iceFrost']:world==='green'?['faceEdge','gullyRock','mineralDetail','rockOrder']:world==='archipelago'?['ringShiftDir','beachWidth','apron','bandFoot']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','faceEdge','gullyRock','bedHeight','bedVary','bedDipDir','jointSpacing','jointAngle','jointRun','jointGaps','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','bedPunch','cliffStagger','mineralDetail','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','cliffDomain','crackWidth','crackHairline','boulderRound'];
  const tasks=inventory.knobs.flatMap(([group,list])=>list.map(f=>({group,f}))).filter(t=>keys.includes(t.f[0]));
  for(const {group,f:[key,,lo,hi,step]} of tasks){
   if(stop)break;const gates={...worldGates(group,key),undulation:10};
-  if(group.startsWith('Rock')||['faceEdge','gullyRock'].includes(key))Object.assign(gates,{rockOrder:1,bedLedge:.7,bedLip:2,jointDepth:4,bedDip:.7,cliffFollow:key==='cliffStagger'||key==='cliffDomain'?1:0,cliffStagger:.5,bedFlow:1,blocks:0});
-  if(group==='Contour bands')Object.assign(gates,{banding:.8,bandStyle:1,sandBanding:.8,bandWidth:2});
+  if(group.startsWith('Rock')||['faceEdge','gullyRock'].includes(key))Object.assign(gates,{rockOrder:1,bedLedge:.7,bedLip:2,jointDepth:4,bedDip:.7,cliffFollow:key==='cliffStagger'||key==='cliffDomain'?1:0,cliffStagger:.5,blocks:0});
+  if(group==='Contour bands')Object.assign(gates,{banding:.8,sandBanding:.8});
   if(['shallowDepth','deepDepth','waterSoft','bandWater'].includes(key))Object.assign(gates,{deepEdge:0,stepSharp:0});
-  if(key==='bedMottleScale')Object.assign(gates,{bedMottle:.25,bedLit:1,deepEdge:1});
   if(key.startsWith('ring'))Object.assign(gates,{ringContrast:1,ringShift:20});
   if(key.startsWith('frost'))gates.frostGaps=.35;
   const saved={};for(const [k,v] of Object.entries(gates)){saved[k]=api.renderer.variant.get(k);await api.knob(k,v);}
@@ -243,7 +241,7 @@ $('repeat-perf').onclick=()=>run('Warm interleaved alternatives',async()=>{
 
 $('surface').onclick=()=>run('Surface and legacy-control sensitivity',async()=>{
  const world=$('world-filter').value,api=await load(world),s=scenes[world+'-1'];api.scene(s.strokes,{ground:s.ground!==false});const rows=[];
- for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['mineral-ring',0,100],['ring-spread',0,100],['ring-variation',0,100],['fractures',0,100],['scree',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
+ for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['mineral-ring',0,100],['ring-spread',0,100],['ring-variation',0,100],['scree',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
   const original=frame.contentDocument.getElementById(id).value;await api.control(id,lo);const a=await api.capture();await api.control(id,hi);const b=await api.capture();await api.control(id,original);const r={key:id,world,lo,hi,...summarize(a.canvas,b.canvas)};rows.push(r);line(`${id}: ${(r.changedBlocks*100).toFixed(1)}% blocks, max RGB ${r.maxRGB}`);
  }await save(`${$('label').value}/surface-${world}.json`,rows);
 });

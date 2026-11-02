@@ -2,7 +2,6 @@ import {isShouldered} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
-export const RETIRED_WORLD_CONTROLS=new Set(['sandReach','windStrength','sandPatchy','sandTail']);
 // Experiment 4 left this off: it darkens broad faces instead of making useful
 // crevices. Preserve recipes, but require fresh visual evidence before exposure.
 export const PARKED_WORLD_CONTROLS=new Set(['crevice']);
@@ -13,9 +12,9 @@ export const WORLD_GROUP_NAMES={
  'Lava hill rock':'Pillow crust','Lava banks':'Terrace creases','Pockmarks (Moon)':'Surface pits',
  'Moon surface':'Cups, ribs & folds','Ice mountains':'Mineral faces','Ice blocks and mesas':'Cap & face finish',
  'Ice frost lines':'Needle lines','Ice frost band':'Shore pockets',
- 'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: scratches':'Scratches','Rock face: facets':'Microfacets'
+ 'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: facets':'Microfacets'
 };
-export const WORLD_CHOICES={bandStyle:[[0,'Tonal steps'],[1,'Bank lines']],stepSharp:[[0,'Smooth transition'],[1,'Depth threshold']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
+export const WORLD_CHOICES={stepSharp:[[0,'Smooth transition'],[1,'Depth threshold']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
 const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
  desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',shoreEdge:'Waterline rim and lip',
  stepSharp:'Threshold depth transition',bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
@@ -24,7 +23,7 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
  iceSlate:'Slate faces',iceCrystal:'Straight face fibres',iceCrest:'Cap lumps',iceSoft:'Rounded lighting',iceSnow:'Snow on level caps',iceFall:'Slope fibres',iceApron:'Hatched foot apron',iceFrost:'Needle hairlines',
  crystalForm:'Form',crystalSize:'Element width (px)',crystalCount:'Elements per cluster',crystalSides:'Polygon sides',crystalTop:'Flat top share',crystalLean:'Apex lean',
  crystalTiers:'Stepped column tops',crystalAlign:'Align blocks to shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
- craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreScale:'Slab size multiplier',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
+ craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
  iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',moonLobes:'Outline lobes',lavaMeander:'Layer meander',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
  fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerAmount:'Lobe coverage',fingerSize:'Lobe size',fingerSpread:'Lobe clustering',fingerHeight:'Lobe height',
  styleErosion:'Local relaxation',styleDeposits:'Local deposits',styleVegetation:'Local vegetation',styleExposure:'Local rock exposure',
@@ -46,7 +45,7 @@ export function shapeControlAvailable(key,kind,p){
   if(['crystalTop','crystalLean'].includes(key))return form===0;
   if(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergFlat','bergTiltDir'].includes(key))return form===2&&(!['bergFlat','bergTiltDir'].includes(key)||p.bergTilt>0);
  }
- if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreScale','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key.startsWith('crystalShore')||key==='plateVary'?slab:true);
+ if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  if(key==='iceFacetSize')return kind==='mountain'&&p.iceFacets>0;
  if(['ledge','terraceJitter'].includes(key))return p.terraces>0;
@@ -60,13 +59,14 @@ export function shapeControlAvailable(key,kind,p){
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>n(parent)<=0?`Enable ${label} to use this setting.`:'';
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
- if(['bedHeight','bedVary','bedPunch','bedFlow'].includes(key)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';
+ if(['bedHeight','bedVary','bedPunch'].includes(key)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir'&&n('bedDip')===0)return 'Set Bed tilt above or below zero to choose its direction.';
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedFlow','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','scratchDepth','scratchSpacing','scratchAngle','scratchRun','scratchGaps','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
- if(['bandWidth','bandRelief','bandWander','bandGaps'].includes(key)&&n('bandStyle')<.5)return 'Choose Bank lines in Contour bands to use this setting.';
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','bedLip','jointSpacing','jointAngle','jointDepth','jointRun','jointGaps','bedBend','bedPunch','gullyDepth','gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade','ribTilt','facetTilt','facetSize','facetStretch','facetStep','facetSeam','facetSkew','facetCoarse'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
+ if(['jointSpacing','jointAngle','jointRun','jointGaps'].includes(key))return needs('jointDepth','Joint depth');
+ if(key==='bedBend'&&n('gullyDepth')<=0&&n('ribTilt')<=0)return 'Set Gully depth or Rib tilt above zero to use this setting.';
+ if(key==='cliffStagger')return n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':needs('jointDepth','Joint depth');
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
- if(key==='bedMottleScale')return needs('bedMottle','Bed mottle');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
  if(/^moonCup/.test(key)&&key!=='moonCups')return needs('moonCups','Slope cups');
@@ -74,7 +74,6 @@ export function worldControlRequirement(key,v){
  if(key==='moonFoldSpacing')return needs('moonFolds','Contour folds');
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm','lavaDusk'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
- if(['scratchSpacing','scratchAngle','scratchRun','scratchGaps'].includes(key))return needs('scratchDepth','Scratch depth');
  if(['gullySpacing','gullyWidth','gullyAngle','gullyRun','gullyGaps','gullyShade'].includes(key))return needs('gullyDepth','Gully depth');
  if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
  if(key==='ringPatchSize')return needs('ringPatch','Reach variation');
@@ -91,10 +90,10 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'boulders','boulderSize','debris','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','crackLength','crackStyle','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
- 'banding','bandStyle','sandBanding','strata','strataContrast',
+ 'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','deepEdgeDepth','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
- 'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','gullySpacing','scratchDepth','facetTilt','facetSize','cliffFollow',
- 'stepSharp','shelfWander','bedFlat','bedMottle','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
+ 'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','gullySpacing','facetTilt','facetSize','cliffFollow',
+ 'stepSharp','shelfWander','bedFlat','bedDots','crackedStep','crackedContrast','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceSlate','mineralDetail','iceCrystal','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'

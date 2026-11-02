@@ -2,7 +2,7 @@ import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn} from './sculpt-column.js';
-import {controlLabel,shapeControlAvailable,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
+import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
 
@@ -220,7 +220,6 @@ const SHAPE_FIELDS=[
   ['crystalCraterStep','crystal-crater-step','Facet step (units, crystal craters)',['crater'],0,60,5,10,'Crater facets: how far each facet may stand above or below the crater\'s own surface, in height units either way (shown in tenths: 3 is the earlier ragged crater). Retail\'s crater walls are smooth planes broken by a thin web, so a small step keeps the sun\'s light running smoothly across the wall.'],
   ['crystalCraterSkin','crystal-crater-skin','Web in the shader (crystal craters)',['crater'],0,100,100,100,'Crater facets: 100 marks the whole crater as one crystal skin (no seams in the crystal field) and leaves the thin web between the facets to the shader (World knobs crystalCraterWeb and its relatives), drawn at pixel size so its lines run thin and wander; 0 inks each facet\'s seam in the field as before.'],
   // G7 (Crystal): finer shore slabs.
-  ['crystalShoreScale','crystal-shore-scale','Rock slab size (share of Plate size, crystal shores)',['deep','shallow','offset'],10,100,5,100,'Rock slabs (Plate material 1): scales Plate size down, so a preset or an old stroke asks for large plates and the shore draws finer ones (never under 8 px). 100 keeps Plate size as given.'],
   // H20b (Crystal): some slabs break into a fine mesh.
   ['plateVary','plate-vary','Rock slab variety (share of slabs broken into fine mesh)',['deep','shallow','offset'],0,100,5,100,'Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole.'],
   ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['deep','shallow','offset'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
@@ -235,7 +234,7 @@ const SHAPE_FIELDS=[
   ['lavaSpread','lava-spread','Layer width spread',['deep','shallow'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
-const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreScale','crystalShoreSeam','plateVary'];
+const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreSeam','plateVary'];
 // G6 (Ice): the mountain facets' options, wired beside E7's (the card the stroke builds and strokeParams).
 const G6_KEYS=['iceFacets','iceFacetSize'];
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
@@ -405,7 +404,6 @@ function updateControls() {
   $('deposit-spread-value').textContent=$('deposit-spread').value+'%';
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
   $('tool-style').value=toolSettings[tool]?.preset||'custom';
-  $('fractures-value').textContent=$('fractures').value+'%';
   $('scree-value').textContent=$('scree').value+'%';
   $('tool-help').textContent=tool==='shallow' && $('shallow-mode').value==='passage'
     ?'Raise the underwater bed to 7 below sea level for a shallow passage. Existing land and shallower banks keep their shape.'
@@ -758,7 +756,7 @@ function endRegionalMove(commit=true) {
   selectNode(gesture.index); updateControls(); schedule(); queueWeather(); return commit?gesture.index:false;
 }
 function currentDrawOptions() {
-  return {clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
+  return {clay:$('clay').checked,light:$('light').value,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
 }
 function regionalHeightCell(x,y) {
   const h=regionalFields.cell(x,y),i=y*worldGrid+x;
@@ -1146,7 +1144,7 @@ function sketch() {
     toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
     beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
-    tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),shelves:Number($('shelves').value),shallowMode:$('shallow-mode').value,fractures:Number($('fractures').value),scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'stroke-graph'};
+    tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),shelves:Number($('shelves').value),shallowMode:$('shallow-mode').value,scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'stroke-graph'};
 }
 function persistLater() {
   if (experiment.has('scratch')) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
@@ -1165,7 +1163,7 @@ function loadSketch(s) {
   for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(s.toolSettings?.[kind]||{})};
   showTool(toolSettings[tool]);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
-  for (const [key,id,lo,hi] of [['bankWidth','bank-width',0,100],['beachFlatness','beach-flatness',0,100],['softness','softness',0,100],['fractures','fractures',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
+  for (const [key,id,lo,hi] of [['bankWidth','bank-width',0,100],['beachFlatness','beach-flatness',0,100],['softness','softness',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
   $('shallow-mode').value=s.shallowMode==='area'?'area':'passage';
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
@@ -1275,7 +1273,6 @@ $('tool-style').addEventListener('change',() => {
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for (const id of ['mineral-ring','ring-spread','ring-variation']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for(const id of ['material-weathering','deposit-spread']) $(id).addEventListener('input',()=>{markViewChanged();updateControls();schedule();queueWeather();persistLater();});
-$('fractures').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 $('shallow-mode').addEventListener('change',() => { rememberTool(true); updateControls(); persistLater(); if (selected>=0) { editSelectedFromControls(); checkpoint(); queueWeather(); } });
 $('scree').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); queueWeather(); persistLater(); });
 function applySeedControl() {
@@ -1369,8 +1366,8 @@ const KNOBS = [
   ['Boulders', [['boulders','Density',0,1,.05,0],['boulderSize','Size (px)',4,24,1,9],['boulderFoot','From cliff feet',0,1,.05,.5],
     ['boulderCluster','Clustering',0,1,.05,.6],['boulderMoss','Mossy tops',0,1,.05,.35],['boulderRound','Roundness',0,1,.05,0]]],
   ['Debris', [['debris','Amount',0,1,.05,0],['debrisReach','Reach (px)',16,128,4,48],['debrisSize','Size (px)',3,12,1,6],['debrisSort','Sorting',0,1,.05,.8],['repose','Rest slope',.3,1,.05,.6]]],
-  ['Sand', [['sand','Weathering supply',0,2,.05,0],['sandReach','Water transport',0,1,.05,.6],['windStrength','Wind strength',0,1,.05,.5],
-    ['wind','Wind toward (deg)',0,360,5,20],['sandPatchy','Patchiness (flows and piles)',0,1,.05,.7],['sandTail','Fines carried beyond',0,1,.05,.6],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Grass regrowing over sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
+  ['Sand', [['sand','Weathering supply',0,2,.05,0],
+    ['wind','Wind toward (deg)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Grass regrowing over sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
   ['Cracks', [['crackSeverity','Depth',0,1,.05,.6],['crackSpacing','Block size (px)',16,96,2,40],['crackLength','Length down the slope',1,4,.25,2],
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
@@ -1379,7 +1376,7 @@ const KNOBS = [
   ['Rock structure', [['rockOrder','Order (0 scattered, 1 beds and joints)',0,1,.05,0],['rockFrom','Beds and joints from slope (painted rock always)',.3,2,.05,.6],['bedSpacing','Bed thickness (px along the ground, or height units)',3,80,1,12],['bedHeight','Beds spaced by height (0 px along the ground)',0,1,.05,0],['bedVary','Bed thickness variation',0,1,.05,.5],
     ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledge step strength',0,1,.05,.5],['bedLip','Ledge lip and notch (height)',0,4,.1,1],
     ['jointSpacing','Joint spacing (px)',12,120,2,36],['jointAngle','Joint lean from north-south (deg)',-60,60,1,0],['jointDepth','Joint depth (height)',0,6,.1,2],['jointRun','Joint run (px)',30,400,10,120],['jointGaps','Joint gaps',0,1,.05,.3]]],
-  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWidth','Bank line width at half depth (px; 0 thin)',0,4,.1,0],['bandStyle','Style (0 tonal steps, 1 bank lines)',0,1,1,0],['bandRelief','Bank lines bent by relief',0,1,.05,0],['bandWander','Bank line wander',0,2,.05,0],['bandGaps','Bank line gaps',0,1,.05,0],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
+  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
   ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
@@ -1389,15 +1386,14 @@ const KNOBS = [
   ['Desert caps', [['desertCapFlat','Level cap kept cool (0 beds as before)',0,1,.05,0]]],
   // E9 (Green rock faces); every default is the earlier look.
   ['Rock face', [['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
-    ['bedFlow','Beds broken and shifted by joints (0 continuous)',0,1,.05,1],['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],
+    ['bedBend','Beds follow the ribs and gullies',0,2,.05,0],['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullySpacing','Gully spacing (px)',12,120,2,40],['gullyWidth','Gully width (px)',4,40,1,14],['gullyAngle','Gully lean from north-south (deg)',-60,60,1,-20],
     ['gullyRun','Gully length (px)',30,400,10,160],['gullyGaps','Gully gaps',0,1,.05,.3],['gullyShade','Gully floor shade (occlusion)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
-  ['Rock face: scratches', [['scratchDepth','Scratch depth (height; 0 none)',0,4,.1,0],['scratchSpacing','Scratch spacing (px)',3,40,1,9],['scratchAngle','Scratch lean from north-south (deg)',-60,60,1,-20],['scratchRun','Scratch length (px)',20,300,5,90],['scratchGaps','Scratch gaps',0,1,.05,.4]]],
   ['Rock face: facets', [['facetTilt','Facet tilt (height per px; 0 none)',0,2,.05,0],['facetSize','Facet height (px)',2,24,.5,6],['facetStretch','Facet width (x height)',.25,4,.05,1.5],['facetStep','Step between facets (height)',0,6,.1,1],['facetSeam','Facet crease darkness',0,2,.05,0],['facetSkew','Facet tilt in y (share of its tilt in x)',0,1,.05,1],['facetCoarse','Coarser second level of facets (share)',0,1.5,.05,0]]],
   // G2: rock faces follow the slope; every default is the earlier look.
   ['Rock face: follows the slope', [['cliffFollow','Beds on the contours, joints down the fall line (0 fixed screen directions)',0,1,1,0],['cliffReach','Fall line smoothing radius (px)',6,60,1,20],['cliffWide','Wide fall line radius, level ground under rock (px)',20,160,2,56],['cliffFlat','Slope under which structure fades into broken rock',0,.3,.005,.04],['cliffRise','Bed riser height (units; 0 the bed\'s own)',0,40,1,0],['cliffBed','Beds follow the smoothed ground (0 the grid\'s own bumps)',0,1,.05,.5],['cliffStagger','Joints offset from bed to bed (share of spacing)',0,.8,.05,0],['cliffFine','Third, finer facet level (share of tilt)',0,1.5,.05,0],['cliffDomain','Joint lattice patch size (px)',30,240,5,90]]],
   // E11: shallow water round 2 and Archipelago's fringe lines.
-  ['Shallow water, round 2', [['stepSharp','Step is a true threshold (Green, Red, reef bars)',0,1,1,0],['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['shelfScale','Shelf wander size (px)',30,400,5,100],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedMottle','Bed mottle',0,.3,.01,0],['bedMottleScale','Bed mottle size',.5,4,.1,1],['bedDots','Dark dots in the bed (Red)',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed step depth (Red; 0: the world\'s)',0,60,1,0],['crackedContrast','Cracked-bed contrast (0: the tint\'s own)',0,2,.05,0],['bedCrackSlope','Slope the cracked bed is cut for',.5,1.6,.05,.8]]],
+  ['Shallow water, round 2', [['stepSharp','Step is a true threshold (Green, Red, reef bars)',0,1,1,0],['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['shelfScale','Shelf wander size (px)',30,400,5,100],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedDots','Dark dots in the bed (Red)',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed step depth (Red; 0: the world\'s)',0,60,1,0],['crackedContrast','Cracked-bed contrast (0: the tint\'s own)',0,2,.05,0],['bedCrackSlope','Slope the cracked bed is cut for',.5,1.6,.05,.8]]],
   // G1: shallow water round 3.
   ['Shallow water, round 3', [['shoalBump','Lit bumps in the bed (slope)',0,6,.1,0],['shoalBumpPx','Bump size (px)',2,16,.5,6],['shoalDither','Palette dither on the bed (share)',0,1,.05,1],['shoalGrain','Ground grain through the tint (Red)',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalStairs','Hard waterline stairs (px)',0,6,.1,0],['shoalShoreSoft','Default waterline blur (px; Archipelago)',0,12,.5,0]]],
   ['Fringe lines (Archipelago)', [['bandFoot','Band lines start above the base (units)',0,30,1,0],['ringContrast','Fringe contour lines: contrast',0,1,.05,0],['ringCount','Fringe contour lines: count',1,30,1,7],['ringSize','Fringe contour lines: reach',.1,2,.05,1]]],
@@ -1560,7 +1556,7 @@ function buildKnobs() {
       box.append(wrap);
     }
     for (const [key, oldLabel, min, max, step, value] of knobs) {
-      if(RETIRED_WORLD_CONTROLS.has(key)||PARKED_WORLD_CONTROLS.has(key))continue;
+      if(PARKED_WORLD_CONTROLS.has(key))continue;
       const label=controlLabel(key,oldLabel);
       const wrap = document.createElement('div'); wrap.className = 'control';
       wrap.dataset.knob=key;
@@ -1609,8 +1605,7 @@ async function bootMap() {
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
   syncColumnPanel=mountColumnPanel(()=>({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),editColumn,commitColumn,()=>{editColumn(null);commitColumn();});
-  $('fracture-control').hidden=true;
-  $('fractures').value=clamp(Number(experiment.get('fractures'))||0,0,100); $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
+  $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
   let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
   if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved map recipe.'); } catch (err) { error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); } }
   else status('Blank map ready · draw terrain with the existing tools.');
@@ -1702,7 +1697,7 @@ async function gpuRegionalCheck() {
   } finally { engine.destroy(); }
 }
 window.sculptDebug = {curve:() => currentCurve(),pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
-  drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,fractures:Number($('fractures').value)/100,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
+  drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),
   // replayDetail: the same, per field key (h, then the mask planes).

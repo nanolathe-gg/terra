@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shapeControlAvailable as available,controlLabel,RETIRED_WORLD_CONTROLS,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
+import {shapeControlAvailable as available,controlLabel,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
 test('a hill exposes foot effects only as a ridge',()=>{
@@ -29,8 +29,7 @@ test('erase all masks includes all eight local style planes',()=>{
  assert.deepEqual(writes.map(w=>w[0]),Array.from({length:18},(_,i)=>i));
  assert.ok(writes.every(w=>w[1]===0));
 });
-test('retired controls are only the disconnected transport quartet',()=>{
- assert.deepEqual([...RETIRED_WORLD_CONTROLS],['sandReach','windStrength','sandPatchy','sandTail']);
+test('the parked control is only crevice',()=>{
  assert.deepEqual([...PARKED_WORLD_CONTROLS],['crevice']);
  assert.equal(controlLabel('moonCups','Moon cups'),'Slope cups');
  assert.equal(controlLabel('iceSoft','Ice lighting'),'Rounded lighting');
@@ -42,6 +41,15 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.equal(requirement('bedVary',{column:0,rockOrder:1}),'');
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
- assert.match(requirement('scratchSpacing',{rockOrder:0,scratchDepth:1}),/Rock structure/);
+ assert.match(requirement('gullySpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
+ assert.match(requirement('jointRun',{rockOrder:1,jointDepth:0}),/Joint depth/);
+ assert.equal(requirement('jointRun',{rockOrder:1,jointDepth:2}),'');
+ assert.match(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:0}),/Gully depth or Rib tilt/);
+ assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:.2}),'');
+ assert.equal(requirement('bedBend',{rockOrder:1,gullyDepth:4,ribTilt:0}),'');
+ assert.match(requirement('cliffStagger',{cliffFollow:0,jointDepth:2}),/Follow terrain/);
+ assert.match(requirement('cliffStagger',{cliffFollow:1,jointDepth:0}),/Joint depth/);
+ assert.equal(requirement('cliffStagger',{cliffFollow:1,jointDepth:2}),'');
  assert.equal(requirement('boulderSize',{boulders:0}),'','painted scatter still uses size when global density is zero');
+ assert.equal(requirement('bandSoftness',{banding:0}),'','painted banding still uses the riser share when the world strength is zero');
 });

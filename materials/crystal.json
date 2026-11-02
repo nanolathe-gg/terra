@@ -1771,32 +1771,18 @@
  },
  "world": {
   "defaults": {
-   "noise": "ridged",
    "coverage": "form",
-   "rock": "hill",
    "lighting": "front",
-   "forms": "shouldered",
    "surface": "slopes",
-   "scene": "compact",
-   "weather": "broad",
    "transition": "soil",
    "material": "single",
-   "edges": "natural",
-   "fractures": "40",
    "scree": "0",
    "shade": "separate",
-   "example": "columns",
-   "fingerBlunt": "0",
-   "fingerCoast": "0",
    "flowTint": "1",
    "flowShallow": "0.85",
    "flowStreak": "0.5",
    "flowStreakLen": "140",
-   "flowBank": "0.9",
-   "faceRock": "0",
-   "hillLobes": "0",
-   "hillSteps": "8",
-   "lavaTread": "0"
+   "flowBank": "0.9"
   },
   "export": {
    "planet": "Crystal",

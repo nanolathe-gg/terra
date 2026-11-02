@@ -382,19 +382,11 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 //
 // Joints: grooves close to the screen's north-south with a slight lean,
 // spaced irregularly, each running in unbroken stretches (jointRun px) with
-// gaps (jointGaps) and deepest mid-stretch; they wander a little. A joint
-// also breaks the beds: the block to its right is shifted along the beds by
-// up to 0.25 of a bed wherever the joint is present, so rows end and step at
-// the joints instead of running on as contour lines. Returns (groove height
-// offset <= 0, block shift in bed thicknesses).
+// gaps (jointGaps) and deepest mid-stretch; they wander a little. The beds run
+// on across them. Returns the groove height offset (<= 0).
 fn jointGroove() -> Groove { return lines(u.jointAngle, u.jointSpacing, u.jointDepth, u.jointRun, u.jointGaps, 2.2, 11.0); }
-fn jointField(p: vec2f) -> vec2f { return jointFieldAt(p, 0.0); }
 // G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
-fn jointFieldAt(p: vec2f, off: f32) -> vec2f {
-    let g = jointGroove();
-    let cut = groove(p, g, off);
-    return vec2f(-cut.depth, (cellHash(vec2f(cut.left, 57.0)).x - 0.5) * 0.5 * grooveRun(cut.left, cut.y, g.line.w, g.shape.x, g.shape.z));
-}
+fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), off).depth; }
 
 // Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
 // wander broadly and wobble finely but stay continuous between joints, so the
@@ -438,7 +430,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     return vec3f(off, lip, bed.index);
 }
 
-fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
+fn bedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     if (u.columnSectionCount > 0) { return columnBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
@@ -449,7 +441,7 @@ fn bedRelief(p: vec2f, h: f32, shift: f32, gOver: f32) -> vec3f {
     let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
     let S = max(u.bedSpacing, 2.0) * pow(G, 1.0 - u.bedHeight);
     let wander = valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1;
-    let L = (h + tilt + wander) / S + shift;
+    let L = (h + tilt + wander) / S;
     // Bed boundaries sit within 0.4 of each whole step, so they never cross.
     var k = floor(L);
     var lo = k + u.bedVary * 0.8 * (cellHash(vec2f(k, 3.7)).x - 0.5);
@@ -519,13 +511,12 @@ fn blockField(p: vec2f, pf: vec2f, h: f32, hill: f32) -> vec4f {
 
 // Rock face form (card E9). Retail's big green faces are carved: broad gullies
 // and ribs run down the face at a slight lean, tens of px apart, so whole
-// stripes read lit or shaded; the beds run on across them; long thin scratches
-// score the stripes; and the fine detail is angular facets, not rounded cells.
+// stripes read lit or shaded; the beds run on across them; and the fine detail is angular facets, not rounded cells.
 // Everything is height the sun lights; nothing here is ink.
 
-// One groove, for every mark cut as lines (joints, gullies, scratches): a lattice of lines `spacing` apart, leaning `angle` degrees from the
+// One groove, for every mark cut as lines (joints, gullies): a lattice of lines `spacing` apart, leaning `angle` degrees from the
 // screen's north-south and bending with two octaves of noise; each line a smooth channel up to `depth` deep in runs of about `run` px with
-// gaps, deepest mid-run. A family is the numbers of its Groove (jointGroove, gullyGroove, scratchField); the code is shared, and so is every
+// gaps, deepest mid-run. A family is the numbers of its Groove (jointGroove, gullyGroove); the code is shared, and so is every
 // number a family does not own: its half-width is the one thing it adds, and its salt (apart from the others') seeds every noise it draws.
 struct Groove {
     line: vec4f,    // angle (degrees), spacing (px), depth, run (px)
@@ -535,7 +526,7 @@ fn lines(angle: f32, spacing: f32, depth: f32, run: f32, gaps: f32, half_: f32, 
     return Groove(vec4f(angle, max(spacing, 3.0), depth, max(run, 12.0)), vec3f(gaps, half_, salt));
 }
 // The deepest cut here (a depth), the lattice coordinates (x across the lines, with `off` px added; y along them) and the index of the line
-// left of x, where a joint shifts the beds and a gully's rib begins.
+// left of x, where a gully's rib begins.
 struct Cut { depth: f32, x: f32, y: f32, left: f32 }
 // A line sits at (cell + .15 + .7 * hash) spacings.
 fn groovePos(c: f32, g: Groove) -> f32 { return (c + 0.15 + 0.7 * cellHash(vec2f(c, g.shape.z)).x) * g.line.y; }
@@ -581,13 +572,6 @@ fn gullyField(p: vec2f) -> vec2f {
     let hl = u.ribTilt * g.line.y * (cellHash(vec2f(cut.left, 77.0)).x - 0.5) * 2.0;
     let hr = u.ribTilt * g.line.y * (cellHash(vec2f(cut.left + 1.0, 77.0)).x - 0.5) * 2.0;
     return vec2f(mix(hl, hr, mix(t, smoothstep(0.0, 1.0, t), 0.4)) - cut.depth, select(0.0, cut.depth / u.gullyDepth, u.gullyDepth > 0.0));
-}
-
-// Weathering scratches: thin grooves leaning scratchAngle, scratchSpacing apart,
-// 1-2 px wide and up to scratchDepth deep, in runs of scratchRun px with gaps.
-fn scratchField(p: vec2f) -> f32 {
-    let g = lines(u.scratchAngle, u.scratchSpacing, u.scratchDepth, u.scratchRun, u.scratchGaps, 1.05, 53.0);
-    return -groove(p, g, 0.0).depth;
 }
 
 // The jittered point of each cell in the 3 x 3 around q (cell units), at jit.x + jit.y * hash of its cell (facets .15 + .7, Lava .12 + .76): the nearest, its
@@ -640,7 +624,7 @@ fn facetField(p: vec2f) -> vec2f {
 // Rock structure that follows the ground (card G2). Retail's strata lie along the contours of the
 // hill they are cut in and its joints run down the fall line, so on a face turned east the beds
 // are vertical on the screen and the joints run across it. The fixed screen directions above
-// (bedDip, jointAngle, gullyAngle, scratchAngle) are the earlier look; with cliffFollow 1 the
+// (bedDip, jointAngle, gullyAngle) are the earlier look; with cliffFollow 1 the
 // ground gives the directions instead, from heights smoothed at two scales, so the direction
 // does not shiver with the grid's own roughness. Where the smoothed slope is small even at the
 // wide scale (painted rock on level ground) there is no fall line to follow, and the structure
@@ -820,51 +804,6 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
     let line = (1.0 - smoothstep(0.35, 1.2, px)) * strength * gate
              * (0.7 + 0.3 * smoothstep(-0.6, 0.2, valueNoise(p / 15.0 + 61.0)));
     return vec2f(line, dot(-fall, normalize(u.sun.xy + 1e-6)));
-}
-
-// Lava bank lines (retail section-built Lava maps, measure/lava_*.py):
-// continuous braided dark lines along the contours, spaced by distance on
-// the ground rather than by a fixed height step (about 10 (s/0.5)^-0.3 px
-// at broad slope s), from slope 0.15 up with no upper limit, denser and
-// darker on steep ground; a dark V 3 px wide at half depth (5-6 px on steep
-// shaded faces), dark on every facing, no light lines. The broad slope sets
-// the step, so neighbouring lines converge and merge where it changes.
-// Returns (line strength, facing).
-fn lavaLines(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, relief: f32) -> vec2f {
-    if (banding <= 0.0 || h < u.sea + 0.5 || slope < 0.12) { return vec2f(0.0); }
-    // Broad slope of the dry land only: the lava bed would steepen a bank.
-    let broad = vec2f(max(baseHeight(p + vec2f(16.0, 0.0)), u.sea) - max(baseHeight(p - vec2f(16.0, 0.0)), u.sea),
-                      max(baseHeight(p + vec2f(0.0, 16.0)), u.sea) - max(baseHeight(p - vec2f(0.0, 16.0)), u.sea)) / 32.0;
-    // On a narrow steep bank the broad slope is gentler than the face, so
-    // the steeper of the two sets the step (lines no closer than ~7 px).
-    let S = u.bandSpacing * pow(max(max(length(broad), slope), 0.12) / 0.5, 0.7);
-    var field = h + valueNoise(p / 28.0 + 5.0) * S * 0.45 + valueNoise(p / 9.0 + 23.0) * S * 0.18;
-    // Card B3: retail's bank lines fork, end and meet, because they trace a
-    // rough surface rather than a smooth slope. The relief's ribs and lumps
-    // bend the contours (they fold round every rib), a slow phase wander makes
-    // neighbouring lines meet and part, all as extra height in line steps.
-    if (u.bandRelief > 0.0) { field += u.bandRelief * relief; }
-    if (u.bandWander > 0.0) { field += u.bandWander * S * (valueNoise(p / 41.0 + 61.0) * 1.2 + valueNoise(p / 17.0 + 77.0) * 0.5); }
-    let uu = field / S;   // GLSL: u
-    let v = fract(uu);
-    let px = min(v, 1.0 - v) * S / max(slope, 0.05);
-    let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
-    // A dark V, wider on steep shaded faces. Its width at half depth is the
-    // tent's half-width: retail cores (luma 15-27 in 55-60 ground) are ~2.5
-    // px wide at half depth (measure/lava_bands.py lines profiles); 0 keeps
-    // the original 1.6.
-    let core = select(1.6, u.bandWidth, u.bandWidth > 0.0);
-    let halfWidth = core * mix(1.0, 1.375, smoothstep(0.8, 1.4, slope) * smoothstep(0.1, -0.4, facing));
-    let line = clamp(1.0 - px / halfWidth, 0.0, 1.0);
-    var strength = smoothstep(0.12, 0.25, slope) * (0.75 + 0.25 * smoothstep(0.3, 1.5, slope));
-    // Each line (its own level) is present only along stretches ~40 px long:
-    // wider and more irregular spacing, lines that break off (card B3).
-    if (u.bandGaps > 0.0) {
-        let level = floor(uu + 0.5);
-        let present = valueNoise(p / 38.0 + vec2f(level * 7.31, level * 3.17) + 13.0);
-        strength *= smoothstep(mix(-1.2, 0.15, u.bandGaps), mix(-0.9, 0.45, u.bandGaps), present);
-    }
-    return vec2f(line * strength * banding, facing);
 }
 
 // Sandiness from the weathering worker's transport (wind and water): 0
@@ -1187,19 +1126,17 @@ fn bake(p: vec2f) -> vec4f {
         // The squiggles read as dark lines in the art: shade their troughs.
         wormDark = smoothstep(0.82, 0.97, max(worm, worm2 * 0.97)) * u.worms * on * 0.85;
     }
-    var bandsAt = vec3f(0.0);
     // Painted banding: fainter scales the world's strength down, stronger
     // doubles it up to twice and never drops below 0.8 times the painted amount.
     let banding = select(u.banding * (1.0 + style.z), max(u.banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
-    if (u.bandStyle != 1) { bandsAt = contourBands(p, h, slope, fall, banding); }
+    let bandsAt = contourBands(p, h, slope, fall, banding);
     var bands = bandsAt.xy * (1.0 - route);
     // E11: the dark lines round Archipelago's hills were the first contour risers on the
     // hill's foot; retail has red fringe lines there instead (fringeContours draws those).
     if (u.bandFoot > 0.0) { bands.y *= smoothstep(u.base + 0.5 * u.bandFoot, u.base + u.bandFoot, h); }
     height += bands.x;
-    var bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
+    let bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
-    if (u.bandStyle == 1) { bandDark = lavaLines(p, h, slope, fall, banding, height).x * u.bandLine * (1.0 - route); }
     var sand = sandCover(p, slope, height) * (1.0 - route);
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
@@ -1284,31 +1221,24 @@ fn bake(p: vec2f) -> vec4f {
         // H2: the rock column reads the surface itself, the coordinate erosion reads (columnCoord), not G2's smoothed ground.
         if (u.columnSectionCount > 0) { bedH = h; }
         // E9: the face's own form. Gullies and ribs carve the face; the beds follow
-        // them (bedBend) and run on across the joints (bedFlow 0: no break and no shift).
+        // them (bedBend) and run on across the joints.
         // The form fades out over the face's foot, so no gully reaches the water plane.
         var carved = vec2f(0.0);
         if (u.gullyDepth > 0.0 || u.ribTilt > 0.0) { carved = gullyField(pf) * smoothstep(u.base + 2.0, u.base + 16.0, h); }
-        var joint = vec2f(0.0);
-        var bed = vec3f(0.0);
-        if (cliffOn && u.cliffStagger > 0.0) {
-            // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
-            // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
-            // (the beds come first, as the offset is keyed on the bed's index; bedFlow 0 anyway lets joints leave them alone).
-            bed = bedRelief(p, bedH + carved.x * u.bedBend, 0.0, bedG);
-            // A joint of no depth cuts nothing, and here nothing else reads it.
-            if (u.jointDepth > 0.0) { joint = jointFieldAt(pf, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5)); }
-        } else {
-            // The joint's shift reaches the beds only through bedFlow, and its cut only through its depth.
-            if (u.jointDepth > 0.0 || u.bedFlow != 0.0) { joint = jointField(pf); }
-            joint.y *= u.bedFlow;
-            bed = bedRelief(p, bedH + carved.x * u.bedBend, joint.y, bedG);
+        let bed = bedRelief(p, bedH + carved.x * u.bedBend, bedG);
+        // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
+        // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
+        // (the offset is keyed on the bed's index). A joint of no depth cuts nothing.
+        var joint = 0.0;
+        if (u.jointDepth > 0.0) {
+            let stagger = select(0.0, u.cliffStagger * max(u.jointSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5), cliffOn && u.cliffStagger > 0.0);
+            joint = jointFieldAt(pf, stagger);
         }
-        height += order * steep * (bed.x + joint.x);
+        height += order * steep * (bed.x + joint);
         // The form eases in over the painted edge (a smoothstep of the cover, not the cover itself), so the rim stays smooth.
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
-        if (u.scratchDepth > 0.0) { height += gate * scratchField(pf); }
         if (u.blocks > 0.0) {
             let block = blockField(p, pf, bedH + carved.x * u.bedBend, 0.0);
             height += gate * block.x;
