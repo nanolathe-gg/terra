@@ -283,7 +283,7 @@ WORLD_KNOBS = {
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
                   stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1,
                   # G1 (round 8 review: "reads as noise while retail reads as lit bumpy terrain"): the
-                  # the palette dither's white noise went; lit bumps of 5 px take
+                  # palette dither's white noise went; lit bumps of 5 px take
                   # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
                   shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
@@ -660,11 +660,14 @@ WORLD_VARIANTS = {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
         # window ice-2: block mean (177,196,247); the default's (220,225,232)).
         # The Ice blocks are Crystals-brush stamps, so their colour is the
-        # world's crystal colour; side faces are that colour times 0.38.
+        # world's crystal colour; side faces are that colour times 0.38 times
+        # crystalFace.
         # Berg faces and tops (card E5): retail's bergs are blue-tinted all over,
         # tops (125,150,236) darker than the lit faces (177,201,251), so the
         # variant's ground, slope cover and rock take those colours (the berg
         # form carries no crystal mark; it is lit and covered like any slope).
+        # crystalFace, crystalTone and crystalGrain reach only Ice's default
+        # Crystals stroke (form 0): without them its shaded side goes near black (H22).
         'bergs': dict(label='Icy Bergs: blue blocks',
                       colors=dict(crystal='#8ea6ee', ground='#9db5fa', slope='#a5bef9', rock='#9ab2f4'),
                       # No slope cover, face rock or exposed rock: their dark slate and granite
@@ -673,7 +676,7 @@ WORLD_VARIANTS = {
                       # relief to .35 / .4: the owner found ice-2 too rough, and its 3x3 high-pass was 17.5 against retail's 11.7, now 13).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3, microRock=0,
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3, microRock=0,
                                  # Card G6: the world's soft slate block look is not the berg's.
                                  iceSoft=0, iceSnow=0, iceFall=0, iceApron=0,
                                  # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.

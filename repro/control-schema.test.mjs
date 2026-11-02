@@ -51,4 +51,5 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('cliffStagger',{cliffFollow:1,jointDepth:0}),/Joint depth/);
  assert.equal(requirement('cliffStagger',{cliffFollow:1,jointDepth:2}),'');
  assert.equal(requirement('boulderSize',{boulders:0}),'','painted scatter still uses size when global density is zero');
+ assert.equal(requirement('bandSoftness',{banding:0}),'','painted banding still uses the riser share when the world strength is zero');
 });
