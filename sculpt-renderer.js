@@ -1125,7 +1125,6 @@ export class TerrainRenderer {
     set('uFacetStretch', number('facetStretch', 1.5));
     set('uFacetStep', number('facetStep', 1));
     set('uFacetSeam', number('facetSeam', 0));
-    set('uFacetSkew', number('facetSkew', 1));
     set('uFacetCoarse', number('facetCoarse', 0));
     // G2 (rock faces follow the slope).
     set('uCliffFollow', number('cliffFollow', 0));

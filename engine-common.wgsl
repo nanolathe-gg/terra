@@ -265,7 +265,6 @@ struct Uniforms {
     facetStretch: f32,    // facet width as a multiple of its height
     facetStep: f32,       // step between neighbouring facets, height units
     facetSeam: f32,       // how dark the creases between facets are (0: lit like the facets)
-    facetSkew: f32,       // facets' tilt in y as a share of their tilt in x (the picture squeezes steep y tilts: 1 as before, lower keeps them readable)
     facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     stepSharp: f32,       // Green, Red: the shallow-to-deep step is a true threshold, ragged by pixels (0: the earlier smoothed step)

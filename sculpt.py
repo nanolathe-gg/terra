@@ -114,7 +114,7 @@ KNOB_DEFAULTS.update(desertCapFlat=0)
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
                      bedPunch=0,
-                     facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
+                     facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetCoarse=0)
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
 # shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
 # its depth with broad noise so the band's width and outline vary along the shore; bedFlat
@@ -274,7 +274,7 @@ WORLD_KNOBS = {
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
                   bedPunch=1,
-                  facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
+                  facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over

@@ -602,6 +602,8 @@ fn cells(q: vec2f, metric: vec2f, salt: f32, jit: vec2f) -> CellPick {
     }
     return n;
 }
+// H23: facets' tilt in y as a share of their tilt in x, the same on every world (the picture squeezes steep y tilts).
+const FACET_SKEW = 0.25;
 // Angular facets: a jittered grid of cells F px tall and `stretch` times as wide
 // (the beds' direction), each a plane with its own random tilt (up to `tilt`,
 // height per px) and a step against its neighbours (up to `step_`), so each
@@ -615,8 +617,8 @@ fn facetLevel(p: vec2f, F: f32, stretch: f32, tilt_: f32, step_: f32, salt: f32)
     let q = p / size;
     let n = cells(q, vec2f(1.0), 71.0 + salt, vec2f(0.15, 0.7));
     // The picture draws a point at row y - height / 2, so a facet tilted steeply in y is stretched or squeezed on the screen
-    // (flat at 2 units per px): the tilt across the beds (x) carries the contrast, the tilt in y is held to facetSkew of it.
-    let tilt = (cellHash(n.id + 37.0 + salt) - 0.5) * 2.0 * tilt_ * vec2f(1.0, u.facetSkew);
+    // (flat at 2 units per px): the tilt across the beds (x) carries the contrast, the tilt in y is held to FACET_SKEW of it.
+    let tilt = (cellHash(n.id + 37.0 + salt) - 0.5) * 2.0 * tilt_ * vec2f(1.0, FACET_SKEW);
     let step = (cellHash(n.id + 19.0 + salt).x - 0.5) * step_;
     let seam = (1.0 - smoothstep(0.0, 1.2 / F, sqrt(n.second) - sqrt(n.best))) * (0.3 + 0.7 * cellHash(n.id + 5.0 + salt).y);
     return vec2f(dot(tilt, (q - n.point) * size) + step, seam);
