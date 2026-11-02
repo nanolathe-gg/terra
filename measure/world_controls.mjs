@@ -29,24 +29,8 @@ const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolea
 // Rows that read 0 and are kept on purpose. A reason a reader can check, or the row is a finding, not an entry.
 const ALLOWED = {};
 // Rows that read 0 where nothing yet says why: reported, not failed, so the sweep can gate what is settled. An entry holds only in the worlds (and stroke kinds) listed,
-// taken from the final sweep, so a zero anywhere else fails; the card that touches a row settles it, and this list ends empty. Water is H24's, the rest Small leftovers.
+// taken from the final sweep, so a zero anywhere else fails; the card that touches a row settles it, and this list ends empty. Small leftovers holds the three that remain.
 const OPEN = {
-  // H24. One water colour (Lava and Moon: shallow and deep are equal), and the third-colour branch, which discards `deep` (Crystal, Ice, Zhon; Ice and Zhon have no lit bed to carry it).
-  deepEdge: {worlds: ['ice', 'lava', 'moon', 'zhon'], note: 'ice, zhon: third colour and no lit bed; lava, moon: one water colour'},
-  deepEdgeDepth: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  stepSharp: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  stepSoftPx: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  shelfWander: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  shelfScale: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  shoalRag: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  waterDeep: {worlds: ['ice', 'lava', 'moon', 'zhon'], kinds: ['deep', 'shallow'], note: 'a stroke\'s edge choice: as deepEdge'},
-  crackedStep: {worlds: ['crystal', 'ice', 'zhon'], note: 'third colour; moves in green, archipelago, red'},
-  // H24. The threshold step reads no colorDepth, and with deepEdgeDepth above 0 neither depth; a stroke's Faded edge brings them back, so a gate needs that pick first.
-  waterSoft: {worlds: ['green', 'lava', 'moon', 'red'], note: 'green, red: threshold step; lava, moon: one water colour'},
-  bandWater: {worlds: ['green', 'lava', 'moon', 'red'], note: 'as waterSoft'},
-  shallowDepth: {worlds: ['green'], note: 'threshold step at a set depth'},
-  deepDepth: {worlds: ['green'], note: 'as shallowDepth'},
-  bedCrackSlope: {worlds: ['desert', 'moon'], note: 'not traced; reads 0 on the cracked-bed stroke; moves in the other seven'},
   // Small leftovers.
   slopeTexture: {worlds: ['archipelago'], note: 'not traced; moves there only with a slope or ground gloss on, and directly in the other seven'},
   shineSlopeSharp: {worlds: ['red'], note: 'not traced; red\'s slopeTexture is 0; moves in other worlds once their slope gloss is on'},
@@ -71,8 +55,8 @@ const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ri
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
 const KIND_AT = {plateau: [130, 170], offset: [380, 170], hill: [630, 170], mountain: [880, 170], deep: [130, 500], shallow: [380, 500], crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830]};
 // The panel hides these until their switch is above 0 (updateControls in sculpt.js).
-const GATE = {layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerAmount: 'fingers', fingerSize: 'fingers', fingerSpread: 'fingers', fingerHeight: 'fingers',
-  spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaMeander: 'shoreLayers', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
+const GATE = {layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerSize: 'fingers',
+  spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
 mkdirSync(out, {recursive: true});
@@ -163,6 +147,10 @@ try {
     // a partial Denser scatter over the mountain's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
     ['paint', [[240, 220], [760, 220]], {card: {diameter: 460, amount: 35, paintChannel: 5}}],
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
+  // The water picks: six deep strokes, each with one combination of a stroke's edge and bed choices (hard, lit, faded, cracked, and the pairs the water rows' gates read),
+  // for the rows a stroke's own choice keeps alive where the world's setting leaves them idle.
+  const waterPicks = () => [[60, 200, {waterDeep: 1}], [60, 480, {waterBed: 1}], [60, 760, {waterDeep: 2}], [560, 200, {waterBed: 1, waterDeep: 2}], [560, 480, {waterBed: 3}], [560, 760, {waterBed: 1, waterDeep: 1}]]
+    .map(([x, y, picks]) => ['deep', [[x, y], [x + 400, y]], {card: {diameter: 150, shelves: 70}, ...picks}]);
   // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau
   // card: a Face width fills a smaller stroke's reach, leaving a lean no room, and the overlaps cut the deep stroke through the plateau, the steep ground Style: face rock acts on there.
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
@@ -171,7 +159,7 @@ try {
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? (r.open ? '  ?' : '  !') : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
   const add = r => { rows.push(r); if (process.stdout.isTTY || !process.env.QUIET) console.log(fmt(r)); };
   for (const world of WORLDS) {
-    const tw = Date.now(), fixtures = [[`${world}-1`, strokes(world).strokes, strokes(world).ground !== false, strokes(world).query], [`${world}-2`, scenes[`${world}-2`].strokes, scenes[`${world}-2`].ground !== false, scenes[`${world}-2`].query], [`${world}-3`, scenes[`${world}-3`].strokes, scenes[`${world}-3`].ground !== false, scenes[`${world}-3`].query], [`${world}-diagnostic`, diagnostic(world), true, strokes(world).query], [`${world}-painted`, painted(), true, strokes(world).query]];
+    const tw = Date.now(), fixtures = [[`${world}-1`, strokes(world).strokes, strokes(world).ground !== false, strokes(world).query], [`${world}-2`, scenes[`${world}-2`].strokes, scenes[`${world}-2`].ground !== false, scenes[`${world}-2`].query], [`${world}-3`, scenes[`${world}-3`].strokes, scenes[`${world}-3`].ground !== false, scenes[`${world}-3`].query], [`${world}-diagnostic`, diagnostic(world), true, strokes(world).query], [`${world}-painted`, painted(), true, strokes(world).query], [`${world}-water`, waterPicks(), true, strokes(world).query]];
     const setUp = async () => { await ev(`(async () => { for (const [k, v] of Object.entries(${JSON.stringify(SET)})) await terraformAudit.knob(k, v); })()`); return ev('__wc.state()'); };
     await load(world, fixtures[0][3] || '');
     const st = await setUp(); let base = st.variant;
@@ -213,11 +201,13 @@ try {
       return {world, type: 'knob', key: k.key, group: k.group, fixture, state, gates, lo: k.lo, hi, ...m};
     };
     // The mirror of the gated pass: on this fixture, every row whose reason holds now, read as it stands. The reason is asked again here, because a scene's
-    // strokes or query can clear it (a water stroke's Hard edge, Ice's variants).
+    // strokes or query can clear it (a water stroke's Hard edge, Ice's variants). A row no knob can clear has no gated pass, so the fixture that clears it is its proof.
+    const facts = new Map();
     const idle = async fixture => {
       const now = await ev('terraformAudit.panelValues()');
       for (const k of live) {
-        const reason = worldControlRequirement(k.key, now); if (!reason) continue;
+        const reason = worldControlRequirement(k.key, now);
+        if (!reason) { const r = facts.get(k.key); if (r && r.max <= 0) Object.assign(r, await sweepKnob(k, fixture, 'gated', {}), {note: 'a fixture cleared the reason'}); continue; }
         const hi = k.key === 'wind' || k.key.endsWith('Dir') ? 180 : k.hi, m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${hi})`);
         if (m.px >= HIDDEN_PX) add({world, type: 'knob', key: k.key, group: k.group, fixture, state: 'hidden', reason, lo: k.lo, hi, hides: true, ...m});
       }
@@ -227,9 +217,8 @@ try {
     await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`); await ev('__wc.remember()');
     const results = new Map();
     for (const k of on) { const r = await sweepKnob(k, fixtures[0][0], 'enabled', {}); results.set(k.key, r); }
-    await idle(fixtures[0][0]);
     for (const k of off) {
-      const sets = gatesFor(k.key); if (!sets.length) { add({world, type: 'knob', key: k.key, group: k.group, fixture: fixtures[0][0], state: 'gated', gates: null, max: -1, px: -1, note: 'no knob clears the reason'}); continue; }
+      const sets = gatesFor(k.key); if (!sets.length) { facts.set(k.key, {world, type: 'knob', key: k.key, group: k.group, fixture: fixtures[0][0], state: 'gated', gates: null, max: -1, px: -1, note: 'no knob clears the reason'}); continue; }
       let best = null;
       for (const gates of sets) {
         for (const [g, x] of Object.entries(gates)) await ev(`terraformAudit.knob(${JSON.stringify(g)}, ${x})`);
@@ -238,6 +227,7 @@ try {
       }
       results.set('~' + k.key, best);
     }
+    await idle(fixtures[0][0]);
     // The page sliders.
     for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`!!document.getElementById(${JSON.stringify(sid)}).closest('[hidden]')`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
     stage('rows', ts); ts = Date.now();
@@ -258,7 +248,7 @@ try {
       }
       await idle(fixtures[f][0]);
     }
-    for (const r of results.values()) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
+    for (const r of [...results.values(), ...facts.values()]) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); r.open = r.zero && openFor(r); add(r); }
     stage('zero retries', ts); ts = Date.now();
     // Stroke options, on the stroke fixture.
     const shapeRows = [];
@@ -281,7 +271,7 @@ try {
       if (key.startsWith('fissureBranch')) p.fissureBranches = 3;
       if (key === 'fissureCell') p.fissureNetwork = 1;
       if (key.startsWith('plate') || key === 'shorePlates' || key.startsWith('frost') || key.startsWith('crystalShore')) Object.assign(p, {shorePlates: 1, plateMaterial: key.startsWith('frost') ? 2 : 1, plateWaterPx: 100, plateLandPx: 120, plateSize: 40, plateGap: 5, plateHeight: 7});
-      if (key.startsWith('finger')) Object.assign(p, {fingers: 1, fingerAmount: 1, fingerSize: 1, fingerSpread: .5});
+      if (key.startsWith('finger')) Object.assign(p, {fingers: 1, fingerSize: 1});
       if (key.startsWith('layer') || key.startsWith('lava') || key === 'shoreLayers') Object.assign(p, {shoreLayers: 5, layerPx: 22, layerRiser: 4, layerLedge: .7, layerRough: .5, layerVary: .4, layerStyle: key.includes('Circle') || key === 'layerCircle' || key === 'lavaCircleVary' ? 1 : 0});
       if (['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar', 'crystalSmooth'].includes(key)) Object.assign(p, {crystalForm: 1, crystalSize: 32});
       if (key.startsWith('berg') || key === 'crystalAlign') Object.assign(p, {crystalForm: 2, crystalSize: 200, crystalCount: 3, bergTilt: .3});
@@ -289,6 +279,7 @@ try {
       if (key === 'iceFacetSize' || key === 'iceFacets') p.iceFacets = .7;
       if (key === 'maskAmount') p.maskChannel = 1;
       if (key === 'facing') p.lean = 3;
+      if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
       return p;
     };
     // The panel's own test of a row on a kind, on the state the context sets (UI units for the availability test).

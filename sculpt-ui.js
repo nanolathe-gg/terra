@@ -70,8 +70,8 @@ export function groupToolControls(fields){
  const definitions=[
  ['','Cross-section',['facePx','terraces','ledge','terraceJitter','lean','facing']],
  ['','Variability',['faceVariation','outlineVar','widthVar','heightVar']],
- ['fingers','Shore lobes',['fingers','fingerAmount','fingerSize','fingerSpread','fingerHeight']],
- ['shoreLayers','Shore layers',['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle','layerVary','layerCircle','lavaMeander','lavaSpread','lavaCircleVary']],
+ ['fingers','Shore lobes',['fingers','fingerSize']],
+ ['shoreLayers','Shore layers',['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle','layerVary','layerCircle','lavaSpread','lavaCircleVary']],
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb']],
  ['rimSectors','Rim sectors',['rimSectors','rimUnequal']],['rimGaps','Rim gaps',['rimGaps','rimGapWidth']],
  ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']],

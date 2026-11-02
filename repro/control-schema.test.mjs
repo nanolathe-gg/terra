@@ -103,25 +103,41 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('ripple',{beachLayer:1,sand:0}),/Weathering supply/);
  shows('ripple',{beachLayer:1,sand:.5});
  shows('ripple',{beachLayer:0,sand:0});   // the Sand brush feeds it where there is no beach
- assert.match(requirement('crackedStep',{stepSharp:0,deepEdge:1}),/true threshold/);
+ assert.match(requirement('crackedStep',{deepEdge:0,crackedBed:1}),/Hard shallow-to-deep step/);
+ assert.match(requirement('crackedStep',{deepEdge:1,crackedBed:0}),/Cracked bed/);
+ shows('crackedStep',{deepEdge:1,crackedBed:1});
  assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
  shows('strataContrast',{column:1,strata:.4});
  // water: the lit bed, the hard step, the threshold step
  assert.match(requirement('bedDots',{bedLit:0}),/Lit bed/);
  shows('bedDots',{bedLit:.5});
- assert.match(requirement('stepSharp',{deepEdge:0}),/Hard shallow-to-deep step/);
- shows('stepSharp',{deepEdge:1});
- assert.match(requirement('shelfWander',{deepEdge:1,stepSharp:0}),/true threshold/);
- shows('shelfWander',{deepEdge:1,stepSharp:1});
- assert.match(requirement('shelfWander',{deepEdge:0,stepSharp:1}),/Hard shallow-to-deep step/,'a parent that is itself idle names its own reason');
- assert.match(requirement('shelfScale',{deepEdge:1,stepSharp:1,shelfWander:0}),/Shelf wander/);
- shows('shelfScale',{deepEdge:1,stepSharp:1,shelfWander:5});
+ assert.match(requirement('shelfWander',{deepEdge:0}),/Hard shallow-to-deep step/);
+ shows('shelfWander',{deepEdge:1});
  assert.match(requirement('shoalBump',{bedLit:1,deepEdge:0}),/Hard shallow-to-deep step/);
  assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
  shows('shoalBump',{bedLit:1,deepEdge:1});
  shows('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2});
- assert.match(requirement('lavaCreaseVary',{layerCrease:0}),/crease/);
- shows('lavaCreaseVary',{layerCrease:.5});
+ // one water colour, or a third that follows the depth: the step shows only where something draws its deep share
+ assert.match(requirement('deepEdge',{waterTones:1}),/one colour/);
+ assert.match(requirement('deepEdge',{waterTones:3}),/third colour/);
+ for(const lit of [{bedLit:.5},{crystalShallow:1},{waterTinted:1}])shows('deepEdge',{waterTones:1,...lit});
+ shows('deepEdge',{waterTones:2});
+ assert.match(requirement('shelfWander',{waterTones:1,deepEdge:1}),/one colour/,'a parent that is itself idle names its own reason');
+ shows('shelfWander',{waterTones:1,deepEdge:1,bedLit:1});
+ // the ramp: a third colour is cut by the depths whatever the step does; two colours need the step off, or a Faded stroke
+ shows('waterSoft',{waterTones:3,rampWater:0});
+ assert.match(requirement('waterSoft',{waterTones:1,rampWater:1}),/one colour/);
+ assert.match(requirement('bandWater',{waterTones:2,rampWater:0}),/Faded edge/);
+ shows('bandWater',{waterTones:2,rampWater:1});
+ shows('waterSoft',{waterTones:1,bedLit:1,rampWater:1});
+ shows('shallowDepth',{waterTones:3});
+ shows('deepDepth',{waterTones:2,rampWater:0,deepEdge:1});   // the hard step sits at their midpoint
+ assert.match(requirement('shallowDepth',{waterTones:1}),/one colour/);
+ // a stroke's edge choice, on its own Lit bed or the world's
+ assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterTones:1}}),false);
+ assert.equal(available('waterDeep','deep',{waterBed:1,world:{waterTones:1}}),true);
+ assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterTones:3,bedLit:1}}),true);
+ assert.equal(available('waterDeep','shallow',{waterBed:0,world:{waterTones:2}}),true);
  // facts of the world's material the panel passes in with the settings
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});
@@ -135,8 +151,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
  shows('dither',{paletteMix:0});
- assert.match(requirement('shoalDither',{paletteMix:0,deepEdge:0}),/Hard shallow-to-deep step/);
- shows('shoalDither',{paletteMix:0,deepEdge:1});
  assert.equal(available('facing','mountain',{lean:0}),false);
  assert.equal(available('facing','mountain',{lean:2}),true);
  assert.equal(available('facing','hill',{lean:0}),true,'a hill leans on its own');

@@ -277,6 +277,8 @@ const CRACK_JAGGED = 0.6;
 const CRACK_REACH = 0.6;
 // H23: the elongation of the crack cells along the fall line, the same on every world.
 const CRACK_LENGTH = 2.0;
+// H24: the slope a shallow cracked bed's cracks are cut for (the land's rocky faces are cut from about 1), the same on every world.
+const BED_CRACK_SLOPE = 1.0;
 
 // The relief style of crackShade (card E3, ordered rock): the groove is carved
 // and lit rather than inked. Its floor keeps only a light core, the wall
@@ -1150,7 +1152,8 @@ fn bake(p: vec2f) -> vec4f {
     var bands = bandsAt.xy * (1.0 - route);
     // E11: the dark lines round Archipelago's hills were the first contour risers on the
     // hill's foot; retail has red fringe lines there instead (fringeContours draws those).
-    if (u.bandFoot > 0.0) { bands.y *= smoothstep(u.base + 0.5 * u.bandFoot, u.base + u.bandFoot, h); }
+    // The same flatBank worlds start them 8 units above the dry base.
+    if (u.flatBank > 0.0) { bands.y *= smoothstep(u.base + 4.0 * u.flatBank, u.base + 8.0 * u.flatBank, h); }
     height += bands.x;
     let bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
@@ -1187,7 +1190,7 @@ fn bake(p: vec2f) -> vec4f {
     var crackedBed = false;
     if (u.waterOn != 0 && h <= u.sea + 1.0) { crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5; }
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
-    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, u.bedCrackSlope), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
+    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, BED_CRACK_SLOPE), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
     var broken = 0.0;

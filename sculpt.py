@@ -70,7 +70,7 @@ KNOB_DEFAULTS = dict(
     # 1 or 2; the world knobs default to the earlier noise water, a ramp from
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
-    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, deepEdgeDepth=0, lumpRelief=4,
+    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
@@ -115,32 +115,25 @@ KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
                      bedPunch=0,
                      facetTilt=0, facetCoarse=0)
-# E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
-# shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
-# its depth with broad noise so the band's width and outline vary along the shore; bedFlat
-# lights the lit bed by its own relief only (no slope shading across the shelf).
-KNOB_DEFAULTS.update(stepSharp=0, shelfWander=0, shelfScale=100, bedFlat=0)
+# E11 (shallow water round 2): every default is the earlier look. shelfWander (depth units) moves
+# the hard step's depth with broad noise so the band's width and outline vary along the shore;
+# bedFlat lights the lit bed by its own relief only (no slope shading across the shelf).
+KNOB_DEFAULTS.update(shelfWander=0, bedFlat=0)
 # E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
-# crackedContrast carries a cracked bed's light and cracks through its tint, both sides, and
-# bedCrackSlope is the slope those cracks are cut for (.8: the earlier cracked bed; the land's
-# rocky faces are cut from ~1); bedDots / bedDotCell draw dark dots in the lit bed.
-KNOB_DEFAULTS.update(crackedStep=0, crackedContrast=0, bedCrackSlope=.8, bedDots=0, bedDotCell=14)
-# E11 Archipelago: bandFoot hides the band lines on a hill's foot (below this height above the
-# dry base); ringContrast / ringCount / ringSize draw contour lines in the red fringe that follow
-# the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach against
-# the ring texture's own).
-KNOB_DEFAULTS.update(bandFoot=0, ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
-# E10 (Lava): finger amount (share of lattice sites), size, distribution (0 even, 1 clustered; .5 is
-# the first thumb fingers' own) and flat height in units (0 the old tongue); layer width variation
-# (0 even layers) and the circle size in px of circular layers. Every default is the earlier output.
-KNOB_DEFAULTS.update(fingerAmount=1, fingerSize=1, fingerSpread=.5, fingerHeight=0, layerVary=0, layerCircle=26)
+# bedDots / bedDotCell draw dark dots in the lit bed.
+KNOB_DEFAULTS.update(crackedStep=0, bedDots=0, bedDotCell=14)
+# E11 Archipelago: ringContrast / ringCount / ringSize draw contour lines in the red fringe that
+# follow the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach
+# against the ring texture's own).
+KNOB_DEFAULTS.update(ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
+# E10 (Lava): finger size; layer width variation (0 even layers) and the circle size in px of circular
+# layers. Every default is the earlier output.
+KNOB_DEFAULTS.update(fingerSize=1, layerVary=0, layerCircle=26)
 # E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
 KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)
-# G5 (Lava): contour layers wander in two dimensions (layers of amplitude; 0 follows the shore only) and spread in width (0 none).
-KNOB_DEFAULTS.update(lavaMeander=0, lavaSpread=0, lavaCircleVary=0)
-# G5 (Lava), shader knob: the bank crease breaks into dashes of varying darkness (0: unbroken).
-KNOB_DEFAULTS.update(lavaCreaseVary=0)
+# G5 (Lava): contour layers spread in width (0 none).
+KNOB_DEFAULTS.update(lavaSpread=0, lavaCircleVary=0)
 # G5 (Lava), hill rock: crust strength (0: none), pillow and chip size in px, hanging veins, the share of the fall-line relief it replaces, and the dusk on shaded rock.
 KNOB_DEFAULTS.update(lavaCrust=0, lavaPillow=34, lavaChip=5.5, lavaVeins=0, lavaCalm=.6, lavaDusk=0)
 # E6: shine roughness only on raised ground and slopes (0: everywhere), and the headroom that lets
@@ -165,10 +158,8 @@ KNOB_DEFAULTS.update(iceFrost=0)
 # G6, Ice: angular facets on hills and mountains (share of the mountain broken into facets; facet width in px). Off by default everywhere.
 KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
 # G1 (shallow water round 3): shoalBump is the slope of the lit bumps the shallow bed carries
-# (0: none, the earlier bed), shoalBumpPx their size in screen px; shoalDither is the palette
-# dither's strength on the lit bed as a share of the water's (1: as before; the dither is white
-# noise that hides the bumps' clumps).
-KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6, shoalDither=1)
+# (0: none, the earlier bed), shoalBumpPx their size in screen px.
+KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6)
 # G1: shoalRag is how far (px) pixel notches move the shallow-to-deep step, independent of the
 # bed's slope (0: the step's earlier jitter, which a gentle shelf scales to nothing).
 KNOB_DEFAULTS.update(shoalRag=0)
@@ -187,9 +178,9 @@ KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGap
 # lines; ringCount copies), drifting towards ringShiftDir degrees clockwise from east with ringScatter of a half turn of
 # wander, and ringWobble px of waver in each outline (lobes ringLobe px across).
 KNOB_DEFAULTS.update(ringShift=0, ringShiftDir=315, ringScatter=.5, ringWobble=3, ringLobe=22)
-# G3: the stack fades into the sand: ringTaper (outer lines fainter), ringFill (pale tint, stepping lighter
-# outward), ringPatch over ringPatchSize px (the reach varies along the outline). 0: as the concentric look.
-KNOB_DEFAULTS.update(ringTaper=0, ringFill=0, ringPatch=0, ringPatchSize=120)
+# G3: the stack fades into the sand: ringFill (pale tint, stepping lighter outward), ringPatch over
+# ringPatchSize px (the reach varies along the outline). 0: as the concentric look.
+KNOB_DEFAULTS.update(ringFill=0, ringPatch=0, ringPatchSize=120)
 # G3: ringTone 1 draws the copies' lines in retail's rose, paler outward (0: the earlier crimson).
 KNOB_DEFAULTS.update(ringTone=0)
 # G2 (rock faces follow the slope): 0 keeps the fixed screen directions of every world; 1 runs beds along the
@@ -254,8 +245,8 @@ WORLD_KNOBS = {
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
-                  # grid upsampled), so the step sits at 40 and nothing fades.
-                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=1, deepEdge=1, deepEdgeDepth=40,
+                  # grid upsampled), so the step sits at 40 (H24: the midpoint, 42) and nothing fades.
+                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=1, deepEdge=1,
                   # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
                   # lumps only in patches, which the Paint brush's Ground lumps makes. On
                   # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
@@ -280,12 +271,12 @@ WORLD_KNOBS = {
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
                   # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
-                  stepSharp=1, shelfWander=24, shelfScale=140, bedFlat=1,
+                  shelfWander=24, bedFlat=1,
                   # G1 (round 8 review: "reads as noise while retail reads as lit bumpy terrain"): the
                   # palette dither's white noise went; lit bumps of 5 px take
                   # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
-                  shoalBump=1.8, shoalBumpPx=5, shoalDither=0,
+                  shoalBump=1.8, shoalBumpPx=5,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
                   shoalRag=5,
                   # G1: the hard waterline steps in 1-3 px runs (retail's), up to 2 px off the depth contour.
@@ -332,10 +323,10 @@ WORLD_KNOBS = {
                 # the lake (red-2) is lilac to its full depth 24 and keeps the world's 22. The
                 # cracked bed is cut as rocky ground and keeps its crevices through the tint
                 # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
-                stepSharp=1, shelfWander=6, shelfScale=80, bedFlat=.6,
-                crackedStep=14, crackedContrast=.45, bedCrackSlope=1, bedDots=.18, bedDotCell=15,
+                shelfWander=6, bedFlat=.6,
+                crackedStep=14, bedDots=.18, bedDotCell=15,
                 # G1: lit bumps of 8 px, and no palette dither (see Green).
-                shoalBump=2, shoalBumpPx=8, shoalDither=0,
+                shoalBump=2, shoalBumpPx=8,
                 # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is
                 # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
                 # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
@@ -357,7 +348,7 @@ WORLD_KNOBS = {
     # the directional share to 0.3 with a lift of the hill cover).
     # Water (card E1): the shallows are the lit sand bed under a blue tint. Their
     # edge is a fade by default (retail's halo round an island and its reef bars
-    # fade over 30-40 px); a stroke may set a hard step, which sits at depth 20.
+    # fade over 30-40 px); a stroke may set a hard step, which sits at the midpoint, depth 18 (20 before H24).
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, flatBank=1,
                         undulation=0, shadeDepth=.3,
                         # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
@@ -367,7 +358,7 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1.25, ringFade=1,
-                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1, deepEdgeDepth=20,
+                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
                         # E11 (round 7 report: "weird black/dark lines around the hills" and "more
                         # noticeable circle features in the red fringe"): the dark lines were the
                         # first band risers on the hill's foot (banding 0 removes them, crack knobs do
@@ -376,14 +367,13 @@ WORLD_KNOBS = {
                         # contour pass draws from the mineral field's falloff (so they follow the
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
-                        bandFoot=8,
-                        stepSharp=1, stepSoftPx=14, shelfWander=6, shelfScale=80,
+                        stepSoftPx=14, shelfWander=6,
                         # G1: the reef bars are soft blotches (retail: 8-16 px energy 1.8 against 1.3 at 4-8 px;
                         # 4.5-px bumps at 3 read as chunky cobbles): faint lit bumps of 9 px, a few dots, and no
                         # palette dither (3-px-blurred luma s.d. retail 7.6, before 4.7, now 5.8; see Green).
                         # H18 part 2: a mottle of the bed's brightness printed noisy blotches on the bars where retail's are
                         # smooth and soft (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); none reads closer there.
-                        bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9, shoalDither=0,
+                        bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
                         shoalRag=4,
                         # G1 (round 8: "the default should still have a small blur on the edge"): the world's own
@@ -399,7 +389,7 @@ WORLD_KNOBS = {
                         # G3 fade: outer lines fainter, a pale lime skirt stepping lighter outward, and a
                         # reach that varies along the outline (retail's halo is wide on some sides of a hill
                         # and a few px on others). ringTone 1: retail's rose lines, paler outward.
-                        ringTaper=.35, ringFill=.45, ringPatch=.8, ringPatchSize=160, ringTone=1),
+                        ringFill=.45, ringPatch=.8, ringPatchSize=160, ringTone=1),
     # Painted Desert, measured on the retail map (measure/desert_*.py): beds
     # alternate every ~6 units; dark lines are shaded risers on 0.4% of lit
     # slopes, not cracks; the plain carries no lighting (luma vs gradient
@@ -507,12 +497,12 @@ WORLD_KNOBS = {
                  crackDark=.35, reliefAmount=.9, reliefScale=20, reliefLumps=.9, wrinkles=.6,
                  # E10: lava-1's layers are many and uneven (11 of ~9 px, widths and risers vary along the shore,
                  # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
-                 # fingers are small, flat tongues (amount, size and distribution are per-stroke options);
+                 # fingers are small, flat tongues (their size is a per-stroke option);
                  # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
-                 layerVary=.8, layerCrease=.7, fingerHeight=3.5, fingerSize=.65, fingerAmount=1.4,
+                 layerVary=.8, layerCrease=.7, fingerSize=.65,
                  # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),
                  # its circles differ in size and spacing, and its step lines fade and break along their length.
-                 lavaMeander=1.2, lavaSpread=.7, lavaCircleVary=1, lavaCreaseVary=.2,
+                 lavaSpread=.7, lavaCircleVary=1,
                  # G5: hill rock as retail's crust, pillows and chips with creases and hanging veins, the fall-line relief it
                  # replaces, treads tilted toward the crown, and the tall hills' far sides near black.
                  lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8,

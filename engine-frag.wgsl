@@ -909,6 +909,8 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     return vec4f(glint, lit * dim);
 }
 
+// H24: how far the crease at the bank steps breaks into dashes of varying darkness along each line, the same on every world.
+const LAVA_CREASE_VARY = 0.2;
 // E10 (Lava): retail draws the step between two shore layers as a dark line whichever way it faces, where a
 // lit riser is only dark on the side turned from the sun. This is that line as a cavity: how far the four
 // neighbours 2.5 px round a point stand above it (the foot of a riser has higher ground on one side; a lip
@@ -920,7 +922,7 @@ fn layerCreaseTerm(p: vec2f) -> f32 {
     const r = 2.5;
     let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
     // G5: retail's step lines fade and break along their length; a noise of ~14 px takes whole stretches out and weakens others.
-    let dash = 1.0 - u.lavaCreaseVary * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
+    let dash = 1.0 - LAVA_CREASE_VARY * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
     return bank * smoothstep(0.1, 0.5, around - h) * dash;
 }
 // E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
@@ -935,19 +937,6 @@ fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
 fn stepJitter(pixel: vec2f) -> f32 { return fract(sin(dot(floor(pixel / 2.0), vec2f(39.3467, 11.135))) * 43758.5453) - 0.5; }
 fn bankGrad(p: vec2f) -> f32 { return 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)), baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0)))); }
 
-// The shallow-to-deep step (card E1). Retail's step is a hard edge with
-// ragged stairs, not the ramp's gradual blend: the step sits at one depth (the
-// ramp's midpoint unless the world names one), is read off the bed's own depth
-// rather than the soft disc average, and wanders by a block-sized jitter and a
-// broad wobble. hard 0 is the ramp, 1 the step; between, both narrow together.
-fn hardDeepStep(pixel: vec2f, depth: f32, colorDepth: f32, n: vec4f, hard: f32) -> f32 {
-    let at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
-    let jitter = stepJitter(pixel);
-    let reach = mix(0.5 * (u.deepDepth - u.shallowDepth), 0.8, hard);
-    let d = mix(colorDepth, depth, hard) + (jitter * 2.6 + (n.r - 0.5) * 5.0) * hard;
-    return smoothstep(at - reach, at + reach, d);
-}
-
 // E11: value noise for the shelf's wander (smooth, 0..1, four lattice hashes).
 fn shelfHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
 fn shelfNoise(q: vec2f) -> f32 {
@@ -957,14 +946,18 @@ fn shelfNoise(q: vec2f) -> f32 {
     return mix(mix(shelfHash(i), shelfHash(i + vec2f(1.0, 0.0)), s.x), mix(shelfHash(i + vec2f(0.0, 1.0)), shelfHash(i + vec2f(1.0, 1.0)), s.x), s.y);
 }
 
-// The shallow-to-deep step with a true threshold (E11, Green and Red). The ragged
+// H24: the size (world px) of the broad noise that wanders the step's depth, the same on every world.
+const SHELF_SCALE = 140.0;
+// The hard shallow-to-deep step (cards E1 and E11). Retail's step is a hard edge
+// with ragged stairs, not the ramp's gradual blend: it sits at one depth (the ramp's
+// midpoint), read off the bed's own depth rather than the soft disc average. The
 // stairs are pixel blocks in the picture, not in depth: depth units would turn a
 // flat shelf into a wide fuzzy band (green-3's blurry middle), so the 2-px block
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
-// noise (shelfWander units over shelfScale px), so the band's outline and width
+// noise (shelfWander units over SHELF_SCALE px), so the band's outline and width
 // vary along the shore instead of following it at a fixed offset.
 fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
-    var at = select(0.5 * (u.shallowDepth + u.deepDepth), u.deepEdgeDepth, u.deepEdgeDepth > 0.0);
+    var at = 0.5 * (u.shallowDepth + u.deepDepth);
     if (cracked && u.crackedStep > 0.0) { at = u.crackedStep; }
     var depth = depthIn;
     if (u.shoalRag > 0.0) {
@@ -979,7 +972,7 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
     }
     let grad = bankGrad(p);
     let jitter = stepJitter(pixel);
-    let q = p / max(u.shelfScale, 8.0);
+    let q = p / SHELF_SCALE;
     let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
     // The wander fades in with depth, so the shore side of the band keeps its own width.
     let d = depth - jitter * 4.0 * max(grad, 0.05);
@@ -1046,6 +1039,8 @@ fn ringScallop(p: vec2f, seed: f32) -> f32 {
     return sqrt(1.0 - x * x) - 0.4;
 }
 fn ringReachMeasure(q: vec2f) -> f32 { return sqrt(max(-fringeField(q), 0.01)); }
+// H24: the outermost copy's line is this much fainter than the innermost's, the same on every world.
+const RING_TAPER = 0.35;
 fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     if (u.ringContrast <= 0.0 || u.materialReady == 0) { return base; }
     let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
@@ -1085,7 +1080,7 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
         // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
         let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
-        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - u.ringTaper * t) * u.ringContrast);
+        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
     }
     return rgb;
 }
@@ -1122,6 +1117,8 @@ fn shoalBumpLight(p: vec2f) -> f32 {
     return min((u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight, u.lightCap);
 }
 
+// H24: how much of a cracked bed's light and cracks carry through its tint, the same on every world.
+const CRACKED_CONTRAST = 0.45;
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
@@ -1131,11 +1128,11 @@ fn litBed(bed: vec3f, cracked: bool) -> vec3f {
     let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
     // as soft darker blue, never as black rims), so the dark side carries less.
-    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides.
-    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked && u.crackedContrast > 0.0), 2.0);
+    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides, at CRACKED_CONTRAST.
+    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked), 2.0);
     var contrast = u.bedContrast;
     var darkSide = 0.6;
-    if (cracked && u.crackedContrast > 0.0) { contrast = u.crackedContrast; darkSide = 1.0; }
+    if (cracked) { contrast = CRACKED_CONTRAST; darkSide = 1.0; }
     let light = pow(ratio, select(contrast * darkSide, contrast, ratio >= 1.0));
     let tint = u.shallowMean * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
@@ -1832,10 +1829,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
-        if (edgeHard > 0.0) {
-            if (u.stepSharp > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
-            else { deep = hardDeepStep(pixel, depth, colorDepth, n, edgeHard); }
-        }
+        if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
         let grain = genColor(u.waterLayer, pixel) - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
         if (u.nativeShallows != 0 && u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
@@ -1945,7 +1939,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
 #endif
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
-        let ditherStrength = select(u.dither * u.landDither, u.dither * mix(1.0, u.shoalDither, shoalWeight), h < u.sea + 1.0);
+        // The hard step's lit bed takes no palette dither (where a world draws lit bumps there, they replace its noise).
+        let ditherStrength = select(u.dither * u.landDither, u.dither * (1.0 - shoalWeight), h < u.sea + 1.0);
         // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
         // local checkerboards, which read as one colour; a noise threshold
         // clumped them into speckles.

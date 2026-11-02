@@ -215,7 +215,6 @@ struct Uniforms {
     bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)
     bedRelief: f32,       // bed lumps (bake): faint embossed relief under shallow water, 0: none
     deepEdge: f32,        // shallow-to-deep step: 0 the depth ramp, 1 a hard step with ragged stairs
-    deepEdgeDepth: f32,   // depth of the hard step (0: the ramp's midpoint)
     waterOn: i32,         // 1 once any cell carries a painted water edge or bed choice (planes 9-11)
     lumpOn: i32,          // 1 once any cell carries painted ground lumps (plane 12)
     lumpRelief: f32,      // height of a fully painted lump field, in the units of plainRelief
@@ -260,16 +259,11 @@ struct Uniforms {
     facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
     facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
-    stepSharp: f32,       // Green, Red: the shallow-to-deep step is a true threshold, ragged by pixels (0: the earlier smoothed step)
     shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
-    shelfScale: f32,      // size of that wander, world px
     crackedStep: f32,     // Red: depth of the shallow-to-deep step under a cracked-bed stroke (0: the world's own step)
-    crackedContrast: f32, // Red: how much of the cracked bed's light and cracks carry through its tint (0: bedContrast's own, compressed, path)
-    bedCrackSlope: f32,   // Red (bake): the slope the cracked bed's cracks are cut for; the land's cracked faces are steeper (.8: as before)
     bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
     bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
     stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
-    bandFoot: f32,        // Archipelago (bake): no band lines on the hill's foot below this height above the dry base (0: lines everywhere)
     ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
     ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
     ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
@@ -286,7 +280,6 @@ struct Uniforms {
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
     shineSlopeGate: f32,       // slope at which the shine reaches full strength; below a third of it there is none (0: shine is not gated by slope)
     // G5 (Lava).
-    lavaCreaseVary: f32,  // how far the dark crease at the bank steps breaks into dashes of varying darkness along each line (0: unbroken, as before)
     lavaCrust: f32,       // hill rock as pillows, chips and creases on raised ground (0: none, as before; 1: full)
     lavaPillow: f32,      // size of a pillow, px
     lavaChip: f32,        // size of a chip, px
@@ -318,7 +311,6 @@ struct Uniforms {
     ringScatter: f32,     // how far each copy's direction wanders from that mean, as a share of a half turn
     ringWobble: f32,      // px of waver in each copy's outline: lobes with inward cusps, the scalloped look (0: smooth)
     ringLobe: f32,        // px across one lobe
-    ringTaper: f32,       // the outermost copy's line is this much fainter than the innermost's (0: all alike)
     ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)
     ringPatch: f32,       // how far the stack's reach varies along the outline, from a few copies to all of them (0: every copy everywhere)
     ringPatchSize: f32,   // px over which that reach varies
@@ -332,7 +324,6 @@ struct Uniforms {
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
     shoalBump: f32,       // the shallow bed's lit bumps: slope of the lumps the sun lights (0: none, as before)
     shoalBumpPx: f32,     // size of those lumps, screen px
-    shoalDither: f32,     // the palette dither's strength on the lit shallow bed, as a share of the water's own (1: as before)
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
     shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
     shoalGrain: f32,      // Red: the ground tile's own colour grain shows through the tint, this share of it (0: the tint replaces it, as before)

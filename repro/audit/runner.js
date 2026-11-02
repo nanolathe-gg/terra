@@ -19,7 +19,7 @@ function shapeContext(key,kind){
  if(key.startsWith('fissureBranch'))p.fissureBranches=3;
  if(key==='fissureCell')p.fissureNetwork=1;
  if(key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore'))Object.assign(p,{shorePlates:1,plateMaterial:key.startsWith('frost')?2:1,plateWaterPx:100,plateLandPx:120,plateSize:40,plateGap:5,plateHeight:7});
- if(key.startsWith('finger'))Object.assign(p,{fingers:1,fingerAmount:1,fingerSize:1,fingerSpread:.5});
+ if(key.startsWith('finger'))Object.assign(p,{fingers:1,fingerSize:1});
  if(key.startsWith('layer')||key.startsWith('lava')||key==='shoreLayers')Object.assign(p,{shoreLayers:5,layerPx:22,layerRiser:4,layerLedge:.7,layerRough:.5,layerVary:.4,layerStyle:key.includes('Circle')||key==='layerCircle'?1:0});
  if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))Object.assign(p,{crystalForm:1,crystalSize:32});
  if(key.startsWith('berg')||key==='crystalAlign')Object.assign(p,{crystalForm:2,crystalSize:200,crystalCount:3,bergTilt:.3});
@@ -58,9 +58,9 @@ function worldFor(group,key){
  if(/^moon|^pock|^slopeMarks$|^wrinkles$/.test(key))return 'moon';
  if(/^lava|^layerCrease|^shineSlopeGate|^shoreEdge/.test(key))return 'lava';
  if(/^baseBand|^desert|^strata/.test(key))return 'desert';
- if(/^ring|^hillLight$|^bandFoot$/.test(key)||key==='apron'||key==='beachWidth')return 'archipelago';
+ if(/^ring|^hillLight$/.test(key)||key==='apron'||key==='beachWidth')return 'archipelago';
  if(group.includes('Shine'))return 'crystal';
- if(/^bedDots|^bedDotCell|^cracked|^bedCrack|^shoalGrain/.test(key))return 'red';
+ if(/^bedDots|^bedDotCell|^cracked|^shoalGrain/.test(key))return 'red';
  return 'green';
 }
 function worldGates(group,key){
@@ -80,7 +80,6 @@ function worldGates(group,key){
  if(/^moonFold/.test(key))x.moonFolds=.7;
  if(/^bedDot/.test(key))x.bedDots=.8;
  if(/^shoalBump/.test(key))x.shoalBump=3;
- if(/^shelf/.test(key))x.shelfWander=15;
  if(/^ring/.test(key))Object.assign(x,{ringContrast:.8,ringShift:8,ringPatch:.6});
  return x;
 }
@@ -180,13 +179,13 @@ $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtur
  const world=$('world-filter').value,api=await load(world),rows=[];
  const fixture=[['plateau',[[270,300],[550,300]],{card:{diameter:400,amount:110,roughness:35,cracks:100}}],['mountain',[[800,150],[860,430]],{card:{diameter:320,amount:130,cracks:100}}],['deep',[[0,850],[1024,850]],{card:{diameter:600,shelves:70,roughness:40,shorePlates:100,plateMaterial:world==='ice'?2:1},waterShore:0,waterDeep:0,waterBed:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
  api.scene(fixture,{ground:true});await api.idle();const original=new Map(api.renderer.variant);
- const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','iceFrost']:world==='green'?['faceEdge','gullyRock','mineralDetail','rockOrder']:world==='archipelago'?['ringShiftDir','beachWidth','apron','bandFoot']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','faceEdge','gullyRock','bedHeight','bedVary','bedDipDir','grooveSpacing','grooveAngle','grooveRun','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','bedPunch','cliffStagger','mineralDetail','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','cliffDomain','crackWidth','crackHairline','boulderRound'];
+ const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','iceFrost']:world==='green'?['faceEdge','gullyRock','mineralDetail','rockOrder']:world==='archipelago'?['ringShiftDir','beachWidth','apron']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','faceEdge','gullyRock','bedHeight','bedVary','bedDipDir','grooveSpacing','grooveAngle','grooveRun','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','bedPunch','cliffStagger','mineralDetail','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','cliffDomain','crackWidth','crackHairline','boulderRound'];
  const tasks=inventory.knobs.flatMap(([group,list])=>list.map(f=>({group,f}))).filter(t=>keys.includes(t.f[0]));
  for(const {group,f:[key,,lo,hi,step]} of tasks){
   if(stop)break;const gates={...worldGates(group,key),undulation:10};
   if(group.startsWith('Rock')||['faceEdge','gullyRock'].includes(key))Object.assign(gates,{rockOrder:1,bedLedge:.7,jointDepth:4,bedDip:.7,cliffFollow:key==='cliffStagger'||key==='cliffDomain'?1:0,cliffStagger:.5,blocks:0});
   if(group==='Contour bands')Object.assign(gates,{banding:.8,sandBanding:.8});
-  if(['shallowDepth','deepDepth','waterSoft','bandWater'].includes(key))Object.assign(gates,{deepEdge:0,stepSharp:0});
+  if(['shallowDepth','deepDepth','waterSoft','bandWater'].includes(key))Object.assign(gates,{deepEdge:0});
   if(key.startsWith('ring'))Object.assign(gates,{ringContrast:1,ringShift:20});
   if(key.startsWith('frost'))gates.frostGaps=.35;
   const saved={};for(const [k,v] of Object.entries(gates)){saved[k]=api.renderer.variant.get(k);await api.knob(k,v);}

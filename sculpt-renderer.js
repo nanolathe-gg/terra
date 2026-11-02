@@ -868,8 +868,6 @@ export class TerrainRenderer {
     // E10 (Lava): crease at the foot of each bank step; shine only from this slope up (0: off).
     this.f('uLayerCrease', variant.has('layerCrease') ? Number(variant.get('layerCrease')) : 0);
     this.f('uShineSlopeGate', variant.has('shineSlopeGate') ? Number(variant.get('shineSlopeGate')) : 0);
-    // G5 (Lava): dashes in the bank crease.
-    this.f('uLavaCreaseVary', variant.has('lavaCreaseVary') ? Number(variant.get('lavaCreaseVary')) : 0);
     // H1 (Green): close shadow and cavity occlusion (0: off).
     this.f('uCloseShadow', variant.has('closeShadow') ? Number(variant.get('closeShadow')) : 0);
     this.f('uCavity', variant.has('cavity') ? Number(variant.get('cavity')) : 0);
@@ -892,11 +890,8 @@ export class TerrainRenderer {
     this.f('uCrystalSeamEnd', variant.has('crystalSeamEnd') ? Number(variant.get('crystalSeamEnd')) : 0.74);
     this.f('uCrystalShallowInk', variant.has('crystalShallowInk') ? Number(variant.get('crystalShallowInk')) : 0.55);
     // E11: shallow water round 2; every default is the earlier look.
-    this.f('uStepSharp', variant.has('stepSharp') ? Number(variant.get('stepSharp')) : 0);
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
-    this.f('uShelfScale', variant.has('shelfScale') ? Number(variant.get('shelfScale')) : 100);
     this.f('uCrackedStep', variant.has('crackedStep') ? Number(variant.get('crackedStep')) : 0);
-    this.f('uCrackedContrast', variant.has('crackedContrast') ? Number(variant.get('crackedContrast')) : 0);
     this.f('uBedDots', variant.has('bedDots') ? Number(variant.get('bedDots')) : 0);
     this.f('uBedDotCell', variant.has('bedDotCell') ? Number(variant.get('bedDotCell')) : 14);
     this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
@@ -946,7 +941,6 @@ export class TerrainRenderer {
     this.f('uHillLight', variant.has('hillLight') ? Number(variant.get('hillLight')) : 1);
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
-    this.f('uDeepEdgeDepth', variant.has('deepEdgeDepth') ? Number(variant.get('deepEdgeDepth')) : 0);
     // Card E8 (Painted Desert); 0 is every world as it was.
     this.f('uBaseBand', variant.has('baseBand') ? Number(variant.get('baseBand')) : 0);
     this.f('uBaseBandLow', variant.has('baseBandLow') ? Number(variant.get('baseBandLow')) : 4);
@@ -989,7 +983,6 @@ export class TerrainRenderer {
     this.f('uRingScatter', variant.has('ringScatter') ? Number(variant.get('ringScatter')) : 0.5);
     this.f('uRingWobble', variant.has('ringWobble') ? Number(variant.get('ringWobble')) : 3);
     this.f('uRingLobe', variant.has('ringLobe') ? Number(variant.get('ringLobe')) : 22);
-    this.f('uRingTaper', variant.has('ringTaper') ? Number(variant.get('ringTaper')) : 0);
     this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);
     this.f('uRingPatch', variant.has('ringPatch') ? Number(variant.get('ringPatch')) : 0);
     this.f('uRingPatchSize', variant.has('ringPatchSize') ? Number(variant.get('ringPatchSize')) : 120);
@@ -1003,7 +996,6 @@ export class TerrainRenderer {
     // G1: shallow water round 3; every default is the earlier look.
     this.f('uShoalBump', variant.has('shoalBump') ? Number(variant.get('shoalBump')) : 0);
     this.f('uShoalBumpPx', variant.has('shoalBumpPx') ? Number(variant.get('shoalBumpPx')) : 6);
-    this.f('uShoalDither', variant.has('shoalDither') ? Number(variant.get('shoalDither')) : 1);
     this.f('uShoalRag', variant.has('shoalRag') ? Number(variant.get('shoalRag')) : 0);
     this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
     this.f('uShoalGrain', variant.has('shoalGrain') ? Number(variant.get('shoalGrain')) : 0);
@@ -1074,8 +1066,6 @@ export class TerrainRenderer {
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
     set('uBedRelief', number('bedRelief', 0));
-    set('uBedCrackSlope', number('bedCrackSlope', 0.8));
-    set('uBandFoot', number('bandFoot', 0));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackWidth', number('crackWidth', 1));

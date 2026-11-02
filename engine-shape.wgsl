@@ -1096,16 +1096,18 @@ fn packPlane(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) n
 // Thumb fingers (retail lava-1: tendrils and stubs in clusters, tapering to a round tip, now and then forked): one per jittered lattice site in the shape's
 // frame; the coast point at tangent offset tau from a site's axis reaches the finger's outline. Everything about a finger comes from its site's hashes.
 const THUMB_CELL = 44.0;
+const THUMB_SPREAD = 0.5;   // how much a cluster's noise raises a site's chance of a finger
+const THUMB_AMOUNT = 1.4;   // H24: the share of lattice sites that grow one, the same on every world
 fn uhash(i: i32, j: i32, salt: u32, k: u32) -> f32 { return hashi(i, j, salt ^ k) * 0.5 + 0.5; }
 fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
   let tx = -ny; let ty = nx; let salt = u.seed;
   let ci = i32(floor(lx / THUMB_CELL)); let cj = i32(floor(ly / THUMB_CELL));
   var best = 0.0;
-  let fa = u.cfAmount; let spread = u.cfSpread; let size = u.cfSize;
+  let size = u.cfSize;
   for (var j = cj - 1; j <= cj + 1; j++) { for (var i = ci - 1; i <= ci + 1; i++) {
     let ax = (f32(i) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x5a7u)) * THUMB_CELL;
     let ay = (f32(j) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x1d3u)) * THUMB_CELL;
-    let chance = clamp((0.7 + 1.5 * spread * vnoise(ax / 130.0, ay / 130.0, salt ^ 0x1f3u)) * fa, 0.04 * clamp(fa, 0.0, 1.0), 0.97);
+    let chance = clamp((0.7 + 1.5 * THUMB_SPREAD * vnoise(ax / 130.0, ay / 130.0, salt ^ 0x1f3u)) * THUMB_AMOUNT, 0.04, 0.97);
     if (uhash(i, j, salt, 0x31fu) >= chance) { continue; }
     // Only sites within half a cell of the coast along its normal grow a finger here.
     if (abs((lx - ax) * nx + (ly - ay) * ny) >= THUMB_CELL * 0.5) { continue; }
@@ -1144,6 +1146,8 @@ fn coastNormal(x: i32, y: i32, cells: u32) -> vec3f {
   if (len < 1.0e-3) { return vec3f(0.0, 0.0, 0.0); }
   return vec3f(gx / len, gy / len, 1.0);
 }
+// H24: the height (units above the sea) of a finger's flat top, the same on every world.
+const FINGER_LOW = 3.5;
 // At each cell near the coast the finger field is read at the nearest coast point (back along the normal) and the cell is raised to a flat tongue (or
 // sunk, for an inlet). U marks the raised cells for the connectivity march; F keeps a flat finger's height for the layers.
 @compute @workgroup_size(8, 8)
@@ -1157,13 +1161,11 @@ fn coastFinger(@builtin(global_invocation_id) g: vec3u) {
   if (nm.z == 0.0) { return; }
   let sd = select(-dist, dist, Sc[CRR * cells + i] > sea);
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  let low = select(min(6.0, 0.3 * (u.baseH - sea)), max(2.5, u.coFLow), u.coFlatOn != 0u);
   let f = clamp(thumbReach(wx - sd * nm.x, wy - sd * nm.y, nm.x, nm.y, u.coFAmt), -u.coFReach, u.coFReach);
   if (sd < 0.0 && -sd < f) {
-    let uu = -sd / f;
-    F[PH * cells + i] = clamp(sea + low * select(0.7 + 0.3 * (1.0 - sm(0.0, 1.0, uu)), 1.0, u.coFlatOn != 0u), u.minH, u.maxH);
+    F[PH * cells + i] = clamp(sea + FINGER_LOW, u.minH, u.maxH);
     Sc[CUU * cells + i] = 1.0;
-    if (u.coFlatOn != 0u) { Sc[CFF * cells + i] = low; }
+    Sc[CFF * cells + i] = FINGER_LOW;
   } else if (sd > 0.0 && sd < -f) {
     F[PH * cells + i] = clamp(sea - 0.5 - 2.5 * (1.0 - sd / -f), u.minH, u.maxH);
   }

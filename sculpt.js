@@ -4,7 +4,7 @@ import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel}
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
-import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
+import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
@@ -106,10 +106,10 @@ const OVERRIDE_CHOICES=[[18,'Relaxation: more'],[19,'Relaxation: less'],[20,'Dep
 const STYLE_CHOICES=[...OVERRIDE_CHOICES,[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
 const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace','styleErosion','styleDeposits','styleVegetation','styleExposure'];
 const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
-  // E10: finger amount, size, distribution and height; layer width variation; the circles of scalloped layers.
-  'fingerAmount','fingerSize','fingerSpread','fingerHeight','layerVary','layerCircle',
+  // E10: finger size; layer width variation; the circles of scalloped layers.
+  'fingerSize','layerVary','layerCircle',
   // G5 (Lava): the layers' two-dimensional wander and extra width spread; the circles' variety; the lobes' tread tilt (the hill-lobe option rides this list, as E10's).
-  'lavaMeander','lavaSpread','lavaCircleVary'];
+  'lavaSpread','lavaCircleVary'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
@@ -208,11 +208,8 @@ const SHAPE_FIELDS=[
   // E8 (Painted Desert): ragged feet and bumpy aprons.
   ['baseVary','base-vary','Foot outline raggedness (px)',BASE_KINDS,0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
   ['baseBump','base-bump','Foot bumps (height units)',BASE_KINDS,0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
-  // E10 (Lava): finger amount, size, distribution and height; layer width variation; circle size of the circular layers.
-  ['fingerAmount','finger-amount','Finger amount (share of sites)',['deep','shallow'],0,200,5,100,'Fingers on the joined coast: how many of the sites along the shore grow a finger. 100 is the usual; 200 grows one at nearly every site.'],
+  // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
   ['fingerSize','finger-size','Finger size',['deep','shallow'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
-  ['fingerSpread','finger-spread','Finger distribution (0 even, 100 clustered)',['deep','shallow'],0,100,5,100,'Fingers on the joined coast: 0 spaces them evenly along the shore; higher gathers them in clusters with bare stretches between.'],
-  ['fingerHeight','finger-height','Finger height (units; 0 the old tongue)',['deep','shallow'],0,120,5,10,'Fingers on the joined coast: a flat top this many units above the lava, with soft sides. 0 keeps the earlier tongue, as high as the lowest layer and lower at its tip.'],
   ['layerVary','layer-vary','Layer width variation',['deep','shallow'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
   // G7 (Crystal): craters with smaller, softer facets.
@@ -229,7 +226,6 @@ const SHAPE_FIELDS=[
   // G8 (Moon): lumpy, folded outlines.
   ['moonLobes','moon-lobes','Outline lobes (share of radius)',['hill','mountain'],0,60,2,100,'How far the hill\'s whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline.'],
   // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
-  ['lavaMeander','lava-meander','Layer meander (layers of wander)',['deep','shallow'],0,300,5,100,'Contour layers: how far the layer lines wander across the bank in two dimensions, in layer widths. Past about 1 they pinch together, split and close into swirls, as retail lava-1\'s do. 0 keeps the layers that only follow the shore.'],
   ['lavaCircleVary','lava-circle-vary','Circle variety (circular layers)',['deep','shallow'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
   ['lavaSpread','lava-spread','Layer width spread',['deep','shallow'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
@@ -378,7 +374,7 @@ function updateControls() {
   $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
-  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerAmount:'fingers',fingerSize:'fingers',fingerSpread:'fingers',fingerHeight:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaMeander:'shoreLayers',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
+  const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
@@ -526,11 +522,10 @@ const coastLayerReach=s => {
   const n=Math.max(1,Math.round(s.shoreLayers)),W=Math.max(4,s.layerPx),style=Math.round(s.layerStyle);
   if (style===2) return 1.6*n*W+2*W;
   if (style===1) { const cv=clamp(s.lavaCircleVary||0,0,1); return n*W*(1+.45*cv)+2.8*Math.max(8,s.layerCircle)*(1+.07*cv)+2*W; }
-  // G5: the meander moves a layer line by up to its amplitude in layer widths, and the spread widens the widest layer;
-  // both reach farther inland than the shore-following layers do (zero for both: the earlier reach exactly).
-  const meander=clamp(s.lavaMeander||0,0,3),spread=clamp(s.lavaSpread||0,0,2);
-  if (meander>0 || spread>0) { const wide=Math.max(1+.6*clamp(s.layerVary,0,1),Math.exp(.5*(clamp(s.layerVary,0,1)+spread))); return (n+1+meander)*W*wide+2*W; }
-  return n*W*(1+.6*clamp(s.layerVary,0,1))+2*W;
+  // G5: the meander moves a layer line by up to LAYER_MEANDER layer widths, and the spread widens the widest layer;
+  // both reach farther inland than the shore-following layers do.
+  const spread=clamp(s.lavaSpread||0,0,2),wide=Math.max(1+.6*clamp(s.layerVary,0,1),Math.exp(.5*(clamp(s.layerVary,0,1)+spread)));
+  return (n+1+LAYER_MEANDER)*W*wide+2*W;
 };
 // Circular layers (retail lava-2): round bites cut out of the bank, layer after layer. A bite is a disc
 // centered within a radius of the waterline, one per jittered lattice cell in the shape's own frame (so a
@@ -1379,7 +1374,7 @@ const KNOBS = [
     ['jointDepth','Joint depth (height)',0,6,.1,2],['grooveSpacing','Joint and gully spacing (px)',12,120,2,36],['grooveAngle','Joint and gully lean from north-south (deg)',-60,60,1,0],['grooveRun','Joint and gully length (px)',30,400,10,120]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,.05,0],['deepEdgeDepth','Step depth (0: the ramp\'s midpoint)',0,100,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
   // E8 (Painted Desert): the gray band at the foot of the raised ground (strata color 5); its heights are above the plain.
   ['Desert foot band', [['baseBand','Gray band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
@@ -1394,15 +1389,15 @@ const KNOBS = [
   // G2: rock faces follow the slope; every default is the earlier look.
   ['Rock face: follows the slope', [['cliffFollow','Beds on the contours, joints down the fall line (0 fixed screen directions)',0,1,1,0],['cliffReach','Fall line smoothing radius (px)',6,60,1,20],['cliffWide','Wide fall line radius, level ground under rock (px)',20,160,2,56],['cliffFlat','Slope under which structure fades into broken rock',0,.3,.005,.04],['cliffRise','Bed riser height (units; 0 the bed\'s own)',0,40,1,0],['cliffBed','Beds follow the smoothed ground (0 the grid\'s own bumps)',0,1,.05,.5],['cliffStagger','Joints offset from bed to bed (share of spacing)',0,.8,.05,0],['cliffFine','Third, finer facet level (share of tilt)',0,1.5,.05,0],['cliffDomain','Joint lattice patch size (px)',30,240,5,90]]],
   // E11: shallow water round 2 and Archipelago's fringe lines.
-  ['Shallow water, round 2', [['stepSharp','Step is a true threshold (Green, Red, reef bars)',0,1,1,0],['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['shelfScale','Shelf wander size (px)',30,400,5,100],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedDots','Dark dots in the bed (Red)',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed step depth (Red; 0: the world\'s)',0,60,1,0],['crackedContrast','Cracked-bed contrast (0: the tint\'s own)',0,2,.05,0],['bedCrackSlope','Slope the cracked bed is cut for',.5,1.6,.05,.8]]],
+  ['Shallow water, round 2', [['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedDots','Dark dots in the bed (Red)',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed step depth (Red; 0: the world\'s)',0,60,1,0]]],
   // G1: shallow water round 3.
-  ['Shallow water, round 3', [['shoalBump','Lit bumps in the bed (slope)',0,6,.1,0],['shoalBumpPx','Bump size (px)',2,16,.5,6],['shoalDither','Palette dither on the bed (share)',0,1,.05,1],['shoalGrain','Ground grain through the tint (Red)',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalStairs','Hard waterline stairs (px)',0,6,.1,0],['shoalShoreSoft','Default waterline blur (px; Archipelago)',0,12,.5,0]]],
-  ['Fringe lines (Archipelago)', [['bandFoot','Band lines start above the base (units)',0,30,1,0],['ringContrast','Fringe contour lines: contrast',0,1,.05,0],['ringCount','Fringe contour lines: count',1,30,1,7],['ringSize','Fringe contour lines: reach',.1,2,.05,1]]],
+  ['Shallow water, round 3', [['shoalBump','Lit bumps in the bed (slope)',0,6,.1,0],['shoalBumpPx','Bump size (px)',2,16,.5,6],['shoalGrain','Ground grain through the tint (Red)',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalStairs','Hard waterline stairs (px)',0,6,.1,0],['shoalShoreSoft','Default waterline blur (px; Archipelago)',0,12,.5,0]]],
+  ['Fringe lines (Archipelago)', [['ringContrast','Fringe contour lines: contrast',0,1,.05,0],['ringCount','Fringe contour lines: count',1,30,1,7],['ringSize','Fringe contour lines: reach',.1,2,.05,1]]],
   // G3
-  ['Fringe copies (Archipelago)', [['ringShift','Offset between copies (px; 0: concentric lines)',0,30,.5,0],['ringShiftDir','Drift direction (deg clockwise from east)',0,360,5,315],['ringScatter','Direction wander (share of a half turn)',0,1,.05,.5],['ringWobble','Outline waver (px)',0,10,.5,3],['ringLobe','Lobe size (px)',8,60,1,22],['ringTaper','Outer lines fainter by',0,1,.05,0],['ringFill','Pale tint where copies overlap',0,1,.05,0],['ringPatch','Reach varies along the outline',0,1,.05,0],['ringPatchSize','Reach variation size (px)',30,400,5,120],['ringTone','Retail rose, paler outward',0,1,.05,0]]],
+  ['Fringe copies (Archipelago)', [['ringShift','Offset between copies (px; 0: concentric lines)',0,30,.5,0],['ringShiftDir','Drift direction (deg clockwise from east)',0,360,5,315],['ringScatter','Direction wander (share of a half turn)',0,1,.05,.5],['ringWobble','Outline waver (px)',0,10,.5,3],['ringLobe','Lobe size (px)',8,60,1,22],['ringFill','Pale tint where copies overlap',0,1,.05,0],['ringPatch','Reach varies along the outline',0,1,.05,0],['ringPatchSize','Reach variation size (px)',30,400,5,120],['ringTone','Retail rose, paler outward',0,1,.05,0]]],
   // E10 (Lava)
   ['Lava hill rock', [['lavaCrust','Crust: pillows, chips and creases on hills',0,1,.05,0],['lavaPillow','Pillow size (px)',16,80,1,34],['lavaChip','Chip size (px)',3,12,.5,5.5],['lavaVeins','Veins hanging down the slope',0,1,.05,0],['lavaCalm','Fall-line relief replaced by the crust',0,1,.05,.6],['lavaDusk','Dusk on rock turned from the sun',0,2,.05,0]]],
-  ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['lavaCreaseVary','Crease breaks into dashes of varying darkness',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
+  ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
   // E6
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
   ['Pockmarks (Moon)', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
@@ -1571,15 +1566,20 @@ function buildKnobs() {
   }
   syncWorldControls=mountWorldControlIndex(root,worldPanelValues);
 }
-// A deep or shallow stroke's own water choices, which turn the hard step and the lit bed on inside its footprint whatever the world says (engine-frag.wgsl's `pick`).
+// A deep or shallow stroke's own water choices, which turn the hard step, the ramp and the lit bed on inside its footprint whatever the world says (engine-frag.wgsl's `pick`).
 function strokeWaterPicks() {
   const water=nodes.filter(n=>['deep','shallow'].includes(n.kind)),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
-  return {deepEdge:picked('waterDeep',1),bedLit:picked('waterBed',1,3)};
+  return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2),bedLit:picked('waterBed',1,3),crackedBed:picked('waterBed',3)};
+}
+// How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2.
+function waterTones() {
+  const w=config.water||{};
+  return w.midRGB&&config.material?.midDepth?3:w.shallow===w.deep&&String(w.shallowRGB)===String(w.deepRGB)?1:2;
 }
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 function worldPanelValues() {
   const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),waterTinted:own.water==='tinted'?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
