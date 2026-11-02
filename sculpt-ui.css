@@ -26,6 +26,7 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 .view-tools{margin-left:auto}
 .divider{height:20px;width:1px;background:var(--line);margin:0 5px}
 .view-switch{display:flex;gap:3px}
+.view-toggle{display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:11px;margin-left:6px}
 .document-menu{position:relative}
 .document-menu>summary{list-style:none;padding:6px 9px;color:var(--muted)}
 .popover{position:absolute;width:290px;padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:20}

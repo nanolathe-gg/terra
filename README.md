@@ -112,9 +112,23 @@ expanding one connected bounding box. Lava shore layers reduce their whole
 stroke bounds tile by tile, retaining the global bite lattice while processing
 only each requested region. Brush aprons include base variation, hill lobes,
 facet-crater seed reads and the finger/shore/frost reach. Visible chunks and one surrounding margin
-are baked on demand. Scrolling uses an LRU image cache, while overview and the
-navigator use a coarse 128×128 height preview. A stroke, move, rotation, scale or
+are baked on demand. Scrolling redraws cached images immediately, using Fit
+tiles or the coarse height preview wherever detail is missing. It keeps moving
+while terrain generation is busy. Newly visible 256-pixel tiles begin rendering
+during scrolling, showing authored detail first, then the final weathered result,
+before filling the surrounding cache. Each completed tile appears immediately.
+Background overview sampling, CPU copies, and save scans yield while visible
+detail is missing. Small camera movements retain useful in-flight tiles;
+tiles that leave the view are canceled before further work is queued.
+Overview and the navigator also use a coarse 128×128 height preview. A stroke, move, rotation, scale or
 height drag previews while held and commits one undo step; Escape cancels it.
+
+**Weathered view**, next to Rendered / Clay, is on by default. Turn it off to
+edit the authored terrain without waiting for weathering, then turn it on for
+spot checks. The browser remembers the preference; `weatheredView=0` in the URL
+also selects the fast view. This only changes the zoomed-in display and picking.
+The map recipe, weathering settings, and canonical export rendering stay the
+same. Fit remains a coarse authored preview in either mode.
 
 **Simplify strokes** (on by default in Draw) reduces a freehand path when you
 release the pointer, keeping its endpoints and bends within 3 terrain pixels of
