@@ -35,6 +35,16 @@ the other rows do not have a verified net removal count. Nothing has been render
 or timed for this read-only brief; all image/impact statements below are attributed
 to the existing cards, not new visual judgments.
 
+## Rulings (owner, 2026-11-01)
+
+The owner ruled on the 26 decisions of the combine-or-drop page. These replace the recommendations below wherever they differ.
+
+- **Approved, removed outright (9, card H22):** Fractures slider and image; the four retired sand settings; the thirteen leftover table defaults; Ice's settings that draw nothing; `crystalShoreScale`; Lava's bank lines; bed mottle; `bedFlow`; rock scratches.
+- **Approved as trials (9):** joints; crack fine tuning; facet, block and gully tuning; bed shape; coast lobes; Lava layers; water step and shallow bed; fringe and band fading; whole families as one control. A merge lands only if it comes out shorter and reads no further from retail. Otherwise it is reported as tried and the controls stay.
+- **Kept (8):** `terraceBreak`; `crevice`; `bedDots`; `shoalRag`; `shoalGrain`; cups, pockmarks and slope marks as one mark; wrinkles, ribs, folds and worms as one mark; crater web and skin gate.
+
+The first three kept here differ from the sheet's and the page's recommendation to drop, and so do `crevice` and `shoalGrain` from the sheet's alone: those five are the owner's rulings, whatever a row below says.
+
 ## First sitting: the decisions with the clearest evidence
 
 1. **Disconnected cleanup:** recommend dropping `fractures` and its image path

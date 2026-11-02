@@ -8069,6 +8069,25 @@ trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 - *Crystal-3's band* reads closer in its mesh, though the unbroken plates beside it are paler and smoother than retail's, whose web runs across the whole band. The slider is there if the owner wants more or less of it. crystal-2's water reads slightly busier than retail's smooth plates, the cost of .5.
 - *Decision 11.* `plateVary` moves 2.3 / 12.9 / 18.9% of the `shore` class on crystal-1, -2 and -3. crystal-1 has few plates in the water.
 
+### H22. Combine or drop: the nine removals
+
+> **Owner, 2026-11-01,** on the combine-or-drop page: 18 approved and 8 kept. The record is under "Rulings" in `docs/audit/COMBINE_OR_DROP.md`.
+
+**Why.** Nine approved rulings remove something outright. They come first: the merges overlap them (scratches is one of the three groove kinds), and each trial is easier to read once the dead names are gone.
+
+**The build, one commit each.**
+1. The four retired sand settings, and `RETIRED_WORLD_CONTROLS` with them.
+2. The thirteen leftover table defaults.
+3. Ice's Icy Bergs values that draw nothing: `crystalFace`, `crystalTone`, `crystalGrain`.
+4. `crystalShoreScale`.
+5. The Fractures slider: `fractureDepth`, its two uniforms, the texture and its binding, `materials/fractures.png`, `measure/make_fractures.py`, the table keys. `fracturedSource` is a different layer and stays.
+6. `bedFlow`.
+7. Bed mottle.
+8. Lava's bank lines: `lavaLines`, `bandStyle`, `bandWidth`, `bandRelief`, `bandWander`, `bandGaps`. Tonal bands stay.
+9. Rock scratches, the one removal that moves shipped pixels.
+
+**Server and guard:** port 8885, CDP 9685; baseline 8886, 9686; worktree `../terraform-wt-H22`, branch `H22-drops`; assets `$R/agent-H22`.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
