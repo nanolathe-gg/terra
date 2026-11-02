@@ -362,7 +362,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       await this.previousChunk;
       const passes=feed?await feedPasses(this.device):null;   // nothing awaits between here and the feed pass's submit: the buffers it reads stay current
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
-      const region=this.requiredRegion(request,options),w=request.gridWidth??region.gridWidth,h=request.gridHeight??w;
+      const region=this.requiredRegion(request,options),w=request.gridWidth??region.gridWidth,h=request.gridHeight??region.gridHeight;
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
       const planes=feed?new Array(feed.maskCount).fill(null):this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
       this.recommendedChunkSize=this.chunkSize();
