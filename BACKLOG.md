@@ -209,6 +209,23 @@ branches and the projection fix below, so re-render before judging.
     Stop there: the owner reviews and merges. Do not merge into
     `main` yourself.
 
+11. **Every control does something, or says why not.** A card that adds,
+    moves, merges or removes a control, a requirement line or a table
+    default runs `node measure/world_controls.mjs --out <dir>` before the
+    hand-off, next to `measure/shape_controls.mjs`: it starts its own
+    audit host (`repro/audit/server.py`) and `--jobs` browsers, moves every
+    row the panel shows enabled in each of the nine worlds, every stroke
+    option on each kind that shows it and the visible page sliders from
+    low to high on fixtures that hold the features, and exits 1 on an
+    exact 0 that is not on its `ALLOWED` list (a kept ruling, with the
+    reason) or its `OPEN` list (a finding, with the evidence). A row that
+    reads 0 is either idle until a named control is on (a line in
+    `worldControlRequirement` or `shapeControlAvailable`, with a node test
+    in `repro/control-schema.test.mjs`), kept alive by a painted or
+    per-stroke path (the tool's painted fixture shows it), or dead and
+    removed whole. A merge card leaves no row on `OPEN` that it could
+    settle. About 20 minutes with three browsers.
+
 ## Card A: editor correctness (no visual judgement)
 
 For a model without image input. Every item has a scripted pass

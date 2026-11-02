@@ -28,7 +28,32 @@ const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolea
 // Rows that read 0 and are kept on purpose. A reason a reader can check, or the row is a finding, not an entry.
 const ALLOWED = {};
 // Rows that read 0 and have no settled cause yet: reported, not failed, so the sweep can gate what is settled. Each is a finding with the evidence that opened it.
-const OPEN = {};
+const OPEN = {
+  // World rows: observations from the sweeps and the probes, causes not traced. "moves" is a probe or another world that shows the row can.
+  slopeTexture: 'archipelago: reads 0 on every fixture; it moves there only through the shine weights (slope or ground gloss on), and in the other seven worlds directly',
+  faceEdge: 'red: reads 0 on every fixture and no single other row turns it on (find mode); moves in the other eight',
+  gullyRock: 'red: as faceEdge', iceSlate: 'red: as faceEdge',
+  shineSlopeSharp: 'red: enabled with its gloss on, reads 0 on every fixture; moves in other worlds once their slope gloss is on',
+  shineSlopeScale: 'red: as shineSlopeSharp',
+  wind: 'zhon: reads 0 on every fixture including the sand brush; moves with Deposit supply above 0 (probe) and, with the brush, in the other eight',
+  sandDust: 'zhon: as wind', sandGrass: 'zhon: as wind', sandLight: 'zhon: as wind', sandGrain: 'zhon: as wind', ripple: 'zhon: as wind', rippleHeight: 'zhon: as wind',
+  shallowDepth: 'green: reads 0 on every fixture; green draws the hard step (Hard shallow-to-deep step on); moves in the other eight',
+  deepDepth: 'green: as shallowDepth',
+  waterSoft: 'green, lava, moon, red: reads 0 on every fixture; moves in the other five worlds',
+  bandWater: 'green, lava, moon, red: as waterSoft',
+  deepEdge: 'ice, lava, moon, zhon: reads 0 on every fixture; ice and zhon draw three-colour water and lava and moon one colour; moves in the other five worlds',
+  deepEdgeDepth: 'ice: as deepEdge', stepSharp: 'ice: as deepEdge', stepSoftPx: 'ice: as deepEdge', shelfWander: 'ice: as deepEdge', shelfScale: 'ice: as deepEdge', shoalRag: 'ice: as deepEdge',
+  crackedStep: 'crystal, ice, zhon: reads 0 on every fixture including the cracked-bed stroke; moves in green, archipelago, red',
+  bedCrackSlope: 'desert, moon: reads 0 on every fixture including the cracked-bed stroke; moves in the other seven',
+  desertCapFlat: 'green: enabled (a column and strata are on), reads 0; moves in desert',
+  // Stroke rows.
+  styleDeposits: 'every kind, every world: reads 0 on both stroke fixtures and the paint choices Deposits more and fewer move nothing either (direct probe, green and zhon); Style: relief, cracks, banding and erosion move',
+  styleVegetation: 'as styleDeposits', styleExposure: 'as styleDeposits',
+  styleFace: 'red on every kind, and deep in five more worlds: reads 0; moves elsewhere',
+  styleRelief: 'lava on hill and mountain: reads 0; moves elsewhere',
+  waterDeep: 'crystal, ice, lava, moon, zhon: a deep or shallow stroke\'s edge choice reads 0; moves in the other four',
+  'plateau:lean': 'desert: reads 0 on both stroke fixtures; moves on the other kinds and in the other eight', 'plateau:faceVariation': 'desert: as plateau:lean', 'plateau:facing': 'desert: as plateau:lean',
+};
 const reasonFor = r => ALLOWED[(r.stroke ? r.stroke + ':' : '') + r.key] || ALLOWED[r.key] || null;
 const openFor = r => OPEN[(r.stroke ? r.stroke + ':' : '') + r.key] || OPEN[r.key] || null;
 const judge = rows => { for (const r of rows) if (r.zero) { r.allowed = reasonFor(r); r.open = openFor(r); } return rows.filter(r => (r.zero && !r.allowed && !r.open) || r.leak).map(r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}`); };
