@@ -1092,7 +1092,6 @@ export class TerrainRenderer {
     set('uGrooveSpacing', number('grooveSpacing', 36));
     set('uGrooveAngle', number('grooveAngle', 0));
     set('uGrooveRun', number('grooveRun', 120));
-    set('uCrackStyle', number('crackStyle', 0));
     set('uBedHeight', number('bedHeight', 0));
     set('uRockFrom', number('rockFrom', 0.6));
     if (this.sun) this.v('uSun', this.sun);

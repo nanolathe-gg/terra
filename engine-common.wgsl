@@ -208,7 +208,6 @@ struct Uniforms {
     grooveSpacing: f32,   // distance between joint lines, and between gully lines, world px
     grooveAngle: f32,     // their lean from the screen's north-south, degrees
     grooveRun: f32,       // typical length of an unbroken joint or gully, world px
-    crackStyle: f32,      // cracks: 0 ink (dark floor), 1 relief (carved groove with a lit lip)
     bedHeight: f32,       // 0 beds spaced along the ground (px), 1 by height units (as the strata colours)
     rockFrom: f32,        // slope where beds and joints start on steep ground (painted rock always counts)
     // Water looks (card E1). Defaults reproduce the earlier water exactly.

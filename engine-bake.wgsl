@@ -278,7 +278,7 @@ const CRACK_REACH = 0.6;
 // H23: the elongation of the crack cells along the fall line, the same on every world.
 const CRACK_LENGTH = 2.0;
 
-// The relief style of crackShade (card E3, crackStyle 1): the groove is carved
+// The relief style of crackShade (card E3, ordered rock): the groove is carved
 // and lit rather than inked. Its floor keeps only a light core, the wall
 // facing the sun is a wider lit lip, and the wall turned from the sun shades
 // by the carved geometry plus a faint tone. Returns (dark, lit).
@@ -350,19 +350,19 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     // A modest V for majors and minors, so the cracks also shade at scale.
     var carve = c0.open * max(0.0, 1.0 - c0.dist / (width * 0.6 + 1.2)) * mix(0.8, 3.0, severity) * mix(0.5, 1.0, rocky)
               + c1.open * max(0.0, 1.0 - c1.dist / (width * 0.45 + 0.9)) * mix(0.4, 1.5, severity);
-    // Relief style (card E3): a wider, deeper groove that the light shows, a
+    // Relief style (card E3; H23: it follows the rock's order, so ordered rock has lit relief cracks and scattered rock ink): a wider, deeper groove that the light shows, a
     // light floor and a lit lip, in place of the ink. The hairlines keep their
     // faint dark pixel: they are too fine to carve.
-    if (u.crackStyle > 0.0) {
+    if (u.rockOrder > 0.0) {
         let r0 = crackShadeRelief(c0, width * 1.25 * mix(0.6, 1.0, rocky), sun, 1.0);
         let r1 = crackShadeRelief(c1, width * 0.9 * mix(0.8, 1.0, rocky), sun, 0.8);
         let rdark = max(r0.x, max(r1.x, s2.x * 0.5));
         let rlit = max(r0.y, r1.y) * (1.0 - rdark);
         let rcarve = c0.open * max(0.0, 1.0 - c0.dist / (width * 0.9 + 2.0)) * mix(1.2, 4.0, severity) * mix(0.5, 1.0, rocky)
                    + c1.open * max(0.0, 1.0 - c1.dist / (width * 0.7 + 1.5)) * mix(0.6, 2.2, severity);
-        dark = mix(dark, rdark, u.crackStyle);
-        lit = mix(lit, rlit, u.crackStyle);
-        carve = mix(carve, rcarve, u.crackStyle);
+        dark = mix(dark, rdark, u.rockOrder);
+        lit = mix(lit, rlit, u.rockOrder);
+        carve = mix(carve, rcarve, u.rockOrder);
     }
     // Blocks step and tilt against each other on rocky ground.
     let b0 = cellHash(c0.id + 5.5) - 0.5;

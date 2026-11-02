@@ -36,9 +36,9 @@ KNOB_DEFAULTS = dict(
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackDark=.75,
-    # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
+    # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it, and the cracks of ordered rock are lit relief, not ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
-    jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, crackStyle=0, bedHeight=0, rockFrom=.6,
+    jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
@@ -250,7 +250,6 @@ WORLD_KNOBS = {
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
                   bedLedge=.4, grooveAngle=-20, jointDepth=3,
-                  crackStyle=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
@@ -311,12 +310,12 @@ WORLD_KNOBS = {
                   # H2 (erosion): the GPU shallow-water Time pass.
                   erosion=1, ),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
-    # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
+    # grooves (ordered rock) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
     # Red's faces show none).
     'red': dict(crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
-                crackStyle=1, crackSpacing=28, rockOrder=1, bedLedge=0,
+                crackSpacing=28, rockOrder=1, bedLedge=0,
                 jointDepth=3, grooveSpacing=30, grooveAngle=-10, grooveRun=160,
                 # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
                 # rock on level ground fades into plain broken rock. Red has no beds.
@@ -422,7 +421,7 @@ WORLD_KNOBS = {
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1,
-                   jointDepth=3, grooveSpacing=30, crackStyle=1, faceFill=0, ambient=.3,
+                   jointDepth=3, grooveSpacing=30, faceFill=0, ambient=.3,
                    # G2: joints run down the fall line (its beds are height contours already, kept on the grid's own heights
                    # so the lit ledges stay with the strata colours: cliffBed 0).
                    cliffFollow=1, cliffReach=40, cliffBed=0,
