@@ -99,11 +99,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const relief=Math.abs(n('reliefAmount',.5)*n('reliefScale',28))*Math.max(2.5,.25*n('gentleRelief',.6))*Math.max(1,Math.abs(n('gentleRelief',.6)))*Math.max(1,1+.65*n('reliefPatchy',1))*4;
     const severity=Math.max(n('crackSeverity',.6),.6),major=n('crackSpacing',40),minor=major/3.2;
     const blocks=(.5*(1+3*severity)+1.225*major+.5*(.6+1.6*severity)+4.41*minor)*Math.max(n('crackBlocks',.6),.6);
-    const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+1.8*Math.abs(n('bedLip',1)))*Math.abs(n('rockOrder',0));
+    const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+(n('bedLedge',.5)>0?3.6:0))*Math.abs(n('rockOrder',0));
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('gullySpacing',8),8),F=Math.max(n('facetSize',2),2),coarse=Math.max(n('facetCoarse',0),0);
-    const facetRise=1.85*F*Math.abs(n('facetTilt',0))*(Math.max(n('facetStretch',.25),.25)+Math.abs(n('facetSkew',1)))*(1+2.4*coarse)+.5*Math.abs(n('facetStep',0))*(1+coarse);
+    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),F=Math.max(n('blockRow',2),2),coarse=Math.max(n('facetCoarse',0),0);
+    const facetRise=1.85*F*Math.abs(n('facetTilt',0))*(Math.max(n('blockWidth',.5)/F,.25)+0.25)*(1+2.4*coarse)+.5*Math.abs(n('blockStep',0))*(1+coarse);   // the facets are cut at the blocks' size and step; the .25 is FACET_SKEW (engine-bake.wgsl)
     const extra=gullyRise+facetRise+relief+blocks+beds+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('boulderSize',9))+Math.abs(n('debrisSize',6))*.35+Math.abs(n('rippleHeight',1.4));
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
     return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};

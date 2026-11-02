@@ -18,6 +18,13 @@ export function columnRows(column, variant) {
   return {beds, starts, bands};
 }
 
+// Whether any section is a cap bed: two beds, one filling over .88 of the cycle (the shader's widest share, engine-common.wgsl columnBedIn, which
+// reads it only for a two-bed section). Only there does Cap color hold level ground to one bed's colour.
+export function columnHasCapBed(column, variant) {
+  const {beds, starts} = columnRows(column, variant);
+  return starts.some(([, first, count, period]) => count === 2 && Math.max(beds[first + 1][0] / period, 1 - beds[first + 1][0] / period) > 0.88);
+}
+
 // A map edits the world's existing table, never its shape or uniform capacity. Validate before touching the open map.
 export function copyColumn(value, template) {
   if (value == null) return null;

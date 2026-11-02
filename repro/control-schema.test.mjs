@@ -41,12 +41,13 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.equal(requirement('bedVary',{column:0,rockOrder:1,bedLedge:.5}),'');
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
- assert.match(requirement('gullySpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
- assert.match(requirement('jointRun',{rockOrder:1,jointDepth:0}),/Joint depth/);
- assert.equal(requirement('jointRun',{rockOrder:1,jointDepth:2}),'');
- assert.match(requirement('bedBend',{rockOrder:1,gullyDepth:0,ribTilt:0}),/Gully depth or Rib tilt/);
- assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:0,ribTilt:.2}),'');
- assert.equal(requirement('bedBend',{rockOrder:1,bedLedge:.5,gullyDepth:4,ribTilt:0}),'');
+ assert.match(requirement('grooveSpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
+ assert.match(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:0}),/Joint depth or Gully depth/);
+ assert.equal(requirement('grooveRun',{rockOrder:1,jointDepth:2}),'');
+ assert.equal(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:4}),'');   // Green cuts gullies and no joints
+ assert.match(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:0}),/Joint depth, Gully depth or Rib tilt/);
+ assert.equal(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),'');   // ribs stand between the lines
+ assert.match(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),/Joint depth or Gully depth/);   // a rib cuts nothing
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,jointDepth:2}),/Follow terrain/);
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:0}),/Joint depth/);
  assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:2}),'');
@@ -74,20 +75,21 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('rockFrom',{rockOrder:1});
  assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
- assert.match(requirement('facetSize',{rockOrder:1,facetTilt:0}),/Facet tilt/);
- shows('facetSize',{rockOrder:1,facetTilt:.5});
+ assert.match(requirement('facetCoarse',{rockOrder:1,facetTilt:0}),/Facet tilt/);
+ shows('facetCoarse',{rockOrder:1,facetTilt:.5});
  assert.match(requirement('cliffFine',{rockOrder:1,cliffFollow:1,facetTilt:0}),/Facet tilt/);
- assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
- assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0,bedLip:0}),/Ledge or Lip/);
+ assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
+ assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  shows('bedSpacing',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
- assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge or Lip/,'the rise is relief only');
- shows('bedBend',{rockOrder:1,gullyDepth:4,blocks:.5});   // blocks read the bed height
+ assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge above zero/,'the rise is relief only');
+ shows('cliffBed',{rockOrder:1,cliffFollow:1,blocks:.5});   // blocks read the bed height
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
- shows('bedSpacing',{rockOrder:1,bedLip:2});
  // strata: bands and caps need a column and the strata switch
  assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);
  assert.match(requirement('baseBand',{column:1,strata:0}),/Strata/);
  shows('baseBand',{column:1,strata:.5});
+ assert.match(requirement('desertCapFlat',{column:1,strata:.5,capBed:0}),/no cap bed/);   // Green's column has eight beds in one section, so its caps hold nothing
+ shows('desertCapFlat',{column:1,strata:.5,capBed:1});
  assert.match(requirement('baseBandGaps',{column:1,strata:1,baseBand:0}),/Gray band/);
  shows('baseBandGaps',{column:1,strata:1,baseBand:.5});
  assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Strata/);

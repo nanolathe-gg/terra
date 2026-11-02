@@ -8,7 +8,7 @@
 // --find key,key: instead of the sweep, set each other enabled row to its high end in turn and print which of the named rows then move (the search for a row's parent).
 // Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885; --assets DIR is that host's assets root: it needs map-catalog.json and features/, as a card's own root has): terraformAudit exists only on that host's ?audit pages.
 // Writes DIR/world-controls.json and prints one row per control and world. Exit 1 on a console error or on an unexplained exact 0, that is a
-// row that reads 0 on every fixture (the world's three scenes, the diagnostic fixture, the painted fixture; stroke rows the second stroke fixture and
+// row that reads 0 on every fixture (the world's three scenes, the diagnostic fixture, the painted fixture; stroke rows the second and wide stroke fixtures and
 // Sand over the first) and is on neither list below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
 // stands on every fixture while its reason holds (state "hidden"), which proves the reason true: it fails if the row moves HIDDEN_PX pixels or more,
 // since a wrong gate hides a live control and nothing else would show it. --set puts values in before the sweep, to probe a row under a gate.
@@ -29,7 +29,7 @@ const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolea
 // Rows that read 0 and are kept on purpose. A reason a reader can check, or the row is a finding, not an entry.
 const ALLOWED = {};
 // Rows that read 0 where nothing yet says why: reported, not failed, so the sweep can gate what is settled. An entry holds only in the worlds (and stroke kinds) listed,
-// taken from the final sweep, so a zero anywhere else fails; the card that touches a row settles it, and this list ends empty. Water is H24's, rock H23's, the rest Small leftovers.
+// taken from the final sweep, so a zero anywhere else fails; the card that touches a row settles it, and this list ends empty. Water is H24's, the rest Small leftovers.
 const OPEN = {
   // H24. One water colour (Lava and Moon: shallow and deep are equal), and the third-colour branch, which discards `deep` (Crystal, Ice, Zhon; Ice and Zhon have no lit bed to carry it).
   deepEdge: {worlds: ['ice', 'lava', 'moon', 'zhon'], note: 'ice, zhon: third colour and no lit bed; lava, moon: one water colour'},
@@ -39,7 +39,7 @@ const OPEN = {
   shelfWander: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shelfScale: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
   shoalRag: {worlds: ['ice', 'zhon'], note: 'as deepEdge'},
-  waterDeep: {worlds: ['crystal', 'ice', 'lava', 'moon', 'zhon'], kinds: ['deep', 'shallow'], note: 'a stroke\'s edge choice: as deepEdge on ice, lava, moon, zhon; crystal not traced, its deepEdge moves'},
+  waterDeep: {worlds: ['ice', 'lava', 'moon', 'zhon'], kinds: ['deep', 'shallow'], note: 'a stroke\'s edge choice: as deepEdge'},
   crackedStep: {worlds: ['crystal', 'ice', 'zhon'], note: 'third colour; moves in green, archipelago, red'},
   // H24. The threshold step reads no colorDepth, and with deepEdgeDepth above 0 neither depth; a stroke's Faded edge brings them back, so a gate needs that pick first.
   waterSoft: {worlds: ['green', 'lava', 'moon', 'red'], note: 'green, red: threshold step; lava, moon: one water colour'},
@@ -47,13 +47,6 @@ const OPEN = {
   shallowDepth: {worlds: ['green'], note: 'threshold step at a set depth'},
   deepDepth: {worlds: ['green'], note: 'as shallowDepth'},
   bedCrackSlope: {worlds: ['desert', 'moon'], note: 'not traced; reads 0 on the cracked-bed stroke; moves in the other seven'},
-  // H23.
-  styleFace: {worlds: ['green', 'crystal', 'ice', 'lava', 'moon'], kinds: ['deep'], note: 'not traced; on deep strokes only, and moves on them in the other worlds'},
-  styleRelief: {worlds: ['lava'], kinds: ['hill', 'mountain'], note: 'not traced; moves on Lava\'s other kinds'},
-  desertCapFlat: {worlds: ['green'], note: 'not traced; enabled (a column and strata are on), moves in desert'},
-  lean: {worlds: ['desert'], kinds: ['plateau'], note: 'not traced; moves on the other kinds and in the other eight worlds'},
-  facing: {worlds: ['desert'], kinds: ['plateau'], note: 'as lean'},
-  faceVariation: {worlds: ['desert'], kinds: ['plateau'], note: 'as lean'},
   // Small leftovers.
   slopeTexture: {worlds: ['archipelago'], note: 'not traced; moves there only with a slope or ground gloss on, and directly in the other seven'},
   shineSlopeSharp: {worlds: ['red'], note: 'not traced; red\'s slopeTexture is 0; moves in other worlds once their slope gloss is on'},
@@ -170,8 +163,9 @@ try {
     // a partial Denser scatter over the mountain's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
     ['paint', [[240, 220], [760, 220]], {card: {diameter: 460, amount: 35, paintChannel: 5}}],
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
-  // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount.
-  const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: variant ? 260 : 180, amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
+  // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau
+  // card: a Face width fills a smaller stroke's reach, leaving a lean no room, and the overlaps cut the deep stroke through the plateau, the steep ground Style: face rock acts on there.
+  const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
   const sandOver = () => [170, 500].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? (r.open ? '  ?' : '  !') : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
@@ -323,7 +317,7 @@ try {
     }
     await ev('__wc.putBack()');
     stage('stroke rows', ts); ts = Date.now();
-    for (const [name, fixture] of [['strokes-B', strokeFixture(1)], ['strokes-sand', [...strokeFixture(0), ...sandOver()]]]) {
+    for (const [name, fixture] of [['strokes-B', strokeFixture(1)], ['strokes-wide', strokeFixture(2)], ['strokes-sand', [...strokeFixture(0), ...sandOver()]]]) {
       const szeros = sresults.filter(r => r.max === 0);
       if (!szeros.length) break;
       await ev(`__wc.scene(${JSON.stringify(fixture)}, true)`);

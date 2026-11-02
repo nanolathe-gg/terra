@@ -79,7 +79,6 @@ struct Uniforms {
     crystalBase: vec4f,
     groundContrast: f32,
     groundBorrowed: i32,
-    crackLit: f32,
     sandDust: f32,
     sandGrass: f32,
     bandWater: f32,
@@ -152,13 +151,10 @@ struct Uniforms {
     sand: f32,            // 0 disables sand
     crackSeverity: f32,   // crack depth
     crackWidth: f32,      // crack core width, world px
-    crackJagged: f32,     // kinks and bends along a crack
     crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
-    crackReach: f32,      // 0: steep faces only; 1: onto gentle slopes
     cracksOn: i32,        // the full bake computes cracks; previews skip them
     plainRelief: f32,     // faint lit lumps on level ground (appearance only)
     crackSpacing: f32,    // major crack block size, world px
-    crackLength: f32,     // elongation of crack cells along the fall line
     windAngle: f32,       // direction the wind blows toward, degrees (0 = east)
     ripple: f32,          // ripple wavelength, world px (0: none)
     rippleHeight: f32,    // ripple amplitude, height units
@@ -208,13 +204,10 @@ struct Uniforms {
     bedDip: f32,          // bed tilt, height units per px
     bedDipDir: f32,       // direction the beds tilt down toward, degrees (0 east, 90 south)
     bedLedge: f32,        // how far each bed steps (0 the smooth face, 1 flat treads and short risers)
-    bedLip: f32,          // lit lip on each ledge and the shaded notch under it, height units
-    jointSpacing: f32,    // distance between joints, world px
-    jointAngle: f32,      // joints' lean from the screen's north-south, degrees
-    jointDepth: f32,      // groove depth, height units
-    jointRun: f32,        // typical length of an unbroken joint, world px
-    jointGaps: f32,       // share of each joint's length that is missing (0: the whole face)
-    crackStyle: f32,      // cracks: 0 ink (dark floor), 1 relief (carved groove with a lit lip)
+    jointDepth: f32,      // joint depth, height units
+    grooveSpacing: f32,   // distance between joint lines, and between gully lines, world px
+    grooveAngle: f32,     // their lean from the screen's north-south, degrees
+    grooveRun: f32,       // typical length of an unbroken joint or gully, world px
     bedHeight: f32,       // 0 beds spaced along the ground (px), 1 by height units (as the strata colours)
     rockFrom: f32,        // slope where beds and joints start on steep ground (painted rock always counts)
     // Water looks (card E1). Defaults reproduce the earlier water exactly.
@@ -260,21 +253,11 @@ struct Uniforms {
     faceRelief: f32,      // share of the rock relief lit on a wall that faces the viewer (0: the world-space look; engine-frag.wgsl)
     rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
     gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
-    gullySpacing: f32,    // distance between gully lines, world px
     gullyWidth: f32,      // gully width across, world px
-    gullyAngle: f32,      // gully lean from the screen's north-south, degrees
-    gullyRun: f32,        // typical length of an unbroken gully, world px
-    gullyGaps: f32,       // share of each gully's length that is missing
     gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
-    bedBend: f32,         // how far the beds follow the ribs' and gullies' height (0: not at all)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
     facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
-    facetSize: f32,       // facet height, world px
-    facetStretch: f32,    // facet width as a multiple of its height
-    facetStep: f32,       // step between neighbouring facets, height units
-    facetSeam: f32,       // how dark the creases between facets are (0: lit like the facets)
-    facetSkew: f32,       // facets' tilt in y as a share of their tilt in x (the picture squeezes steep y tilts: 1 as before, lower keeps them readable)
     facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     stepSharp: f32,       // Green, Red: the shallow-to-deep step is a true threshold, ragged by pixels (0: the earlier smoothed step)
@@ -385,7 +368,6 @@ struct Uniforms {
     blockStep: f32,       // largest step of a block against the next, height units (hard beds 0.4 of it)
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
     blockChip: f32,       // px an edge wanders, chipping the block outline (hard beds 0.4 of it)
-    blockGrit: f32,       // per-pixel height grit on blocks, height units
     weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet

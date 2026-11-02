@@ -813,6 +813,9 @@ fn craterWeb(p: vec2f) -> vec2f {
     return vec2f(line, 1.0 + u.crystalCraterTone * (m.id.x - 0.5));
 }
 
+// H23: how much of the sun-facing crack wall's light the rock takes, the same on every world.
+const CRACK_LIT = 0.35;
+
 // Shine and roughness (card E2). Nanolathe look, not a retail claim: a
 // Blinn lobe over a micro-roughened surface normal, per material, added to
 // the lit colour (so it passes the highlight cap) before the palette stage.
@@ -1556,7 +1559,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     {
         let coverOrCrack = bakedFields(p).b * (1.0 - faceRelief);
         // A crack wall facing the sun.
-        if (coverOrCrack > 1.0) { material *= 1.0 + u.crackLit * (coverOrCrack - 1.0); }
+        if (coverOrCrack > 1.0) { material *= 1.0 + CRACK_LIT * (coverOrCrack - 1.0); }
         else { material = mix(material, rock * 1.08, max(coverOrCrack, 0.0)); }
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are

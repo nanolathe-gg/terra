@@ -934,7 +934,6 @@ export class TerrainRenderer {
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
     this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
     this.f('uCrackDark', variant.has('crackDark') ? Number(variant.get('crackDark')) : 0.75);
-    this.f('uCrackLit', variant.has('crackLit') ? Number(variant.get('crackLit')) : 0.35);
     this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
@@ -1079,11 +1078,8 @@ export class TerrainRenderer {
     set('uBandFoot', number('bandFoot', 0));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
-    set('uCrackLength', number('crackLength', 2));
     set('uCrackWidth', number('crackWidth', 1));
-    set('uCrackJagged', number('crackJagged', 0.6));
     set('uCrackNetwork', number('crackNetwork', 0.35));
-    set('uCrackReach', number('crackReach', 0.6));
     set('uCrackMinor', number('crackMinor', 0.75));
     set('uCrackHairline', number('crackHairline', 0.6));
     set('uCrackBlocks', number('crackBlocks', 0.6));
@@ -1092,13 +1088,10 @@ export class TerrainRenderer {
     set('uRockOrder', number('rockOrder', 0));
     set('uBedVary', number('bedVary', 0.5));
     set('uBedLedge', number('bedLedge', 0.5));
-    set('uBedLip', number('bedLip', 1));
-    set('uJointSpacing', number('jointSpacing', 36));
-    set('uJointAngle', number('jointAngle', 0));
     set('uJointDepth', number('jointDepth', 2));
-    set('uJointRun', number('jointRun', 120));
-    set('uJointGaps', number('jointGaps', 0.3));
-    set('uCrackStyle', number('crackStyle', 0));
+    set('uGrooveSpacing', number('grooveSpacing', 36));
+    set('uGrooveAngle', number('grooveAngle', 0));
+    set('uGrooveRun', number('grooveRun', 120));
     set('uBedHeight', number('bedHeight', 0));
     set('uRockFrom', number('rockFrom', 0.6));
     if (this.sun) this.v('uSun', this.sun);
@@ -1120,21 +1113,11 @@ export class TerrainRenderer {
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
     // E9 (Green rock faces).
     set('uGullyDepth', number('gullyDepth', 0));
-    set('uGullySpacing', number('gullySpacing', 40));
     set('uGullyWidth', number('gullyWidth', 14));
-    set('uGullyAngle', number('gullyAngle', -20));
-    set('uGullyRun', number('gullyRun', 160));
-    set('uGullyGaps', number('gullyGaps', 0.3));
     set('uGullyShade', number('gullyShade', 0));
     set('uRibTilt', number('ribTilt', 0));
-    set('uBedBend', number('bedBend', 0));
     set('uBedPunch', number('bedPunch', 0));
     set('uFacetTilt', number('facetTilt', 0));
-    set('uFacetSize', number('facetSize', 6));
-    set('uFacetStretch', number('facetStretch', 1.5));
-    set('uFacetStep', number('facetStep', 1));
-    set('uFacetSeam', number('facetSeam', 0));
-    set('uFacetSkew', number('facetSkew', 1));
     set('uFacetCoarse', number('facetCoarse', 0));
     // G2 (rock faces follow the slope).
     set('uCliffFollow', number('cliffFollow', 0));
@@ -1149,7 +1132,7 @@ export class TerrainRenderer {
     {
       set('uBlocks', number('blocks', 0)); set('uBlockRow', number('blockRow', 4.5)); set('uBlockWidth', number('blockWidth', 9)); set('uBlockTilt', number('blockTilt', .5));
       set('uBlockStep', number('blockStep', .8)); set('uBlockSeam', number('blockSeam', .5)); set('uBlockChip', number('blockChip', 1.2));
-      set('uBlockGrit', number('blockGrit', .25)); set('uHillBlocks', number('hillBlocks', 0));
+      set('uHillBlocks', number('hillBlocks', 0));
     }
     this.setColumn();
     const own = !encoder;

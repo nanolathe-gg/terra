@@ -34,11 +34,11 @@ KNOB_DEFAULTS = dict(
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
-    crackSeverity=.6, crackSpacing=40, crackLength=2, crackMajor=.8, crackMinor=.75, crackHairline=.6,
-    crackBlocks=.6, crackWidth=1, crackJagged=.6, crackNetwork=.35, crackReach=.6, crackDark=.75, crackLit=.35,
-    # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it. crackStyle 0 is ink.
-    rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5, bedLip=1,
-    jointSpacing=36, jointAngle=0, jointDepth=2, jointRun=120, jointGaps=.3, crackStyle=0, bedHeight=0, rockFrom=.6,
+    crackSeverity=.6, crackSpacing=40, crackMajor=.8, crackMinor=.75, crackHairline=.6,
+    crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackDark=.75,
+    # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it, and the cracks of ordered rock are lit relief, not ink.
+    rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
+    jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
@@ -112,9 +112,9 @@ KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander
 KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
-                     gullyDepth=0, gullySpacing=40, gullyWidth=14, gullyAngle=-20, gullyRun=160, gullyGaps=.3, gullyShade=0, ribTilt=0,
-                     bedBend=0, bedPunch=0,
-                     facetTilt=0, facetSize=6, facetStretch=1.5, facetStep=1, facetSeam=0, facetSkew=1, facetCoarse=0)
+                     gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
+                     bedPunch=0,
+                     facetTilt=0, facetCoarse=0)
 # E11 (shallow water round 2): every default is the earlier look. stepSharp makes the
 # shallow-to-deep step a true threshold; shelfWander (depth units) over shelfScale (px) moves
 # its depth with broad noise so the band's width and outline vary along the shore; bedFlat
@@ -203,7 +203,7 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # beds that repeat upward, materials/<world>.json) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
-KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2, blockGrit=.25)
+KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2)
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
 KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
@@ -221,7 +221,7 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 # lightens and thins those lines toward retail's soft dashes.
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
-    'green': dict(blocks=1, blockRow=4, blockWidth=7, blockTilt=.8, blockStep=3, blockSeam=.6, blockChip=1.2, blockGrit=.25,
+    'green': dict(blocks=1, blockRow=3.2, blockWidth=5.76, blockTilt=.8, blockStep=1.5, blockSeam=1.6, blockChip=1.2,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4,
                   rockMoss=.4, hillBlocks=.5,
                   terraceBreak=0, terraceCalm=0, wetSwath=.35, outcrop=0),
@@ -249,8 +249,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
-                  bedLip=2, bedLedge=.4, jointAngle=-20, jointSpacing=34, jointDepth=3, jointRun=200, jointGaps=.35,
-                  crackStyle=1,
+                  bedLedge=.4, grooveAngle=-20, jointDepth=3,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
@@ -270,11 +269,11 @@ WORLD_KNOBS = {
                   # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
                   # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
                   # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
-                  # bedBend 0, bedPunch 0, facetTilt 0, shineOutside 1 and bedLip 1, bedLedge .55.
+                  # bedPunch 0, facetTilt 0, shineOutside 1 and bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
-                  gullyDepth=8, gullySpacing=36, gullyRun=90, gullyGaps=.4, gullyShade=1.2, ribTilt=.2,
-                  bedBend=1, bedPunch=1,
-                  facetTilt=1, facetSize=3.2, facetStretch=1.8, facetStep=1.5, facetSeam=1.6, facetSkew=.25, facetCoarse=.5, cliffFine=.7,
+                  gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
+                  bedPunch=1,
+                  facetTilt=1, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
@@ -295,13 +294,13 @@ WORLD_KNOBS = {
                   # screen. Beds are the contours of the ground (smoothed over 40 px, 30% of the way from the grid's own
                   # heights), 6.5 height units apart (bedSpacing, was 28 against a tilt of 2 that made rows level on the screen:
                   # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies and
-                  # facets run down the fall line. bedDip is 0 now, and bedBend 1 (was 2.5) because a bed is a quarter as
+                  # facets run down the fall line. bedDip is 0 now, and the beds follow the ribs and gullies at 1 (was 2.5) because a bed is a quarter as
                   # thick, so the ribs would fold it fourfold.
                   cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=8,
                   # G2: the vertical bands break up: each bed's joints at their own offset (up to .35 of a spacing).
                   cliffStagger=.35,
                   # H1 (lit relief): ledges shade the ground 1-6 px behind them and crevices lose ambient light, so the
-                  # beds are lower than G2's (cliffRise 16 -> 8, bedLedge .6 -> .4, bedLip 3 -> 2): taller ledges now shade
+                  # beds are lower than G2's (cliffRise 16 -> 8, bedLedge .6 -> .4, the ledge lip 3 -> 2): taller ledges now shade
                   # the whole face. green-2 face (x 20-880, y 650-870) mean luma / s.d. / share under 30 / p90 gradient:
                   # retail 45.8 / 27.2 / .245 / 17.6, G2 46.9 / 23.3 / .143 / 14.8, here 44.7 / 26.4 / .247 / 17.6.
                   closeShadow=.8, cavity=.6,
@@ -311,14 +310,14 @@ WORLD_KNOBS = {
                   # H2 (erosion): the GPU shallow-water Time pass.
                   erosion=1, ),
     # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
-    # grooves (crackStyle 1) .5 px wide on 28-px blocks at depth .3, and thin long
+    # grooves (ordered rock) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
     # Red's faces show none).
-    'red': dict(crackSeverity=.3, crackReach=.5, crackDark=.35, crackWidth=.5, banding=.3,
+    'red': dict(crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
-                crackStyle=1, crackSpacing=28, rockOrder=1, bedLip=0, bedLedge=0,
-                jointDepth=3, jointSpacing=30, jointAngle=-10, jointRun=160, jointGaps=.4,
-                # G2: joints run down the fall line of the ground they are cut in (jointAngle is the lean from it), and painted
+                crackSpacing=28, rockOrder=1, bedLedge=0,
+                jointDepth=3, grooveSpacing=30, grooveAngle=-10, grooveRun=160,
+                # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
                 # rock on level ground fades into plain broken rock. Red has no beds.
                 cliffFollow=1, cliffReach=40,
                 # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
@@ -421,8 +420,8 @@ WORLD_KNOBS = {
                    # from the sun, where ours shaded to a soft grey. No fill light and little
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
-                   rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1, bedLip=2,
-                   jointDepth=3, jointSpacing=30, jointAngle=0, jointGaps=.4, crackStyle=1, faceFill=0, ambient=.3,
+                   rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1,
+                   jointDepth=3, grooveSpacing=30, faceFill=0, ambient=.3,
                    # G2: joints run down the fall line (its beds are height contours already, kept on the grid's own heights
                    # so the lit ledges stay with the strata colours: cliffBed 0).
                    cliffFollow=1, cliffReach=40, cliffBed=0,
@@ -534,7 +533,7 @@ WORLD_KNOBS = {
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
     # Its Crystals brush makes column mounds: Voronoi columns with ~15 px
     # tops stepped ~16 units (measure/crystal_geometry.py).
-    'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1, crackLength=1.25,
+    'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
@@ -654,7 +653,7 @@ WORLD_VARIANTS = {
         # smooth variant .0445 / .0425, this .0547 / .0504.
         'evad': dict(label='Evad River: broken slopes',
                      knobs=dict(banding=.35, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
-                                crackReach=.75, reliefAmount=.5, microRock=.7)),
+                                reliefAmount=.5, microRock=.7)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
@@ -728,7 +727,7 @@ WORLD_VARIANTS = {
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: gray buttes',
                       knobs=dict(bedSpacing=4, faceDark=.4, banding=.9, crackSeverity=.5, crackMajor=.7,
-                                 crackMinor=.15, crackBlocks=.15, crackReach=.5, crackLength=3,
+                                 crackMinor=.15, crackBlocks=.15,
                                  # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
                                  # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
                                  # 0.4%). Ambient .12 gives 0% and 1.0%.
