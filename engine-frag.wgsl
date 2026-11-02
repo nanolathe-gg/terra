@@ -813,6 +813,9 @@ fn craterWeb(p: vec2f) -> vec2f {
     return vec2f(line, 1.0 + u.crystalCraterTone * (m.id.x - 0.5));
 }
 
+// H23: how much of the sun-facing crack wall's light the rock takes, the same on every world.
+const CRACK_LIT = 0.35;
+
 // Shine and roughness (card E2). Nanolathe look, not a retail claim: a
 // Blinn lobe over a micro-roughened surface normal, per material, added to
 // the lit colour (so it passes the highlight cap) before the palette stage.
@@ -822,8 +825,6 @@ fn craterWeb(p: vec2f) -> vec2f {
 // ground, so a sharp lobe lights facets and the grain decides which.
 // Retail's glints run as thin streaks ~27 degrees off the screen vertical (the
 // same axis as the slope marks), so the micro-normal noise is stretched along it.
-// H23: how much of the sun-facing crack wall's light the rock takes, the same on every world.
-const CRACK_LIT = 0.35;
 const SHINE_VIEW = vec3f(0.0, 0.4472136, 0.8944272);
 const SHINE_ALONG = vec2f(0.454, 0.891);
 const SHINE_ACROSS = vec2f(0.891, -0.454);

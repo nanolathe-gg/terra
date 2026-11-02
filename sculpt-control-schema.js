@@ -42,8 +42,6 @@ export function shapeControlAvailable(key,kind,p){
  // p.world is what worldControlRequirement reads. A face share needs faces of rock and moss; deposits need sand or stones that a world can lay down, and a beach keeps the Sand brush for its bars.
  const world=p.world||{};
  if(key==='styleFace'&&Number(world.microRock??1)<=0)return false;
- // The crust replaces all the relief on ground above the plain (Replace fine relief with crust at 1), so a hill's or mountain's relief strength has nothing to scale.
- if(key==='styleRelief'&&['hill','mountain'].includes(kind)&&world.lavaCrust>0&&world.lavaCalm>=1)return false;
  if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.stoneDensity)>0))return false;
  // A hill leans on its own, and a plateau or offset too until a Face width takes that away; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
  if(key==='facing')return kind==='hill'||['plateau','offset'].includes(kind)&&!(p.facePx>0)||p.lean>0;

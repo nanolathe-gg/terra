@@ -394,6 +394,10 @@ fn jointGroove() -> Groove { return lines(u.grooveAngle, u.grooveSpacing, u.join
 // G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
 fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), off).depth; }
 
+// H23: a bed with a riser has a lip of this height; one with none has none.
+const BED_LIP = 2.0;
+fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
+
 // Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
 // wander broadly and wobble finely but stay continuous between joints, so the
 // eye can follow one. The picture draws a point at screen row y - height / 2,
@@ -412,8 +416,6 @@ fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), of
 // its own, its hardness scales how tall its ledge stands (columnContrast), and the
 // bed coordinate is columnCoord at the surface height, the one erosion reads.
 // Returns the same (offset, lip cover, bed index) as bedRelief.
-const BED_LIP = 2.0;
-fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
 fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
@@ -477,12 +479,11 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
 }
 
 // H4b: a hill's pieces against a face's: width and length (down the fall line) as shares of blockWidth and blockRow.
-// H23: the per-pixel height grit on every block (height units), the same on every world.
-const BLOCK_GRIT = 0.25;
 const HILL_WIDTH = 0.6;
 const HILL_LENGTH = 2.2;
 const HILL_RELIEF = 1.8;   // a hill's piece heights against a face's (the hills' pieces are small, so their planes need more to light)
 const HILL_SEAM = 0.7;   // crevice half-width on a hill, px (a face's is 1.2): retail's hill cracks are 1-2 px
+const BLOCK_GRIT = 0.25;   // H23: per-pixel height grit on every block, height units, the same on every world
 // H4 item 4 (round 2): rock blocks. The face is cut into irregular pieces: a jittered cell grid, blockWidth by blockRow px, turned by a
 // slowly varying angle (up to about 40 degrees either way, so neighbouring regions are not aligned) and with its cells' own sizes
 // varying; each piece is a plane with a small tilt and a step against its neighbours, so it lights as one flat piece. The beds of the
@@ -1213,11 +1214,11 @@ fn bake(p: vec2f) -> vec4f {
         crackAt.y *= 1.0 - 0.5 * order * steep;
     }
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
-    // G5 (Lava): the crust replaces most of the fall-line relief on hills and adds its own, with the dark of its creases.
+    // G5 (Lava): the crust replaces most of the fall-line relief on hills and adds its own, with the dark of its creases. Its height is relief too, so a stroke's Style: relief strength scales it.
     var crustDark = 0.0;
     if (u.lavaCrust > 0.0) {
         let crust = lavaCrust(p, h, slope, fall);
-        height = height * (1.0 - crust.z) + crust.x;
+        height = height * (1.0 - crust.z) + crust.x * styleScale(style.x);
         crustDark = crust.y;
     }
     if (order > 0.0) {

@@ -10,12 +10,6 @@ test('a hill exposes foot effects only as a ridge',()=>{
  assert.equal(available('moonLobes','mountain',{baseVary:15}),false);
  assert.equal(available('iceFacetSize','hill',{iceFacets:1}),false);
  assert.equal(available('iceFacetSize','mountain',{iceFacets:1}),true);
- // H23: a crust that replaces all the relief leaves a hill's relief strength nothing to scale; a plateau's, partial replacement and no crust keep it
- assert.equal(available('styleRelief','hill',{world:{lavaCrust:1,lavaCalm:1}}),false);
- assert.equal(available('styleRelief','mountain',{world:{lavaCrust:'1',lavaCalm:'1'}}),false);
- assert.equal(available('styleRelief','plateau',{world:{lavaCrust:1,lavaCalm:1}}),true);
- assert.equal(available('styleRelief','hill',{world:{lavaCrust:1,lavaCalm:.5}}),true);
- assert.equal(available('styleRelief','hill',{world:{lavaCrust:0,lavaCalm:1}}),true);
 });
 test('faceted forms and shoreline materials keep their own dependent controls',()=>{
  assert.equal(available('crystalTiers','crystal',{crystalForm:0}),false);
