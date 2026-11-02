@@ -42,6 +42,8 @@ export function shapeControlAvailable(key,kind,p){
  // p.world is what worldControlRequirement reads. A face share needs faces of rock and moss; deposits need sand or stones that a world can lay down, and a beach keeps the Sand brush for its bars.
  const world=p.world||{};
  if(key==='styleFace'&&Number(world.microRock??1)<=0)return false;
+ // The crust replaces all the relief on ground above the plain (Replace fine relief with crust at 1), so a hill's or mountain's relief strength has nothing to scale.
+ if(key==='styleRelief'&&['hill','mountain'].includes(kind)&&world.lavaCrust>0&&world.lavaCalm>=1)return false;
  if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.stoneDensity)>0))return false;
  // A hill leans on its own, and a plateau or offset too until a Face width takes that away; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
  if(key==='facing')return kind==='hill'||['plateau','offset'].includes(kind)&&!(p.facePx>0)||p.lean>0;
@@ -93,7 +95,8 @@ export function worldControlRequirement(key,v){
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&!bedsMoveJoints&&!bedsMoveBlocks)return 'Set Ledge above zero in Rock structure to give the beds relief.';
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
- if(['baseBand','desertCapFlat'].includes(key))return n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');
+ // Cap color holds level ground to one bed only in a section of two beds where one fills over 88 percent of the cycle (worldPanelValues passes capBed in).
+ if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Edit the column to add one.':'');}
  if(['baseBandLow','baseBandHigh','baseBandWander','baseBandGaps'].includes(key))return needs('baseBand','Gray band strength');
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  const shine=['Ground','Slope','Rock','Sand','Crystal'],shiny=shine.some(m=>n('shine'+m)>0),rough=shine.some(m=>n('shine'+m+'Rough')>0);

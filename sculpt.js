@@ -1,7 +1,7 @@
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
-import {copyColumn} from './sculpt-column.js';
+import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler} from './sculpt-gpu-fields.js';
@@ -1579,7 +1579,7 @@ function strokeWaterPicks() {
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 function worldPanelValues() {
   const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),column:config.column?.sections?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);

@@ -48,9 +48,7 @@ const OPEN = {
   deepDepth: {worlds: ['green'], note: 'as shallowDepth'},
   bedCrackSlope: {worlds: ['desert', 'moon'], note: 'not traced; reads 0 on the cracked-bed stroke; moves in the other seven'},
   // H23.
-  styleFace: {worlds: ['green', 'crystal', 'ice', 'lava', 'moon'], kinds: ['deep'], note: 'not traced; on deep strokes only, and moves on them in the other worlds'},
-  styleRelief: {worlds: ['lava'], kinds: ['hill', 'mountain'], note: 'not traced; moves on Lava\'s other kinds'},
-  desertCapFlat: {worlds: ['green'], note: 'not traced; enabled (a column and strata are on), moves in desert'},
+  styleFace: {worlds: ['green', 'crystal', 'ice', 'lava', 'moon'], kinds: ['deep'], note: 'not traced; deep strokes only (a shallow stroke on the same fixture moves 306 px in Green, 7 in Lava), and the other worlds read 6 and 103 px on the second fixture; not the water look: Green and Lava read 0 with the hard step and the lit bed off'},
   lean: {worlds: ['desert'], kinds: ['plateau'], note: 'not traced; moves on the other kinds and in the other eight worlds'},
   facing: {worlds: ['desert'], kinds: ['plateau'], note: 'as lean'},
   faceVariation: {worlds: ['desert'], kinds: ['plateau'], note: 'as lean'},
