@@ -1568,8 +1568,10 @@ function buildKnobs() {
       box.append(wrap);
     }
   }
-  syncWorldControls=mountWorldControlIndex(root,()=>({...Object.fromEntries(renderer.variant),column:config.column?.sections?1:0}));
+  syncWorldControls=mountWorldControlIndex(root,worldPanelValues);
 }
+// What worldControlRequirement may read: the renderer's settings and the facts of the world's material that no slider sets.
+function worldPanelValues() {return {...Object.fromEntries(renderer.variant),column:config.column?.sections?1:0};}
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
   experiment.set(key, value);
