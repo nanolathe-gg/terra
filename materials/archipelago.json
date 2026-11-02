@@ -2042,32 +2042,19 @@
  "world": {
   "baseHeight": 8,
   "defaults": {
-   "noise": "ridged",
    "coverage": "form",
-   "rock": "hill",
    "lighting": "front",
-   "forms": "shouldered",
    "surface": "structured",
-   "scene": "compact",
-   "weather": "broad",
    "transition": "mineral",
    "material": "single",
-   "edges": "natural",
    "fractures": "20",
    "scree": "0",
    "shade": "separate",
-   "example": "islands",
-   "fingerBlunt": "0",
-   "fingerCoast": "0",
    "flowTint": "1",
    "flowShallow": "0.85",
    "flowStreak": "0.5",
    "flowStreakLen": "140",
-   "flowBank": "0.9",
-   "faceRock": "0",
-   "hillLobes": "0",
-   "hillSteps": "8",
-   "lavaTread": "0"
+   "flowBank": "0.9"
   },
   "column": {
    "bands": [3.7, 0.68]

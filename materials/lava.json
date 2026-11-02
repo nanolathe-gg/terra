@@ -1200,34 +1200,21 @@
  },
  "world": {
   "defaults": {
-   "noise": "ridged",
    "coverage": "form",
-   "rock": "hill",
    "lighting": "front",
-   "forms": "shouldered",
    "surface": "slopes",
-   "scene": "compact",
-   "weather": "broad",
    "transition": "soil",
    "material": "single",
-   "edges": "natural",
    "fractures": "0",
    "scree": "0",
    "shade": "separate",
-   "example": "coasts",
    "faceSlope": "1.4,2.2",
    "rockShare": "0.1,0.8",
-   "fingerBlunt": "1",
-   "fingerCoast": "1",
    "flowTint": "1",
    "flowShallow": "0.85",
    "flowStreak": "0.5",
    "flowStreakLen": "140",
-   "flowBank": "0.9",
-   "faceRock": "0",
-   "hillLobes": "0",
-   "hillSteps": "8",
-   "lavaTread": "0.6"
+   "flowBank": "0.9"
   },
   "column": {
    "bands": [7, 1]
