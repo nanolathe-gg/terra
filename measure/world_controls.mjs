@@ -13,6 +13,7 @@
 // stands on every fixture while its reason holds (state "hidden"), which proves the reason true: it fails if the row moves HIDDEN_PX pixels or more,
 // since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
 // --set puts values in before the sweep, to probe a row under a gate. --show-view retains background viewport bakes for comparison.
+// The 1024-pixel audit capture uses a 1024 MiB GPU budget; normal view and export budgets are unchanged.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
@@ -125,7 +126,7 @@ try {
     };
   })()`;
   const load = async (world, query) => {
-    await send('Page.navigate', {url: `${server}/sculpt?biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`});
+    await send('Page.navigate', {url: `${server}/sculpt?biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=1024&heapMB=2048${query ? '&' + query : ''}`});
     for (let i = 0; i < 400; i++) { await sleep(150); try { if (await ev('!!window.terraformAudit&&document.readyState==="complete"')) break; } catch {} }
     await ev('terraformAudit.ready()'); if (!args.includes('--show-view')) await ev('terraformAudit.captureOnly(true)'); await ev(HELPERS.replace('KINDS', JSON.stringify(Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]))))); await ev('terraformAudit.idle()');
   };
