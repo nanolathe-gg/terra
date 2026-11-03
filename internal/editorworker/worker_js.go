@@ -437,7 +437,12 @@ func loop() {
 				if generation != job.ID {
 					return
 				}
-				time.Sleep(time.Millisecond)
+				// View tiles already yield on the next GPU fence and UI
+				// admission acknowledgment. A nested browser timer adds an
+				// avoidable clamp delay after that bounded backpressure.
+				if job.Kind != "view" || job.RPC {
+					time.Sleep(time.Millisecond)
+				}
 			}
 			// Refresh picking independently of visible image replacements. Each
 			// request is bounded and cancellation is checked between tiles.
