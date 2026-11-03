@@ -143,6 +143,15 @@ func loop() {
 				post(map[string]any{"kind": "uniforms", "id": job.ID, "result": js.Global().Get("JSON").Call("parse", string(b))})
 				return
 			}
+			// Presentation transfers the image before its GPU work completes. Drain
+			// that captured fence before every subsequent GPU job, including RPCs,
+			// ghosts and fills, so their allocation checks see no retired work.
+			if err := engine.WaitView(ctx); err != nil {
+				if ctx.Err() == nil {
+					post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+				}
+				return
+			}
 			if job.Kind == "view" && !job.RPC {
 				restore := engine.BeginViewValidation()
 				defer restore()
