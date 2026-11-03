@@ -63,6 +63,7 @@ try {
     };
     proto.stroke = function(...args) { window.__featureStrokes.push(this.strokeStyle); return stroke.call(this, ...args); };
     document.getElementById('overlay').dispatchEvent(new PointerEvent('pointerleave', {bubbles:true}));
+    await new Promise(resolve => requestAnimationFrame(resolve));
     return {calls:window.__featureCalls,strokes:window.__featureStrokes,view:sculptCanvas.view(),base:sculptDebug.base,
       corners:[[10,10],[20,30]].map(([x,z]) => [[x,z],[x+1,z],[x,z+1],[x+1,z+1]].map(([a,b]) => sculptDebug.corner(a*16,b*16).eroded)),
       count:sculptDebug.sketch().mapData.features.length};
@@ -91,9 +92,11 @@ try {
     return {x:rect.left+(x-view.x)*view.scale,y:rect.top+(z-(Math.max(sculptDebug.sea,h)-sculptDebug.base)/2-view.y)*view.scale};
   })()`);
   await page('Input.dispatchMouseEvent', {type:'mouseMoved', x:point.x, y:point.y});
+  await evaluate('new Promise(resolve => requestAnimationFrame(resolve))');
   if (!await evaluate(`window.__featureStrokes.includes('#ff877e')`)) throw new Error('Overlapping hover footprint missing');
   await page('Input.dispatchMouseEvent', {type:'mousePressed', x:point.x, y:point.y, button:'left', buttons:1, clickCount:1});
   await page('Input.dispatchMouseEvent', {type:'mouseReleased', x:point.x, y:point.y, button:'left', buttons:0, clickCount:1});
+  await evaluate('new Promise(resolve => requestAnimationFrame(resolve))');
   if (!await evaluate(`window.__featureStrokes.includes('#ffe69c')`)) throw new Error('Selected footprint missing');
   console.log(JSON.stringify({features:data.count,draws:data.calls.length,order:['Tree3 shadow','Tree3 sprite','Tree2 shadow','Tree2 sprite'],alpha:data.calls.map(call=>call.alpha),pixelated:true,anchor:true,hovered:true,selected:true}));
   ws.close();
