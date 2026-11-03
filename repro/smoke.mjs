@@ -14,7 +14,7 @@ const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--po
 const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'offset', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];
+const TOOLS = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'offset', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];
 
 async function session(url, fn) {
   const logs = [];
@@ -101,11 +101,13 @@ if (page8) for (const world of worlds8) {
     try {
       await ready(ev, world !== 'zhon'); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       r.paged = await ev('sculptDebug.pageInfo()?.np ?? null');
-      const before = await ev('sculptDebug.nodes().length'); await strokeAt(send, ev, 'hill');
-      r.added = (await ev('sculptDebug.nodes().length')) - before;
-      await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()');
-      r.afterUndo = (await ev('sculptDebug.nodes().length')) - before;
-      if (r.added !== 1 || r.afterUndo !== 0 || !r.paged) bad++;
+      for (const tool of ['hill', 'landform']) {
+        const before = await ev('sculptDebug.nodes().length'); await strokeAt(send, ev, tool);
+        r.added = ((r.added ?? 0)) + (await ev('sculptDebug.nodes().length')) - before;
+        await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()');
+        r.afterUndo = (r.afterUndo ?? 0) + (await ev('sculptDebug.nodes().length')) - before;
+      }
+      if (r.added !== 2 || r.afterUndo !== 0 || !r.paged) bad++;
     } catch (err) { r.error = err.message; bad++; }
     r.console = logs.filter(l => !/favicon/.test(l)); if (r.console.length) bad++;
     return r;

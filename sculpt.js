@@ -3,7 +3,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FACING_CHOICES,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -33,6 +33,7 @@ const HELP = {
   paint:'Paint a material over the ground, or a scatter density: rock showing through, snow or ice, wet (dark) ground and moss take the world\'s own materials; denser or sparser scatter multiplies the World panel\'s Boulders and Debris (at 0 nothing shows). Strength is how fully it paints, Softness the edge. Heights do not change.',
   fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
+  landform:'Draw a landform along a path: the path is the crest, and the section across it is one curve you shape on both sides. The crest stands at an elevation you set, and the ground is raised to it, cut down to it or flattened to it. A second curve sets the crest\'s height along the path.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Drag to move · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas'
 };
@@ -84,7 +85,9 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
-const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter'];
+const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter','breakup'];
+// Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
+const LANDFORM_KEYS=['elevation','combine','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -98,7 +101,7 @@ const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter'];
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
-const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
+const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow','landform'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // H3 override planes 14-17 (a signed value v multiplies the control it names by 1 + v; 0 changes nothing): erosion rate (H2's pass),
@@ -134,14 +137,24 @@ const SHAPE_FIELDS=[
   ['terraces','sec-terraces','Terraces',SECTION_KINDS,0,8,1,1,'Cut the face into this many flat ledges with risers between them.'],
   ['ledge','sec-ledge','Ledge (flat share of a step)',SECTION_KINDS,0,90,5,100,'How much of each step is flat; the rest is the riser.'],
   ['terraceJitter','sec-terrace-jitter','Terrace variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
-  ['spurCount','spur-count','Spurs',['hill','mountain','crater'],0,12,1,1,'Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape\'s own seed. Each joins its parent at the crest.'],
-  ['spurLength','spur-length','Spur length (px)',['hill','mountain','crater'],20,400,10,1,'Average reach of a spur; each runs from about half to one and a half times this.'],
-  ['spurSpread','spur-spread','Spur angle spread',['hill','mountain','crater'],0,100,5,100,'0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding.'],
-  ['spurWidth','spur-width','Spur width',['hill','mountain','crater'],20,200,5,100,'A spur\'s width at its root, as a share of the ridge\'s own (a crater\'s radius, on a crater); it flares a little where it joins.'],
-  ['spurTaper','spur-taper','Spur taper',['hill','mountain','crater'],0,100,5,100,'How much a spur narrows and lowers toward its tip.'],
-  ['spurHeight','spur-height','Spur height',['hill','mountain','crater'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the crater\'s rim height).'],
-  ['spurForks','spur-forks','Spur forks',['hill','mountain','crater'],0,100,5,100,'The share of spurs that fork once, two thirds of the way out, into a shorter spur.'],
-  ['spurBulb','spur-bulb','Bulbous spur tips',['hill','mountain','crater'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
+  ['breakup','sec-breakup','Terrace breakup',SECTION_KINDS,0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
+  // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
+  ['elevation','lf-elevation','Elevation (height units)',['landform'],-80,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
+  ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
+  ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the section strays sideways from the path you drew, in waves as long as the Variation size.'],
+  ['widthVary','lf-width-vary','Width variation',['landform'],0,100,5,100,'How much the section widens and narrows along the path (100: from half to twice its width).'],
+  ['heightVary','lf-height-vary','Height variation (units)',['landform'],0,40,1,1,'How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet.'],
+  ['varySize','lf-vary-size','Variation size (px)',['landform'],20,400,10,1,'The wavelength of the wander and of the width and height variation.'],
+  ['varyFoot','lf-vary-foot','Variation at the foot',['landform'],0,200,5,100,'How much of the variation acts at the foot of the section (100: all of it, 0: none, 200: twice). It blends into the next one up to the middle of the section.'],
+  ['varyMiddle','lf-vary-middle','Variation up the section',['landform'],0,200,5,100,'How much of the variation acts from the middle of the section to its crest. Set the foot to 0 and this to 200 for variation that grows toward the crest.'],
+  ['spurCount','spur-count','Spurs',['hill','mountain','crater','landform'],0,12,1,1,'Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape\'s own seed. Each joins its parent at the crest.'],
+  ['spurLength','spur-length','Spur length (px)',['hill','mountain','crater','landform'],20,400,10,1,'Average reach of a spur; each runs from about half to one and a half times this.'],
+  ['spurSpread','spur-spread','Spur angle spread',['hill','mountain','crater','landform'],0,100,5,100,'0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding.'],
+  ['spurWidth','spur-width','Spur width',['hill','mountain','crater','landform'],20,200,5,100,'A spur\'s width at its root, as a share of the ridge\'s own (a crater\'s radius, on a crater); it flares a little where it joins.'],
+  ['spurTaper','spur-taper','Spur taper',['hill','mountain','crater','landform'],0,100,5,100,'How much a spur narrows and lowers toward its tip.'],
+  ['spurHeight','spur-height','Spur height',['hill','mountain','crater','landform'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the crater\'s rim height).'],
+  ['spurForks','spur-forks','Spur forks',['hill','mountain','crater','landform'],0,100,5,100,'The share of spurs that fork once, two thirds of the way out, into a shorter spur.'],
+  ['spurBulb','spur-bulb','Bulbous spur tips',['hill','mountain','crater','landform'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
   ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
   ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
   ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain'],0,100,5,100,'The ridge narrows and lowers toward both ends of its path.'],
@@ -253,17 +266,25 @@ function buildShapeOptions() {
     wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"${choices?' hidden':''}></output></label>${input}<p class="small">${help}</p>`;
     return wrap;
   }));
-  // The curve editor sits above the face width (H15 part 2, step C): a form to pick, the curve's knots to drag, and the lean.
+  // The section editor sits above the face width (H15 part 2, step C; H27): a form to pick, the whole section across both sides to drag, the lean, and for a
+  // landform the sides' link and the second curve, the elevation along the path.
   const preview=document.createElement('div'); preview.className='control'; preview.id='section-preview-control'; preview.hidden=true;
   const cvStyle='width:100%;background:#172119;border:1px solid #465344;border-radius:4px;touch-action:none;display:block;margin-top:4px';
-  preview.innerHTML=`<label for="curve-form">Curve</label><select id="curve-form" style="width:100%"><option value="">The shape\'s own</option>${FORM_NAMES.map(f => `<option value="${f}">${f[0].toUpperCase()+f.slice(1)}</option>`).join('')}</select>`+
-    `<canvas id="section-preview" width="222" height="120" style="${cvStyle};cursor:crosshair"></canvas><canvas id="section-across" width="222" height="44" style="${cvStyle}"></canvas>`+
-    `<div style="display:flex;gap:6px;margin-top:4px;align-items:center"><button type="button" id="curve-reset" style="flex:none">Reset to the form</button><span class="small" id="curve-lean" style="flex:1"></span></div>`+
-    '<p class="small">Height share against distance share, foot to top. Drag a knot; click the line to add one; double-click a knot (or Shift-click) to remove it. A knot above 1 makes a lip (on water, below 0).</p>';
+  preview.innerHTML=`<label for="curve-form">Section</label><select id="curve-form" style="width:100%"></select>`+
+    `<canvas id="section-preview" width="480" height="240" style="${cvStyle};cursor:crosshair"></canvas>`+
+    `<div style="display:flex;gap:6px;margin-top:4px;align-items:center;flex-wrap:wrap"><button type="button" id="curve-link" style="flex:none" aria-pressed="true" title="Both sides share one curve">Link sides</button><button type="button" id="curve-mirror" style="flex:none" title="Flip the section left to right">Mirror</button><button type="button" id="curve-reset" style="flex:none">Reset to the form</button><span class="small" id="curve-lean" style="flex:1 1 100%"></span></div>`+
+    '<p class="small" id="curve-help">Height against distance across the shape, both sides. Drag a knot; click the line to add one; double-click a knot (or Shift-click) to remove it. Drag the diamond at the crest sideways to lean the shape. A knot above the top makes a lip (on water, below 0).</p>'+
+    `<div id="along-block" hidden><label for="along-preview">Height along the path</label><canvas id="along-preview" width="480" height="140" style="${cvStyle};cursor:crosshair"></canvas>`+
+    '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" id="along-reset" style="flex:none">Level along the path</button></div>'+
+    '<p class="small">The dashed line is the crest\'s height along the path you drew, as a share of the elevation above the plain; the solid line is read from the map. Click to pick the place the section shows (marked on the map); double-click the line to add a knot, drag a knot to move it, Shift-click a knot to remove it.</p></div>';
   root.children[SHAPE_FIELDS.findIndex(f => f[0]==='facePx')].before(preview);
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
-  curveEditorEvents();
+  $('along-reset').addEventListener('click',() => { setCurve(null,'along'); if (selected>=0) { checkpoint(); queueWeather(); } });
+  $('curve-link').addEventListener('click',() => { toggleLink(); if (selected>=0) { checkpoint(); queueWeather(); } });
+  $('curve-mirror').addEventListener('click',() => { mirrorSides(); if (selected>=0) { checkpoint(); queueWeather(); } });
+  curveEditorEvents(); alongEditorEvents();
+  for (const id of ['section-preview','along-preview']) new ResizeObserver(() => { if (!$('section-preview-control').hidden) drawSection(); }).observe($(id));
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -286,7 +307,7 @@ const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind=
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40,landform:40}[kind]??0,diameter:200,elevation:clamp(Math.round((config?.baseHeight??24)+70),-80,300),amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -354,7 +375,7 @@ function updateControls() {
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
   try {
-  const fixed=['deep','shallow','ramp','erase'].includes(tool);
+  const fixed=['deep','shallow','ramp','erase','landform'].includes(tool);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
   const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
@@ -369,11 +390,11 @@ function updateControls() {
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
-  $('roughness').closest('.control').hidden=tool==='fissure';
+  $('roughness').closest('.control').hidden=tool==='fissure'||tool==='landform';
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(tool);
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
-  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
+  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset','landform'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
   const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
@@ -412,7 +433,7 @@ function updateControls() {
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
   } finally { tool=activeTool; }
-  if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase'].includes(nodes[selected]?.kind); }
+  if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase','landform'].includes(nodes[selected]?.kind); }
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
@@ -434,78 +455,205 @@ const about=(pivot,m) => compose([1,0,0,1,pivot.x,pivot.y],compose(m,[1,0,0,1,-p
 const rotation=a => [Math.cos(a),Math.sin(a),-Math.sin(a),Math.cos(a),0,0];
 const scaling=k => [k,0,0,k,0,0];
 const isIdentity=m => !m || m.every((v,i) => Math.abs(v-IDENTITY[i])<1e-9);
-// The curve editor (H15 part 2, step C). The curve a stroke carries is {form, knots?}: the form alone follows softness, knots (once one is dragged) are what
-// saves. The preview draws the real table (sculpt-shape-presets.js sectionPreview), foot to top, before the outline noise.
+// The section editor (H15 part 2, step C; H27). The curve a stroke carries is {form, knots?, back?}: the form alone follows softness, knots (once one is dragged)
+// are what saves, and a landform's back is a list of its own once its sides are unlinked. The canvas draws the real tables (sculpt-shape-presets.js sectionPreview)
+// across both sides, the lean side (the back) on the left, before the outline noise. A landform's axis is in height units, the plain, the sea and the elevation marked.
 const CV_LO=-.6,CV_HI=1.6,CV_PAD=9;
 const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].kind : tool;
 const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.curve : toolSettings[tool]?.curve) || null;
+const currentAlong=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.along : toolSettings[tool]?.along) || null;
 function curveContext() {
   const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),shouldered=isShouldered(kind,o,ridgeOn(kind,o));
-  return {kind,shouldered,water:kind==='deep' || kind==='shallow',q:{...o,radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve()}};
+  return {kind,shouldered,water:kind==='deep' || kind==='shallow',land:kind==='landform',q:{...o,radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve(),along:currentAlong()}};
 }
-// Hand the curve to the shape being edited (or to the brush, for the next stroke); null goes back to the kind's own form.
-function setCurve(curve) {
+// Hand the curve (or, with key 'along', the along-the-path knots) to the shape being edited, or to the brush for the next stroke; null goes back to the default.
+function setCurve(curve,key='curve') {
   if (selected>=0 && nodes[selected]?.params) {
-    const n=nodes[selected],p={...n.params}; if (curve) p.curve=curve; else delete p.curve; n.params=p;
+    const n=nodes[selected],p={...n.params}; if (curve) p[key]=curve; else delete p[key]; n.params=p;
     updateControls(); editSelectedFromControls(); persistLater(); return;
   }
-  const t={...toolSettings[tool],preset:'custom'}; if (curve) t.curve=curve; else delete t.curve; toolSettings[tool]=t;
+  const t={...toolSettings[tool],preset:'custom'}; if (curve) t[key]=curve; else delete t[key]; toolSettings[tool]=t;
   updateControls(); schedule(); persistLater();
 }
-const cvXY=(x,v,W,H) => [CV_PAD+(W-2*CV_PAD)*x,H-CV_PAD-(H-2*CV_PAD)*(v-CV_LO)/(CV_HI-CV_LO)];
+const roundKnots=ks => ks.map(([x,v]) => [Math.round(x*1000)/1000,Math.round(v*1000)/1000]);
+// The knots on each side: the front's own (or its form's, thinned when the form samples a power law or a smoothstep finely); a landform's back is its own list
+// once unlinked, and the front's until then.
+const frontKnots=c => { const k=strokeKnots(c.kind,c.q,c.shouldered).knots; return c.q.curve?.knots||k.length<=12?k:thinKnots(k); };
+const backKnots=c => c.land&&c.q.curve?.back?c.q.curve.back:null;
+const sidesLinked=c => c.land&&!c.q.curve?.back;
+function storeSection(c,front,back) {
+  const curve={form:c.q.curve?.form||defaultForm(c.kind,c.shouldered),knots:roundKnots(front)}; if (back) curve.back=roundKnots(back);
+  setCurve(curve);
+}
+function toggleLink() { const c=curveContext(); if (!c.land) return; const f=frontKnots(c); sidesLinked(c)?storeSection(c,f,f.map(k => [...k])):storeSection(c,f); }
+// Mirror flips the section left to right: the two lists swap and the lean turns round.
+function mirrorSides() { const c=curveContext(),b=backKnots(c); if (!c.land || !b) return; storeSection(c,b,frontKnots(c)); setLean(1/leanRatio(c.kind,c.q,c.shouldered)); }
+function setLean(ratio) { const el=$('lean'); el.value=String(clamp(Math.round(ratio*20)*5,25,400)); el.dispatchEvent(new Event('input',{bubbles:true})); }
+// The height axis of a landform's canvases: the plain, the sea and the elevation, with room for an along curve up to 1.2.
+function heightAxis(c) {
+  const plain=config.baseHeight,sea=config.seaLevel,E=c.q.elevation,span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain,top=plain+span*1.2;
+  let lo=Math.min(sea,plain,E,top),hi=Math.max(sea,plain,E,top); const pad=Math.max(5,(hi-lo)*.1); lo-=pad; hi+=pad;
+  return {plain,sea,E,span,lo,hi};
+}
+function sectionLayout(c) {
+  const cv=$('section-preview'),W=cv.width,H=cv.height,ratio=leanRatio(c.kind,c.q,c.shouldered),xL=CV_PAD,xR=W-CV_PAD,xc=xL+(xR-xL)*ratio/(1+ratio),top=CV_PAD+2,bottom=H-CV_PAD-2,L={W,H,ratio,xL,xR,xc,top,bottom,land:c.land};
+  if (c.land) {
+    const a=heightAxis(c); Object.assign(L,a,{yH:h => bottom-(bottom-top)*(h-a.lo)/(a.hi-a.lo),hY:y => a.lo+(a.hi-a.lo)*(bottom-y)/(bottom-top)});
+    L.yv=v => L.yH(a.plain+a.span*v); L.vy=y => (L.hY(y)-a.plain)/a.span;
+  } else { L.yv=v => bottom-(bottom-top)*(v-CV_LO)/(CV_HI-CV_LO); L.vy=y => CV_LO+(CV_HI-CV_LO)*(bottom-y)/(bottom-top); }
+  return L;
+}
+const sideX=(L,side,x) => side==='back'?L.xc-(L.xc-L.xL)*(1-x):L.xc+(L.xR-L.xc)*(1-x);
+// Every handle: the front's knots on the right, and for a landform the back's on the left (a linked back shows the front's knots, which move together).
+function sectionHandles(c,L) {
+  const out=[],fk=frontKnots(c),bk=backKnots(c);
+  fk.forEach(([x,v],i) => out.push({side:'front',i,x,v,X:sideX(L,'front',x),Y:L.yv(v)}));
+  if (c.land) (bk||fk).forEach(([x,v],i) => out.push({side:'back',i,x,v,X:sideX(L,'back',x),Y:L.yv(v),edit:bk?'back':'front'}));
+  return out;
+}
+// A landform's path as the engine sweeps it (the simplified polyline of its first path), its back side and half widths, so the editor reads the map where the shape stands.
+function landformPath(n) {
+  const q={...shapeDefaults(),...n.params},paths=shapePaths(n),pts=paths[0].map(i => n.points[i]);
+  let path=simplifyPath(pts,Math.max(1,q.radius*.04)).filter((p,k,a) => !k || Math.hypot(p.x-a[k-1].x,p.y-a[k-1].y)>=1e-4);
+  if (path.length<2) path=[path[0],{x:path[0].x+.01,y:path[0].y}];
+  const cum=[0]; for (let k=1;k<path.length;k++) cum.push(cum[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
+  const turn=isIdentity(n.frame)?0:Math.atan2(n.frame[1],n.frame[0]),sd=landformSides(q);
+  return {path,cum,total:cum[cum.length-1],side:landformBackSide(leanSetup('landform',q),turn,path[1].x-path[0].x,path[1].y-path[0].y),front:sd.front,back:sd.back,q};
+}
+// The point at share t of the way along, and the unit vector from it toward the back.
+function landformAt(lp,t) {
+  const d=clamp(t,0,1)*lp.total; let k=1; while (k<lp.path.length-1 && lp.cum[k]<d) k++;
+  const a=lp.path[k-1],b=lp.path[k],len=lp.cum[k]-lp.cum[k-1]||1,f=clamp((d-lp.cum[k-1])/len,0,1),ux=(b.x-a.x)/len,uy=(b.y-a.y)/len;
+  return {x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f,bx:lp.side*uy,by:-lp.side*ux};
+}
+// The map's own heights (the CPU copy of the authored field) across the shape at share t: from the back's foot (-back) to the front's (+front).
+const landformCut=(lp,t,n=33) => { const p=landformAt(lp,t),out=[]; for (let j=0;j<n;j++) { const a=-lp.back+(lp.back+lp.front)*j/(n-1); out.push([a,regionalFields.sample(p.x-p.bx*a,p.y-p.by*a)]); } return out; };
+let lfPlace=.5;
+const selectedLandform=() => selected>=0 && nodes[selected]?.kind==='landform' && nodes[selected].points?.length ? nodes[selected] : null;
+function sectionMark() {
+  const n=tool==='move'?selectedLandform():null; if (!n || !regionalFields) return null;
+  const lp=landformPath(n),p=landformAt(lp,lfPlace); return {a:{x:p.x+p.bx*lp.back,y:p.y+p.by*lp.back},b:{x:p.x-p.bx*lp.front,y:p.y-p.by*lp.front}};
+}
+// A canvas is drawn at the pixels it is shown in (as wide as its panel, 2 to 1), so its text stays small and sharp.
+function fitCanvas(cv,ratio) { const w=Math.round(cv.clientWidth); if (w>=120 && cv.width!==w) { cv.width=w; cv.height=Math.round(w*ratio); } }
 function drawSection() {
-  const cv=$('section-preview'),g=cv.getContext('2d'),W=cv.width,H=cv.height,c=curveContext(),{water,ys,knots}=sectionPreview(c.kind,c.q,c.shouldered),n=ys.length-1;
-  g.clearRect(0,0,W,H);
-  g.strokeStyle='#465344'; g.setLineDash([3,3]); for (const v of [0,1]) { const [,y]=cvXY(0,v,W,H); g.beginPath(); g.moveTo(CV_PAD,y); g.lineTo(W-CV_PAD,y); g.stroke(); } g.setLineDash([]);
-  const [,y0]=cvXY(0,0,W,H); g.beginPath(); g.moveTo(CV_PAD,y0);
-  for (let k=0;k<=n;k++) g.lineTo(...cvXY(k/n,ys[k],W,H));
-  g.lineTo(W-CV_PAD,y0); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
-  g.beginPath(); for (let k=0;k<=n;k++) g[k?'lineTo':'moveTo'](...cvXY(k/n,ys[k],W,H));
-  g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
-  // The handles: the stroke's own knots, or its form's (a power law or a smoothstep shows nine, which a drag then makes its own).
-  g.fillStyle=c.q.curve?.knots?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [x,v] of (c.q.curve?.knots||knots.length<=12?knots:thinKnots(knots))) { g.beginPath(); g.arc(...cvXY(x,v,W,H),3.5,0,7); g.fill(); }
-  g.fillStyle='#a8b7a5'; g.font='9px system-ui'; g.fillText(water?'ground':'foot',CV_PAD,10); g.textAlign='right'; g.fillText(water?'bed':'top',W-CV_PAD,10); g.textAlign='left';
-  $('curve-form').value=c.q.curve?.form||''; $('curve-reset').disabled=!c.q.curve?.knots;
-  // Lean: the whole cross-section, the long slope toward the lean side on the left (its back curve where the shape has one).
-  const ratio=leanRatio(c.kind,c.q,c.shouldered),across=$('section-across'),a=across.getContext('2d'),AW=across.width,AH=across.height,{back}=sectionPreview(c.kind,c.q,c.shouldered);
-  const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
-  $('curve-lean').textContent=`Lean ${(Math.round(ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
-  across.hidden=c.water; a.clearRect(0,0,AW,AH);
-  if (!c.water) {
-    const total=ratio+1,X=t => CV_PAD+(AW-2*CV_PAD)*t/total,Y=v => AH-6-(AH-12)*Math.min(Math.max(v,0),1.5)/1.5;
-    a.beginPath(); a.moveTo(X(0),Y(0));
-    for (let k=0;k<=n;k++) a.lineTo(X(ratio*(1-k/n)),Y(back[k]));
-    for (let k=n;k>=0;k--) a.lineTo(X(ratio+(1-k/n)),Y(ys[k]));
-    a.lineTo(X(total),Y(0)); a.closePath(); a.fillStyle='rgba(180,213,137,.25)'; a.fill(); a.strokeStyle='#b4d589'; a.stroke();
+  fitCanvas($('section-preview'),.5); fitCanvas($('along-preview'),.3);
+  const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{water,ys,back}=sectionPreview(c.kind,c.q,c.shouldered),n=ys.length-1;
+  g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
+  const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); if (label) { g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); } };
+  if (c.land) { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
+  else { rule(L.yv(0),'#465344'); rule(L.yv(1),'#465344'); }
+  const base=L.yv(0),trace=() => { for (let k=0;k<=n;k++) g.lineTo(L.xL+(L.xc-L.xL)*k/n,L.yv(back[k])); for (let k=n;k>=0;k--) g.lineTo(L.xc+(L.xR-L.xc)*(n-k)/n,L.yv(ys[k])); };
+  g.beginPath(); g.moveTo(L.xL,base); trace(); g.lineTo(L.xR,base); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
+  g.beginPath(); g.moveTo(L.xL,L.yv(back[0])); trace(); g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
+  // The map's own sections across the selected landform, at five places along it and at the place picked below, in height units.
+  const node=c.land?selectedLandform():null;
+  if (node && regionalFields) {
+    const lp=landformPath(node),px=a => L.xc+a*(a<0?L.xc-L.xL:L.xR-L.xc)/(a<0?lp.back:lp.front),line=(t,color,w) => { g.beginPath(); landformCut(lp,t).forEach(([a,h],j) => g[j?'lineTo':'moveTo'](px(a),L.yH(h))); g.strokeStyle=color; g.lineWidth=w; g.stroke(); };
+    for (const t of [.1,.3,.5,.7,.9]) line(t,'rgba(160,200,255,.38)',1);
+    line(lfPlace,'#ffd27a',2); g.lineWidth=1;
   }
+  const fk=frontKnots(c),edited=Boolean(c.q.curve?.knots);
+  g.fillStyle=edited?'#e8f2d8':'rgba(232,242,216,.45)';
+  for (const h of sectionHandles(c,L)) { g.fillStyle=edited?(h.side==='back'&&!h.edit?'rgba(232,242,216,.55)':'#e8f2d8'):'rgba(232,242,216,.45)'; g.beginPath(); g.arc(h.X,h.Y,3.5,0,7); g.fill(); }
+  // The crest's lean handle: a diamond on the crest line at the foot's height.
+  g.fillStyle='#ffd27a'; g.beginPath(); g.moveTo(L.xc,base-5); g.lineTo(L.xc+5,base); g.lineTo(L.xc,base+5); g.lineTo(L.xc-5,base); g.closePath(); g.fill();
+  g.strokeStyle='rgba(255,210,122,.35)'; g.setLineDash([2,3]); g.beginPath(); g.moveTo(L.xc,L.top); g.lineTo(L.xc,L.bottom); g.stroke(); g.setLineDash([]);
+  g.fillStyle='#a8b7a5'; g.textAlign='left'; g.fillText('lean side',L.xL+2,L.H-2); g.textAlign='right'; g.fillText('steep side',L.xR-2,L.H-2); g.textAlign='left';
+  // The controls round the canvas.
+  const form=$('curve-form'),choices=formChoices(c.kind); if (form.dataset.kind!==c.kind) { form.replaceChildren(new Option('The shape\'s own',''),...choices.map(([id,label]) => new Option(label,id))); form.dataset.kind=c.kind; }
+  form.value=choices.some(([id]) => id===c.q.curve?.form)?c.q.curve.form:''; $('curve-reset').disabled=!c.q.curve?.knots;
+  $('curve-link').hidden=$('curve-mirror').hidden=!c.land; $('curve-link').setAttribute('aria-pressed',String(sidesLinked(c))); $('curve-link').textContent=sidesLinked(c)?'Sides linked':'Link sides'; $('curve-mirror').disabled=sidesLinked(c);
+  $('along-block').hidden=!c.land;
+  const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
+  $('curve-lean').textContent=`Lean ${(Math.round(L.ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
+  if (c.land) drawAlong(c);
+}
+// The second curve: the crest's height along the path, as a share of the elevation above the plain (0 to 1.2), against the share of the way along. The dashed
+// line is what was authored; the solid line is read from the map along the path.
+const ALONG_HI=1.2;
+function alongLayout(c) {
+  const cv=$('along-preview'),W=cv.width,H=cv.height,a=heightAxis(c),xL=CV_PAD,xR=W-CV_PAD,top=CV_PAD,bottom=H-CV_PAD,yH=h => bottom-(bottom-top)*(h-a.lo)/(a.hi-a.lo);
+  return {...a,W,H,xL,xR,top,bottom,yH,hY:y => a.lo+(a.hi-a.lo)*(bottom-y)/(bottom-top),X:t => xL+(xR-xL)*t,T:x => clamp((x-xL)/(xR-xL),0,1),yv:v => yH(a.plain+a.span*v),vy:y => (a.lo+(a.hi-a.lo)*(bottom-y)/(bottom-top)-a.plain)/a.span};
+}
+function drawAlong(c) {
+  const cv=$('along-preview'),g=cv.getContext('2d'),L=alongLayout(c),knots=alongKnots(c.q),f=knotCurve(knots);
+  g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
+  const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); };
+  rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`);
+  const node=selectedLandform(),N=48;
+  if (node && regionalFields) {
+    // The crest wanders, so the line takes the extreme toward the elevation (the highest for a ridge, the lowest for a cut below the plain) near the path.
+    const lp=landformPath(node),reach=Math.max(0,c.q.wander||0)*1.2+4,dir=L.E<L.plain?-1:1;
+    g.beginPath(); for (let k=0;k<=N;k++) { const t=k/N,p=landformAt(lp,t); let h=-1e9; for (let j=-2;j<=2;j++) h=Math.max(h,dir*regionalFields.sample(p.x+p.bx*reach*j/2,p.y+p.by*reach*j/2)); g[k?'lineTo':'moveTo'](L.X(t),L.yH(dir*h)); }
+    g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
+    g.strokeStyle='#ffd27a'; g.beginPath(); g.moveTo(L.X(lfPlace),L.top); g.lineTo(L.X(lfPlace),L.bottom); g.stroke();
+  }
+  g.setLineDash([5,3]); g.beginPath(); for (let k=0;k<=N;k++) g[k?'lineTo':'moveTo'](L.X(k/N),L.yv(clamp(f(k/N),0,ALONG_HI))); g.strokeStyle='#e8f2d8'; g.stroke(); g.setLineDash([]);
+  g.fillStyle=c.q.along?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [x,v] of knots) { g.beginPath(); g.arc(L.X(x),L.yv(v),3.5,0,7); g.fill(); }
 }
 function curveEditorEvents() {
-  const cv=$('section-preview'); let drag=-1;
-  const at=e => { const r=cv.getBoundingClientRect(),W=cv.width,H=cv.height,px=(e.clientX-r.left)*W/r.width,py=(e.clientY-r.top)*H/r.height; return {px,py,x:clamp((px-CV_PAD)/(W-2*CV_PAD),0,1),v:CV_LO+(CV_HI-CV_LO)*(H-CV_PAD-py)/(H-2*CV_PAD)}; };
-  // The knots to edit: the stroke's own, or its form's (thinned when the form samples a power law or a smoothstep finely).
-  const knotsNow=() => { const c=curveContext(),k=strokeKnots(c.kind,c.q,c.shouldered).knots; return {c,knots:(c.q.curve?.knots||k.length<=12?k:thinKnots(k)).map(p => [...p])}; };
-  const store=(c,knots) => setCurve({form:c.q.curve?.form||defaultForm(c.kind,c.shouldered),knots:knots.map(([x,v]) => [Math.round(x*1000)/1000,Math.round(v*1000)/1000])});
-  const hit=(knots,p) => { let best=-1,d=8; knots.forEach(([x,v],i) => { const [kx,ky]=cvXY(x,v,cv.width,cv.height),dd=Math.hypot(kx-p.px,ky-p.py); if (dd<d) { d=dd; best=i; } }); return best; };
-  const remove=(c,knots,i) => { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(c,knots); return true; } return false; };
+  const cv=$('section-preview'); let drag=null;
+  const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
+  const hit=(c,L,p) => { let best=null,d=8; for (const h of sectionHandles(c,L)) { const dd=Math.hypot(h.X-p.px,h.Y-p.py); if (dd<d) { d=dd; best=h; } } return best; };
+  const distShare=(L,side,px) => clamp(1-Math.abs(px-L.xc)/(side==='back'?L.xc-L.xL:L.xR-L.xc),0,1);
+  const vOf=(c,L,py) => clamp(L.vy(py),c.water?-.5:0,1.5);
+  const finish=() => { if (drag) { drag=null; if (selected>=0) { checkpoint(); queueWeather(); } } };
+  const remove=(c,h) => { const list=(h.edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); if (h.i>0 && h.i<list.length-1 && list.length>2) { list.splice(h.i,1); h.edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c)); return true; } return false; };
   cv.addEventListener('contextmenu',e => e.preventDefault());
   cv.addEventListener('pointerdown',e => {
-    const p=at(e),{c,knots}=knotsNow(),i=hit(knots,p); if (e.button===2) return;
-    if (i>=0 && e.shiftKey) { if (remove(c,knots,i) && selected>=0) { checkpoint(); queueWeather(); } return; }
-    if (i>=0) { drag=i; } else {
-      const x=clamp(p.x,.01,.99); let j=knots.findIndex(k => k[0]>x); if (j<0) j=knots.length-1;
-      knots.splice(j,0,[x,clamp(p.v,c.water?-.5:0,1.5)]); drag=j; store(c,knots);
+    if (e.button===2) return;
+    const p=at(e),c=curveContext(),L=sectionLayout(c);
+    if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) { drag={lean:true}; cv.setPointerCapture(e.pointerId); return; }
+    const h=hit(c,L,p);
+    if (h && e.shiftKey) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if (h) drag={side:h.side,edit:h.edit||'front',i:h.i};
+    else {
+      const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
+      const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
+      list.splice(j,0,[x,vOf(c,L,p.py)]); drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
     }
     cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener('pointermove',e => {
-    if (drag<0) return;
-    const p=at(e),{c,knots}=knotsNow(),k=knots[drag];
-    if (drag>0 && drag<knots.length-1) k[0]=clamp(p.x,knots[drag-1][0]+.01,knots[drag+1][0]-.01);
-    k[1]=clamp(p.v,c.water?-.5:0,1.5); store(c,knots);
+    if (!drag) return;
+    const p=at(e),c=curveContext(),L=sectionLayout(c);
+    if (drag.lean) { const f=clamp((p.px-L.xL)/(L.xR-L.xL),.1,.9); setLean(f/(1-f)); return; }
+    const list=(drag.edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]),k=list[drag.i]; if (!k) return;
+    if (drag.i>0 && drag.i<list.length-1) k[0]=clamp(distShare(L,drag.side,p.px),list[drag.i-1][0]+.01,list[drag.i+1][0]-.01);
+    k[1]=vOf(c,L,p.py); drag.edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
   });
-  const finish=() => { if (drag>=0) { drag=-1; if (selected>=0) { checkpoint(); queueWeather(); } } };
   cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
-  cv.addEventListener('dblclick',e => { const p=at(e),{c,knots}=knotsNow(),i=hit(knots,p); if (i>=0 && remove(c,knots,i) && selected>=0) { checkpoint(); queueWeather(); } });
+  cv.addEventListener('dblclick',e => { const c=curveContext(),h=hit(c,sectionLayout(c),at(e)); if (h && remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } });
+}
+// The along-the-path canvas: drag a knot, double-click the line to add one, Shift-click or double-click a knot to remove it (the ends stay); a click elsewhere picks the
+// place whose section the canvas above shows.
+function alongEditorEvents() {
+  const cv=$('along-preview'); let drag=-1,moved=false;
+  const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
+  const hit=(c,L,knots,p) => { let best=-1,d=8; knots.forEach(([x,v],i) => { const dd=Math.hypot(L.X(x)-p.px,L.yv(v)-p.py); if (dd<d) { d=dd; best=i; } }); return best; };
+  const store=ks => setCurve(roundKnots(ks),'along');
+  const finish=() => { if (drag>=0) { const edited=moved; drag=-1; if (edited && selected>=0) { checkpoint(); queueWeather(); } } };
+  cv.addEventListener('pointerdown',e => {
+    if (e.button!==0) return;
+    const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),i=hit(c,L,knots,p); moved=false;
+    if (i>=0 && e.shiftKey) { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(knots); if (selected>=0) { checkpoint(); queueWeather(); } } return; }
+    if (i>=0) { drag=i; cv.setPointerCapture(e.pointerId); return; }
+    lfPlace=L.T(p.px); drawSection(); schedule();
+  });
+  cv.addEventListener('pointermove',e => {
+    if (drag<0) return;
+    const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),k=knots[drag]; if (!k) return;
+    if (drag>0 && drag<knots.length-1) k[0]=clamp(L.T(p.px),knots[drag-1][0]+.01,knots[drag+1][0]-.01);
+    k[1]=clamp(L.vy(p.py),0,ALONG_HI); moved=true; store(knots);
+  });
+  cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
+  cv.addEventListener('dblclick',e => {
+    const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),i=hit(c,L,knots,p);
+    if (i>=0) { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(knots); } }
+    else { const x=clamp(L.T(p.px),.01,.99); let j=knots.findIndex(k => k[0]>x); if (j<0) j=knots.length-1; knots.splice(j,0,[x,clamp(L.vy(p.py),0,ALONG_HI)]); store(knots); }
+    if (selected>=0) { checkpoint(); queueWeather(); }
+  });
 }
 // Line features (card C4). A ridge (a hill or mountain with spurs or crest
 // options) is swept as short pieces, each with width and height multipliers at
@@ -542,8 +690,8 @@ function markChanged() { markViewChanged(false); error(); }
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
-const NODE_NAMES={crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,outlineVar:s.outlineVar,widthVar:s.widthVar,heightVar:s.heightVar,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),curve:s.curve,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+const NODE_NAMES={landform:'Landform',crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,outlineVar:s.outlineVar,widthVar:s.widthVar,heightVar:s.heightVar,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
 const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);
@@ -572,6 +720,8 @@ function nodeBounds(n) {
   let r=n.kind==='crystal'?radius*(q.crystalForm>=.5 && q.crystalForm<1.5?1.35:1)+(q.crystalForm>=.5 && q.crystalForm<1.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shoreLayers>=1?coastLayerReach(q):0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
   if(BASE_KINDS.includes(n.kind))r+=Math.max(0,q.baseVary||0);
   if(['hill','mountain'].includes(n.kind))r+=Math.max(0,q.moonLobes||0)*radius;
+  // A landform reaches its widest side grown by the width variation, the wander and the spurs (the same reach its segment boxes use).
+  if(n.kind==='landform')r=landformReach({...q,radius},n.frame?Math.hypot(n.frame[0],n.frame[1]):1)+12*spacing;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
@@ -579,7 +729,7 @@ function nodeBounds(n) {
   // Spurs (card C4) reach up to one and a half spur lengths past the ridge or rim, plus their own width.
   // A ridge's crest also swells to 1.4 of its radius and a spur's root flares to about 1.7 times Spur width.
   if (ridgeOn(n.kind,q)) r+=radius;
-  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
+  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater','landform'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
   return {x0:clamp(Math.floor((ax-r)/spacing-originCellX),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing-originCellY),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
@@ -672,7 +822,7 @@ function makeRegionalFields() {
 // field snapshot or world-sized noise array in map mode.
 function currentStrokeOptions() {
   applySeedControl();
-  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{})};
+  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{}),...(toolSettings[tool]?.along?{along:toolSettings[tool].along}:{})};
 }
 function regionalPoints(points) {
   if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
@@ -917,7 +1067,7 @@ const sculptRegion={
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuTransientBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:(commit=true)=>endRegionalStroke(commit,$('simplify-strokes').checked),beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
-  pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
+  sectionMark,pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:tool,
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
   addPathPoint:p=>{if(pathAdding&&pathPoint>=0)changeSelected(n=>{const added=extendPoint(n,pathPoint,regionalPoints([p])[0],pathIndex);pathPoint=added.point;pathIndex=added.path;});pathAdding=true;updateControls();},
@@ -1133,7 +1283,7 @@ function scriptedScene(list,{ground=true}={}) {
   list.forEach(([kind,points,options={}],i) => {
     const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
-      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,seed:(seed+i*7919)>>>0};
+      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along,seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
   });
@@ -1619,6 +1769,7 @@ async function bootMap() {
   // Outside a scoped regional replay, only the graph and empty placeholders
   // exist. In particular, opening a 40×40 map allocates no world field planes.
   seed=Number($('seed').value); refinementSeed=seed; regionalFields=makeRegionalFields();
+  regionalFields.subscribe?.(() => { if (selectedLandform() && !$('section-preview-control').hidden) drawSection(); });   // the sections read from the map follow its CPU copy
   regionalFields.subscribeSubmit(change=>{
     if(regionalFields.paged)return;
     const r=change.rect,rect=r?{x0:Math.floor(r.x/spacing),y0:Math.floor(r.y/spacing),x1:Math.ceil((r.x+r.width)/spacing),y1:Math.ceil((r.y+r.height)/spacing)}:null;
@@ -1722,7 +1873,7 @@ async function gpuRegionalCheck() {
     return {grid:G,planes,mismatches,gpuShape:true};
   } finally { engine.destroy(); }
 }
-window.sculptDebug = {curve:() => currentCurve(),pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
+window.sculptDebug = {curve:() => currentCurve(),along:() => currentAlong(),place:() => lfPlace,sectionPoint:(side,x,v) => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+sideX(L,side,x)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },leanPoint:() => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+L.xc*r.width/cv.width,y:r.top+L.yv(0)*r.height/cv.height}; },alongPoint:(t,v) => { const cv=$('along-preview'),r=cv.getBoundingClientRect(),L=alongLayout(curveContext()); return {x:r.left+L.X(t)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,scree:Number($('scree').value)/100,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene, // replayAll: the worst difference in heights or any painted mask between the fields as edited and a full replay of every node.
   replayAll: () => Math.max(...Object.values(replayDetail())),

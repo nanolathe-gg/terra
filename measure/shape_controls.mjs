@@ -11,7 +11,9 @@ const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n);
 const server = opt('--server', 'http://127.0.0.1:8885'), port = Number(opt('--port', 9685)), out = opt('--out', 'shape-controls');
 const STEP = 4, W = 1000, H = 600, YC = 500, Y0 = YC - H / 2, path = [[420, YC], [560, YC], [700, YC]];
 const CARD = {diameter: 280, amount: 80, roughness: 40, softness: 50, cracks: 0};
-const KINDS = {plateau: {}, offset: {}, hill: {}, ridge: {kind: 'hill', extra: {crestJag: 20}}, mountain: {}, deep: {}, shallow: {}};
+// H27: a landform stands at an elevation (170: 71 above this 4x4 map's plain of 99), raised to it, with no variation until a row turns it on.
+const LAND = {elevation: 170, combine: 0, wander: 0, widthVary: 0, heightVary: 0, curve: {form: 'lfHill'}};   // the hill form: a slope the whole width, where terraces and variation have room
+const KINDS = {plateau: {}, offset: {}, hill: {}, ridge: {kind: 'hill', extra: {crestJag: 20}}, mountain: {}, deep: {}, shallow: {}, landform: {extra: LAND}};
 // control: the UI's units; `base` is what the control needs on to mean anything (compared with and without the control's own value).
 const CONTROLS = {
   curve: {set: {curve: {form: 'cliff'}}},
@@ -26,16 +28,29 @@ const CONTROLS = {
   outlineVar: {set: {outlineVar: 200}},
   widthVar: {set: {widthVar: 200}},
   heightVar: {set: {heightVar: 200}},
+  breakup: {base: {terraces: 4}, set: {breakup: 100}},
+  // The landform's own (H27). Variation sizes and weights are read with the three variations on; a weight from 0 to 200 percent, a size from its default to 360 px.
+  elevation: {set: {elevation: 230}},
+  combine: {set: {combine: 1}},
+  wander: {set: {wander: 60}},
+  widthVary: {set: {widthVary: 60}},
+  heightVary: {set: {heightVary: 20}},
+  varySize: {base: {wander: 40, widthVary: 40, heightVary: 12}, set: {varySize: 360}},
+  varyFoot: {base: {wander: 40, widthVary: 40, heightVary: 12, varyFoot: 0}, set: {varyFoot: 200}},
+  varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},
 };
+// Rows only a landform has (the others do not show them, and the sweep leaves them out).
+const LAND_ONLY = ['elevation', 'combine', 'wander', 'widthVary', 'heightVary', 'varySize', 'varyFoot', 'varyMiddle'];
 // The panel's own test: the control is shown to this kind (sculpt.js SHAPE_FIELDS kinds, then shapeControlAvailable).
-const SECTION = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
-const SHOWN = {widthVar: ['plateau', 'offset', 'deep'], heightVar: ['hill', 'mountain'], softness: ['plateau', 'hill', 'mountain', 'offset']};
+const SECTION = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow', 'landform'];
+const SHOWN = {widthVar: ['plateau', 'offset', 'deep'], heightVar: ['hill', 'mountain'], softness: ['plateau', 'hill', 'mountain', 'offset'], ...Object.fromEntries(LAND_ONLY.map(k => [k, ['landform']]))};
 const shown = (key, kind, card) => (SHOWN[key] || SECTION).includes(kind) && shapeControlAvailable(key, kind, {faceVariation: 80, ...card, terraces: card.terraces || 0, ledge: .6, terraceJitter: .35});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await cdpPortFree(port);
 mkdirSync(out, {recursive: true});
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
   `--user-data-dir=${out}/.profile-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
+const only = opt('--kinds', '').split(',').filter(Boolean);   // H27: only these kinds (a landform run does not repeat the others)
 const rows = [], logs = [];
 try {
   let ws; for (let i = 0; i < 100 && !ws; i++) { try { const p = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(x => x.type === 'page'); if (p) ws = new WebSocket(p.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(200); }
@@ -53,10 +68,12 @@ try {
   };
   const moved = (a, b) => { const g = a[0]; let s = 0, n = 0; for (let i = 0; i < a.length; i++) { if (Math.abs(a[i] - g) < 1 && Math.abs(b[i] - g) < 1) continue; s += Math.abs(a[i] - b[i]); n++; } return n ? s / n : 0; };
   for (const [name, d] of Object.entries(KINDS)) for (const [variant, face] of [['open', {}], ['px', {facePx: 120}]]) {
+    if (only.length && !only.includes(name)) continue;
     const kind = d.kind || name, card = {...CARD, ...(d.extra || {}), ...face}, cache = new Map();
     const at = c => { const k = JSON.stringify(c); if (!cache.has(k)) cache.set(k, heights(kind, c)); return cache.get(k); };
     for (const [key, c] of Object.entries(CONTROLS)) {
-      if (variant === 'px' && key === 'facePx') continue;
+      if (variant === 'px' && (key === 'facePx' || name === 'landform')) continue;
+      if (LAND_ONLY.includes(key) && name !== 'landform') continue;
       const base = {...card, ...c.base}, show = shown(key, kind, {...base, ...(name === 'ridge' ? {crestJag: .2} : {})});
       rows.push({kind: name, variant, control: key, shown: show, moved: moved(await at(base), await at({...base, ...c.set}))});
     }
