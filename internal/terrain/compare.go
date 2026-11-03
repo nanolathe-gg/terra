@@ -39,7 +39,7 @@ func (s *SceneRenderer) CompareRegions(ctx context.Context, nodes []model.Node, 
 	spacing := float64(s.renderer.Size-1) / float64(grid-1)
 	seaLevel := number(s.config, "seaLevel", 0)
 	bounds := vector(s.config, "heightBounds", []float64{seaLevel - 90, seaLevel + 300})
-	c := ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{0, 0, grid - 1, grid - 1}, Memory: membudget.FromConfig(s.config), ReservedGPUBytes: int64(s.renderer.FixedBytes() + s.cacheResidentBytes()), Defaults: s.shapeDefaults()}
+	c := ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{0, 0, grid - 1, grid - 1}, Memory: membudget.FromConfig(s.config), ReservedGPUBytes: s.reservedGPUBytes(), Defaults: s.shapeDefaults()}
 	a, e := s.shape.EvaluateShapeWindow(ctx, c, nodes)
 	if e != nil {
 		return nil, e
@@ -130,5 +130,5 @@ func (s *SceneRenderer) ReadAuthored(ctx context.Context, nodes []model.Node, kn
 	spacing := float64(s.renderer.Size-1) / float64(grid-1)
 	sea := number(s.config, "seaLevel", 0)
 	bounds := vector(s.config, "heightBounds", []float64{sea - 90, sea + 300})
-	return s.shape.EvaluateShapeWindow(ctx, ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: sea, MinHeight: bounds[0], MaxHeight: bounds[1], Window: rect, Memory: membudget.FromConfig(s.config), ReservedGPUBytes: int64(s.renderer.FixedBytes() + s.cacheResidentBytes()), Defaults: s.shapeDefaults()}, nodes)
+	return s.shape.EvaluateShapeWindow(ctx, ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: sea, MinHeight: bounds[0], MaxHeight: bounds[1], Window: rect, Memory: membudget.FromConfig(s.config), ReservedGPUBytes: s.reservedGPUBytes(), Defaults: s.shapeDefaults()}, nodes)
 }

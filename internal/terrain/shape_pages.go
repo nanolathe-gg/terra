@@ -3,8 +3,10 @@ package terrain
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
 	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
@@ -16,10 +18,12 @@ func (s *SceneRenderer) clearShapeCache() {
 	}
 	s.shapePages = nil
 	s.shapeKey = [32]byte{}
+	s.shapeNodes = nil
+	s.shapeNodesSet = false
 }
 func (s *SceneRenderer) newShapeFeed(side, x, y int, additional ...int) (*weatherFeed, error) {
 	limits := membudget.FromConfig(s.config)
-	reserved := int64(s.renderer.FixedBytes() + s.cacheResidentBytes())
+	reserved := s.reservedGPUBytes()
 	for _, n := range additional {
 		reserved += int64(n)
 	}
@@ -45,27 +49,69 @@ func (s *SceneRenderer) newShapeFeed(side, x, y int, additional ...int) (*weathe
 	f.bytes += 7 * cells * 4
 	return f, nil
 }
+
+// Copy raw u32 words, preserving all float bit patterns and packed mask bytes.
+// One invocation handles one cell, replacing seven copy commands per row.
+const authoredGatherSource = `
+struct Gather { srcGrid:u32, srcCells:u32, dstGrid:u32, dstCells:u32, srcX:u32, srcY:u32, dstX:u32, dstY:u32, width:u32, height:u32, };
+@group(0) @binding(0) var<uniform> p: Gather;
+@group(0) @binding(1) var<storage, read> srcPlanes: array<u32>;
+@group(0) @binding(2) var<storage, read> srcMasks: array<u32>;
+@group(0) @binding(3) var<storage, read_write> dstPlanes: array<u32>;
+@group(0) @binding(4) var<storage, read_write> dstMasks: array<u32>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u) {
+ if id.x>=p.width || id.y>=p.height {return;}
+ let a=(p.srcY+id.y)*p.srcGrid+p.srcX+id.x;
+ let b=(p.dstY+id.y)*p.dstGrid+p.dstX+id.x;
+ for(var k=0u;k<6u;k++){dstPlanes[k*p.dstCells+b]=srcPlanes[k*p.srcCells+a];}
+ for(var k=0u;k<7u;k++){dstMasks[b*7u+k]=srcMasks[a*7u+k];}
+}`
+
+func (s *SceneRenderer) closeShapeGather() {
+	if s.shapeGather == nil {
+		return
+	}
+	s.shapeGather.Pipeline.Release()
+	for _, layout := range s.shapeGather.Layouts {
+		layout.Release()
+	}
+	s.shapeGather = nil
+}
 func (s *SceneRenderer) copyAuthored(src, dst *GPUFeed, r CellRect) error {
-	enc, e := s.gpu.Device.CreateCommandEncoder(nil)
-	if e != nil {
-		return e
-	}
-	width := r.X1 - r.X0 + 1
-	for y := r.Y0; y <= r.Y1; y++ {
-		a := (y-src.OriginY)*src.Grid + r.X0 - src.OriginX
-		b := (y-dst.OriginY)*dst.Grid + r.X0 - dst.OriginX
-		for k := 0; k < 6; k++ {
-			enc.CopyBufferToBuffer(src.Planes, uint64((k*src.Cells+a)*4), dst.Planes, uint64((k*dst.Cells+b)*4), uint64(width*4))
+	if s.shapeGather == nil {
+		var err error
+		s.shapeGather, err = s.gpu.Kernel(authoredGatherSource, "main")
+		if err != nil {
+			return err
 		}
-		enc.CopyBufferToBuffer(src.Masks, uint64(a*28), dst.Masks, uint64(b*28), uint64(width*28))
 	}
-	return s.gpu.Submit(enc)
+	width, height := r.X1-r.X0+1, r.Y1-r.Y0+1
+	values := []int{src.Grid, src.Cells, dst.Grid, dst.Cells, r.X0 - src.OriginX, r.Y0 - src.OriginY, r.X0 - dst.OriginX, r.Y0 - dst.OriginY, width, height}
+	for _, v := range values {
+		if v < 0 {
+			return fmt.Errorf("invalid authored gather rectangle")
+		}
+	}
+	if width <= 0 || height <= 0 || values[4]+width > src.Grid || values[6]+width > dst.Grid || (values[5]+height)*src.Grid > src.Cells || (values[7]+height)*dst.Grid > dst.Cells {
+		return fmt.Errorf("authored gather rectangle outside buffer")
+	}
+	data := make([]byte, 48)
+	for i, v := range values {
+		binary.LittleEndian.PutUint32(data[i*4:], uint32(v))
+	}
+	uniform, err := s.gpu.Buffer("authored gather uniforms", data, gputypes.BufferUsageUniform)
+	if err != nil {
+		return err
+	}
+	defer uniform.Release()
+	return s.gpu.Dispatch(s.shapeGather, Bindings{0: {{Binding: 0, Buffer: uniform}, {Binding: 1, Buffer: src.Planes}, {Binding: 2, Buffer: src.Masks}, {Binding: 3, Buffer: dst.Planes}, {Binding: 4, Buffer: dst.Masks}}}, uint32((width+7)/8), uint32((height+7)/8), 1)
 }
 
 // buildShapeFeed caches exact authored 512-cell cores and gathers the requested
 // rectangle on the GPU. Each core is replayed with its required dependency halo.
 func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, c ShapeWindowConfig, region CellRect) (feed *weatherFeed, err error) {
-	data, e := json.Marshal([]any{nodes, c.Grid, c.Spacing, c.RefSpacing, c.BaseHeight, c.Sea, c.MinHeight, c.MaxHeight, c.Defaults})
+	data, e := json.Marshal([]any{c.Grid, c.Spacing, c.RefSpacing, c.BaseHeight, c.Sea, c.MinHeight, c.MaxHeight, c.Defaults})
 	if e != nil {
 		return nil, e
 	}
@@ -75,6 +121,37 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 		s.shapeKey = key
 		s.shapePages = map[[2]int]*weatherFeed{}
 	}
+	if s.shapeNodesSet {
+		dirty, full, e := ChangedShapeRegion(s.shapeNodes, nodes, c)
+		if e != nil {
+			s.clearShapeCache()
+			return nil, e
+		}
+		if full {
+			for id, page := range s.shapePages {
+				page.Close()
+				delete(s.shapePages, id)
+			}
+		} else if dirty != nil {
+			for id, page := range s.shapePages {
+				box := CellRect{id[0] * 512, id[1] * 512, min(c.Grid-1, (id[0]+1)*512-1), min(c.Grid-1, (id[1]+1)*512-1)}
+				if _, hit := intersect(box, *dirty); hit {
+					page.Close()
+					delete(s.shapePages, id)
+				}
+			}
+		}
+	}
+	snapshot, e := json.Marshal(nodes)
+	if e != nil {
+		return nil, e
+	}
+	var copyNodes []model.Node
+	if e = json.Unmarshal(snapshot, &copyNodes); e != nil {
+		return nil, e
+	}
+	s.shapeNodes = copyNodes
+	s.shapeNodesSet = true
 	side := max(region.X1-region.X0+1, region.Y1-region.Y0+1)
 	feed, err = s.newShapeFeed(side, region.X0, region.Y0)
 	if err != nil {
@@ -103,7 +180,7 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 				}
 				q := c
 				q.Window = pageRect
-				q.ReservedGPUBytes = int64(s.renderer.FixedBytes() + s.cacheResidentBytes() + feed.bytes + page.bytes)
+				q.ReservedGPUBytes = s.reservedGPUBytes() + int64(feed.bytes+page.bytes)
 				_, err = s.shape.evaluateShapeWindow(ctx, q, nodes, true, false, func(target CellRect, p, m *wgpu.Buffer) error {
 					w, h := target.X1-target.X0+1, target.Y1-target.Y0+1
 					src := GPUFeed{Planes: p, Masks: m, Grid: w, Cells: w * h, OriginX: target.X0, OriginY: target.Y0}

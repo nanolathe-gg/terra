@@ -33,7 +33,7 @@ func (s *SceneRenderer) clearWeatherCache() {
 }
 func (s *SceneRenderer) newWeatherFeed(side, originX, originY int, material bool) (*weatherFeed, error) {
 	limits := membudget.FromConfig(s.config)
-	if err := membudget.Require("Weather feed", int64(s.renderer.FixedBytes()+s.cacheResidentBytes())+weatherFeedBytes(side, material), limits.GPU); err != nil {
+	if err := membudget.Require("Weather feed", s.reservedGPUBytes()+weatherFeedBytes(side, material), limits.GPU); err != nil {
 		return nil, err
 	}
 	cells := side * side
@@ -192,7 +192,7 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 				continue
 			}
 			q := c
-			q.ReservedGPUBytes = int64(s.renderer.FixedBytes()+s.cacheResidentBytes()) + weatherFeedBytes(side, o.MaterialWeathering > 0)
+			q.ReservedGPUBytes = s.reservedGPUBytes() + weatherFeedBytes(side, o.MaterialWeathering > 0)
 			q = weatherShapeConfig(q, px, py, core, apron, o)
 			q.preflightOnly = true
 			if _, e := s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, nil); e != nil {
@@ -226,7 +226,7 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 			page := s.weatherPages[id]
 			if page == nil {
 				pageConfig := c
-				pageConfig.ReservedGPUBytes = int64(s.renderer.FixedBytes() + s.cacheResidentBytes() + feed.bytes)
+				pageConfig.ReservedGPUBytes = s.reservedGPUBytes() + int64(feed.bytes)
 				page, err = s.weatherPage(ctx, nodes, pageConfig, px, py, core, apron, o)
 				if err != nil {
 					return nil, fmt.Errorf("weather page %d,%d: %w", px, py, err)

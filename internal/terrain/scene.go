@@ -35,6 +35,7 @@ type SceneRenderer struct {
 	sources                  map[string]string
 	material                 map[string]any
 	shape                    *ShapeEngine
+	shapeGather              *Kernel
 	renderer                 *Renderer
 	erosion                  *Erosion
 	weatherPages             map[[2]int]*weatherFeed
@@ -42,6 +43,8 @@ type SceneRenderer struct {
 	weatherTick, weatherRuns uint64
 	shapePages               map[[2]int]*weatherFeed
 	shapeKey                 [32]byte
+	shapeNodes               []model.Node
+	shapeNodesSet            bool
 	shapeTick, shapeRuns     uint64
 }
 
@@ -70,6 +73,7 @@ func NewSceneRenderer(gpu *GPU, config map[string]any, sources map[string]string
 	return &SceneRenderer{gpu: gpu, config: chunkConfig, sources: sources, material: material, shape: shape, renderer: renderer}, nil
 }
 func (s *SceneRenderer) Close() {
+	s.closeShapeGather()
 	s.clearWeatherCache()
 	s.clearShapeCache()
 	if s.erosion != nil {
@@ -152,7 +156,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 	seaLevel := number(s.config, "seaLevel", 0)
 	bounds := vector(s.config, "heightBounds", []float64{seaLevel - 90, seaLevel + 300})
 	shapeDefaults := s.shapeDefaults()
-	shapeConfig := ShapeWindowConfig{Grid: s.renderer.Grid, Spacing: region.GridSpacing, RefSpacing: nativeSpacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{region.GridX, region.GridY, region.GridX + region.GridWidth - 1, region.GridY + region.GridHeight - 1}, Memory: membudget.FromConfig(s.config), ReservedGPUBytes: int64(s.renderer.FixedBytes() + s.cacheResidentBytes()), Defaults: shapeDefaults}
+	shapeConfig := ShapeWindowConfig{Grid: s.renderer.Grid, Spacing: region.GridSpacing, RefSpacing: nativeSpacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{region.GridX, region.GridY, region.GridX + region.GridWidth - 1, region.GridY + region.GridHeight - 1}, Memory: membudget.FromConfig(s.config), ReservedGPUBytes: s.reservedGPUBytes(), Defaults: shapeDefaults}
 	var pixels []byte
 	var err error
 	input := WindowInput{Window: window, Region: region, ExportArt: window.ExportArt}
@@ -220,7 +224,7 @@ func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
 		return errors.New("scene grid changed; recreate renderer")
 	}
 	oldBudget := s.cacheBudget()
-	for _, key := range []string{"gpuMB", "gpuBudgetBytes", "gpuBudgetMB", "heapMB", "heapBudgetBytes", "heapBudgetMB"} {
+	for _, key := range []string{"gpuMB", "gpuBudgetBytes", "gpuBudgetMB", "heapMB", "heapBudgetBytes", "heapBudgetMB", "uiBitmapBytes"} {
 		if v, ok := config[key]; ok {
 			s.config[key] = v
 		}
@@ -258,6 +262,11 @@ func (s *SceneRenderer) cacheBudget() int {
 		bytes = mb * 1024 * 1024
 	}
 	return min(96*1024*1024, max(0, int(bytes/5)))
+}
+
+// reservedGPUBytes includes external browser bitmap residency in addition to terrain caches.
+func (s *SceneRenderer) reservedGPUBytes() int64 {
+	return int64(s.renderer.FixedBytes()+s.cacheResidentBytes()) + int64(math.Max(0, param(s.config, "uiBitmapBytes")))
 }
 
 func (s *SceneRenderer) cacheResidentBytes() int {
