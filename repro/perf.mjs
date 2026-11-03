@@ -8,8 +8,9 @@
 //   scroll    a pan across several chunks: rAF frame intervals, coverage, time to final after it stops
 //   export    sculptMap.export (skipped with --no-export)
 // and writes <out>/<mode>-perf.json.
-// The hooks time GPU passes with timestamp queries (added to every pass that has none), the queue waits, and the JS
-// stages a chunk bake runs through: region read (shape replay), field upload, draw encode, bitmap copy.
+// Default hooks record actual new bitmap presentation and animation-frame timing.
+// --diagnostic-gpu additionally instruments the original renderer's GPU passes, waits and JS stages;
+// do not use that original-only instrumentation for a cross-build latency comparison.
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';

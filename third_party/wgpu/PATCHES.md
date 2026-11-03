@@ -24,7 +24,9 @@ arithmetic or texture data is changed by either workaround.
 
 Browser queue completion: `Queue.OnSubmittedWorkDone(callback)` exposes the
 standard WebGPU queue promise without awaiting it. The terrain worker captures
-this fence immediately after presenting a GPU tile, transfers its ImageBitmap,
-and waits before submitting the next tile. Both JavaScript callbacks are
+this fence after presenting a GPU tile and at view exit, including canceled or
+failed work before the first bitmap. Every subsequent GPU job drains outstanding
+view work. ImageBitmap transfer happens before the wait; UI admission is also
+acknowledged before allocating another tile. Both JavaScript callbacks are
 released on settlement. This bounds in-flight viewport work while avoiding a
 completion wait before a ready image is posted to the UI.

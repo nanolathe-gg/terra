@@ -48,14 +48,17 @@ browser can replace the included synthetic hill fixture.
   history, persistence, documents and export coordination.
 - `internal/editorworker`: separate browser runtime for terrain preparation,
   GPU rendering/weathering, feature fills and PNG encoding. Latest requests
-  replace queued stale work; bounded tasks yield and can be canceled. Buffers
-  transfer back to the UI; export waits for each chunk upload before producing
+  replace queued stale work; bounded tasks yield and can be canceled. GPU ImageBitmaps
+  transfer back to the UI for ordinary views; RGBA byte readback is reserved
+  for captures and exports. Picking heights and other small data transfer
+  separately. Image admission acknowledgments and GPU fences
+  bound outstanding work; export waits for each chunk upload before producing
   another.
 - `internal/server` and `cmd/terraform`: Go HTTP/configuration/documents/export
   service and native renderer. The server binds to localhost.
 - `web/`: minimal runtime bootstraps. Go's generated WASM support script and
   built WASM files are ignored, rebuilt by `run.sh`, and served compressed. Final stripped UI and worker binaries are
-  7,130,726 and 14,551,979 bytes; gzip sizes are 1,896,719 and 3,792,630 bytes.
+  7,731,027 and 14,828,252 bytes; gzip sizes are 2,036,561 and 3,802,839 bytes.
 
 ```mermaid
 flowchart LR
@@ -73,9 +76,15 @@ WASM runtime are cooperative work, not a substitute for a background browser
 thread. DOM/input stays in the UI runtime; expensive terrain work stays in the
 Worker. The native entry point opens no browser.
 
-Ordinary rendering keeps authored fields and weather on the GPU. Height-only
+Ordinary rendering keeps authored fields, weather, and display pixels on the GPU.
+The worker presents through an OffscreenCanvas and transfers an ImageBitmap,
+without mapping RGBA into WASM memory. Typed graph snapshots and sequence-checked
+changed-suffix messages avoid repeatedly serializing unchanged strokes. Prepared
+shape nodes and unaffected GPU pages are reused. Height-only
 queries omit color/relief targets and do not read all 31 authored planes. GPU
-page caches and UI tiles have byte budgets. Large maps preserve main's actual
+page caches and UI tiles have byte budgets. Picking heights have coverage tracked
+independently of displayed images, so cached-image revisits can refresh evicted
+height data without rebaking the images. Large maps preserve main's actual
 512-cell weather cores and 128-cell apron. Small maps preserve the global
 weather solver. No CPU terrain renderer or alternate old implementation is
 retained.
@@ -119,7 +128,7 @@ labeled otherwise. These are spike measurements, not claims about other GPUs.
 | Brushes and undo | 144/144 cases pass across nine worlds (16 brushes including Landform); 8×8 Green passes paged draw/undo, and all 16 brushes pass on a 40×40 Green map. |
 | Curve editing | 92/92 checks pass across Green and Desert, including legacy and Landform forms, bilateral/along curves, selected edits, undo and GPU parity after autosave/reload. |
 | Browser export | All eight exportable worlds pass at 4×4; Green 8×8 exports 17,436,672 art pixels with 0 clamped height cells. Zhon remains intentionally unavailable. |
-| Memory controls | At GPU/heap 128 MiB, a 256×256 render changes 0 pixels; cache 17,429,184 bytes ≤32 MiB. A 96 MiB image job is refused against 64 MiB worker space; restoring budgets changes 0 bytes. |
+| Memory controls | At GPU/heap 128 MiB, a 256×256 render changes 0 pixels; cache 8,704,208 bytes ≤32 MiB. A 96 MiB image job is refused against 64 MiB worker space; restoring budgets changes 0 bytes. |
 | Large-map zoom | 8×8 zoom/restoration passes; edited 256×256-cell regional replay compares 3,211,264 packed bytes with 0 differences. |
 | Native Metal | Hardware suite passes, including nine material worlds, cached weather, regional seams and height-only rendering. |
 | Native browser-free export | Adapter reports `Apple M3 Pro (Metal)`; two runs produce identical `.ufo`, indexed PNG and `heights.json` bytes. |
@@ -128,18 +137,21 @@ labeled otherwise. These are spike measurements, not claims about other GPUs.
 | World-name gate | Production Go terrain engine and WGSL pass. |
 
 The final Landform CLI export also reports `Apple M3 Pro (Metal)` and is in
-`/private/tmp/terraform-wgpu-run/native-landform-final`. Native Hill repeat evidence is in
-`/private/tmp/terraform-wgpu-run/native-final-a` and `native-final-b`.
+`/private/tmp/terraform-go-opt/native-landform-final`. Native Hill repeat evidence is in
+`/private/tmp/terraform-go-opt/native-final-a` and `native-final-b`.
 SHA-256 of the archive is
 `9960e78a5a4b1b30e9bdd4cb77ab44ff7245919d9dc695171556c7936a984d49`;
 the indexed PNG is
 `ff3d0e888325ff15007b23bb3cf15da08ab77936edaed4ead1f25af9d9401fef`.
 
-Scene evidence is under `/private/tmp/terraform-wgpu-run/before` and
-`after-budget-shine-final`; `final-pixel-comparison.json` records its exact
-counts. `after-budget-shine-final.log` records the render runs. The final native
-hardware log is `native-gpu-final.log` in that same directory. These private
-artifacts are intentionally outside git.
+The original scene evidence is under `/private/tmp/terraform-wgpu-run/before`.
+The optimized final-source rerun is `/private/tmp/terraform-go-opt/final-scenes`,
+with `final-scenes.log`, `final-scene-comparison.log` and the exact RGBA counts
+in `final-pixel-comparison.json` alongside it. Final
+native hardware, race and vet logs are also in `/private/tmp/terraform-go-opt`.
+The earlier broad controls/export/curve evidence remains under
+`/private/tmp/terraform-wgpu-run`; those suites were not all repeated after every
+optimization. These private artifacts are intentionally outside git.
 
 ## Independent review
 
@@ -172,6 +184,17 @@ RPC images are never marked as viewport tiles. A browser regression holds a
 capture for 800ms: it completes, no ghost request interrupts it, both explicit
 cancellations are acknowledged, and the console has 0 errors.
 
+The optimization review also examined graph-delta sequencing, cache invalidation,
+height-only picking, bitmap admission, canceled-job fences and GPU ownership.
+Findings were fixed: graph baselines update before coalescing; picking coverage
+is independent of images; transferred images are admitted before another
+allocation; canceled work is fenced even before its first bitmap; cache ownership
+lasts through submitted uses; Time/material scratch waits match the original.
+The final independent code review reported no unresolved findings. A separate
+report review checked timing values/counts, source revisions and binary sizes;
+its data-transfer wording correction is included. These reviews do not certify
+total physical GPU memory or untested platforms.
+
 ## Controls and performance
 
 The completed nine-world audit has 4,638 rows and 0 unexplained findings,
@@ -203,54 +226,13 @@ scale/coverage instead of main's fixed 160/.5 creation values. Undo/redo
 synchronizes only those three ground controls with the restored stroke graph;
 the custom 8/296/.25 fixture restores identical authored GPU bytes.
 
-Alternating current-main/Go runs found and then fixed a real responsiveness
-regression: the first Go worker canceled every tile during continuous movement
-(0 accepted changed tiles, 70/70 moves censored, frame p95 117–133ms). The final
-scheduler lets one bounded tile finish while replacing one pending snapshot,
-prioritizes the pointer, and uses the same pipeline's interactive quality with
-Time deferred until release. Canonical rendering and export keep full quality.
-
-The final quiet comparison alternated current main and Go once per tool, after
-all fixes, at a 1020×989 viewport on the 4×4 Green fixture. Values below are
-Hill / Landform, in milliseconds unless stated otherwise:
-
-| Metric | Current main | Go worker |
-| --- | --- | --- |
-| Initial scene complete after editor boot | 1,057.4 / 1,050.1 | 924.5 / 945.8 |
-| First changed picture on scene load | 16.1 / 15.8 | 52.9 / 52.7 |
-| Drag animation-frame p95 | 16.8 / 16.8 | 16.8 / 16.7 |
-| Moves receiving changed terrain | 70/70 for each tool | 70/70 for each tool |
-| Move-to-changed-picture p50 | 16.0 / 15.6 | 58.0 / 57.3 |
-| Move-to-changed-picture p95 | 18.7 / 17.6 | 70.6 / 75.1 |
-| Release to full picture | 555.1 / 505.6 | 784.7 / 786.0 |
-| Scroll completion after stopping | 133.9 / 134.5 | 122.7 / 114.0 |
-
-All four runs had 0 censored moves, 0 missing final visible tiles and 0 console
-errors. Go produced 160 / 167 fresh drag bakes versus main's 211 / 211. The
-input thread remains responsive, but terrain feedback and release still trail
-the original. These results do not justify claiming equal speed. Reducing GPU
-readback round trips is a remaining performance opportunity.
-
-Move-to-picture measures the first newly baked chunk paint whose source
-revision includes the move; it is not physical input-to-display latency.
-Animation-frame intervals describe input/display scheduling, not terrain GPU
-completion. Scene timing starts after editor boot and excludes network cold
-start. Recorded boot-to-idle was 1,075 / 974ms on main and 1,088 / 1,153ms in Go.
-Wider-view freshness also trails the cursor preview. The repeatedly-dirty-chunk
-p95 diagnostic is 332.9 / 331.8ms for main and 1,788.9 / 1,742.2ms for Go, but
-qualifying sets differ (20 chunks and 64 samples versus six chunks and 20 / 19
-samples), so these are not a like-for-like speed ratio. Cached canvas redraw
-counts are not presented as fresh terrain frames.
-
-Go's retained RGBA/height tile data at the end is 244,547,184 / 249,506,776 bytes,
-within its 268,435,456-byte tile budget. Main's bitmap cache is 19,435,520 bytes;
-the representations differ, but the larger Go cache is a memory cost. Budgets
-track owned page/field/image data, not total browser, runtime or driver memory.
-No whole-process GPU/heap peak is claimed.
-
-This is one final alternating pair per tool, with earlier development runs
-showing the same direction, not a statistical survey. Final raw results and
-`summary.json` are in `/private/tmp/terraform-go-perf-final`.
+The initial port had a substantial terrain-feedback regression. The subsequent
+optimization and corrected direct comparison are documented in
+[GO_WGPU_PERFORMANCE.md](GO_WGPU_PERFORMANCE.md). The earlier timing table has
+been removed because it predates GPU bitmap presentation, typed graph reuse,
+Worker delta transport, matched drag quality, and the corrected measurement of
+actual new bitmap presentation. Its figures should not be used to assess the
+current branch.
 
 An erosion dispatch optimization preserves shader results while replacing 1,200
 pass/group creations with one compute pass and four reusable bind groups. On a
