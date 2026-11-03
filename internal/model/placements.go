@@ -53,8 +53,9 @@ func (s *PlacementStore) near(p FeaturePlacement, d FeatureDefinition, q Feature
 }
 func (s *PlacementStore) trimGenerated() int {
 	removed := 0
+	original := append([]FeaturePlacement(nil), s.Features...)
 	kept := s.Features[:0]
-	for _, p := range s.Features {
+	for _, p := range original {
 		d, _ := s.def(p.Name)
 		drop := false
 		if s.Generated[featureKey(p)] {
@@ -65,7 +66,7 @@ func (s *PlacementStore) trimGenerated() int {
 					break
 				}
 			}
-			for _, q := range s.Features {
+			for _, q := range original {
 				qd, _ := s.def(q.Name)
 				if s.isDeposit(qd) && s.near(p, d, q, qd) {
 					drop = true
