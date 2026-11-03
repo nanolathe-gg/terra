@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
@@ -18,7 +19,20 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+func (b *lockedBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
 
 type exportJob struct {
 	mu      sync.Mutex
@@ -85,12 +99,25 @@ func (j *exportJob) exchange(command any) (map[string]any, error) {
 			return nil, e
 		}
 	}
-	line, e := j.output.ReadBytes('\n')
-	if e != nil {
-		return nil, fmt.Errorf("export helper stopped: %s", j.stderr.String())
+	type readResult struct {
+		line []byte
+		err  error
+	}
+	ch := make(chan readResult, 1)
+	go func() { line, err := j.output.ReadBytes('\n'); ch <- readResult{line, err} }()
+	var line []byte
+	select {
+	case result := <-ch:
+		if result.err != nil {
+			return nil, fmt.Errorf("export helper stopped: %s", j.stderr.String())
+		}
+		line = result.line
+	case <-time.After(300 * time.Second):
+		_ = j.cmd.Process.Kill()
+		return nil, fmt.Errorf("Map export helper timed out")
 	}
 	var v map[string]any
-	if e = json.Unmarshal(line, &v); e != nil {
+	if e := json.Unmarshal(line, &v); e != nil {
 		return nil, e
 	}
 	return v, nil
