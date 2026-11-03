@@ -297,7 +297,7 @@ func loop() {
 				if ctx.Err() != nil || generation != job.ID && job.Kind != "view" {
 					return
 				}
-				m := map[string]any{"kind": "tile", "id": job.ID, "key": tile.Key, "x": tile.X, "y": tile.Y, "width": r.Width, "height": r.Height, "scale": tile.Scale, "index": index, "total": len(job.Tiles), "session": job.Session, "revision": job.Revision, "view": job.Kind == "view", "preview": job.Interactive}
+				m := map[string]any{"kind": "tile", "id": job.ID, "key": tile.Key, "x": tile.X, "y": tile.Y, "width": r.Width, "height": r.Height, "scale": tile.Scale, "index": index, "total": len(job.Tiles), "session": job.Session, "revision": job.Revision, "view": job.Kind == "view" && !job.RPC, "preview": job.Interactive}
 				profile, _ := json.Marshal(engine.LastRenderProfile())
 				m["profile"] = js.Global().Get("JSON").Call("parse", string(profile))
 				m["milliseconds"] = float64(time.Since(tileStart).Microseconds()) / 1000
