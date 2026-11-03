@@ -4,10 +4,11 @@
 //  a  zoom 1, 2, 4: every tile in view ends at the level its zoom wants (1, .5, .25)
 //  b  the canvas at zoom 2 is debugBake(tile, .5)
 //  c  back at zoom 1 the canvas is byte equal to the first read: a fine image must be replaced, not shown sampled
-//  d  four 256 px tiles at .5 joined against one 512 px tile at .5
+//  d  four 256 px tiles joined against one 512 px tile, at .5 and at .25
 //  e  an edit at zoom 2: console clean, mismatch 0, no tile dirty, the view back at its level
 //  f  no bakes over 2 s of idle at zoom 2 and zoom 4: no loop
-//  g  with the GPU budget at 128 MB, zoom 4 settles without the error banner (the level may fall back; it is reported)
+//  g  at the smallest GPU budget 100% settles on, zoom 4 settles without the error banner (the level may fall back; it is reported)
+//  h  a detail bake the allocator refuses falls back to level 1 with no banner, and a budget change tries the finest again
 // Writes one JSON line; exit 1 if any check fails.
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
@@ -88,6 +89,10 @@ try {
   await ev(`__z.join('joined', ['d0', 'd1', 'd2', 'd3'], 1024)`); await ev(`__z.bake('whole', ${O}, ${O}, 512, 512, .5)`);
   const d = await ev(`__z.diff('joined', 'whole')`);
   check('d', d <= TILE_PX, {pixels: d});
+  for (const [k, x, y] of [['q0', 0, 0], ['q1', 256, 0], ['q2', 0, 256], ['q3', 256, 256]]) await ev(`__z.bake('${k}', ${O} + ${x}, ${O} + ${y}, 256, 256, .25)`);
+  await ev(`__z.join('joined4', ['q0', 'q1', 'q2', 'q3'], 2048)`); await ev(`__z.bake('whole4', ${O}, ${O}, 512, 512, .25)`);
+  const d4 = await ev(`__z.diff('joined4', 'whole4')`);
+  check('d4', d4 <= TILE_PX, {pixels: d4});
   // a, f at zoom 4
   await ev(`__z.goto(4)`); const a4 = await level(.25);
   check('a4', a4.ok, a4);

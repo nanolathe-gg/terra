@@ -13,11 +13,6 @@
 // H19: the rock's height gradient (xy) and cavity (z), made with the materials (engine-materials.wgsl makeRelief).
 @group(1) @binding(20) var reliefTex: texture_2d<f32>;
 
-// Material textures are read at one texel per pixel step: GLSL's
-// texture(t, pixel / D) had implicit derivatives of exactly 1 / D per
-// pixel. Explicit gradients select the same level and filter, and are legal
-// in non-uniform control flow, where WGSL's textureSample is not.
-// H7b: a drawn pixel covers materialFoot final pixels (1 at final), so the gradients pick the coarser level of a quarter draw.
 // Above 1x a texel is one drawn pixel, not one world pixel: the pattern comes out smaller and keeps its grain and dither.
 fn grainPixel(pixel: vec2f) -> vec2f {
 #ifdef CHUNK
@@ -26,6 +21,12 @@ fn grainPixel(pixel: vec2f) -> vec2f {
     return pixel;
 #endif
 }
+
+// Material textures are read at one texel per pixel step: GLSL's
+// texture(t, pixel / D) had implicit derivatives of exactly 1 / D per
+// pixel. Explicit gradients select the same level and filter, and are legal
+// in non-uniform control flow, where WGSL's textureSample is not.
+// H7b: a drawn pixel covers materialFoot final pixels (1 at final), so the gradients pick the coarser level of a quarter draw.
 fn pixelSample(t: texture_2d<f32>, s: sampler, pixel: vec2f, scale: vec2f) -> vec4f {
     return textureSampleGrad(t, s, pixel / scale, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
 }
@@ -1226,7 +1227,7 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
             transitionGround = mix(transitionGround, contours.rgb, contours.a);
         }
         if (u.transitionDetail > 0.0) {
-            let uv = pixel / 512.0;
+            let uv = grainPixel(pixel) / 512.0;
             let groundLow = select(textureSampleLevel(grassTex, grassSamp, uv, 3.0).rgb, textureSampleLevel(generatedTex, linearRepeat, uv, max(u.groundLayer, 0), 3.0).rgb, u.groundLayer >= 0);
             let ringLow = textureSampleLevel(generatedTex, linearRepeat, uv, 7, 3.0).rgb;
             let bodyLow = textureSampleLevel(generatedTex, linearRepeat, uv, 5, 3.0).rgb;
@@ -1270,7 +1271,7 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
     let face = mix(transitionFace, rock, exposed);
     var refined = mix(transitionGround, face, transitionCore);
     if (u.transitionDetail > 0.0) {
-        let uv = pixel / 512.0;
+        let uv = grainPixel(pixel) / 512.0;
         let faceLow = textureSampleLevel(generatedTex, linearRepeat, uv, 0, 3.0).rgb;
         var rockLow = textureSampleLevel(generatedTex, linearRepeat, uv, 1, 3.0).rgb;
         rockLow = saturate(u.rockMean + (rockLow - u.rockMean) * u.mineralDetail);
