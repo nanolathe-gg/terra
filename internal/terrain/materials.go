@@ -188,9 +188,12 @@ func (r *Renderer) initGround() {
 		}
 		r.means[k] = v
 	}
-	v := vector(object(object(r.Material, "measured"), "beach"), "meanRGB", []float64{128, 128, 128})
-	for j := range v {
-		v[j] /= 255
+	if r.hasLayer("beach") {
+		v := vector(object(object(r.Material, "measured"), "beach"), "meanRGB", []float64{128, 128, 128})
+		for j := range v {
+			v[j] /= 255
+		}
+		r.means["beach"] = v
 	}
-	r.means["beach"] = v
+
 }

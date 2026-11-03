@@ -145,3 +145,27 @@ func (u *Uniforms) Set(name string, v ...float64) {
 		binary.LittleEndian.PutUint32(u.Data[at:], bits)
 	}
 }
+
+// UniformSnapshot decodes the current CPU-side shader values for parity tools.
+// GPU-written mask flags are read from authored data only; chunk coordinates
+// depend on the last rendered tile and should be excluded in cross-tile diffs.
+func (r *Renderer) UniformSnapshot() map[string][]float64 {
+	out := map[string][]float64{}
+	for name, f := range r.Uniform.Fields {
+		values := make([]float64, f.Width*f.Count)
+		for i := range values {
+			at := f.Offset + i*4
+			if f.Stride > 0 {
+				at = f.Offset + i/f.Width*f.Stride + i%f.Width*4
+			}
+			bits := binary.LittleEndian.Uint32(r.Uniform.Data[at:])
+			if f.Integer {
+				values[i] = float64(int32(bits))
+			} else {
+				values[i] = float64(math.Float32frombits(bits))
+			}
+		}
+		out[name] = values
+	}
+	return out
+}

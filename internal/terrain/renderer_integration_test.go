@@ -142,6 +142,19 @@ func TestNativeTerrain(t *testing.T) {
 		t.Fatal(e)
 	}
 	t.Logf("dynamic knobs SHA256 %x", sha256.Sum256(knobPixels))
+	strataRenderer, e := NewRenderer(g, config, sources, material)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer strataRenderer.Close()
+	strataRenderer.ApplyKnobs(map[string]string{"strata": ".8", "strataContrast": ".7", "strataGrain": ".9"})
+	strataOptions := DefaultDrawOptions(config)
+	strataOptions.MaterialWeathering = 0
+	strataPixels, e := strataRenderer.RenderWindow(context.Background(), WindowInput{Window: window, Heights: regional}, strataOptions)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("strata colors SHA256 %x", sha256.Sum256(strataPixels))
 	erosion, e := r.NewErosion()
 	if e != nil {
 		t.Fatal(e)

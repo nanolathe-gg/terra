@@ -267,7 +267,7 @@ func (r *Renderer) SetColors(colors map[string][]float64) {
 		if len(a) != 3 {
 			a = []float64{c[0] / 255, c[1] / 255, c[2] / 255}
 		}
-		v = append(v, a...)
+		v = append(v, a[0], a[1], a[2], 0)
 	}
 	r.Set("uStrataColors", v...)
 	for k, a := range r.means {
