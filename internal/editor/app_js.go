@@ -338,7 +338,8 @@ func (a *App) showTool(kind string) {
 	}
 	setValue("shallow-mode", str(d, "shallowMode", "area"))
 	setValue("tool-style", str(d, "preset", a.World()))
-	a.Curve = obj(d, "curve")
+	curve, _ := d["curve"].(map[string]any)
+	a.Curve = clone(curve)
 	a.Along = readCurveKnots(d["along"])
 	a.Update()
 }
@@ -362,7 +363,8 @@ func (a *App) Select(index int) {
 		for _, f := range a.Schema.Shapes {
 			setValue(f[1].(string), num(p, f[0].(string), num(a.Knobs, f[0].(string), 0))*f[7].(float64))
 		}
-		a.Curve = obj(p, "curve")
+		curve, _ := p["curve"].(map[string]any)
+		a.Curve = clone(curve)
 		a.Along = readCurveKnots(p["along"])
 		setValue("seed", n.Seed)
 	}

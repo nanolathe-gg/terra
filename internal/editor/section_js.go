@@ -188,14 +188,21 @@ func (a *App) mountCurve() {
 	row.Set("innerHTML", `<label for="curve-form">Section</label><select id="curve-form" style="width:100%"></select><canvas id="section-preview" width="480" height="240" style="width:100%;background:#172119;touch-action:none;cursor:crosshair"></canvas><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="curve-link" aria-pressed="true">Link sides</button><button type="button" id="curve-mirror">Mirror</button><button type="button" id="curve-reset">Reset to the form</button><span class="small" id="curve-lean"></span></div><p class="small">Drag a knot; click the line to add one; Shift-click or double-click a knot to remove it. Drag the diamond at the crest to lean the shape.</p><div id="along-block" hidden><label for="along-preview">Height along the path</label><canvas id="along-preview" width="480" height="140" style="width:100%;background:#172119;touch-action:none;cursor:crosshair"></canvas><button type="button" id="along-reset">Level along the path</button><p class="small">Click to pick the place shown above; double-click to add a knot, drag to move it, or Shift-click to remove it.</p></div>`)
 	element("shape-options").Call("prepend", row)
 	on(element("curve-form"), "change", func(js.Value) {
-		a.Curve = map[string]any{"form": value("curve-form")}
+		a.Curve = nil
+		if form := value("curve-form"); form != "" {
+			a.Curve = map[string]any{"form": form}
+		}
 		a.commitCurveEdit()
 		if a.selected() != nil {
 			a.Checkpoint()
 		}
 	})
 	click("curve-reset", func() {
-		a.Curve = map[string]any{"form": str(a.Curve, "form", "")}
+		form := str(a.Curve, "form", "")
+		a.Curve = nil
+		if form != "" {
+			a.Curve = map[string]any{"form": form}
+		}
 		a.commitCurveEdit()
 		if a.selected() != nil {
 			a.Checkpoint()
