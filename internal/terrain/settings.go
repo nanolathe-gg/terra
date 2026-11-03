@@ -109,6 +109,7 @@ func (r *Renderer) ApplyKnobs(v map[string]string) {
 		}
 		r.Set("u"+upper(k), a...)
 		overrides[k] = a
+		lists[k] = a
 	}
 	for _, k := range []string{"faceEdge", "gullyRock", "rockOrder"} {
 		if _, ok := r.Variant[k]; ok {
@@ -189,6 +190,13 @@ func (r *Renderer) initUniforms() {
 	r.Set("uMineralMargins", flag(r.Variant["transition"] == "mineral" && r.Variant["margins"] != "slope"))
 	r.Set("uRockLayers", flag(r.Variant["material"] == "varied"))
 	r.ApplyKnobs(nil)
+	view := 0
+	for i, k := range []string{"diffuse", "occlusion", "shadow", "exposure", "shading", "material", "cracks"} {
+		if r.Variant["view"] == k {
+			view = i + 1
+		}
+	}
+	r.Set("uDiagnosticView", float64(view))
 	r.Set("uSeparateLight", flag(r.Variant["shade"] == "separate"))
 	r.Set("uFaceFill", r.num("faceFill", math.Max(0, math.Min(.5, r.num("fill", 0)/100))))
 	r.Set("uCoastalDetail", flag(r.Variant["shore"] != "smooth"))
@@ -269,17 +277,19 @@ func (r *Renderer) SetColors(colors map[string][]float64) {
 func (r *Renderer) drawUniforms(o DrawOptions) {
 	r.Set("uFull", flag(o.Full))
 	r.Set("uClay", flag(o.Clay))
+	r.Set("uScree", flag(o.Scree > 0))
 	detail := o.Detail
-	if detail == 0 {
-		detail = number(object(r.Config, "material"), "surfaceRelief", 1)
-	}
 	if r.Variant["relief"] == "base" {
 		detail = 0
 	}
 	r.Set("uDetail", detail)
-	r.Set("uMaterialWeathering", o.MaterialWeathering)
+	weatherAmount := o.MaterialWeathering
+	if r.Variant["deposits"] == "off" {
+		weatherAmount = 0
+	}
+	r.Set("uMaterialWeathering", weatherAmount)
 	r.Set("uTransitionDetail", o.TransitionDetail)
-	r.Set("uTransitionBody", flag(r.hasLayer("body") && o.MaterialWeathering > 0))
+	r.Set("uTransitionBody", flag(r.hasLayer("body") && r.materialReady && weatherAmount > 0))
 	ring := o.Ring
 	if !r.hasLayer("ring") {
 		ring = 0
@@ -300,12 +310,32 @@ func (r *Renderer) drawUniforms(o DrawOptions) {
 		y = .38
 	}
 	y *= r.num("sunTilt", 1)
+	if !o.Exact {
+		if parts := strings.Split(r.Variant["sun"], ","); len(parts) == 2 {
+			turnValue, turnErr := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+			riseValue, riseErr := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+			if parts[0] == "" {
+				turnValue = 0
+				turnErr = nil
+			}
+			if parts[1] == "" {
+				riseValue = math.Atan2(z, math.Hypot(x, y)) * 180 / math.Pi
+				riseErr = nil
+			}
+			if turnErr == nil && riseErr == nil {
+				turn := math.Atan2(y, x) + turnValue*math.Pi/180
+				rise := riseValue * math.Pi / 180
+				x, y, z = math.Cos(turn)*math.Cos(rise), math.Sin(turn)*math.Cos(rise), math.Sin(rise)
+			}
+		}
+	}
 	length := math.Sqrt(x*x + y*y + z*z)
 	sun := []float64{x / length, y / length, z / length}
 	r.Set("uLight", sun...)
 	r.Set("uSun", sun...)
 }
 func (r *Renderer) bakeUniforms(full bool) {
+	r.Set("uWindAngle", r.num("wind", 20))
 	for k, d := range bakeDefaults {
 		r.Set("u"+upper(k), r.num(k, d))
 	}
@@ -324,4 +354,11 @@ func (r *Renderer) bakeUniforms(full bool) {
 	}
 	r.Set("uReliefOctaves", octaves)
 	r.SetColumn()
+}
+
+// DefaultDrawOptions gives callers explicit defaults while preserving meaningful
+// zero values such as a disabled relief slider in subsequent Render calls.
+func DefaultDrawOptions(config map[string]any) DrawOptions {
+	m := object(config, "material")
+	return DrawOptions{Full: true, Detail: number(m, "surfaceRelief", 1), Ring: .85, RingSpread: .65, RingVariation: .7, MaterialWeathering: number(m, "materialWeathering", 0), TransitionDetail: number(m, "transitionDetail", .65), RefinementSeed: 2701, DepositSpread: .65, Weather: true}
 }

@@ -3,7 +3,6 @@ package terrain
 // Scalar defaults transcribed from the shared browser renderer.
 var surfaceDefaults = map[string]float64{
 	"microRock":           1.0,
-	"moss":                0.0,
 	"lightCap":            1.13,
 	"shadeDepth":          1.0,
 	"ambient":             0.42,
@@ -38,7 +37,6 @@ var surfaceDefaults = map[string]float64{
 	"ringSize":            1,
 	"bedFlat":             0,
 	"sandCrown":           0,
-	"rim":                 0.0,
 	"crevice":             0.0,
 	"faceDark":            0.0,
 	"flatBank":            0.0,
@@ -158,7 +156,6 @@ var bakeDefaults = map[string]float64{
 	"grooveRun":       120,
 	"bedHeight":       0,
 	"rockFrom":        0.6,
-	"wind":            20,
 	"ripple":          7,
 	"rippleHeight":    1.4,
 	"banding":         0,

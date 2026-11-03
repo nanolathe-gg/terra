@@ -134,7 +134,7 @@ func (r *Renderer) initGround() {
 	entries, _ := ground["entries"].([]any)
 	w, h := 1, 1
 	b := make([]byte, 4)
-	r.Set("uGroundTiled", flag(len(tiles) > 0))
+	r.Set("uGroundMode", flag(len(tiles) > 0))
 	if len(tiles) > 0 {
 		w, h = 512, 32
 		b = make([]byte, w*h*4)
@@ -178,6 +178,9 @@ func (r *Renderer) initGround() {
 		r.own(r.Grass)
 	}
 	check(r.upload(r.Grass, b, w, h, 0, 1, 4))
+	if r.groundTiled {
+		r.means["ground"] = r.groundMean()
+	}
 	for i, k := range []string{"slope", "rock"} {
 		v := vector(object(object(r.Material, "measured"), r.Table.Order[i]), "meanRGB", []float64{128, 128, 128})
 		for j := range v {

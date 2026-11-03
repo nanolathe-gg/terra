@@ -14,6 +14,9 @@ import (
 )
 
 type Renderer struct {
+	reservedGPUBytes                                                                                                             int
+	materialReady                                                                                                                bool
+	LastProfile                                                                                                                  RenderProfile
 	groundKey                                                                                                                    string
 	groundTiled, groundBorrowed                                                                                                  bool
 	gpuFlags                                                                                                                     bool
@@ -45,6 +48,7 @@ type Renderer struct {
 	means                                                                                                                        map[string][]float64
 }
 type DrawOptions struct {
+	Scree                                                                         float64
 	Weather                                                                       bool
 	RefinementSeed                                                                uint32
 	DepositSpread                                                                 float64
@@ -213,6 +217,9 @@ func (r *Renderer) Set(name string, v ...float64) {
 	if strings.HasPrefix(name, "u") && len(name) > 1 {
 		name = strings.ToLower(name[1:2]) + name[2:]
 	}
+	if _, ok := r.Uniform.Fields[name]; !ok {
+		panic(fmt.Errorf("no terrain uniform %s", name))
+	}
 	r.Uniform.Set(name, v...)
 }
 func (r *Renderer) FlushUniforms() error {
@@ -344,6 +351,7 @@ func (r *Renderer) SetRoutes(routes, cracks, cover, crystal []float32) error {
 	return r.upload(r.RouteTexture, b, r.Grid, r.Grid, 0, 1, 4)
 }
 func (r *Renderer) SetWeather(flow, deposit, talus, sand []float32) error {
+	r.Set("uWeatherMaps", 0)
 	b := make([]byte, r.Grid*r.Grid*4)
 	for i := 0; i < len(b)/4; i++ {
 		b[4*i] = quant(at(flow, i))
@@ -354,6 +362,7 @@ func (r *Renderer) SetWeather(flow, deposit, talus, sand []float32) error {
 	return r.upload(r.GridTexture, b, r.Grid, r.Grid, 0, 1, 4)
 }
 func (r *Renderer) SetMaterialField(field []float32) error {
+	r.materialReady = field != nil
 	b := make([]byte, r.Grid*r.Grid*4)
 	for i := range b {
 		b[i] = quant(at(field, i))

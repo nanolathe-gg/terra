@@ -59,7 +59,7 @@ func TestNativeTerrain(t *testing.T) {
 	h := make([]float32, 33*33)
 	for y := 0; y < 33; y++ {
 		for x := 0; x < 33; x++ {
-			h[y*33+x] = 24 + float32(x+y)*.6
+			h[y*33+x] = float32(24 + float64(x+y)*float64(float32(.6)))
 		}
 	}
 	if e = r.SetHeight(h); e != nil {
@@ -116,6 +116,32 @@ func TestNativeTerrain(t *testing.T) {
 		t.Fatal("repeated chunk mismatch")
 	}
 
+	for _, scale := range []float64{.5, 2, 4} {
+		window.Scale = scale
+		opts := DefaultDrawOptions(config)
+		opts.MaterialWeathering = 0
+		scaled, e := chunk.RenderWindow(context.Background(), WindowInput{Window: window, Region: reg, Heights: regional}, opts)
+		if e != nil {
+			t.Fatal(e)
+		}
+		t.Logf("scale %g: %d bytes SHA256 %x", scale, len(scaled), sha256.Sum256(scaled))
+	}
+	window.Scale = 1
+	chunk.SetColors(map[string][]float64{"ground": {.3, .4, .5}, "slope": {.2, .3, .4}, "rock": {.5, .3, .2}, "beach": {.4, .5, .3}})
+	colors, e := chunk.RenderWindow(context.Background(), WindowInput{Window: window, Region: reg, Heights: regional}, DefaultDrawOptions(config))
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("colors SHA256 %x; means %+v", sha256.Sum256(colors), chunk.means)
+	chunk.SetColors(nil)
+	chunk.ApplyKnobs(map[string]string{"microRock": ".35", "rockOrder": ".7", "banding": ".4", "bedSpacing": "8", "shineRock": ".8", "shineRockSharp": "18", "waterSoft": "20", "faceSlope": "0.2,0.8", "rockShare": "0.3,0.9", "faceScore": "0.4,1.4,0.6,0.2", "columnContrast": ".7", "groundTiles": "8", "moss": ".2", "rim": ".15", "reliefAmount": ".35", "sun": "45,20"})
+	knobOptions := DefaultDrawOptions(config)
+	knobOptions.MaterialWeathering = 0
+	knobPixels, e := chunk.RenderWindow(context.Background(), WindowInput{Window: window, Heights: regional}, knobOptions)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("dynamic knobs SHA256 %x", sha256.Sum256(knobPixels))
 	erosion, e := r.NewErosion()
 	if e != nil {
 		t.Fatal(e)
@@ -149,6 +175,9 @@ func TestNativeTerrain(t *testing.T) {
 		}
 	}
 	t.Logf("weather: %d bytes SHA256 %x", len(raw), sha256.Sum256(raw))
+	if out := os.Getenv("TERRAFORM_GPU_DUMP"); out != "" {
+		check(os.WriteFile(filepath.Join(out, "native-weather.bin"), raw, 0644))
+	}
 	mf, e := erosion.MaterialField(MaterialFieldRequest{Height: er.Weather, HeightOffset: 33 * 33, Grid: 33, Size: 128, BaseHeight: 24, DepositSpread: .65, Seed: 2701, Profile: object(config, "material")})
 	if e != nil {
 		t.Fatal(e)
@@ -159,5 +188,17 @@ func TestNativeTerrain(t *testing.T) {
 		t.Fatal(e)
 	}
 	t.Logf("material field: %d bytes SHA256 %x", len(mraw), sha256.Sum256(mraw))
+	if out := os.Getenv("TERRAFORM_GPU_DUMP"); out != "" {
+		check(os.WriteFile(filepath.Join(out, "native-material.bin"), mraw, 0644))
+	}
+
+	window.Scale = 1
+	chunk.SetColors(nil)
+	chunk.ApplyKnobs(map[string]string{"microRock": "1", "rockOrder": "0", "banding": "0", "bedSpacing": "12", "shineRock": "0", "shineRockSharp": "24", "waterSoft": "32", "faceSlope": "0.35,0.9", "rockShare": "0.2,1.0", "faceScore": "0.2,2.0,0.5,0.3", "columnContrast": "1", "groundTiles": "16", "moss": "0", "rim": "0", "reliefAmount": "0.5", "sun": ""})
+	feedPixels, e := chunk.RenderWindow(context.Background(), WindowInput{Window: window, Region: reg, Feed: &GPUFeed{Planes: pb, Masks: mb, Weather: er.Weather, Maps: er.Maps, Field: mf, Grid: 33, Cells: 33 * 33, MaskCount: 25}}, DefaultDrawOptions(config))
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("native GPU feed %d bytes SHA256 %x", len(feedPixels), sha256.Sum256(feedPixels))
 
 }

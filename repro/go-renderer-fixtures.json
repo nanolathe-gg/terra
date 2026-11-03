@@ -1,0 +1,22 @@
+{
+  "adapter": "Apple M3 Pro",
+  "reference": "Original JavaScript ChunkTerrainRenderer at main 92df846; 33x33 authored ramp, world size 128, output x=16 y=16 width=64 height=64, defaults from each material file, weather off. Numeric hashes only; no retail pixels.",
+  "worlds": {
+    "archipelago.json": "eff393be44d754f47239e3f9c63cf389900a76acc572c63b758ee45eff067f59",
+    "crystal.json": "32eed79c7135ef7111990d27f30f9cf8129298dfc5c03b21e749a9e195e85c00",
+    "desert.json": "2d4e27746c5908c2fde5529b3c9632a2e6b34150679ddf8d9097abdef719b41d",
+    "green.json": "3d36a70e847eb0b3f18902b8455a5139016bbe3e80594b1c275b9ee574e975e0",
+    "ice.json": "45d77e7fc27371f223303fc81c38a4b11227f00778d0affaf61103fa44db72ef",
+    "lava.json": "0498c7e528b9ecef57030d93c66f71fbd3c973c9a02a839612588f239a097178",
+    "moon.json": "3c4f98be207a8f14d986d1fea6e01d26193eab148727b9f472dcb1e88569714a",
+    "red.json": "c607bbb95c767c59af4b4d398a4b4c57e60ccf4b40e09f39592d76977a3bccfd",
+    "zhon.json": "3a6a80fdacd2a8c4dceafa19b50faaf85a9c3b31f0e0c95c7c760cdb733059d2"
+  },
+  "greenScales": {
+    "0.5": "e01e2d1a41b3c7926beaec31c31d85c53499ff2429c291cee7b62bb8b34d6e38",
+    "1": "3d36a70e847eb0b3f18902b8455a5139016bbe3e80594b1c275b9ee574e975e0",
+    "2": "fb213f8fb55bc1d32a48d252b4174f00e9b9571c03e943a4d1491c2d50373dfe",
+    "4": "bd2008438f88934ec7029b0d3b7d68831451a6b93e9498725ad146ab761b003b"
+  },
+  "greenColors": "e899dde3f491a1949e2c541376ebf0358384c8b280eb7a318fc6e02b21c342ab"
+}

@@ -96,6 +96,7 @@ func FeedUniform(g *GPU, values map[string]float64) (*wgpu.Buffer, error) {
 }
 func (e *Erosion) RunGPU(ctx context.Context, q ErosionRequest) (result *ErosionResult, err error) {
 	defer recoverError(&err)
+	defer e.Renderer.GPU.scope()(&err)
 	if q.Grid < 2 || q.Planes == nil || q.Masks == nil {
 		return nil, fmt.Errorf("invalid erosion input")
 	}
@@ -243,6 +244,7 @@ type MaterialFieldRequest struct {
 
 func (e *Erosion) MaterialField(q MaterialFieldRequest) (field *wgpu.Buffer, err error) {
 	defer recoverError(&err)
+	defer e.Renderer.GPU.scope()(&err)
 	r, g := e.Renderer, e.Renderer.GPU
 	n := q.Grid * q.Grid
 	spacing := q.Spacing

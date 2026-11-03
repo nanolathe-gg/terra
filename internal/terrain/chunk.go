@@ -7,6 +7,7 @@ import (
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
 	"math"
+	"time"
 )
 
 // RenderRegion describes the exact input apron and global mesh lattice of a
@@ -73,7 +74,11 @@ func (r *Renderer) reaches(full bool) (draw, bake, direct float64, projection [2
 	minor := major / 3.2
 	blocks := (.5*(1+3*severity) + 1.225*major + .5*(.6+1.6*severity) + 4.41*minor) * math.Max(n("crackBlocks", .6), .6)
 	beds := (math.Abs(n("bedSpacing", 12))*math.Max(1, math.Pow(slope+math.Abs(n("bedDip", 0)), 1-n("bedHeight", 0)))*1.8*math.Abs(n("bedLedge", .5)) + flag(n("bedLedge", .5) > 0)*3.6) * math.Abs(n("rockOrder", 0))
-	bands := 3.7 * math.Max(math.Abs(n("banding", 0))*4, .8)
+	column := object(r.Config, "column")
+	bandValues := vector(column, "bands", []float64{3.7, .5})
+	row := object(object(column, "variants"), str(r.Config, "variant"))
+	bandValues = vector(row, "bands", bandValues)
+	bands := bandValues[0] * math.Max(math.Abs(n("banding", 0))*4, .8)
 	lumps := 1.6 * (math.Abs(n("plainRelief", 1.2)) + math.Abs(n("lumpRelief", 4)) + math.Abs(n("bedRelief", 0)))
 	gully := math.Abs(n("ribTilt", 0)) * math.Max(n("grooveSpacing", 8), 8)
 	f := math.Max(n("blockRow", 2), 2)
@@ -101,8 +106,8 @@ func (r *Renderer) RequiredRegion(w SceneWindow, full bool) *RenderRegion {
 	step := float64(size-1) / float64(resolution)
 	col0 := clampInt(int(math.Floor(float64(w.X)/step))-1, 0, resolution)
 	col1 := clampInt(int(math.Ceil(float64(w.X+w.Width)/step))+1, 0, resolution)
-	row0 := clampInt(int(math.Floor((float64(w.Y)+projection[0])/step))-1, 0, resolution)
-	row1 := clampInt(int(math.Ceil((float64(w.Y+w.Height)+projection[1])/step))+1, 0, resolution)
+	row0 := clampInt(int(math.Floor((float64(w.Y+shift)+projection[0])/step))-1, 0, resolution)
+	row1 := clampInt(int(math.Ceil((float64(w.Y+shift+w.Height)+projection[1])/step))+1, 0, resolution)
 	fx := clampInt(int(math.Floor(float64(col0)*step-draw))-1, 0, size-1)
 	fy := clampInt(int(math.Floor(float64(row0)*step-draw))-1, 0, size-1)
 	ex := clampInt(int(math.Ceil(float64(col1)*step+draw))+1, 0, size-1)
@@ -114,7 +119,18 @@ func (r *Renderer) RequiredRegion(w SceneWindow, full bool) *RenderRegion {
 	gy1 := clampInt(int(math.Ceil((float64(ey)+input)/spacing))+1, 0, grid-1)
 	return &RenderRegion{gx0, gy0, gx1 - gx0 + 1, gy1 - gy0 + 1, spacing, fx, fy, ex - fx + 1, ey - fy + 1, col0, col1, row0, row1, resolution, [2]float64{float64(w.X), float64(w.Y + shift)}, size, grid}
 }
+
+type RenderProfile struct {
+	TotalMilliseconds, FeedMilliseconds, UploadMilliseconds, EncodeMilliseconds, ReadbackMilliseconds float64
+	Width, Height, GridWidth, GridHeight, FieldWidth, FieldHeight, WorkingBytes, FixedBytes           int
+	GPUFed                                                                                            bool
+}
+
+func elapsed(start time.Time) float64 { return float64(time.Since(start)) / float64(time.Millisecond) }
 func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptions) (pixels []byte, err error) {
+	started := time.Now()
+	profile := RenderProfile{GPUFed: in.Feed != nil}
+	defer func() { profile.TotalMilliseconds = elapsed(started); r.LastProfile = profile }()
 	defer recoverError(&err)
 	defer r.GPU.scope()(&err)
 	if !r.chunked {
@@ -145,14 +161,16 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 		rasterScale = math.Max(1, scale/2)
 	}
 	fieldScale := math.Max(scale, .5)
-	fw, fh := pow2(int(math.Ceil(float64(reg.FieldsWidth)/fieldScale))+1), pow2(int(math.Ceil(float64(reg.FieldsHeight)/fieldScale))+1)
+	fw, fh := pow2(int(math.Ceil(float64(reg.FieldsWidth)/fieldScale))), pow2(int(math.Ceil(float64(reg.FieldsHeight)/fieldScale)))
 	outputW, outputH := int(math.Ceil(float64(in.Window.Width)/rasterScale)), int(math.Ceil(float64(in.Window.Height)/rasterScale))
 	layers := max(1, (len(in.Masks)+3)/4)
 	if len(in.Masks) == 0 {
 		layers = 7
 	}
-	budget := number(r.Config, "gpuBudgetMB", 512) * 1024 * 1024
-	needed := float64(fw*fh*8 + gw*gh*(24+layers*4) + outputW*outputH*8)
+	budget := number(r.Config, "gpuBudgetBytes", number(r.Config, "gpuBudgetMB", number(r.Config, "gpuMB", 512))*1024*1024)
+	cols, rows := reg.Col1-reg.Col0, reg.Row1-reg.Row0
+	meshBytes := (cols+1)*(rows+1)*8 + max(4, cols*rows*24)
+	needed := float64(fw*fh*8+gw*gh*(24+layers*4)+outputW*outputH*12+meshBytes) + float64(r.FixedBytes()) + math.Max(number(r.Config, "gpuReservedBytes", 0), float64(r.reservedGPUBytes))
 	if needed > budget {
 		return nil, fmt.Errorf("terrain chunk needs %.1f MB, budget %.1f MB", needed/1048576, budget/1048576)
 	}
@@ -169,6 +187,12 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 	r.MaskTexture = r.texture("chunk masks", gw, gh, layers, 1, gputypes.TextureFormatRGBA8Snorm, u)
 	r.FieldsTexture = r.texture("chunk fields", fw, fh, 1, 1, gputypes.TextureFormatRGBA16Float, gputypes.TextureUsageStorageBinding|gputypes.TextureUsageTextureBinding)
 	r.maskLayers = layers
+	profile.Width, profile.Height = outputW, outputH
+	profile.GridWidth, profile.GridHeight = gw, gh
+	profile.FieldWidth, profile.FieldHeight = fw, fh
+	profile.FixedBytes = r.FixedBytes()
+	profile.WorkingBytes = int(needed) - profile.FixedBytes
+	uploadStart := time.Now()
 	r.gpuFlags = false
 	if in.Feed == nil {
 		heights := make([]float32, gw*gh)
@@ -228,13 +252,18 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 		for k, v := range map[string]bool{"paintOn": any(0, 9), "scatterOn": painted[4], "styleOn": any(5, 9), "waterOn": any(9, 12) || painted[13], "lumpOn": painted[12], "overrideOn": any(14, 18)} {
 			r.Set("u"+upper(k), flag(v))
 		}
-		r.Set("uMaterialReady", flag(in.Material != nil))
+		r.materialReady = in.Material != nil
+		r.Set("uMaterialReady", flag(r.materialReady))
 		r.Set("uWeatherMaps", flag(in.Weather["wear"] != nil))
 	} else {
+		feedStart := time.Now()
 		check(r.feedFromGPU(ctx, in.Feed, reg, gw, gh, in.ExportArt))
-		r.Set("uMaterialReady", flag(in.Feed.Field != nil))
+		r.materialReady = in.Feed.Field != nil
+		r.Set("uMaterialReady", flag(r.materialReady))
 		r.Set("uWeatherMaps", flag(in.Feed.Maps[0] != nil))
+		profile.FeedMilliseconds = elapsed(feedStart)
 	}
+	profile.UploadMilliseconds = elapsed(uploadStart) - profile.FeedMilliseconds
 	r.Set("uGrid", float64(r.Grid))
 	r.Set("uSize", float64(r.Size))
 	r.Set("uChunkGridOrigin", float64(reg.GridX), float64(reg.GridY))
@@ -260,13 +289,17 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 	r.activeRegion = reg
 	r.regionMesh(reg)
 	o.Width, o.Height = outputW, outputH
+	encodeStart := time.Now()
 	if e := r.Render(o); e != nil {
 		return nil, e
 	}
+	profile.EncodeMilliseconds = elapsed(encodeStart)
+	readStart := time.Now()
 	pixels, err = r.ReadRGBA(ctx)
 	if err != nil {
 		return nil, err
 	}
+	profile.ReadbackMilliseconds = elapsed(readStart)
 	outW, outH := int(math.Ceil(float64(in.Window.Width)/scale)), int(math.Ceil(float64(in.Window.Height)/scale))
 	if outputW != outW || outputH != outH {
 		pixels = resizeRGBA(pixels, outputW, outputH, outW, outH)
@@ -342,3 +375,17 @@ func resizeRGBA(src []byte, sw, sh, dw, dh int) []byte {
 	}
 	return dst
 }
+
+// FixedBytes counts live renderer-owned shared textures/buffers, excluding driver
+// allocations and transient initialization resources already released.
+func (r *Renderer) FixedBytes() int {
+	mips := 0
+	for level := 0; level < 7; level++ {
+		side := 512 >> level
+		mips += side * side
+	}
+	return mips*(len(r.Table.Order)*4+8) + 512*512*4 + 1024*96*4 + 512*32*4 + len(r.Uniform.Data)
+}
+
+// SetReservedGPUBytes accounts for external GPU fields/pages and image caches.
+func (r *Renderer) SetReservedGPUBytes(bytes int) { r.reservedGPUBytes = max(0, bytes) }

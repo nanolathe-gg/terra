@@ -5,7 +5,9 @@ package terrain
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
 	"io"
 	"net/http"
@@ -72,7 +74,7 @@ func TestBrowserTerrain(t *testing.T) {
 	h := make([]float32, reg.GridWidth*reg.GridHeight)
 	for y := 0; y < reg.GridHeight; y++ {
 		for x := 0; x < reg.GridWidth; x++ {
-			h[y*reg.GridWidth+x] = 24 + float32(reg.GridX+x+reg.GridY+y)*.6
+			h[y*reg.GridWidth+x] = float32(24 + float64(reg.GridX+x+reg.GridY+y)*float64(float32(.6)))
 		}
 	}
 	p, e := r.RenderWindow(context.Background(), WindowInput{Window: window, Region: reg, Heights: h}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65})
@@ -87,4 +89,55 @@ func TestBrowserTerrain(t *testing.T) {
 		t.Fatal("browser terrain is a flat clear color")
 	}
 	t.Logf("browser chunk %d bytes SHA256 %x", len(p), sha256.Sum256(p))
+	erosion, e := r.NewErosion()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer erosion.Close()
+	planes := make([]float32, 33*33*6)
+	copy(planes, h)
+	pb, e := g.Buffer("test planes", FloatBytes(planes), storageUsage)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer pb.Release()
+	mb, e := g.Buffer("test masks", make([]byte, 33*33*7*4), gputypes.BufferUsageStorage)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer mb.Release()
+	er, e := erosion.RunGPU(context.Background(), ErosionRequest{Planes: pb, Masks: mb, Grid: 33, Size: 128, Age: 2, Rain: 1, TalusAngle: 30, RateMask: 14})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer er.Close()
+	raw, e := g.ReadBuffer(context.Background(), er.Weather, 0, 33*33*8)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("browser weather %d bytes SHA256 %x", len(raw), sha256.Sum256(raw))
+	dumpBrowserGPU("weather", raw)
+	mf, e := erosion.MaterialField(MaterialFieldRequest{Height: er.Weather, HeightOffset: 33 * 33, Grid: 33, Size: 128, BaseHeight: 24, DepositSpread: .65, Seed: 2701, Profile: object(config, "material")})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer mf.Release()
+	mraw, e := g.ReadBuffer(context.Background(), mf, 0, 33*33*16)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("browser material field %d bytes SHA256 %x", len(mraw), sha256.Sum256(mraw))
+	dumpBrowserGPU("material", mraw)
+	feedPixels, e := r.RenderWindow(context.Background(), WindowInput{Window: window, Region: reg, Feed: &GPUFeed{Planes: pb, Masks: mb, Weather: er.Weather, Maps: er.Maps, Field: mf, Grid: 33, Cells: 33 * 33, MaskCount: 25}}, DefaultDrawOptions(config))
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("browser GPU feed %d bytes SHA256 %x", len(feedPixels), sha256.Sum256(feedPixels))
+
+}
+
+func dumpBrowserGPU(name string, data []byte) {
+	if js.Global().Get("gpuDump").Truthy() {
+		js.Global().Get("console").Call("log", "GPU_DATA:"+name+":"+base64.StdEncoding.EncodeToString(data))
+	}
 }
