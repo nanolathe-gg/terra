@@ -42,21 +42,27 @@ type exportJob struct {
 	input   io.WriteCloser
 	output  *bufio.Reader
 	stderr  lockedBuffer
+	// lastUsed and active are guarded by exportStore.mu.
+	lastUsed time.Time
+	active   int
 }
 type exportStore struct {
-	o         Options
-	mu        sync.Mutex
-	jobs      map[string]*exportJob
-	closing   bool
-	closeCh   chan struct{}
-	featureMu sync.Mutex
+	o          Options
+	mu         sync.Mutex
+	jobs       map[string]*exportJob
+	closing    bool
+	closeCh    chan struct{}
+	reaperDone chan struct{}
+	featureMu  sync.Mutex
 }
 
 func (s *exportStore) init(o Options) {
 	s.o = o
 	s.jobs = map[string]*exportJob{}
 	s.closeCh = make(chan struct{})
+	s.reaperDone = make(chan struct{})
 	s.cleanupCrashes()
+	go s.reapLoop()
 }
 func (s *exportStore) args(args ...string) []string {
 	var a []string
@@ -244,6 +250,7 @@ func (s *exportStore) start(ctx context.Context, req map[string]any) (map[string
 		_ = j.cmd.Wait()
 		return nil, fmt.Errorf("Server is shutting down")
 	}
+	j.lastUsed = time.Now()
 	s.jobs[name] = j
 	s.mu.Unlock()
 	cleanup = false
@@ -335,14 +342,64 @@ func (s *exportStore) discard(j *exportJob) {
 		os.Remove(filepath.Join(s.o.AssetsRoot, "exports", ".map-export-"+j.id+"-"+kind+".tmp"))
 	}
 }
+
+// A stalled client can disappear after the response was buffered but before
+// receiving the ID. Keep a generous idle window for slow renderers, then stop
+// only jobs with no in-flight request; active uploads/exchanges never expire.
+const exportIdleTimeout = time.Hour
+const exportReapInterval = time.Minute
+
+func (s *exportStore) reapLoop() {
+	defer close(s.reaperDone)
+	ticker := time.NewTicker(exportReapInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.closeCh:
+			return
+		case now := <-ticker.C:
+			s.expireIdle(now)
+		}
+	}
+}
+func (s *exportStore) expireIdle(now time.Time) {
+	var expired []*exportJob
+	s.mu.Lock()
+	for id, j := range s.jobs {
+		if j.active == 0 && now.Sub(j.lastUsed) >= exportIdleTimeout {
+			delete(s.jobs, id)
+			expired = append(expired, j)
+		}
+	}
+	s.mu.Unlock()
+	for _, j := range expired {
+		j.mu.Lock()
+		s.discard(j)
+		j.mu.Unlock()
+	}
+}
+func (s *exportStore) claimJob(id string) *exportJob {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j := s.jobs[id]
+	if j != nil {
+		j.active++
+	}
+	return j
+}
+func (s *exportStore) releaseJob(j *exportJob) {
+	s.mu.Lock()
+	j.active--
+	j.lastUsed = time.Now()
+	s.mu.Unlock()
+}
+
 func (s *exportStore) getJob(r *http.Request) (*exportJob, error) {
 	v := r.URL.Query()["id"]
 	if len(v) != 1 || !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(v[0]) {
 		return nil, fmt.Errorf("One valid export id is required")
 	}
-	s.mu.Lock()
-	j := s.jobs[v[0]]
-	s.mu.Unlock()
+	j := s.claimJob(v[0])
 	if j == nil {
 		return nil, fmt.Errorf("Export id is unknown or no longer active")
 	}
@@ -436,13 +493,12 @@ func (s *exportStore) serve(w http.ResponseWriter, r *http.Request) {
 		// If delivery fails, the client cannot know the job ID to cancel it.
 		w.Header().Set("Content-Type", "application/json")
 		if e := json.NewEncoder(w).Encode(v); e != nil || r.Context().Err() != nil {
-			s.mu.Lock()
-			j := s.jobs[v["id"].(string)]
-			s.mu.Unlock()
+			j := s.claimJob(v["id"].(string))
 			if j != nil {
 				j.mu.Lock()
 				s.discard(j)
 				j.mu.Unlock()
+				s.releaseJob(j)
 			}
 		}
 		return
@@ -460,6 +516,7 @@ func (s *exportStore) serve(w http.ResponseWriter, r *http.Request) {
 		bad(w, e)
 		return
 	}
+	defer s.releaseJob(j)
 	if r.Method == "DELETE" {
 		j.cmd.Process.Kill()
 		j.mu.Lock()
@@ -526,9 +583,12 @@ func (s *exportStore) legacy(w http.ResponseWriter, r *http.Request) {
 		bad(w, e)
 		return
 	}
-	s.mu.Lock()
-	j := s.jobs[ready["id"].(string)]
-	s.mu.Unlock()
+	j := s.claimJob(ready["id"].(string))
+	if j == nil {
+		bad(w, fmt.Errorf("Export id is unknown or no longer active"))
+		return
+	}
+	defer s.releaseJob(j)
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	defer s.discard(j)
@@ -578,6 +638,7 @@ func (s *Server) Close() {
 		jobs = append(jobs, j)
 	}
 	s.exports.mu.Unlock()
+	<-s.exports.reaperDone
 	for _, j := range jobs {
 		_ = j.cmd.Process.Kill()
 	}

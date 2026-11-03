@@ -25,6 +25,7 @@ func testServer(t *testing.T) *Server {
 	if e != nil {
 		t.Fatal(e)
 	}
+	t.Cleanup(s.Close)
 	return s
 }
 func request(t *testing.T, s *Server, method, path string, body []byte) *httptest.ResponseRecorder {
@@ -287,10 +288,11 @@ func TestRecoverOnlyDeadOwnedExportJobs(t *testing.T) {
 	dead, stage := makeJob(strings.Repeat("a", 32), 2147483647, output)
 	active, activeStage := makeJob(strings.Repeat("b", 32), os.Getpid(), output)
 	other, otherStage := makeJob(strings.Repeat("c", 32), 2147483647, otherOutput)
-	_, err := New(Options{SourceRoot: filepath.Join("..", ".."), AssetsRoot: assets, Prepared: true})
+	s, err := New(Options{SourceRoot: filepath.Join("..", ".."), AssetsRoot: assets, Prepared: true})
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	for _, p := range []string{dead, stage} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Errorf("dead owned job remains: %s (%v)", p, err)
@@ -352,5 +354,110 @@ func TestCompressedWASMDelivery(t *testing.T) {
 		if !bytes.Equal(got, payload) {
 			t.Fatal("WASM changed in delivery")
 		}
+	}
+}
+
+func TestExportIdleReaperSkipsActiveRequests(t *testing.T) {
+	s := testServer(t)
+	helper := filepath.Join(t.TempDir(), "helper")
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"ready\":true}'\nexec sleep 30\n"
+	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	s.exports.o.ExportTool = helper
+	ready, err := s.exports.start(context.Background(), map[string]any{"world": "green"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := ready["id"].(string)
+	request := httptest.NewRequest("POST", "/map-export/chunk?id="+id, nil)
+	job, err := s.exports.getJob(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.exports.mu.Lock()
+	job.lastUsed = time.Now().Add(-2 * exportIdleTimeout)
+	s.exports.mu.Unlock()
+	s.exports.expireIdle(time.Now())
+	s.exports.mu.Lock()
+	stillActive := s.exports.jobs[id] == job
+	s.exports.mu.Unlock()
+	if !stillActive {
+		t.Fatal("reaped an active request")
+	}
+	s.exports.releaseJob(job)
+	s.exports.expireIdle(time.Now())
+	s.exports.mu.Lock()
+	if s.exports.jobs[id] != job {
+		s.exports.mu.Unlock()
+		t.Fatal("release failed to refresh the idle deadline")
+	}
+	job.lastUsed = time.Now().Add(-2 * exportIdleTimeout)
+	s.exports.mu.Unlock()
+	s.exports.expireIdle(time.Now())
+	if _, err := os.Stat(job.dir); !os.IsNotExist(err) {
+		t.Fatalf("idle job directory remains: %v", err)
+	}
+	if _, err := s.exports.getJob(request); err == nil {
+		t.Fatal("reaped job still available")
+	}
+	s.Close()
+	select {
+	case <-s.exports.reaperDone:
+	default:
+		t.Fatal("server close left its reaper running")
+	}
+}
+
+func TestExportIdleReaperDoesNotInterruptExchange(t *testing.T) {
+	s := testServer(t)
+	helperDir := t.TempDir()
+	helper, marker := filepath.Join(helperDir, "helper"), filepath.Join(helperDir, "waiting")
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"ready\":true}'\nIFS= read -r line\ntouch \"" + marker + "\"\nexec sleep 30\n"
+	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	s.exports.o.ExportTool = helper
+	ready, err := s.exports.start(context.Background(), map[string]any{"world": "green"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := ready["id"].(string)
+	done := make(chan int, 1)
+	go func() {
+		r := httptest.NewRequest("POST", "/map-export/chunk?id="+id+"&x=0&y=0&width=1&height=1", bytes.NewReader([]byte("png")))
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		done <- w.Code
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("helper did not enter exchange")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	s.exports.mu.Lock()
+	job := s.exports.jobs[id]
+	job.lastUsed = time.Now().Add(-2 * exportIdleTimeout)
+	s.exports.mu.Unlock()
+	s.exports.expireIdle(time.Now())
+	s.exports.mu.Lock()
+	active := s.exports.jobs[id] == job
+	s.exports.mu.Unlock()
+	if !active {
+		t.Fatal("reaper interrupted active helper exchange")
+	}
+	w := request(t, s, "DELETE", "/map-export?id="+id, nil)
+	if w.Code != 200 {
+		t.Fatalf("cancel: %d %s", w.Code, w.Body)
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled exchange did not stop")
 	}
 }
