@@ -1,9 +1,9 @@
 package terrain
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
@@ -15,30 +15,15 @@ func ChangedShapeRegion(before, after []model.Node, c ShapeWindowConfig) (region
 	if c.Grid <= 0 || c.Spacing <= 0 {
 		return nil, true, fmt.Errorf("invalid shape geometry")
 	}
-	oldData, e := json.Marshal(before)
-	if e != nil {
-		return nil, true, e
-	}
-	newData, e := json.Marshal(after)
-	if e != nil {
-		return nil, true, e
-	}
-	var oldRows, newRows []json.RawMessage
-	if e = json.Unmarshal(oldData, &oldRows); e != nil {
-		return nil, true, e
-	}
-	if e = json.Unmarshal(newData, &newRows); e != nil {
-		return nil, true, e
-	}
 	first := 0
-	for first < len(oldRows) && first < len(newRows) && string(oldRows[first]) == string(newRows[first]) {
+	for first < len(before) && first < len(after) && reflect.DeepEqual(before[first], after[first]) {
 		first++
 	}
-	if first == len(oldRows) && first == len(newRows) {
+	if first == len(before) && first == len(after) {
 		return nil, false, nil
 	}
-	oldEnd, newEnd := len(oldRows), len(newRows)
-	for oldEnd > first && newEnd > first && string(oldRows[oldEnd-1]) == string(newRows[newEnd-1]) {
+	oldEnd, newEnd := len(before), len(after)
+	for oldEnd > first && newEnd > first && reflect.DeepEqual(before[oldEnd-1], after[newEnd-1]) {
 		oldEnd--
 		newEnd--
 	}

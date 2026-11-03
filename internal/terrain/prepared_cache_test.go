@@ -32,6 +32,12 @@ func TestPreparedGraphReuseAndInvalidation(t *testing.T) {
 		t.Fatal("edit did not preserve only unchanged preparation")
 	}
 	previous := s.prepared
+	nodes[0].Params["amount"] = 123.0
+	_, _, _, err = s.prepareGraph(nodes, c)
+	if err != nil || s.prepared == previous || &s.prepared.nodes[0].shapes[0] == &previous.nodes[0].shapes[0] {
+		t.Fatalf("in-place parameter edit was missed: %v", err)
+	}
+	previous = s.prepared
 	c.Spacing = 8
 	_, _, _, err = s.prepareGraph(nodes, c)
 	if err != nil || s.prepared == previous || &s.prepared.nodes[0].shapes[0] == &previous.nodes[0].shapes[0] {

@@ -1,9 +1,8 @@
 package terrain
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
@@ -13,47 +12,47 @@ import (
 const preparedGraphLimit = 16 << 20
 
 type preparedNode struct {
-	key    []byte
+	node   model.Node
+	bytes  int
 	shapes []PreparedShape
 }
 type preparedGraph struct {
-	geometry        []byte
+	geometry        ShapeGeometry
+	defaults        map[string]any
 	nodes           []preparedNode
 	ops             []PreparedOp
 	segments, masks []byte
 }
 
 func (s *ShapeEngine) prepareGraph(nodes []model.Node, c ShapeWindowConfig) ([]PreparedOp, []byte, []byte, error) {
-	geometry, err := json.Marshal([]any{c.Grid, c.Spacing, c.RefSpacing, c.Defaults})
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	geometry := ShapeGeometry{Grid: c.Grid, Spacing: c.Spacing, RefSpacing: c.RefSpacing}
 	old := s.prepared
-	if old != nil && !bytes.Equal(old.geometry, geometry) {
+	if old != nil && (old.geometry != geometry || !reflect.DeepEqual(old.defaults, c.Defaults)) {
 		old = nil
 	}
 	next := &preparedGraph{geometry: geometry, nodes: make([]preparedNode, len(nodes))}
 	same := old != nil && len(old.nodes) == len(nodes)
-	estimate := len(geometry)
+	estimate := 1024
 	var shapes []PreparedShape
 	for i, node := range nodes {
-		key, err := json.Marshal(node)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("node %d: %w", i, err)
-		}
 		var prepared []PreparedShape
-		if old != nil && i < len(old.nodes) && bytes.Equal(old.nodes[i].key, key) {
-			prepared = old.nodes[i].shapes
+		var snapshot model.Node
+		var nodeBytes int
+		if old != nil && i < len(old.nodes) && reflect.DeepEqual(old.nodes[i].node, node) {
+			prepared, snapshot, nodeBytes = old.nodes[i].shapes, old.nodes[i].node, old.nodes[i].bytes
 		} else {
 			same = false
-			prepared, err = PrepareShapes(node, ShapeGeometry{Grid: c.Grid, Spacing: c.Spacing, RefSpacing: c.RefSpacing}, c.Defaults)
+			var err error
+			prepared, err = PrepareShapes(node, geometry, c.Defaults)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("node %d: %w", i, err)
 			}
+			snapshot = model.CloneNode(node)
+			nodeBytes = estimateValue(reflect.ValueOf(snapshot))
 		}
-		next.nodes[i] = preparedNode{key: key, shapes: prepared}
+		next.nodes[i] = preparedNode{node: snapshot, shapes: prepared, bytes: nodeBytes}
 		shapes = append(shapes, prepared...)
-		estimate += len(key)
+		estimate += nodeBytes
 		for _, shape := range prepared {
 			// Include backing arrays, per-operation maps, and conservative overhead.
 			estimate += 2048 + len(shape.Segments)*256 + len(shape.Writes)*64 + len(shape.Extra)*64
@@ -73,10 +72,53 @@ func (s *ShapeEngine) prepareGraph(nodes []model.Node, c ShapeWindowConfig) ([]P
 	ops, segments, masks := PackPreparedShapes(shapes)
 	estimate += len(segments) + len(masks) + len(ops)*2048
 	if int64(estimate) <= limit {
+		if c.Defaults != nil {
+			next.defaults = model.CloneValue(c.Defaults).(map[string]any)
+		}
 		next.ops, next.segments, next.masks = ops, segments, masks
 		s.prepared = next
 	} else {
 		s.prepared = nil
 	}
 	return ops, segments, masks, nil
+}
+
+// Conservative estimate for the detached JSON-like node values.
+func estimateValue(v reflect.Value) int {
+	if !v.IsValid() {
+		return 0
+	}
+	switch v.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if v.IsNil() {
+			return 16
+		}
+		return 16 + estimateValue(v.Elem())
+	case reflect.String:
+		return 16 + v.Len()
+	case reflect.Slice, reflect.Array:
+		n := 32
+		for i := 0; i < v.Len(); i++ {
+			n += estimateValue(v.Index(i))
+		}
+		return n
+	case reflect.Map:
+		if v.IsNil() {
+			return 16
+		}
+		n := 64
+		it := v.MapRange()
+		for it.Next() {
+			n += 64 + estimateValue(it.Key()) + estimateValue(it.Value())
+		}
+		return n
+	case reflect.Struct:
+		n := 0
+		for i := 0; i < v.NumField(); i++ {
+			n += estimateValue(v.Field(i))
+		}
+		return n
+	default:
+		return int(v.Type().Size())
+	}
 }

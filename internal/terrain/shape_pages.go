@@ -10,6 +10,7 @@ import (
 	"github.com/gogpu/wgpu"
 	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
+	"reflect"
 	"time"
 )
 
@@ -125,7 +126,8 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 		s.shapeKey = key
 		s.shapePages = map[[2]int]*weatherFeed{}
 	}
-	if s.shapeNodesSet {
+	changed := !s.shapeNodesSet || !reflect.DeepEqual(s.shapeNodes, nodes)
+	if s.shapeNodesSet && changed {
 		diffStart := time.Now()
 		dirty, full, e := ChangedShapeRegion(s.shapeNodes, nodes, c)
 		s.shapeProfile.GraphDiffMilliseconds += elapsed(diffStart)
@@ -148,18 +150,12 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 			}
 		}
 	}
-	cloneStart := time.Now()
-	snapshot, e := json.Marshal(nodes)
-	if e != nil {
-		return nil, e
+	if changed {
+		cloneStart := time.Now()
+		s.shapeNodes = model.CloneNodes(nodes)
+		s.shapeNodesSet = true
+		s.shapeProfile.GraphCloneMilliseconds += elapsed(cloneStart)
 	}
-	var copyNodes []model.Node
-	if e = json.Unmarshal(snapshot, &copyNodes); e != nil {
-		return nil, e
-	}
-	s.shapeProfile.GraphCloneMilliseconds += elapsed(cloneStart)
-	s.shapeNodes = copyNodes
-	s.shapeNodesSet = true
 	s.shapeProfile.GraphMilliseconds += elapsed(graphStart)
 	allocStart := time.Now()
 	side := max(region.X1-region.X0+1, region.Y1-region.Y0+1)
