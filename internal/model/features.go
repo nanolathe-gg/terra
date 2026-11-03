@@ -104,6 +104,71 @@ func featureKey(p FeaturePlacement) string {
 	return fmt.Sprintf("%s@%d,%d", strings.ToLower(p.Name), p.X, p.Z)
 }
 
+type featureCandidate struct {
+	x, z int
+	rank float64
+}
+
+func candidateLess(a, b featureCandidate) bool {
+	return a.rank < b.rank || a.rank == b.rank && (a.z < b.z || a.z == b.z && a.x < b.x)
+}
+
+// Sort bounded runs and merge them cooperatively, preserving the exact total
+// order of the original sort while letting the browser worker handle cancel.
+func sortFeatureCandidates(items []featureCandidate, yield func() error) error {
+	const batch = 8192
+	check := func() error {
+		if yield != nil {
+			return yield()
+		}
+		return nil
+	}
+	for start := 0; start < len(items); start += batch {
+		if err := check(); err != nil {
+			return err
+		}
+		end := min(start+batch, len(items))
+		sort.Slice(items[start:end], func(i, j int) bool { return candidateLess(items[start+i], items[start+j]) })
+	}
+	if len(items) <= batch {
+		return nil
+	}
+	scratch := make([]featureCandidate, len(items))
+	src, dst := items, scratch
+	for width := batch; width < len(items); width *= 2 {
+		copied := 0
+		for start := 0; start < len(items); start += width * 2 {
+			mid, end := min(start+width, len(items)), min(start+width*2, len(items))
+			i, j := start, mid
+			for k := start; k < end; k++ {
+				if copied%batch == 0 {
+					if err := check(); err != nil {
+						return err
+					}
+				}
+				if j >= end || i < mid && !candidateLess(src[j], src[i]) {
+					dst[k] = src[i]
+					i++
+				} else {
+					dst[k] = src[j]
+					j++
+				}
+				copied++
+			}
+		}
+		src, dst = dst, src
+	}
+	if len(src) > 0 && &src[0] != &items[0] {
+		for start := 0; start < len(items); start += batch {
+			if err := check(); err != nil {
+				return err
+			}
+			copy(items[start:min(start+batch, len(items))], src[start:min(start+batch, len(items))])
+		}
+	}
+	return nil
+}
+
 // FillFeatures mirrors the editor's deterministic candidate ranking and checks
 // every cell in a feature footprint against dry, gentle terrain and the region.
 func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64, defs []FeatureDefinition, existing []FeaturePlacement, starts []FeaturePoint, depositName string, r FeatureRegion, f FeatureFill) ([]FeaturePlacement, error) {
@@ -208,11 +273,7 @@ func FillFeaturesYield(cols, rows int, sea float64, sample func(x, z float64) fl
 			}
 		}
 	}
-	type candidate struct {
-		x, z int
-		rank float64
-	}
-	candidates := []candidate{}
+	candidates := []featureCandidate{}
 	for z := b.Z0; z < b.Z1; z++ {
 		if z%32 == 0 {
 			if err := check(); err != nil {
@@ -226,14 +287,13 @@ func FillFeaturesYield(cols, rows int, sea float64, sample func(x, z float64) fl
 			cluster := math.Max(0, math.Min(1, (featureNoise(float64(x)/12, float64(z)/12, f.Seed^0x713c6a91)-.25)*2))
 			prob := f.Density / 100 * (1 - f.Clustering + f.Clustering*cluster*2)
 			if featureHash(x, z, f.Seed^0x517ad0f3) < prob {
-				candidates = append(candidates, candidate{x, z, featureHash(x, z, f.Seed^0x34da72f1)})
+				candidates = append(candidates, featureCandidate{x, z, featureHash(x, z, f.Seed^0x34da72f1)})
 			}
 		}
 	}
-	sort.Slice(candidates, func(i, j int) bool {
-		a, b := candidates[i], candidates[j]
-		return a.rank < b.rank || a.rank == b.rank && (a.z < b.z || a.z == b.z && a.x < b.x)
-	})
+	if err := sortFeatureCandidates(candidates, yield); err != nil {
+		return nil, err
+	}
 	occupied := make([]bool, cols*rows)
 	for _, p := range existing {
 		d := defsByName[strings.ToLower(p.Name)]
