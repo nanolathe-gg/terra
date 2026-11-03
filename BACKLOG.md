@@ -8313,6 +8313,61 @@ trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 - *Not run.* `measure/world_controls.mjs` (no control changed).
 - *Left.* Export of 2x tiles, and anything in Nanolathe, are out of scope. A 4K-sized window on the default budget stops at .5 at 400%, and the planner has no way to say so on screen. `pixelSample` and `pixelSampleLayer` have no callers.
 
+### H27. Landform: a path tool with a whole cross-section and a height along the path
+
+**Why.** The owner built a throwaway playground (branch `prototype/unified-landform`, at `/private/tmp/terraform-landform-prototype`, page `landform.html`). An artist draws a path, edits the whole cross-section across both sides, sets the crest's height along the path on a second curve, and adds natural variation weighted toward the foot, the middle or the crest. Faint extra sections show the spread the variation makes. The ideas are good. The playground, though, was a second engine: a CPU evaluator, `uLandformOn` branches through the shared shaders, mask planes 18-35 as controls, its own page, save format and undo. This card ports the ideas onto main's one engine and one editor (decision 24, [AGENTS.md](AGENTS.md)). Read the playground's `landform-core.js` for the ideas only. Copy no code from it and never edit that worktree.
+
+**The contract.**
+1. **The engine.** A new kind, `landform` (`KIND` 16), with its own entry `stampLandform` in `engine-shape.wgsl` and a branch in `prepareNode` (`sculpt-gpu-fields.js`). It writes the height plane and the other planes and masks the way `plateau` and `hill` do: protection, routes, cracks, and the stroke's mask and Style writes. **The draw and the bake never learn it exists: no new uniform in `engine-common.wgsl`, no branch in `engine-frag.wgsl` or `engine-bake.wgsl`, and no CPU evaluation of heights anywhere, the editor's previews included.**
+2. **The section is main's curve.** The drawn path is the crest. The section is `curve: {form, knots, back}` with `lean` and `facing`: the front table, the back table, the back's length over the front's, and the side (`strokeCurve`, `curveAt`, decision 23). The tables span the whole half-width, from the foot at the edge to the top at the path; a flat top is knots, not `facePx` or softness, neither of which a landform shows. The whole section's width is `diameter`. *Link sides* sets back = front, *Mirror* swaps them, and dragging the crest sideways sets `lean`. The presets (Plateau, Hill, Mountain, Terraced, and main's forms where they fit) are knot lists in `FORMS`. There is no Smooth switch: `knotCurve`'s monotone cubic already keeps a flat tread flat.
+3. **Fixed elevation, three ways to combine** (decision 24). `elevation` is an absolute height in height units. Along the path the crest is `crest(t) = plain + (elevation - plain) * along(t)`, where `plain` is the map's base height (`baseH`) and `along` is the second curve, 0 to 1.2. A cell `q` of the way up the section, 0 at the feet and 1 at the crest, has `value = base + (crest(t) - base) * q`, where `base` is the height the strokes before it left. Then:
+   - **Raise to** keeps `max(base, value)`;
+   - **Cut to** keeps `min(base, value)`;
+   - **Flatten to** keeps `value`.
+
+   `along(t) = 0` means the plain, not the ground under the path. The test: a Flatten to landform drawn over an existing hill, with its along curve at 0 at one end, brings that end down to the plain.
+4. **The height along the path.** `along` is a second knot list, `[[0, 1], [1, 1]]` by default, sampled like `sampleKnots` into a table after the curve tables. A cell finds `t` by its nearest segment's length before it, its length and the whole path's (the rows `stampRamp` reads). The section continues round the path's two ends with no seam, an asymmetric section included.
+5. **Variation, at its place on the section.** The playground's three kinds of variation: how far the section wanders sideways (px), how much its width varies (a share), and how much its height varies (units). One size sets the wavelength (px) of all three. Three weights (Foot, Middle, Crest, 0 to 2) scale them by the cell's place on the section. The noise is a function of world position, domain-warped at a few scales as the playground's is (`vnoise(lx / size, ly / size, seed)`, as `stampN` reads it), and never of a tile or a page. The segment boxes cover the wander, the widest width variation and the spurs' reach. *New variation* is the existing per-shape reseed button.
+6. **Terraces.** Reuse `terraces`, `ledge` and `terraceJitter` (`terraced()`). Add one shared option, `breakup`, to that function for every section kind: at full breakup most stretches lose their shelf and short ledges survive. 0, the default, changes nothing. **Not ported:** the fine contour steps and their line contrast (steps under a pixel, and H16's rock column already draws height-banded strata); the terraces' strength.
+7. **Spurs.** Reuse the eight spur keys (`spurCount` to `spurBulb`) and `spurPieces`. Each piece draws the landform's section scaled by the piece's width and height multipliers.
+8. **Surface.** Reuse the stroke's Style and mask options: add `landform` to `MASK_SHAPES` in both files and to the Style options' kind lists. **Not ported:** the playground's per-landform material sliders (rock, sand, snow, patch size, fine relief, the fracture and weathering sliders) and its all-or-nothing material pixels, which would be an engine-wide change to judge against retail, not part of a tool.
+9. **The new keys, and what each will replace.** A landform reuses `diameter`, `curve`, `lean`, `facing`, `terraces`, `ledge`, `terraceJitter`, the spur keys, `cracks`, the Style and mask keys, and the node's seed. It adds only these, each in `KNOB_DEFAULTS` and wired in all four places (ground rule 4):
+
+   | Key | Control | Replaces, when the landform takes over from plateau, hill and mountain |
+   | --- | --- | --- |
+   | `elevation` | Elevation (height units) | `amount` on those kinds |
+   | `combine` | Raise to / Cut to / Flatten to | the plateau's level read and `offset` / `lower` |
+   | `along` | the height-along-the-path curve | `crestVary`, `crestTaper` |
+   | `wander` | Wander (px) | `outlineVar`, and `roughness`'s share of it |
+   | `widthVary` | Width variation | `widthVar`, `faceVariation` |
+   | `heightVary` | Height variation (units) | `heightVar`, `crestJag` |
+   | `varySize` | Variation size (px) | the fixed noise wavelengths |
+   | `varyFoot`, `varyMiddle`, `varyCrest` | where the variation acts | nothing yet; fold them into fewer controls if the sweep finds one under 5% |
+   | `breakup` | Terrace breakup, on every section kind | nothing; it is new |
+
+   The playground's other sliders do not come across. Each key here must move at least 5% of its class (`measure/shape_controls.mjs`, a landform row) or fold into another.
+
+**The editor.** Add nothing else (AGENTS.md rule 3).
+- One tool button, **Landform**, in the Shape group (`sculpt-ui.js`). It draws, adds paths to and edits paths like Ridge.
+- **One whole-section canvas** replaces `section-preview` and `section-across` for every section kind. It is drawn from the same tables, so no render moves. It shows both sides at the stroke's widths, the handles, Link sides, Mirror and the crest's lean handle, and keeps main's knot gestures. For a landform its axis reads in height units, with the plain, the sea and the elevation marked. Make it as wide as the inspector allows, about 2:1.
+- **Ghost sections.** With a stroke selected, the canvas also draws the sections across it at five places along its path, **read from the map's heights (the CPU copy)**, not computed.
+- **The along-path canvas,** for a landform only, below the section. It shows the authored curve dashed with its handles, and the crest's heights read from the map along the path as a solid line. A click picks the section shown above, and a mark across the path on the map shows where it is.
+
+**Steps.** Commit each, in this order:
+1. The kind, the host and the shader, with a landform fixture scene (not one of the 27 windows). `regional.mjs` finds 0 on it, and the 27 scenes and 9 walls are byte for byte.
+2. The tool's wiring: `SHAPE_FIELDS`, the card `startStroke` builds, `strokeParams`, `KNOB_DEFAULTS`, save and reload, undo, scripted scenes and export. On an exported map, the TNT corners along a crest at elevation E read E, within the terraces and variation.
+3. The editor, with `repro/curveedit.mjs` extended to the landform and the whole-section canvas.
+4. Spurs.
+5. The sweeps and perf: landform rows in `measure/shape_controls.mjs`, `measure/world_controls.mjs`, and `repro/perf.mjs map4 --only drag --no-export` on a landform stroke against a hill stroke, alternating.
+6. A sheet: a Green ridge and a Desert mesa made with the tool, beside their retail windows, in the assets folder. Judged by eye.
+7. These docs: the Done list, an EXPERIMENTS row and the engine doc's Cards row.
+
+**The bar.** The 27 scenes and 9 walls byte for byte with main, with `breakup` at 0. If the new branch in `terraced()` moves a scene, follow ground rule 3's `false` bisect. `regional.mjs` 0 on the 27 and the fixture; `smoke.mjs --page8` 0 with the landform among the brushes; `node --test repro/*.test.mjs`; `repro/gate.sh`; `curveedit.mjs`; the sweeps; drag perf within noise of a hill stroke; a clean console.
+
+**Left, not this card.** A closed-area footprint (main has no polygon fill for shapes). Replacing plateau, hill and mountain with the landform, which is the owner's call once they have tried it. Fine contours, and all-or-nothing material pixels.
+
+**Setup.** Worktree `../terraform-wt-H27` on branch `H27-landform`, server 8885, browser 9685, assets `$R/agent-H27`. Commit on the branch and stop; the session that owns the editor reviews and lands it.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
