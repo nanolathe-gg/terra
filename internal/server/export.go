@@ -276,7 +276,9 @@ func (s *exportStore) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		dir := filepath.Join(s.o.AssetsRoot, "features", parts[0])
 		if parts[1] == "catalog.json" {
-			if _, e := os.Stat(filepath.Join(dir, "catalog.json")); e != nil && s.o.Prepared {
+			_, catalogErr := os.Stat(filepath.Join(dir, "catalog.json"))
+			_, helperErr := os.Stat(s.o.FeatureTool)
+			if catalogErr != nil && (s.o.Prepared || helperErr != nil) {
 				reply(w, map[string]any{"world": parts[0], "features": []any{}, "unavailable": "This server has no feature catalogue installed, so no features can be placed; start positions remain editable."})
 				return
 			}
