@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gogpu/wgpu"
+	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
 
@@ -17,6 +18,10 @@ func (s *SceneRenderer) clearShapeCache() {
 	s.shapeKey = [32]byte{}
 }
 func (s *SceneRenderer) newShapeFeed(side, x, y int) (*weatherFeed, error) {
+	limits := membudget.FromConfig(s.config)
+	if err := membudget.Require("Authored feed", int64(s.renderer.FixedBytes()+s.cacheResidentBytes())+membudget.Area(side, side, 52), limits.GPU); err != nil {
+		return nil, err
+	}
 	cells := side * side
 	f := &weatherFeed{GPUFeed: GPUFeed{Grid: side, Cells: cells, OriginX: x, OriginY: y, MaskCount: 25}}
 	p, e := s.gpu.Allocate("cached authored planes", uint64(6*cells*4), storageUsage)

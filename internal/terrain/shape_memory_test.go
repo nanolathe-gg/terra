@@ -36,3 +36,16 @@ func TestShapeMemoryIncludesCoastPrefixAndReadback(t *testing.T) {
 		t.Fatal("mapped readback copies omitted")
 	}
 }
+
+func TestWeatherRefusesBeforeFeedOrShapeAllocation(t *testing.T) {
+	c := ShapeWindowConfig{Grid: 768, Spacing: 1, RefSpacing: 1, Window: CellRect{0, 0, 0, 0}, Memory: membudget.FromConfig(map[string]any{"gpuMB": 128, "heapMB": 128})}
+	// The authored window alone fits. Its simultaneous output feed and Time
+	// state/flux/result buffers do not. Nil GPU proves no feed or shape allocation.
+	s := &SceneRenderer{shape: &ShapeEngine{}}
+	for _, material := range []float64{0, 1} {
+		_, err := s.weatherPage(context.Background(), nil, c, 0, 0, 512, 128, DrawOptions{MaterialWeathering: material})
+		if err == nil || !strings.Contains(err.Error(), "Expanded shape GPU buffers") {
+			t.Fatalf("expected preallocation weather refusal, got %v", err)
+		}
+	}
+}

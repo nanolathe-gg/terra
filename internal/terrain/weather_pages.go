@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/gogpu/wgpu"
+	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
 
@@ -31,6 +32,10 @@ func (s *SceneRenderer) clearWeatherCache() {
 	s.weatherKey = [32]byte{}
 }
 func (s *SceneRenderer) newWeatherFeed(side, originX, originY int, material bool) (*weatherFeed, error) {
+	limits := membudget.FromConfig(s.config)
+	if err := membudget.Require("Weather feed", int64(s.renderer.FixedBytes()+s.cacheResidentBytes())+weatherFeedBytes(side, material), limits.GPU); err != nil {
+		return nil, err
+	}
 	cells := side * side
 	f := &weatherFeed{GPUFeed: GPUFeed{Grid: side, Cells: cells, OriginX: originX, OriginY: originY, MaskCount: 25}}
 	alloc := func(label string, n int) (*wgpu.Buffer, error) {
@@ -95,19 +100,43 @@ func (s *SceneRenderer) copyWeather(src, dst *weatherFeed, hit CellRect) error {
 	}
 	return s.gpu.Submit(enc)
 }
+func weatherFeedBytes(side int, material bool) int64 {
+	per := int64(72)
+	if material {
+		per += 16
+	}
+	return membudget.Area(side, side, per)
+}
+func weatherShapeConfig(c ShapeWindowConfig, px, py, core, apron int, o DrawOptions) ShapeWindowConfig {
+	side := min(c.Grid, core+2*apron)
+	x, y := px*core, py*core
+	ox, oy := max(0, min(c.Grid-side, x-apron)), max(0, min(c.Grid-side, y-apron))
+	c.Window = CellRect{ox, oy, ox + side - 1, oy + side - 1}
+	c.ReservedGPUBytes += weatherFeedBytes(core, o.MaterialWeathering > 0)
+	// Time's temporary buffers and result are simultaneous. Its temporaries are
+	// released before MaterialField, which retains only the 20-byte/cell result.
+	n := int64(side) * int64(side)
+	tiles := int64((side + 7) / 8)
+	c.CallbackGPUBytes = 140*n + 12*tiles*tiles + 176
+	if o.MaterialWeathering > 0 {
+		c.CallbackGPUBytes = max(c.CallbackGPUBytes, 92*n+80*8)
+	}
+	return c
+}
 func (s *SceneRenderer) weatherPage(ctx context.Context, nodes []model.Node, c ShapeWindowConfig, px, py, core, apron int, o DrawOptions) (*weatherFeed, error) {
 	x, y := px*core, py*core
 	coreRect := CellRect{x, y, min(c.Grid-1, x+core-1), min(c.Grid-1, y+core-1)}
-	out, e := s.newWeatherFeed(core, x, y, o.MaterialWeathering > 0)
-	if e != nil {
-		return nil, e
-	}
+	q := weatherShapeConfig(c, px, py, core, apron, o)
+	var out *weatherFeed
 	pageSide := min(c.Grid, core+2*apron)
-	ox, oy := max(0, min(c.Grid-pageSide, x-apron)), max(0, min(c.Grid-pageSide, y-apron))
-	q := c
-	q.ReservedGPUBytes += int64(out.bytes)
-	q.Window = CellRect{ox, oy, ox + pageSide - 1, oy + pageSide - 1}
-	_, e = s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, func(_ CellRect, planes, masks *wgpu.Buffer) error {
+	ox, oy := q.Window.X0, q.Window.Y0
+
+	_, e := s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, func(_ CellRect, planes, masks *wgpu.Buffer) error {
+		var err error
+		out, err = s.newWeatherFeed(core, x, y, o.MaterialWeathering > 0)
+		if err != nil {
+			return err
+		}
 		er, e := s.erosion.RunGPU(ctx, ErosionRequest{Planes: planes, Masks: masks, Grid: pageSide, Size: s.renderer.Size, Ox: ox, Oy: oy, RateMask: 14, Age: int(s.renderer.num("erosionAge", 200)), SeaLevel: c.Sea, Spacing: c.Spacing, Rain: s.renderer.num("erosionRain", 1), TalusAngle: s.renderer.num("talusAngle", 40), Envelope: s.renderer.num("erosionEnvelope", 2), Sand: s.renderer.num("sand", 0), WetReach: s.renderer.num("wetReach", 3), TalusFull: s.renderer.num("talusFull", 2.5), WearFull: s.renderer.num("wearFull", 1.5), FlowK: s.renderer.num("flowK", 30)})
 		if e != nil {
 			return e
@@ -130,7 +159,9 @@ func (s *SceneRenderer) weatherPage(ctx context.Context, nodes []model.Node, c S
 		return s.copyWeather(src, out, coreRect)
 	})
 	if e != nil {
-		out.Close()
+		if out != nil {
+			out.Close()
+		}
 		return nil, e
 	}
 	return out, nil
@@ -139,12 +170,6 @@ func (s *SceneRenderer) weatherPage(ctx context.Context, nodes []model.Node, c S
 // buildWeatherFeed reuses bounded Time pages. Small maps follow the original
 // whole-map pass; larger maps use 512-cell cores with 128-cell aprons.
 func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node, c ShapeWindowConfig, region CellRect, o DrawOptions) (feed *weatherFeed, err error) {
-	if s.erosion == nil {
-		s.erosion, err = s.renderer.NewErosion()
-		if err != nil {
-			return nil, err
-		}
-	}
 	keyData, e := json.Marshal([]any{nodes, c.Grid, c.Spacing, c.RefSpacing, c.BaseHeight, c.Sea, c.MinHeight, c.MaxHeight, c.Defaults, s.renderer.Size, s.renderer.Variant, s.config["column"], s.config["material"], o.MaterialWeathering > 0, o.RefinementSeed, o.DepositSpread})
 	if e != nil {
 		return nil, e
@@ -156,6 +181,31 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 		s.weatherPages = map[[2]int]*weatherFeed{}
 	}
 	side := max(region.X1-region.X0+1, region.Y1-region.Y0+1)
+	core, apron := 512, 128
+	if c.Grid <= 1168 {
+		core, apron = c.Grid, 0
+	}
+	// Preflight every missing page before allocating even the gathered feed.
+	for py := region.Y0 / core; py <= region.Y1/core; py++ {
+		for px := region.X0 / core; px <= region.X1/core; px++ {
+			if s.weatherPages[[2]int{px, py}] != nil {
+				continue
+			}
+			q := c
+			q.ReservedGPUBytes = int64(s.renderer.FixedBytes()+s.cacheResidentBytes()) + weatherFeedBytes(side, o.MaterialWeathering > 0)
+			q = weatherShapeConfig(q, px, py, core, apron, o)
+			q.preflightOnly = true
+			if _, e := s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, nil); e != nil {
+				return nil, e
+			}
+		}
+	}
+	if s.erosion == nil {
+		s.erosion, err = s.renderer.NewErosion()
+		if err != nil {
+			return nil, err
+		}
+	}
 	feed, err = s.newWeatherFeed(side, region.X0, region.Y0, o.MaterialWeathering > 0)
 	if err != nil {
 		return nil, err
@@ -166,10 +216,6 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 			owned.Close()
 		}
 	}()
-	core, apron := 512, 128
-	if c.Grid <= 1168 {
-		core, apron = c.Grid, 0
-	}
 	budget := s.cacheBudget()
 	for py := region.Y0 / core; py <= region.Y1/core; py++ {
 		for px := region.X0 / core; px <= region.X1/core; px++ {

@@ -30,6 +30,7 @@ func (s *SceneRenderer) CompareRegions(ctx context.Context, nodes []model.Node, 
 	if s.shape == nil || s.renderer == nil {
 		return nil, fmt.Errorf("scene renderer is closed")
 	}
+	s.renderer.releaseWorking()
 	s.renderer.ApplyKnobs(knobs)
 	grid := s.renderer.Grid
 	if grid < 2 || grid > 2048 {
@@ -120,6 +121,7 @@ func (s *SceneRenderer) ReadAuthored(ctx context.Context, nodes []model.Node, kn
 	if err := membudget.FromConfig(s.config).Authored(rect.X1-rect.X0+1, rect.Y1-rect.Y0+1); err != nil {
 		return nil, err
 	}
+	s.renderer.releaseWorking()
 	s.renderer.ApplyKnobs(knobs)
 	grid := s.renderer.Grid
 	if grid < 2 {

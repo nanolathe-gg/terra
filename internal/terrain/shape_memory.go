@@ -45,7 +45,7 @@ func checkShapeMemory(c ShapeWindowConfig, ops []PreparedOp, sizes []int, packed
 		main += int64(max(16, size))
 	}
 	main += int64(packedBytes)
-	var extra int64
+	extra := c.CallbackGPUBytes
 	for i, op := range ops {
 		for _, p := range op.PrefixReads {
 			r := prefixWindow(c, ops, i, p)

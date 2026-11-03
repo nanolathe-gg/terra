@@ -102,6 +102,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 			return nil, err
 		}
 	}
+	s.renderer.releaseWorking()
 	s.renderer.ApplyKnobs(knobs)
 	if len(colors) > 0 {
 		b, err := json.Marshal(colors)

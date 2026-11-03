@@ -20,6 +20,8 @@ type ShapeWindowConfig struct {
 	Defaults                                                   map[string]any
 	Memory                                                     membudget.Limits
 	ReservedGPUBytes                                           int64
+	CallbackGPUBytes                                           int64
+	preflightOnly                                              bool
 }
 type ShapeWindow struct {
 	Rect          CellRect
@@ -111,6 +113,9 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, scratch * 4, 0, 0, outputBytes, max(16, reads*4)}
 	if err := checkShapeMemory(c, ops, sizes, len(segData)+len(maskData), outCells, readback); err != nil {
 		return nil, err
+	}
+	if c.preflightOnly {
+		return &ShapeWindow{Rect: window, Width: outW, Height: outH}, nil
 	}
 	var e error
 	for i := range buffers {
