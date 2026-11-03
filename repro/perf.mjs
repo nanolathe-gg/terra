@@ -139,6 +139,7 @@ function patch(c) {
   if (region) for (const name of ['sampleAuthored', 'sample']) {   // the 128 x 128 overview samples the authored field point by point
     const f = region[name]; if (typeof f !== 'function') continue;
     region[name] = function (...a) {
+      if (P.quiet) return f.apply(this, a);   // the harness's own reads (the drag's pointer picks) are not the page's work
       const t = now(); const v = f.apply(this, a), d = now() - t; add('field sample (' + name + ')', d);
       // every 97th call: who asked (the innermost page functions above the wrapper), with the time this call took
       if ((P.sampleCalls = (P.sampleCalls || 0) + 1) % 97 === 0) {
@@ -267,7 +268,9 @@ try {
   // revision of the fields it read (a fed bake: the revision submitted when it took the buffers; a CPU bake: the last region read before it); the
   // picture is the first chunk paint after that bake ends.
   const drawSize = Number(opt2('--diameter', 0)); if (drawSize) await ev(`(() => { const d = document.getElementById('diameter'); d.value = ${drawSize}; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })(); true`);
-  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; await ev(`__perf.mark('move', {k: ${i}})`); await mouse('mouseMoved', cx + i * 9, cy + Math.sin(i / 6) * 60); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats().revision ?? null})`); await sleep(30); }
+  // `at` is the map point under the pointer, picked before the move lands as the editor picks it, for the latency of the chunk under it.
+  const at = (x, y) => `(() => { __perf.quiet = true; try { return sculptCanvas.pick(${x}, ${y}); } finally { __perf.quiet = false; } })()`;
+  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; const sx = cx + i * 9, sy = cy + Math.sin(i / 6) * 60; await ev(`__perf.mark('move', {k: ${i}, at: ${at(sx - box.x, sy - box.y)}})`); await mouse('mouseMoved', sx, sy); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats().revision ?? null})`); await sleep(30); }
   const frames = await ev('__perf.frameStop()');
   const dragEnd = await ev('performance.now()');
   const dragDraws = (await ev('__perf.draws')).filter(d => d.t >= dragT0 && d.t <= dragEnd);
@@ -275,7 +278,7 @@ try {
     erodeDuringDrag: (await ev('__perf.ev')).filter(e => e.type === 'erode-start').length, split: await splitStages()};
   {
     const events = await ev('__perf.ev'), draws = (await ev('__perf.draws')).filter(d => d.chunk), runs = (await ev('window.sculptRegion?.stats().gpuShape?.runLog || []')) || [];
-    const marks = new Map(); for (const e of events) { if (e.type === 'move') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).t = e.t; if (e.type === 'rev') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).rev = e.rev; }
+    const marks = new Map(); for (const e of events) { if (e.type === 'move') Object.assign(marks.get(e.k) ?? marks.set(e.k, {}).get(e.k), {t: e.t, at: e.at}); if (e.type === 'rev') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).rev = e.rev; }
     const bakes = []; let lastRead = null;
     for (const e of events) { if (e.type === 'read') lastRead = e; if (e.type === 'bake-end') { const start = e.t - e.ms, read = events.filter(r => r.type === 'read' && r.t <= start).at(-1); bakes.push({end: e.t, rev: e.rev ?? read?.rev ?? null, key: e.x + ',' + e.y, level: e.level ?? 1}); } }
     const lat = [], share = []; let censored = 0;
@@ -298,6 +301,16 @@ try {
       if (ok) all.push(worst);
     }
     result.drag.latencyAll = {dirtyChunks: dirty.length, measured: all.length, p50: q(all, .5), p95: q(all, .95), max: Math.max(...all, 0)};
+    // The chunk under the pointer: its first bake that carries the move, then the picture. Censored: that chunk did not rebake before the release.
+    const size = result.load.chunkSize, latP = []; let censoredP = 0;
+    for (const [k, m] of marks) {
+      if (m.t === undefined || m.rev == null || !m.at) continue;
+      const key = Math.floor(m.at[0] / size) * size + ',' + Math.floor(m.at[1] / size) * size;
+      const b = bakes.find(b => b.key === key && b.end >= m.t && b.rev != null && b.rev >= m.rev), d = b && draws.find(d => d.t >= b.end);
+      if (!d) { censoredP++; continue; }
+      latP.push(d.t - m.t);
+    }
+    result.drag.latencyPointer = {moves: marks.size, measured: latP.length, censored: censoredP, p50: q(latP, .5), p95: q(latP, .95), max: Math.max(...latP, 0)};
     result.drag.quarterBakes = bakes.filter(b => b.level > 1).length; result.drag.bakes = bakes.length;
     result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), shapeShareP50: q(share, .5), shapeShareP95: q(share, .95), shapeShareN: share.length};
   }
