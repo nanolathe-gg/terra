@@ -33,3 +33,15 @@ func TestFillFeaturesDeterministicAndBounded(t *testing.T) {
 		t.Fatal("filled submerged ground")
 	}
 }
+func TestFeatureBoundsExplicitZeroRadius(t *testing.T) {
+	r := FeatureRegion{Type: "brush", Points: []FeaturePoint{{80, 80}}, Radius: 0, RadiusSet: true}
+	b, e := FeatureRegionBounds(r, 100, 100, 128)
+	if e != nil || b != (FeatureBounds{5, 5, 6, 6}) {
+		t.Fatalf("explicit zero radius: %+v %v", b, e)
+	}
+	r.RadiusSet = false
+	b, e = FeatureRegionBounds(r, 100, 100, 128)
+	if e != nil || b.X0 >= 5 || b.X1 <= 6 {
+		t.Fatalf("omitted radius: %+v %v", b, e)
+	}
+}

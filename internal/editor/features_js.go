@@ -466,7 +466,7 @@ func (f *FeatureUI) PointerUp(p model.Point, e js.Value) bool {
 	}
 	f.snapshot = nil
 	if f.mode == "fill" {
-		region := model.FeatureRegion{Type: f.region, Points: f.points, X: p.X, Z: p.Y, Radius: f.radius}
+		region := model.FeatureRegion{Type: f.region, Points: f.points, X: p.X, Z: p.Y, Radius: f.radius, RadiusSet: true}
 		fill := model.FeatureFill{Kind: f.kind, Density: f.density, Clustering: f.cluster, Gap: f.gap, Seed: f.seed, Margin: f.margin, Radius: f.radius}
 		added, err := model.FillFeatures(f.store.Cols, f.store.Rows, num(f.a.Config, "seaLevel", 0), f.a.Sample, f.defs, f.store.Features, f.store.Starts, f.store.DepositName, region, fill)
 		if err != nil {

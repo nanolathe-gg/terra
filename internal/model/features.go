@@ -23,6 +23,7 @@ type FeatureDefinition struct {
 	FootprintX, FootprintZ, Uses int
 }
 type FeatureRegion struct {
+	RadiusSet    bool
 	Type         string
 	Points       []FeaturePoint
 	X, Z, Radius float64
@@ -59,8 +60,8 @@ func FeatureRegionBounds(r FeatureRegion, cols, rows int, radius float64) (Featu
 	reach := 0.
 	if r.Type == "brush" {
 		reach = radius
-		if r.Radius > 0 {
-			reach = r.Radius
+		if r.RadiusSet || r.Radius > 0 {
+			reach = math.Max(0, r.Radius)
 		}
 	}
 	bound := func(v float64, maxi int) int { return max(0, min(int(v), maxi)) }
@@ -162,8 +163,8 @@ func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64
 		}
 	} else if !(r.Type == "lasso" && len(r.Points) < 3 || r.Type == "brush" && len(r.Points) == 0) {
 		radius := f.Radius
-		if r.Radius > 0 {
-			radius = r.Radius
+		if r.RadiusSet || r.Radius > 0 {
+			radius = math.Max(0, r.Radius)
 		}
 		for z := b.Z0; z < b.Z1; z++ {
 			for x := b.X0; x < b.X1; x++ {
