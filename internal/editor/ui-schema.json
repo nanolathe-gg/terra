@@ -1,0 +1,4579 @@
+{
+  "TOOL_PRESETS": {
+    "green": {
+      "crater": {
+        "roughness": 60
+      },
+      "plateau": {
+        "roughness": 40
+      },
+      "hill": {
+        "roughness": 35
+      },
+      "mountain": {
+        "roughness": 45
+      },
+      "ramp": {
+        "roughness": 18
+      },
+      "deep": {
+        "roughness": 45
+      },
+      "shallow": {
+        "roughness": 18
+      }
+    },
+    "red": {
+      "crater": {
+        "roughness": 65,
+        "softness": 40
+      },
+      "plateau": {
+        "roughness": 50,
+        "softness": 35
+      },
+      "hill": {
+        "roughness": 50,
+        "softness": 40
+      },
+      "mountain": {
+        "roughness": 55,
+        "softness": 30
+      },
+      "ramp": {
+        "roughness": 22
+      },
+      "deep": {
+        "roughness": 55,
+        "bankWidth": 38,
+        "shelves": 45
+      },
+      "shallow": {
+        "roughness": 25
+      }
+    },
+    "desert": {
+      "crater": {
+        "roughness": 55,
+        "softness": 55,
+        "cracks": 10
+      },
+      "plateau": {
+        "roughness": 30,
+        "softness": 100,
+        "diameter": 560,
+        "amount": 67,
+        "cracks": 10,
+        "facePx": 210,
+        "curve": {
+          "form": "mesa"
+        }
+      },
+      "hill": {
+        "roughness": 45,
+        "softness": 62,
+        "cracks": 10
+      },
+      "mountain": {
+        "roughness": 50,
+        "softness": 50,
+        "cracks": 10
+      },
+      "offset": {
+        "cracks": 10
+      },
+      "ramp": {
+        "roughness": 18
+      },
+      "deep": {
+        "roughness": 50
+      },
+      "shallow": {
+        "roughness": 20
+      }
+    },
+    "moon": {
+      "crater": {
+        "roughness": 65,
+        "softness": 45
+      },
+      "plateau": {
+        "roughness": 45,
+        "softness": 45
+      },
+      "hill": {
+        "roughness": 40,
+        "softness": 55
+      },
+      "mountain": {
+        "roughness": 50,
+        "softness": 40
+      },
+      "ramp": {
+        "roughness": 18
+      },
+      "deep": {
+        "roughness": 50
+      },
+      "shallow": {
+        "roughness": 20
+      }
+    },
+    "crystal": {
+      "crystal": {
+        "amount": 140,
+        "diameter": 480,
+        "roughness": 40
+      }
+    },
+    "ice": {
+      "crystal": {
+        "amount": 155,
+        "diameter": 120,
+        "roughness": 20
+      }
+    },
+    "lava": {
+      "deep": {
+        "roughness": 45,
+        "bankWidth": 80,
+        "beachFlatness": 30
+      },
+      "shallow": {
+        "roughness": 30,
+        "bankWidth": 80,
+        "beachFlatness": 30
+      }
+    },
+    "zhon": {
+      "crater": {
+        "roughness": 55,
+        "softness": 60
+      },
+      "plateau": {
+        "roughness": 45,
+        "softness": 55
+      },
+      "hill": {
+        "roughness": 30,
+        "softness": 35
+      },
+      "mountain": {
+        "roughness": 45,
+        "softness": 55
+      },
+      "ramp": {
+        "roughness": 18
+      },
+      "deep": {
+        "roughness": 60,
+        "bankWidth": 70,
+        "beachFlatness": 75,
+        "shelves": 70
+      },
+      "shallow": {
+        "roughness": 30,
+        "bankWidth": 70,
+        "beachFlatness": 75
+      }
+    },
+    "archipelago": {
+      "crater": {
+        "roughness": 60,
+        "softness": 65
+      },
+      "plateau": {
+        "roughness": 45,
+        "softness": 72
+      },
+      "hill": {
+        "roughness": 35,
+        "softness": 78
+      },
+      "mountain": {
+        "roughness": 45,
+        "softness": 65
+      },
+      "ramp": {
+        "roughness": 18
+      },
+      "deep": {
+        "roughness": 60,
+        "bankWidth": 78,
+        "beachFlatness": 80,
+        "shelves": 90
+      },
+      "shallow": {
+        "roughness": 30,
+        "bankWidth": 75,
+        "beachFlatness": 80
+      }
+    }
+  },
+  "TOOL_FIELDS": {
+    "cracks": [
+      "cracks",
+      0,
+      100
+    ],
+    "diameter": [
+      "diameter",
+      40,
+      800
+    ],
+    "amount": [
+      "amount",
+      -80,
+      160
+    ],
+    "roughness": [
+      "roughness",
+      0,
+      100
+    ],
+    "shelves": [
+      "shelves",
+      0,
+      100
+    ],
+    "bankWidth": [
+      "bank-width",
+      0,
+      100
+    ],
+    "beachFlatness": [
+      "beach-flatness",
+      0,
+      100
+    ],
+    "softness": [
+      "softness",
+      0,
+      100
+    ],
+    "craterlets": [
+      "craterlets",
+      0,
+      12
+    ],
+    "craterEjecta": [
+      "crater-ejecta",
+      0,
+      100
+    ],
+    "faceVariation": [
+      "face-variation",
+      0,
+      150
+    ],
+    "lean": [
+      "lean",
+      0,
+      400
+    ],
+    "outlineVar": [
+      "outline-var",
+      0,
+      200
+    ],
+    "widthVar": [
+      "width-var",
+      0,
+      200
+    ],
+    "heightVar": [
+      "height-var",
+      0,
+      200
+    ],
+    "facing": [
+      "facing",
+      0,
+      10
+    ],
+    "fingers": [
+      "fingers",
+      0,
+      150
+    ],
+    "bankPx": [
+      "bank-px",
+      0,
+      160
+    ],
+    "shoreLayers": [
+      "shore-layers",
+      0,
+      12
+    ],
+    "layerPx": [
+      "layer-px",
+      4,
+      60
+    ],
+    "layerRiser": [
+      "layer-riser",
+      0,
+      80
+    ],
+    "layerLedge": [
+      "layer-ledge",
+      40,
+      95
+    ],
+    "layerRough": [
+      "layer-rough",
+      0,
+      100
+    ],
+    "layerStyle": [
+      "layer-style",
+      0,
+      1
+    ],
+    "facePx": [
+      "sec-face-px",
+      0,
+      400
+    ],
+    "terraces": [
+      "sec-terraces",
+      0,
+      8
+    ],
+    "ledge": [
+      "sec-ledge",
+      0,
+      90
+    ],
+    "terraceJitter": [
+      "sec-terrace-jitter",
+      0,
+      100
+    ],
+    "spurCount": [
+      "spur-count",
+      0,
+      12
+    ],
+    "spurLength": [
+      "spur-length",
+      20,
+      400
+    ],
+    "spurSpread": [
+      "spur-spread",
+      0,
+      100
+    ],
+    "spurWidth": [
+      "spur-width",
+      20,
+      200
+    ],
+    "spurTaper": [
+      "spur-taper",
+      0,
+      100
+    ],
+    "spurHeight": [
+      "spur-height",
+      10,
+      100
+    ],
+    "spurForks": [
+      "spur-forks",
+      0,
+      100
+    ],
+    "spurBulb": [
+      "spur-bulb",
+      0,
+      100
+    ],
+    "crestJag": [
+      "crest-jag",
+      0,
+      100
+    ],
+    "crestVary": [
+      "crest-vary",
+      0,
+      100
+    ],
+    "crestTaper": [
+      "crest-taper",
+      0,
+      100
+    ],
+    "rimHeight": [
+      "rim-height",
+      0,
+      150
+    ],
+    "rimSectors": [
+      "rim-sectors",
+      0,
+      8
+    ],
+    "rimUnequal": [
+      "rim-unequal",
+      0,
+      100
+    ],
+    "rimGaps": [
+      "rim-gaps",
+      0,
+      4
+    ],
+    "rimGapWidth": [
+      "rim-gap-width",
+      10,
+      180
+    ],
+    "fissureWidth": [
+      "fissure-width",
+      2,
+      24
+    ],
+    "fissureJag": [
+      "fissure-jag",
+      0,
+      100
+    ],
+    "fissureBranches": [
+      "fissure-branches",
+      0,
+      12
+    ],
+    "fissureBranchLen": [
+      "fissure-branch-len",
+      20,
+      300
+    ],
+    "fissureBranchSpread": [
+      "fissure-branch-spread",
+      0,
+      100
+    ],
+    "fissureTaper": [
+      "fissure-taper",
+      0,
+      100
+    ],
+    "fissureNetwork": [
+      "fissure-network",
+      0,
+      1
+    ],
+    "fissureCell": [
+      "fissure-cell",
+      30,
+      160
+    ],
+    "fissureCrack": [
+      "fissure-crack",
+      0,
+      100
+    ],
+    "fissureDark": [
+      "fissure-dark",
+      0,
+      100
+    ],
+    "shorePlates": [
+      "shore-plates",
+      0,
+      1
+    ],
+    "plateWaterPx": [
+      "plate-water-px",
+      0,
+      240
+    ],
+    "plateLandPx": [
+      "plate-land-px",
+      0,
+      240
+    ],
+    "plateSize": [
+      "plate-size",
+      8,
+      96
+    ],
+    "plateGap": [
+      "plate-gap",
+      0,
+      160
+    ],
+    "plateHeight": [
+      "plate-height",
+      0,
+      240
+    ],
+    "plateMaterial": [
+      "plate-material",
+      1,
+      2
+    ],
+    "frostNeedles": [
+      "frost-needles",
+      0,
+      100
+    ],
+    "crystalForm": [
+      "crystal-form",
+      0,
+      2
+    ],
+    "crystalTiers": [
+      "crystal-tiers",
+      0,
+      100
+    ],
+    "crystalSides": [
+      "crystal-sides",
+      3,
+      10
+    ],
+    "crystalSize": [
+      "crystal-size",
+      6,
+      640
+    ],
+    "crystalStep": [
+      "crystal-step",
+      0,
+      64
+    ],
+    "crystalCount": [
+      "crystal-count",
+      1,
+      40
+    ],
+    "crystalTop": [
+      "crystal-top",
+      0,
+      95
+    ],
+    "crystalLean": [
+      "crystal-lean",
+      0,
+      100
+    ],
+    "crystalVariation": [
+      "crystal-variation",
+      0,
+      100
+    ],
+    "waterShore": [
+      "water-shore",
+      0,
+      2
+    ],
+    "waterDeep": [
+      "water-deep",
+      0,
+      2
+    ],
+    "waterBed": [
+      "water-bed",
+      0,
+      3
+    ],
+    "crystalAlign": [
+      "crystal-align",
+      0,
+      100
+    ],
+    "bergFace": [
+      "berg-face",
+      20,
+      200
+    ],
+    "bergJitter": [
+      "berg-jitter",
+      0,
+      100
+    ],
+    "bergBreak": [
+      "berg-break",
+      0,
+      8
+    ],
+    "bergRough": [
+      "berg-rough",
+      0,
+      30
+    ],
+    "bergTilt": [
+      "berg-tilt",
+      0,
+      60
+    ],
+    "bergFlat": [
+      "berg-flat",
+      -80,
+      80
+    ],
+    "bergTiltDir": [
+      "berg-tilt-dir",
+      0,
+      359
+    ],
+    "paintChannel": [
+      "paint-channel",
+      1,
+      25
+    ],
+    "maskChannel": [
+      "mask-channel",
+      0,
+      6
+    ],
+    "maskAmount": [
+      "mask-amount",
+      5,
+      100
+    ],
+    "styleRelief": [
+      "style-relief",
+      -100,
+      100
+    ],
+    "styleCracks": [
+      "style-cracks",
+      -100,
+      100
+    ],
+    "styleBanding": [
+      "style-banding",
+      -100,
+      100
+    ],
+    "styleFace": [
+      "style-face",
+      -100,
+      100
+    ],
+    "styleErosion": [
+      "style-erosion",
+      -100,
+      100
+    ],
+    "styleDeposits": [
+      "style-deposits",
+      -100,
+      100
+    ],
+    "styleVegetation": [
+      "style-vegetation",
+      -100,
+      100
+    ],
+    "styleExposure": [
+      "style-exposure",
+      -100,
+      100
+    ],
+    "crystalFacet": [
+      "crystal-facet",
+      0,
+      100
+    ],
+    "crystalSizeVar": [
+      "crystal-size-var",
+      0,
+      100
+    ],
+    "crystalSmooth": [
+      "crystal-smooth",
+      0,
+      100
+    ],
+    "craterFacets": [
+      "crater-facets",
+      0,
+      100
+    ],
+    "baseVary": [
+      "base-vary",
+      0,
+      60
+    ],
+    "baseBump": [
+      "base-bump",
+      0,
+      80
+    ],
+    "fingerSize": [
+      "finger-size",
+      20,
+      300
+    ],
+    "layerVary": [
+      "layer-vary",
+      0,
+      100
+    ],
+    "layerCircle": [
+      "layer-circle",
+      8,
+      80
+    ],
+    "crystalCraterPx": [
+      "crystal-crater-px",
+      0,
+      48
+    ],
+    "crystalCraterStep": [
+      "crystal-crater-step",
+      0,
+      60
+    ],
+    "crystalCraterSkin": [
+      "crystal-crater-skin",
+      0,
+      100
+    ],
+    "plateVary": [
+      "plate-vary",
+      0,
+      100
+    ],
+    "crystalShoreSeam": [
+      "crystal-shore-seam",
+      50,
+      65
+    ],
+    "iceFacets": [
+      "ice-facets",
+      0,
+      100
+    ],
+    "iceFacetSize": [
+      "ice-facet-size",
+      16,
+      96
+    ],
+    "moonLobes": [
+      "moon-lobes",
+      0,
+      60
+    ],
+    "lavaCircleVary": [
+      "lava-circle-vary",
+      0,
+      100
+    ],
+    "lavaSpread": [
+      "lava-spread",
+      0,
+      200
+    ]
+  },
+  "SHAPE_FIELDS": [
+    [
+      "craterlets",
+      "craterlets",
+      "Craterlets",
+      [
+        "crater"
+      ],
+      0,
+      12,
+      1,
+      1,
+      "Small satellite craters round the rim."
+    ],
+    [
+      "craterEjecta",
+      "crater-ejecta",
+      "Ejecta",
+      [
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Ragged patches of throw-out beyond the rim."
+    ],
+    [
+      "faceVariation",
+      "face-variation",
+      "Face width variation",
+      [
+        "plateau",
+        "offset",
+        "erase",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      150,
+      5,
+      100,
+      "How much the edge face widens and narrows along the outline (on a carried cross-section, every width of it)."
+    ],
+    [
+      "lean",
+      "lean",
+      "Lean (back length over face; 0: the shape's own)",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      400,
+      5,
+      100,
+      "How much longer the slope toward the lean side runs than the one away from it (100: the same both sides). 0 keeps what the shape does on its own: a hill's long back, a plateau's wider faces toward north, no lean on the rest."
+    ],
+    [
+      "outlineVar",
+      "outline-var",
+      "Outline wander",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      200,
+      5,
+      100,
+      "How far the outline strays from the line you drew, as a share of what roughness gives this kind (100: as it is; 0: a clean outline)."
+    ],
+    [
+      "widthVar",
+      "width-var",
+      "Width variation",
+      [
+        "plateau",
+        "offset",
+        "deep"
+      ],
+      0,
+      200,
+      5,
+      100,
+      "How much the shape widens and narrows along its outline, as a share of what roughness gives it (100: as it is; 0: an even width)."
+    ],
+    [
+      "heightVar",
+      "height-var",
+      "Height lumps",
+      [
+        "hill",
+        "mountain"
+      ],
+      0,
+      200,
+      5,
+      100,
+      "How much the height wanders along the shape, as a share of what roughness gives it (100: as it is; 0: an even crest)."
+    ],
+    [
+      "facing",
+      "facing",
+      "Lean toward",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      10,
+      1,
+      1,
+      "The side the shape leans toward, the long gentle slope: a map direction or a side of the line you draw (a ridge's steep face is the opposite side).",
+      [
+        [
+          0,
+          "World default (north)"
+        ],
+        [
+          1,
+          "Left of the line"
+        ],
+        [
+          2,
+          "Right of the line"
+        ],
+        [
+          3,
+          "North"
+        ],
+        [
+          4,
+          "North-east"
+        ],
+        [
+          5,
+          "East"
+        ],
+        [
+          6,
+          "South-east"
+        ],
+        [
+          7,
+          "South"
+        ],
+        [
+          8,
+          "South-west"
+        ],
+        [
+          9,
+          "West"
+        ],
+        [
+          10,
+          "North-west"
+        ]
+      ]
+    ],
+    [
+      "fingers",
+      "fingers",
+      "Shore lobes",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      150,
+      5,
+      100,
+      "Interlocking land fingers and inlets along the shore."
+    ],
+    [
+      "bankPx",
+      "bank-px",
+      "Dry bank (px)",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      160,
+      2,
+      1,
+      "Width of the dry bank from the waterline to the level ground, whatever the shape's size (0: a share of the shape, set by Bank width)."
+    ],
+    [
+      "shoreLayers",
+      "shore-layers",
+      "Shore layers",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      12,
+      1,
+      1,
+      "Cut the bank into this many flat terraces stepping down to the water, as real heights the sun lights (a lit top, a shaded riser), counted from the waterline this stroke leaves. 0: the plain bank."
+    ],
+    [
+      "layerPx",
+      "layer-px",
+      "Layer width (px)",
+      [
+        "deep",
+        "shallow"
+      ],
+      4,
+      60,
+      1,
+      1,
+      "Width of one layer, ledge and riser together: Shore layers times this is how far the terraces reach inland."
+    ],
+    [
+      "layerRiser",
+      "layer-riser",
+      "Riser height (units; 0 fits the bank)",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      80,
+      1,
+      10,
+      "Height of each step. 0 shares the bank's whole rise out between the layers, so the last one meets the plain."
+    ],
+    [
+      "layerLedge",
+      "layer-ledge",
+      "Flat share of a layer",
+      [
+        "deep",
+        "shallow"
+      ],
+      40,
+      95,
+      5,
+      100,
+      "How much of each layer is flat ledge; the rest is the riser, which the sun shades."
+    ],
+    [
+      "layerRough",
+      "layer-rough",
+      "Layer irregularity",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How far the layer edges wander, so neighboring risers meet and part and no two layers run parallel for long."
+    ],
+    [
+      "layerStyle",
+      "layer-style",
+      "Layer style",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      1,
+      1,
+      1,
+      "Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2).",
+      [
+        [
+          0,
+          "Contour"
+        ],
+        [
+          1,
+          "Circular"
+        ]
+      ]
+    ],
+    [
+      "facePx",
+      "sec-face-px",
+      "Face width (px)",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      400,
+      2,
+      1,
+      "Width of the whole curve, foot to top, kept the same whatever the brush size (0: a share of the brush set by Slope softness)."
+    ],
+    [
+      "terraces",
+      "sec-terraces",
+      "Terraces",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      8,
+      1,
+      1,
+      "Cut the face into this many flat ledges with risers between them."
+    ],
+    [
+      "ledge",
+      "sec-ledge",
+      "Ledge (flat share of a step)",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      90,
+      5,
+      100,
+      "How much of each step is flat; the rest is the riser."
+    ],
+    [
+      "terraceJitter",
+      "sec-terrace-jitter",
+      "Terrace variation",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How much riser positions and step heights wander along the outline."
+    ],
+    [
+      "spurCount",
+      "spur-count",
+      "Spurs",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      0,
+      12,
+      1,
+      1,
+      "Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape's own seed. Each joins its parent at the crest."
+    ],
+    [
+      "spurLength",
+      "spur-length",
+      "Spur length (px)",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      20,
+      400,
+      10,
+      1,
+      "Average reach of a spur; each runs from about half to one and a half times this."
+    ],
+    [
+      "spurSpread",
+      "spur-spread",
+      "Spur angle spread",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding."
+    ],
+    [
+      "spurWidth",
+      "spur-width",
+      "Spur width",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      20,
+      200,
+      5,
+      100,
+      "A spur's width at its root, as a share of the ridge's own (a crater's radius, on a crater); it flares a little where it joins."
+    ],
+    [
+      "spurTaper",
+      "spur-taper",
+      "Spur taper",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How much a spur narrows and lowers toward its tip."
+    ],
+    [
+      "spurHeight",
+      "spur-height",
+      "Spur height",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      10,
+      100,
+      5,
+      100,
+      "A spur's root height as a share of the ridge's crest (of the crater's rim height)."
+    ],
+    [
+      "spurForks",
+      "spur-forks",
+      "Spur forks",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "The share of spurs that fork once, two thirds of the way out, into a shorter spur."
+    ],
+    [
+      "spurBulb",
+      "spur-bulb",
+      "Bulbous spur tips",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point."
+    ],
+    [
+      "crestJag",
+      "crest-jag",
+      "Crest irregularity",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs."
+    ],
+    [
+      "crestVary",
+      "crest-vary",
+      "Crest width and height variation",
+      [
+        "hill",
+        "mountain",
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "The ridge swells and shrinks, wider and lower in places, along its path (a crater's spurs, on a crater)."
+    ],
+    [
+      "crestTaper",
+      "crest-taper",
+      "Crest taper (both ends)",
+      [
+        "hill",
+        "mountain"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "The ridge narrows and lowers toward both ends of its path."
+    ],
+    [
+      "rimHeight",
+      "rim-height",
+      "Rim height (share of depth)",
+      [
+        "crater"
+      ],
+      0,
+      150,
+      1,
+      100,
+      "How high the rim stands, as a share of the crater's Depth (34% is the usual rim); the bowl floor does not change, so a tall rim needs no deeper bowl."
+    ],
+    [
+      "rimSectors",
+      "rim-sectors",
+      "Rim sectors",
+      [
+        "crater"
+      ],
+      0,
+      8,
+      1,
+      1,
+      "Split the rim into this many sectors of different height and width (a lopsided ring, not an even one)."
+    ],
+    [
+      "rimUnequal",
+      "rim-unequal",
+      "Sector inequality",
+      [
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How different the sectors are: 0 equal; 100 from a faint low ridge to a tall, broad massif."
+    ],
+    [
+      "rimGaps",
+      "rim-gaps",
+      "Rim gaps",
+      [
+        "crater"
+      ],
+      0,
+      4,
+      1,
+      1,
+      "Deliberate breaks in the rim, where it sinks to a low saddle."
+    ],
+    [
+      "rimGapWidth",
+      "rim-gap-width",
+      "Gap width (degrees)",
+      [
+        "crater"
+      ],
+      10,
+      180,
+      5,
+      1,
+      "Angular width of each gap; a wide one leaves an open crescent."
+    ],
+    [
+      "fissureWidth",
+      "fissure-width",
+      "Width (px)",
+      [
+        "fissure"
+      ],
+      2,
+      24,
+      1,
+      1,
+      "Width of the cut at its widest. The grid is 2 px, so a cut never reads narrower than about 4 px, however thin it is set."
+    ],
+    [
+      "fissureJag",
+      "fissure-jag",
+      "Jaggedness",
+      [
+        "fissure"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How far the cut zigzags off its path, and how its depth varies along it."
+    ],
+    [
+      "fissureBranches",
+      "fissure-branches",
+      "Branches",
+      [
+        "fissure"
+      ],
+      0,
+      12,
+      1,
+      1,
+      "Side cuts that leave the main cut, and fork once, grown from the shape's own seed. Network mode ignores them."
+    ],
+    [
+      "fissureBranchLen",
+      "fissure-branch-len",
+      "Branch length (px)",
+      [
+        "fissure"
+      ],
+      20,
+      300,
+      5,
+      1,
+      "Average reach of a branch; each runs from about half to one and a half times this."
+    ],
+    [
+      "fissureBranchSpread",
+      "fissure-branch-spread",
+      "Branch angle spread",
+      [
+        "fissure"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "0: branches leave at about 25 degrees to the cut; 100: up to square."
+    ],
+    [
+      "fissureTaper",
+      "fissure-taper",
+      "Taper",
+      [
+        "fissure"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How much the cut narrows and shallows toward its ends and its branch tips."
+    ],
+    [
+      "fissureNetwork",
+      "fissure-network",
+      "Cut layout",
+      [
+        "fissure"
+      ],
+      0,
+      1,
+      1,
+      1,
+      "0: cut along the stroke. 1: a connected polygonal fracture network over the stroke's whole footprint (Diameter sets how far it reaches), as on Red's rock platforms."
+    ],
+    [
+      "fissureCell",
+      "fissure-cell",
+      "Network block size (px)",
+      [
+        "fissure"
+      ],
+      30,
+      160,
+      5,
+      1,
+      "Typical width of a block between the cuts."
+    ],
+    [
+      "fissureCrack",
+      "fissure-crack",
+      "Fractured rock beside the cut",
+      [
+        "fissure"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Raises the world's own crack field along the cut, so the rock beside it breaks up (0 leaves only the cut)."
+    ],
+    [
+      "fissureDark",
+      "fissure-dark",
+      "Darkness",
+      [
+        "fissure"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Paints the world's own wet (dark) ground along the cut, so it reads dark whatever the ground (it layers on rock, snow or moss)."
+    ],
+    [
+      "shorePlates",
+      "shore-plates",
+      "Shore plates",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      0,
+      1,
+      1,
+      1,
+      "Add a band of broken plates on this stroke only. Off preserves the original water shape."
+    ],
+    [
+      "plateWaterPx",
+      "plate-water-px",
+      "Plates: water width (px)",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      0,
+      240,
+      4,
+      1,
+      "Reach from this stroke's waterline into the water."
+    ],
+    [
+      "plateLandPx",
+      "plate-land-px",
+      "Plates: land width (px)",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      0,
+      240,
+      4,
+      1,
+      "Reach from this stroke's waterline onto land, with broken pressure ridges."
+    ],
+    [
+      "plateSize",
+      "plate-size",
+      "Plate size (px)",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      8,
+      96,
+      2,
+      1,
+      "Typical width of the interlocking polygonal plates."
+    ],
+    [
+      "plateGap",
+      "plate-gap",
+      "Plate gap (px)",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      0,
+      160,
+      5,
+      10,
+      "Open gap between adjacent plates."
+    ],
+    [
+      "plateHeight",
+      "plate-height",
+      "Plate height above sea",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      0,
+      240,
+      5,
+      10,
+      "Flat water plates sit this high above sea; land keeps its existing height. Rock slabs: how far the land slabs stand above their seams."
+    ],
+    [
+      "plateMaterial",
+      "plate-material",
+      "Shore structure",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      1,
+      2,
+      1,
+      1,
+      "2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke's own waterline, so separate shores stay separate."
+    ],
+    [
+      "frostNeedles",
+      "frost-needles",
+      "Frost needle share (plate material 2)",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Frost crystals: the share of patches that carry needles at all; the rest of the band is plain ice. Needles in a patch are also dropped at random, so lines are sparse, fine and of varied length."
+    ],
+    [
+      "crystalForm",
+      "crystal-form",
+      "Form",
+      [
+        "crystal"
+      ],
+      0,
+      2,
+      1,
+      1,
+      "Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world). Berg: a rough ice block with an uneven outline, broken corners and rough faces that take the world's own slope relief (Ice); Sides, Width, Height and Variation apply."
+    ],
+    [
+      "crystalTiers",
+      "crystal-tiers",
+      "Stepped column tops",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Remove the mound incline from each column top so its height steps distinctly from its neighbors."
+    ],
+    [
+      "crystalSides",
+      "crystal-sides",
+      "Polygon sides",
+      [
+        "crystal"
+      ],
+      3,
+      10,
+      1,
+      1,
+      "Sides of each crystal's footprint (crystals form; columns are Voronoi, mostly 5-6 sides)."
+    ],
+    [
+      "crystalSize",
+      "crystal-size",
+      "Element width (px)",
+      [
+        "crystal"
+      ],
+      6,
+      640,
+      2,
+      1,
+      "Crystals: typical base width. Column mound: column top width (retail ~15)."
+    ],
+    [
+      "crystalStep",
+      "crystal-step",
+      "Column step",
+      [
+        "crystal"
+      ],
+      0,
+      64,
+      1,
+      1,
+      "Column mound: how far a column top steps up or down from its neighbors (retail ~16; ~40% flush)."
+    ],
+    [
+      "crystalCount",
+      "crystal-count",
+      "Elements per cluster",
+      [
+        "crystal"
+      ],
+      1,
+      40,
+      1,
+      1,
+      "How many crystals a click grows; a longer stroke grows more."
+    ],
+    [
+      "crystalTop",
+      "crystal-top",
+      "Flat top share",
+      [
+        "crystal"
+      ],
+      0,
+      95,
+      5,
+      100,
+      "0: pointed; higher cuts the tops level (a flat-topped prism)."
+    ],
+    [
+      "crystalLean",
+      "crystal-lean",
+      "Apex lean",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How far each apex leans off its base center."
+    ],
+    [
+      "crystalVariation",
+      "crystal-variation",
+      "Variation",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Spread of sizes, heights and side counts."
+    ],
+    [
+      "waterShore",
+      "water-shore",
+      "Shore edge (shore to shallow)",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      2,
+      1,
+      1,
+      "World default keeps the World panel's Crisp waterline. Hard: the water starts at the shoreline with ragged stairs, as retail draws it. Faded: the water fades in over a few pixels.",
+      [
+        [
+          0,
+          "World default"
+        ],
+        [
+          1,
+          "Hard"
+        ],
+        [
+          2,
+          "Faded"
+        ]
+      ]
+    ],
+    [
+      "waterDeep",
+      "water-deep",
+      "Shallow-to-deep edge",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      2,
+      1,
+      1,
+      "World default keeps the World panel's Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).",
+      [
+        [
+          0,
+          "World default"
+        ],
+        [
+          1,
+          "Hard"
+        ],
+        [
+          2,
+          "Faded"
+        ]
+      ]
+    ],
+    [
+      "waterBed",
+      "water-bed",
+      "Shallow water look",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      3,
+      1,
+      1,
+      "World default keeps the World panel's Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture. Cracked bed: lit bed over cracked rock-like ground, tinted (Red's shelf shallows).",
+      [
+        [
+          0,
+          "World default"
+        ],
+        [
+          1,
+          "Lit bed"
+        ],
+        [
+          2,
+          "Noise water"
+        ],
+        [
+          3,
+          "Cracked bed"
+        ]
+      ]
+    ],
+    [
+      "crystalAlign",
+      "crystal-align",
+      "Align blocks to shape",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Berg: 0 turns each block at random, 100 sets its faces square to the shape's frame (four sides then make an axis-aligned box)."
+    ],
+    [
+      "bergFace",
+      "berg-face",
+      "Face steepness",
+      [
+        "crystal"
+      ],
+      20,
+      200,
+      5,
+      100,
+      "Berg: how fast the faces rise, in height units per px (shown in percent: 90% is 0.9 units per px). Each face varies by Outline jitter."
+    ],
+    [
+      "bergJitter",
+      "berg-jitter",
+      "Outline jitter",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Berg: how far the face angles, distances and steepness stray from a regular polygon, and how much each face wavers along its length."
+    ],
+    [
+      "bergBreak",
+      "berg-break",
+      "Corner cuts",
+      [
+        "crystal"
+      ],
+      0,
+      8,
+      1,
+      1,
+      "Berg: extra planes of their own steepness that cut corners off the block."
+    ],
+    [
+      "bergRough",
+      "berg-rough",
+      "Face roughness",
+      [
+        "crystal"
+      ],
+      0,
+      30,
+      1,
+      1,
+      "Berg: fractal roughness added to the height, from 40 px lumps to 4 px grain."
+    ],
+    [
+      "bergTilt",
+      "berg-tilt",
+      "Top tilt",
+      [
+        "crystal"
+      ],
+      0,
+      60,
+      1,
+      100,
+      "Berg: the slope of the ramp that brings the top down away from the Tilt direction (the top is level toward it, at Height)."
+    ],
+    [
+      "bergFlat",
+      "berg-flat",
+      "Level top share",
+      [
+        "crystal"
+      ],
+      -80,
+      80,
+      5,
+      100,
+      "Berg: how far from the center, toward the tilt direction, the top stays level before it ramps down (negative: the ramp starts on the far side of the center)."
+    ],
+    [
+      "bergTiltDir",
+      "berg-tilt-dir",
+      "Tilt direction (degrees)",
+      [
+        "crystal"
+      ],
+      0,
+      359,
+      1,
+      1,
+      "Berg: the direction the top rises toward, turning with the shape's frame."
+    ],
+    [
+      "paintChannel",
+      "paint-channel",
+      "Paint",
+      [
+        "paint"
+      ],
+      1,
+      25,
+      1,
+      1,
+      "What the brush paints. Denser scatter supplies its own stones where the World panel's Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world's own value; Strength is how far. Erase clears every mask and style under the brush.",
+      [
+        [
+          1,
+          "Rock"
+        ],
+        [
+          2,
+          "Snow or ice"
+        ],
+        [
+          3,
+          "Wet or dark ground"
+        ],
+        [
+          4,
+          "Moss"
+        ],
+        [
+          5,
+          "Denser scatter"
+        ],
+        [
+          6,
+          "Sparser scatter"
+        ],
+        [
+          16,
+          "Ground lumps"
+        ],
+        [
+          17,
+          "Smoother ground"
+        ],
+        [
+          18,
+          "Relaxation: more"
+        ],
+        [
+          19,
+          "Relaxation: less"
+        ],
+        [
+          20,
+          "Deposits: more"
+        ],
+        [
+          21,
+          "Deposits: less"
+        ],
+        [
+          22,
+          "Vegetation: more"
+        ],
+        [
+          23,
+          "Vegetation: less"
+        ],
+        [
+          24,
+          "Rock exposure: more"
+        ],
+        [
+          25,
+          "Rock exposure: less"
+        ],
+        [
+          8,
+          "Relief stronger"
+        ],
+        [
+          9,
+          "Relief weaker"
+        ],
+        [
+          10,
+          "Cracks more"
+        ],
+        [
+          11,
+          "Cracks fewer"
+        ],
+        [
+          12,
+          "Banding more"
+        ],
+        [
+          13,
+          "Banding less"
+        ],
+        [
+          14,
+          "Face: more rock"
+        ],
+        [
+          15,
+          "Face: less rock"
+        ],
+        [
+          7,
+          "Erase all masks and style"
+        ]
+      ]
+    ],
+    [
+      "maskChannel",
+      "mask-channel",
+      "Paint inside the shape",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      0,
+      6,
+      1,
+      1,
+      "Also paint a mask over the shape's own footprint, strongest where the shape is (a rocky mesa, a mossy hill).",
+      [
+        [
+          0,
+          "Off"
+        ],
+        [
+          1,
+          "Rock"
+        ],
+        [
+          2,
+          "Snow or ice"
+        ],
+        [
+          3,
+          "Wet or dark ground"
+        ],
+        [
+          4,
+          "Moss"
+        ],
+        [
+          5,
+          "Denser scatter"
+        ],
+        [
+          6,
+          "Sparser scatter"
+        ]
+      ]
+    ],
+    [
+      "maskAmount",
+      "mask-amount",
+      "Shape paint strength",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      5,
+      100,
+      5,
+      100,
+      "How fully the shape paints its mask."
+    ],
+    [
+      "styleRelief",
+      "style-relief",
+      "Style: relief strength",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Relief (ribs, lumps) inside the shape: below 0 smoother, above 0 stronger, up to 4x."
+    ],
+    [
+      "styleCracks",
+      "style-cracks",
+      "Style: cracks",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none)."
+    ],
+    [
+      "styleBanding",
+      "style-banding",
+      "Style: banding",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none)."
+    ],
+    [
+      "styleFace",
+      "style-face",
+      "Style: face rock",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock."
+    ],
+    [
+      "styleErosion",
+      "style-erosion",
+      "Local relaxation",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Erosion rate inside the shape (the GPU pass), times 1 + this: below 0 less, above 0 more, -100% none."
+    ],
+    [
+      "styleDeposits",
+      "style-deposits",
+      "Local deposits",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Sand and scree inside the shape, times 1 + this: below 0 less, above 0 more."
+    ],
+    [
+      "styleVegetation",
+      "style-vegetation",
+      "Local vegetation",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover."
+    ],
+    [
+      "styleExposure",
+      "style-exposure",
+      "Local rock exposure",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "crater",
+        "deep",
+        "shallow"
+      ],
+      -100,
+      100,
+      5,
+      100,
+      "Where rock shows inside the shape, times 1 + this: below 0 less, above 0 more."
+    ],
+    [
+      "crystalFacet",
+      "crystal-facet",
+      "Facet tilt (column mound)",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Column mound: tilts each column's top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops."
+    ],
+    [
+      "crystalSizeVar",
+      "crystal-size-var",
+      "Size variation (column mound)",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width."
+    ],
+    [
+      "crystalSmooth",
+      "crystal-smooth",
+      "Smooth hill between crystals (column mound)",
+      [
+        "crystal"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Column mound: the share of the widest columns (and some of the middle ones) left as smooth hill with no flat top, taking the world's hill relief. 0 tiles the whole mound."
+    ],
+    [
+      "craterFacets",
+      "crater-facets",
+      "Bowl facets",
+      [
+        "crater"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Crater: tiles the bowl, rim and apron with polygonal facets (planes fitted to the crater's own surface, stepped a few units from each other), so its contours are straight-edged like crystal. 0 keeps the smooth crater."
+    ],
+    [
+      "baseVary",
+      "base-vary",
+      "Foot outline raggedness (px)",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain"
+      ],
+      0,
+      60,
+      2,
+      1,
+      "How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet)."
+    ],
+    [
+      "baseBump",
+      "base-bump",
+      "Foot bumps (height units)",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain"
+      ],
+      0,
+      80,
+      5,
+      10,
+      "Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone."
+    ],
+    [
+      "fingerSize",
+      "finger-size",
+      "Lobe size",
+      [
+        "deep",
+        "shallow"
+      ],
+      20,
+      300,
+      5,
+      100,
+      "Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke's bank."
+    ],
+    [
+      "layerVary",
+      "layer-vary",
+      "Layer width variation",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How much each layer's width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail's do. 0 keeps the even layers."
+    ],
+    [
+      "layerCircle",
+      "layer-circle",
+      "Circle size (px, circular layers)",
+      [
+        "deep",
+        "shallow"
+      ],
+      8,
+      80,
+      1,
+      1,
+      "Circular layers: the typical radius of the round bites cut from the bank."
+    ],
+    [
+      "crystalCraterPx",
+      "crystal-crater-px",
+      "Facet width (px)",
+      [
+        "crater"
+      ],
+      0,
+      48,
+      2,
+      1,
+      "Crater facets: the width of each polygonal facet. 0 sizes them by the crater's radius (about a third of it, 14-36 px); retail's crater walls break into cells of 12-20 px."
+    ],
+    [
+      "crystalCraterStep",
+      "crystal-crater-step",
+      "Facet step height",
+      [
+        "crater"
+      ],
+      0,
+      60,
+      5,
+      10,
+      "Crater facets: how far each facet may stand above or below the crater's own surface, in height units either way (shown in tenths: 3 is the earlier ragged crater). Retail's crater walls are smooth planes broken by a thin web, so a small step keeps the sun's light running smoothly across the wall."
+    ],
+    [
+      "crystalCraterSkin",
+      "crystal-crater-skin",
+      "Fine seam shading",
+      [
+        "crater"
+      ],
+      0,
+      100,
+      100,
+      100,
+      "Crater facets: 100 marks the whole crater as one crystal skin (no seams in the crystal field) and leaves the thin web between the facets to the shader (World knobs crystalCraterWeb and its relatives), drawn at pixel size so its lines run thin and wander; 0 inks each facet's seam in the field as before."
+    ],
+    [
+      "plateVary",
+      "plate-vary",
+      "Slab variety",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole."
+    ],
+    [
+      "crystalShoreSeam",
+      "crystal-shore-seam",
+      "Slab seam weight",
+      [
+        "deep",
+        "shallow",
+        "offset"
+      ],
+      50,
+      65,
+      1,
+      100,
+      "Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail's shore band."
+    ],
+    [
+      "iceFacets",
+      "ice-facets",
+      "Angular facets",
+      [
+        "mountain"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Ice: breaks part of the mountain into angular facets: tilted planes fitted to the mountain's own surface, a little steeper, stepped a few units off their neighbors and partly buried where the ground rises past them. They share the mountain's material and light, so they stand out of the snow as part of it. 0 keeps the smooth mountain."
+    ],
+    [
+      "iceFacetSize",
+      "ice-facet-size",
+      "Facet width (px)",
+      [
+        "hill",
+        "mountain"
+      ],
+      16,
+      96,
+      2,
+      1,
+      "Ice facets: the typical width of one facet."
+    ],
+    [
+      "moonLobes",
+      "moon-lobes",
+      "Outline lobes",
+      [
+        "hill",
+        "mountain"
+      ],
+      0,
+      60,
+      2,
+      100,
+      "How far the hill's whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline."
+    ],
+    [
+      "lavaCircleVary",
+      "lava-circle-vary",
+      "Circular bite variation",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2's do. 0: the even circles."
+    ],
+    [
+      "lavaSpread",
+      "lava-spread",
+      "Layer width spread",
+      [
+        "deep",
+        "shallow"
+      ],
+      0,
+      200,
+      5,
+      100,
+      "Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none."
+    ]
+  ],
+  "KNOBS": [
+    [
+      "Ground",
+      [
+        [
+          "groundTiles",
+          "Unique ground tiles",
+          1,
+          16,
+          1,
+          16
+        ],
+        [
+          "groundContrast",
+          "Pattern contrast",
+          0,
+          2,
+          0.05,
+          1
+        ],
+        [
+          "undulation",
+          "Undulation height",
+          0,
+          16,
+          0.5,
+          10
+        ],
+        [
+          "undulationScale",
+          "Undulation size (px)",
+          48,
+          400,
+          8,
+          200
+        ],
+        [
+          "undulationCover",
+          "Undulating share of land",
+          0,
+          1,
+          0.05,
+          0.45
+        ]
+      ]
+    ],
+    [
+      "Relief",
+      [
+        [
+          "reliefScale",
+          "Scale (px)",
+          8,
+          64,
+          1,
+          28
+        ],
+        [
+          "reliefAmount",
+          "Strength",
+          0,
+          1.2,
+          0.05,
+          0.5
+        ],
+        [
+          "reliefLumps",
+          "Lumps",
+          0,
+          1,
+          0.05,
+          0.7
+        ],
+        [
+          "reliefBranch",
+          "Branching",
+          0,
+          4,
+          0.1,
+          2
+        ],
+        [
+          "reliefWarp",
+          "Warp (px)",
+          0,
+          24,
+          1,
+          10
+        ],
+        [
+          "reliefPatchy",
+          "Patchiness",
+          0,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "reliefJitter",
+          "Rib irregularity",
+          0,
+          1,
+          0.05,
+          0.8
+        ],
+        [
+          "gentleRelief",
+          "Gentle-slope relief",
+          0,
+          1,
+          0.05,
+          0.6
+        ],
+        [
+          "plainRelief",
+          "Level-ground lumps",
+          0,
+          3,
+          0.05,
+          1.2
+        ],
+        [
+          "lumpRelief",
+          "Painted ground lumps (Paint brush)",
+          0,
+          8,
+          0.1,
+          4
+        ],
+        [
+          "reliefOctaves",
+          "Octaves",
+          1,
+          6,
+          1,
+          5
+        ],
+        [
+          "worms",
+          "Wormy relief on slopes",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Light",
+      [
+        [
+          "flatShadow",
+          "Cast shadow on level ground",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "flatOcclusion",
+          "Occlusion on level ground",
+          0,
+          1,
+          0.05,
+          0.4
+        ],
+        [
+          "lightCap",
+          "Highlight cap",
+          1,
+          1.6,
+          0.01,
+          1.13
+        ],
+        [
+          "shadeDepth",
+          "Directional shading kept",
+          0,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "sunTilt",
+          "Light from the south (0: due west)",
+          -1,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "ambient",
+          "Ambient (unlit share)",
+          0,
+          0.8,
+          0.02,
+          0.42
+        ]
+      ]
+    ],
+    [
+      "Faces",
+      [
+        [
+          "hillLight",
+          "Slope-cover brightness",
+          0.6,
+          1.6,
+          0.01,
+          1
+        ],
+        [
+          "ringFade",
+          "Fringe fade length",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "faceFill",
+          "Fill light on shaded faces",
+          0,
+          0.5,
+          0.02,
+          0
+        ],
+        [
+          "rockCrown",
+          "Bare rock to the crown",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "sandCrown",
+          "Painted sand to the crown (sand bars)",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "slopeTexture",
+          "Sampled slope texture",
+          0,
+          1,
+          0.05,
+          0.3
+        ],
+        [
+          "faceEdge",
+          "Edge breakup",
+          0,
+          2,
+          0.05,
+          0.8
+        ],
+        [
+          "gullyRock",
+          "Rock in gullies",
+          0,
+          2,
+          0.05,
+          0.5
+        ],
+        [
+          "moss",
+          "Moss from ground",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "crevice",
+          "Crevices",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "slopeMarks",
+          "Dark slope marks",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "wrinkles",
+          "Joined slope wrinkles",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Shine",
+      [
+        [
+          "shineStretch",
+          "Grain streak length (x its width)",
+          1,
+          8,
+          0.25,
+          1
+        ],
+        [
+          "shineWhite",
+          "Highlight whiteness (0 material hue, 1 white)",
+          0,
+          1,
+          0.05,
+          0.35
+        ]
+      ]
+    ],
+    [
+      "Shine: ground",
+      [
+        [
+          "shineGround",
+          "Gloss (highlight strength)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineGroundSharp",
+          "Sharpness (lobe exponent)",
+          2,
+          200,
+          2,
+          24
+        ],
+        [
+          "shineGroundRough",
+          "Roughness (grain slope)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineGroundScale",
+          "Grain width (px)",
+          1,
+          24,
+          0.5,
+          6
+        ]
+      ]
+    ],
+    [
+      "Shine: slope cover",
+      [
+        [
+          "shineSlope",
+          "Gloss (highlight strength)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineSlopeSharp",
+          "Sharpness (lobe exponent)",
+          2,
+          200,
+          2,
+          24
+        ],
+        [
+          "shineSlopeRough",
+          "Roughness (grain slope)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineSlopeScale",
+          "Grain width (px)",
+          1,
+          24,
+          0.5,
+          6
+        ]
+      ]
+    ],
+    [
+      "Shine: rock",
+      [
+        [
+          "shineRock",
+          "Gloss (highlight strength)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineRockSharp",
+          "Sharpness (lobe exponent)",
+          2,
+          200,
+          2,
+          24
+        ],
+        [
+          "shineRockRough",
+          "Roughness (grain slope)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineRockScale",
+          "Grain width (px)",
+          1,
+          24,
+          0.5,
+          6
+        ]
+      ]
+    ],
+    [
+      "Shine: sand",
+      [
+        [
+          "shineSand",
+          "Gloss (highlight strength)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineSandSharp",
+          "Sharpness (lobe exponent)",
+          2,
+          200,
+          2,
+          24
+        ],
+        [
+          "shineSandRough",
+          "Roughness (grain slope)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineSandScale",
+          "Grain width (px)",
+          1,
+          24,
+          0.5,
+          6
+        ]
+      ]
+    ],
+    [
+      "Shine: crystal",
+      [
+        [
+          "shineCrystal",
+          "Gloss (highlight strength)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineCrystalSharp",
+          "Sharpness (lobe exponent)",
+          2,
+          200,
+          2,
+          24
+        ],
+        [
+          "shineCrystalRough",
+          "Roughness (grain slope)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "shineCrystalScale",
+          "Grain width (px)",
+          1,
+          24,
+          0.5,
+          6
+        ]
+      ]
+    ],
+    [
+      "Boulders",
+      [
+        [
+          "boulders",
+          "Density",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "boulderSize",
+          "Size (px)",
+          4,
+          24,
+          1,
+          9
+        ],
+        [
+          "boulderFoot",
+          "From cliff feet",
+          0,
+          1,
+          0.05,
+          0.5
+        ],
+        [
+          "boulderCluster",
+          "Clustering",
+          0,
+          1,
+          0.05,
+          0.6
+        ],
+        [
+          "boulderMoss",
+          "Mossy tops",
+          0,
+          1,
+          0.05,
+          0.35
+        ],
+        [
+          "boulderRound",
+          "Roundness",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Debris",
+      [
+        [
+          "debris",
+          "Amount",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "debrisReach",
+          "Reach (px)",
+          16,
+          128,
+          4,
+          48
+        ],
+        [
+          "debrisSize",
+          "Size (px)",
+          3,
+          12,
+          1,
+          6
+        ],
+        [
+          "debrisSort",
+          "Sorting",
+          0,
+          1,
+          0.05,
+          0.8
+        ],
+        [
+          "repose",
+          "Rest slope",
+          0.3,
+          1,
+          0.05,
+          0.6
+        ]
+      ]
+    ],
+    [
+      "Sand",
+      [
+        [
+          "sand",
+          "Deposit supply",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "wind",
+          "Ripple direction (degrees)",
+          0,
+          360,
+          5,
+          20
+        ],
+        [
+          "sandDust",
+          "Dusting tint",
+          0,
+          1,
+          0.05,
+          0.5
+        ],
+        [
+          "sandGrass",
+          "Vegetation through sand",
+          0,
+          1,
+          0.05,
+          0.6
+        ],
+        [
+          "sandLight",
+          "Weathered lightness",
+          0,
+          1,
+          0.05,
+          0.25
+        ],
+        [
+          "sandGrain",
+          "Rock grain in sand",
+          0,
+          1,
+          0.05,
+          0.8
+        ],
+        [
+          "ripple",
+          "Ripple length (px)",
+          0,
+          16,
+          1,
+          7
+        ],
+        [
+          "rippleHeight",
+          "Ripple height",
+          0,
+          3,
+          0.1,
+          1.4
+        ]
+      ]
+    ],
+    [
+      "Cracks",
+      [
+        [
+          "crackSeverity",
+          "Depth",
+          0,
+          1,
+          0.05,
+          0.6
+        ],
+        [
+          "crackSpacing",
+          "Block size (px)",
+          16,
+          96,
+          2,
+          40
+        ],
+        [
+          "crackMajor",
+          "Major cracks",
+          0,
+          1,
+          0.05,
+          0.8
+        ],
+        [
+          "crackMinor",
+          "Minor cracks",
+          0,
+          1,
+          0.05,
+          0.75
+        ],
+        [
+          "crackHairline",
+          "Hairline crazing",
+          0,
+          1,
+          0.05,
+          0.6
+        ],
+        [
+          "crackBlocks",
+          "Facets (block relief)",
+          0,
+          1.5,
+          0.05,
+          0.6
+        ],
+        [
+          "crackWidth",
+          "Width (px)",
+          0.5,
+          2.5,
+          0.1,
+          1
+        ],
+        [
+          "crackNetwork",
+          "Majors: rills to plates",
+          0,
+          1,
+          0.05,
+          0.35
+        ],
+        [
+          "crackDark",
+          "Floor darkness",
+          0,
+          1,
+          0.05,
+          0.75
+        ]
+      ]
+    ],
+    [
+      "Rock structure",
+      [
+        [
+          "rockOrder",
+          "Order (0 scattered, ink cracks; 1 beds, joints, lit relief cracks)",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "rockFrom",
+          "Beds and joints from slope (painted rock always)",
+          0.3,
+          2,
+          0.05,
+          0.6
+        ],
+        [
+          "bedSpacing",
+          "Bed thickness (px along the ground, or height units)",
+          3,
+          80,
+          1,
+          12
+        ],
+        [
+          "bedHeight",
+          "Beds spaced by height (0 px along the ground)",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "bedVary",
+          "Bed thickness variation",
+          0,
+          1,
+          0.05,
+          0.5
+        ],
+        [
+          "bedDip",
+          "Bed tilt (height per px; 2 north: level rows)",
+          -4,
+          4,
+          0.05,
+          0
+        ],
+        [
+          "bedDipDir",
+          "Bed tilt toward (deg, 0 east, 90 south)",
+          0,
+          360,
+          5,
+          90
+        ],
+        [
+          "bedLedge",
+          "Ledge step strength",
+          0,
+          1,
+          0.05,
+          0.5
+        ],
+        [
+          "jointDepth",
+          "Joint depth (height)",
+          0,
+          6,
+          0.1,
+          2
+        ],
+        [
+          "grooveSpacing",
+          "Joint and gully spacing (px)",
+          12,
+          120,
+          2,
+          36
+        ],
+        [
+          "grooveAngle",
+          "Joint and gully lean from north-south (deg)",
+          -60,
+          60,
+          1,
+          0
+        ],
+        [
+          "grooveRun",
+          "Joint and gully length (px)",
+          30,
+          400,
+          10,
+          120
+        ]
+      ]
+    ],
+    [
+      "Contour bands",
+      [
+        [
+          "banding",
+          "Strength",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "bandSoftness",
+          "Riser share",
+          0.05,
+          1,
+          0.05,
+          0.35
+        ],
+        [
+          "bandWater",
+          "Rings in water color",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "sandBanding",
+          "Streaks on sand and ramps",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "sandBandSpacing",
+          "Streak height step",
+          0.3,
+          4,
+          0.1,
+          2
+        ]
+      ]
+    ],
+    [
+      "Strata",
+      [
+        [
+          "strata",
+          "Strength (painted beds)",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "strataContrast",
+          "Color strength",
+          0,
+          1,
+          0.05,
+          0.6
+        ],
+        [
+          "strataGrain",
+          "Bed grain",
+          0,
+          1,
+          0.05,
+          1
+        ]
+      ]
+    ],
+    [
+      "Water",
+      [
+        [
+          "beachWidth",
+          "Beach width (worlds with beaches)",
+          0,
+          2,
+          0.05,
+          0.6
+        ],
+        [
+          "apron",
+          "Sand apron round raised rock (px)",
+          0,
+          120,
+          2,
+          0
+        ],
+        [
+          "shallowDepth",
+          "Shallow until depth",
+          0,
+          60,
+          1,
+          24
+        ],
+        [
+          "deepDepth",
+          "Deep from depth",
+          10,
+          100,
+          1,
+          60
+        ],
+        [
+          "waterSoft",
+          "Color depth averaging (px)",
+          0,
+          64,
+          2,
+          32
+        ],
+        [
+          "crispShore",
+          "Crisp waterline (shore to shallow)",
+          0,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "deepEdge",
+          "Hard shallow-to-deep step (0 ramp)",
+          0,
+          1,
+          1,
+          0
+        ],
+        [
+          "bedLit",
+          "Lit bed under shallow water (0 noise water)",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "bedTint",
+          "Bed tint strength",
+          0,
+          1,
+          0.05,
+          0.85
+        ],
+        [
+          "bedBright",
+          "Tinted bed brightness",
+          0.5,
+          1.5,
+          0.02,
+          1
+        ],
+        [
+          "bedContrast",
+          "Bed light carried through the tint",
+          0,
+          1.5,
+          0.05,
+          1
+        ],
+        [
+          "bedRelief",
+          "Bed lumps (lit relief under shallows)",
+          0,
+          3,
+          0.05,
+          0
+        ],
+        [
+          "shoreEdge",
+          "Waterline rim and lip",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "bankRock",
+          "Rock on low banks",
+          0,
+          1,
+          0.05,
+          0.25
+        ]
+      ]
+    ],
+    [
+      "Palette",
+      [
+        [
+          "paletteMix",
+          "Mix palette pairs (0 nearest, 1 pairs)",
+          0,
+          1,
+          1,
+          0
+        ],
+        [
+          "dither",
+          "Dither (water)",
+          0,
+          4,
+          0.1,
+          2
+        ],
+        [
+          "landDither",
+          "Land dither share",
+          0,
+          1,
+          0.05,
+          0.25
+        ]
+      ]
+    ],
+    [
+      "Desert foot band",
+      [
+        [
+          "baseBand",
+          "Gray band strength",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "baseBandLow",
+          "Window from (height)",
+          0,
+          12,
+          0.5,
+          4
+        ],
+        [
+          "baseBandHigh",
+          "Window to (height)",
+          1,
+          16,
+          0.5,
+          6.5
+        ],
+        [
+          "baseBandWander",
+          "Window drift (height)",
+          0,
+          4,
+          0.25,
+          1
+        ],
+        [
+          "baseBandGaps",
+          "Share missing",
+          0,
+          0.9,
+          0.05,
+          0.45
+        ]
+      ]
+    ],
+    [
+      "Desert caps",
+      [
+        [
+          "desertCapFlat",
+          "Uniform cap color",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Rock face",
+      [
+        [
+          "rockMoss",
+          "Vegetation tint in rock",
+          0,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "rockDetail",
+          "Rock tile blotch contrast (1 as drawn, 0 flat)",
+          0,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "faceRelief",
+          "Rock relief lit on walls that face the viewer (0: world-space look)",
+          0,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "shineOutside",
+          "Rock glints kept outside painted rock",
+          0,
+          1,
+          0.05,
+          1
+        ],
+        [
+          "bedPunch",
+          "Beds differ in strength",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Rock face: gullies and ribs",
+      [
+        [
+          "gullyDepth",
+          "Gully depth (height; 0 none)",
+          0,
+          16,
+          0.5,
+          0
+        ],
+        [
+          "gullyWidth",
+          "Gully width (px)",
+          4,
+          40,
+          1,
+          14
+        ],
+        [
+          "gullyShade",
+          "Gully floor shade (occlusion)",
+          0,
+          3,
+          0.05,
+          0
+        ],
+        [
+          "ribTilt",
+          "Rib tilt (height per px)",
+          0,
+          1,
+          0.02,
+          0
+        ]
+      ]
+    ],
+    [
+      "Rock face: facets",
+      [
+        [
+          "facetTilt",
+          "Facet tilt (height per px; 0 none)",
+          0,
+          2,
+          0.05,
+          0
+        ],
+        [
+          "facetCoarse",
+          "Coarser second level of facets (share)",
+          0,
+          1.5,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Rock face: follows the slope",
+      [
+        [
+          "cliffFollow",
+          "Beds on the contours, joints down the fall line (0 fixed screen directions)",
+          0,
+          1,
+          1,
+          0
+        ],
+        [
+          "cliffReach",
+          "Fall line smoothing radius (px)",
+          6,
+          60,
+          1,
+          20
+        ],
+        [
+          "cliffWide",
+          "Wide fall line radius, level ground under rock (px)",
+          20,
+          160,
+          2,
+          56
+        ],
+        [
+          "cliffFlat",
+          "Slope under which structure fades into broken rock",
+          0,
+          0.3,
+          0.005,
+          0.04
+        ],
+        [
+          "cliffRise",
+          "Bed riser height (units; 0 the bed's own)",
+          0,
+          40,
+          1,
+          0
+        ],
+        [
+          "cliffBed",
+          "Beds follow the smoothed ground (0 the grid's own bumps)",
+          0,
+          1,
+          0.05,
+          0.5
+        ],
+        [
+          "cliffStagger",
+          "Joints offset from bed to bed (share of spacing)",
+          0,
+          0.8,
+          0.05,
+          0
+        ],
+        [
+          "cliffFine",
+          "Third, finer facet level (share of tilt)",
+          0,
+          1.5,
+          0.05,
+          0
+        ],
+        [
+          "cliffDomain",
+          "Joint lattice patch size (px)",
+          30,
+          240,
+          5,
+          90
+        ]
+      ]
+    ],
+    [
+      "Shallow water, round 2",
+      [
+        [
+          "stepSoftPx",
+          "Threshold edge softness (px)",
+          1,
+          40,
+          1,
+          1
+        ],
+        [
+          "shelfWander",
+          "Shelf wander (depth units)",
+          0,
+          40,
+          1,
+          0
+        ],
+        [
+          "bedFlat",
+          "Bed lit by its own relief only",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "bedDots",
+          "Bed speckles",
+          0,
+          1,
+          0.02,
+          0
+        ],
+        [
+          "bedDotCell",
+          "Dot spacing (px)",
+          6,
+          40,
+          1,
+          14
+        ],
+        [
+          "crackedStep",
+          "Cracked-bed transition depth",
+          0,
+          60,
+          1,
+          0
+        ]
+      ]
+    ],
+    [
+      "Shallow water, round 3",
+      [
+        [
+          "shoalBump",
+          "Lit bumps in the bed (slope)",
+          0,
+          6,
+          0.1,
+          0
+        ],
+        [
+          "shoalBumpPx",
+          "Bump size (px)",
+          2,
+          16,
+          0.5,
+          6
+        ],
+        [
+          "shoalGrain",
+          "Grain through water tint",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "shoalRag",
+          "Shallow-to-deep notches (px)",
+          0,
+          16,
+          0.5,
+          0
+        ],
+        [
+          "shoalStairs",
+          "Hard waterline stairs (px)",
+          0,
+          6,
+          0.1,
+          0
+        ],
+        [
+          "shoalShoreSoft",
+          "Waterline blur (px)",
+          0,
+          12,
+          0.5,
+          0
+        ]
+      ]
+    ],
+    [
+      "Fringe lines (Archipelago)",
+      [
+        [
+          "ringContrast",
+          "Fringe contour lines: contrast",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "ringCount",
+          "Fringe contour lines: count",
+          1,
+          30,
+          1,
+          7
+        ],
+        [
+          "ringSize",
+          "Fringe contour lines: reach",
+          0.1,
+          2,
+          0.05,
+          1
+        ]
+      ]
+    ],
+    [
+      "Fringe copies (Archipelago)",
+      [
+        [
+          "ringShift",
+          "Offset between copies (px; 0: concentric lines)",
+          0,
+          30,
+          0.5,
+          0
+        ],
+        [
+          "ringShiftDir",
+          "Drift direction (deg clockwise from east)",
+          0,
+          360,
+          5,
+          315
+        ],
+        [
+          "ringScatter",
+          "Direction wander (share of a half turn)",
+          0,
+          1,
+          0.05,
+          0.5
+        ],
+        [
+          "ringWobble",
+          "Outline waver (px)",
+          0,
+          10,
+          0.5,
+          3
+        ],
+        [
+          "ringLobe",
+          "Lobe size (px)",
+          8,
+          60,
+          1,
+          22
+        ],
+        [
+          "ringFill",
+          "Pale tint where copies overlap",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "ringPatch",
+          "Reach varies along the outline",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "ringPatchSize",
+          "Reach variation size (px)",
+          30,
+          400,
+          5,
+          120
+        ],
+        [
+          "ringTone",
+          "Retail rose, paler outward",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Lava hill rock",
+      [
+        [
+          "lavaCrust",
+          "Pillow crust strength",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "lavaPillow",
+          "Pillow size (px)",
+          16,
+          80,
+          1,
+          34
+        ],
+        [
+          "lavaChip",
+          "Chip size (px)",
+          3,
+          12,
+          0.5,
+          5.5
+        ],
+        [
+          "lavaVeins",
+          "Veins hanging down the slope",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "lavaCalm",
+          "Replace fine relief with crust",
+          0,
+          1,
+          0.05,
+          0.6
+        ],
+        [
+          "lavaDusk",
+          "Shade away from light",
+          0,
+          2,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Lava banks",
+      [
+        [
+          "layerCrease",
+          "Dark crease at each step foot, any facing",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "shineSlopeGate",
+          "Shine only on slopes above (0: everywhere)",
+          0,
+          1.5,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Shine: gate and headroom",
+      [
+        [
+          "shineGate",
+          "Roughness only on raised ground and slopes",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "shineHeadroom",
+          "Dim the body between glints (near-white surface)",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Pockmarks (Moon)",
+      [
+        [
+          "pockmark",
+          "Dark pits on raised ground and slopes",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "pockSize",
+          "Pit spacing (px)",
+          3,
+          12,
+          0.5,
+          5
+        ]
+      ]
+    ],
+    [
+      "Moon surface",
+      [
+        [
+          "moonCups",
+          "Slope cups",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "moonCupSize",
+          "Cup spacing (px)",
+          3,
+          12,
+          0.5,
+          5.5
+        ],
+        [
+          "moonCupDepth",
+          "Cup depth (wall steepness)",
+          0.4,
+          3,
+          0.1,
+          1.4
+        ],
+        [
+          "moonRibs",
+          "Slope ribs",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "moonRibDepth",
+          "Stroke steepness",
+          0.2,
+          3,
+          0.1,
+          1
+        ],
+        [
+          "moonRibDark",
+          "Darker where turned from the sun",
+          0,
+          0.9,
+          0.05,
+          0
+        ],
+        [
+          "moonFolds",
+          "Contour folds",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "moonFoldSpacing",
+          "Fold spacing (height units)",
+          0.3,
+          3,
+          0.1,
+          0.9
+        ]
+      ]
+    ],
+    [
+      "Ice mountains",
+      [
+        [
+          "iceSlate",
+          "Slate faces",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "mineralDetail",
+          "Rock art contrast",
+          0,
+          2,
+          0.05,
+          1
+        ],
+        [
+          "iceCrystal",
+          "Straight face fibres",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "iceCrest",
+          "Cap lumps",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Ice blocks and mesas",
+      [
+        [
+          "iceSoft",
+          "Rounded lighting",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "iceSnow",
+          "Snow on level caps",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "iceFall",
+          "Slope fibres",
+          0,
+          1,
+          0.05,
+          0
+        ],
+        [
+          "iceApron",
+          "Hatched foot apron",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Ice frost lines",
+      [
+        [
+          "iceFrost",
+          "Needle hairlines",
+          0,
+          1,
+          0.05,
+          0
+        ]
+      ]
+    ],
+    [
+      "Ice frost band",
+      [
+        [
+          "frostGaps",
+          "Melt pockets: share of cells at the coast",
+          0,
+          0.6,
+          0.01,
+          0.17
+        ],
+        [
+          "frostGapReach",
+          "Melt pockets: reach inland (share of the band)",
+          0.2,
+          1.2,
+          0.05,
+          0.65
+        ],
+        [
+          "frostGapSize",
+          "Melt pockets: size (px)",
+          3,
+          24,
+          1,
+          11
+        ],
+        [
+          "frostGapDepth",
+          "Melt pockets: depth below the sea",
+          0.5,
+          6,
+          0.1,
+          3
+        ]
+      ]
+    ]
+  ],
+  "HELP": {
+    "plateau": "Paint a level crest above the height where this stroke begins. New strokes can build on top.",
+    "hill": "Paint a rounded ridge along any path. A later stroke adds more height to the existing ground.",
+    "mountain": "Paint a narrower, peaked ridge. New strokes add to the existing height, without a flat summit.",
+    "ramp": "Draw between terrain levels. A smooth center joins the endpoint heights with rounded approaches; shoulder roughness stays outside the route. Longer paths make gentler grades.",
+    "deep": "Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The center stays deep until you paint over it.",
+    "shallow": "Set the bed 7 below sea level. Paint through deep water to make a shallow passage, or through land to make shallows.",
+    "smooth": "Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.",
+    "lower": "Lower the starting surface by the chosen amount. New strokes can dig farther.",
+    "offset": "Paint an area to raise or lower by the chosen height. Its edge is natural and its softness sets cliff or slope; the ground keeps its own relief.",
+    "crystal": "Grow a cluster of faceted crystals along the stroke: their sides, size, count, how flat their tops are and how much they lean are brush options. Height sets the tallest.",
+    "sand": "Paint sand cover: the ground under the brush becomes sand (on slopes too, so a hill set in sand has sandy feet). Heights do not change.",
+    "grass": "Paint ground cover: clears sand (painted or weathered) back to the world's own ground, such as grass. Heights do not change.",
+    "paint": "Paint a material over the ground, or a scatter density: rock showing through, snow or ice, wet (dark) ground and moss take the world's own materials; denser or sparser scatter multiplies the World panel's Boulders and Debris (at 0 nothing shows). Strength is how fully it paints, Softness the edge. Heights do not change.",
+    "fissure": "Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world's own crack field is raised along the cut.",
+    "erase": "Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.",
+    "crater": "Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.",
+    "move": "Drag to move · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas"
+  },
+  "WORLD_PRIMARY_CONTROLS": [
+    "groundTiles",
+    "groundContrast",
+    "undulation",
+    "undulationScale",
+    "undulationCover",
+    "reliefScale",
+    "reliefAmount",
+    "reliefLumps",
+    "gentleRelief",
+    "plainRelief",
+    "lumpRelief",
+    "flatShadow",
+    "flatOcclusion",
+    "sunTilt",
+    "ambient",
+    "shadeDepth",
+    "lightCap",
+    "hillLight",
+    "faceFill",
+    "rockCrown",
+    "sandCrown",
+    "slopeTexture",
+    "moss",
+    "slopeMarks",
+    "wrinkles",
+    "shineGround",
+    "shineSlope",
+    "shineRock",
+    "shineSand",
+    "shineCrystal",
+    "boulders",
+    "boulderSize",
+    "debris",
+    "sand",
+    "sandGrain",
+    "sandLight",
+    "ripple",
+    "rippleHeight",
+    "wind",
+    "crackSeverity",
+    "crackSpacing",
+    "rockOrder",
+    "rockFrom",
+    "bedSpacing",
+    "bedLedge",
+    "jointDepth",
+    "banding",
+    "sandBanding",
+    "strata",
+    "strataContrast",
+    "beachWidth",
+    "apron",
+    "shallowDepth",
+    "deepDepth",
+    "crispShore",
+    "deepEdge",
+    "bedLit",
+    "bedTint",
+    "bedBright",
+    "bedContrast",
+    "bedRelief",
+    "shoreEdge",
+    "baseBand",
+    "desertCapFlat",
+    "rockMoss",
+    "rockDetail",
+    "faceRelief",
+    "gullyDepth",
+    "grooveSpacing",
+    "facetTilt",
+    "cliffFollow",
+    "shelfWander",
+    "bedFlat",
+    "bedDots",
+    "crackedStep",
+    "shoalBump",
+    "shoalGrain",
+    "ringContrast",
+    "ringCount",
+    "ringSize",
+    "ringShift",
+    "ringTone",
+    "lavaCrust",
+    "lavaPillow",
+    "lavaVeins",
+    "layerCrease",
+    "pockmark",
+    "moonCups",
+    "moonRibs",
+    "moonFolds",
+    "iceSlate",
+    "mineralDetail",
+    "iceCrystal",
+    "iceCrest",
+    "iceSoft",
+    "iceSnow",
+    "iceFall",
+    "iceApron",
+    "iceFrost",
+    "frostGaps"
+  ],
+  "WORLD_GROUP_NAMES": {
+    "Light": "Lighting",
+    "Faces": "Material coverage",
+    "Desert foot band": "Foot color band",
+    "Desert caps": "Cap color",
+    "Shallow water, round 2": "Water detail",
+    "Shallow water, round 3": "Water detail",
+    "Fringe lines (Archipelago)": "Contour fringe",
+    "Fringe copies (Archipelago)": "Contour fringe",
+    "Lava hill rock": "Pillow crust",
+    "Lava banks": "Terrace creases",
+    "Pockmarks (Moon)": "Surface pits",
+    "Moon surface": "Cups, ribs & folds",
+    "Ice mountains": "Mineral faces",
+    "Ice blocks and mesas": "Cap & face finish",
+    "Ice frost lines": "Needle lines",
+    "Ice frost band": "Shore pockets",
+    "Rock face: follows the slope": "Structure orientation",
+    "Rock face: gullies and ribs": "Gullies & ribs",
+    "Rock face: facets": "Microfacets"
+  },
+  "WORLD_CHOICES": {
+    "deepEdge": [
+      [
+        0,
+        "Ramp"
+      ],
+      [
+        1,
+        "Hard step"
+      ]
+    ],
+    "cliffFollow": [
+      [
+        0,
+        "Fixed directions"
+      ],
+      [
+        1,
+        "Follow terrain"
+      ]
+    ],
+    "paletteMix": [
+      [
+        0,
+        "Nearest color"
+      ],
+      [
+        1,
+        "Mix color pairs"
+      ]
+    ]
+  },
+  "PARKED_WORLD_CONTROLS": [
+    "crevice"
+  ],
+  "icons": {
+    "move": "M5 3l14 10-7 1-3 7z",
+    "plateau": "M2 20l5-12h10l5 12M7 8V5h10v3",
+    "hill": "M2 20Q12 0 22 20",
+    "mountain": "M2 21L10 4l4 7 3-4 5 14M7 10l3 3 3-3",
+    "ramp": "M3 19L21 5v14z",
+    "deep": "M2 7q3 4 6 0t6 0t8 0M2 13q3 4 6 0t6 0t8 0M2 19q3 4 6 0t6 0t8 0",
+    "shallow": "M2 11q3 4 6 0t6 0t8 0M2 17q3 4 6 0t6 0t8 0",
+    "smooth": "M2 17q5-14 10-4t10-4",
+    "offset": "M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5",
+    "crater": "M2 13q10 14 20 0M2 13q3-6 7 0t13 0",
+    "fissure": "M14 2l-6 7 8 2-7 5 3 6",
+    "erase": "M3 14L13 3l8 8-9 10H9zM7 10l9 8M12 21h10",
+    "crystal": "M12 2l7 7-2 11-5 3-5-3-2-11zM12 2v21M5 9h14",
+    "sand": "M3 16q6-9 12-3t7-1M3 21h1m5-2h1m5 2h1m4-3h1",
+    "grass": "M12 22V8M12 16Q3 16 3 6q9 0 9 10M12 13q0-9 9-9 0 9-9 9",
+    "paint": "M15 3l6 6-10 10-6-6zM4 16q-4 5 1 6 5 0 3-4",
+    "features": "M12 2l9 6v9l-9 5-9-5V8zM3 8l9 6 9-6M12 14v8"
+  },
+  "iconColors": {
+    "move": "#e9e7d6",
+    "plateau": "#e6bb82",
+    "hill": "#b8d88d",
+    "mountain": "#b3bcca",
+    "ramp": "#e5cfa5",
+    "deep": "#7cb8e8",
+    "shallow": "#87d9da",
+    "smooth": "#c1acdf",
+    "offset": "#e3af9e",
+    "crater": "#d5a18b",
+    "fissure": "#eab481",
+    "erase": "#d1bbaa",
+    "crystal": "#aaa5ec",
+    "sand": "#ead095",
+    "grass": "#9ad09d",
+    "paint": "#df98c4",
+    "features": "#efc975"
+  }
+}

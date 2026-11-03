@@ -33,7 +33,7 @@ async function session(url, fn) {
       if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map(a => a.value ?? a.description).join(' ').slice(0, 300));
     };
     const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
-    const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
+    const ev = async expression => { let timer; const r = await Promise.race([send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Browser evaluation timed out: '+expression.slice(0,120))),330000)})]).finally(()=>clearTimeout(timer)); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
     await send('Runtime.enable'); await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {width: 1700, height: 1300, deviceScaleFactor: 1, mobile: false});
     await send('Page.navigate', {url});
@@ -76,6 +76,7 @@ for (const world of worlds) {
         const back = await ev('sculptDebug.nodes().length');
         r.brushes[tool] = added === 1 && back === before ? 'ok' : `added ${added}, after undo ${back - before}`;
         if (r.brushes[tool] !== 'ok') bad++;
+        console.error(`${world}: ${tool} ${r.brushes[tool]}`);
       }
       if (!noExport) {
         if (world === 'zhon') r.export = await ev(`document.getElementById('map-export').disabled ? 'disabled, by design' : 'enabled'`);
