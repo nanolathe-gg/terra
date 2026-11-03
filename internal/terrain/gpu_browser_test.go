@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"syscall/js"
 	"testing"
+	"time"
 )
 
 func TestBrowserValidationScope(t *testing.T) {
@@ -34,6 +35,39 @@ func TestBrowserValidationScope(t *testing.T) {
 		t.Fatal("invalid GPU buffer escaped error scope")
 	} else {
 		t.Logf("captured expected validation: %s", validation.Message)
+	}
+}
+func TestBrowserViewValidationReportsErrors(t *testing.T) {
+	g, e := NewGPU()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer g.Close()
+	errors := make(chan error, 1)
+	g.OnError = func(err error) {
+		select {
+		case errors <- err:
+		default:
+		}
+	}
+	restore := g.beginViewValidation()
+	finish := g.scope()
+	b, e := g.Device.CreateBuffer(&wgpu.BufferDescriptor{Label: "intentional fast-view invalid usage", Size: 16, Usage: 0})
+	if b != nil {
+		defer b.Release()
+	}
+	finish(&e)
+	restore()
+	select {
+	case reported := <-errors:
+		t.Logf("asynchronous view validation forwarded: %v", reported)
+	case <-time.After(5 * time.Second):
+		t.Fatal("view validation error was hidden")
+	}
+	var collected error
+	g.scope()(&collected)
+	if collected == nil && e == nil {
+		t.Fatal("asynchronous error was not retained for the next strict operation")
 	}
 }
 func TestBrowserTerrain(t *testing.T) {

@@ -12,15 +12,16 @@ import (
 )
 
 type GPU struct {
-	errorMu            sync.Mutex
-	asyncError         error
-	OnError            func(error)
-	removeErrorHandler func()
-	layoutBindings     map[*wgpu.BindGroupLayout]map[uint32]bool
-	Instance           *wgpu.Instance
-	Adapter            *wgpu.Adapter
-	Device             *wgpu.Device
-	Queue              *wgpu.Queue
+	deferViewValidation bool
+	errorMu             sync.Mutex
+	asyncError          error
+	OnError             func(error)
+	removeErrorHandler  func()
+	layoutBindings      map[*wgpu.BindGroupLayout]map[uint32]bool
+	Instance            *wgpu.Instance
+	Adapter             *wgpu.Adapter
+	Device              *wgpu.Device
+	Queue               *wgpu.Queue
 }
 
 func NewGPU() (*GPU, error) {
@@ -205,17 +206,23 @@ func (g *GPU) ReadBuffer(ctx context.Context, src *wgpu.Buffer, offset, size uin
 }
 
 func (g *GPU) scope() (finish func(*error)) {
+	if g.deferViewValidation {
+		return g.collectAsyncError
+	}
 	g.Device.PushErrorScope(wgpu.ErrorFilterValidation)
 	return func(err *error) {
 		if validation := g.Device.PopErrorScope(); validation != nil && *err == nil {
 			*err = validation
 		}
-		g.errorMu.Lock()
-		async := g.asyncError
-		g.asyncError = nil
-		g.errorMu.Unlock()
-		if async != nil && *err == nil {
-			*err = async
-		}
+		g.collectAsyncError(err)
+	}
+}
+func (g *GPU) collectAsyncError(err *error) {
+	g.errorMu.Lock()
+	async := g.asyncError
+	g.asyncError = nil
+	g.errorMu.Unlock()
+	if async != nil && *err == nil {
+		*err = async
 	}
 }

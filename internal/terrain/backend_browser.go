@@ -18,3 +18,11 @@ func (g *GPU) installErrorHandler() {
 		}
 	})
 }
+
+// Browser view jobs report validation/device errors through the installed
+// uncaptured handler instead of awaiting a popErrorScope promise per GPU pass.
+func (g *GPU) beginViewValidation() func() {
+	old := g.deferViewValidation
+	g.deferViewValidation = true
+	return func() { g.deferViewValidation = old }
+}

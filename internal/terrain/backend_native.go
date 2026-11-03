@@ -18,3 +18,5 @@ func instanceDescriptor() *wgpu.InstanceDescriptor {
 	return &wgpu.InstanceDescriptor{Backends: backends}
 }
 func (g *GPU) installErrorHandler() {}
+
+func (g *GPU) beginViewValidation() func() { return func() {} }
