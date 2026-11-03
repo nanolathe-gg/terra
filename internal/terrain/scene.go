@@ -130,6 +130,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		}
 		defer feed.Close()
 		input.Feed = &feed.GPUFeed
+		s.renderer.SetReservedGPUBytes(s.cacheResidentBytes() + feed.bytes)
 		pixels, err = s.renderer.RenderWindow(ctx, input, options)
 	} else {
 		feed, e := s.buildShapeFeed(ctx, nodes, shapeConfig, shapeConfig.Window)
@@ -138,6 +139,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		}
 		defer feed.Close()
 		input.Feed = &feed.GPUFeed
+		s.renderer.SetReservedGPUBytes(s.cacheResidentBytes() + feed.bytes)
 		pixels, err = s.renderer.RenderWindow(ctx, input, options)
 	}
 	if err != nil {
@@ -223,4 +225,15 @@ func (s *SceneRenderer) cacheBudget() int {
 		bytes = mb * 1024 * 1024
 	}
 	return min(96*1024*1024, max(0, int(bytes/5)))
+}
+
+func (s *SceneRenderer) cacheResidentBytes() int {
+	n := 0
+	for _, p := range s.shapePages {
+		n += p.bytes
+	}
+	for _, p := range s.weatherPages {
+		n += p.bytes
+	}
+	return n
 }
