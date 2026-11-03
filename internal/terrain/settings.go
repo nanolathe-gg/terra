@@ -62,6 +62,11 @@ func (r *Renderer) SetColumn() {
 	r.Set("uBandSpacing", float64(p.Bands[0]))
 	r.Set("uBandLine", float64(p.Bands[1]))
 }
+
+// shineGroupActive mirrors the renderer's material-share gate.
+func shineGroupActive(name string, gloss, rough float64, slopeShare bool) bool {
+	return (name != "Slope" || slopeShare) && (gloss > 0 || rough > 0)
+}
 func (r *Renderer) ApplyKnobs(v map[string]string) {
 	for k, x := range v {
 		r.Variant[k] = x
@@ -133,7 +138,8 @@ func (r *Renderer) ApplyKnobs(v map[string]string) {
 	on := false
 	for _, name := range []string{"Ground", "Slope", "Rock", "Sand", "Crystal"} {
 		a := []float64{r.num("shine"+name, 0), r.num("shine"+name+"Sharp", 24), r.num("shine"+name+"Rough", 0), r.num("shine"+name+"Scale", 6)}
-		on = on || a[0] > 0 || a[2] > 0
+		slopeShare := r.num("slopeTexture", .3) > 0 || r.num("microRock", 1) > 0 || object(r.Config, "material")["slopeSand"] == true
+		on = on || shineGroupActive(name, a[0], a[2], slopeShare)
 		shine = append(shine, a...)
 	}
 	r.Set("uShine", shine...)
