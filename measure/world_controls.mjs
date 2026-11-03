@@ -213,7 +213,7 @@ try {
     }
     await idle(fixtures[0][0]);
     // The page sliders.
-    for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`(id=>{const e=document.getElementById(id);return !e||!!e.closest('#ring-controls[hidden],#transition-detail-control[hidden]')})(${JSON.stringify(sid)})`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
+    for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`(id=>{const e=document.getElementById(id);return !e||!!e.closest('details[hidden],#ring-controls[hidden],#transition-detail-control[hidden]')})(${JSON.stringify(sid)})`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
     stage('rows', ts); ts = Date.now();
     // Leak check: the first fixture drawn again must match its first capture, so no row left a value behind.
     await restoreAll(); await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`);
