@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -210,8 +211,44 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if strings.HasSuffix(name, ".wasm") {
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Header().Add("Vary", "Accept-Encoding")
+		if acceptsGzip(r.Header.Get("Accept-Encoding")) {
+			if compressed, err := os.Open(filepath.Join(s.SourceRoot, name+".gz")); err == nil {
+				defer compressed.Close()
+				if cs, err := compressed.Stat(); err == nil && !cs.IsDir() && !cs.ModTime().Before(st.ModTime()) {
+					f = compressed
+					st = cs
+					w.Header().Set("Content-Encoding", "gzip")
+				}
+			}
+		}
+	}
 	if strings.HasSuffix(name, ".wgsl") {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	}
 	http.ServeContent(w, r, name, st.ModTime(), f)
+}
+
+func acceptsGzip(header string) bool {
+	wildcard := false
+	for _, item := range strings.Split(header, ",") {
+		parts := strings.Split(item, ";")
+		encoding := strings.TrimSpace(parts[0])
+		q := 1.
+		for _, param := range parts[1:] {
+			pair := strings.SplitN(strings.TrimSpace(param), "=", 2)
+			if len(pair) == 2 && pair[0] == "q" {
+				q, _ = strconv.ParseFloat(pair[1], 64)
+			}
+		}
+		if encoding == "gzip" {
+			return q > 0
+		}
+		if encoding == "*" {
+			wildcard = q > 0
+		}
+	}
+	return wildcard
 }

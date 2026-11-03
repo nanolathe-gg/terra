@@ -2,10 +2,12 @@ package server
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -297,6 +299,58 @@ func TestRecoverOnlyDeadOwnedExportJobs(t *testing.T) {
 	for _, p := range []string{active, activeStage, other, otherStage} {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("unowned or live job removed: %s (%v)", p, err)
+		}
+	}
+}
+
+func TestCompressedWASMDelivery(t *testing.T) {
+	s := testServer(t)
+	s.SourceRoot = t.TempDir()
+	dir := filepath.Join(s.SourceRoot, "web")
+	if e := os.Mkdir(dir, 0700); e != nil {
+		t.Fatal(e)
+	}
+	payload := []byte("\x00asm\x01\x00\x00\x00")
+	path := filepath.Join(dir, "editor.wasm")
+	if e := os.WriteFile(path, payload, 0600); e != nil {
+		t.Fatal(e)
+	}
+	var compressed bytes.Buffer
+	z := gzip.NewWriter(&compressed)
+	_, _ = z.Write(payload)
+	if e := z.Close(); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(path+".gz", compressed.Bytes(), 0600); e != nil {
+		t.Fatal(e)
+	}
+	for _, accept := range []string{"gzip, deflate, br", "gzip;q=0, *;q=1", "identity"} {
+		req := httptest.NewRequest("GET", "/web/editor.wasm", nil)
+		req.Header.Set("Accept-Encoding", accept)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, req)
+		if w.Code != 200 || w.Header().Get("Content-Type") != "application/wasm" {
+			t.Fatalf("%s: %d %v", accept, w.Code, w.Header())
+		}
+		got := w.Body.Bytes()
+		if accept == "gzip, deflate, br" {
+			if w.Header().Get("Content-Encoding") != "gzip" {
+				t.Fatal("gzip was not selected")
+			}
+			reader, e := gzip.NewReader(bytes.NewReader(got))
+			if e != nil {
+				t.Fatal(e)
+			}
+			got, e = io.ReadAll(reader)
+			reader.Close()
+			if e != nil {
+				t.Fatal(e)
+			}
+		} else if w.Header().Get("Content-Encoding") != "" {
+			t.Fatal("ignored gzip refusal")
+		}
+		if !bytes.Equal(got, payload) {
+			t.Fatal("WASM changed in delivery")
 		}
 	}
 }
