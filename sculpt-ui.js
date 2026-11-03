@@ -70,7 +70,7 @@ export function groupToolControls(fields){
  const definitions=[
  ['','Height',['elevation','combine']],
  ['','Cross-section',['facePx','terraces','ledge','terraceJitter','breakup','lean','facing']],
- ['','Variation',['wander','widthVary','heightVary','varySize','varyFoot','varyMiddle','varyCrest']],
+ ['','Variation',['wander','widthVary','heightVary','varySize','varyFoot','varyMiddle']],
  ['','Variability',['faceVariation','outlineVar','widthVar','heightVar']],
  ['fingers','Shore lobes',['fingers','fingerSize']],
  ['shoreLayers','Shore layers',['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle','layerVary','layerCircle','lavaSpread','lavaCircleVary']],

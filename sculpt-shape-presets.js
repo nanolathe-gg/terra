@@ -139,7 +139,7 @@ export function landformBackSide(lean, turn, dx, dy) {
 // H27: the most a cell can stand from a landform's path and still be on it (world px; `scale` is the frame's), over the widest side grown by the width
 // variation at its largest weight, the wander, and the spurs. The segment boxes and nodeBounds both use it.
 export function landformReach(q, scale = 1, widthMul = 1) {
-  const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1, q.varyCrest ?? 1);
+  const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1);
   return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (q.wander || 0) * scale * weight + 2;
 }
 // The along-the-path knots a landform carries (the elevation's share along the path, 0 to 1.2), flat at 1 until edited.

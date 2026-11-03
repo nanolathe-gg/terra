@@ -703,10 +703,10 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
 fn lfFractal(x: f32, y: f32, salt: u32) -> f32 {
   return 0.57 * vnoise(x, y, u.seed ^ salt) + 0.29 * vnoise(x * 2.17 + 19.1, y * 2.17 - 7.3, u.seed ^ (salt + 0x65u)) + 0.14 * vnoise(x * 5.03 - 11.7, y * 5.03 + 31.2, u.seed ^ (salt + 0xd1u));
 }
-// The variation's weight at a place on the section: foot, middle and crest, blended between.
+// The variation's weight at a place on the section: the foot's at the foot, blending to the middle's by halfway up and holding it to the crest.
 fn lfWeight(q: f32) -> f32 {
   let g = clamp(q, 0.0, 1.0);
-  return select(mix(u.lfMid, u.lfCrest, g * 2.0 - 1.0), mix(u.lfFoot, u.lfMid, g * 2.0), g < 0.5);
+  return mix(u.lfFoot, u.lfMid, min(g * 2.0, 1.0));
 }
 // The share of the section at a signed distance c across the path (positive: left of the way drawn) and e beyond the path's end. Past a free end the section
 // closes round it: the distance is radial and the two halves are blended by which way the cell lies, so an asymmetric section meets itself with no seam.
