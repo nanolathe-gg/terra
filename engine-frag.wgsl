@@ -18,6 +18,14 @@
 // pixel. Explicit gradients select the same level and filter, and are legal
 // in non-uniform control flow, where WGSL's textureSample is not.
 // H7b: a drawn pixel covers materialFoot final pixels (1 at final), so the gradients pick the coarser level of a quarter draw.
+// Above 1x a texel is one drawn pixel, not one world pixel: the pattern comes out smaller and keeps its grain and dither.
+fn grainPixel(pixel: vec2f) -> vec2f {
+#ifdef CHUNK
+    return pixel / min(u.chunkScale, 1.0);
+#else
+    return pixel;
+#endif
+}
 fn pixelSample(t: texture_2d<f32>, s: sampler, pixel: vec2f, scale: vec2f) -> vec4f {
     return textureSampleGrad(t, s, pixel / scale, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
 }
@@ -223,7 +231,8 @@ fn groundHash(q: vec3i) -> f32 {
     n = (n ^ (n >> 13u)) * 1274126177u;
     return f32(n ^ (n >> 16u)) / 4294967295.0;
 }
-fn groundTile(pixel: vec2f) -> vec3f {
+fn groundTile(world: vec2f) -> vec3f {
+    let pixel = grainPixel(world);
     let cell = vec2i(floor(pixel / 32.0));
     let local = vec2i(glslMod(floor(pixel), 32.0));
     let tile = min(i32(groundHash(vec3i(cell, 7)) * f32(u.groundTiles)), 15);
@@ -234,13 +243,15 @@ fn groundTile(pixel: vec2f) -> vec3f {
 // materials/green.json through material-model.wgsl. Every draw that wants one of them asks here.
 fn matRow(i: u32) -> vec4f { return u.materialTable[i]; }
 // A generated material at a drawn pixel: the level is the footprint (materialFoot, 1 at final resolution), the texel wraps with a mask.
-fn genColor(layer: i32, pixel: vec2f) -> vec3f {
+fn genColor(layer: i32, world: vec2f) -> vec3f {
+    let pixel = grainPixel(world);
     let level = clamp(i32(log2(max(u.materialFoot, 1.0)) + 0.5), 0, 6);
     let mask = vec2i((512 >> u32(level)) - 1);
     return textureLoad(generatedTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, layer, level).rgb;
 }
 // The rock's relief at a drawn pixel, at the footprint's level as genColor reads the colours, so a quarter draw matches the final one.
-fn rockRelief(pixel: vec2f) -> vec3f {
+fn rockRelief(world: vec2f) -> vec3f {
+    let pixel = grainPixel(world);
     let level = clamp(i32(log2(max(u.materialFoot, 1.0)) + 0.5), 0, 6);
     let mask = vec2i((512 >> u32(level)) - 1);
     return textureLoad(reliefTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, level).xyz;
@@ -934,7 +945,7 @@ fn shineSlopeGated(shine: vec4f, slope: f32) -> vec4f {
 }
 
 // The step's 2-px block jitter, -.5..+.5, and the bank's slope in height per px (the water section's two readers).
-fn stepJitter(pixel: vec2f) -> f32 { return fract(sin(dot(floor(pixel / 2.0), vec2f(39.3467, 11.135))) * 43758.5453) - 0.5; }
+fn stepJitter(pixel: vec2f) -> f32 { return fract(sin(dot(floor(grainPixel(pixel) / 2.0), vec2f(39.3467, 11.135))) * 43758.5453) - 0.5; }
 fn bankGrad(p: vec2f) -> f32 { return 0.5 * length(vec2f(baseHeight(p + vec2f(1.0, 0.0)) - baseHeight(p - vec2f(1.0, 0.0)), baseHeight(p + vec2f(0.0, 1.0)) - baseHeight(p - vec2f(0.0, 1.0)))); }
 
 // E11: value noise for the shelf's wander (smooth, 0..1, four lattice hashes).
@@ -965,7 +976,7 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
         // and fingers, also across a gentle shelf, where the depth jitter below is the bed's gradient times
         // nothing. The depth is read where a displaced point sits: 2-px blocks (the stairs) and a 6-px noise
         // (the notches' own run), each up to shoalRag px.
-        let blk = floor(pixel / 2.0);
+        let blk = floor(grainPixel(pixel) / 2.0);
         let stairs = vec2f(shelfHash(blk + 3.7), shelfHash(blk + 19.1)) - 0.5;
         let notch = vec2f(shelfNoise(p / 6.0 + 3.0), shelfNoise(p / 6.0 + 41.0)) - 0.5;
         depth = depth + baseHeight(p) - baseHeight(p + (stairs * 0.8 + notch * 1.6) * u.shoalRag);
@@ -1925,7 +1936,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (shoreHard > 0.0) {
             // Retail waterlines are hard edges with small stair-step notches,
             // not soft fades: threshold depth against pixel-block jitter.
-            let block = floor(pixel / 2.0);
+            let block = floor(grainPixel(pixel) / 2.0);
             let jitter = fract(sin(dot(block, vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
             var crisp = step(0.6 + jitter * 1.4, depth);
             if (u.shoalStairs > 0.0) {
@@ -1941,7 +1952,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
                 // banks) and each pixel is cut against its own hash.
                 let cover = clamp((depth - 0.6) / (max(bankGrad(p), 0.15) * u.shoalShoreSoft) + 0.5, 0.0, 1.0);
-                crisp = step(shelfHash(floor(pixel) + 71.0), cover);
+                crisp = step(shelfHash(floor(grainPixel(pixel)) + 71.0), cover);
             }
             submerged = mix(submerged, crisp, shoreHard);
         }
@@ -1987,6 +1998,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var fc = floor(fragCoord);
 #ifdef CHUNK
         if (u.chunkScale > 1.0) { fc = floor(vec2f(pixel.x, u.size - pixel.y)); }
+        if (u.chunkScale < 1.0) { fc = floor(fragCoord / u.chunkScale); }
 #endif
         let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.

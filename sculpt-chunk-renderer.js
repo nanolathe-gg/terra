@@ -139,7 +139,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(24+maskLayers*4);
     const m=region.mesh,cols=m.col1-m.col0,rows=m.row1-m.row0;
     const meshKey=Object.values(m).join(','),otherMeshes=[...this.meshCache].reduce((n,[k,v])=>n+(k===meshKey?0:v.bytes),0);
-    const rasterScale=Math.max(1,scale/2);
+    const rasterScale=scale<1?scale:Math.max(1,scale/2);
     const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24)+(includeCache?otherMeshes:0),output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/scale)*Math.ceil(height/scale)*4;
     return {field,input,mesh,output,maskPlaneCount,maskLayers,workingBytes:field+input+mesh+output,
       retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+mesh+output,
@@ -168,7 +168,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     return this.track(this.device.createTexture({label,size:[width,height,layers],format,usage}),label,width*height*layers*bytes,kind);
   }
   allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
-    const rasterScale=Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
+    const rasterScale=scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
     const fw=pow2(Math.ceil(region.fieldsWidth/scale)),fh=pow2(Math.ceil(region.fieldsHeight/scale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
     let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale);
     // Cached meshes are expendable; they must never make an otherwise valid bake fail its budget.
@@ -199,8 +199,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // guard texel can be sampled. Avoid shading the unused power-of-two tail.
     this.bakeWidth=Math.min(fw,Math.ceil(region.fieldsWidth/scale)+1);
     this.bakeHeight=Math.min(fh,Math.ceil(region.fieldsHeight/scale)+1);
-    const rasterSize=world_width>this.limit?this.size:Math.min(this.size,this.limit),span=rasterSize/2;
-    const rasterOrigin=this.size<=this.limit?[0,0]:region.screenOrigin.map(v=>Math.floor(v/span)*span);
+    const L=this.limit*Math.min(1,rasterScale),rasterSize=world_width>L?this.size:Math.min(this.size,L),span=rasterSize/2;
+    const rasterOrigin=this.size<=L?[0,0]:region.screenOrigin.map(v=>Math.floor(v/span)*span);
     this.f('uChunkRasterOrigin',rasterOrigin);this.f('uChunkRasterSize',rasterSize);
     this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/rasterScale,(rasterOrigin[1]-region.screenOrigin[1])/rasterScale,rasterSize/rasterScale,rasterSize/rasterScale];   // clip space stays in world units; the viewport is what scales
     this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
