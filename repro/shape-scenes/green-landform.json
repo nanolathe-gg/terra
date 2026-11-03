@@ -1,0 +1,10 @@
+{"biome": "green", "source": {"note": "authored for the landform kind (H27); on this 4x4 map the plain is 99 and the sea 75: every combine, an along curve down to the plain over a hill, a lean, terraces with breakup, variation, a click, a two-path shape and a closed curve of the path"},
+ "ground": true, "query": "",
+ "strokes": [
+  ["hill", [[300,260],[420,300],[540,260]], {"card": {"diameter": 260, "amount": 80, "roughness": 30}}],
+  ["landform", [[150,330],[300,300],[460,320],[600,280],[780,300]], {"card": {"diameter": 150, "elevation": 190, "combine": 2, "wander": 20, "widthVary": 20, "heightVary": 3, "varySize": 140}, "along": [[0,1],[0.55,1],[1,0]]}],
+  ["landform", [[160,520],[330,560],[520,520],[700,560]], {"card": {"diameter": 190, "elevation": 180, "combine": 0, "lean": 250, "facing": 1, "terraces": 3, "ledge": 60, "breakup": 60, "wander": 0, "widthVary": 0, "heightVary": 0}, "curve": {"form": "lfMountain"}}],
+  ["landform", [[160,760],[400,800],[640,760]], {"card": {"diameter": 170, "elevation": 220, "combine": 0, "wander": 36, "widthVary": 40, "heightVary": 10, "varySize": 90, "varyFoot": 150, "varyMiddle": 100, "varyCrest": 20, "cracks": 60, "maskChannel": 1, "maskAmount": 70}, "curve": {"form": "lfHill", "knots": [[0,0],[0.2,0.05],[0.5,0.55],[0.7,0.6],[0.85,1.15],[1,1]], "back": [[0,0],[0.3,0.3],[0.55,0.9],[1,1]]}, "along": [[0,0.4],[0.5,1],[1,0.7]]}],
+  ["landform", [[760,640]], {"card": {"diameter": 160, "elevation": 200, "combine": 0, "wander": 0, "widthVary": 0, "heightVary": 0}, "curve": {"form": "lfHill"}}],
+  ["landform", [[820,470],[900,500],[900,640]], {"card": {"diameter": 120, "elevation": 40, "combine": 1, "wander": 12, "widthVary": 10, "heightVary": 0}}]
+ ]}

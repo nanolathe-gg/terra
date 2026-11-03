@@ -62,7 +62,10 @@ KNOB_DEFAULTS = dict(
     # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
     flatBank=0,
     # Cross-section (card C1): the face width in px (0: a share of the brush) and the terraces on the curve (sculpt-shape-presets.js).
-    facePx=0, terraces=0, ledge=.6, terraceJitter=.35,
+    facePx=0, terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
+    # Landform (card H27): the crest's height (absolute, in height units) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
+    # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot, middle and crest of the section).
+    elevation=100, combine=0, wander=24, widthVary=.2, heightVary=3, varySize=140, varyFoot=1, varyMiddle=1, varyCrest=1,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,

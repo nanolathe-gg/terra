@@ -30,6 +30,8 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
 export function shapeControlAvailable(key,kind,p){
+ // A landform has its own width (the diameter), softness-free presets and variation; the controls of the other kinds' outlines do not reach it (card H27).
+ if(kind==='landform'&&['facePx','softness','faceVariation','outlineVar','widthVar','heightVar'].includes(key))return false;
  const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2,ridge=Math.round(p.spurCount)>=1||p.crestJag>0||p.crestVary>0||p.crestTaper>0;
  const sharedFace=['plateau','offset','erase','paint','sand','grass'].includes(kind)&&!(p.facePx>0),shoulderedHill=isShouldered(kind,p,ridge);
  // The classic shouldered ridge uses a different footprint; its settled path
@@ -56,7 +58,7 @@ export function shapeControlAvailable(key,kind,p){
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  if(key==='iceFacetSize')return kind==='mountain'&&p.iceFacets>0;
- if(['ledge','terraceJitter'].includes(key))return p.terraces>0;
+ if(['ledge','terraceJitter','breakup'].includes(key))return p.terraces>0;
  if(key==='lavaSpread')return p.shoreLayers>0&&p.layerStyle<.5;
  if(['layerCircle','lavaCircleVary'].includes(key))return p.shoreLayers>0&&p.layerStyle>=.5;
  return true;

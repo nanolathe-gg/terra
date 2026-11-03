@@ -3,7 +3,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FORM_NAMES,FACING_CHOICES,defaultForm,strokeKnots,thinKnots,leanRatio,isShouldered,landformReach} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -33,6 +33,7 @@ const HELP = {
   paint:'Paint a material over the ground, or a scatter density: rock showing through, snow or ice, wet (dark) ground and moss take the world\'s own materials; denser or sparser scatter multiplies the World panel\'s Boulders and Debris (at 0 nothing shows). Strength is how fully it paints, Softness the edge. Heights do not change.',
   fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
+  landform:'Draw a landform along a path: the path is the crest, and the section across it is one curve you shape on both sides. The crest stands at an elevation you set, and the ground is raised to it, cut down to it or flattened to it. A second curve sets the crest\'s height along the path.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Drag to move · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas'
 };
@@ -84,7 +85,9 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
-const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter'];
+const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter','breakup'];
+// Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
+const LANDFORM_KEYS=['elevation','combine','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle','varyCrest'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -98,7 +101,7 @@ const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter'];
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
-const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow'];
+const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow','landform'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // H3 override planes 14-17 (a signed value v multiplies the control it names by 1 + v; 0 changes nothing): erosion rate (H2's pass),
@@ -134,6 +137,17 @@ const SHAPE_FIELDS=[
   ['terraces','sec-terraces','Terraces',SECTION_KINDS,0,8,1,1,'Cut the face into this many flat ledges with risers between them.'],
   ['ledge','sec-ledge','Ledge (flat share of a step)',SECTION_KINDS,0,90,5,100,'How much of each step is flat; the rest is the riser.'],
   ['terraceJitter','sec-terrace-jitter','Terrace variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
+  ['breakup','sec-breakup','Terrace breakup',SECTION_KINDS,0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
+  // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
+  ['elevation','lf-elevation','Elevation (height units)',['landform'],-80,300,1,1,'The height of the crest, in height units. The plain is the map\'s base height, and the sea is 0. Combine decides what the landform does to the ground it meets.'],
+  ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
+  ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the section strays sideways from the path you drew, in waves as long as the Variation size.'],
+  ['widthVary','lf-width-vary','Width variation',['landform'],0,100,5,100,'How much the section widens and narrows along the path (100: from half to twice its width).'],
+  ['heightVary','lf-height-vary','Height variation (units)',['landform'],0,40,1,1,'How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet.'],
+  ['varySize','lf-vary-size','Variation size (px)',['landform'],20,400,10,1,'The wavelength of the wander and of the width and height variation.'],
+  ['varyFoot','lf-vary-foot','Variation at the foot',['landform'],0,200,5,100,'How much of the variation acts at the foot of the section (100: all of it, 0: none).'],
+  ['varyMiddle','lf-vary-middle','Variation in the middle',['landform'],0,200,5,100,'How much of the variation acts in the middle of the section.'],
+  ['varyCrest','lf-vary-crest','Variation at the crest',['landform'],0,200,5,100,'How much of the variation acts at the crest.'],
   ['spurCount','spur-count','Spurs',['hill','mountain','crater'],0,12,1,1,'Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape\'s own seed. Each joins its parent at the crest.'],
   ['spurLength','spur-length','Spur length (px)',['hill','mountain','crater'],20,400,10,1,'Average reach of a spur; each runs from about half to one and a half times this.'],
   ['spurSpread','spur-spread','Spur angle spread',['hill','mountain','crater'],0,100,5,100,'0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding.'],
@@ -286,7 +300,7 @@ const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind=
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40,landform:40}[kind]??0,diameter:200,elevation:clamp(Math.round((config?.baseHeight??24)+70),-80,300),amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -354,7 +368,7 @@ function updateControls() {
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
   try {
-  const fixed=['deep','shallow','ramp','erase'].includes(tool);
+  const fixed=['deep','shallow','ramp','erase','landform'].includes(tool);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
   const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
@@ -369,11 +383,11 @@ function updateControls() {
   $('shelves-value').textContent=$('shelves').value+'%';
   $('bank-control').hidden=!['deep','shallow'].includes(tool);
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
-  $('roughness').closest('.control').hidden=tool==='fissure';
+  $('roughness').closest('.control').hidden=tool==='fissure'||tool==='landform';
   $('beach-control').hidden=!['deep','shallow'].includes(tool);
   $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(tool);
   if (tool==='crystal') $('roughness-label').textContent='Irregularity';
-  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset'].includes(tool);
+  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset','landform'].includes(tool);
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
   const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
@@ -412,7 +426,7 @@ function updateControls() {
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
   } finally { tool=activeTool; }
-  if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase'].includes(nodes[selected]?.kind); }
+  if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase','landform'].includes(nodes[selected]?.kind); }
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
@@ -542,8 +556,8 @@ function markChanged() { markViewChanged(false); error(); }
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
-const NODE_NAMES={crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,outlineVar:s.outlineVar,widthVar:s.widthVar,heightVar:s.heightVar,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),curve:s.curve,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+const NODE_NAMES={landform:'Landform',crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,outlineVar:s.outlineVar,widthVar:s.widthVar,heightVar:s.heightVar,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
 const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);
@@ -572,6 +586,8 @@ function nodeBounds(n) {
   let r=n.kind==='crystal'?radius*(q.crystalForm>=.5 && q.crystalForm<1.5?1.35:1)+(q.crystalForm>=.5 && q.crystalForm<1.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shoreLayers>=1?coastLayerReach(q):0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
   if(BASE_KINDS.includes(n.kind))r+=Math.max(0,q.baseVary||0);
   if(['hill','mountain'].includes(n.kind))r+=Math.max(0,q.moonLobes||0)*radius;
+  // A landform reaches its widest side grown by the width variation, the wander and the spurs (the same reach its segment boxes use).
+  if(n.kind==='landform')r=landformReach({...q,radius},n.frame?Math.hypot(n.frame[0],n.frame[1]):1)+12*spacing;
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
@@ -672,7 +688,7 @@ function makeRegionalFields() {
 // field snapshot or world-sized noise array in map mode.
 function currentStrokeOptions() {
   applySeedControl();
-  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{})};
+  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{}),...(toolSettings[tool]?.along?{along:toolSettings[tool].along}:{})};
 }
 function regionalPoints(points) {
   if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
@@ -1133,7 +1149,7 @@ function scriptedScene(list,{ground=true}={}) {
   list.forEach(([kind,points,options={}],i) => {
     const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
-      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,seed:(seed+i*7919)>>>0};
+      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along,seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
   });
