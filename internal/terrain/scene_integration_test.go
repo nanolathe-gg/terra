@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -180,4 +181,76 @@ func TestSceneWindowAndComparison(t *testing.T) {
 			t.Fatalf("regional %s: %+v", name, p)
 		}
 	}
+}
+
+func TestSceneBudgetChangeBoundsPages(t *testing.T) {
+	if os.Getenv("TERRAFORM_GPU_TEST") == "" {
+		t.Skip("set TERRAFORM_GPU_TEST=1 for hardware test")
+	}
+	gpu, err := NewGPU()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gpu.Close()
+	sources := map[string]string{}
+	for _, name := range []string{"sculpt-vert.wgsl", "engine-shape.wgsl", "engine-feed.wgsl", "engine-frag.wgsl", "engine-common.wgsl", "engine-bake.wgsl", "engine-materials.wgsl", "engine-palette.wgsl", "engine-weather.wgsl", "engine-erosion.wgsl", "materials/palette.json"} {
+		b, e := os.ReadFile(filepath.Join("../..", name))
+		if e != nil {
+			t.Fatal(e)
+		}
+		sources[name] = string(b)
+	}
+	b, err := os.ReadFile("../../materials/green.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var material map[string]any
+	if err = json.Unmarshal(b, &material); err != nil {
+		t.Fatal(err)
+	}
+	config := map[string]any{"grid": 257, "size": 512, "baseHeight": 24., "seaLevel": 0., "gpuMB": 512., "material": material["material"], "water": material["water"]}
+	s, err := NewSceneRenderer(gpu, config, sources, material)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	nodes := []model.Node{{Kind: "hill", Seed: 123, Points: []model.Point{{X: 100, Y: 100}, {X: 180, Y: 140}}, Params: map[string]any{"radius": 50., "amount": 70., "rough": .2, "softness": .5}}}
+	window := SceneWindow{X: 64, Y: 64, Width: 128, Height: 128, Scale: 1, ReadHeights: true}
+	options := DrawOptions{Full: true, Weather: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65}
+	if _, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options); err != nil {
+		t.Fatal(err)
+	}
+	before := s.cacheResidentBytes()
+	if before <= 0 {
+		t.Fatal("expected retained pages")
+	}
+	if err = s.UpdateConfig(map[string]any{"gpuMB": 128.}); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.cacheResidentBytes(); n != 0 {
+		t.Fatalf("budget update retained %d bytes", n)
+	}
+	result, err := s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options)
+	if err != nil {
+		if !strings.Contains(err.Error(), "budget") {
+			t.Fatalf("unexpected budget refusal: %v", err)
+		}
+		t.Logf("128 MiB tile safely refused: %v", err)
+	} else if len(result.RGBA) != window.Width*window.Height*4 {
+		t.Fatal("invalid tile output")
+	}
+	shapeBytes, weatherBytes := 0, 0
+	for _, p := range s.shapePages {
+		shapeBytes += p.bytes
+	}
+	for _, p := range s.weatherPages {
+		weatherBytes += p.bytes
+	}
+	if shapeBytes > s.cacheBudget() || weatherBytes > s.cacheBudget() {
+		t.Fatalf("page budgets exceeded: authored=%d weather=%d limit=%d", shapeBytes, weatherBytes, s.cacheBudget())
+	}
+	if err == nil && s.LastRenderProfile().WorkingBytes > 128*1024*1024 {
+		t.Fatalf("tile exceeded 128 MiB: %+v", s.LastRenderProfile())
+	}
+	t.Logf("retained before=%d, after authored=%d weather=%d, per-cache budget=%d", before, shapeBytes, weatherBytes, s.cacheBudget())
 }
