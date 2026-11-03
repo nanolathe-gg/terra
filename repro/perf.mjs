@@ -54,7 +54,7 @@ const q = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) =
 // ---------------------------------------------------------------- hooks, installed before the page's own scripts
 const HOOKS = `(() => {
 const diagnosticGPU = ${diagnosticGPU}, verifyPixels = ${verifyPixels};
-const bitmapInfo = new WeakMap(), canvasInfo = new WeakMap();
+const bitmapInfo = new WeakMap(), canvasInfo = new WeakMap(), presentedBitmaps = new WeakSet();
 const P = window.__perf = {workerProfiles: [], worker: false, ev: [], gpu: [], passes: [], waits: [], images: [], draws: [], frames: [], stage: {}, ctx: ''};
 const now = () => performance.now();
 const ev = (type, data) => P.ev.push({t: now(), type, ...data});
@@ -157,7 +157,7 @@ CanvasRenderingContext2D.prototype.drawImage = function (src, ...rest) {
     P.draws.push({t: now(), chunk: src instanceof ImageBitmap || (P.worker && src instanceof HTMLCanvasElement), x: rest[0] ?? null});
     // A bitmap is tagged at the exact renderChunk result used to create it.
     // Cached paints keep their old source revision; they cannot impersonate a fresh bake.
-    if (!P.worker && info && rest.length >= 4) P.present({...info, screenX:rest[0],screenY:rest[1],screenWidth:rest[2],screenHeight:rest[3]});
+    if (!P.worker && info && rest.length >= 4 && !presentedBitmaps.has(src)) { presentedBitmaps.add(src); P.present({...info, screenX:rest[0],screenY:rest[1],screenWidth:rest[2],screenHeight:rest[3]}); }
   }
   return result;
 };
