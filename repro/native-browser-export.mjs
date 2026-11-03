@@ -4,7 +4,6 @@
 // node repro/native-browser-export.mjs --prepared-assets /path/to/assets [--recipe path] [--port 9697] [--server-port 8898]
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, symlinkSync} from 'node:fs';
-import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
 
@@ -14,7 +13,7 @@ if(!prepared)throw Error('--prepared-assets must name an independent prepared ca
 const port=Number(opt('--port',9697)),serverPort=Number(opt('--server-port',8898));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 await cdpPortFree(port);await cdpPortFree(serverPort);
-const root=mkdtempSync(join(tmpdir(),'terraform-native-browser-')),assets=join(root,'assets'),native=join(root,'native'),source=join(root,'source');
+const root=mkdtempSync(join('/private/tmp','terraform-native-browser-')),assets=join(root,'assets'),native=join(root,'native'),source=join(root,'source');
 mkdirSync(assets);mkdirSync(native);mkdirSync(source);mkdirSync(join(source,'web'));
 copyFileSync('sculpt.html',join(source,'sculpt.html'));
 symlinkSync(resolve('materials'),join(source,'materials'),'dir');
