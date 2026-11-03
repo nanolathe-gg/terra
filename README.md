@@ -4,6 +4,8 @@ A browser (WebGPU) terrain and map editor for Total Annihilation, an
 experimental prototype. It exports `.ufo` map archives. It began as
 Nanolathe's `tools/map-editor`, and its history came with it.
 
+Agents: read [AGENTS.md](AGENTS.md) before changing anything.
+
 Use American English for all user-visible text, including labels, help, status
 messages, preset descriptions, and export errors (for example, color, center,
 gray, and canceled).

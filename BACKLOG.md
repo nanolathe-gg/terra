@@ -2,7 +2,8 @@
 
 This is the work list for agents other than the Claude session that owns
 the editor (Codex, OpenCode models). Read the ground rules, then do only
-the card you were given. The editor is an experimental prototype with no
+the card you were given. [AGENTS.md](AGENTS.md) holds the rules every agent
+follows; it wins over an older card. The editor is an experimental prototype with no
 tests and no Go gates. It lives in its own repository,
 `github.com/nanolathe-gg/terraform` (checkout `~/src/terraform`); cards
 before H ran in Nanolathe's `tools/map-editor/`, which is why their notes
