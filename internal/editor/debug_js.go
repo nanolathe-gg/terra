@@ -110,6 +110,45 @@ func (a *App) mountDebug() {
 	d.Set("size", a.Config["size"])
 	d.Set("sea", a.Config["seaLevel"])
 	d.Set("base", a.Config["baseHeight"])
+	if a.Query.Has("audit") {
+		expose(d, "cacheAudit", func(args []js.Value) any {
+			action := "snapshot"
+			if len(args) > 0 {
+				action = args[0].String()
+			}
+			if action == "evictHeights" {
+				for k, t := range a.tiles {
+					if len(t.Heights) == 0 {
+						continue
+					}
+					if exists(t.Canvas) {
+						t.Bytes -= len(t.Heights) * 4
+						t.Heights = nil
+					} else {
+						releaseTile(t)
+						delete(a.tiles, k)
+					}
+				}
+			} else if action == "schedule" {
+				a.Schedule()
+			}
+			images, heights, bitmapBytes := 0, 0, 0
+			for _, t := range a.tiles {
+				if exists(t.Canvas) {
+					images++
+					bitmapBytes += t.Width * t.Height * 4
+				}
+				if len(t.Heights) > 0 {
+					heights++
+				}
+			}
+			out := map[string]any{"images": images, "heights": heights, "bitmapBytes": bitmapBytes, "revision": a.Revision}
+			if len(args) >= 3 {
+				out["sample"] = a.Sample(args[1].Float(), args[2].Float())
+			}
+			return js.ValueOf(out)
+		})
+	}
 	expose(d, "nodes", func([]js.Value) any {
 		if a.Nodes == nil {
 			return jsObject([]model.Node{})
