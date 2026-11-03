@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
+	"strings"
 	"syscall/js"
 	"time"
 
@@ -45,6 +47,15 @@ func (a *App) startWorker() {
 			detail := map[string]any{"phase": "start", "id": id, "revision": a.Revision}
 			if kind == "tile" {
 				detail["phase"] = "tile"
+				// A received image belongs to the revision encoded in its key,
+				// even if a newer pointer move has already changed live state.
+				if key := m.Get("key"); exists(key) {
+					if prefix, _, ok := strings.Cut(key.String(), "/"); ok {
+						if revision, err := strconv.Atoi(prefix); err == nil {
+							detail["revision"] = revision
+						}
+					}
+				}
 			}
 			for _, key := range []string{"x", "y", "width", "height", "scale", "profile", "milliseconds"} {
 				if exists(m.Get(key)) {
