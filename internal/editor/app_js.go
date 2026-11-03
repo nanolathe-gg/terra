@@ -97,7 +97,7 @@ func Run() {
 		current = a
 		if e := a.boot(); e != nil {
 			showError(e)
-			text("status", "The Go editor could not start.")
+			text("status", "The editor could not start.")
 		}
 	}()
 }
@@ -256,7 +256,7 @@ func (a *App) boot() error {
 	disabled("load", false)
 	text("levels", fmt.Sprintf("Dry base %g · sea %g · heights %g…%g", num(a.Config, "baseHeight", 0), sea, sea-90, sea+300))
 	query(".canvas-caption h2").Set("textContent", str(a.Config, "biome", "Terrain")+" terrain")
-	text("status", "Starting the Go terrain worker…")
+	text("status", "Preparing the terrain…")
 	return nil
 }
 func (a *App) World() string       { return str(a.Config, "biomeId", "green") }

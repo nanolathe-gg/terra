@@ -239,5 +239,5 @@ func (a *App) applyMemoryBudgets() {
 		setValue(item.id, fmt.Sprint(int(n)))
 		a.Config[item.key] = int(n) * 1024 * 1024
 	}
-	text("memory-status", fmt.Sprintf("GPU %d MiB · page data %d MiB (¼ cache, ½ worker, ¼ transfer headroom)", int(number("gpu-budget")), int(number("heap-budget"))))
+	text("memory-status", fmt.Sprintf("GPU %d MiB · page data %d MiB", int(number("gpu-budget")), int(number("heap-budget"))))
 }

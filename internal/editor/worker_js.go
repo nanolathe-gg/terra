@@ -100,7 +100,7 @@ func (a *App) startWorker() {
 			a.worker.Call("postMessage", jsObject(renderjob.Request{Kind: "init", ID: a.requestID, Session: a.viewState().session, Config: a.Config}))
 		case "ready":
 			a.workerReady = true
-			text("status", "Go WebGPU worker ready · draw terrain with the existing tools.")
+			text("status", "Terrain ready. Draw a shape to begin.")
 			disabled("export", false)
 			a.Schedule()
 		case "error":
