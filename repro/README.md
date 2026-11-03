@@ -1,4 +1,32 @@
-# Reproductions
+# Reproductions and checks
+
+The current editor is served by the Go application. Start an isolated server with
+`go run ./cmd/terraform --source-root . --port 8801 --assets-root <prepared-assets> --prepared`.
+Use a separate assets root, server port, Chrome debugging port, and output directory
+for each worktree. The browser tests use headless Chrome with WebGPU; they do not
+start or stop another worktree's server. Run commands from the repository root.
+
+```sh
+go test ./...
+node repro/render.mjs repro/scenes/green-1.json /tmp/terraform-green --server http://127.0.0.1:8801 --port 9450
+node repro/regional.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --port 9450
+node repro/smoke.mjs --server http://127.0.0.1:8801 --port 9450
+node repro/smoke.mjs --server http://127.0.0.1:8801 --port 9450 --page8
+node repro/curveedit.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-curves
+node repro/shapecheck.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-shapes
+node repro/zoom.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --port 9450
+node measure/shape_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-shape-controls
+node measure/world_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-world-controls
+```
+
+`measure/section_check.mjs` compares the authored GPU height field with the Go
+curve model; `measure/swatch.mjs` uses the Go material model. The zoom test
+checks split tiles, restored 1x pixels, idle stability, and replay; it does not
+currently exercise allocator refusal or budget fallback. `measure/geology_controls.mjs` measures class-specific impact using current Go
+world configuration and the recorded neutral and per-world baseline values.
+Historical audit and interaction reports describe past evidence.
+
+## Retail scenes
 
 Rebuild a 1024-px window of a retail map with the editor's brushes, then put
 the two side by side. The scene files are stroke lists, so they are ours;

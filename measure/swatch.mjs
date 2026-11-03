@@ -9,12 +9,11 @@
 // --time: also times the whole startup chain (every level, every layer), seven runs, in meta.json (`times`, ms, first is cold).
 // --same-seed: every layer uses layer 0's noise salt (the fit compares candidates that differ only in their numbers).
 // --z: runs entry makeZ instead (level 0): <name>.rgba holds a lit material's z, 16 bits as red*256+green, z = v / 65535 * 16 - 8.
-import {spawn} from 'node:child_process';
+import {spawn, execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {materialRows, MM_ROWS} from '../sculpt-material-model.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -28,7 +27,7 @@ const level = zMode ? 0 : Math.round(Math.log2(foot));
 const [tableFile, out] = args;
 mkdirSync(out, {recursive: true});
 const table = JSON.parse(readFileSync(tableFile, 'utf8'));
-const rows = materialRows(table);
+const {rows, rowsPerLayer: MM_ROWS} = JSON.parse(execFileSync('go', ['run', './cmd/measuremodel', 'material'], {cwd: resolve(here, '..'), input: JSON.stringify(table), maxBuffer: 16 * 1024 * 1024}));
 // The fitting hooks live here, not in the engine: --same-seed gives every layer one noise salt (candidate layers then differ only in their
 // numbers), and the makeZ entry writes a lit material's z at level 0 (16 bits across red and green) for the fit's rank quantiles.
 const engineShader = readFileSync(resolve(here, '../engine-materials.wgsl'), 'utf8');

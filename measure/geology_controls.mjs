@@ -35,8 +35,8 @@ const CARD_SCALE = {fingers: 100, fingerSize: 100, bankPx: 1, shorePlates: 1, pl
 // Shape options that no world sets: red-2's own stroke carries terraces 7, ledge 40, jitter 60 (card units). Moved on that scene's card.
 const CARD_ONLY = [{world: 'red', knob: 'terraces', from: 7, to: 0}, {world: 'red', knob: 'ledge', from: 40, to: 90}, {world: 'red', knob: 'terraceJitter', from: 60, to: 0}];
 // H21: read card limits/scales from the same declarations as toolDefaults. Top-level scriptedScene options use engine units and win over the card.
-const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt.js`, 'utf8').matchAll(/\['(\w+)','[^']*','[^']*',\[([^\]]*)\],([\d.]+),([\d.]+),[\d.]+,([\d.]+)/g)]
-  .filter(m => IMPACTS.test(m[1])).map(m => [m[1], {kinds: [...m[2].matchAll(/'([^']+)'/g)].map(x => x[1]), lo: +m[3], hi: +m[4], scale: +m[5]}]));
+const schema = JSON.parse(readFileSync(`${here}internal/editor/ui-schema.json`, 'utf8'));
+const impactFields = Object.fromEntries(schema.SHAPE_FIELDS.filter(f => IMPACTS.test(f[0])).map(f => [f[0], {kinds:f[3], lo:f[4], hi:f[5], scale:f[7]}]));
 // Crater spurs are child hills and inherit the crater's outline parameters (prepareNode); spurCount defaults to zero.
 const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]) || (knob === 'moonLobes' && st[0] === 'crater' && (st[2]?.spurCount ?? st[2]?.card?.spurCount ?? 0) > 0);
 for (const [k, f] of Object.entries(impactFields)) CARD_SCALE[k] = f.scale;
@@ -57,16 +57,15 @@ for (const world of ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'des
   const q = [1, 2, 3].map(n => new URLSearchParams(JSON.parse(readFileSync(scenePath(world, n), 'utf8')).query));
   queries[world] = q; scenes[world] = q.map(x => x.get('variant') || '');
 }
-const dump = JSON.parse(execFileSync(py, ['-c', `import json, sys, sculpt
-scenes = json.loads(sys.argv[1])
-eff = {}
-for world, variants in scenes.items():
-    base = sculpt.biome_config(world)
-    eff[world] = []
-    for v in variants:
-        c = sculpt.apply_variant(base, world, v) if v else base
-        eff[world].append({**c['defaults'], **c.get('engineDefaults', {})})
-print(json.dumps({'d': sculpt.KNOB_DEFAULTS, 'w': sculpt.WORLD_KNOBS, 'e': eff}))`, JSON.stringify(scenes)], {cwd: here}).toString());
+// The baseline records the editor's pre-migration neutral values and explicit world
+// overrides; effective values and variant precedence come from the current Go data.
+const baseline = JSON.parse(readFileSync(`${here}measure/geology-baselines.json`, 'utf8'));
+const worlds = JSON.parse(readFileSync(`${here}internal/server/worlds.json`, 'utf8'));
+const dump = {d: baseline.defaults, w: baseline.worldOverrides, e: {}};
+for (const [world, variants] of Object.entries(scenes)) {
+  const config = worlds.configs[world];
+  dump.e[world] = variants.map(variant => ({...config.defaults, ...(worlds.variants[world]?.[variant]?.knobs || {}), ...config.engineDefaults}));
+}
 const states = [];
 // A stroke card that carries the option wins over the page's default for that stroke (lava-2 asks for four circular layers, ice-3 for no plates). Water strokes that
 // disagree (lava-1's first stroke asks for no fingers, the rest take the world's) read `a|b`, and the scene counts as one where the option is not yet at its target.
