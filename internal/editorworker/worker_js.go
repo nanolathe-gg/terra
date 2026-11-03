@@ -23,7 +23,9 @@ import (
 )
 
 var callback js.Func
-var jobs = make(chan renderjob.Request, 1)
+var jobs = renderjob.NewQueue()
+var activeKind string
+var activeSession int
 var cancel context.CancelFunc
 var generation int
 
@@ -43,14 +45,12 @@ func Run() {
 			return nil
 		}
 		generation = job.ID
-		if cancel != nil {
+		if cancel != nil && !renderjob.FinishViewTile(activeKind, activeSession, job) {
 			cancel()
 		}
-		select {
-		case <-jobs:
-		default:
+		if dropped := jobs.Submit(job); dropped != nil && dropped.Kind != "view" && dropped.Kind != "cancel" {
+			post(map[string]any{"kind": "error", "id": dropped.ID, "canceled": true, "error": context.Canceled.Error()})
 		}
-		jobs <- job
 		return nil
 	})
 	js.Global().Set("onmessage", callback)
@@ -81,7 +81,8 @@ func loop() {
 	var engine *terrain.SceneRenderer
 	var gpu *terrain.GPU
 	var config map[string]any
-	for job := range jobs {
+	for job := range jobs.Pending() {
+		activeKind, activeSession = job.Kind, job.Session
 		ctx, c := context.WithCancel(context.Background())
 		cancel = c
 		func() {
@@ -259,7 +260,7 @@ func loop() {
 					return
 				}
 				tileStart := time.Now()
-				post(map[string]any{"kind": "render-start", "id": job.ID, "x": tile.X, "y": tile.Y, "width": tile.Width, "height": tile.Height, "scale": tile.Scale})
+				post(map[string]any{"kind": "render-start", "id": job.ID, "x": tile.X, "y": tile.Y, "width": tile.Width, "height": tile.Height, "scale": tile.Scale, "session": job.Session, "revision": job.Revision})
 				r, e := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, terrain.SceneWindow{X: tile.X, Y: tile.Y, Width: tile.Width, Height: tile.Height, Scale: tile.Scale, Preview: job.Kind == "view" && job.Options["Preview"] == true, ExportArt: job.Kind == "export", ReadHeights: job.Kind != "export", HeightsOnly: job.Kind == "heights"}, options)
 				if e != nil {
 					if ctx.Err() == nil {
@@ -267,10 +268,10 @@ func loop() {
 					}
 					return
 				}
-				if ctx.Err() != nil || generation != job.ID {
+				if ctx.Err() != nil || generation != job.ID && job.Kind != "view" {
 					return
 				}
-				m := map[string]any{"kind": "tile", "id": job.ID, "key": tile.Key, "x": tile.X, "y": tile.Y, "width": r.Width, "height": r.Height, "scale": tile.Scale, "index": index, "total": len(job.Tiles)}
+				m := map[string]any{"kind": "tile", "id": job.ID, "key": tile.Key, "x": tile.X, "y": tile.Y, "width": r.Width, "height": r.Height, "scale": tile.Scale, "index": index, "total": len(job.Tiles), "session": job.Session, "revision": job.Revision, "view": job.Kind == "view", "preview": job.Interactive}
 				profile, _ := json.Marshal(engine.LastRenderProfile())
 				m["profile"] = js.Global().Get("JSON").Call("parse", string(profile))
 				m["milliseconds"] = float64(time.Since(tileStart).Microseconds()) / 1000
@@ -325,13 +326,21 @@ func loop() {
 					m["heightSpacing"] = r.HeightSpacing
 					js.Global().Call("postMessage", js.ValueOf(m), js.ValueOf([]any{rgba.Get("buffer"), heights.Get("buffer")}))
 				}
-				// A browser task yield lets cancellation/new view messages run between tiles.
+				// Deliver the bounded current tile even when a newer view arrived.
+				// The next loop immediately consumes only the latest pending snapshot.
+				if generation != job.ID {
+					return
+				}
 				time.Sleep(time.Millisecond)
 			}
-			post(map[string]any{"kind": "done", "id": job.ID, "milliseconds": float64(time.Since(start).Microseconds()) / 1000})
+			post(map[string]any{"kind": "done", "id": job.ID, "session": job.Session, "milliseconds": float64(time.Since(start).Microseconds()) / 1000})
 		}()
+		if ctx.Err() != nil && job.Kind != "view" && job.Kind != "cancel" {
+			post(map[string]any{"kind": "error", "id": job.ID, "canceled": true, "error": ctx.Err().Error()})
+		}
 		c()
 		cancel = nil
+		activeKind = ""
 	}
 }
 func nestedNumber(m map[string]any, k, p string) float64 {

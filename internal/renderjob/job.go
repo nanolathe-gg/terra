@@ -19,13 +19,16 @@ type FillRequest struct {
 	Settings    model.FeatureFill
 }
 type Request struct {
-	Kind    string            `json:"kind"`
-	ID      int               `json:"id"`
-	Config  map[string]any    `json:"config"`
-	Nodes   []model.Node      `json:"nodes"`
-	Knobs   map[string]string `json:"knobs"`
-	Colors  map[string]any    `json:"colors"`
-	Options map[string]any    `json:"options"`
-	Tiles   []Tile            `json:"tiles"`
-	Fill    *FillRequest      `json:"fill,omitempty"`
+	Session     int               `json:"session"`
+	Revision    int               `json:"revision"`
+	Interactive bool              `json:"interactive"`
+	Kind        string            `json:"kind"`
+	ID          int               `json:"id"`
+	Config      map[string]any    `json:"config"`
+	Nodes       []model.Node      `json:"nodes"`
+	Knobs       map[string]string `json:"knobs"`
+	Colors      map[string]any    `json:"colors"`
+	Options     map[string]any    `json:"options"`
+	Tiles       []Tile            `json:"tiles"`
+	Fill        *FillRequest      `json:"fill,omitempty"`
 }

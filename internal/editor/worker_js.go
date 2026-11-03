@@ -28,7 +28,26 @@ type cachedTile struct {
 	Bytes                                       int
 }
 
+type workerViewState struct{ session int }
+
+var workerViews = map[*App]*workerViewState{}
+
+func (a *App) viewState() *workerViewState {
+	s := workerViews[a]
+	if s == nil {
+		s = &workerViewState{}
+		workerViews[a] = s
+	}
+	return s
+}
+func (a *App) terrainGesture() bool {
+	return a.controlEditing || a.gesture != nil && a.gesture.Kind != "pan"
+}
+func (a *App) acceptsViewTile(m js.Value) bool {
+	return m.Get("view").Type() == js.TypeBoolean && m.Get("view").Bool() && exists(m.Get("session")) && m.Get("session").Int() == a.viewState().session
+}
 func (a *App) startWorker() {
+	workerViews[a] = &workerViewState{}
 	a.tiles = map[string]*cachedTile{}
 	a.rpc = map[int]chan js.Value{}
 	a.worker = js.Global().Get("Worker").New("/web/worker.js")
@@ -43,7 +62,7 @@ func (a *App) startWorker() {
 		if exists(m.Get("id")) {
 			id = m.Get("id").Int()
 		}
-		if kind == "render-start" || kind == "tile" && id == a.activeID {
+		if kind == "render-start" || kind == "tile" && (id == a.activeID || a.acceptsViewTile(m)) {
 			detail := map[string]any{"phase": "start", "id": id, "revision": a.Revision}
 			if kind == "tile" {
 				detail["phase"] = "tile"
@@ -76,7 +95,8 @@ func (a *App) startWorker() {
 		case "booted":
 			a.requestID++
 			a.activeID = a.requestID
-			a.worker.Call("postMessage", jsObject(renderjob.Request{Kind: "init", ID: a.requestID, Config: a.Config}))
+			a.viewState().session = a.requestID
+			a.worker.Call("postMessage", jsObject(renderjob.Request{Kind: "init", ID: a.requestID, Session: a.viewState().session, Config: a.Config}))
 		case "ready":
 			a.workerReady = true
 			text("status", "Go WebGPU worker ready · draw terrain with the existing tools.")
@@ -90,7 +110,7 @@ func (a *App) startWorker() {
 			a.rendering = false
 			text("status", "Terrain job failed. The recipe is retained.")
 		case "tile":
-			if id != a.activeID {
+			if id != a.activeID && !a.acceptsViewTile(m) {
 				return
 			}
 			a.acceptTile(m)
@@ -126,7 +146,7 @@ func (a *App) job(kind string, tiles []renderjob.Tile) renderjob.Request {
 	if kind == "export" || kind == "heights" {
 		options["Weather"] = checked("weather")
 	}
-	return renderjob.Request{Kind: kind, ID: a.requestID, Config: a.Config, Nodes: clone(a.Nodes), Knobs: a.knobStrings(), Colors: a.mergedColors(), Options: options, Tiles: tiles}
+	return renderjob.Request{Kind: kind, ID: a.requestID, Session: a.viewState().session, Revision: a.Revision, Config: a.Config, Nodes: a.Nodes, Knobs: a.knobStrings(), Colors: a.mergedColors(), Options: options, Tiles: tiles}
 }
 func (a *App) Schedule() {
 	if !a.workerReady || a.Busy || a.view.Width < 1 {
@@ -135,7 +155,11 @@ func (a *App) Schedule() {
 	if a.scheduleTimer != nil {
 		return
 	}
-	a.scheduleTimer = time.AfterFunc(16*time.Millisecond, func() { a.scheduleTimer = nil; a.queueView() })
+	delay := 16 * time.Millisecond
+	if a.terrainGesture() {
+		delay = 4 * time.Millisecond
+	}
+	a.scheduleTimer = time.AfterFunc(delay, func() { a.scheduleTimer = nil; a.queueView() })
 }
 func (a *App) tileKey(x, y, w, h int, level float64) string {
 	return fmt.Sprintf("%d/%d/%d/%d/%d/%g/%t/%t", a.Revision, x, y, w, h, level, checked("clay"), checked("weathered-view"))
@@ -150,6 +174,10 @@ func (a *App) queueView() {
 	}
 	level := 1 / scale
 	size := max(64, int(math.Ceil(256*level)))
+	interactive := a.terrainGesture()
+	if interactive {
+		level *= 2
+	}
 	x0, y0 := int(math.Floor(a.view.X/float64(size)))*size, int(math.Floor(a.view.Y/float64(size)))*size
 	x1, y1 := min(int(a.Width()), int(math.Ceil(a.view.X+float64(a.view.Width)/scale))), min(int(a.Height()), int(math.Ceil(a.view.Y+float64(a.view.Height)/scale)))
 	tiles := []renderjob.Tile{}
@@ -167,7 +195,22 @@ func (a *App) queueView() {
 		return
 	}
 	job := a.job("view", tiles)
+	job.Interactive = interactive
 	job.Options["Preview"] = a.view.Fit
+	if interactive {
+		job.Options["Full"] = false
+		job.Options["Weather"] = false
+		if hoverPoint != nil {
+			projected := a.project(*hoverPoint)
+			px, py := projected.X/a.view.Scale+a.view.X, projected.Y/a.view.Scale+a.view.Y
+			distance := func(t renderjob.Tile) float64 {
+				dx := math.Max(0, math.Max(float64(t.X)-px, px-float64(t.X+t.Width)))
+				dy := math.Max(0, math.Max(float64(t.Y)-py, py-float64(t.Y+t.Height)))
+				return dx*dx + dy*dy
+			}
+			sort.SliceStable(job.Tiles, func(i, j int) bool { return distance(job.Tiles[i]) < distance(job.Tiles[j]) })
+		}
+	}
 	a.activeID = job.ID
 	a.rendering = true
 	a.worker.Call("postMessage", jsObject(job))
@@ -183,6 +226,9 @@ func (a *App) acceptTile(m js.Value) {
 	data := js.Global().Get("ImageData").New(bytes, w, h)
 	c.Call("getContext", "2d").Call("putImageData", data, 0, 0)
 	t := &cachedTile{Canvas: c, X: m.Get("x").Int(), Y: m.Get("y").Int(), Width: w, Height: h, Scale: m.Get("scale").Float(), Used: time.Now(), Bytes: w * h * 4, Revision: a.Revision}
+	if exists(m.Get("revision")) {
+		t.Revision = m.Get("revision").Int()
+	}
 	if exists(m.Get("heights")) {
 		ha := js.Global().Get("Uint8Array").New(m.Get("heights"))
 		hb := make([]byte, ha.Get("byteLength").Int())
@@ -201,6 +247,7 @@ func (a *App) acceptTile(m js.Value) {
 	a.tiles[m.Get("key").String()] = t
 	a.trimTiles()
 	a.paintTiles()
+	a.refreshLandformSection()
 }
 func (a *App) trimTiles() {
 	budget := 128 * 1024 * 1024
