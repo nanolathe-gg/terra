@@ -75,7 +75,7 @@ type App struct {
 	focused                   bool
 	panels                    map[string]bool
 	tiles                     map[string]*cachedTile
-	scheduleTimer             *time.Timer
+	scheduleQueued            bool
 	rpc                       map[int]chan js.Value
 	frameTimes                []float64
 	strokeTimes               []float64

@@ -80,7 +80,7 @@ func (a *App) queueLandformGhost(state *landformGhostCache) {
 		if a.selectedLandformPath() == nil || !exists(control) || control.Get("hidden").Bool() || control.Call("getClientRects").Length() == 0 {
 			return
 		}
-		if len(a.rpc) > 0 || !a.workerReady || a.Busy || a.gesture != nil || a.controlEditing || a.rendering || a.scheduleTimer != nil {
+		if len(a.rpc) > 0 || !a.workerReady || a.Busy || a.gesture != nil || a.controlEditing || a.rendering || a.scheduleQueued {
 			a.queueLandformGhost(state)
 			return
 		}

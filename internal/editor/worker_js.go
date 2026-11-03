@@ -173,14 +173,18 @@ func (a *App) Schedule() {
 	if !a.workerReady || a.Busy || a.view.Width < 1 || auditCaptureOnly {
 		return
 	}
-	if a.scheduleTimer != nil {
+	if a.scheduleQueued {
 		return
 	}
-	delay := 16 * time.Millisecond
-	if a.terrainGesture() {
-		delay = 4 * time.Millisecond
-	}
-	a.scheduleTimer = time.AfterFunc(delay, func() { a.scheduleTimer = nil; a.queueView() })
+	a.scheduleQueued = true
+	var callback js.Func
+	callback = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		defer callback.Release()
+		a.scheduleQueued = false
+		a.queueView()
+		return nil
+	})
+	js.Global().Call("queueMicrotask", callback)
 }
 func (a *App) tileKey(x, y, w, h int, level float64) string {
 	return fmt.Sprintf("%d/%d/%d/%d/%d/%g/%t/%t", a.Revision, x, y, w, h, level, checked("clay"), checked("weathered-view"))
@@ -528,12 +532,8 @@ func (a *App) retainUnaffectedTiles(interactive bool) {
 		options["Weather"] = false
 	}
 	visual, _ := json.Marshal([]any{a.Knobs, a.mergedColors(), options, a.Config["column"], a.Config["size"], a.Config["grid"], a.Config["baseHeight"], a.Config["seaLevel"], a.view.Fit})
-	data, err := json.Marshal(a.Nodes)
-	if err != nil {
-		return
-	}
 	defer func() {
-		_ = json.Unmarshal(data, &state.nodes)
+		state.nodes = model.CloneNodes(a.Nodes)
 		state.visual = string(visual)
 		state.revision = a.Revision
 		state.initialized = true
