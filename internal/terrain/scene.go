@@ -43,6 +43,8 @@ type SceneRenderer struct {
 	erosion                           *Erosion
 	weatherPages                      map[[2]int]*weatherFeed
 	weatherKey                        [32]byte
+	weatherNodes                      []model.Node
+	weatherNodesSet                   bool
 	weatherTick, weatherRuns          uint64
 	shapePages                        map[[2]int]*weatherFeed
 	shapeKey                          [32]byte
@@ -318,31 +320,14 @@ func pageCacheBytes(pages map[[2]int]*weatherFeed) int {
 	return total
 }
 
-// A canonical small-map weather page may use the unused authored-cache share.
-// This keeps the combined retention cap unchanged while avoiding repeated
-// whole-map weather replays on each visible tile.
+// Weather pages may use any unused authored-cache capacity. Their combined
+// retained bytes never exceed the original two-share pool.
 func (s *SceneRenderer) shapeCacheBudget() int {
 	budget := s.cacheBudget()
-	if len(s.weatherPages) == 1 {
-		for _, p := range s.weatherPages {
-			if p.Grid == s.renderer.Grid {
-				return min(budget, max(0, 2*budget-p.bytes))
-			}
-		}
-	}
-	return budget
+	return min(budget, max(0, 2*budget-pageCacheBytes(s.weatherPages)))
 }
-
 func (s *SceneRenderer) weatherCacheBudget() int {
-	budget := s.cacheBudget()
-	if len(s.weatherPages) == 1 {
-		for _, p := range s.weatherPages {
-			if p.Grid == s.renderer.Grid {
-				return max(budget, 2*budget-pageCacheBytes(s.shapePages))
-			}
-		}
-	}
-	return budget
+	return max(0, 2*s.cacheBudget()-pageCacheBytes(s.shapePages))
 }
 
 // trimPageCache releases least-recently-used pages without invalidating the

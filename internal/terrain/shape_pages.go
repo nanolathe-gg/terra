@@ -115,6 +115,9 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 	started := time.Now()
 	defer func() { s.shapeProfile.ShapeFeedMilliseconds += elapsed(started) }()
 	graphStart := time.Now()
+	// Preview geometry changes alone leave weather valid; an authored graph
+	// edit makes all old weather pages stale and releases their pool share.
+	s.invalidateStaleWeather(nodes)
 	data, e := json.Marshal([]any{c.Grid, c.Spacing, c.RefSpacing, c.BaseHeight, c.Sea, c.MinHeight, c.MaxHeight, c.Defaults})
 	if e != nil {
 		return nil, e

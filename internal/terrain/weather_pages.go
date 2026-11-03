@@ -32,7 +32,15 @@ func (s *SceneRenderer) clearWeatherCache() {
 	}
 	s.weatherPages = nil
 	s.weatherKey = [32]byte{}
+	s.weatherNodes = nil
+	s.weatherNodesSet = false
 }
+func (s *SceneRenderer) invalidateStaleWeather(nodes []model.Node) {
+	if s.weatherNodesSet && !model.NodesEqual(s.weatherNodes, nodes) {
+		s.clearWeatherCache()
+	}
+}
+
 func (s *SceneRenderer) newWeatherFeed(side, originX, originY int, material bool) (*weatherFeed, error) {
 	limits := membudget.FromConfig(s.config)
 	if err := membudget.Require("Weather feed", s.reservedGPUBytes()+weatherFeedBytes(side, material), limits.GPU); err != nil {
@@ -154,6 +162,8 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 	if s.weatherPages == nil || s.weatherKey != key {
 		s.clearWeatherCache()
 		s.weatherKey = key
+		s.weatherNodes = model.CloneNodes(nodes)
+		s.weatherNodesSet = true
 		s.weatherPages = map[[2]int]*weatherFeed{}
 	}
 	side := max(region.X1-region.X0+1, region.Y1-region.Y0+1)
@@ -225,12 +235,11 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 				if err != nil {
 					return nil, fmt.Errorf("weather page %d,%d: %w", px, py, err)
 				}
-				if core == c.Grid && page.bytes > budget && page.bytes <= 2*budget {
-					s.trimPageCache(s.shapePages, 2*budget-page.bytes)
+				pool := 2 * s.cacheBudget()
+				if page.bytes <= pool {
+					s.trimPageCache(s.shapePages, max(0, pool-pageCacheBytes(s.weatherPages)-page.bytes))
 				}
-				if core == c.Grid {
-					budget = max(budget, 2*budget-pageCacheBytes(s.shapePages))
-				}
+				budget = s.weatherCacheBudget()
 				if page.bytes <= budget {
 					s.weatherPages[id] = page
 				}

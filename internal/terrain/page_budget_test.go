@@ -1,6 +1,9 @@
 package terrain
 
-import "testing"
+import (
+	"github.com/nanolathe-gg/terraform/internal/model"
+	"testing"
+)
 
 func TestPageCacheBudgetTracksBitmapAndEvictsLRU(t *testing.T) {
 	const mb = 1024 * 1024
@@ -15,7 +18,7 @@ func TestPageCacheBudgetTracksBitmapAndEvictsLRU(t *testing.T) {
 	if err := s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(64 * mb)}); err != nil {
 		t.Fatal(err)
 	}
-	if s.cacheBudget() != 64*mb || len(s.shapePages) != 2 || len(s.weatherPages) != 2 || s.shapePages[[2]int{0, 0}] != nil || s.weatherPages[[2]int{0, 0}] != nil {
+	if s.cacheBudget() != 64*mb || len(s.shapePages) != 1 || len(s.weatherPages) != 3 || s.shapePages[[2]int{0, 0}] != nil || s.shapePages[[2]int{1, 0}] != nil {
 		t.Fatalf("did not evict oldest pages: shape=%v weather=%v budget=%d", s.shapePages, s.weatherPages, s.cacheBudget())
 	}
 	if s.cacheEvictions != 2 || s.cacheEvictedBytes != uint64(60*mb) {
@@ -24,7 +27,7 @@ func TestPageCacheBudgetTracksBitmapAndEvictsLRU(t *testing.T) {
 	if err := s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(60 * mb)}); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.shapePages) != 2 || len(s.weatherPages) != 2 {
+	if len(s.shapePages) != 1 || len(s.weatherPages) != 3 {
 		t.Fatal("relaxing reservation discarded pages")
 	}
 	if err := s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(1024 * mb)}); err != nil {
@@ -61,5 +64,27 @@ func TestWholeWeatherPageUsesSharedCacheCapacity(t *testing.T) {
 	}
 	if len(s.weatherPages) != 0 {
 		t.Fatal("retained whole weather page beyond shared cap")
+	}
+}
+
+func TestPagedWeatherBorrowsUnusedAuthoredShare(t *testing.T) {
+	const mb = 1024 * 1024
+	nodes := []model.Node{{Kind: "hill", Params: map[string]any{"amount": 10.}}}
+	s := &SceneRenderer{config: map[string]any{"gpuMB": 512., "uiBitmapBytes": float64(64 * mb)}, renderer: &Renderer{Size: 4000, Grid: 2000}, weatherNodes: model.CloneNodes(nodes), weatherNodesSet: true, shapePages: map[[2]int]*weatherFeed{}, weatherPages: map[[2]int]*weatherFeed{}}
+	for i := 0; i < 6; i++ {
+		s.weatherPages[[2]int{i, 0}] = &weatherFeed{bytes: 18 * mb, used: uint64(i)}
+	}
+	s.shapePages[[2]int{0, 0}] = &weatherFeed{bytes: 20 * mb}
+	if s.weatherCacheBudget() != 108*mb || s.shapeCacheBudget() != 20*mb {
+		t.Fatalf("pool weather=%d shape=%d", s.weatherCacheBudget(), s.shapeCacheBudget())
+	}
+	s.invalidateStaleWeather(nodes)
+	if len(s.weatherPages) != 6 {
+		t.Fatal("identical graph discarded valid weather")
+	}
+	nodes[0].Params["amount"] = 11.
+	s.invalidateStaleWeather(nodes)
+	if len(s.weatherPages) != 0 || s.weatherNodesSet {
+		t.Fatal("authored change retained stale weather")
 	}
 }
