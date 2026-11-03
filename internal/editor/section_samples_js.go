@@ -34,11 +34,12 @@ func landformSectionSamples(p *landformPath, place float64) []model.Point {
 }
 
 type landformGhostCache struct {
-	key     string
-	values  []float64
-	points  []model.Point
-	timer   *time.Timer
-	pending bool
+	key       string
+	failedKey string
+	values    []float64
+	points    []model.Point
+	timer     *time.Timer
+	pending   bool
 }
 
 var landformGhosts = map[*App]*landformGhostCache{}
@@ -59,6 +60,9 @@ func (a *App) landformGhostSamples(p *landformPath) []float64 {
 		state.key = key
 		state.values = nil
 		state.points = landformSectionSamples(p, a.landformPlace)
+	}
+	if state.failedKey == key {
+		return nil
 	}
 	if len(state.values) == len(state.points) && len(state.values) > 0 {
 		return state.values
@@ -88,13 +92,23 @@ func (a *App) queueLandformGhost(state *landformGhostCache) {
 			job.Points = points
 			msg, err := a.rpcRequest(context.Background(), job)
 			state.pending = false
+			if err != nil && err.Error() != context.Canceled.Error() {
+				if state.key == key {
+					state.failedKey = key
+				}
+				showError(fmt.Errorf("Landform section preview: %w", err))
+				return
+			}
 			if err == nil && state.key == key {
 				var values []float64
-				if fromJS(msg.Get("values"), &values) == nil && len(values) == len(points) {
-					state.values = values
-					a.drawCurve()
+				if fromJS(msg.Get("values"), &values) != nil || len(values) != len(points) {
+					state.failedKey = key
+					showError(fmt.Errorf("Landform section preview returned invalid samples."))
 					return
 				}
+				state.values = values
+				a.drawCurve()
+				return
 			}
 			if a.selectedLandformPath() != nil {
 				a.queueLandformGhost(state)
