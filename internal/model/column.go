@@ -1,8 +1,11 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
+	"reflect"
 )
 
 const ColumnBeds = 32
@@ -76,4 +79,27 @@ func ColumnHasCapBed(column *Column, variant string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// ColumnColorOverrides preserves explicit edited slot colors over palette
+// choices, while an unchanged world column leaves those choices intact.
+func ColumnColorOverrides(column, defaults any) map[string]any {
+	out := map[string]any{}
+	if column == nil || reflect.DeepEqual(column, defaults) {
+		return out
+	}
+	b, e := json.Marshal(column)
+	if e != nil {
+		return out
+	}
+	var c Column
+	if json.Unmarshal(b, &c) != nil {
+		return out
+	}
+	for i, color := range c.Colors {
+		if len(color) >= 3 {
+			out[fmt.Sprint("strata", i+1)] = []float64{color[0] / 255, color[1] / 255, color[2] / 255}
+		}
+	}
+	return out
 }

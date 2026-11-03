@@ -183,6 +183,9 @@ func (a *App) boot() error {
 		}
 	}
 	a.localKey = fmt.Sprintf("nanolathe-terrain-sculpt-v3-%s-map-%dx%d-sea-%g", a.World(), x, y, sea)
+	if variant := str(a.Config, "variant", ""); variant != "" {
+		a.localKey += "-v-" + variant
+	}
 	if id := a.Query.Get("world"); id != "" {
 		a.localKey += "-world-" + id
 	}
@@ -199,6 +202,7 @@ func (a *App) boot() error {
 		setValue(item.id, math.Round(v*100))
 	}
 
+	setValue("scree", max(0, min(100, num(a.Knobs, "scree", 0))))
 	a.defaultColumn = clone(a.Config["column"])
 	a.mountLayout()
 	a.mountControls()
@@ -207,6 +211,7 @@ func (a *App) boot() error {
 	a.mountCanvas()
 	a.mountFiles()
 	a.mountDebug()
+	a.mountAudit()
 	for kind := range a.Schema.Help {
 		a.ToolSettings[kind] = a.toolDefaults(kind, a.World())
 	}
@@ -231,7 +236,14 @@ func (a *App) boot() error {
 		u.Get("searchParams").Call("delete", "pendingSketch")
 		js.Global().Get("history").Call("replaceState", js.Null(), "", u.Get("href"))
 	}
-	a.Checkpoint()
+	// Opening a canvas establishes undo history without writing autosave. In
+	// particular, a rejected saved recipe must remain recoverable on disk.
+	initial, e := json.Marshal(a.historyState())
+	if e != nil {
+		return e
+	}
+	a.history = [][]byte{initial}
+	a.historyIndex = 0
 	a.Update()
 	a.Fit()
 	a.startWorker()
@@ -464,8 +476,21 @@ func (a *App) LoadSketch(data []byte) error {
 	return nil
 }
 func inVersion(v float64) bool { return v == 4 || v == 5 || v == 6 }
+
+// History contains editable document data. Brush settings, view options, and
+// world controls are preferences and must survive undoing a stroke.
+type historyState struct {
+	Nodes          []model.Node   `json:"nodes"`
+	RefinementSeed uint32         `json:"refinementSeed"`
+	MapData        map[string]any `json:"mapData"`
+	Column         any            `json:"column"`
+}
+
+func (a *App) historyState() historyState {
+	return historyState{a.Nodes, a.RefinementSeed, a.MapData, a.Config["column"]}
+}
 func (a *App) Checkpoint() {
-	b, e := json.Marshal(a.Sketch())
+	b, e := json.Marshal(a.historyState())
 	if e != nil {
 		showError(e)
 		return
@@ -484,13 +509,23 @@ func (a *App) Checkpoint() {
 }
 func (a *App) Undo(delta int) {
 	i := a.historyIndex + delta
-	if i < 0 || i >= len(a.history) || a.gesture != nil {
+	if i < 0 || i >= len(a.history) || a.gesture != nil || a.Busy {
 		return
 	}
-	if e := a.LoadSketch(a.history[i]); e != nil {
+	var state historyState
+	if e := json.Unmarshal(a.history[i], &state); e != nil {
 		showError(e)
 		return
 	}
+	a.Nodes = state.Nodes
+	a.RefinementSeed = state.RefinementSeed
+	a.MapData = state.MapData
+	a.Config["column"] = state.Column
+	a.Selected = -1
+	a.PathPoint = -1
+	a.PathIndex = 0
+	a.AddPath = false
+	a.restoreMapMetadata()
 	a.historyIndex = i
 	a.Revision++
 	a.Update()
@@ -835,6 +870,9 @@ func (a *App) mergedColors() map[string]any {
 		} else {
 			out[key] = clone(v)
 		}
+	}
+	for k, v := range model.ColumnColorOverrides(a.Config["column"], a.defaultColumn) {
+		out[k] = v
 	}
 	return out
 }
