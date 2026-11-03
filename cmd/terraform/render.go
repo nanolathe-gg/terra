@@ -67,6 +67,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		config[k] = v
 	}
 	config["map"] = recipe.Map
+	config["heightBounds"] = []float64{recipe.SeaLevel - 90, recipe.SeaLevel + 300}
 	tablePath, _ := config["materialTable"].(string)
 	b, e = os.ReadFile(filepath.Join(o.SourceRoot, strings.TrimPrefix(tablePath, "/")))
 	if e != nil {
@@ -164,7 +165,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	for y := 0; y < h; y += side {
 		for x := 0; x < w; x += side {
 			tw, th := min(side, w-x), min(side, h-y)
-			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true}, func() terrain.DrawOptions { d := draw; d.Width = tw; d.Height = th; return d }())
+			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true, ReadHeights: true}, func() terrain.DrawOptions { d := draw; d.Width = tw; d.Height = th; return d }())
 			if err != nil {
 				return fmt.Errorf("render tile (%d,%d): %w", x, y, err)
 			}
