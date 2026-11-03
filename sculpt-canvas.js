@@ -25,6 +25,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   if(query.has('weatheredView'))weatheredView=query.get('weatheredView')!=='0';
   $('weathered-view-control').hidden=false;$('weathered-view').checked=weatheredView;
   const displayLevel=()=>overview?Math.max(1,2**Math.floor(Math.log2(1/scale))):1;
+  // H26: above 100% the final image is baked at the screen's pixels (.5 up to 200%, .25 beyond), so the grain stays one texel per drawn pixel; only the
+  // fed path takes a level. A detail bake that does not fit the GPU budget lowers `finest` until the next budget change.
+  let finest=.25;
+  const detailLevel=()=>overview||!levels||!api.gpuFeedActive?.()?1:Math.max(finest,scale<=1?1:scale<=2?.5:.25);
+  const offLevel=(e,want)=>(e.scale??1)!==want&&(e.fed||want===1);   // an image not at the level wanted; a non-fed one cannot be at a finer level, so it stays
   const cacheKey=(rect,size=canonicalSize)=>[rect.x,rect.y,size,overview?'fit':weatheredView?'detail':'authored'].join(',');
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
   const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
@@ -92,7 +97,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // Every selected budget uses the same bake lattice. Budget changes evict
       // images, rather than change GPU interpolation and palette decisions.
       const reserve=fixedGPU(false)-(previewReserved?64*MB:0)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
-      renderer.setBudget(128*MB,reserve);const next=Math.min(512,renderer.recommendedChunkSize);
+      finest=.25;renderer.setBudget(128*MB,reserve);const next=Math.min(512,renderer.recommendedChunkSize);
       if(next!==canonicalSize){for(const key of cache.keys())remove(key);canonicalSize=next;}
       trimTo(gpuBudget-fixedGPU()-renderer.stats().retainedBytes-32*MB);
       renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+canonicalSize*canonicalSize*8);
@@ -120,9 +125,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(busy)return false;
     if(navigating())return true;
     if(!drawing&&!pending)return false;
-    const v=state(),size=overview?256*displayLevel():viewChunkSize(),level=overview?displayLevel():levels&&interacting()&&api.gpuFeedActive?.()?2:1;
+    const v=state(),size=overview?256*displayLevel():viewChunkSize(),level=overview?displayLevel():levels&&interacting()&&api.gpuFeedActive?.()?2:detailLevel();
     for(let y=Math.max(0,Math.floor(v.y/size))*size;y<Math.min(map.height,v.y+v.height);y+=size)for(let x=Math.max(0,Math.floor(v.x/size))*size;x<Math.min(map.width,v.x+v.width);x+=size){
-      const e=cache.get(cacheKey({x,y},size));if(!e||e.dirty||(e.scale??1)>level)return true;
+      const e=cache.get(cacheKey({x,y},size));if(!e||e.dirty||(level<2?offLevel(e,level):(e.scale??1)>level))return true;
     }
     return false;
   }
@@ -213,7 +218,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     ink.restore();
   }
   function coarseSample(x,y) { return coarseH[Math.round(clamp(y/(map.height-1),0,1)*(CH-1))*CW+Math.round(clamp(x/(map.width-1),0,1)*(CW-1))]; }
-  function paint(entry,v=state()) { g.imageSmoothingEnabled=scale<1;g.imageSmoothingQuality='high';const k=entry.scale??1;g.drawImage(entry.bitmap,(entry.x-v.x)*scale,(entry.y-v.y)*scale,entry.bitmap.width*k*scale,entry.bitmap.height*k*scale); }
+  function paint(entry,v=state()) { const k=entry.scale??1;g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.drawImage(entry.bitmap,(entry.x-v.x)*scale,(entry.y-v.y)*scale,entry.bitmap.width*k*scale,entry.bitmap.height*k*scale); }
   function presentView() {
     const repaint=paintedView!==viewEpoch||cache.size===0;
     drawCoarse(repaint);
@@ -269,7 +274,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             // Weather can take seconds; cover the camera before waiting on it.
             // Retained detail (even if dirty) already provides that coverage.
             if(weatheredView)for(const rect of jobs)if(intersects(rect,v)&&!cache.has(cacheKey(rect,size)))plan.push({rect,want:2,authoredPreview:true});
-            for(const rect of jobs)plan.push({rect,want:1});
+            for(const rect of jobs)plan.push({rect,want:detailLevel()});
           }
         }
         for(const {rect,want,authoredPreview=false} of plan){
@@ -277,13 +282,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if((previewing||navigating())&&!intersects(rect,v))continue;
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
           if(want===2&&e&&!e.dirty)continue;   // current detailed images also satisfy a preview request
-          const upgrade=want===1&&e&&((e.scale??1)>1||!overview&&e.weathered!==weatheredView);
+          const upgrade=want<=1&&e&&(offLevel(e,want)||!overview&&e.weathered!==weatheredView);
           if((!e||e.dirty||upgrade)&&holding&&!overview&&!authoredPreview)continue;
           if(!e||e.dirty||upgrade){
             const controller=new AbortController();activeBake={controller,rect};
             // Scrolling changes the plan, but a tile still in view remains
             // useful. Keep it running instead of restarting on every input.
             try{e=await bake(rect,false,controller.signal,()=>token!==epoch||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview,authoredPreview);}
+            catch(err){if(want<1&&String(err.message).includes('of GPU memory')){finest=want*2;rerun=true;break;}throw err;}   // fall back to the next coarser level, never the banner
             finally{if(activeBake?.controller===controller)activeBake=null;}
             baked=true;if(token!==epoch){
             // Keep a completed preview even if a newer input touched it. It remains dirty until the latest revision is baked.
