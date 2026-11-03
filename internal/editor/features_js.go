@@ -32,6 +32,8 @@ type FeatureUI struct {
 	seed                             uint32
 	points                           []model.FeaturePoint
 	dragging                         bool
+	snapshot                         *model.PlacementStore
+	modified                         bool
 	selectedStart, selectedFeature   int
 	ready                            bool
 	Active                           bool
@@ -44,12 +46,32 @@ func (a *App) mountFeatures() {
 	f.root = root
 	root.Set("innerHTML", `<h3>Features and starts</h3><div data-modes class="tools"></div><p data-feature-status class="small">Reading the world’s feature catalogue…</p><label>Kind <select data-filter><option value="all">All features</option><option value="tree">Trees</option><option value="foliage">Foliage</option><option value="rock">Rocks</option><option value="deposit">Metal deposits</option><option value="other">Other</option></select></label><div data-feature-list style="max-height:220px;overflow:auto"></div><label>Start positions <select data-starts></select></label><button data-remove-start>Remove selected start</button><details><summary>Tree, foliage and rock fill</summary><label>Mix <select data-kind><option>tree</option><option>foliage</option><option>rock</option></select></label><label>Region <select data-region><option>brush</option><option>lasso</option><option>flood</option></select></label><div data-fill></div></details><p data-feature-count class="small"></p>`)
 	host := element("feature-tool-host")
-	host.Set("hidden", false)
+	host.Set("hidden", true)
 	host.Call("append", root)
+	featureButton := create("button", "", "Features")
+	featureButton.Set("id", "feature-tool")
+	attribute(featureButton, "aria-pressed", false)
+	query(".tool-group .tools").Call("append", featureButton)
+	on(featureButton, "click", func(js.Value) {
+		if !f.ready || a.Busy {
+			return
+		}
+		a.Selected = -1
+		a.PathMode = false
+		f.Active = true
+		if f.store.DepositName != "" {
+			f.mode = "deposit"
+		} else {
+			f.mode = "starts"
+		}
+		a.Update()
+		a.drawOverlay()
+	})
 	q := func(sel string) js.Value { return root.Call("querySelector", sel) }
 	for _, item := range [][2]string{{"place", "Place feature"}, {"erase", "Erase"}, {"deposit", "Metal deposit"}, {"starts", "Starts"}, {"fill", "Fill"}} {
 		mode, label := item[0], item[1]
 		b := create("button", "", label)
+		attribute(b, "data-feature-mode", mode)
 		on(b, "click", func(js.Value) {
 			if f.Active && f.mode == mode {
 				f.mode = ""
@@ -59,6 +81,7 @@ func (a *App) mountFeatures() {
 				f.Active = true
 			}
 			f.Update()
+			element("overlay").Call("focus")
 			a.drawOverlay()
 		})
 		q("[data-modes]").Call("append", b)
@@ -140,7 +163,10 @@ func (a *App) mountFeatures() {
 			}
 		}
 		f.store = model.NewPlacementStore(int(num(a.Map(), "playRight", 0)/16), int(num(a.Map(), "playBottom", 0)/16), f.defs, c.DepositName)
-		f.load()
+		if err := f.load(); err != nil {
+			f.status(err.Error())
+			return
+		}
 		f.sync()
 		f.ready = true
 		list := q("[data-feature-list]")
@@ -180,11 +206,11 @@ func strconvA(s string) (int, error) { var n int; _, e := fmt.Sscan(s, &n); retu
 func (f *FeatureUI) status(s string) {
 	f.root.Call("querySelector", "[data-feature-status]").Set("textContent", s)
 }
-func (f *FeatureUI) load() {
+func (f *FeatureUI) load() error {
 	if f.store == nil {
-		return
+		return nil
 	}
-	f.store = model.NewPlacementStore(f.store.Cols, f.store.Rows, f.defs, f.store.DepositName)
+	next := model.NewPlacementStore(f.store.Cols, f.store.Rows, f.defs, f.store.DepositName)
 	b, _ := json.Marshal(f.a.MapData)
 	var d struct {
 		Features []model.FeaturePlacement `json:"features"`
@@ -201,13 +227,29 @@ func (f *FeatureUI) load() {
 			Radius     *float64                 `json:"radius"`
 		} `json:"fill"`
 	}
-	if json.Unmarshal(b, &d) == nil {
-		if d.Features != nil {
-			f.store.Features = d.Features
+	if err := json.Unmarshal(b, &d); err != nil {
+		return fmt.Errorf("Invalid map placements: %w", err)
+	}
+	for _, p := range d.Features {
+		if _, err := next.Add(p.Name, p.X, p.Z); err != nil {
+			return fmt.Errorf("Feature %s: %w", p.Name, err)
 		}
-		if len(d.Starts) > 0 {
-			f.store.Starts = d.Starts
+	}
+	if d.Starts != nil {
+		if len(d.Starts) < 1 || len(d.Starts) > 10 {
+			return fmt.Errorf("Map placements need 1–10 starts.")
 		}
+		next.Starts = nil
+		for _, p := range d.Starts {
+			if math.Trunc(p.X) != p.X || math.Trunc(p.Z) != p.Z {
+				return fmt.Errorf("Every start must be a distinct pixel position inside the play area.")
+			}
+			if _, err := next.AddStart(p); err != nil {
+				return err
+			}
+		}
+	}
+	{
 		if d.Fill.Kind != "" {
 			f.kind = d.Fill.Kind
 		}
@@ -232,11 +274,13 @@ func (f *FeatureUI) load() {
 		if d.Fill.Radius != nil {
 			f.radius = *d.Fill.Radius
 		}
-		f.store.Margin = f.margin
+		next.Margin = f.margin
 		for _, p := range d.Fill.Generated {
-			f.store.Generated[strings.ToLower(fmt.Sprintf("%s@%d,%d", p.Name, p.X, p.Z))] = true
+			next.Generated[strings.ToLower(fmt.Sprintf("%s@%d,%d", p.Name, p.X, p.Z))] = true
 		}
 	}
+	f.store = next
+	return nil
 }
 func (f *FeatureUI) sync() {
 	if f.store == nil {
@@ -263,6 +307,27 @@ func (f *FeatureUI) Update() {
 	if f == nil || f.store == nil {
 		return
 	}
+	hidden("feature-tool-host", !f.Active)
+	attribute(element("feature-tool"), "aria-pressed", f.Active)
+	if f.Active {
+		hidden("drawing-options", true)
+		hidden("selection-panel", true)
+		hidden("brush-panel", true)
+	}
+	disabled("feature-tool", !f.ready || f.a.Busy)
+	eachButtons := f.root.Call("querySelectorAll", "[data-feature-mode]")
+	for i := 0; i < eachButtons.Length(); i++ {
+		b := eachButtons.Index(i)
+		mode := b.Call("getAttribute", "data-feature-mode").String()
+		attribute(b, "aria-pressed", f.Active && f.mode == mode)
+		unavailable := !f.ready || f.a.Busy || (mode != "starts" && len(f.defs) == 0) || (mode == "deposit" && f.store.DepositName == "")
+		b.Set("disabled", unavailable)
+		if unavailable && mode != "starts" {
+			b.Set("title", "No feature catalogue is available for this world.")
+		} else {
+			b.Set("title", "")
+		}
+	}
 	sel := f.root.Call("querySelector", "[data-starts]")
 	sel.Call("replaceChildren")
 	for i, p := range f.store.Starts {
@@ -286,6 +351,11 @@ func (f *FeatureUI) PointerDown(p model.Point, e js.Value) bool {
 		return false
 	}
 	x, z := int(math.Floor(p.X/16)), int(math.Floor(p.Y/16))
+	if f.mode == "erase" || f.mode == "starts" || f.mode == "fill" {
+		copy := clone(*f.store)
+		f.snapshot = &copy
+		f.modified = false
+	}
 	switch f.mode {
 	case "place", "deposit":
 		if i := f.at(p); i >= 0 {
@@ -307,7 +377,9 @@ func (f *FeatureUI) PointerDown(p model.Point, e js.Value) bool {
 	case "erase":
 		if i := f.at(p); i >= 0 {
 			_ = f.store.Remove(i)
-			f.changed()
+			f.modified = true
+			f.sync()
+			f.a.drawOverlay()
 		}
 		f.dragging = true
 	case "starts":
@@ -349,10 +421,13 @@ func (f *FeatureUI) PointerMove(p model.Point, e js.Value) bool {
 	case "erase":
 		if i := f.at(p); i >= 0 {
 			_ = f.store.Remove(i)
-			f.changed()
+			f.modified = true
+			f.sync()
+			f.a.drawOverlay()
 		}
 	case "starts":
 		if _, err := f.store.MoveStart(f.selectedStart, model.FeaturePoint{p.X, p.Y}); err == nil {
+			f.modified = true
 			f.sync()
 			f.a.drawOverlay()
 		}
@@ -367,9 +442,20 @@ func (f *FeatureUI) PointerUp(p model.Point, e js.Value) bool {
 		return false
 	}
 	f.dragging = false
-	if f.mode == "starts" {
+	if e.Get("type").String() == "pointercancel" {
+		if f.snapshot != nil {
+			f.store = f.snapshot
+			f.sync()
+			f.Update()
+			f.a.drawOverlay()
+		}
+		f.snapshot = nil
+		return true
+	}
+	if (f.mode == "starts" || f.mode == "erase") && f.modified {
 		f.changed()
 	}
+	f.snapshot = nil
 	if f.mode == "fill" {
 		region := model.FeatureRegion{Type: f.region, Points: f.points, X: p.X, Z: p.Y, Radius: f.radius}
 		fill := model.FeatureFill{Kind: f.kind, Density: f.density, Clustering: f.cluster, Gap: f.gap, Seed: f.seed, Margin: f.margin, Radius: f.radius}
@@ -428,8 +514,15 @@ func (f *FeatureUI) HandleKey(key string) bool {
 		return false
 	}
 	if key == "Escape" {
+		if f.dragging && f.snapshot != nil {
+			f.store = f.snapshot
+			f.sync()
+			f.dragging = false
+			f.snapshot = nil
+		}
 		f.Active = false
 		f.mode = ""
+		f.a.Update()
 		f.selectedFeature = -1
 		f.a.drawOverlay()
 		return true

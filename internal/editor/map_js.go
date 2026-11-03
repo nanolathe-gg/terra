@@ -217,7 +217,9 @@ func (a *App) restoreMapMetadata() {
 		element("map-lava").Set("checked", b)
 	}
 	if a.featureUI != nil && a.featureUI.store != nil {
-		a.featureUI.load()
+		if err := a.featureUI.load(); err != nil {
+			showError(err)
+		}
 		a.featureUI.Update()
 	}
 }

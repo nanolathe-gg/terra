@@ -102,60 +102,95 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	for k, v := range recipe.Knobs {
 		knobs[k] = fmt.Sprint(v)
 	}
-	result, e := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{Width: w, Height: h, Scale: 1}, terrain.DrawOptions{Width: w, Height: h, Full: true})
+	wc, hc := int(numberMap(recipe.Map, "widthCells")), int(numberMap(recipe.Map, "heightCells"))
+	if wc <= 0 || hc <= 0 {
+		return fmt.Errorf("recipe has no height dimensions")
+	}
+	heights := make([]int, wc*hc)
+	tileDir, e := os.MkdirTemp("", "terraform-native-tiles-")
 	if e != nil {
 		return e
 	}
-	if len(result.RGBA) != w*h*4 {
-		return fmt.Errorf("renderer returned an incomplete image")
+	tiles := []nativeTile{}
+	defer func() {
+		for _, t := range tiles {
+			os.Remove(t.path)
+		}
+		os.Remove(tileDir)
+	}()
+	const side = 512
+	for y := 0; y < h; y += side {
+		for x := 0; x < w; x += side {
+			tw, th := min(side, w-x), min(side, h-y)
+			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true}, terrain.DrawOptions{Width: tw, Height: th, Full: true})
+			if err != nil {
+				return err
+			}
+			if result.Width != tw || result.Height != th || len(result.RGBA) != tw*th*4 {
+				return fmt.Errorf("renderer returned an incomplete tile")
+			}
+			if result.HeightWidth < 1 || result.HeightHeight < 1 || result.HeightSpacing <= 0 || len(result.Heights) != result.HeightWidth*result.HeightHeight {
+				return fmt.Errorf("renderer returned an incomplete height grid")
+			}
+			for cy := y / 16; cy < min(hc, (y+th+15)/16); cy++ {
+				for cx := x / 16; cx < min(wc, (x+tw+15)/16); cx++ {
+					value, err := sampleNativeHeight(result, float64(cx*16), float64(cy*16))
+					if err != nil {
+						return err
+					}
+					heights[cy*wc+cx] = value
+				}
+			}
+			path := filepath.Join(tileDir, fmt.Sprintf("tile-%d-%d.png", x, y))
+			f, err := os.Create(path)
+			if err != nil {
+				return err
+			}
+			tiles = append(tiles, nativeTile{x, y, tw, th, path})
+			err = png.Encode(f, &image.RGBA{Pix: result.RGBA, Stride: tw * 4, Rect: image.Rect(0, 0, tw, th)})
+			if closeErr := f.Close(); err == nil {
+				err = closeErr
+			}
+			if err != nil {
+				return err
+			}
+		}
 	}
 	if e = os.MkdirAll(out, 0700); e != nil {
 		return e
 	}
-	f, e := os.Create(filepath.Join(out, "terrain.png"))
+	b, e = json.Marshal(heights)
 	if e != nil {
 		return e
 	}
-	err := png.Encode(f, &image.RGBA{Pix: result.RGBA, Stride: w * 4, Rect: image.Rect(0, 0, w, h)})
-	if closeErr := f.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return err
-	}
-	heights, e := json.Marshal(result.Heights)
-	if e != nil {
+	if e = os.WriteFile(filepath.Join(out, "heights.json"), b, 0600); e != nil {
 		return e
 	}
-	if e = os.WriteFile(filepath.Join(out, "heights.json"), heights, 0600); e != nil {
-		return e
-	}
-	return exportNative(o, out, recipe.Biome, recipe.SeaLevel, recipe.Map, recipe.MapData, result)
-
+	return exportNative(o, out, recipe.Biome, recipe.SeaLevel, recipe.Map, recipe.MapData, heights, tiles)
 }
+
+type nativeTile struct {
+	x, y, w, h int
+	path       string
+}
+
+func sampleNativeHeight(result *terrain.SceneResult, x, y float64) (int, error) {
+	fx := (x - result.HeightOriginX) / result.HeightSpacing
+	fy := (y - result.HeightOriginY) / result.HeightSpacing
+	if fx < 0 || fy < 0 || fx > float64(result.HeightWidth-1) || fy > float64(result.HeightHeight-1) {
+		return 0, fmt.Errorf("height grid does not cover (%g,%g)", x, y)
+	}
+	ix, iy := int(fx), int(fy)
+	jx, jy := min(ix+1, result.HeightWidth-1), min(iy+1, result.HeightHeight-1)
+	sx, sy := fx-float64(ix), fy-float64(iy)
+	at := func(x, y int) float64 { return float64(result.Heights[y*result.HeightWidth+x]) }
+	v := (at(ix, iy)*(1-sx)+at(jx, iy)*sx)*(1-sy) + (at(ix, jy)*(1-sx)+at(jx, jy)*sx)*sy
+	return int(math.Round(math.Max(0, math.Min(255, v)))), nil
+}
+
 func numberMap(m map[string]any, k string) float64 { v, _ := m[k].(float64); return v }
 
-func exportNative(o server.Options, out, world string, sea float64, geometry, data map[string]any, result *terrain.SceneResult) error {
-	wc, hc := int(numberMap(geometry, "widthCells")), int(numberMap(geometry, "heightCells"))
-	if wc <= 0 || hc <= 0 || result.HeightWidth < 1 || result.HeightHeight < 1 || result.HeightSpacing <= 0 || len(result.Heights) != result.HeightWidth*result.HeightHeight {
-		return fmt.Errorf("renderer returned an incomplete height grid")
-	}
-	sample := func(x, y float64) int {
-		fx := math.Max(0, math.Min(float64(result.HeightWidth-1), (x-result.HeightOriginX)/result.HeightSpacing))
-		fy := math.Max(0, math.Min(float64(result.HeightHeight-1), (y-result.HeightOriginY)/result.HeightSpacing))
-		ix, iy := int(fx), int(fy)
-		jx, jy := min(ix+1, result.HeightWidth-1), min(iy+1, result.HeightHeight-1)
-		sx, sy := fx-float64(ix), fy-float64(iy)
-		at := func(x, y int) float64 { return float64(result.Heights[y*result.HeightWidth+x]) }
-		v := (at(ix, iy)*(1-sx)+at(jx, iy)*sx)*(1-sy) + (at(ix, jy)*(1-sx)+at(jx, jy)*sx)*sy
-		return int(math.Round(math.Max(0, math.Min(255, v))))
-	}
-	heights := make([]int, wc*hc)
-	for y := 0; y < hc; y++ {
-		for x := 0; x < wc; x++ {
-			heights[y*wc+x] = sample(float64(x*16), float64(y*16))
-		}
-	}
+func exportNative(o server.Options, out, world string, sea float64, geometry, data map[string]any, heights []int, tiles []nativeTile) error {
 	name, _ := data["name"].(string)
 	if name == "" {
 		name = "Sculpt map"
@@ -244,26 +279,12 @@ func exportNative(o server.Options, out, world string, sea float64, geometry, da
 	if limit <= 0 {
 		return fmt.Errorf("map export helper returned an invalid chunk limit")
 	}
-	img := &image.RGBA{Pix: result.RGBA, Stride: result.Width * 4, Rect: image.Rect(0, 0, result.Width, result.Height)}
-	for y := 0; y < result.Height; y += limit {
-		for x := 0; x < result.Width; x += limit {
-			w, h := min(limit, result.Width-x), min(limit, result.Height-y)
-			p := filepath.Join(temp, "chunk.png")
-			f, e := os.Create(p)
-			if e != nil {
-				return e
-			}
-			e = png.Encode(f, img.SubImage(image.Rect(x, y, x+w, y+h)))
-			if ce := f.Close(); e == nil {
-				e = ce
-			}
-			if e != nil {
-				return e
-			}
-			if _, e = exchange(map[string]any{"op": "chunk", "x": x, "y": y, "width": w, "height": h, "path": p}); e != nil {
-				return e
-			}
-			os.Remove(p)
+	for _, tile := range tiles {
+		if tile.w > limit || tile.h > limit {
+			return fmt.Errorf("export helper chunk limit is smaller than render tiles")
+		}
+		if _, e = exchange(map[string]any{"op": "chunk", "x": tile.x, "y": tile.y, "width": tile.w, "height": tile.h, "path": tile.path}); e != nil {
+			return e
 		}
 	}
 	v, e := exchange(map[string]any{"op": "finish"})
