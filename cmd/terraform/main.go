@@ -18,9 +18,11 @@ func (r *roots) Set(s string) error { *r = append(*r, s); return nil }
 func main() {
 	var o server.Options
 	var port int
-	var biomes string
+	var biomes, scene, output string
 	var gr roots
 	flag.IntVar(&port, "port", 8767, "HTTP port")
+	flag.StringVar(&scene, "scene", "", "render an editor recipe without a browser")
+	flag.StringVar(&output, "out", "", "output directory for native scene render")
 	flag.StringVar(&o.SourceRoot, "source-root", ".", "editor source root")
 	flag.StringVar(&o.AssetsRoot, "assets-root", "/private/tmp/nanolathe-map-editor", "assets and documents root")
 	flag.StringVar(&o.ExportTool, "export-tool", "", "map exporter helper")
@@ -44,6 +46,12 @@ func main() {
 	s, e := server.New(o)
 	if e != nil {
 		log.Fatal(e)
+	}
+	if scene != "" {
+		if e := renderScene(o, s, scene, output); e != nil {
+			log.Fatal(e)
+		}
+		return
 	}
 	fmt.Printf("Shared-surface sculptor: http://127.0.0.1:%d/sculpt\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), s))
