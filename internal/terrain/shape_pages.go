@@ -94,6 +94,7 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 				}
 				q := c
 				q.Window = pageRect
+				q.ReservedGPUBytes = int64(s.renderer.FixedBytes() + s.cacheResidentBytes() + feed.bytes + page.bytes)
 				_, err = s.shape.evaluateShapeWindow(ctx, q, nodes, true, false, func(target CellRect, p, m *wgpu.Buffer) error {
 					w, h := target.X1-target.X0+1, target.Y1-target.Y0+1
 					src := GPUFeed{Planes: p, Masks: m, Grid: w, Cells: w * h, OriginX: target.X0, OriginY: target.Y0}

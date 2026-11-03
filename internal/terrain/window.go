@@ -8,6 +8,7 @@ import (
 
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
+	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
 
@@ -17,6 +18,8 @@ type ShapeWindowConfig struct {
 	Spacing, RefSpacing, BaseHeight, Sea, MinHeight, MaxHeight float64
 	Window                                                     CellRect
 	Defaults                                                   map[string]any
+	Memory                                                     membudget.Limits
+	ReservedGPUBytes                                           int64
 }
 type ShapeWindow struct {
 	Rect          CellRect
@@ -100,17 +103,15 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	for _, op := range ops {
 		reads += len(op.PrefixReads)
 	}
-	scratch := 3 * cells
-	for _, op := range ops {
-		if op.Coast != nil {
-			scratch = max(scratch, 14*cells+op.Coast.SiteFloats)
-		}
-	}
+	scratch := shapeScratch(cells, ops)
 	outputBytes := 16
 	if readback {
 		outputBytes = words * 4
 	}
 	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, scratch * 4, 0, 0, outputBytes, max(16, reads*4)}
+	if err := checkShapeMemory(c, ops, sizes, len(segData)+len(maskData), outCells, readback); err != nil {
+		return nil, err
+	}
 	var e error
 	for i := range buffers {
 		switch i {

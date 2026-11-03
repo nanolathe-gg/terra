@@ -151,7 +151,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 	seaLevel := number(s.config, "seaLevel", 0)
 	bounds := vector(s.config, "heightBounds", []float64{seaLevel - 90, seaLevel + 300})
 	shapeDefaults := s.shapeDefaults()
-	shapeConfig := ShapeWindowConfig{Grid: s.renderer.Grid, Spacing: region.GridSpacing, RefSpacing: nativeSpacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{region.GridX, region.GridY, region.GridX + region.GridWidth - 1, region.GridY + region.GridHeight - 1}, Defaults: shapeDefaults}
+	shapeConfig := ShapeWindowConfig{Grid: s.renderer.Grid, Spacing: region.GridSpacing, RefSpacing: nativeSpacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{region.GridX, region.GridY, region.GridX + region.GridWidth - 1, region.GridY + region.GridHeight - 1}, Memory: membudget.FromConfig(s.config), ReservedGPUBytes: int64(s.renderer.FixedBytes() + s.cacheResidentBytes()), Defaults: shapeDefaults}
 	var pixels []byte
 	var err error
 	input := WindowInput{Window: window, Region: region, ExportArt: window.ExportArt}

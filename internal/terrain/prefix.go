@@ -23,17 +23,7 @@ func (s *ShapeEngine) resolvePrefix(ctx context.Context, c ShapeWindowConfig, op
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			gx, gy := clampNumber(p.X/c.Spacing, 0, float64(c.Grid-1)), clampNumber(p.Y/c.Spacing, 0, float64(c.Grid-1))
-			ix, iy := int(math.Floor(gx)), int(math.Floor(gy))
-			margin := 4
-			for k := 0; k < i; k++ {
-				r := ops[k].SmoothRadius
-				if r == 0 && ops[k].Coast != nil {
-					r = ops[k].Coast.ReadRadius
-				}
-				margin += r
-			}
-			window := CellRect{max(0, ix-margin), max(0, iy-margin), min(c.Grid-1, min(ix+1, c.Grid-1)+margin), min(c.Grid-1, min(iy+1, c.Grid-1)+margin)}
+			window := prefixWindow(c, ops, i, p)
 			w, h := window.X1-window.X0+1, window.Y1-window.Y0+1
 			cells := w * h
 			base := map[string]float64{"grid": float64(c.Grid), "spacing": c.Spacing, "baseH": c.BaseHeight, "sea": c.Sea, "minH": c.MinHeight, "maxH": c.MaxHeight, "ox": float64(window.X0), "oy": float64(window.Y0), "pw": float64(w), "ph": float64(h), "direct": 1}
@@ -58,12 +48,7 @@ func (s *ShapeEngine) resolvePrefix(ctx context.Context, c ShapeWindowConfig, op
 				case 1:
 					size = 7 * cells * 4
 				case 3:
-					scratch := 3 * cells
-					for _, prior := range ops[:i] {
-						if prior.Coast != nil {
-							scratch = max(scratch, 14*cells+prior.Coast.SiteFloats)
-						}
-					}
+					scratch := shapeScratch(cells, ops[:i])
 					size = scratch * 4
 				}
 				b[j], err = s.gpu.Allocate("prefix window", uint64(size), usage)

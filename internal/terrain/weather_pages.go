@@ -105,6 +105,7 @@ func (s *SceneRenderer) weatherPage(ctx context.Context, nodes []model.Node, c S
 	pageSide := min(c.Grid, core+2*apron)
 	ox, oy := max(0, min(c.Grid-pageSide, x-apron)), max(0, min(c.Grid-pageSide, y-apron))
 	q := c
+	q.ReservedGPUBytes += int64(out.bytes)
 	q.Window = CellRect{ox, oy, ox + pageSide - 1, oy + pageSide - 1}
 	_, e = s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, func(_ CellRect, planes, masks *wgpu.Buffer) error {
 		er, e := s.erosion.RunGPU(ctx, ErosionRequest{Planes: planes, Masks: masks, Grid: pageSide, Size: s.renderer.Size, Ox: ox, Oy: oy, RateMask: 14, Age: int(s.renderer.num("erosionAge", 200)), SeaLevel: c.Sea, Spacing: c.Spacing, Rain: s.renderer.num("erosionRain", 1), TalusAngle: s.renderer.num("talusAngle", 40), Envelope: s.renderer.num("erosionEnvelope", 2), Sand: s.renderer.num("sand", 0), WetReach: s.renderer.num("wetReach", 3), TalusFull: s.renderer.num("talusFull", 2.5), WearFull: s.renderer.num("wearFull", 1.5), FlowK: s.renderer.num("flowK", 30)})
@@ -178,7 +179,9 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 			id := [2]int{px, py}
 			page := s.weatherPages[id]
 			if page == nil {
-				page, err = s.weatherPage(ctx, nodes, c, px, py, core, apron, o)
+				pageConfig := c
+				pageConfig.ReservedGPUBytes = int64(s.renderer.FixedBytes() + s.cacheResidentBytes() + feed.bytes)
+				page, err = s.weatherPage(ctx, nodes, pageConfig, px, py, core, apron, o)
 				if err != nil {
 					return nil, fmt.Errorf("weather page %d,%d: %w", px, py, err)
 				}
