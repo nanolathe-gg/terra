@@ -280,11 +280,7 @@ func (a *App) pointerPoint(e js.Value) model.Point {
 	r := element("overlay").Call("getBoundingClientRect")
 	x := (e.Get("clientX").Float()-r.Get("left").Float())/a.view.Scale + a.view.X
 	screenY := (e.Get("clientY").Float()-r.Get("top").Float())/a.view.Scale + a.view.Y
-	y := screenY
-	for i := 0; i < 8; i++ {
-		y = screenY + (max(num(a.Config, "seaLevel", 0), a.Sample(x, y))-num(a.Config, "baseHeight", 0))/2
-	}
-	return model.Point{X: max(0, min(a.Width()-1, x)), Y: max(0, min(a.Height()-1, y))}
+	return model.PickTerrain(x, screenY, a.Width(), a.Height(), num(a.Config, "seaLevel", 0), num(a.Config, "baseHeight", 0), a.Sample)
 }
 func (a *App) pointerDown(e js.Value) {
 	if a.Busy || a.gesture != nil {
