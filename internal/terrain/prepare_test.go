@@ -26,3 +26,17 @@ func TestUnsupportedShapeReturnsError(t *testing.T) {
 		t.Fatal("unsupported shape silently accepted")
 	}
 }
+func TestPrepareHillMatchesReference(t *testing.T) {
+	q := map[string]any{"radius": 20.0, "amount": 50.0, "rough": .2, "softness": .5, "outlineVar": 1.0, "widthVar": 1.0, "heightVar": 1.0}
+	n := model.Node{Kind: "hill", Seed: 123, Points: []model.Point{{X: 20, Y: 30}, {X: 40, Y: 35}, {X: 60, Y: 25}}, Params: q}
+	p, e := PrepareBasicShape(n, ShapeGeometry{Grid: 128, Spacing: 1}, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(p.Segments) != 3 || *p.Op.Region != (CellRect{0, 0, 95, 69}) || !p.Op.Settle || len(p.Extra) != 34 {
+		t.Fatalf("unexpected hill preparation: %+v", p)
+	}
+	if math.Abs(p.Segments[0].F0[0]-(-.24253562503633297)) > 1e-12 || math.Abs(p.Op.Values["faceX"]-.16608073512242313) > 1e-12 {
+		t.Fatalf("hill frame differs: %+v %+v", p.Segments[0], p.Op.Values)
+	}
+}

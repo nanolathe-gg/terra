@@ -123,7 +123,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		out.Op = PreparedOp{Ground: true, Values: map[string]float64{"seed": float64(n.Seed), "gAmp": n.Amplitude, "gWave": n.Wavelength, "gCover": n.Coverage}}
 		return out, nil
 	}
-	codes := map[string]int{"paint": 0, "erase": 1, "mountain": 4, "lower": 8, "sand": 9, "grass": 10, "smooth": 11}
+	codes := map[string]int{"paint": 0, "erase": 1, "mountain": 4, "hill": 5, "plateau": 6, "offset": 7, "lower": 8, "sand": 9, "grass": 10, "smooth": 11}
 	code, ok := codes[n.Kind]
 	if !ok {
 		return out, fmt.Errorf("shape %q preparation not implemented", n.Kind)
@@ -137,8 +137,9 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	}
 	for k, v := range n.Params {
 		q[k] = v
+
 	}
-	if n.Kind == "mountain" && (param(q, "spurCount") >= .5 || param(q, "crestJag") > 0 || param(q, "crestVary") > 0 || param(q, "crestTaper") > 0) {
+	if (n.Kind == "hill" || n.Kind == "mountain") && (param(q, "spurCount") >= .5 || param(q, "crestJag") > 0 || param(q, "crestVary") > 0 || param(q, "crestTaper") > 0) {
 		return out, fmt.Errorf("ridge preparation not implemented")
 	}
 	radius, rough := param(q, "radius"), param(q, "rough")
@@ -147,20 +148,26 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	}
 	inv := inverseFrame(n.Frame)
 	lean := model.LeanSetup(n.Kind, param(q, "lean"), param(q, "facing"), param(q, "facePx"))
-	natural := n.Kind == "paint" || n.Kind == "erase" || n.Kind == "sand" || n.Kind == "grass"
+	faceWidth, backWidth := model.HillWidths(param(q, "softness"), param(q, "facePx"), radius, lean.Ratio)
+	shouldered := model.IsShouldered(n.Kind, param(q, "lean"), false)
+	plainHill := n.Kind == "hill" && !shouldered
+	natural := n.Kind == "paint" || n.Kind == "erase" || n.Kind == "sand" || n.Kind == "grass" || n.Kind == "plateau" || n.Kind == "offset"
 	get := func(k string, fallback float64) float64 {
 		if _, ok := q[k]; !ok {
 			return fallback
 		}
 		return param(q, k)
 	}
-	vary := model.ShapeVariability(n.Kind, false, natural, false, false, get("outlineVar", 1), get("widthVar", 1), get("heightVar", 1))
+	vary := model.ShapeVariability(n.Kind, false, natural, shouldered, plainHill, get("outlineVar", 1), get("widthVar", 1), get("heightVar", 1))
 	amp := rough * radius * vary.Amp
 	extent := radius
 	if vary.WK != 0 {
 		extent *= math.Min(vary.WHi, 1+rough*vary.WK)
 	}
-	if lean.Ratio != nil && *lean.Ratio > 1 {
+	if shouldered {
+		extent *= math.Max(1.4, math.Max(backWidth, faceWidth))
+	}
+	if !shouldered && lean.Ratio != nil && *lean.Ratio > 1 {
 		extent *= *lean.Ratio
 	}
 	extent += 2 * amp
@@ -182,10 +189,47 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	if e := model.ValidatePaths(&p); e != nil {
 		return out, e
 	}
-	for _, indices := range model.ShapePaths(&p) {
+	turn := 0.0
+	if len(n.Frame) == 6 {
+		turn = math.Atan2(n.Frame[1], n.Frame[0])
+	}
+	face := [2]float64{1, 0}
+	faceSide := 1
+	settle := false
+	paths := model.ShapePaths(&p)
+	for _, indices := range paths {
 		pts := make([]model.Point, len(indices))
 		for i, j := range indices {
 			pts[i] = n.Points[j]
+		}
+		if shouldered {
+			fa := math.Atan2(-lean.BY, -lean.BX) + turn
+			if param(q, "facing") == 0 {
+				fa += sampledShapeNoise(3, n.Seed, pts[0].X, pts[0].Y, g, inv) * 1.8
+			}
+			face = [2]float64{math.Cos(fa), math.Sin(fa)}
+			start := len(out.Segments)
+			var didSettle bool
+			faceSide, didSettle = prepareHillPath(pts, radius, face, lean.Side, dab, &out.Segments)
+			settle = settle || didSettle
+			if len(paths) > 1 {
+				for i := start; i < len(out.Segments); i++ {
+					s := &out.Segments[i]
+					if s.Frame {
+						continue
+					}
+					dx, dy := s.EX-s.PX, s.EY-s.PY
+					length := math.Hypot(dx, dy)
+					f := face
+					if length > 0 {
+						f = [2]float64{-dy / length * float64(faceSide), dx / length * float64(faceSide)}
+					}
+					s.F0 = f
+					s.F1 = f
+					s.Frame = true
+				}
+			}
+			continue
 		}
 		path := model.SimplifyPath(pts, math.Max(1, radius*.04))
 		dab(path[0], path[0])
@@ -204,18 +248,28 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		region = union(region, s.Box)
 	}
 	out.Writes = ShapeMaskWrites(n.Kind, q, false)
-	turn := 0.0
-	if len(n.Frame) == 6 {
-		turn = math.Atan2(n.Frame[1], n.Frame[0])
-	}
-	u := map[string]float64{"kind": float64(code), "seed": float64(n.Seed), "radius": radius, "amount": param(q, "amount"), "amountPct": clampNumber(param(q, "amount")/100, 0, 1), "rough": rough, "softness": param(q, "softness"), "leanK": lean.K, "bearX": lean.BX, "bearY": lean.BY, "leanSide": float64(lean.Side), "wK": vary.WK, "wLo": vary.WLo, "wHi": vary.WHi, "hgtA": vary.HgtA, "hgtB": vary.HgtB, "bankScale": 1, "amp": amp, "faceVar": get("faceVariation", .8), "shelves": param(q, "shelves"), "beachFlat": param(q, "beachFlatness"), "coreEdge": .38, "faceX": 1, "faceSide": 1, "rotX": math.Cos(turn), "rotY": math.Sin(turn), "cOffX": math.Cos(float64(n.Seed%628)/100 + turn), "cOffY": math.Sin(float64(n.Seed%628)/100 + turn), "facePx": math.Max(0, param(q, "facePx"))}
+	u := map[string]float64{"kind": float64(code), "seed": float64(n.Seed), "radius": radius, "amount": param(q, "amount"), "amountPct": clampNumber(param(q, "amount")/100, 0, 1), "rough": rough, "softness": param(q, "softness"), "leanK": lean.K, "bearX": lean.BX, "bearY": lean.BY, "leanSide": float64(lean.Side), "wK": vary.WK, "wLo": vary.WLo, "wHi": vary.WHi, "hgtA": vary.HgtA, "hgtB": vary.HgtB, "bankScale": 1, "amp": amp, "faceVar": get("faceVariation", .8), "shelves": param(q, "shelves"), "beachFlat": param(q, "beachFlatness"), "coreEdge": .38, "faceX": face[0], "faceY": face[1], "faceSide": float64(faceSide), "faceWidth": faceWidth, "backWidth": backWidth, "rotX": math.Cos(turn), "rotY": math.Sin(turn), "cOffX": math.Cos(float64(n.Seed%628)/100 + turn), "cOffY": math.Sin(float64(n.Seed%628)/100 + turn), "facePx": math.Max(0, param(q, "facePx"))}
 	if inv != nil {
 		u["framed"] = 1
 		for i, v := range inv {
 			u[fmt.Sprintf("inv%d", i)] = v
 		}
 	}
-	if n.Kind == "mountain" {
+	if n.Kind == "offset" {
+		u["bpOffset"] = 1
+		if param(q, "shorePlates") > 0 {
+			return out, fmt.Errorf("shore plate preparation not implemented")
+		}
+	}
+	if n.Kind == "hill" {
+		if plainHill {
+			u["plain"] = 1
+		}
+		if settle {
+			u["settle"] = 1
+		}
+	}
+	if n.Kind == "mountain" || n.Kind == "hill" || n.Kind == "plateau" || n.Kind == "offset" {
 		u["crackAmt"] = math.Max(0, param(q, "cracks"))
 	}
 	entry := "stamp"
@@ -233,7 +287,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 			return out, err
 		}
 	}
-	cv := model.StrokeCurve(n.Kind, param(q, "softness"), param(q, "terraces"), param(q, "ledge"), param(q, "terraceJitter"), curve, false)
+	cv := model.StrokeCurve(n.Kind, param(q, "softness"), param(q, "terraces"), param(q, "ledge"), param(q, "terraceJitter"), curve, shouldered)
 	if cv != nil {
 		u["cvLip"] = float64(cv.Lip)
 		u["sSteps"] = float64(cv.Steps)
@@ -245,11 +299,23 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 			copy(row[:], cv.Front[j:min(j+4, len(cv.Front))])
 			out.Extra = append(out.Extra, row)
 		}
+		if shouldered {
+			u["backBase"] = float64(len(out.Extra))
+			for j := 0; j < len(cv.Back); j += 4 {
+				var row [4]float64
+				copy(row[:], cv.Back[j:min(j+4, len(cv.Back))])
+				out.Extra = append(out.Extra, row)
+			}
+			u["sBack"] = backWidth / faceWidth
+		}
 	}
-	if n.Kind == "mountain" && (param(q, "baseVary") > 0 || param(q, "moonLobes") > 0 || param(q, "baseBump") > 0 || param(q, "iceFacets") > 0) {
+	if (n.Kind == "hill" || n.Kind == "mountain" || n.Kind == "plateau" || n.Kind == "offset") && (param(q, "baseVary") > 0 || param(q, "moonLobes") > 0 || param(q, "baseBump") > 0 || param(q, "iceFacets") > 0) {
 		return out, fmt.Errorf("mountain outline and facet preparation not implemented")
 	}
-	out.Op = PreparedOp{Region: &region, Values: u, Entry: entry}
+	out.Op = PreparedOp{Region: &region, Values: u, Entry: entry, Settle: settle}
+	if n.Kind == "plateau" {
+		out.Op.PrefixReads = []model.Point{n.Points[0]}
+	}
 	if n.Kind == "smooth" {
 		ref := g.RefSpacing
 		if ref == 0 {

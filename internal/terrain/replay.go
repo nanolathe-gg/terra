@@ -1,6 +1,9 @@
 package terrain
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/nanolathe-gg/terraform/internal/model"
+)
 
 // PreparedOp is a GPU-authored operation after path and parameter preparation.
 // The uniform values include kind, segment offsets and mask-write offsets.
@@ -13,7 +16,8 @@ type PreparedOp struct {
 	SmoothRadius int
 	Coast        *CoastPass
 	// PrefixReads require the paged point-read windows to be evaluated first.
-	PrefixReads int
+	PrefixReads    []model.Point
+	PrefixResolved bool
 }
 type CoastPass struct {
 	Box                                       CellRect
@@ -42,7 +46,7 @@ func PlanReplay(base map[string]float64, ops []PreparedOp, requested, whole Cell
 	}
 	deps := make([]RegionalDependency, len(ops))
 	for i, op := range ops {
-		if op.PrefixReads > 0 {
+		if len(op.PrefixReads) > 0 && !op.PrefixResolved {
 			return nil, fmt.Errorf("operation %d needs unresolved prefix point reads", i)
 		}
 		deps[i] = RegionalDependency{Region: op.Region, SmoothRadius: op.SmoothRadius}

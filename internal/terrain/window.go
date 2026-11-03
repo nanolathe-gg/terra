@@ -61,13 +61,8 @@ func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	w, h := target.X1-target.X0+1, target.Y1-target.Y0+1
 	cells := w * h
 	base := map[string]float64{"grid": float64(c.Grid), "spacing": c.Spacing, "baseH": c.BaseHeight, "sea": c.Sea, "minH": c.MinHeight, "maxH": c.MaxHeight, "ox": float64(target.X0), "oy": float64(target.Y0), "pw": float64(w), "ph": float64(h), "direct": 1}
-	passes, e := PlanReplay(base, ops, window, target, true)
-	if e != nil {
-		return nil, e
-	}
 	q4 := (outCells + 3) / 4
 	words := 6*outCells + 25*q4
-	passes = append(passes, ShapePass{Entry: "pack", Region: window, Values: base, OutputWords: words})
 	usage := gputypes.BufferUsageStorage | gputypes.BufferUsageCopySrc | gputypes.BufferUsageCopyDst
 	var buffers [8]*wgpu.Buffer
 	cleanup := func() {
@@ -78,7 +73,12 @@ func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 		}
 	}
 	defer cleanup()
-	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, 3 * cells * 4, 0, 0, words * 4, 16}
+	reads := 0
+	for _, op := range ops {
+		reads += len(op.PrefixReads)
+	}
+	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, 3 * cells * 4, 0, 0, words * 4, max(16, reads*4)}
+	var e error
 	for i := range buffers {
 		switch i {
 		case 4:
@@ -92,6 +92,14 @@ func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 			return nil, e
 		}
 	}
+	if e = s.resolvePrefix(ctx, c, ops, buffers[4], buffers[5], buffers[7]); e != nil {
+		return nil, e
+	}
+	passes, e := PlanReplay(base, ops, window, target, true)
+	if e != nil {
+		return nil, e
+	}
+	passes = append(passes, ShapePass{Entry: "pack", Region: window, Values: base, OutputWords: words})
 	if e = s.Dispatch(passes, buffers); e != nil {
 		return nil, e
 	}
