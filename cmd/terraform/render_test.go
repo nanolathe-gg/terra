@@ -95,3 +95,16 @@ func TestSceneDefaultScree(t *testing.T) {
 		t.Fatalf("recipe scree=%g", got)
 	}
 }
+
+func TestSceneRefinementSeedMatchesEditorDefaults(t *testing.T) {
+	seed, refinement := uint32(42), uint32(7)
+	if got := sceneRefinementSeed(nil, nil); got != 2701 {
+		t.Fatalf("default = %d", got)
+	}
+	if got := sceneRefinementSeed(&seed, nil); got != seed {
+		t.Fatalf("seed fallback = %d", got)
+	}
+	if got := sceneRefinementSeed(&seed, &refinement); got != refinement {
+		t.Fatalf("override = %d", got)
+	}
+}

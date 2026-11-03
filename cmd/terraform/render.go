@@ -41,7 +41,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		Colors                                                                                                     map[string]any
 		BaseHeight, SeaLevel, Size, Grid                                                                           float64
 		Relief, MineralRing, RingSpread, RingVariation, MaterialWeathering, DepositSpread, TransitionDetail, Scree *float64
-		RefinementSeed                                                                                             *uint32
+		Seed, RefinementSeed                                                                                       *uint32
 		Weather, WeatheredView, Clay                                                                               *bool
 		Light                                                                                                      string
 	}
@@ -220,9 +220,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 			*item.dst = *item.src / 100
 		}
 	}
-	if recipe.RefinementSeed != nil {
-		draw.RefinementSeed = *recipe.RefinementSeed
-	}
+	draw.RefinementSeed = sceneRefinementSeed(recipe.Seed, recipe.RefinementSeed)
 	draw.Weather = sceneExportWeather(draw.Weather, recipe.Weather)
 	if recipe.Clay != nil {
 		draw.Clay = *recipe.Clay
@@ -318,6 +316,15 @@ func sceneDefaultScree(config, knobs map[string]any) float64 {
 }
 func mapObject(v any) map[string]any { m, _ := v.(map[string]any); return m }
 
+func sceneRefinementSeed(seed, refinement *uint32) uint32 {
+	if refinement != nil {
+		return *refinement
+	}
+	if seed != nil {
+		return *seed
+	}
+	return 2701
+}
 func sceneExportWeather(fallback bool, weather *bool) bool {
 	if weather != nil {
 		return *weather
