@@ -46,7 +46,7 @@ if (args.includes('--recheck')) {
 }
 const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['scree', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
-const KIND_AT = {plateau: [130, 170], offset: [380, 170], hill: [630, 170], mountain: [880, 170], deep: [130, 500], shallow: [380, 500], crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830]};
+const KIND_AT = {plateau: [130, 170], offset: [380, 170], hill: [630, 170], mountain: [880, 170], deep: [130, 500], shallow: [380, 500], crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
 mkdirSync(out, {recursive: true});
@@ -149,7 +149,7 @@ try {
   // card: a Face width fills a smaller stroke's reach, leaving a lean no room, and the overlaps cut the deep stroke through the plateau, the steep ground Style: face rock acts on there.
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
-  const sandOver = () => [170, 500].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
+  const sandOver = () => [170, 500, 830].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? '  !' : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
   const add = r => { rows.push(r); if (process.stdout.isTTY || !process.env.QUIET) console.log(fmt(r)); };
   for (const world of WORLDS) {
@@ -267,7 +267,7 @@ try {
     const nodeKinds = await ev('__wc.kinds()');   // a ground node leads only where the world's undulation is on
     const ctxFor = (key, kind) => {
       const p = {craterlets: 0, shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestJag: 0, crestVary: 0, crestTaper: 0, craterFacets: 0, iceFacets: 0, crystalCount: 8, crystalSize: 110, crystalForm: 0};
-      if (['terraces', 'ledge', 'terraceJitter'].includes(key)) p.terraces = 4;
+      if (['terraces', 'ledge', 'terraceJitter', 'breakup'].includes(key)) p.terraces = 4;
       if (['ledge', 'terraceJitter'].includes(key)) p.ledge = .55;
       if (['faceVariation'].includes(key)) Object.assign(p, {facePx: 0});
       if (key.startsWith('spur') || key.startsWith('crest')) p.spurCount = 4;

@@ -11,7 +11,9 @@ const server = opt('--server', 'http://127.0.0.1:8885'), port = Number(opt('--po
 const only = new Set(opt('--only', '').split(',').filter(Boolean)), kinds = new Set(opt('--kinds', '').split(',').filter(Boolean)), variants = new Set(opt('--variants', '').split(',').filter(Boolean));
 const STEP = 4, W = 1000, H = 600, YC = 500, Y0 = YC - H / 2, path = [[420, YC], [560, YC], [700, YC]];
 const CARD = {diameter: 280, amount: 80, roughness: 40, softness: 50, cracks: 0};
-const KINDS = {plateau: {}, offset: {}, hill: {}, ridge: {kind: 'hill', extra: {crestJag: 20}}, mountain: {}, deep: {}, shallow: {}};
+// H27: a landform stands at an elevation (170: 71 above this 4x4 map's plain of 99), raised to it, with no variation until a row turns it on.
+const LAND = {elevation: 170, combine: 0, wander: 0, widthVary: 0, heightVary: 0, curve: {form: 'lfHill'}};   // the hill form: a slope the whole width, where terraces and variation have room
+const KINDS = {plateau: {}, offset: {}, hill: {}, ridge: {kind: 'hill', extra: {crestJag: 20}}, mountain: {}, deep: {}, shallow: {}, landform: {extra: LAND}};
 // control: the UI's units; `base` is what the control needs on to mean anything (compared with and without the control's own value).
 const CONTROLS = {
   curve: {set: {curve: {form: 'cliff'}}},
@@ -26,9 +28,20 @@ const CONTROLS = {
   outlineVar: {set: {outlineVar: 200}},
   widthVar: {set: {widthVar: 200}},
   heightVar: {set: {heightVar: 200}},
+  breakup: {base: {terraces: 4}, set: {breakup: 100}},
+  // The landform's own (H27). Variation sizes and weights are read with the three variations on; a weight from 0 to 200 percent, a size from its default to 360 px.
+  elevation: {set: {elevation: 230}},
+  combine: {set: {combine: 1}},
+  wander: {set: {wander: 60}},
+  widthVary: {set: {widthVary: 60}},
+  heightVary: {set: {heightVary: 20}},
+  varySize: {base: {wander: 40, widthVary: 40, heightVary: 12}, set: {varySize: 360}},
+  varyFoot: {base: {wander: 40, widthVary: 40, heightVary: 12, varyFoot: 0}, set: {varyFoot: 200}},
+  varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},
 };
-// Applicability comes from the same Go model and schema used by the editor.
-const SECTION = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
+// Applicability comes from the Go editor model and schema.
+const LAND_ONLY = ['elevation', 'combine', 'wander', 'widthVary', 'heightVary', 'varySize', 'varyFoot', 'varyMiddle'];
+const SECTION = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow', 'landform'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await cdpPortFree(port);
 mkdirSync(out, {recursive: true});
@@ -70,7 +83,8 @@ try {
     const kind = d.kind || name, card = {...CARD, ...(d.extra || {}), ...face}, cache = new Map();
     const at = c => { const k = JSON.stringify(c); if (!cache.has(k)) cache.set(k, heights(kind, c)); return cache.get(k); };
     for (const [key, c] of Object.entries(CONTROLS)) {
-      if ((only.size && !only.has(key)) || (variant === 'px' && key === 'facePx')) continue;
+      if ((only.size && !only.has(key)) || (variant === 'px' && (key === 'facePx' || name === 'landform'))) continue;
+      if (LAND_ONLY.includes(key) && name !== 'landform') continue;
       const base = {...card, ...c.base}, show = await shown(key, kind, {...base, ...(name === 'ridge' ? {crestJag: 20} : {})});
       rows.push({kind: name, variant, control: key, shown: show, moved: moved(await at(base), await at({...base, ...c.set}))});
     }

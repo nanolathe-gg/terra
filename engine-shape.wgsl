@@ -179,7 +179,14 @@ fn terraced(c: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
   if (u.sSteps == 0u) { return c; }
   let g = clamp(c, 0.0, 1.0);
   if (g <= 0.0 || g >= 1.0) { return c; }
-  return terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g);
+  if (u.sBreak <= 0.0) { return terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g); }
+  // H27 breakup: a stretch of the terraces keeps its shelf where a ticket (the shelf and detail noise, and a draw per tread) clears a bar that rises with
+  // the breakup, so at full breakup most stretches lose their shelf and the short ledges that survive are where the ticket is high. The treads' heights are
+  // untouched (the unterraced value is the curve), only whether the shelf stands at this place.
+  let ticket = clamp(0.5 + 0.9 * (0.6 * nzF(6u, x, y, i, cells) + 0.4 * nzF(2u, x, y, i, cells)) + 0.3 * hashi(i32(floor(g * f32(u.sSteps))), 3, 0x5b7u), 0.0, 1.0);
+  let bar = u.sBreak * 0.8;
+  let intact = sm(bar - 0.12, bar + 0.12, ticket + 0.12);
+  return mix(c, terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g), intact);
 }
 // The share of its reach the curve covers at a cell, foot to top (flat beyond): the kind's own share `own` (1 minus the shoulder, or 1), or facePx, kept
 // that wide whatever the stroke's size, wandering with the cell's width noise (kw, shared by the whole face) and stretched by the lean.
@@ -683,6 +690,161 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
   if ((kind == 6u || kind == 7u) && u.crackAmt > 0.0) {
     F[PC * cells + i] = max(F[PC * cells + i], min(1.0, w * 1.6) * u.crackAmt);
   }
+}
+
+// ---- H27 landform (decision 24): one path, a whole cross-section, a fixed elevation along it ----
+// A landform sweeps its section (the front table, the back table, their half widths lfFront and lfBack) along a path. The path is the crest. A cell takes the
+// segment nearest it (the first on a tie, as stampRamp), finds how far up the section it stands (q: 0 at the feet, 1 at the crest, a lip above), and reads the
+// crest's height at its place along the path from the along table. The cell's value is base + (crest - base) * q, `base` being the height the strokes before
+// it left, and combine keeps max(base, value) (raise to), min (cut to) or value (flatten to). Every read is the cell's own height and its position, so a
+// regional replay of a window finds what the whole map did. A spur piece (s1.z < 0, its root's place along the trunk -1 - s1.z) is a candidate of its own.
+// Segment layout: s0 = a, b; s1 = (length before, length, the path's length | -1 - place, the back side: +1 left of the way drawn, -1 right);
+// s2 = a trunk's end flags (1 start, 2 end: the section closes round it) | a spur piece's (width, width, height, height) at its ends.
+fn lfFractal(x: f32, y: f32, salt: u32) -> f32 {
+  return 0.57 * vnoise(x, y, u.seed ^ salt) + 0.29 * vnoise(x * 2.17 + 19.1, y * 2.17 - 7.3, u.seed ^ (salt + 0x65u)) + 0.14 * vnoise(x * 5.03 - 11.7, y * 5.03 + 31.2, u.seed ^ (salt + 0xd1u));
+}
+// The variation's weight at a place on the section: the foot's at the foot, blending to the middle's by halfway up and holding it to the crest.
+fn lfWeight(q: f32) -> f32 {
+  let g = clamp(q, 0.0, 1.0);
+  return mix(u.lfFoot, u.lfMid, min(g * 2.0, 1.0));
+}
+// The share of the section at a signed distance c across the path (positive: left of the way drawn) and e beyond the path's end. Past a free end the section
+// closes round it: the distance is radial and the two halves are blended by which way the cell lies, so an asymmetric section meets itself with no seam.
+fn lfShare(c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
+  let back = c * side;
+  let fw = max(u.lfFront * wm, 0.5); let bw = max(u.lfBack * wm, 0.5);
+  let r = sqrt(c * c + e * e);
+  if (cap && e > 0.0) {
+    var qf = 0.0; var qb = 0.0;
+    if (r < fw) { qf = curveAt(u.curveBase, 1.0 - r / fw); }
+    if (r < bw) { qb = curveAt(u.backBase, 1.0 - r / bw); }
+    return mix(qf, qb, 0.5 + 0.5 * back / r);
+  }
+  if (back > 0.0) { if (r >= bw) { return 0.0; } return curveAt(u.backBase, 1.0 - r / bw); }
+  if (r >= fw) { return 0.0; }
+  return curveAt(u.curveBase, 1.0 - r / fw);
+}
+// One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
+// trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
+fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec2f {
+  let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len = max(sqrt(dx * dx + dy * dy), 1e-4);
+  let ux = dx / len; let uy = dy / len;
+  let ahead = (wx - s0.x) * ux + (wy - s0.y) * uy;
+  let tt = clamp(ahead / len, 0.0, 1.0);
+  let cx = s0.x + dx * tt; let cy = s0.y + dy * tt;
+  let c = (wx - cx) * uy - (wy - cy) * ux;
+  let spur = s1.z < 0.0;
+  let flags = select(u32(s2.x), 3u, spur);
+  let cap = (ahead < 0.0 && (flags & 1u) != 0u) || (ahead > len && (flags & 2u) != 0u);
+  let e = max(max(ahead - len, -ahead), 0.0);
+  let wm0 = select(1.0, mix(s2.x, s2.y, tt), spur);
+  let hm = select(1.0, mix(s2.z, s2.w, tt), spur);
+  var cc = c; var ee = e; var wm = wm0;
+  if (u.lfWander > 0.0 || u.lfWidth > 0.0) {
+    // The weight is read at the cell's place on the section as drawn, then the section moves: sideways by the wander, narrower or wider by the width variation.
+    // Past an inner joint the distance is round the joint, and the wander moves that distance: moving c alone would carry the joint a different way for each
+    // of its two segments and leave a seam on the outside of the bend. A free end's cap moves sideways with its segment.
+    let wt = lfWeight(lfShare(c, e, cap, s1.w, wm0));
+    let shift = u.lfWander * wt * nA;
+    if (cap || e <= 0.0) { cc = c - shift; } else { cc = select(-1.0, 1.0, c >= 0.0) * sqrt(c * c + e * e) - shift; ee = 0.0; }
+    wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
+  }
+  let q = lfShare(cc, ee, cap, s1.w, wm);
+  let share = select(trunkShare, -1.0 - s1.z, spur);
+  let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
+  let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
+  let qt = terraced(q, x, y, i, cells);
+  var value = base + (crest - base) * qt;
+  if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
+  return vec2f(value, clamp(q, 0.0, 1.0));
+}
+@compute @workgroup_size(8, 8)
+fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let cells = u.grid * u.grid; let i = u32(y) * u.grid + u32(x);
+#endif
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let base = F[PH * cells + i];
+  // The variation noise: functions of the position in the shape's frame only (never of a tile or a page), warped at a few scales; one cell's three values serve every segment.
+  var nA = 0.0; var nB = 0.0; var nC = 0.0;
+  if (u.lfWander > 0.0 || u.lfWidth > 0.0 || u.lfHeight > 0.0) {
+    let sz = max(u.lfSize, 8.0);
+    let warp = 0.55 * vnoise(lx / (sz * 0.8), ly / (sz * 0.8), u.seed ^ 0x2f1u);
+    if (u.lfWander > 0.0) { nA = lfFractal(lx / (sz * 0.73) + warp, ly / (sz * 0.73) + warp, 0x7a3u); }
+    if (u.lfWidth > 0.0) { nB = lfFractal(lx / sz + warp, ly / sz - warp, 0x3b1u); }
+    if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
+  }
+  var nearest = 3.0e38; var trunk = 0xffffffffu;
+  var pick = vec2f(base, 0.0); var seen = false;
+  for (var k = 0u; k < u.nseg; k++) {
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
+    if (s1.z >= 0.0) {
+      let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len2 = max(dx * dx + dy * dy, 1e-8);
+      let t = clamp(((wx - s0.x) * dx + (wy - s0.y) * dy) / len2, 0.0, 1.0);
+      let d2 = (wx - s0.x - dx * t) * (wx - s0.x - dx * t) + (wy - s0.y - dy * t) * (wy - s0.y - dy * t);
+      if (d2 < nearest) { nearest = d2; trunk = k; }
+      continue;
+    }
+    let cand = lfEval(s0, s1, s2, wx, wy, base, nA, nB, nC, 0.0, x, y, i, cells);
+    if (cand.y <= 0.0) { continue; }
+    var better = !seen;
+    if (seen) {
+      if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
+    }
+    if (better) { pick = cand; seen = true; }
+  }
+  if (trunk != 0xffffffffu) {
+    // The cell's place along the path. On the inside of a bend the nearest point jumps from one segment to the next, so the place is blended over the
+    // segments nearly as near (within a band of half the distance) and the crest's height along the path meets itself with no seam. The band ends before
+    // the reach, inside every segment's box, so no box cuts a weight off.
+    let dn = sqrt(nearest); let wmax = max(u.lfFoot, u.lfMid);
+    let band = min(max(4.0, 0.5 * dn), max(u.lfFront, u.lfBack) * exp(1.35 * u.lfWidth * wmax) + u.lfWander * wmax - dn);
+    var sw = 0.0; var ss = 0.0;
+    for (var k = 0u; k < u.nseg; k++) {
+      let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+      if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+      let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+      if (s1.z < 0.0) { continue; }
+      let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len2 = max(dx * dx + dy * dy, 1e-8);
+      let t = clamp(((wx - s0.x) * dx + (wy - s0.y) * dy) / len2, 0.0, 1.0);
+      var w = 1.0;
+      if (k != trunk) {
+        if (band <= 0.0) { continue; }
+        let f = 1.0 - (sqrt((wx - s0.x - dx * t) * (wx - s0.x - dx * t) + (wy - s0.y - dy * t) * (wy - s0.y - dy * t)) - dn) / band;
+        if (f <= 0.0) { continue; }
+        w = f * f;
+      }
+      sw += w; ss += w * clamp((s1.x + t * s1.y) / max(s1.z, 1e-4), 0.0, 1.0);
+    }
+    let cand = lfEval(Seg[(u.segBase + trunk) * 4u], Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], wx, wy, base, nA, nB, nC, ss / sw, x, y, i, cells);
+    if (cand.y > 0.0) {
+      var better = !seen;
+      if (seen) {
+        if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
+      }
+      if (better) { pick = cand; seen = true; }
+    }
+  }
+  if (!seen) { return; }
+  var value = pick.x;
+  if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
+  F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  // The influence: how much of the section the cell stands in, where the stroke moved the height (a unit or more is all of it). Masks, routes, protection and
+  // cracks follow as a plateau's do.
+  let inf = pick.y * clamp(abs(value - base), 0.0, 1.0);
+  if (inf <= 0.0) { return; }
+  if (u.nwrites > 0u) { shapeMasks(i, inf); }
+  F[PR * cells + i] = F[PR * cells + i] * (1.0 - inf);
+  F[PP * cells + i] = max(F[PP * cells + i] * (1.0 - inf), sm(0.65, 0.95, inf));
+  if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, inf * 1.6) * u.crackAmt); }
 }
 
 #ifdef PAGES

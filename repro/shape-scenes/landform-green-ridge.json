@@ -1,0 +1,6 @@
+{"biome": "green", "source": {"note": "H27 sheet: a Green ridge made with the Landform tool, for the window of green-2 (the great divide's rocky south face; long gentle slope to the north, a steep face to the south, the crest falling toward the east). Plain 99 and sea 75 on this map."},
+ "ground": true, "query": "",
+ "strokes": [
+  ["landform", [[-150,690],[250,702],[640,740],[1000,775]], {"card": {"diameter": 820, "elevation": 199, "combine": 0, "lean": 250, "facing": 3, "wander": 40, "widthVary": 25, "heightVary": 6, "varySize": 170, "varyFoot": 120, "varyMiddle": 100, "cracks": 50, "maskChannel": 1, "maskAmount": 100},
+    "curve": {"form": "lfHill", "knots": [[0,0],[0.18,0.04],[0.5,0.45],[0.8,0.93],[1,1]], "back": [[0,0],[0.35,0.1],[0.65,0.4],[0.88,0.8],[1,1]]}, "along": [[0,1],[0.5,0.95],[1,0.5]]}]
+ ]}

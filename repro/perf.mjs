@@ -23,6 +23,7 @@ const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out'
 const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : fallback; };
 const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
 const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
+const dragTool = opt('--tool', 'hill');   // H27: the brush the drag draws (hill, or landform to measure it beside a hill)
 const [mode] = args;
 if (!['map4', 'map8', 'map16', 'map40'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|map16|map40> --scene <scene.json> --out <dir>'); process.exit(1); }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
@@ -276,7 +277,7 @@ try {
   console.error('phase drag'); flush();
   // ------------------------------------------------------------ drag: a stroke with real mouse events
   const box = await ev(`(() => { const r = document.getElementById('overlay')?.getBoundingClientRect() ?? document.querySelector('canvas').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
-  await ev(`document.querySelector('[data-tool="hill"]').click(); true`);
+  await ev(`document.querySelector('[data-tool="${dragTool}"]').click(); true`);
   await reset();
   const cx = box.x + box.w * .35, cy = box.y + box.h * .5;
   await ev('__perf.frameStart(); true');
