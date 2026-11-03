@@ -15,7 +15,6 @@ import (
 // browserPresenter holds one reusable GPU canvas. transferToImageBitmap moves
 // the completed image to the UI without mapping terrain pixels into Go memory.
 type browserPresenter struct {
-	done           <-chan error
 	canvas         js.Value
 	surface        *wgpu.Surface
 	width, height  int
@@ -103,9 +102,7 @@ func (r *Renderer) PresentBitmap(ctx context.Context, width, height int) (bitmap
 		check(pass.End())
 	}
 	check(r.GPU.Submit(enc))
-	completion := make(chan error, 1)
-	r.GPU.Queue.OnSubmittedWorkDone(func(err error) { completion <- err; close(completion) })
-	p.done = completion
+	r.GPU.captureViewFence()
 	check(p.surface.Present(frame))
 	return p.canvas.Call("transferToImageBitmap"), nil
 }
@@ -136,23 +133,24 @@ struct Dims {src:vec2u,dst:vec2u};
  return vec4f((sum+vec4u(n/2u))/vec4u(n))/255.0;
 }`
 
-// WaitView waits for the preceding image's captured queue fence. PresentBitmap
+// WaitView waits for the preceding view's captured queue fence, including
+// canceled work that never produced an image. PresentBitmap
 // does not wait for it: the worker sends that bitmap before awaiting this fence
 // at the start of the next tile. Cancellation preserves the pending fence.
-func (s *SceneRenderer) WaitView(ctx context.Context) error { return s.renderer.WaitView(ctx) }
-func (r *Renderer) WaitView(ctx context.Context) error {
+func (s *SceneRenderer) WaitView(ctx context.Context) error { return s.gpu.waitView(ctx) }
+func (r *Renderer) WaitView(ctx context.Context) error      { return r.GPU.waitView(ctx) }
+func (g *GPU) waitView(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	p, _ := r.presentation.(*browserPresenter)
-	if p == nil || p.done == nil {
+	if g.viewDone == nil {
 		return ctx.Err()
 	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case err := <-p.done:
-		p.done = nil
+	case err := <-g.viewDone:
+		g.viewDone = nil
 		return err
 	}
 }

@@ -12,6 +12,7 @@ import (
 )
 
 type GPU struct {
+	viewDone            <-chan error
 	deferViewValidation bool
 	errorMu             sync.Mutex
 	asyncError          error

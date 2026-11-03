@@ -24,5 +24,33 @@ func (g *GPU) installErrorHandler() {
 func (g *GPU) beginViewValidation() func() {
 	old := g.deferViewValidation
 	g.deferViewValidation = true
-	return func() { g.deferViewValidation = old }
+	ended := false
+	return func() {
+		if ended {
+			return
+		}
+		ended = true
+		// Include partial submissions from canceled/failed views that never reached
+		// presentation. Recording a callback does not await the GPU on this path.
+		g.captureViewFence()
+		g.deferViewValidation = old
+	}
+}
+
+func (g *GPU) captureViewFence() {
+	completion := make(chan error, 1)
+	g.Queue.OnSubmittedWorkDone(func(err error) {
+		if err != nil {
+			g.errorMu.Lock()
+			g.asyncError = err
+			handler := g.OnError
+			g.errorMu.Unlock()
+			if handler != nil {
+				handler(err)
+			}
+		}
+		completion <- err
+		close(completion)
+	})
+	g.viewDone = completion
 }

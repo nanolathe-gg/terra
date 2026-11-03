@@ -572,6 +572,9 @@ func sendBitmap(m map[string]any, transfer []any) {
 	defer func() {
 		if p := recover(); p != nil {
 			// A transfer that throws never reaches the UI and cannot be acked.
+			if bitmap, ok := m["bitmap"].(js.Value); ok && !bitmap.IsUndefined() && !bitmap.IsNull() {
+				bitmap.Call("close")
+			}
 			if pendingBitmapToken != 0 {
 				close(pendingBitmapAck)
 				pendingBitmapToken = 0

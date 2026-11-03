@@ -77,6 +77,54 @@ func TestBrowserViewValidationReportsErrors(t *testing.T) {
 		t.Fatal("asynchronous error was not retained for the next strict operation")
 	}
 }
+
+// Cancellation before the first PresentBitmap must still leave a queue fence.
+func TestBrowserCanceledViewBeforePresentationIsFenced(t *testing.T) {
+	g, err := NewGPU()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer g.Close()
+	restore := g.beginViewValidation()
+	b, err := g.Buffer("canceled view partial data", make([]byte, 256), storageUsage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Release()
+	enc, err := g.Device.CreateCommandEncoder(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc.ClearBuffer(b, 0, 256)
+	if err = g.Submit(enc); err != nil {
+		t.Fatal(err)
+	}
+	// A real view can return context.Canceled here, before any presenter exists.
+	restore()
+	if g.viewDone == nil {
+		t.Fatal("partial canceled GPU work has no exit fence")
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	scene := &SceneRenderer{gpu: g}
+	if err = scene.WaitView(canceled); err != context.Canceled {
+		t.Fatalf("canceled wait: %v", err)
+	}
+	if g.viewDone == nil {
+		t.Fatal("cancellation dropped the partial-work fence")
+	}
+	if err = scene.WaitView(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if g.viewDone != nil {
+		t.Fatal("completed partial-work fence retained")
+	}
+	var validation error
+	g.scope()(&validation)
+	if validation != nil {
+		t.Fatal(validation)
+	}
+}
 func TestBrowserTerrain(t *testing.T) {
 	g, e := NewGPU()
 	if e != nil {
@@ -222,7 +270,7 @@ func TestBrowserTerrain(t *testing.T) {
 	if e := r.WaitView(context.Background()); e != nil {
 		t.Fatal(e)
 	}
-	if pending := r.presentation.(*browserPresenter).done; pending != nil {
+	if pending := g.viewDone; pending != nil {
 		t.Fatal("completed view fence retained")
 	}
 	var finalValidation error
