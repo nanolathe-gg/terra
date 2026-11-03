@@ -27,6 +27,7 @@ import (
 var callback js.Func
 var jobs = renderjob.NewQueue()
 var activeKind string
+var activeRPC bool
 var activeSession int
 var cancel context.CancelFunc
 var generation int
@@ -47,10 +48,10 @@ func Run() {
 			return nil
 		}
 		generation = job.ID
-		if cancel != nil && !renderjob.FinishViewTile(activeKind, activeSession, job) {
+		if cancel != nil && (activeRPC || !renderjob.FinishViewTile(activeKind, activeSession, job)) {
 			cancel()
 		}
-		if dropped := jobs.Submit(job); dropped != nil && dropped.Kind != "view" && dropped.Kind != "cancel" {
+		if dropped := jobs.Submit(job); dropped != nil && renderjob.NeedsReply(*dropped) {
 			post(map[string]any{"kind": "error", "id": dropped.ID, "canceled": true, "error": context.Canceled.Error()})
 		}
 		return nil
@@ -84,7 +85,7 @@ func loop() {
 	var gpu *terrain.GPU
 	var config map[string]any
 	for job := range jobs.Pending() {
-		activeKind, activeSession = job.Kind, job.Session
+		activeKind, activeSession, activeRPC = job.Kind, job.Session, job.RPC
 		ctx, c := context.WithCancel(context.Background())
 		cancel = c
 		func() {
@@ -365,7 +366,7 @@ func loop() {
 			}
 			post(map[string]any{"kind": "done", "id": job.ID, "session": job.Session, "milliseconds": float64(time.Since(start).Microseconds()) / 1000})
 		}()
-		if ctx.Err() != nil && job.Kind != "view" && job.Kind != "cancel" {
+		if ctx.Err() != nil && renderjob.NeedsReply(job) {
 			post(map[string]any{"kind": "error", "id": job.ID, "canceled": true, "error": ctx.Err().Error()})
 		}
 		c()

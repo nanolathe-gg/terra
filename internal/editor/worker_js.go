@@ -325,6 +325,7 @@ func (a *App) rpcJob(ctx context.Context, kind string, tile renderjob.Tile) (js.
 	return a.rpcRequest(ctx, a.job(kind, []renderjob.Tile{tile}))
 }
 func (a *App) rpcRequest(ctx context.Context, job renderjob.Request) (js.Value, error) {
+	job.RPC = true
 	a.rendering = false
 	defer a.Schedule()
 	ch := make(chan js.Value, 4)

@@ -45,3 +45,21 @@ func TestQueueReturnsSupersededRPCForCancellation(t *testing.T) {
 		t.Fatal(next.ID)
 	}
 }
+
+func TestAwaitedViewCaptureAlwaysGetsCancellation(t *testing.T) {
+	q := NewQueue()
+	q.Submit(Request{ID: 1, Kind: "view", RPC: true, Session: 4})
+	dropped := q.Submit(Request{ID: 2, Kind: "ghost", RPC: true, Session: 4})
+	if dropped == nil || !NeedsReply(*dropped) {
+		t.Fatal("dropped awaited capture must receive a canceled reply")
+	}
+	if FinishViewTile("view", 4, Request{Kind: "view", RPC: true, Session: 4}) {
+		t.Fatal("foreground capture must preempt viewport work")
+	}
+	if NeedsReply(Request{Kind: "view"}) {
+		t.Fatal("viewport stream must remain replaceable without RPC replies")
+	}
+	if !NeedsReply(Request{Kind: "view", RPC: true}) {
+		t.Fatal("active canceled capture needs terminal reply")
+	}
+}

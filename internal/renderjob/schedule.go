@@ -27,5 +27,9 @@ func (q *Queue) Pending() <-chan Request { return q.pending }
 // FinishViewTile permits one useful image to finish while a newer view waits.
 // Session changes, exports and explicit cancellation still interrupt stale work.
 func FinishViewTile(activeKind string, activeSession int, next Request) bool {
-	return activeKind == "view" && next.Kind == "view" && activeSession == next.Session
+	return activeKind == "view" && next.Kind == "view" && !next.RPC && activeSession == next.Session
 }
+
+// NeedsReply distinguishes awaited captures using the view pipeline from the
+// replaceable viewport stream. Every displaced RPC receives a terminal reply.
+func NeedsReply(job Request) bool { return job.RPC || job.Kind != "view" && job.Kind != "cancel" }

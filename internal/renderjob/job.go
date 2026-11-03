@@ -19,6 +19,7 @@ type FillRequest struct {
 	Settings    model.FeatureFill
 }
 type Request struct {
+	RPC         bool              `json:"rpc,omitempty"`
 	Session     int               `json:"session"`
 	Revision    int               `json:"revision"`
 	Interactive bool              `json:"interactive"`
