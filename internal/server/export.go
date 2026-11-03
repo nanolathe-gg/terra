@@ -3,11 +3,13 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -40,16 +43,23 @@ type exportJob struct {
 	cmd     *exec.Cmd
 	input   io.WriteCloser
 	output  *bufio.Reader
-	stderr  strings.Builder
+	stderr  lockedBuffer
 }
 type exportStore struct {
 	o         Options
 	mu        sync.Mutex
 	jobs      map[string]*exportJob
+	closing   bool
+	closeCh   chan struct{}
 	featureMu sync.Mutex
 }
 
-func (s *exportStore) init(o Options) { s.o = o; s.jobs = map[string]*exportJob{} }
+func (s *exportStore) init(o Options) {
+	s.o = o
+	s.jobs = map[string]*exportJob{}
+	s.closeCh = make(chan struct{})
+	s.cleanupCrashes()
+}
 func (s *exportStore) args(args ...string) []string {
 	var a []string
 	for _, r := range s.o.GameRoots {
@@ -122,7 +132,7 @@ func (j *exportJob) exchange(command any) (map[string]any, error) {
 	}
 	return v, nil
 }
-func (s *exportStore) start(req map[string]any) (map[string]any, error) {
+func (s *exportStore) start(ctx context.Context, req map[string]any) (map[string]any, error) {
 	allowed := map[string]bool{"name": true, "description": true, "world": true, "unitsX": true, "unitsY": true, "seaLevel": true, "heights": true, "features": true, "starts": true, "settings": true}
 	for k := range req {
 		if !allowed[k] {
@@ -140,8 +150,28 @@ func (s *exportStore) start(req map[string]any) (map[string]any, error) {
 		return nil, e
 	}
 	name := hex.EncodeToString(id[:])
-	dir, e := os.MkdirTemp("", "terraform-export-"+name+"-")
+	parent, e := os.MkdirTemp("", "terraform-export-jobs-")
 	if e != nil {
+		return nil, e
+	}
+	output, e := filepath.Abs(filepath.Join(s.o.AssetsRoot, "exports"))
+	if e != nil {
+		os.Remove(parent)
+		return nil, e
+	}
+	owner, e := json.Marshal(exportOwner{Version: 1, ID: name, PID: os.Getpid(), Output: output})
+	if e != nil {
+		os.Remove(parent)
+		return nil, e
+	}
+	if e = os.WriteFile(filepath.Join(parent, "owner.json"), owner, 0600); e != nil {
+		os.Remove(parent)
+		return nil, e
+	}
+	dir := filepath.Join(parent, "export-"+name)
+	if e = os.Mkdir(dir, 0700); e != nil {
+		os.Remove(filepath.Join(parent, "owner.json"))
+		os.Remove(parent)
 		return nil, e
 	}
 	cleanup := true
@@ -179,7 +209,28 @@ func (s *exportStore) start(req map[string]any) (map[string]any, error) {
 	if e = j.cmd.Start(); e != nil {
 		return nil, e
 	}
+	// A client that leaves while the helper starts must not leave a child
+	// process or private temporary directory behind.
+	stopWatch := make(chan struct{})
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		select {
+		case <-ctx.Done():
+			_ = j.cmd.Process.Kill()
+		case <-s.closeCh:
+			_ = j.cmd.Process.Kill()
+		case <-stopWatch:
+		}
+	}()
 	ready, e := j.exchange(nil)
+	close(stopWatch)
+	<-watchDone
+	if ctx.Err() != nil {
+		_ = j.cmd.Process.Kill()
+		_ = j.cmd.Wait()
+		return nil, ctx.Err()
+	}
 	if e != nil || ready["ready"] != true {
 		j.cmd.Process.Kill()
 		j.cmd.Wait()
@@ -189,11 +240,75 @@ func (s *exportStore) start(req map[string]any) (map[string]any, error) {
 		return nil, e
 	}
 	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		_ = j.cmd.Process.Kill()
+		_ = j.cmd.Wait()
+		return nil, fmt.Errorf("Server is shutting down")
+	}
 	s.jobs[name] = j
 	s.mu.Unlock()
 	cleanup = false
 	return map[string]any{"id": name, "width": ready["width"], "height": ready["height"], "maxChunkSide": ready["maxChunkSide"]}, nil
 }
+
+type exportOwner struct {
+	Version int    `json:"version"`
+	ID      string `json:"id"`
+	PID     int    `json:"pid"`
+	Output  string `json:"output"`
+}
+
+// Recover only explicitly owned jobs whose server process no longer exists.
+func (s *exportStore) cleanupCrashes() {
+	output, err := filepath.Abs(filepath.Join(s.o.AssetsRoot, "exports"))
+	if err != nil {
+		return
+	}
+	entries, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "terraform-export-jobs-") {
+			continue
+		}
+		parent := filepath.Join(os.TempDir(), entry.Name())
+		ownerPath := filepath.Join(parent, "owner.json")
+		info, err := os.Lstat(ownerPath)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > 4096 {
+			continue
+		}
+		b, err := os.ReadFile(ownerPath)
+		if err != nil {
+			continue
+		}
+		var owner exportOwner
+		if json.Unmarshal(b, &owner) != nil || owner.Version != 1 || owner.Output != output || owner.PID <= 0 || !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(owner.ID) {
+			continue
+		}
+		// A live process, an inaccessible process, and other errors all mean skip.
+		if err := syscall.Kill(owner.PID, 0); !errors.Is(err, syscall.ESRCH) {
+			continue
+		}
+		dir := filepath.Join(parent, "export-"+owner.ID)
+		info, err = os.Lstat(dir)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		removeJobDir(dir)
+		for _, kind := range []string{"archive", "indexed"} {
+			os.Remove(filepath.Join(output, ".map-export-"+owner.ID+"-"+kind+".tmp"))
+		}
+	}
+}
+
+// EnsureFeatures prepares the catalogue required by native exports with placements.
+func (s *Server) EnsureFeatures(world string) error {
+	_, err := s.exports.features(world)
+	return err
+}
+
 func removeJobDir(dir string) {
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
@@ -201,7 +316,10 @@ func removeJobDir(dir string) {
 			os.Remove(filepath.Join(dir, e.Name()))
 		}
 	}
-	os.Remove(dir)
+	if os.Remove(dir) == nil {
+		os.Remove(filepath.Join(filepath.Dir(dir), "owner.json"))
+		os.Remove(filepath.Dir(dir))
+	}
 }
 func (s *exportStore) discard(j *exportJob) {
 	s.mu.Lock()
@@ -213,6 +331,11 @@ func (s *exportStore) discard(j *exportJob) {
 		j.cmd.Wait()
 	}
 	removeJobDir(j.dir)
+	// The exporter derives these exact staging names from the work directory.
+	// They can survive a killed helper during final archive assembly.
+	for _, kind := range []string{"archive", "indexed"} {
+		os.Remove(filepath.Join(s.o.AssetsRoot, "exports", ".map-export-"+j.id+"-"+kind+".tmp"))
+	}
 }
 func (s *exportStore) getJob(r *http.Request) (*exportJob, error) {
 	v := r.URL.Query()["id"]
@@ -307,12 +430,23 @@ func (s *exportStore) serve(w http.ResponseWriter, r *http.Request) {
 			bad(w, e)
 			return
 		}
-		v, e := s.start(m)
+		v, e := s.start(r.Context(), m)
 		if e != nil {
 			bad(w, e)
 			return
 		}
-		reply(w, v)
+		// If delivery fails, the client cannot know the job ID to cancel it.
+		w.Header().Set("Content-Type", "application/json")
+		if e := json.NewEncoder(w).Encode(v); e != nil || r.Context().Err() != nil {
+			s.mu.Lock()
+			j := s.jobs[v["id"].(string)]
+			s.mu.Unlock()
+			if j != nil {
+				j.mu.Lock()
+				s.discard(j)
+				j.mu.Unlock()
+			}
+		}
 		return
 	}
 	if r.Method == "POST" && p == "/map-export" {
@@ -389,7 +523,7 @@ func (s *exportStore) legacy(w http.ResponseWriter, r *http.Request) {
 		bad(w, fmt.Errorf("Expected 1–25 terrain chunks"))
 		return
 	}
-	ready, e := s.start(m)
+	ready, e := s.start(r.Context(), m)
 	if e != nil {
 		bad(w, e)
 		return
@@ -431,3 +565,27 @@ func (s *exportStore) legacy(w http.ResponseWriter, r *http.Request) {
 	reply(w, v)
 }
 func num(v any) int { f, _ := v.(float64); return int(f) }
+
+// Close stops all outstanding export helpers and removes their temporary files.
+func (s *Server) Close() {
+	s.exports.mu.Lock()
+	if s.exports.closing {
+		s.exports.mu.Unlock()
+		return
+	}
+	s.exports.closing = true
+	close(s.exports.closeCh)
+	jobs := make([]*exportJob, 0, len(s.exports.jobs))
+	for _, j := range s.exports.jobs {
+		jobs = append(jobs, j)
+	}
+	s.exports.mu.Unlock()
+	for _, j := range jobs {
+		_ = j.cmd.Process.Kill()
+	}
+	for _, j := range jobs {
+		j.mu.Lock()
+		s.exports.discard(j)
+		j.mu.Unlock()
+	}
+}

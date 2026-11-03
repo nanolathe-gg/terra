@@ -2,13 +2,18 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func testServer(t *testing.T) *Server {
@@ -149,5 +154,149 @@ done
 	w = request(t, s, "POST", "/map-export/finish?id="+id, nil)
 	if w.Code != 400 {
 		t.Fatal(w.Code)
+	}
+}
+
+// The subprocess stderr copier can still be writing while an export error is
+// reported. Exercise both operations concurrently under the race detector.
+func TestExportStderrConcurrentRead(t *testing.T) {
+	var output lockedBuffer
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			_, _ = output.Write([]byte("helper diagnostic\n"))
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			_ = output.String()
+		}
+	}()
+	wg.Wait()
+	if !strings.Contains(output.String(), "helper diagnostic") {
+		t.Fatal("missing helper diagnostic")
+	}
+}
+
+func TestCanceledExportStartCleansUp(t *testing.T) {
+	s := testServer(t)
+	helper := filepath.Join(t.TempDir(), "helper")
+	marker := filepath.Join(t.TempDir(), "started")
+	if e := os.WriteFile(helper, []byte("#!/bin/sh\ntouch \""+marker+"\"\nexec sleep 30\n"), 0700); e != nil {
+		t.Fatal(e)
+	}
+	s.exports.o.ExportTool = helper
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, e := s.exports.start(ctx, map[string]any{"world": "green"})
+		done <- e
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, e := os.Stat(marker); e == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("helper did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	select {
+	case e := <-done:
+		if !errors.Is(e, context.Canceled) {
+			t.Fatalf("expected cancellation, got %v", e)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled start did not stop helper")
+	}
+	if len(s.exports.jobs) != 0 {
+		t.Fatal("canceled start retained an export job")
+	}
+}
+
+func TestCloseStopsExport(t *testing.T) {
+	s := testServer(t)
+	helper := filepath.Join(t.TempDir(), "helper")
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"ready\":true}'\nexec sleep 30\n"
+	if e := os.WriteFile(helper, []byte(script), 0700); e != nil {
+		t.Fatal(e)
+	}
+	s.exports.o.ExportTool = helper
+	ready, e := s.exports.start(context.Background(), map[string]any{"world": "green"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	j := s.exports.jobs[ready["id"].(string)]
+	staged := filepath.Join(s.AssetsRoot, "exports", ".map-export-"+j.id+"-archive.tmp")
+	if e := os.MkdirAll(filepath.Dir(staged), 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(staged, []byte("partial"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	s.Close()
+	if _, e := os.Stat(staged); !os.IsNotExist(e) {
+		t.Fatalf("staged archive remains: %v", e)
+	}
+	if len(s.exports.jobs) != 0 {
+		t.Fatal("close retained job")
+	}
+	if _, e := os.Stat(j.dir); !os.IsNotExist(e) {
+		t.Fatalf("temporary directory remains: %v", e)
+	}
+	if _, e := s.exports.start(context.Background(), map[string]any{"world": "green"}); e == nil {
+		t.Fatal("start succeeded after close")
+	}
+}
+
+func TestRecoverOnlyDeadOwnedExportJobs(t *testing.T) {
+	temp, assets, foreign := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("TMPDIR", temp)
+	output, _ := filepath.Abs(filepath.Join(assets, "exports"))
+	otherOutput, _ := filepath.Abs(filepath.Join(foreign, "exports"))
+	if err := os.MkdirAll(output, 0700); err != nil {
+		t.Fatal(err)
+	}
+	makeJob := func(id string, pid int, out string) (string, string) {
+		parent := filepath.Join(temp, "terraform-export-jobs-"+id)
+		dir := filepath.Join(parent, "export-"+id)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := json.Marshal(exportOwner{Version: 1, ID: id, PID: pid, Output: out})
+		if err := os.WriteFile(filepath.Join(parent, "owner.json"), b, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "manifest.json"), []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		stage := filepath.Join(output, ".map-export-"+id+"-archive.tmp")
+		if err := os.WriteFile(stage, []byte("partial"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		return parent, stage
+	}
+	dead, stage := makeJob(strings.Repeat("a", 32), 2147483647, output)
+	active, activeStage := makeJob(strings.Repeat("b", 32), os.Getpid(), output)
+	other, otherStage := makeJob(strings.Repeat("c", 32), 2147483647, otherOutput)
+	_, err := New(Options{SourceRoot: filepath.Join("..", ".."), AssetsRoot: assets, Prepared: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{dead, stage} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("dead owned job remains: %s (%v)", p, err)
+		}
+	}
+	for _, p := range []string{active, activeStage, other, otherStage} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("unowned or live job removed: %s (%v)", p, err)
+		}
 	}
 }

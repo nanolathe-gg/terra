@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/nanolathe-gg/terraform/internal/server"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 type roots []string
@@ -47,6 +52,7 @@ func main() {
 	if e != nil {
 		log.Fatal(e)
 	}
+	defer s.Close()
 	if scene != "" {
 		if e := renderScene(o, s, scene, output); e != nil {
 			log.Fatal(e)
@@ -54,5 +60,18 @@ func main() {
 		return
 	}
 	fmt.Printf("Shared-surface sculptor: http://127.0.0.1:%d/sculpt\n", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), s))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	host := &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: s, ReadHeaderTimeout: 10 * time.Second}
+	go func() {
+		<-ctx.Done()
+		s.Close()
+		shutdown, done := context.WithTimeout(context.Background(), 5*time.Second)
+		defer done()
+		_ = host.Shutdown(shutdown)
+	}()
+	if err := host.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Print(err)
+		os.Exit(1)
+	}
 }
