@@ -106,7 +106,12 @@ func (s *SceneRenderer) copyAuthored(src, dst *GPUFeed, r CellRect) error {
 		return err
 	}
 	defer uniform.Release()
-	return s.gpu.Dispatch(s.shapeGather, Bindings{0: {{Binding: 0, Buffer: uniform}, {Binding: 1, Buffer: src.Planes}, {Binding: 2, Buffer: src.Masks}, {Binding: 3, Buffer: dst.Planes}, {Binding: 4, Buffer: dst.Masks}}}, uint32((width+7)/8), uint32((height+7)/8), 1)
+	err = s.gpu.Dispatch(s.shapeGather, Bindings{0: {{Binding: 0, Buffer: uniform}, {Binding: 1, Buffer: src.Planes}, {Binding: 2, Buffer: src.Masks}, {Binding: 3, Buffer: dst.Planes}, {Binding: 4, Buffer: dst.Masks}}}, uint32((width+7)/8), uint32((height+7)/8), 1)
+	if err == nil {
+		src.lastUse = s.gpu.submittedSerial.Load()
+		dst.lastUse = src.lastUse
+	}
+	return err
 }
 
 // buildShapeFeed caches exact authored 512-cell cores and gathers the requested
@@ -186,6 +191,9 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 				s.shapeProfile.PageMisses++
 				pageStart := time.Now()
 				page, err = s.newShapeFeed(core, pageRect.X0, pageRect.Y0, feed.bytes)
+				if page != nil {
+					page.owner = s.gpu
+				}
 				if err != nil {
 					return nil, err
 				}

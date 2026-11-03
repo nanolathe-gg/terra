@@ -9,6 +9,7 @@ import (
 // GPUFeed is the source lattice for a chunk. Origin is a global lattice index;
 // Grid is the source row stride. The caller retains ownership until submission.
 type GPUFeed struct {
+	lastUse                                  uint64
 	Planes, Masks, Weather, Field            *wgpu.Buffer
 	Maps                                     [3]*wgpu.Buffer
 	Grid, Cells, OriginX, OriginY, MaskCount int
@@ -113,6 +114,7 @@ func (r *Renderer) feedFromGPU(ctx context.Context, feed *GPUFeed, reg *RenderRe
 	if e = g.Submit(enc); e != nil {
 		return e
 	}
+	feed.lastUse = g.submittedSerial.Load()
 	r.gpuFlags = true
 	return nil
 }

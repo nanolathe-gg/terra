@@ -9,9 +9,12 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 )
 
 type GPU struct {
+	submittedSerial     atomic.Uint64
+	completedSerial     atomic.Uint64
 	viewDone            <-chan error
 	deferViewValidation bool
 	errorMu             sync.Mutex
@@ -177,8 +180,15 @@ func (g *GPU) Submit(enc *wgpu.CommandEncoder) error {
 		return e
 	}
 	defer c.Release()
-	_, e = g.Queue.Submit(c)
-	return e
+	index, submitErr := g.Queue.Submit(c)
+	if submitErr == nil {
+		if index == 0 {
+			g.submittedSerial.Add(1)
+		} else {
+			atomicMax(&g.submittedSerial, index)
+		}
+	}
+	return submitErr
 }
 func (g *GPU) ReadBuffer(ctx context.Context, src *wgpu.Buffer, offset, size uint64) ([]byte, error) {
 	b, e := g.Allocate("readback", size, gputypes.BufferUsageMapRead|gputypes.BufferUsageCopyDst)
@@ -225,5 +235,13 @@ func (g *GPU) collectAsyncError(err *error) {
 	g.errorMu.Unlock()
 	if async != nil && *err == nil {
 		*err = async
+	}
+}
+
+func atomicMax(value *atomic.Uint64, n uint64) {
+	for old := value.Load(); n > old; old = value.Load() {
+		if value.CompareAndSwap(old, n) {
+			return
+		}
 	}
 }

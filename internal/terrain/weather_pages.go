@@ -13,6 +13,7 @@ import (
 )
 
 type weatherFeed struct {
+	owner *GPU
 	GPUFeed
 	owned        []*wgpu.Buffer
 	borrowedFrom *weatherFeed
@@ -21,6 +22,20 @@ type weatherFeed struct {
 }
 
 func (f *weatherFeed) Close() {
+	// Never subtract a cache page's bytes while its submitted gather still owns
+	// those buffers. Old/fenced pages do not cause another queue wait.
+	if len(f.owned) > 0 && f.owner != nil && !f.owner.cacheUseCompleted(f.lastUse) {
+		if err := f.owner.waitCacheUses(context.Background()); err != nil {
+			f.owner.errorMu.Lock()
+			f.owner.asyncError = err
+			handler := f.owner.OnError
+			f.owner.errorMu.Unlock()
+			if handler != nil {
+				handler(err)
+			}
+		}
+	}
+
 	for _, b := range f.owned {
 		b.Release()
 	}
@@ -118,6 +133,9 @@ func (s *SceneRenderer) weatherPage(ctx context.Context, nodes []model.Node, c S
 	_, e := s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, func(_ CellRect, planes, masks *wgpu.Buffer) error {
 		var err error
 		out, err = s.newWeatherFeed(core, x, y, o.MaterialWeathering > 0)
+		if out != nil {
+			out.owner = s.gpu
+		}
 		if err != nil {
 			return err
 		}

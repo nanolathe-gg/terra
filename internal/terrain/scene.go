@@ -181,6 +181,9 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 			return nil, e
 		}
 		defer feed.Close()
+		if feed.borrowedFrom != nil {
+			defer func() { feed.borrowedFrom.lastUse = s.gpu.submittedSerial.Load() }()
+		}
 		input.Feed = &feed.GPUFeed
 		s.renderer.SetReservedGPUBytes(s.cacheResidentBytes() + feed.bytes)
 		pixels, err = s.renderWindowWithCacheRetry(ctx, input, options, feed.bytes, feed.borrowedFrom)
@@ -190,6 +193,9 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 			return nil, e
 		}
 		defer feed.Close()
+		if feed.borrowedFrom != nil {
+			defer func() { feed.borrowedFrom.lastUse = s.gpu.submittedSerial.Load() }()
+		}
 		input.Feed = &feed.GPUFeed
 		s.renderer.SetReservedGPUBytes(s.cacheResidentBytes() + feed.bytes)
 		pixels, err = s.renderWindowWithCacheRetry(ctx, input, options, feed.bytes, feed.borrowedFrom)

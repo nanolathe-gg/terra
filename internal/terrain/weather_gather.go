@@ -133,7 +133,12 @@ func (s *SceneRenderer) copyWeather(src, dst *weatherFeed, hit CellRect) error {
 			return e
 		}
 	}
-	return s.gpu.Submit(enc)
+	err = s.gpu.Submit(enc)
+	if err == nil {
+		src.lastUse = s.gpu.submittedSerial.Load()
+		dst.lastUse = src.lastUse
+	}
+	return err
 }
 func (s *SceneRenderer) borrowWeatherPage(region CellRect, core int) *weatherFeed {
 	if core <= 0 || region.X0/core != region.X1/core || region.Y0/core != region.Y1/core {

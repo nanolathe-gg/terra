@@ -39,6 +39,7 @@ func (g *GPU) beginViewValidation() func() {
 
 func (g *GPU) captureViewFence() {
 	completion := make(chan error, 1)
+	serial := g.submittedSerial.Load()
 	g.Queue.OnSubmittedWorkDone(func(err error) {
 		if err != nil {
 			g.errorMu.Lock()
@@ -48,6 +49,9 @@ func (g *GPU) captureViewFence() {
 			if handler != nil {
 				handler(err)
 			}
+		}
+		if err == nil {
+			atomicMax(&g.completedSerial, serial)
 		}
 		completion <- err
 		close(completion)
