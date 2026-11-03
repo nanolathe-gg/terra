@@ -36,6 +36,7 @@ type FeatureUI struct {
 	modified                         bool
 	selectedStart, selectedFeature   int
 	ready                            bool
+	preserveFeatures                 bool
 	Active                           bool
 }
 
@@ -148,8 +149,7 @@ func (a *App) mountFeatures() {
 			Unavailable string                `json:"unavailable"`
 		}
 		if err := request("/map-features/"+a.World()+"/catalog.json", "GET", nil, &c); err != nil {
-			f.status(err.Error())
-			return
+			c.Unavailable = err.Error() + ". Feature placement is unavailable; start positions remain editable."
 		}
 		for _, entry := range c.Features {
 			f.defs = append(f.defs, entry.FeatureDefinition)
@@ -164,8 +164,8 @@ func (a *App) mountFeatures() {
 		}
 		f.store = model.NewPlacementStore(int(num(a.Map(), "playRight", 0)/16), int(num(a.Map(), "playBottom", 0)/16), f.defs, c.DepositName)
 		if err := f.load(); err != nil {
-			f.status(err.Error())
-			return
+			f.preserveFeatures = true
+			c.Unavailable = err.Error() + ". Start positions remain editable."
 		}
 		f.sync()
 		f.ready = true
@@ -292,7 +292,9 @@ func (f *FeatureUI) sync() {
 			generated = append(generated, p)
 		}
 	}
-	f.a.MapData["features"] = f.store.SortedFeatures()
+	if !f.preserveFeatures {
+		f.a.MapData["features"] = f.store.SortedFeatures()
+	}
 	f.a.MapData["starts"] = f.store.Starts
 	f.a.MapData["fill"] = map[string]any{"kind": f.kind, "region": f.region, "density": f.density, "clustering": f.cluster, "gap": f.gap, "seed": f.seed, "margin": f.margin, "radius": f.radius, "generated": generated}
 }

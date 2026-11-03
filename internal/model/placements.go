@@ -160,7 +160,7 @@ func (s *PlacementStore) RemoveStart(index int) error {
 	return nil
 }
 func (s *PlacementStore) SortedFeatures() []FeaturePlacement {
-	out := append([]FeaturePlacement(nil), s.Features...)
+	out := append([]FeaturePlacement{}, s.Features...)
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		return a.Z < b.Z || a.Z == b.Z && (a.X < b.X || a.X == b.X && a.Name < b.Name)
