@@ -56,7 +56,7 @@ func create(tag, class, text string) js.Value {
 	return v
 }
 func text(id, s string) {
-	if v := element(id); exists(v) {
+	if v := element(id); exists(v) && v.Get("textContent").String() != s {
 		v.Set("textContent", s)
 	}
 }

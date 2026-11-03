@@ -82,7 +82,7 @@ func (a *App) mountLayout() {
 	for _, group := range []struct {
 		name  string
 		kinds []string
-	}{{"Select and place", []string{"move"}}, {"Shape", []string{"plateau", "hill", "ramp", "offset", "crater", "fissure", "crystal", "deep"}}, {"Finish", []string{"smooth", "erase", "paint"}}} {
+	}{{"Select and place", []string{"move"}}, {"Shape", []string{"landform", "plateau", "hill", "ramp", "offset", "crater", "fissure", "crystal", "deep"}}, {"Finish", []string{"smooth", "erase", "paint"}}} {
 		section := create("div", "tool-group", "")
 		section.Call("append", create("span", "tool-group-label", group.name))
 		buttons := create("div", "tools", "")
@@ -348,7 +348,7 @@ func (a *App) groupToolControls() {
 	groups := []struct {
 		name string
 		keys []string
-	}{{"Cross-section", strings.Fields("facePx terraces ledge terraceJitter lean facing")}, {"Variability", strings.Fields("faceVariation outlineVar widthVar heightVar")}, {"Shore lobes", strings.Fields("fingers fingerSize")}, {"Shore layers", strings.Fields("shoreLayers layerPx layerRiser layerLedge layerRough layerStyle layerVary layerCircle lavaSpread lavaCircleVary")}, {"Spurs", strings.Fields("spurCount spurLength spurSpread spurWidth spurTaper spurHeight spurForks spurBulb")}, {"Rim sectors", strings.Fields("rimSectors rimUnequal")}, {"Rim gaps", strings.Fields("rimGaps rimGapWidth")}, {"Branches", strings.Fields("fissureBranches fissureBranchLen fissureBranchSpread")}, {"Fracture network", strings.Fields("fissureNetwork fissureCell")}, {"Shore plates", strings.Fields("shorePlates plateWaterPx plateLandPx plateSize plateGap plateHeight plateMaterial frostNeedles crystalShoreSeam plateVary")}, {"Faceted form", strings.Fields("crystalForm crystalSides crystalSize crystalCount crystalTop crystalLean crystalVariation")}, {"Column structure", strings.Fields("crystalTiers crystalStep crystalFacet crystalSizeVar crystalSmooth")}, {"Planar block", strings.Fields("crystalAlign bergFace bergJitter bergBreak bergRough bergTilt bergTiltDir bergFlat")}, {"Water appearance", strings.Fields("waterShore waterDeep waterBed")}, {"Crest variation", strings.Fields("crestJag crestVary crestTaper")}, {"Paint inside shape", strings.Fields("maskChannel maskAmount")}, {"Bowl facets", strings.Fields("craterFacets crystalCraterPx crystalCraterStep crystalCraterSkin")}, {"Angular facets", strings.Fields("iceFacets iceFacetSize")}}
+	}{{"Height", strings.Fields("elevation combine")}, {"Cross-section", strings.Fields("facePx terraces ledge terraceJitter breakup lean facing")}, {"Variation", strings.Fields("wander widthVary heightVary varySize varyFoot varyMiddle")}, {"Variability", strings.Fields("faceVariation outlineVar widthVar heightVar")}, {"Shore lobes", strings.Fields("fingers fingerSize")}, {"Shore layers", strings.Fields("shoreLayers layerPx layerRiser layerLedge layerRough layerStyle layerVary layerCircle lavaSpread lavaCircleVary")}, {"Spurs", strings.Fields("spurCount spurLength spurSpread spurWidth spurTaper spurHeight spurForks spurBulb")}, {"Rim sectors", strings.Fields("rimSectors rimUnequal")}, {"Rim gaps", strings.Fields("rimGaps rimGapWidth")}, {"Branches", strings.Fields("fissureBranches fissureBranchLen fissureBranchSpread")}, {"Fracture network", strings.Fields("fissureNetwork fissureCell")}, {"Shore plates", strings.Fields("shorePlates plateWaterPx plateLandPx plateSize plateGap plateHeight plateMaterial frostNeedles crystalShoreSeam plateVary")}, {"Faceted form", strings.Fields("crystalForm crystalSides crystalSize crystalCount crystalTop crystalLean crystalVariation")}, {"Column structure", strings.Fields("crystalTiers crystalStep crystalFacet crystalSizeVar crystalSmooth")}, {"Planar block", strings.Fields("crystalAlign bergFace bergJitter bergBreak bergRough bergTilt bergTiltDir bergFlat")}, {"Water appearance", strings.Fields("waterShore waterDeep waterBed")}, {"Crest variation", strings.Fields("crestJag crestVary crestTaper")}, {"Paint inside shape", strings.Fields("maskChannel maskAmount")}, {"Bowl facets", strings.Fields("craterFacets crystalCraterPx crystalCraterStep crystalCraterSkin")}, {"Angular facets", strings.Fields("iceFacets iceFacetSize")}}
 	root := element("shape-options")
 	claimed := map[string]bool{}
 	for _, g := range groups {
@@ -681,11 +681,13 @@ func (a *App) syncWorld() {
 	if !exists(element("world-search")) {
 		return
 	}
+	colors := a.mergedColors()
+	values := a.worldValues()
 	each("[data-color-key]", func(row js.Value) {
 		key := row.Get("dataset").Get("colorKey").String()
 		box := row.Call("querySelector", "input[type=checkbox]")
 		pick := row.Call("querySelector", "input[type=color]")
-		c, ok := a.mergedColors()[key]
+		c, ok := colors[key]
 		box.Set("checked", ok && c != nil)
 		if ok {
 			var rgb []float64
@@ -712,7 +714,7 @@ func (a *App) syncWorld() {
 	each("[data-knob]", func(row js.Value) {
 		key := row.Get("dataset").Get("knob").String()
 		total++
-		reason := model.WorldControlRequirement(key, a.worldValues())
+		reason := model.WorldControlRequirement(key, values)
 		row.Call("querySelector", ".control-requirement").Set("textContent", reason)
 		row.Call("querySelector", ".control-requirement").Set("hidden", reason == "")
 		input := row.Call("querySelector", "input,select")

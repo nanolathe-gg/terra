@@ -15,6 +15,8 @@ import (
 
 var hoverNode = -1
 var hoverPoint *model.Point
+var overlayFrame js.Func
+var overlayQueued bool
 
 type gesture struct {
 	Kind                                string
@@ -30,6 +32,12 @@ type gesture struct {
 }
 
 func (a *App) mountCanvas() {
+	overlayFrame = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		overlayQueued = false
+		a.paintOverlay()
+		return nil
+	})
+	callbacks = append(callbacks, overlayFrame)
 	a.view = viewState{Scale: 1, Fit: true}
 	a.output = create("canvas", "", "")
 	a.frame = create("canvas", "", "")
@@ -568,7 +576,17 @@ func (a *App) pick(p model.Point) int {
 func (a *App) present() {
 	a.paintTiles()
 }
+
+// Input and completed worker tiles can invalidate the overlay in the same
+// frame. Paint once with the latest graph and height samples.
 func (a *App) drawOverlay() {
+	if overlayQueued {
+		return
+	}
+	overlayQueued = true
+	js.Global().Call("requestAnimationFrame", overlayFrame)
+}
+func (a *App) paintOverlay() {
 	c := element("overlay")
 	if !exists(c) || a.view.Scale <= 0 {
 		return

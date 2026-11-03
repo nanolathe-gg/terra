@@ -108,7 +108,12 @@ func (a *App) finishLayout() {
 	})
 }
 func (a *App) worldValues() map[string]any {
-	v := clone(a.Knobs)
+	// Requirement checks only add derived top-level values. Copy the map once;
+	// serializing every nested value per panel row stalls pointer-down.
+	v := make(map[string]any, len(a.Knobs)+12)
+	for key, value := range a.Knobs {
+		v[key] = value
+	}
 	layers, _ := a.Config["layers"].([]any)
 	for _, pair := range [][2]string{{"ring", "ringLayer"}, {"beach", "beachLayer"}} {
 		v[pair[1]] = 0.0
