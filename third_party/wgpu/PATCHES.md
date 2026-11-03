@@ -21,3 +21,10 @@ backend without reducing depth precision. Its native material mip passes copy
 previous levels to separate GPU textures to avoid the upstream native tracker's
 whole-texture read/write conflict across distinct mip subresources. No shader
 arithmetic or texture data is changed by either workaround.
+
+Browser queue completion: `Queue.OnSubmittedWorkDone(callback)` exposes the
+standard WebGPU queue promise without awaiting it. The terrain worker captures
+this fence immediately after presenting a GPU tile, transfers its ImageBitmap,
+and waits before submitting the next tile. Both JavaScript callbacks are
+released on settlement. This bounds in-flight viewport work while avoiding a
+completion wait before a ready image is posted to the UI.

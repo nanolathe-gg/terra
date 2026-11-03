@@ -3,6 +3,7 @@
 package wgpu
 
 import (
+	"fmt"
 	"syscall/js"
 
 	"github.com/gogpu/wgpu/internal/browser"
@@ -100,4 +101,34 @@ func (q *Queue) SetSwapchainSuppressed(_ bool) {}
 // On browser, submission indices are not tracked. Returns 0.
 func (q *Queue) LastSubmissionIndex() uint64 {
 	return 0
+}
+
+// OnSubmittedWorkDone captures completion of work already submitted to this
+// queue. It returns immediately; callback runs once when the browser promise
+// settles. Viewport clients can present first and wait before submitting the
+// next bounded tile, matching WebGPU queue completion semantics.
+func (q *Queue) OnSubmittedWorkDone(callback func(error)) {
+	if q.released {
+		callback(ErrReleased)
+		return
+	}
+	var done, failed js.Func
+	release := func() { done.Release(); failed.Release() }
+	done = js.FuncOf(func(_ js.Value, _ []js.Value) any { defer release(); callback(nil); return nil })
+	failed = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		defer release()
+		message := "GPU queue completion failed"
+		if len(args) > 0 && !args[0].IsUndefined() && !args[0].IsNull() {
+			if args[0].Type() != js.TypeObject {
+				message = args[0].String()
+			} else if m := args[0].Get("message"); !m.IsUndefined() && !m.IsNull() {
+				message = m.String()
+			} else {
+				message = args[0].String()
+			}
+		}
+		callback(fmt.Errorf("%s", message))
+		return nil
+	})
+	q.browser.Ref().Call("onSubmittedWorkDone").Call("then", done, failed)
 }

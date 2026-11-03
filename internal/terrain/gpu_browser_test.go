@@ -56,6 +56,13 @@ func TestBrowserViewValidationReportsErrors(t *testing.T) {
 	if b != nil {
 		defer b.Release()
 	}
+	enc, submitErr := g.Device.CreateCommandEncoder(nil)
+	if submitErr != nil {
+		t.Fatal(submitErr)
+	}
+	if submitErr = g.Submit(enc); submitErr != nil {
+		t.Fatal(submitErr)
+	}
 	finish(&e)
 	restore()
 	select {
@@ -192,6 +199,7 @@ func TestBrowserTerrain(t *testing.T) {
 		}
 		t.Logf("GPU bitmap %dx%d exact SHA256 %x", size[0], size[1], sha256.Sum256(actual))
 	}
+	restoreView := g.beginViewValidation()
 	window.SkipRGBA = true
 	skipped, err := r.RenderWindow(context.Background(), WindowInput{Window: window, Region: reg, Feed: &GPUFeed{Planes: pb, Masks: mb, Weather: er.Weather, Maps: er.Maps, Field: mf, Grid: 33, Cells: 33 * 33, MaskCount: 25}}, DefaultDrawOptions(config))
 	if err != nil {
@@ -205,6 +213,23 @@ func TestBrowserTerrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	bitmap.Call("close")
+	restoreView()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if e := r.WaitView(canceled); e != context.Canceled {
+		t.Fatalf("canceled fence wait: %v", e)
+	}
+	if e := r.WaitView(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if pending := r.presentation.(*browserPresenter).done; pending != nil {
+		t.Fatal("completed view fence retained")
+	}
+	var finalValidation error
+	g.scope()(&finalValidation)
+	if finalValidation != nil {
+		t.Fatal(finalValidation)
+	}
 
 }
 
