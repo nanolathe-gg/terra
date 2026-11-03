@@ -129,7 +129,9 @@ func (a *App) worldValues() map[string]any {
 	v["capBed"] = 0.0
 	column := a.Config["column"]
 	if column != nil {
-		v["column"] = 1.0
+		if raw, ok := column.(map[string]any); ok && raw["sections"] != nil {
+			v["column"] = 1.0
+		}
 		var c model.Column
 		b, _ := json.Marshal(column)
 		if json.Unmarshal(b, &c) == nil {
