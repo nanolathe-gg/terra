@@ -110,4 +110,4 @@ for (const variant of ['open', 'px']) {
 if (impact) for (const r of rows.filter(r => r.blocks)) console.log(`${r.kind} ${r.variant} ${r.control}: ${(100*r.blocks.share).toFixed(1)}% of ${r.blocks.total} affected-footprint blocks changed`);
 console.log('\n! shown but dead   - hidden from this stroke');
 if (logs.length) console.log('console:', logs.slice(0, 5));
-process.exit(logs.length ? 1 : 0);
+process.exit(logs.length || (impact && rows.some(r => r.blocks && (r.blocks.total < 4 || r.blocks.share < .05))) ? 1 : 0);
