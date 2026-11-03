@@ -61,7 +61,7 @@ try {
   const schema = await ev('terraformAudit.fields');
   const shown = async (key, kind, card) => {
     const field = schema.find(f => f[0] === key);
-    if (!(field ? field[3].includes(kind) : key === 'curve' && SECTION.includes(kind))) return false;
+    if (!(field ? field[3].includes(kind) : (key === 'curve' || key === 'softness') && SECTION.includes(kind))) return false;
     const p = {softness: (card.softness ?? 50) / 100, rough: (card.roughness ?? 35) / 100,
       radius: (card.diameter ?? 200) / 2, amount: card.amount ?? 70};
     for (const f of schema) if (card[f[0]] !== undefined) p[f[0]] = card[f[0]] / f[7];
