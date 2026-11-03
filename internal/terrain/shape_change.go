@@ -3,7 +3,6 @@ package terrain
 import (
 	"fmt"
 	"math"
-	"reflect"
 
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
@@ -12,18 +11,22 @@ import (
 // graph edit, including downstream blur, coast and prefix-read dependencies.
 // A nil region means identical graphs; full means the whole map is affected.
 func ChangedShapeRegion(before, after []model.Node, c ShapeWindowConfig) (region *CellRect, full bool, err error) {
+	return changedShapeRegion(before, after, c, true)
+}
+
+func changedShapeRegion(before, after []model.Node, c ShapeWindowConfig, optimizeTail bool) (region *CellRect, full bool, err error) {
 	if c.Grid <= 0 || c.Spacing <= 0 {
 		return nil, true, fmt.Errorf("invalid shape geometry")
 	}
 	first := 0
-	for first < len(before) && first < len(after) && reflect.DeepEqual(before[first], after[first]) {
+	for first < len(before) && first < len(after) && model.NodeEqual(before[first], after[first]) {
 		first++
 	}
 	if first == len(before) && first == len(after) {
 		return nil, false, nil
 	}
 	oldEnd, newEnd := len(before), len(after)
-	for oldEnd > first && newEnd > first && reflect.DeepEqual(before[oldEnd-1], after[newEnd-1]) {
+	for oldEnd > first && newEnd > first && model.NodeEqual(before[oldEnd-1], after[newEnd-1]) {
 		oldEnd--
 		newEnd--
 	}
@@ -33,9 +36,13 @@ func ChangedShapeRegion(before, after []model.Node, c ShapeWindowConfig) (region
 		node int
 		op   PreparedOp
 	}
+	tailOnly := optimizeTail && oldEnd == len(before) && newEnd == len(after)
 	prep := func(nodes []model.Node) ([]indexed, error) {
 		var out []indexed
 		for i, n := range nodes {
+			if tailOnly && i < first {
+				continue
+			}
 			shapes, e := PrepareShapes(n, geom, c.Defaults)
 			if e != nil {
 				return nil, e
@@ -106,6 +113,9 @@ func ChangedShapeRegion(before, after []model.Node, c ShapeWindowConfig) (region
 	}
 	if region == nil {
 		return nil, false, nil
+	}
+	if tailOnly {
+		return region, *region == whole, nil
 	}
 	propagate := func(indexedOps []indexed) bool {
 		ops := make([]PreparedOp, len(indexedOps))

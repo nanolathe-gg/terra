@@ -10,7 +10,6 @@ import (
 	"github.com/gogpu/wgpu"
 	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
-	"reflect"
 	"time"
 )
 
@@ -126,7 +125,7 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 		s.shapeKey = key
 		s.shapePages = map[[2]int]*weatherFeed{}
 	}
-	changed := !s.shapeNodesSet || !reflect.DeepEqual(s.shapeNodes, nodes)
+	changed := !s.shapeNodesSet || !model.NodesEqual(s.shapeNodes, nodes)
 	if s.shapeNodesSet && changed {
 		diffStart := time.Now()
 		dirty, full, e := ChangedShapeRegion(s.shapeNodes, nodes, c)

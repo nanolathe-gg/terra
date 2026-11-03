@@ -22,13 +22,33 @@ type preparedGraph struct {
 	nodes           []preparedNode
 	ops             []PreparedOp
 	segments, masks []byte
+	bytes           int
 }
 
 func (s *ShapeEngine) prepareGraph(nodes []model.Node, c ShapeWindowConfig) ([]PreparedOp, []byte, []byte, error) {
 	geometry := ShapeGeometry{Grid: c.Grid, Spacing: c.Spacing, RefSpacing: c.RefSpacing}
 	old := s.prepared
-	if old != nil && (old.geometry != geometry || !reflect.DeepEqual(old.defaults, c.Defaults)) {
+	if old != nil && (old.geometry != geometry || !model.ValueEqual(old.defaults, c.Defaults)) {
 		old = nil
+	}
+	limit := int64(preparedGraphLimit)
+	if c.Memory.Heap > 0 {
+		limit = min(limit, c.Memory.Heap/32)
+	}
+	if old != nil && len(old.nodes) == len(nodes) {
+		same := true
+		for i := range nodes {
+			if !model.NodeEqual(old.nodes[i].node, nodes[i]) {
+				same = false
+				break
+			}
+		}
+		if same {
+			if int64(old.bytes) > limit {
+				s.prepared = nil
+			}
+			return old.ops, old.segments, old.masks, nil
+		}
 	}
 	next := &preparedGraph{geometry: geometry, nodes: make([]preparedNode, len(nodes))}
 	same := old != nil && len(old.nodes) == len(nodes)
@@ -38,7 +58,7 @@ func (s *ShapeEngine) prepareGraph(nodes []model.Node, c ShapeWindowConfig) ([]P
 		var prepared []PreparedShape
 		var snapshot model.Node
 		var nodeBytes int
-		if old != nil && i < len(old.nodes) && reflect.DeepEqual(old.nodes[i].node, node) {
+		if old != nil && i < len(old.nodes) && model.NodeEqual(old.nodes[i].node, node) {
 			prepared, snapshot, nodeBytes = old.nodes[i].shapes, old.nodes[i].node, old.nodes[i].bytes
 		} else {
 			same = false
@@ -58,10 +78,7 @@ func (s *ShapeEngine) prepareGraph(nodes []model.Node, c ShapeWindowConfig) ([]P
 			estimate += 2048 + len(shape.Segments)*256 + len(shape.Writes)*64 + len(shape.Extra)*64
 		}
 	}
-	limit := int64(preparedGraphLimit)
-	if c.Memory.Heap > 0 {
-		limit = min(limit, c.Memory.Heap/32)
-	}
+
 	if same {
 		estimate += len(old.segments) + len(old.masks) + len(old.ops)*2048
 		if int64(estimate) > limit {
@@ -75,7 +92,7 @@ func (s *ShapeEngine) prepareGraph(nodes []model.Node, c ShapeWindowConfig) ([]P
 		if c.Defaults != nil {
 			next.defaults = model.CloneValue(c.Defaults).(map[string]any)
 		}
-		next.ops, next.segments, next.masks = ops, segments, masks
+		next.ops, next.segments, next.masks, next.bytes = ops, segments, masks, estimate
 		s.prepared = next
 	} else {
 		s.prepared = nil

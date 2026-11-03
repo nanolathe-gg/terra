@@ -2,6 +2,7 @@ package terrain
 
 import (
 	"github.com/nanolathe-gg/terraform/internal/model"
+	"reflect"
 	"testing"
 )
 
@@ -48,5 +49,22 @@ func TestChangedShapeRegionPropagatesPrefixAndSmooth(t *testing.T) {
 	r, _, err = ChangedShapeRegion([]model.Node{low, smooth}, []model.Node{high, smooth}, cfg)
 	if err != nil || r == nil || r.X1 <= 330 {
 		t.Fatalf("smooth influence missing: %+v %v", r, err)
+	}
+}
+
+func TestChangedShapeRegionTailMatchesFullPlanner(t *testing.T) {
+	c := ShapeWindowConfig{Grid: 1025, Spacing: 16, RefSpacing: 16, Defaults: map[string]any{}}
+	prefix := []model.Node{shapeNode("hill", 100, 100, 90, 20), shapeNode("crater", 300, 300, 90, 20)}
+	cases := [][2][]model.Node{
+		{append(append([]model.Node{}, prefix...), shapeNode("hill", 900, 800, 90, 20)), append(append([]model.Node{}, prefix...), shapeNode("hill", 1100, 1000, 90, 20))},
+		{prefix, append(append([]model.Node{}, prefix...), shapeNode("smooth", 900, 800, 90, 20))},
+		{append(append([]model.Node{}, prefix...), shapeNode("crater", 900, 800, 90, 20)), prefix},
+	}
+	for i, p := range cases {
+		fast, ff, fe := changedShapeRegion(p[0], p[1], c, true)
+		slow, sf, se := changedShapeRegion(p[0], p[1], c, false)
+		if fe != nil || se != nil || ff != sf || !reflect.DeepEqual(fast, slow) {
+			t.Fatalf("case %d: fast %v/%v/%v full %v/%v/%v", i, fast, ff, fe, slow, sf, se)
+		}
 	}
 }
