@@ -22,7 +22,7 @@ const server = opt('--server', 'http://127.0.0.1:8867'), port = Number(opt('--po
 const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out', 'perf-out'), label = opt('--label', '');
 const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : fallback; };
 const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
-const diagnosticGPU = flag('--diagnostic-gpu'), verifyPixels = flag('--verify-pixels'), selfTest = flag('--self-test');
+const diagnosticGPU = flag('--diagnostic-gpu'), verifyPixels = flag('--verify-pixels'), verifyPicked = flag('--verify-picked'), selfTest = flag('--self-test');
 const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
 const dragTool = opt('--tool', 'hill');   // H27: the brush the drag draws (hill, or landform to measure it beside a hill)
 // A matching presentation must be a real tile drawing from the move's source
@@ -53,7 +53,7 @@ const q = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) =
 
 // ---------------------------------------------------------------- hooks, installed before the page's own scripts
 const HOOKS = `(() => {
-const diagnosticGPU = ${diagnosticGPU}, verifyPixels = ${verifyPixels};
+const diagnosticGPU = ${diagnosticGPU}, verifyPixels = ${verifyPixels}, verifyPicked = ${verifyPicked};
 const bitmapInfo = new WeakMap(), canvasInfo = new WeakMap(), presentedBitmaps = new WeakSet();
 const P = window.__perf = {workerProfiles: [], worker: false, ev: [], gpu: [], passes: [], waits: [], images: [], draws: [], frames: [], stage: {}, ctx: ''};
 const now = () => performance.now();
@@ -183,6 +183,10 @@ const wrap = (obj, name, stage, tag) => {
 function patch(c) {
  if(!c?.renderer){P.worker=true;return;}
   const r = c.renderer, Base = Object.getPrototypeOf(Object.getPrototypeOf(r));
+  if (verifyPicked && window.sculptRegion?.previewStroke) {
+    const original = window.sculptRegion.previewStroke;
+    window.sculptRegion.previewStroke = function(points, ...args) { const tip = points?.at(-1); if (tip) P.strokeTip = {x:tip.x,y:tip.y}; return original.call(this,points,...args); };
+  }
   if (diagnosticGPU) r.timer = () => null; // pass hooks provide the diagnostic timings
   const rc = r.renderChunk.bind(r);
   r.renderChunk = async (request, options) => {
@@ -256,7 +260,7 @@ const ev = async expression => { const r = await Promise.race([send('Runtime.eva
 const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
 
 const url = `${server}/sculpt?biome=${scene.biome || 'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
-const result = {mode, label, query: extraQuery, scene: sceneFile, diagnosticGPU, verifyPixels, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
+const result = {mode, label, query: extraQuery, scene: sceneFile, diagnosticGPU, verifyPixels, verifyPicked, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
 const stable = async (quietMs = 1500, limitMs = 120000) => {
   if(await ev('Boolean(window.sculptCanvas?.stats?.().worker)')){await ev('sculptCanvas.idle()');return true;}   // wait for no bake/erode/read event for quietMs
   const t0 = Date.now();
@@ -346,7 +350,7 @@ try {
   // H6b: move-to-picture latency. Each move is marked before it is sent and with the fields' revision after it was handled; a bake carries the
   // revision of the fields it read (a fed bake: the revision submitted when it took the buffers; a CPU bake: the last region read before it); the
   // picture is the first chunk paint after that bake ends.
-  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; await ev(`__perf.mark('move', {k: ${i}, worldX: ${dragView.x + (cx + i * 9 - box.x) / dragView.scale}, worldY: ${dragView.y + (cy + Math.sin(i / 6) * 60 - box.y) / dragView.scale}, radius: ${brushDiameter / 2}, screenX: ${cx + i * 9 - box.x}, screenY: ${cy + Math.sin(i / 6) * 60 - box.y}})`); await mouse('mouseMoved', cx + i * 9, cy + Math.sin(i / 6) * 60); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats?.()?.revision ?? window.sculptCanvas?.stats().revision ?? null})`); await sleep(30); }
+  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; await ev(`__perf.mark('move', {k: ${i}, worldX: ${dragView.x + (cx + i * 9 - box.x) / dragView.scale}, worldY: ${dragView.y + (cy + Math.sin(i / 6) * 60 - box.y) / dragView.scale}, radius: ${brushDiameter / 2}, screenX: ${cx + i * 9 - box.x}, screenY: ${cy + Math.sin(i / 6) * 60 - box.y}})`); await mouse('mouseMoved', cx + i * 9, cy + Math.sin(i / 6) * 60); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats?.()?.revision ?? window.sculptCanvas?.stats().revision ?? null, picked: ${verifyPicked} ? (window.sculptDebug?.strokeTip?.() ?? __perf.strokeTip ?? null) : null})`); await sleep(30); }
   // Keep the pointer held while the final move has an opportunity to present.
   await sleep(500);
   const frames = await ev('__perf.frameStop()');
@@ -372,11 +376,12 @@ try {
       lat.push(p.t - m.t);
     }
     writeFileSync(`${out}/${mode}-events-drag.json`, JSON.stringify({t0: dragT0, events, draws}));
+    if (verifyPicked) { const picked = events.filter(e => e.type === 'rev').map(e => ({k:e.k, ...e.picked})); result.drag.pickedPath = picked; result.drag.pickedMissing = picked.filter(p => !Number.isFinite(p.x) || !Number.isFinite(p.y)).length; }
     result.drag.latencyAll = {available: false, reason: 'Whole-dirty-region presentation is not certified by tile counts; unchanged cached tiles may remain valid.'};
     if (verifyPixels) { const changed = new Set(events.filter(e => e.type === 'pixel-change').map(e => e.k)); result.drag.pixelProbe = {size: '16x16 at pointer', verified: changed.size, unverified: moves - changed.size, errors: events.filter(e => e.type === 'pixel-probe-error').length, note: 'Diagnostic only: canvas readback can perturb performance.'}; }
     result.drag.quarterBakes = bakes.filter(b => b.level > 1).length; result.drag.bakes = bakes.length;
     result.drag.latencyAny = {moves: marks.size, measured: latAny.length, censored: censoredAny, p50: q(latAny, .5), p95: q(latAny, .95), max: Math.max(...latAny, 0), basis: 'matching source revision, first actual new bitmap drawn anywhere visible'};
-    result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), basis: 'matching source revision, actual bitmap draw, visible tile intersects brush footprint'};
+    result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), basis: 'matching source revision, visible tile overlaps projected pointer-radius square (approximate brush feedback)'};
   }
 
   if (only === 'drag') throw new Error('stopped after drag (--only)');
@@ -431,4 +436,4 @@ try {
   ws.close(); chrome.kill(); await sleep(500);
 }
 // A timer or the socket can keep node alive after the JSON is written; --only stops are not failures.
-process.exit((result.error && !result.error.includes('(--only)')) || (result.drag?.latency?.censored > 0) || (result.drag?.latencyAny?.censored > 0) || (result.drag?.pixelProbe?.unverified > 0) || (result.drag?.pixelProbe?.errors > 0) ? 1 : 0);
+process.exit((result.error && !result.error.includes('(--only)')) || (result.drag?.latency?.censored > 0) || (result.drag?.latencyAny?.censored > 0) || (result.drag?.pixelProbe?.unverified > 0) || (result.drag?.pixelProbe?.errors > 0) || (result.drag?.pickedMissing > 0) ? 1 : 0);
