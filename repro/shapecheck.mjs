@@ -38,10 +38,10 @@ for (const file of scenes) {
     const r = await ev('sculptDebug.shapeCompare()');
     writeFileSync(`${out}/${name}.json`, JSON.stringify({scene: file, sceneMs, console: logs.slice(0, 6), ...r}, null, 1));
     if (r.error) { console.log(`${name}: ${r.error}`); bad++; continue; }
-    const rep = Object.values(r.repeat.planes).some(p => p.max > 0);
-    console.log(`${name}: ${rep ? 'REPEAT DIFFERS' : 'repeat identical'} (two GPU runs, ${Object.keys(r.repeat.planes).length} planes)`);
+    const rep = Object.values(r.repeat).some(p => p.cells > 0 || p.nonFinite > 0);
+    console.log(`${name}: ${rep ? 'REPEAT DIFFERS' : 'repeat identical'} (two GPU runs, ${Object.keys(r.repeat).length} planes)`);
     if (rep) bad++;
-    if (logs.length) console.log('  console errors:', logs.slice(0, 3));
+    if (logs.length) { console.log('  console errors:', logs.slice(0, 3)); bad++; }
   } finally { chrome.kill(); await sleep(500); }
 }
 process.exit(bad ? 1 : 0);

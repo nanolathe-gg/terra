@@ -4,7 +4,6 @@
 //   node repro/curveedit.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,desert] [--out dir]
 // Prints one JSON line per world; exit code 1 on any failed check or a console error.
 import {cdpPortFree} from './cdp-port.mjs';
-import {FORM_NAMES, FORMS} from '../sculpt-shape-presets.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 
@@ -51,7 +50,7 @@ const ready = async ev => {
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 for (const world of worlds) {
-  const url = `${server}/sculpt?biome=${world}&gpuMB=512&heapMB=1536`;   // no scratch: the autosave is what the reload reads
+  const url = `${server}/sculpt?biome=${world}&audit=1&gpuMB=512&heapMB=1536`;   // no scratch: the autosave is what the reload reads
   const r = await session(url, async ({send, ev, logs}) => {
     const res = {world, checks: {}};
     const check = (name, ok, detail) => { res.checks[name] = ok ? 'ok' : `FAILED ${detail === undefined ? '' : JSON.stringify(detail)}`; if (!ok) bad++; };
@@ -78,7 +77,7 @@ for (const world of worlds) {
       // 1. every form at 140 and 560 px
       for (const size of [144, 560]) {   // the diameter slider steps by 8, so 144 is its nearest to 140
         await brush(); await setValue('diameter', size);
-        for (const form of FORM_NAMES) {
+        for (const form of await ev(`[...document.querySelectorAll('#curve-form option')].map(o => o.value).filter(Boolean)`)) {
           await brush(); await setValue('curve-form', form, 'change');
           const before = (await nodes()).length;
           await stroke();
@@ -89,7 +88,7 @@ for (const world of worlds) {
       }
       // 2. knots on the brush: drag, add, remove, reset (the cliff form, softness as it stands)
       await brush(); await setValue('diameter', 200); await setValue('curve-form', 'cliff', 'change');
-      let b = await box(); const base = FORMS.cliff(Number(await ev(`document.getElementById('softness').value`)) / 100).knots;
+      let b = await box(); const base = await ev(`sculptDebug.curveFormKnots('cliff', Number(document.getElementById('softness').value) / 100)`);
       check('the form shows its knots as handles', (await ev('sculptDebug.curve()'))?.form === 'cliff' && !(await ev('sculptDebug.curve()')).knots);
       await drag(knotXY(b, ...base[3]), knotXY(b, base[3][0], base[3][1] + .15));
       let c = await ev('sculptDebug.curve()');

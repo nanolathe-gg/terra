@@ -19,6 +19,12 @@ func (a *App) mountAudit() {
 	if !a.Query.Has("audit") {
 		return
 	}
+	debug := js.Global().Get("sculptDebug")
+	expose(debug, "curve", func([]js.Value) any { return jsObject(a.Curve) })
+	expose(debug, "curveFormKnots", func(args []js.Value) any {
+		knots, _ := model.FormKnots(args[0].String(), args[1].Float())
+		return jsObject(knots)
+	})
 	audit := js.Global().Get("Object").New()
 	js.Global().Set("terraformAudit", audit)
 	variant := js.Global().Get("Map").New()
