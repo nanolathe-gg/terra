@@ -116,6 +116,18 @@ func (a *App) mountDebug() {
 		}
 		return jsObject(a.Nodes)
 	})
+	expose(d, "uniforms", func([]js.Value) any {
+		return promise(func() (any, error) {
+			if e := a.idle(); e != nil {
+				return nil, e
+			}
+			m, e := a.rpcJob(context.Background(), "uniforms", renderjob.Tile{})
+			if e != nil {
+				return nil, e
+			}
+			return m.Get("result"), nil
+		})
+	})
 	expose(d, "sketch", func([]js.Value) any { return jsObject(a.Sketch()) })
 	expose(d, "loadSketch", func(args []js.Value) any {
 		b := js.Global().Get("JSON").Call("stringify", args[0]).String()

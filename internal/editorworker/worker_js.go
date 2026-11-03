@@ -17,6 +17,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/nanolathe-gg/terraform/internal/model"
 	"github.com/nanolathe-gg/terraform/internal/renderjob"
 	"github.com/nanolathe-gg/terraform/internal/terrain"
 )
@@ -132,6 +133,11 @@ func loop() {
 			if job.Kind == "cancel" {
 				return
 			}
+			if job.Kind == "uniforms" {
+				b, _ := json.Marshal(engine.UniformSnapshot())
+				post(map[string]any{"kind": "uniforms", "id": job.ID, "result": js.Global().Get("JSON").Call("parse", string(b))})
+				return
+			}
 			if job.Kind == "authored" {
 				if len(job.Tiles) != 1 {
 					post(map[string]any{"kind": "error", "id": job.ID, "error": "Expected one cell window."})
@@ -179,6 +185,74 @@ func loop() {
 			var options terrain.DrawOptions
 			b, _ := json.Marshal(job.Options)
 			_ = json.Unmarshal(b, &options)
+			if job.Kind == "fill" {
+				f := job.Fill
+				if f == nil || f.Cols < 1 || f.Rows < 1 || f.Cols > 1280 || f.Rows > 1280 {
+					post(map[string]any{"kind": "error", "id": job.ID, "error": "Invalid fill dimensions."})
+					return
+				}
+				bounds, err := model.FeatureRegionBounds(f.Region, f.Cols, f.Rows, f.Settings.Radius)
+				if err != nil {
+					post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+					return
+				}
+				width, height := bounds.X1-bounds.X0+1, bounds.Z1-bounds.Z0+1
+				values := make([]float32, width*height)
+				for z := bounds.Z0; z < bounds.Z1; z += 32 {
+					for x := bounds.X0; x < bounds.X1; x += 32 {
+						if ctx.Err() != nil || generation != job.ID {
+							return
+						}
+						cw, ch := min(32, bounds.X1-x), min(32, bounds.Z1-z)
+						r, err := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, terrain.SceneWindow{X: x * 16, Y: z * 16, Width: cw * 16, Height: ch * 16, Scale: 1, ReadHeights: true, HeightsOnly: true}, options)
+						if err != nil {
+							if ctx.Err() == nil {
+								post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+							}
+							return
+						}
+						for j := 0; j <= ch; j++ {
+							for i := 0; i <= cw; i++ {
+								fx, fy := (float64((x+i)*16)-r.HeightOriginX)/r.HeightSpacing, (float64((z+j)*16)-r.HeightOriginY)/r.HeightSpacing
+								ix, iy := int(math.Floor(fx)), int(math.Floor(fy))
+								if ix < 0 || iy < 0 || ix >= r.HeightWidth || iy >= r.HeightHeight {
+									post(map[string]any{"kind": "error", "id": job.ID, "error": "Fill height patch does not cover map cell corners."})
+									return
+								}
+								jx, jy := min(ix+1, r.HeightWidth-1), min(iy+1, r.HeightHeight-1)
+								tx, ty := fx-float64(ix), fy-float64(iy)
+								at := func(x, y int) float64 { return float64(r.Heights[y*r.HeightWidth+x]) }
+								values[(z+j-bounds.Z0)*width+x+i-bounds.X0] = float32((at(ix, iy)*(1-tx)+at(jx, iy)*tx)*(1-ty) + (at(ix, jy)*(1-tx)+at(jx, jy)*tx)*ty)
+							}
+						}
+						time.Sleep(time.Millisecond)
+					}
+				}
+				sample := func(x, z float64) float64 {
+					i, j := int(x/16)-bounds.X0, int(z/16)-bounds.Z0
+					if i < 0 || j < 0 || i >= width || j >= height {
+						return math.NaN()
+					}
+					return float64(values[j*width+i])
+				}
+				yield := func() error {
+					time.Sleep(time.Millisecond)
+					if generation != job.ID {
+						return context.Canceled
+					}
+					return ctx.Err()
+				}
+				placed, err := model.FillFeaturesYield(f.Cols, f.Rows, f.Sea, sample, f.Definitions, f.Existing, f.Starts, f.DepositName, f.Region, f.Settings, yield)
+				if err != nil {
+					if ctx.Err() == nil && generation == job.ID {
+						post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+					}
+					return
+				}
+				b, _ := json.Marshal(placed)
+				post(map[string]any{"kind": "fill", "id": job.ID, "placements": js.Global().Get("JSON").Call("parse", string(b))})
+				return
+			}
 			start := time.Now()
 			for index, tile := range job.Tiles {
 				if ctx.Err() != nil || generation != job.ID {
@@ -186,7 +260,7 @@ func loop() {
 				}
 				tileStart := time.Now()
 				post(map[string]any{"kind": "render-start", "id": job.ID, "x": tile.X, "y": tile.Y, "width": tile.Width, "height": tile.Height, "scale": tile.Scale})
-				r, e := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, terrain.SceneWindow{X: tile.X, Y: tile.Y, Width: tile.Width, Height: tile.Height, Scale: tile.Scale, Preview: job.Kind == "view" && tile.Scale > 1, ExportArt: job.Kind == "export", ReadHeights: job.Kind != "export"}, options)
+				r, e := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, terrain.SceneWindow{X: tile.X, Y: tile.Y, Width: tile.Width, Height: tile.Height, Scale: tile.Scale, Preview: job.Kind == "view" && job.Options["Preview"] == true, ExportArt: job.Kind == "export", ReadHeights: job.Kind != "export", HeightsOnly: job.Kind == "heights"}, options)
 				if e != nil {
 					if ctx.Err() == nil {
 						post(map[string]any{"kind": "error", "id": job.ID, "error": e.Error()})

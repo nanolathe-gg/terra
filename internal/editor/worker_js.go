@@ -156,6 +156,7 @@ func (a *App) queueView() {
 		return
 	}
 	job := a.job("view", tiles)
+	job.Options["Preview"] = a.view.Fit
 	a.activeID = job.ID
 	a.rendering = true
 	a.worker.Call("postMessage", jsObject(job))
@@ -252,7 +253,9 @@ func (a *App) rpcJob(ctx context.Context, kind string, tile renderjob.Tile) (js.
 	if !a.workerReady {
 		return js.Undefined(), fmt.Errorf("Wait for the terrain worker.")
 	}
-	job := a.job(kind, []renderjob.Tile{tile})
+	return a.rpcRequest(ctx, a.job(kind, []renderjob.Tile{tile}))
+}
+func (a *App) rpcRequest(ctx context.Context, job renderjob.Request) (js.Value, error) {
 	a.rendering = false
 	defer a.Schedule()
 	ch := make(chan js.Value, 4)
@@ -269,7 +272,7 @@ func (a *App) rpcJob(ctx context.Context, kind string, tile renderjob.Tile) (js.
 			switch msg.Get("kind").String() {
 			case "error":
 				return js.Undefined(), fmt.Errorf("%s", msg.Get("error").String())
-			case "exportTile", "heights", "tile", "check", "authored":
+			case "exportTile", "heights", "tile", "check", "authored", "uniforms", "fill":
 				return msg, nil
 			}
 		}

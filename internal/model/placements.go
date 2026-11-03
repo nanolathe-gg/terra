@@ -84,6 +84,12 @@ func (s *PlacementStore) trimGenerated() int {
 	s.Features = kept
 	return removed
 }
+
+// SetMargin reapplies the exclusion zone to generated features.
+func (s *PlacementStore) SetMargin(margin float64) int {
+	s.Margin = margin
+	return s.trimGenerated()
+}
 func (s *PlacementStore) Add(name string, x, z int) (int, error) {
 	d, ok := s.def(name)
 	if !ok {

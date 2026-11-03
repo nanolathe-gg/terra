@@ -3,10 +3,13 @@
 package editor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/nanolathe-gg/terraform/internal/model"
+	"github.com/nanolathe-gg/terraform/internal/renderjob"
 	"math"
+	"sort"
 	"strings"
 	"syscall/js"
 )
@@ -17,13 +20,19 @@ type featureSprite struct {
 }
 type featureCatalogEntry struct {
 	model.FeatureDefinition
-	Sprite *featureSprite `json:"sprite"`
+	Sprite    *featureSprite `json:"sprite"`
+	Shadow    *featureSprite `json:"shadow"`
+	AnimTrans int            `json:"animTrans"`
+	ShadTrans int            `json:"shadTrans"`
 }
 type FeatureUI struct {
 	a                                *App
 	store                            *model.PlacementStore
 	defs                             []model.FeatureDefinition
 	sprites                          map[string]*featureSprite
+	shadows                          map[string]*featureSprite
+	transparency                     map[string][2]bool
+	hover                            *model.Point
 	images                           map[string]js.Value
 	root                             js.Value
 	mode, selected, kind, region     string
@@ -38,10 +47,11 @@ type FeatureUI struct {
 	ready                            bool
 	preserveFeatures                 bool
 	Active                           bool
+	cancelFill                       context.CancelFunc
 }
 
 func (a *App) mountFeatures() {
-	f := &FeatureUI{a: a, kind: "tree", region: "brush", density: 15, cluster: .5, margin: 96, radius: 128, gap: 1, seed: 2701, selectedFeature: -1, sprites: map[string]*featureSprite{}, images: map[string]js.Value{}}
+	f := &FeatureUI{a: a, kind: "tree", region: "brush", density: 15, cluster: .5, margin: 96, radius: 128, gap: 1, seed: 2701, selectedFeature: -1, sprites: map[string]*featureSprite{}, shadows: map[string]*featureSprite{}, transparency: map[string][2]bool{}, images: map[string]js.Value{}}
 	a.featureUI = f
 	root := create("section", "section", "")
 	f.root = root
@@ -64,6 +74,7 @@ func (a *App) mountFeatures() {
 		a.Selected = -1
 		a.PathMode = false
 		f.Active = true
+		f.hover = nil
 		if f.store.DepositName != "" {
 			f.mode = "deposit"
 		} else {
@@ -73,6 +84,12 @@ func (a *App) mountFeatures() {
 		a.drawOverlay()
 	})
 	q := func(sel string) js.Value { return root.Call("querySelector", sel) }
+	on(element("overlay"), "pointerleave", func(js.Value) {
+		if !f.dragging {
+			f.hover = nil
+			a.drawOverlay()
+		}
+	})
 	for _, item := range [][2]string{{"place", "Place feature"}, {"erase", "Erase"}, {"deposit", "Metal deposit"}, {"starts", "Starts"}, {"fill", "Fill"}} {
 		mode, label := item[0], item[1]
 		b := create("button", "", label)
@@ -85,6 +102,7 @@ func (a *App) mountFeatures() {
 				f.mode = mode
 				f.Active = true
 			}
+			f.hover = nil
 			f.Update()
 			element("overlay").Call("focus")
 			a.drawOverlay()
@@ -107,8 +125,16 @@ func (a *App) mountFeatures() {
 		f.selectedStart = min(f.selectedStart, len(f.store.Starts)-1)
 		f.changed()
 	})
-	on(q("[data-kind]"), "change", func(e js.Value) { f.kind = e.Get("target").Get("value").String(); f.mode = "fill"; f.Active = true })
-	on(q("[data-region]"), "change", func(e js.Value) { f.region = e.Get("target").Get("value").String(); f.mode = "fill"; f.Active = true })
+	on(q("[data-kind]"), "change", func(e js.Value) {
+		f.kind = e.Get("target").Get("value").String()
+		f.mode, f.Active = "fill", true
+		f.changed()
+	})
+	on(q("[data-region]"), "change", func(e js.Value) {
+		f.region = e.Get("target").Get("value").String()
+		f.mode, f.Active = "fill", true
+		f.changed()
+	})
 	for _, v := range []struct {
 		id, label string
 		value     float64
@@ -117,6 +143,7 @@ func (a *App) mountFeatures() {
 		label := create("label", "control", v.label)
 		in := create("input", "", "")
 		in.Set("type", "number")
+		attribute(in, "data-fill-setting", id)
 		in.Set("value", v.value)
 		on(in, "change", func(js.Value) {
 			n := in.Get("valueAsNumber").Float()
@@ -135,13 +162,12 @@ func (a *App) mountFeatures() {
 			case "margin":
 				f.margin = math.Max(0, math.Min(4096, n))
 				if f.store != nil {
-					f.store.Margin = f.margin
+					f.store.SetMargin(f.margin)
 				}
 			case "radius":
 				f.radius = math.Max(16, math.Min(1024, n))
 			}
-			f.sync()
-			a.Checkpoint()
+			f.changed()
 		})
 		label.Call("append", in)
 		q("[data-fill]").Call("append", label)
@@ -157,24 +183,40 @@ func (a *App) mountFeatures() {
 		}
 		for _, entry := range c.Features {
 			f.defs = append(f.defs, entry.FeatureDefinition)
-			if entry.Sprite != nil {
-				key := strings.ToLower(entry.Name)
-				f.sprites[key] = entry.Sprite
+			key := strings.ToLower(entry.Name)
+			f.transparency[key] = [2]bool{entry.AnimTrans != 0, entry.ShadTrans != 0}
+			loadSprite := func(sprite *featureSprite) {
+				if sprite == nil {
+					return
+				}
+				if _, ok := f.images[sprite.URL]; ok {
+					return
+				}
 				img := js.Global().Get("Image").New()
-				img.Set("src", entry.Sprite.URL)
-				f.images[key] = img
+				img.Set("src", sprite.URL)
+				f.images[sprite.URL] = img
 				on(img, "load", func(js.Value) { a.drawOverlay() })
+			}
+			if validFeatureSprite(a.World(), entry.Sprite) {
+				f.sprites[key] = entry.Sprite
+				loadSprite(entry.Sprite)
+			}
+			if validFeatureSprite(a.World(), entry.Shadow) {
+				f.shadows[key] = entry.Shadow
+				loadSprite(entry.Shadow)
 			}
 		}
 		f.store = model.NewPlacementStore(int(num(a.Map(), "playRight", 0)/16), int(num(a.Map(), "playBottom", 0)/16), f.defs, c.DepositName)
 		if err := f.load(); err != nil {
 			f.preserveFeatures = true
 			c.Unavailable = err.Error() + ". Start positions remain editable."
+		} else {
+			f.sync()
 		}
-		f.sync()
 		f.ready = true
 		list := q("[data-feature-list]")
 		refresh := func() {
+			clearEvents(list)
 			list.Call("replaceChildren")
 			kind := q("[data-filter]").Get("value").String()
 			for _, d := range f.defs {
@@ -234,11 +276,6 @@ func (f *FeatureUI) load() error {
 	if err := json.Unmarshal(b, &d); err != nil {
 		return fmt.Errorf("Invalid map placements: %w", err)
 	}
-	for _, p := range d.Features {
-		if _, err := next.Add(p.Name, p.X, p.Z); err != nil {
-			return fmt.Errorf("Feature %s: %w", p.Name, err)
-		}
-	}
 	if d.Starts != nil {
 		if len(d.Starts) < 1 || len(d.Starts) > 10 {
 			return fmt.Errorf("Map placements need 1–10 starts.")
@@ -250,6 +287,14 @@ func (f *FeatureUI) load() error {
 			}
 			if _, err := next.AddStart(p); err != nil {
 				return err
+			}
+		}
+	}
+	missingCatalog := len(f.defs) == 0 && len(d.Features) > 0
+	if !missingCatalog {
+		for _, p := range d.Features {
+			if _, err := next.Add(p.Name, p.X, p.Z); err != nil {
+				return fmt.Errorf("Feature %s: %w", p.Name, err)
 			}
 		}
 	}
@@ -284,7 +329,9 @@ func (f *FeatureUI) load() error {
 		}
 	}
 	f.store = next
-	f.preserveFeatures = false
+	f.selectedStart = max(0, min(f.selectedStart, len(next.Starts)-1))
+	f.selectedFeature = -1
+	f.preserveFeatures = missingCatalog
 	return nil
 }
 func (f *FeatureUI) sync() {
@@ -324,6 +371,17 @@ func (f *FeatureUI) Update() {
 		hidden("brush-panel", true)
 	}
 	disabled("feature-tool", !f.ready || f.a.Busy)
+	for key, value := range map[string]any{
+		"density": f.density, "cluster": f.cluster, "gap": f.gap,
+		"seed": f.seed, "margin": f.margin, "radius": f.radius,
+	} {
+		input := f.root.Call("querySelector", "[data-fill-setting='"+key+"']")
+		if exists(input) && !input.Equal(document.Get("activeElement")) {
+			input.Set("value", fmt.Sprint(value))
+		}
+	}
+	f.root.Call("querySelector", "[data-kind]").Set("value", f.kind)
+	f.root.Call("querySelector", "[data-region]").Set("value", f.region)
 	eachButtons := f.root.Call("querySelectorAll", "[data-feature-mode]")
 	for i := 0; i < eachButtons.Length(); i++ {
 		b := eachButtons.Index(i)
@@ -359,6 +417,7 @@ func (f *FeatureUI) PointerDown(p model.Point, e js.Value) bool {
 	if f == nil || !f.ready || !f.Active || f.mode == "" || f.a.Busy {
 		return false
 	}
+	f.hover = &model.Point{X: p.X, Y: p.Y}
 	x, z := int(math.Floor(p.X/16)), int(math.Floor(p.Y/16))
 	if f.mode == "erase" || f.mode == "starts" || f.mode == "fill" {
 		copy := clone(*f.store)
@@ -423,8 +482,12 @@ func (f *FeatureUI) PointerDown(p model.Point, e js.Value) bool {
 	return true
 }
 func (f *FeatureUI) PointerMove(p model.Point, e js.Value) bool {
-	if f == nil || !f.dragging || f.a.Busy {
+	if f == nil || !f.Active || f.mode == "" || f.a.Busy || (f.a.gesture != nil && f.a.gesture.Kind == "pan") {
 		return false
+	}
+	f.hover = &model.Point{X: p.X, Y: p.Y}
+	if !f.dragging {
+		return true
 	}
 	switch f.mode {
 	case "erase":
@@ -466,59 +529,276 @@ func (f *FeatureUI) PointerUp(p model.Point, e js.Value) bool {
 	}
 	f.snapshot = nil
 	if f.mode == "fill" {
-		region := model.FeatureRegion{Type: f.region, Points: f.points, X: p.X, Z: p.Y, Radius: f.radius, RadiusSet: true}
+		available := false
+		for _, d := range f.defs {
+			if d.Kind == f.kind {
+				available = true
+				break
+			}
+		}
+		if !available {
+			f.status("This world has no " + f.kind + " features to fill.")
+			return true
+		}
+		region := model.FeatureRegion{Type: f.region, Points: append([]model.FeaturePoint(nil), f.points...), X: p.X, Z: p.Y, Radius: f.radius, RadiusSet: true}
 		fill := model.FeatureFill{Kind: f.kind, Density: f.density, Clustering: f.cluster, Gap: f.gap, Seed: f.seed, Margin: f.margin, Radius: f.radius}
-		added, err := model.FillFeatures(f.store.Cols, f.store.Rows, num(f.a.Config, "seaLevel", 0), f.a.Sample, f.defs, f.store.Features, f.store.Starts, f.store.DepositName, region, fill)
-		if err != nil {
-			f.status(err.Error())
-		} else {
+		job := f.a.job("fill", nil)
+		job.Options["Weather"] = checked("weather")
+		job.Fill = &renderjob.FillRequest{Cols: f.store.Cols, Rows: f.store.Rows, Sea: num(f.a.Config, "seaLevel", 0), Definitions: clone(f.defs), Existing: clone(f.store.Features), Starts: clone(f.store.Starts), DepositName: f.store.DepositName, Region: region, Settings: fill}
+		revision := f.a.Revision
+		f.a.Busy = true
+		for _, id := range []string{"editor", "world-editor", "map-controls"} {
+			disabled(id, true)
+		}
+		controls := f.root.Call("querySelectorAll", "button,input,select")
+		for i := 0; i < controls.Length(); i++ {
+			controls.Index(i).Set("disabled", true)
+		}
+		f.status("Sampling terrain and placing features…")
+		ctx, cancel := context.WithCancel(context.Background())
+		f.cancelFill = cancel
+		go func() {
+			defer func() {
+				cancel()
+				f.cancelFill = nil
+				f.a.Busy = false
+				for _, id := range []string{"editor", "world-editor", "map-controls"} {
+					disabled(id, false)
+				}
+				for i := 0; i < controls.Length(); i++ {
+					controls.Index(i).Set("disabled", false)
+				}
+				f.a.Update()
+				f.a.Schedule()
+			}()
+			msg, err := f.a.rpcRequest(ctx, job)
+			if err != nil {
+				f.status(err.Error())
+				return
+			}
+			if revision != f.a.Revision {
+				f.status("Map changed during fill; no features were placed.")
+				return
+			}
+			var added []model.FeaturePlacement
+			if err = fromJS(msg.Get("placements"), &added); err != nil {
+				f.status(err.Error())
+				return
+			}
 			for _, v := range added {
 				f.store.Features = append(f.store.Features, v)
 				f.store.Generated[strings.ToLower(fmt.Sprintf("%s@%d,%d", v.Name, v.X, v.Z))] = true
 			}
-			f.status(fmt.Sprintf("Filled %d %s features.", len(added), f.kind))
+			f.status(fmt.Sprintf("Filled %d %s features.", len(added), fill.Kind))
 			if len(added) > 0 {
 				f.changed()
 			}
-		}
+		}()
 	}
 	return true
 }
-func (f *FeatureUI) Draw(ctx js.Value, project func(model.Point) model.Point) {
+
+// validFeatureSprite accepts only the local catalogue's declared image assets.
+func validFeatureSprite(world string, s *featureSprite) bool {
+	return s != nil && strings.HasPrefix(s.URL, "/map-features/"+world+"/") && !strings.Contains(s.URL, "..") && strings.HasSuffix(s.URL, ".png") && s.Width > 0 && s.Height > 0
+}
+func (f *FeatureUI) featureProject(p model.Point) model.Point {
+	h := f.a.Sample(p.X, p.Y)
+	if math.IsNaN(h) || math.IsInf(h, 0) {
+		h = 0
+	}
+	h = math.Floor(math.Max(0, math.Min(255, h)) / 2)
+	return model.Point{X: (p.X - f.a.view.X) * f.a.view.Scale, Y: (p.Y - h + num(f.a.Config, "baseHeight", 0)/2 - f.a.view.Y) * f.a.view.Scale}
+}
+func (f *FeatureUI) featureAnchor(p model.FeaturePlacement, d model.FeatureDefinition) model.Point {
+	sum := 0
+	for _, c := range [][2]int{{p.X, p.Z}, {p.X + 1, p.Z}, {p.X, p.Z + 1}, {p.X + 1, p.Z + 1}} {
+		h := f.a.Sample(float64(c[0]*16), float64(c[1]*16))
+		if math.IsNaN(h) || math.IsInf(h, 0) {
+			sum--
+			continue
+		}
+		sum += int(math.Floor(math.Max(0, math.Min(255, h)) + .5))
+	}
+	return model.Point{X: float64(p.X*16 + d.FootprintX*8), Y: float64(p.Z*16+d.FootprintZ*8-(sum>>3)) + num(f.a.Config, "baseHeight", 0)/2}
+}
+func (f *FeatureUI) Draw(ctx js.Value, _ func(model.Point) model.Point) {
 	if f == nil || f.store == nil {
 		return
 	}
 	ctx.Call("save")
-	for _, v := range f.store.Features {
-		d := f.store.Definitions[strings.ToLower(v.Name)]
-		p := project(model.Point{X: float64(v.X * 16), Y: float64(v.Z * 16)})
-		q := project(model.Point{X: float64((v.X + d.FootprintX) * 16), Y: float64((v.Z + d.FootprintZ) * 16)})
-		key := strings.ToLower(v.Name)
-		if sprite := f.sprites[key]; sprite != nil {
-			img := f.images[key]
-			if img.Get("complete").Bool() && img.Get("naturalWidth").Int() > 0 {
-				anchor := project(model.Point{X: float64(v.X*16 + d.FootprintX*8), Y: float64(v.Z*16 + d.FootprintZ*8)})
-				scale := f.a.view.Scale
-				ctx.Call("drawImage", img, anchor.X-float64(sprite.XOffset)*scale, anchor.Y-float64(sprite.YOffset)*scale, float64(sprite.Width)*scale, float64(sprite.Height)*scale)
+	ctx.Set("imageSmoothingEnabled", false)
+	scale := f.a.view.Scale
+	ordered := make([]model.FeaturePlacement, 0, len(f.store.Features))
+	viewWidth, viewHeight := float64(f.a.view.Width)/scale, float64(f.a.view.Height)/scale
+	for _, p := range f.store.Features {
+		key := strings.ToLower(p.Name)
+		d, ok := f.store.Definitions[key]
+		if !ok {
+			continue
+		}
+		reach := 32.0
+		for _, sprite := range []*featureSprite{f.sprites[key], f.shadows[key]} {
+			if sprite != nil {
+				reach = math.Max(reach, math.Max(float64(sprite.Width), float64(sprite.Height)))
 			}
 		}
-		ctx.Set("strokeStyle", "#73e59c")
-		ctx.Call("strokeRect", p.X, p.Y, q.X-p.X, q.Y-p.Y)
+		reach += 128
+		x := float64(p.X*16 + d.FootprintX*8)
+		y := float64(p.Z*16+d.FootprintZ*8) + num(f.a.Config, "baseHeight", 0)/2
+		if x+reach >= f.a.view.X && x-reach <= f.a.view.X+viewWidth && y+reach >= f.a.view.Y && y-reach <= f.a.view.Y+viewHeight {
+			ordered = append(ordered, p)
+		}
 	}
-	for i, v := range f.store.Starts {
-		p := project(model.Point{X: v.X, Y: v.Z})
-		ctx.Set("fillStyle", "#ffd65a")
+	sort.SliceStable(ordered, func(i, j int) bool {
+		a, b := ordered[i], ordered[j]
+		ad, bd := f.store.Definitions[strings.ToLower(a.Name)], f.store.Definitions[strings.ToLower(b.Name)]
+		ay, by := a.Z*16+ad.FootprintZ*8, b.Z*16+bd.FootprintZ*8
+		if ay != by {
+			return ay < by
+		}
+		if a.Z != b.Z {
+			return a.Z < b.Z
+		}
+		if a.X != b.X {
+			return a.X < b.X
+		}
+		return a.Name < b.Name
+	})
+	for _, p := range ordered {
+		key := strings.ToLower(p.Name)
+		d, ok := f.store.Definitions[key]
+		if !ok {
+			continue
+		}
+		anchor := f.featureAnchor(p, d)
+		for _, layer := range []struct {
+			sprite      *featureSprite
+			transparent bool
+		}{{f.shadows[key], f.transparency[key][1]}, {f.sprites[key], f.transparency[key][0]}} {
+			if layer.sprite == nil {
+				continue
+			}
+			img := f.images[layer.sprite.URL]
+			if !exists(img) || !img.Get("complete").Bool() || img.Get("naturalWidth").Int() <= 0 {
+				continue
+			}
+			alpha := 1.0
+			if layer.transparent {
+				alpha = .5
+			}
+			ctx.Set("globalAlpha", alpha)
+			x := (math.Floor(anchor.X) - float64(layer.sprite.XOffset) - f.a.view.X) * scale
+			y := (math.Floor(anchor.Y) - float64(layer.sprite.YOffset) - f.a.view.Y) * scale
+			ctx.Call("drawImage", img, x, y, float64(layer.sprite.Width)*scale, float64(layer.sprite.Height)*scale)
+		}
+	}
+	ctx.Set("globalAlpha", 1)
+	outline := func(p model.FeaturePlacement, d model.FeatureDefinition, color string) {
+		x0, y0 := float64(p.X*16), float64(p.Z*16)
+		x1, y1 := float64((p.X+d.FootprintX)*16), float64((p.Z+d.FootprintZ)*16)
+		points := []model.Point{{X: x0, Y: y0}, {X: x1, Y: y0}, {X: x1, Y: y1}, {X: x0, Y: y1}}
 		ctx.Call("beginPath")
-		ctx.Call("arc", p.X, p.Y, 9, 0, 2*math.Pi)
+		for i, p := range points {
+			v := f.featureProject(p)
+			if i == 0 {
+				ctx.Call("moveTo", v.X, v.Y)
+			} else {
+				ctx.Call("lineTo", v.X, v.Y)
+			}
+		}
+		ctx.Call("closePath")
+		ctx.Set("strokeStyle", color)
+		ctx.Set("lineWidth", 1.5)
+		ctx.Call("stroke")
+	}
+	if f.Active && f.selectedFeature >= 0 && f.selectedFeature < len(f.store.Features) {
+		p := f.store.Features[f.selectedFeature]
+		if d, ok := f.store.Definitions[strings.ToLower(p.Name)]; ok {
+			outline(p, d, "#ffe69c")
+		}
+	}
+	if f.Active && f.hover != nil && (f.mode == "place" || f.mode == "deposit") {
+		name := f.selected
+		if f.mode == "deposit" {
+			name = f.store.DepositName
+		}
+		if d, ok := f.store.Definitions[strings.ToLower(name)]; ok {
+			p := model.FeaturePlacement{Name: d.Name, X: int(math.Floor(f.hover.X / 16)), Z: int(math.Floor(f.hover.Y / 16))}
+			valid := p.X >= 0 && p.Z >= 0 && p.X+d.FootprintX <= f.store.Cols && p.Z+d.FootprintZ <= f.store.Rows
+			for _, other := range f.store.Features {
+				od, ok := f.store.Definitions[strings.ToLower(other.Name)]
+				if ok && p.X < other.X+od.FootprintX && p.X+d.FootprintX > other.X && p.Z < other.Z+od.FootprintZ && p.Z+d.FootprintZ > other.Z {
+					valid = false
+					break
+				}
+			}
+			color := "#ff877e"
+			if valid {
+				color = "#b8eef3"
+			}
+			outline(p, d, color)
+		}
+	}
+	for i, start := range f.store.Starts {
+		p := f.featureProject(model.Point{X: start.X, Y: start.Z})
+		selected := f.Active && f.mode == "starts" && f.selectedStart == i
+		fill := "#163240dd"
+		if selected {
+			fill = "#ffe69c"
+		}
+		ctx.Call("beginPath")
+		ctx.Call("arc", p.X, p.Y, 12*scale, 0, 2*math.Pi)
+		ctx.Set("fillStyle", fill)
 		ctx.Call("fill")
-		ctx.Set("fillStyle", "#111")
-		ctx.Call("fillText", fmt.Sprint(i+1), p.X-3, p.Y+4)
+		ctx.Set("lineWidth", 2*scale)
+		ctx.Set("strokeStyle", "#b8eef3")
+		ctx.Call("stroke")
+		ctx.Set("fillStyle", "#ffffff")
+		if selected {
+			ctx.Set("fillStyle", "#18221a")
+		}
+		ctx.Set("font", fmt.Sprintf("bold %gpx sans-serif", 12*scale))
+		ctx.Set("textAlign", "center")
+		ctx.Set("textBaseline", "middle")
+		ctx.Call("fillText", fmt.Sprint(i+1), p.X, p.Y)
+	}
+	if f.Active && f.mode == "fill" {
+		ctx.Set("strokeStyle", "#b8eef3")
+		ctx.Set("lineWidth", 1.5*scale)
+		ctx.Call("setLineDash", js.ValueOf([]any{6 * scale, 4 * scale}))
+		if f.region == "brush" && f.hover != nil {
+			p := f.featureProject(*f.hover)
+			ctx.Call("beginPath")
+			ctx.Call("arc", p.X, p.Y, f.radius*scale, 0, 2*math.Pi)
+			ctx.Call("stroke")
+		}
+		if f.dragging && len(f.points) > 0 {
+			ctx.Call("beginPath")
+			for i, point := range f.points {
+				p := f.featureProject(model.Point{X: point.X, Y: point.Z})
+				if i == 0 {
+					ctx.Call("moveTo", p.X, p.Y)
+				} else {
+					ctx.Call("lineTo", p.X, p.Y)
+				}
+			}
+			if f.region == "lasso" {
+				ctx.Call("closePath")
+			}
+			ctx.Call("stroke")
+		}
 	}
 	ctx.Call("restore")
 }
 
 // HandleKey removes a selected feature and leaves other shortcuts to the editor.
 func (f *FeatureUI) HandleKey(key string) bool {
+	if f != nil && key == "Escape" && f.cancelFill != nil {
+		f.cancelFill()
+		f.status("Canceling fill…")
+		return true
+	}
 	if f == nil || !f.Active || f.a.Busy {
 		return false
 	}
@@ -531,6 +811,7 @@ func (f *FeatureUI) HandleKey(key string) bool {
 		}
 		f.Active = false
 		f.mode = ""
+		f.hover = nil
 		f.a.Update()
 		f.selectedFeature = -1
 		f.a.drawOverlay()

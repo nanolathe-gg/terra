@@ -8,6 +8,16 @@ type Tile struct {
 	X, Y, Width, Height int
 	Scale               float64
 }
+type FillRequest struct {
+	Cols, Rows  int
+	Sea         float64
+	Definitions []model.FeatureDefinition
+	Existing    []model.FeaturePlacement
+	Starts      []model.FeaturePoint
+	DepositName string
+	Region      model.FeatureRegion
+	Settings    model.FeatureFill
+}
 type Request struct {
 	Kind    string            `json:"kind"`
 	ID      int               `json:"id"`
@@ -17,4 +27,5 @@ type Request struct {
 	Colors  map[string]any    `json:"colors"`
 	Options map[string]any    `json:"options"`
 	Tiles   []Tile            `json:"tiles"`
+	Fill    *FillRequest      `json:"fill,omitempty"`
 }

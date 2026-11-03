@@ -380,6 +380,9 @@ func (a *App) mountWorld() {
 		option(selectEl, fmt.Sprint(name), "biome:"+id)
 	}
 	for id, raw := range worlds {
+		if _, builtIn := obj(a.Config, "biomes")[id]; builtIn {
+			continue
+		}
 		w, ok := raw.(map[string]any)
 		if !ok {
 			continue

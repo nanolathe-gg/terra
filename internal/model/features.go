@@ -107,6 +107,17 @@ func featureKey(p FeaturePlacement) string {
 // FillFeatures mirrors the editor's deterministic candidate ranking and checks
 // every cell in a feature footprint against dry, gentle terrain and the region.
 func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64, defs []FeatureDefinition, existing []FeaturePlacement, starts []FeaturePoint, depositName string, r FeatureRegion, f FeatureFill) ([]FeaturePlacement, error) {
+	return FillFeaturesYield(cols, rows, sea, sample, defs, existing, starts, depositName, r, f, nil)
+}
+
+// FillFeaturesYield allows a worker to yield and cancel during large fills.
+func FillFeaturesYield(cols, rows int, sea float64, sample func(x, z float64) float64, defs []FeatureDefinition, existing []FeaturePlacement, starts []FeaturePoint, depositName string, r FeatureRegion, f FeatureFill, yield func() error) ([]FeaturePlacement, error) {
+	check := func() error {
+		if yield != nil {
+			return yield()
+		}
+		return nil
+	}
 	b, e := FeatureRegionBounds(r, cols, rows, f.Radius)
 	if e != nil {
 		return nil, e
@@ -133,6 +144,11 @@ func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64
 		return math.Round(math.Max(0, math.Min(255, v)))
 	}
 	for z := b.Z0; z < b.Z1; z++ {
+		if z%32 == 0 {
+			if err := check(); err != nil {
+				return nil, err
+			}
+		}
 		for x := b.X0; x < b.X1; x++ {
 			a, c, d, e := corner(x, z), corner(x+1, z), corner(x, z+1), corner(x+1, z+1)
 			lo := math.Min(math.Min(a, c), math.Min(d, e))
@@ -147,6 +163,11 @@ func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64
 			todo := []int{z*cols + x}
 			area[todo[0]] = true
 			for i := 0; i < len(todo); i++ {
+				if i%8192 == 0 {
+					if err := check(); err != nil {
+						return nil, err
+					}
+				}
 				p := todo[i]
 				x, z = p%cols, p/cols
 				for _, n := range [][2]int{{x - 1, z}, {x + 1, z}, {x, z - 1}, {x, z + 1}} {
@@ -167,6 +188,11 @@ func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64
 			radius = math.Max(0, r.Radius)
 		}
 		for z := b.Z0; z < b.Z1; z++ {
+			if z%32 == 0 {
+				if err := check(); err != nil {
+					return nil, err
+				}
+			}
 			for x := b.X0; x < b.X1; x++ {
 				p := FeaturePoint{float64(x*16 + 8), float64(z*16 + 8)}
 				if r.Type == "lasso" {
@@ -188,6 +214,11 @@ func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64
 	}
 	candidates := []candidate{}
 	for z := b.Z0; z < b.Z1; z++ {
+		if z%32 == 0 {
+			if err := check(); err != nil {
+				return nil, err
+			}
+		}
 		for x := b.X0; x < b.X1; x++ {
 			if !area[z*cols+x] {
 				continue
@@ -213,7 +244,12 @@ func FillFeatures(cols, rows int, sea float64, sample func(x, z float64) float64
 		}
 	}
 	out := []FeaturePlacement{}
-	for _, p := range candidates {
+	for i, p := range candidates {
+		if i%8192 == 0 {
+			if err := check(); err != nil {
+				return nil, err
+			}
+		}
 		ticket := featureHash(p.x, p.z, f.Seed^0x25cd781b) * float64(total)
 		d := mix[len(mix)-1]
 		for _, v := range mix {
