@@ -12,6 +12,8 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out'), mapUnits = Number(opt('--map', 4));
 const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), exportOnly = flag('--export-only');
+if (args.length) throw new Error('Unknown arguments: ' + args.join(' '));
+if (!Number.isInteger(mapUnits) || mapUnits < 1 || mapUnits > 40) throw new Error('--map must be an integer from 1 to 40');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TOOLS = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'offset', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];
