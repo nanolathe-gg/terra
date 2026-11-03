@@ -25,6 +25,7 @@ type ShapeEngine struct {
 	module         *wgpu.ShaderModule
 	kernels        map[string]*wgpu.ComputePipeline
 	prepared       *preparedGraph
+	profile        *ShapeProfile
 }
 
 func shapeUniformSize() int { return (len(shapeFields)*4 + 255) &^ 255 }

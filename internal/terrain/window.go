@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
@@ -50,7 +51,11 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	if c.Grid <= 0 || c.Spacing <= 0 {
 		return nil, fmt.Errorf("invalid shape geometry")
 	}
+	prepareStart := time.Now()
 	ops, segData, maskData, e := s.prepareGraph(nodes, c)
+	if s.profile != nil {
+		s.profile.PrepareMilliseconds += elapsed(prepareStart)
+	}
 	if e != nil {
 		return nil, e
 	}
@@ -118,6 +123,7 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	if c.preflightOnly {
 		return &ShapeWindow{Rect: window, Width: outW, Height: outH}, nil
 	}
+	allocateStart := time.Now()
 	for i := range buffers {
 		switch i {
 		case 4:
@@ -131,9 +137,17 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 			return nil, e
 		}
 	}
+	if s.profile != nil {
+		s.profile.PageAllocateMilliseconds += elapsed(allocateStart)
+	}
+	prefixStart := time.Now()
 	if e = s.resolvePrefix(ctx, c, ops, buffers[4], buffers[5], buffers[7]); e != nil {
 		return nil, e
 	}
+	if s.profile != nil {
+		s.profile.PrefixMilliseconds += elapsed(prefixStart)
+	}
+	planStart := time.Now()
 	passes, e := PlanReplay(base, ops, window, target, true)
 	if e != nil {
 		return nil, e
@@ -141,12 +155,23 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	if readback {
 		passes = append(passes, ShapePass{Entry: "pack", Region: window, Values: base, OutputWords: words})
 	}
+	if s.profile != nil {
+		s.profile.PlanMilliseconds += elapsed(planStart)
+	}
+	dispatchStart := time.Now()
 	if e = s.Dispatch(passes, buffers); e != nil {
 		return nil, e
 	}
+	if s.profile != nil {
+		s.profile.DispatchMilliseconds += elapsed(dispatchStart)
+	}
 	if callback != nil {
+		callbackStart := time.Now()
 		if e = callback(target, buffers[0], buffers[1]); e != nil {
 			return nil, e
+		}
+		if s.profile != nil {
+			s.profile.PageCopyMilliseconds += elapsed(callbackStart)
 		}
 	}
 	if !readback {

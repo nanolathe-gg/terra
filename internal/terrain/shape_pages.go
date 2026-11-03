@@ -10,6 +10,7 @@ import (
 	"github.com/gogpu/wgpu"
 	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
+	"time"
 )
 
 func (s *SceneRenderer) clearShapeCache() {
@@ -111,6 +112,9 @@ func (s *SceneRenderer) copyAuthored(src, dst *GPUFeed, r CellRect) error {
 // buildShapeFeed caches exact authored 512-cell cores and gathers the requested
 // rectangle on the GPU. Each core is replayed with its required dependency halo.
 func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, c ShapeWindowConfig, region CellRect) (feed *weatherFeed, err error) {
+	started := time.Now()
+	defer func() { s.shapeProfile.ShapeFeedMilliseconds += elapsed(started) }()
+	graphStart := time.Now()
 	data, e := json.Marshal([]any{c.Grid, c.Spacing, c.RefSpacing, c.BaseHeight, c.Sea, c.MinHeight, c.MaxHeight, c.Defaults})
 	if e != nil {
 		return nil, e
@@ -122,7 +126,9 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 		s.shapePages = map[[2]int]*weatherFeed{}
 	}
 	if s.shapeNodesSet {
+		diffStart := time.Now()
 		dirty, full, e := ChangedShapeRegion(s.shapeNodes, nodes, c)
+		s.shapeProfile.GraphDiffMilliseconds += elapsed(diffStart)
 		if e != nil {
 			s.clearShapeCache()
 			return nil, e
@@ -142,6 +148,7 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 			}
 		}
 	}
+	cloneStart := time.Now()
 	snapshot, e := json.Marshal(nodes)
 	if e != nil {
 		return nil, e
@@ -150,13 +157,17 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 	if e = json.Unmarshal(snapshot, &copyNodes); e != nil {
 		return nil, e
 	}
+	s.shapeProfile.GraphCloneMilliseconds += elapsed(cloneStart)
 	s.shapeNodes = copyNodes
 	s.shapeNodesSet = true
+	s.shapeProfile.GraphMilliseconds += elapsed(graphStart)
+	allocStart := time.Now()
 	side := max(region.X1-region.X0+1, region.Y1-region.Y0+1)
 	feed, err = s.newShapeFeed(side, region.X0, region.Y0)
 	if err != nil {
 		return nil, err
 	}
+	s.shapeProfile.FeedAllocateMilliseconds += elapsed(allocStart)
 	owned := feed
 	defer func() {
 		if err != nil {
@@ -174,6 +185,8 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 			page := s.shapePages[id]
 			pageRect := CellRect{px * core, py * core, min(c.Grid-1, (px+1)*core-1), min(c.Grid-1, (py+1)*core-1)}
 			if page == nil {
+				s.shapeProfile.PageMisses++
+				pageStart := time.Now()
 				page, err = s.newShapeFeed(core, pageRect.X0, pageRect.Y0, feed.bytes)
 				if err != nil {
 					return nil, err
@@ -194,13 +207,16 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 					s.shapePages[id] = page
 				}
 				s.shapeRuns++
+				s.shapeProfile.PageMilliseconds += elapsed(pageStart)
 			}
 			s.shapeTick++
 			page.used = s.shapeTick
 			if hit, ok := intersect(pageRect, region); ok {
+				gatherStart := time.Now()
 				if err = s.copyAuthored(&page.GPUFeed, &feed.GPUFeed, hit); err != nil {
 					return nil, err
 				}
+				s.shapeProfile.GatherMilliseconds += elapsed(gatherStart)
 			}
 			if page.bytes > budget {
 				page.Close()
