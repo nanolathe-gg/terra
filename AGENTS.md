@@ -85,7 +85,7 @@ landing.
 | Scenes | `repro/all.sh`, then `repro/compare.py` (BACKLOG ground rule 3) | untouched scenes match byte for byte; changed ones are judged on the retail sheets |
 | Regional replay | `node repro/regional.mjs` | no mismatch |
 | Brushes, undo, export | `node repro/smoke.mjs`, and `--page8` for large maps | exit 0 |
-| Unit tests | `node --test repro/*.test.mjs` | all pass |
+| Unit tests | `go test ./...` | all pass |
 | World names | `sh repro/gate.sh` | exit 0, and the list is no longer |
 | Controls | `node measure/world_controls.mjs` and `measure/shape_controls.mjs` | for any control added, moved or removed |
 | Interaction | `node repro/perf.mjs`, alternating runs of the two builds | for anything on the drag or bake path |

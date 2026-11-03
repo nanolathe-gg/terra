@@ -21,11 +21,11 @@ catalogues instead of the retail sources and maps:
 R=/private/tmp/nanolathe-map-editor
 go build -o $R/map-export ./export
 go build -o $R/bin/map-features ./features
-python3 sculpt.py --port 8801 --assets-root $R --game-root $R/content --prepared
+ASSETS_ROOT=$R PORT=8801 ./run.sh --game-root $R/content --prepared
 REPRO_CROPS=$R/repro PYTHON=python3 sh repro/all.sh $R/repro-out/base http://127.0.0.1:8801 9450
 ```
 
-Worlds come from `materials/<world>.json` and `sculpt.py` in every mode, so a
+Worlds come from `materials/<world>.json` and the Go configuration tables in every mode, so a
 world needs no bundle. Renders under a different GPU or a
 software WebGPU adapter may differ slightly from the Mac reference renders,
 so render a fresh baseline before comparing.
