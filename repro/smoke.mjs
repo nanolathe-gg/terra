@@ -1,6 +1,6 @@
 // Smoke run: for each world, open the default editor (/sculpt with no map size, the 4x4 map), paint one stroke with every brush,
 // undo it, and export. With --page8 it also opens one 8x8 map per world in --worlds8 (default green; which pages), paints one stroke and undoes it.
-//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export]
+//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export] [--export-only]
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
 import {cdpPortFree} from './cdp-port.mjs';
@@ -11,7 +11,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out');
-const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export');
+const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), exportOnly = flag('--export-only');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'offset', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];
@@ -68,7 +68,7 @@ for (const world of worlds) {
     try {
       await ready(ev, world !== 'zhon');
       await ev('sculptCanvas.zoom(1); true'); await sleep(500);
-      for (const tool of TOOLS) {
+      for (const tool of exportOnly ? [] : TOOLS) {
         const before = await ev('sculptDebug.nodes().length');
         await strokeAt(send, ev, tool);
         const added = (await ev('sculptDebug.nodes().length')) - before;

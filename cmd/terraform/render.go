@@ -142,6 +142,8 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		return e
 	}
 	defer gpu.Close()
+	info := gpu.Adapter.Info()
+	fmt.Printf("GPU: %s (%s)\n", info.Name, info.Backend)
 	renderer, e := terrain.NewSceneRenderer(gpu, config, sources, material)
 	if e != nil {
 		return fmt.Errorf("initialize scene renderer: %w", e)

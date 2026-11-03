@@ -1,0 +1,49 @@
+{
+  "format": "nanolathe-terrain-sculpt",
+  "biome": "green",
+  "size": 800,
+  "grid": 400,
+  "baseHeight": 24,
+  "seaLevel": 0,
+  "map": {
+    "width": 544,
+    "height": 640,
+    "widthCells": 34,
+    "heightCells": 40,
+    "unitsX": 1,
+    "unitsY": 1,
+    "playRight": 512,
+    "playBottom": 512
+  },
+  "nodes": [
+    {
+      "kind": "hill",
+      "seed": 2701,
+      "points": [
+        {
+          "x": 120,
+          "y": 160
+        },
+        {
+          "x": 300,
+          "y": 280
+        }
+      ],
+      "params": {
+        "radius": 60,
+        "amount": 70,
+        "rough": 0.3,
+        "softness": 0.5
+      }
+    }
+  ],
+  "knobs": {},
+  "colors": {},
+  "mapData": {
+    "name": "Terraform Go Metal smoke"
+  },
+  "version": 6,
+  "encoding": "stroke-graph",
+  "weather": true,
+  "weatheredView": false
+}
