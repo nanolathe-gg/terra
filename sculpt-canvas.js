@@ -26,9 +26,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   $('weathered-view-control').hidden=false;$('weathered-view').checked=weatheredView;
   const displayLevel=()=>overview?Math.max(1,2**Math.floor(Math.log2(1/scale))):1;
   // H26: above 100% the final image is baked at the screen's pixels (.5 up to 200%, .25 beyond), so the grain stays one texel per drawn pixel; only the
-  // fed path takes a level. A detail bake that does not fit the GPU budget lowers `finest` until the next budget change.
+  // fed path takes a level. A level that does not fit the GPU budget lowers `finest` until the next budget change.
   let finest=.25;
   const detailLevel=()=>overview||!levels||!api.gpuFeedActive?.()?1:Math.max(finest,scale<=1?1:scale<=2?.5:.25);
+  const detailBytes=level=>{const size=viewChunkSize();return(Math.ceil(canvas.width*level/size)+1)*(Math.ceil(canvas.height*level/size)+1)*(size/level)**2*4;};   // the most its view's tiles can hold
   const offLevel=(e,want)=>(e.scale??1)!==want&&(e.fed||want===1);   // an image not at the level wanted; a non-fed one cannot be at a finer level, so it stays
   const cacheKey=(rect,size=canonicalSize)=>[rect.x,rect.y,size,overview?'fit':weatheredView?'detail':'authored'].join(',');
   let gpuBudget=number(query,'gpuMB',512,128,4096)*MB,heapBudget=number(query,'heapMB',1024,128,8192)*MB;
@@ -146,8 +147,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(feed)try{
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
-      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8;
-      trimTo(gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
+      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
+      // A level whose view does not fit beside the bake would have each tile evict the last, and every repaint would bake them all again.
+      if(scale<1&&room<detailBytes(scale))throw new Error(`nanolathe: a view at level ${scale} needs more of GPU memory than the budget leaves`);
+      trimTo(room);
       renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
       const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,deferCompletion:!fit&&!exportArt});bakes++;
       const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
@@ -279,7 +282,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         }
         for(const {rect,want,authoredPreview=false} of plan){
           if(token!==epoch||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
-          if((previewing||navigating())&&!intersects(rect,v))continue;
+          if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
           if(want===2&&e&&!e.dirty)continue;   // current detailed images also satisfy a preview request
           const upgrade=want<=1&&e&&(offLevel(e,want)||!overview&&e.weathered!==weatheredView);
