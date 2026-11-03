@@ -94,7 +94,7 @@ try {
   for (let i = 0; i < 100 && !ws; i++) { try { const p = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(x => x.type === 'page'); if (p) ws = new WebSocket(p.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(200); }
   await new Promise(r => ws.onopen = r);
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && wait.has(m.id)) { wait.get(m.id)(m); wait.delete(m.id); } if (m.method === 'Runtime.exceptionThrown') logs.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text); if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map(a => a.value ?? a.description).join(' ').slice(0, 300)); };
-  const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
+  const send = (method, params = {}) => new Promise((resolve, reject) => { const k = ++id, timer = setTimeout(() => { wait.delete(k); reject(new Error(`${method} timed out after 60 seconds`)); }, 60000); wait.set(k, m => { clearTimeout(timer); resolve(m); }); ws.send(JSON.stringify({id: k, method, params})); });
   const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result.result.value; };
   await send('Runtime.enable'); await send('Page.enable');
   // In-page helpers: captures stay in the page; only the two numbers travel.
