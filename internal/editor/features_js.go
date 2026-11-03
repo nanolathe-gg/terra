@@ -462,13 +462,13 @@ func (f *FeatureUI) PointerDown(p model.Point, e js.Value) bool {
 			f.selectedStart = near
 			f.dragging = true
 		} else if e.Get("shiftKey").Bool() {
-			if _, err := f.store.MoveStart(f.selectedStart, model.FeaturePoint{p.X, p.Y}); err != nil {
+			if _, err := f.store.MoveStart(f.selectedStart, model.FeaturePoint{X: p.X, Z: p.Y}); err != nil {
 				f.status(err.Error())
 			} else {
 				f.changed()
 			}
 		} else {
-			if _, err := f.store.AddStart(model.FeaturePoint{p.X, p.Y}); err != nil {
+			if _, err := f.store.AddStart(model.FeaturePoint{X: p.X, Z: p.Y}); err != nil {
 				f.status(err.Error())
 			} else {
 				f.selectedStart = len(f.store.Starts) - 1
@@ -476,7 +476,7 @@ func (f *FeatureUI) PointerDown(p model.Point, e js.Value) bool {
 			}
 		}
 	case "fill":
-		f.points = []model.FeaturePoint{{p.X, p.Y}}
+		f.points = []model.FeaturePoint{{X: p.X, Z: p.Y}}
 		f.dragging = true
 	}
 	return true
@@ -498,13 +498,13 @@ func (f *FeatureUI) PointerMove(p model.Point, e js.Value) bool {
 			f.a.drawOverlay()
 		}
 	case "starts":
-		if _, err := f.store.MoveStart(f.selectedStart, model.FeaturePoint{p.X, p.Y}); err == nil {
+		if _, err := f.store.MoveStart(f.selectedStart, model.FeaturePoint{X: p.X, Z: p.Y}); err == nil {
 			f.modified = true
 			f.sync()
 			f.a.drawOverlay()
 		}
 	case "fill":
-		f.points = append(f.points, model.FeaturePoint{p.X, p.Y})
+		f.points = append(f.points, model.FeaturePoint{X: p.X, Z: p.Y})
 		f.a.drawOverlay()
 	}
 	return true
