@@ -780,6 +780,9 @@ func (a *App) drawCurve() {
 	if facing < 0 || facing >= len(directions) {
 		facing = 0
 	}
+	if facing == 0 {
+		facing = 3
+	}
 	text("curve-lean", fmt.Sprintf("Lean %.2f : 1 toward %s", a.sectionLeanRatio(), directions[facing]))
 	if l.land {
 		a.drawAlong()
