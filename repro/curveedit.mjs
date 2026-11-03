@@ -191,6 +191,12 @@ for (const world of worlds) {
       const backL = (await nodes()).map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean] : null), h3 = await grid();
       check('the landform comes back the same after reload', same(savedL, backL) && savedL.some(x => x?.[1]), {savedL, backL});
       check('the landform render is the same after reload', h3.length === heightsL.length && h3.every((v, i) => Math.abs(v - heightsL[i]) < 1e-3), h3.reduce((m, v, i) => Math.max(m, Math.abs(v - heightsL[i])), 0));
+      // 7. Flatten to over an existing hill, the along curve at 0 at one end: that end comes down to the plain (decision 24)
+      const plainH = await ev(`sculptDebug.corner(10, 10).authored`);
+      const flat = along => [['hill', [[640, 300]], {card: {diameter: 200, amount: 80, roughness: 20}}], ['landform', [[100, 300], [780, 300]], {card: {diameter: 160, elevation: plainH + 91, combine: 2, wander: 0, widthVary: 0, heightVary: 0}, along}]];
+      const probe = async along => { await ev(`sculptDebug.scene(${JSON.stringify(flat(along))}, {ground: false})`); await ready(ev); return ev(`[[300, 300], [640, 300], [740, 300]].map(([x, y]) => sculptDebug.corner(x, y).authored)`); };
+      const level = await probe([[0, 1], [1, 1]]), down = await probe([[0, 1], [1, 0]]);
+      check('flatten to with the along curve at 0 at the end brings the hill down to the plain', level[1] > plainH + 80 && down[1] < plainH + 0.3 * 91 && down[2] < plainH + 12 && level[0] > plainH + 85, {plainH, level, down});
     } catch (err) { res.error = err.message; bad++; }
     res.console = logs.filter(l => !/favicon/.test(l)); if (res.console.length) bad++;
     return res;
