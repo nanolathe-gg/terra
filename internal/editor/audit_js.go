@@ -250,7 +250,7 @@ func (a *App) mountAudit() {
 			}
 			a.Knobs[key] = v
 			var inserted bool
-			a.Nodes, inserted = model.SetGroundKnob(a.Nodes, key, num(a.Knobs, key, 0), a.Seed)
+			a.Nodes, inserted = model.SetGroundKnob(a.Nodes, key, num(a.Knobs, key, 0), num(a.Knobs, "undulationScale", 200), num(a.Knobs, "undulationCover", .45), a.Seed)
 			if inserted && a.Selected >= 0 {
 				a.Selected++
 			}

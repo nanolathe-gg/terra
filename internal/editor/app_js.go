@@ -536,6 +536,11 @@ func (a *App) Undo(delta int) {
 		return
 	}
 	a.Nodes = state.Nodes
+	amplitude, wavelength, coverage := model.GroundKnobs(a.Nodes, num(a.Knobs, "undulationScale", 200), num(a.Knobs, "undulationCover", .45))
+	for key, v := range map[string]float64{"undulation": amplitude, "undulationScale": wavelength, "undulationCover": coverage} {
+		a.Knobs[key] = v
+		setValue("knob-"+key, v)
+	}
 	a.RefinementSeed = state.RefinementSeed
 	a.MapData = state.MapData
 	a.Config["column"] = state.Column
