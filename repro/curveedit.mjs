@@ -66,7 +66,10 @@ for (const world of worlds) {
     };
     const nodes = () => ev('sculptDebug.nodes()');
     const raised = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1), far = sculptDebug.corner(10, 10).authored; return Math.max(...n.points.map(p => sculptDebug.corner(p.x, p.y).authored)) - far; })()`);
-    const grid = () => ev(`(() => { const o = []; for (let y = 100; y < 1000; y += 30) for (let x = 100; x < 1000; x += 30) o.push(sculptDebug.corner(x, y).authored); return o; })()`);
+    // Read the same GPU field rectangle and render window on each side of the
+    // reload. The viewport cache can contain different tiles after navigation.
+    const authored = async () => { await ev('sculptCanvas.idle()'); return ev(`(async()=>{const m=await sculptRegion.readAuthored({x:0,y:0,width:512,height:512});return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',m.data)),x=>x.toString(16).padStart(2,'0')).join('')})()`); };
+    const rendered = async rect => { await ev('sculptCanvas.idle()'); return ev(`(async()=>{const c=await sculptCanvas.debugBake(${JSON.stringify(rect)},1);const b=c.getContext('2d').getImageData(0,0,c.width,c.height).data.buffer;return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),x=>x.toString(16).padStart(2,'0')).join('')})()`); };
     // the editor canvas, scrolled into view, its box in page pixels
     const box = async () => ev(`(() => { const c = document.getElementById('section-preview'); c.closest('details').open = true; c.scrollIntoView({block: 'center'}); const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height}; })()`);
     const knotXY = (b, x, v) => [b.x + (9 + (b.cw - 18) * x) * b.w / b.cw, b.y + (b.ch - 9 - (b.ch - 18) * (v + .6) / 2.2) * b.h / b.ch];
@@ -124,11 +127,14 @@ for (const world of worlds) {
         await drag(knotXY(b, ...k0[3]), knotXY(b, k0[3][0], k0[3][1] + .1));   // the edit that must survive the reload
       }
       // 5. save (the autosave) and reload
-      ns = await nodes(); const saved = ns.map(x => x.params?.curve ?? null), heights = await grid(); await sleep(1500);
+      ns = await nodes(); const saved = ns.map(x => x.params?.curve ?? null);
+      const reloadPoint = ns.at(-1).points[0], rect = {x: Math.max(0, Math.floor(reloadPoint.x - 128)), y: Math.max(0, Math.floor(reloadPoint.y - 128)), width: 512, height: 512};
+      const fieldBefore = await authored(), renderBefore = await rendered(rect); await sleep(1500);
       await send('Page.navigate', {url}); await sleep(1500); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500); await ev('sculptCanvas.idle()'); await sleep(500);
-      const back = (await nodes()).map(x => x.params?.curve ?? null), h2 = await grid();
+      const back = (await nodes()).map(x => x.params?.curve ?? null), fieldAfter = await authored(), renderAfter = await rendered(rect);
       check('the same knots after reload', same(saved, back) && saved.some(x => x?.knots), {saved, back});
-      check('the same render after reload', h2.length === heights.length && h2.every((v, i) => Math.abs(v - heights[i]) < 1e-3), h2.reduce((m, v, i) => Math.max(m, Math.abs(v - heights[i])), 0));
+      check('the same authored GPU fields after reload', fieldBefore === fieldAfter, {fieldBefore, fieldAfter});
+      check('the same render after reload', renderBefore === renderAfter, {renderBefore, renderAfter});
     } catch (err) { res.error = err.message; bad++; }
     res.console = logs.filter(l => !/favicon/.test(l)); if (res.console.length) bad++;
     return res;
