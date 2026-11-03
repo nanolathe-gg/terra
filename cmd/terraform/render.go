@@ -84,6 +84,20 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		}
 		sources[filepath.Base(p)] = string(b)
 	}
+	tables, e := filepath.Glob(filepath.Join(o.SourceRoot, "materials", "*.json"))
+	if e != nil {
+		return e
+	}
+	for _, p := range tables {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return fmt.Errorf("load material table: %w", err)
+		}
+		sources["materials/"+filepath.Base(p)] = string(b)
+	}
+	if sources["materials/palette.json"] == "" {
+		return fmt.Errorf("missing materials/palette.json")
+	}
 	gpu, e := terrain.NewGPU()
 	if e != nil {
 		return e
@@ -91,7 +105,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	defer gpu.Close()
 	renderer, e := terrain.NewSceneRenderer(gpu, config, sources, material)
 	if e != nil {
-		return e
+		return fmt.Errorf("initialize scene renderer: %w", e)
 	}
 	defer renderer.Close()
 	w, h := int(numberMap(recipe.Map, "width")), int(numberMap(recipe.Map, "height"))
@@ -124,7 +138,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 			tw, th := min(side, w-x), min(side, h-y)
 			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true}, terrain.DrawOptions{Width: tw, Height: th, Full: true})
 			if err != nil {
-				return err
+				return fmt.Errorf("render tile (%d,%d): %w", x, y, err)
 			}
 			if result.Width != tw || result.Height != th || len(result.RGBA) != tw*th*4 {
 				return fmt.Errorf("renderer returned an incomplete tile")
