@@ -331,6 +331,19 @@ func (r *Renderer) releaseWorking() {
 			t.Release()
 		}
 	}
+	r.HeightTexture = nil
+	r.RouteTexture = nil
+	r.GridTexture = nil
+	r.MaskTexture = nil
+	r.FieldsTexture = nil
+	if r.vertices != nil {
+		r.vertices.Release()
+		r.vertices = nil
+	}
+	if r.indices != nil {
+		r.indices.Release()
+		r.indices = nil
+	}
 	r.Color = nil
 	r.Depth = nil
 	r.Width = 0

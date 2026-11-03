@@ -119,7 +119,7 @@ func weatherShapeConfig(c ShapeWindowConfig, px, py, core, apron int, o DrawOpti
 	tiles := int64((side + 7) / 8)
 	c.CallbackGPUBytes = 140*n + 12*tiles*tiles + 176
 	if o.MaterialWeathering > 0 {
-		c.CallbackGPUBytes = max(c.CallbackGPUBytes, 92*n+80*8)
+		c.CallbackGPUBytes = max(c.CallbackGPUBytes, 92*n+80*11)
 	}
 	return c
 }
