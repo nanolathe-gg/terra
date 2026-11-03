@@ -1,6 +1,6 @@
 // Smoke run: for each world, open the default editor (/sculpt with no map size, the 4x4 map), paint one stroke with every brush,
 // undo it, and export. With --page8 it also opens one 8x8 map per world in --worlds8 (default green; which pages), paints one stroke and undoes it.
-//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export] [--export-only]
+//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export] [--export-only] [--map 4]
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
 import {cdpPortFree} from './cdp-port.mjs';
@@ -10,7 +10,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
-const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out');
+const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out'), mapUnits = Number(opt('--map', 4));
 const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), exportOnly = flag('--export-only');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -62,9 +62,9 @@ const strokeAt = async (send, ev, tool) => {
 
 let bad = 0;
 for (const world of worlds) {
-  const url = `${server}/sculpt?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/sculpt?biome=${world}&mapX=${mapUnits}&mapY=${mapUnits}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
   const result = await session(url, async ({send, ev, logs}) => {
-    const r = {world, brushes: {}, export: null};
+    const r = {world, mapUnits, brushes: {}, export: null};
     try {
       await ready(ev, world !== 'zhon');
       await ev('sculptCanvas.zoom(1); true'); await sleep(500);

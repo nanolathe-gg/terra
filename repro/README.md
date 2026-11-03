@@ -1,7 +1,7 @@
 # Reproductions and checks
 
 The current editor is served by the Go application. Start an isolated server with
-`go run ./cmd/terraform --source-root . --port 8801 --assets-root <prepared-assets> --prepared`.
+`ASSETS_ROOT=<prepared-assets> PORT=8801 ./run.sh --prepared` (which builds both WASM programs and the helpers).
 Use a separate assets root, server port, Chrome debugging port, and output directory
 for each worktree. The browser tests use headless Chrome with WebGPU; they do not
 start or stop another worktree's server. Run commands from the repository root.
@@ -115,7 +115,7 @@ through a snow shore), `fissure-green` (cuts across a hill with its own painted
 rock) and `fissure-red` (a polygonal fracture network on a low platform; Mode 1).
 
 Variants (card C5 stage 3): a world may offer named presets over its own, listed in
-`WORLD_VARIANTS` (`sculpt.py`) and chosen in the World panel's Variant drop-down. A
+the Go server's variant tables and chosen in the World panel's Variant drop-down. A
 scene names one in its `query`: `"query": "variant=evad"` (green: Evad River and
 Barrier Reef rounded hills with irregular, broken slopes; ice: `bergs`; desert: `triad`). With no variant a scene
 renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt in.
