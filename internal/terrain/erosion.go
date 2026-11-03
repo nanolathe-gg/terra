@@ -264,6 +264,7 @@ func (e *Erosion) RunGPU(ctx context.Context, q ErosionRequest) (result *Erosion
 	mp := uniformBuf("erosion map params", []float32{float32(q.Grid), float32(spacing), float32(.36 / (float64(age) * .006)), float32(q.Sand), float32(wet), float32(talus), float32(wear), float32(flow)})
 	run(e.maps, Bindings{0: {{Binding: 0, Buffer: r.UniformBuffer}}, 1: {{Binding: 0, Buffer: mp}, {Binding: 1, Buffer: state[1]}, {Binding: 2, Buffer: acc}, {Binding: 3, Buffer: fixed}, {Binding: 4, Buffer: weather, Size: uint64(n * 4)}, {Binding: 5, Buffer: result.Maps[0]}, {Binding: 6, Buffer: result.Maps[1]}, {Binding: 7, Buffer: result.Maps[2]}}}, groups, groups, nil)
 	check(g.Submit(enc))
+	check(g.waitCacheUses(ctx))
 	return result, nil
 }
 
@@ -371,6 +372,7 @@ func (e *Erosion) MaterialField(q MaterialFieldRequest) (field *wgpu.Buffer, err
 	blur(b, runoff, 3.5)
 	run("mfCombineMain", []uint32{1, 2, 5, 10, 11, 12, 13, 14}, []*wgpu.Buffer{height, src, basin, field, settled, broad, runoff, soft}, u0, groups, groups)
 	check(g.Submit(enc))
+	check(g.waitCacheUses(context.Background()))
 	return field, nil
 }
 
