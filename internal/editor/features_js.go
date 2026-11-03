@@ -514,7 +514,7 @@ func (f *FeatureUI) PointerUp(p model.Point, e js.Value) bool {
 		return false
 	}
 	f.dragging = false
-	if e.Get("type").String() == "pointercancel" {
+	if e.Get("type").String() == "pointercancel" || e.Get("type").String() == "lostpointercapture" {
 		if f.snapshot != nil {
 			f.store = f.snapshot
 			f.sync()
