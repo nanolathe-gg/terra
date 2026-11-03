@@ -27,11 +27,11 @@ const noExport = flag('--no-export'), only = opt('--only', '');   // --only load
 const dragTool = opt('--tool', 'hill');   // H27: the brush the drag draws (hill, or landform to measure it beside a hill)
 // A matching presentation must be a real tile drawing from the move's source
 // revision or newer, intersecting the brush footprint and the visible viewport.
-function matchesPresentation(p, move, revision, viewport) {
+function matchesPresentation(p, move, revision, viewport, requireOverlap = true) {
   return p.type === 'presented' && p.t >= move.t && Number.isFinite(p.revision) && p.revision >= revision &&
     Number.isFinite(p.x) && Number.isFinite(p.y) && p.width > 0 && p.height > 0 &&
-    p.x < move.worldX + move.radius && p.x + p.width > move.worldX - move.radius &&
-    p.y < move.worldY + move.radius && p.y + p.height > move.worldY - move.radius &&
+    (!requireOverlap || (p.x < move.worldX + move.radius && p.x + p.width > move.worldX - move.radius &&
+    p.y < move.worldY + move.radius && p.y + p.height > move.worldY - move.radius)) &&
     Number.isFinite(p.screenX) && Number.isFinite(p.screenY) && p.screenWidth > 0 && p.screenHeight > 0 &&
     p.screenX < viewport.width && p.screenX + p.screenWidth > 0 &&
     p.screenY < viewport.height && p.screenY + p.screenHeight > 0;
@@ -40,7 +40,7 @@ if (selfTest) {
   const m = {t:10, worldX:30, worldY:30, radius:5}, v = {width:100,height:100};
   const p = {type:'presented',t:12,revision:2,x:20,y:20,width:20,height:20,screenX:20,screenY:20,screenWidth:20,screenHeight:20};
   if (!matchesPresentation(p,m,2,v) || matchesPresentation({...p,revision:1},m,2,v) ||
-      matchesPresentation({...p,x:60},m,2,v) || matchesPresentation({...p,screenX:120},m,2,v) ||
+      matchesPresentation({...p,x:60},m,2,v) || !matchesPresentation({...p,x:60},m,2,v,false) || matchesPresentation({...p,screenX:120},m,2,v,false) ||
       matchesPresentation({...p,type:'bake-end'},m,2,v) || matchesPresentation({...p,t:9},m,2,v)) throw Error('presentation matching self-test failed');
   console.log('presentation matching self-test passed'); process.exit(0);
 }
@@ -183,13 +183,13 @@ const wrap = (obj, name, stage, tag) => {
 function patch(c) {
  if(!c?.renderer){P.worker=true;return;}
   const r = c.renderer, Base = Object.getPrototypeOf(Object.getPrototypeOf(r));
-  r.timer = Base.timer;                 // the chunk renderer turns the timestamp slots off; the renderer's own pass timers stay off here
-  r.timer = () => null;                 // (our hooks time every pass instead)
+  if (diagnosticGPU) r.timer = () => null; // pass hooks provide the diagnostic timings
   const rc = r.renderChunk.bind(r);
   r.renderChunk = async (request, options) => {
     const t = now(); ev('bake-start', {x: request.x, y: request.y, w: request.width, h: request.height, level: options?.scale ?? 1}); const prev = P.ctx; P.ctx = 'chunk';
     try { const result = await rc(request, options); const rev = options?.feed?.revision ?? request?.revision ?? null; if(result?.canvas) canvasInfo.set(result.canvas, {x:request.x,y:request.y,width:request.width,height:request.height,scale:options?.scale??1,revision:rev}); return result; } finally { P.ctx = prev; ev('bake-end', {x: request.x, y: request.y, ms: now() - t, rev: options?.feed?.revision ?? request?.revision ?? null, level: options?.scale ?? 1}); add('chunk bake (wall)', now() - t); }
   };
+  if (diagnosticGPU) {
   wrap(r, 'upload', 'field upload (CPU pack + write)');
   wrap(Base, 'draw', 'draw + bake encode (CPU)');
   const region = window.sculptRegion;
@@ -227,6 +227,7 @@ function patch(c) {
       try { const v = await run.call(this, request); P.erodeParts = v.parts; return v; } finally { P.ctx = prev; ev('erode-end', {ms: now() - t}); add('time pass (wall)', now() - t); }
     };
   }).catch(e => { P.patchError = String(e); });
+  }
 }
 Object.defineProperty(window, 'sculptCanvas', {configurable: true, get: () => canvasValue, set: v => { canvasValue = v; try { patch(v); } catch (e) { P.patchError = String(e); } }});
 // ---- rAF intervals, recorded on demand
@@ -360,10 +361,12 @@ try {
     for (const e of events) { if (e.type === 'read') lastRead = e; if (e.type === 'bake-end') { const start = e.t - e.ms, read = events.filter(r => r.type === 'read' && r.t <= start).at(-1); bakes.push({end: e.t, rev: e.rev ?? read?.rev ?? null, key: e.x + ',' + e.y, level: e.level ?? 1}); } }
     const presented = events.filter(e => e.type === 'presented');
     const moveEvents = new Map(events.filter(e => e.type === 'move').map(e => [e.k, e]));
-    const lat = []; let censored = 0;
+    const lat = [], latAny = []; let censored = 0, censoredAny = 0;
     for (const [k, m] of marks) {
       const move = moveEvents.get(k);
-      if (m.t === undefined || m.rev == null || !move) { censored++; continue; }
+      if (m.t === undefined || m.rev == null || !move) { censored++; censoredAny++; continue; }
+      const any = presented.find(p => matchesPresentation(p, move, m.rev, viewportPixels, false));
+      if (any) latAny.push(any.t - m.t); else censoredAny++;
       const p = presented.find(p => matchesPresentation(p, move, m.rev, viewportPixels));
       if (!p) { censored++; continue; }
       lat.push(p.t - m.t);
@@ -372,6 +375,7 @@ try {
     result.drag.latencyAll = {available: false, reason: 'Whole-dirty-region presentation is not certified by tile counts; unchanged cached tiles may remain valid.'};
     if (verifyPixels) { const changed = new Set(events.filter(e => e.type === 'pixel-change').map(e => e.k)); result.drag.pixelProbe = {size: '16x16 at pointer', verified: changed.size, unverified: moves - changed.size, errors: events.filter(e => e.type === 'pixel-probe-error').length, note: 'Diagnostic only: canvas readback can perturb performance.'}; }
     result.drag.quarterBakes = bakes.filter(b => b.level > 1).length; result.drag.bakes = bakes.length;
+    result.drag.latencyAny = {moves: marks.size, measured: latAny.length, censored: censoredAny, p50: q(latAny, .5), p95: q(latAny, .95), max: Math.max(...latAny, 0), basis: 'matching source revision, first actual new bitmap drawn anywhere visible'};
     result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), basis: 'matching source revision, actual bitmap draw, visible tile intersects brush footprint'};
   }
 
@@ -427,4 +431,4 @@ try {
   ws.close(); chrome.kill(); await sleep(500);
 }
 // A timer or the socket can keep node alive after the JSON is written; --only stops are not failures.
-process.exit((result.error && !result.error.includes('(--only)')) || (result.drag?.latency?.censored > 0) || (result.drag?.pixelProbe?.unverified > 0) || (result.drag?.pixelProbe?.errors > 0) ? 1 : 0);
+process.exit((result.error && !result.error.includes('(--only)')) || (result.drag?.latency?.censored > 0) || (result.drag?.latencyAny?.censored > 0) || (result.drag?.pixelProbe?.unverified > 0) || (result.drag?.pixelProbe?.errors > 0) ? 1 : 0);
