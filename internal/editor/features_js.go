@@ -52,7 +52,11 @@ func (a *App) mountFeatures() {
 	featureButton := create("button", "", "Features")
 	featureButton.Set("id", "feature-tool")
 	attribute(featureButton, "aria-pressed", false)
-	query(".tool-group .tools").Call("append", featureButton)
+	primary := query(".tool-groups .primary-tools")
+	if !exists(primary) {
+		primary = query(".tool-group .tools")
+	}
+	primary.Call("append", featureButton)
 	on(featureButton, "click", func(js.Value) {
 		if !f.ready || a.Busy {
 			return
@@ -142,7 +146,7 @@ func (a *App) mountFeatures() {
 		label.Call("append", in)
 		q("[data-fill]").Call("append", label)
 	}
-	go func() {
+	func() {
 		var c struct {
 			Features    []featureCatalogEntry `json:"features"`
 			DepositName string                `json:"depositName"`
