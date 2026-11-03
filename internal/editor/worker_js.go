@@ -58,6 +58,28 @@ func (a *App) viewState() *workerViewState {
 func (a *App) terrainGesture() bool {
 	return a.controlEditing || a.gesture != nil && a.gesture.Kind != "pan"
 }
+
+// Match the editor's navigation quiet period; full weather and picking
+// refresh resume after the final scroll or drag has settled.
+func (a *App) navigationChanged() {
+	a.navigationSequence++
+	sequence := a.navigationSequence
+	a.navigating = true
+	if a.navigationTimer != nil {
+		a.navigationTimer.Stop()
+	}
+	a.navigationTimer = time.AfterFunc(180*time.Millisecond, func() {
+		if a.navigationSequence != sequence {
+			return
+		}
+		a.navigationTimer = nil
+		a.navigating = false
+		a.Schedule()
+	})
+}
+func (a *App) navigationPreview() bool {
+	return a.navigating || a.navigatorDragging || a.gesture != nil && a.gesture.Kind == "pan"
+}
 func (a *App) acceptsViewTile(m js.Value) bool {
 	return m.Get("view").Type() == js.TypeBoolean && m.Get("view").Bool() && exists(m.Get("session")) && m.Get("session").Int() == a.viewState().session
 }
@@ -210,7 +232,7 @@ func (a *App) queueView() {
 	}
 	level := 1 / scale
 	size := max(64, int(math.Ceil(256*level)))
-	interactive := a.terrainGesture()
+	interactive := a.terrainGesture() || a.navigationPreview()
 	a.retainUnaffectedTiles(interactive)
 	if interactive {
 		level *= 2

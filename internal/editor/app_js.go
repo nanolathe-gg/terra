@@ -76,6 +76,10 @@ type App struct {
 	panels                    map[string]bool
 	tiles                     map[string]*cachedTile
 	scheduleQueued            bool
+	navigationTimer           *time.Timer
+	navigationSequence        uint64
+	navigating                bool
+	navigatorDragging         bool
 	rpc                       map[int]chan js.Value
 	frameTimes                []float64
 	strokeTimes               []float64

@@ -63,6 +63,7 @@ func (a *App) mountCanvas() {
 	on(element("viewport"), "scroll", func(js.Value) {
 		a.view.X = element("viewport").Get("scrollLeft").Float() / a.view.Scale
 		a.view.Y = element("viewport").Get("scrollTop").Float() / a.view.Scale
+		a.navigationChanged()
 		a.present()
 		a.Schedule()
 	})
@@ -184,14 +185,29 @@ func (a *App) mountCanvas() {
 		element("viewport").Set("scrollLeft", x*a.view.Scale-float64(a.view.Width)/2)
 		element("viewport").Set("scrollTop", y*a.view.Scale-float64(a.view.Height)/2)
 	}
-	on(nav, "pointerdown", func(e js.Value) { drag = true; nav.Call("setPointerCapture", e.Get("pointerId")); navMove(e) })
+	on(nav, "pointerdown", func(e js.Value) {
+		drag = true
+		a.navigatorDragging = true
+		nav.Call("setPointerCapture", e.Get("pointerId"))
+		navMove(e)
+	})
 	on(nav, "pointermove", func(e js.Value) {
 		if drag {
 			navMove(e)
 		}
 	})
-	on(nav, "pointerup", func(js.Value) { drag = false })
-	on(nav, "pointercancel", func(js.Value) { drag = false })
+	endNavigation := func(js.Value) {
+		if !drag {
+			return
+		}
+		drag = false
+		a.navigatorDragging = false
+		a.navigationChanged()
+		a.Schedule()
+	}
+	on(nav, "pointerup", endNavigation)
+	on(nav, "pointercancel", endNavigation)
+	on(nav, "lostpointercapture", endNavigation)
 	on(nav, "keydown", func(e js.Value) {
 		if a.Busy || a.gesture != nil {
 			return
@@ -290,12 +306,12 @@ func (a *App) pointerDown(e js.Value) {
 	overlay := element("overlay")
 	overlay.Call("focus")
 	overlay.Call("setPointerCapture", e.Get("pointerId"))
-	p := a.pointerPoint(e)
 	if a.space || e.Get("button").Int() == 1 || e.Get("button").Int() == 2 {
 		v := element("viewport")
 		a.gesture = &gesture{Kind: "pan", ScreenX: e.Get("clientX").Float(), ScreenY: e.Get("clientY").Float(), ScrollX: v.Get("scrollLeft").Float(), ScrollY: v.Get("scrollTop").Float()}
 		return
 	}
+	p := a.pointerPoint(e)
 	if a.featureUI != nil && a.featureUI.PointerDown(p, e) {
 		return
 	}
@@ -382,6 +398,12 @@ func (a *App) pointerDown(e js.Value) {
 	a.Update()
 }
 func (a *App) pointerMove(e js.Value) {
+	if g := a.gesture; g != nil && g.Kind == "pan" {
+		v := element("viewport")
+		v.Set("scrollLeft", g.ScrollX-(e.Get("clientX").Float()-g.ScreenX))
+		v.Set("scrollTop", g.ScrollY-(e.Get("clientY").Float()-g.ScreenY))
+		return
+	}
 	p := a.pointerPoint(e)
 	hoverPoint = &p
 	if a.featureUI != nil && a.featureUI.PointerMove(p, e) {
@@ -485,6 +507,7 @@ func (a *App) pointerUp(e js.Value, commit bool) {
 	}
 	a.gesture = nil
 	if g.Kind == "pan" {
+		a.navigationChanged()
 		a.Schedule()
 		return
 	}
