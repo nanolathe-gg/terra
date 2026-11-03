@@ -123,7 +123,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		out.Op = PreparedOp{Ground: true, Values: map[string]float64{"seed": float64(n.Seed), "gAmp": n.Amplitude, "gWave": n.Wavelength, "gCover": n.Coverage}}
 		return out, nil
 	}
-	codes := map[string]int{"paint": 0, "erase": 1, "mountain": 4, "hill": 5, "plateau": 6, "offset": 7, "lower": 8, "sand": 9, "grass": 10, "smooth": 11}
+	codes := map[string]int{"paint": 0, "erase": 1, "deep": 2, "shallow": 3, "mountain": 4, "hill": 5, "plateau": 6, "offset": 7, "lower": 8, "sand": 9, "grass": 10, "smooth": 11, "ramp": 12}
 	code, ok := codes[n.Kind]
 	if !ok {
 		return out, fmt.Errorf("shape %q preparation not implemented", n.Kind)
@@ -149,6 +149,12 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	inv := inverseFrame(n.Frame)
 	lean := model.LeanSetup(n.Kind, param(q, "lean"), param(q, "facing"), param(q, "facePx"))
 	faceWidth, backWidth := model.HillWidths(param(q, "softness"), param(q, "facePx"), radius, lean.Ratio)
+	water := n.Kind == "deep" || n.Kind == "shallow"
+	naturalWater := n.Kind == "deep"
+	bankScale := 1.0
+	if water {
+		bankScale = math.Pow(2, (param(q, "bankWidth")-.5)*1.3)
+	}
 	shouldered := model.IsShouldered(n.Kind, param(q, "lean"), false)
 	plainHill := n.Kind == "hill" && !shouldered
 	natural := n.Kind == "paint" || n.Kind == "erase" || n.Kind == "sand" || n.Kind == "grass" || n.Kind == "plateau" || n.Kind == "offset"
@@ -158,11 +164,17 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		}
 		return param(q, k)
 	}
-	vary := model.ShapeVariability(n.Kind, false, natural, shouldered, plainHill, get("outlineVar", 1), get("widthVar", 1), get("heightVar", 1))
+	vary := model.ShapeVariability(n.Kind, naturalWater, natural, shouldered, plainHill, get("outlineVar", 1), get("widthVar", 1), get("heightVar", 1))
 	amp := rough * radius * vary.Amp
+	if n.Kind == "ramp" {
+		amp = rough * radius * .14
+	}
 	extent := radius
 	if vary.WK != 0 {
 		extent *= math.Min(vary.WHi, 1+rough*vary.WK)
+	}
+	if water {
+		extent *= bankScale
 	}
 	if shouldered {
 		extent *= math.Max(1.4, math.Max(backWidth, faceWidth))
@@ -171,6 +183,9 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		extent *= *lean.Ratio
 	}
 	extent += 2 * amp
+	if water && !(param(q, "facePx") > 0) {
+		extent += math.Max(0, param(q, "bankPx"))
+	}
 	if param(q, "baseVary") > 0 {
 		extent += param(q, "baseVary")
 	}
@@ -178,11 +193,14 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		extent += param(q, "moonLobes") * radius
 	}
 	fx, fy := 0, 1
-	if natural {
+	if natural || naturalWater {
 		fx, fy = 3, 4
 	}
+	segmentBox := func(a, b model.Point) CellRect {
+		return CellRect{int(clampNumber(math.Floor((math.Min(a.X, b.X)-extent)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Floor((math.Min(a.Y, b.Y)-extent)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(a.X, b.X)+extent)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(a.Y, b.Y)+extent)/g.Spacing), 0, float64(g.Grid-1)))}
+	}
 	dab := func(a, b model.Point) {
-		box := CellRect{int(clampNumber(math.Floor((math.Min(a.X, b.X)-extent)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Floor((math.Min(a.Y, b.Y)-extent)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(a.X, b.X)+extent)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(a.Y, b.Y)+extent)/g.Spacing), 0, float64(g.Grid-1)))}
+		box := segmentBox(a, b)
 		out.Segments = append(out.Segments, Segment{PX: a.X, PY: a.Y, EX: b.X, EY: b.Y, NX: sampledShapeNoise(fx, n.Seed, a.X, a.Y, g, inv), NY: sampledShapeNoise(fy, n.Seed, a.X, a.Y, g, inv), Box: box})
 	}
 	p := model.ShapePath{Points: n.Points, Paths: n.Paths}
@@ -197,10 +215,17 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	faceSide := 1
 	settle := false
 	paths := model.ShapePaths(&p)
+	var reads []model.Point
 	for _, indices := range paths {
 		pts := make([]model.Point, len(indices))
 		for i, j := range indices {
 			pts[i] = n.Points[j]
+		}
+		if n.Kind == "ramp" {
+			segs, ptsRead := prepareRampPath(pts, radius, len(reads), segmentBox)
+			out.Segments = append(out.Segments, segs...)
+			reads = append(reads, ptsRead...)
+			continue
 		}
 		if shouldered {
 			fa := math.Atan2(-lean.BY, -lean.BX) + turn
@@ -243,12 +268,24 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 			}
 		}
 	}
+	if len(out.Segments) == 0 {
+		return out, nil
+	}
 	region := out.Segments[0].Box
 	for _, s := range out.Segments[1:] {
 		region = union(region, s.Box)
 	}
 	out.Writes = ShapeMaskWrites(n.Kind, q, false)
-	u := map[string]float64{"kind": float64(code), "seed": float64(n.Seed), "radius": radius, "amount": param(q, "amount"), "amountPct": clampNumber(param(q, "amount")/100, 0, 1), "rough": rough, "softness": param(q, "softness"), "leanK": lean.K, "bearX": lean.BX, "bearY": lean.BY, "leanSide": float64(lean.Side), "wK": vary.WK, "wLo": vary.WLo, "wHi": vary.WHi, "hgtA": vary.HgtA, "hgtB": vary.HgtB, "bankScale": 1, "amp": amp, "faceVar": get("faceVariation", .8), "shelves": param(q, "shelves"), "beachFlat": param(q, "beachFlatness"), "coreEdge": .38, "faceX": face[0], "faceY": face[1], "faceSide": float64(faceSide), "faceWidth": faceWidth, "backWidth": backWidth, "rotX": math.Cos(turn), "rotY": math.Sin(turn), "cOffX": math.Cos(float64(n.Seed%628)/100 + turn), "cOffY": math.Sin(float64(n.Seed%628)/100 + turn), "facePx": math.Max(0, param(q, "facePx"))}
+	u := map[string]float64{"kind": float64(code), "seed": float64(n.Seed), "radius": radius, "amount": param(q, "amount"), "amountPct": clampNumber(param(q, "amount")/100, 0, 1), "rough": rough, "softness": param(q, "softness"), "leanK": lean.K, "bearX": lean.BX, "bearY": lean.BY, "leanSide": float64(lean.Side), "wK": vary.WK, "wLo": vary.WLo, "wHi": vary.WHi, "hgtA": vary.HgtA, "hgtB": vary.HgtB, "bankScale": bankScale, "amp": amp, "faceVar": get("faceVariation", .8), "shelves": param(q, "shelves"), "beachFlat": param(q, "beachFlatness"), "coreEdge": .38, "faceX": face[0], "faceY": face[1], "faceSide": float64(faceSide), "faceWidth": faceWidth, "backWidth": backWidth, "rotX": math.Cos(turn), "rotY": math.Sin(turn), "cOffX": math.Cos(float64(n.Seed%628)/100 + turn), "cOffY": math.Sin(float64(n.Seed%628)/100 + turn), "facePx": math.Max(0, param(q, "facePx"))}
+	if naturalWater {
+		u["natural"] = 1
+	}
+	if n.Kind == "shallow" && q["shallowMode"] == "passage" {
+		u["passage"] = 1
+	}
+	if water && !(param(q, "facePx") > 0) {
+		u["bankFlat"] = math.Max(0, param(q, "bankPx"))
+	}
 	if inv != nil {
 		u["framed"] = 1
 		for i, v := range inv {
@@ -257,9 +294,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	}
 	if n.Kind == "offset" {
 		u["bpOffset"] = 1
-		if param(q, "shorePlates") > 0 {
-			return out, fmt.Errorf("shore plate preparation not implemented")
-		}
+
 	}
 	if n.Kind == "hill" {
 		if plainHill {
@@ -275,6 +310,23 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	entry := "stamp"
 	if code >= 6 {
 		entry = "stampN"
+	}
+	if n.Kind == "ramp" {
+		entry = "stampRamp"
+	}
+	facet := 0
+	if n.Kind == "mountain" && param(q, "iceFacets") > 0 && param(q, "amount") >= 8 {
+		facet = 2
+	}
+	var coast *CoastPass
+	if water || (n.Kind == "offset" && param(q, "shorePlates") > 0) || facet != 0 {
+		var coU map[string]float64
+		var extra [][4]float64
+		coast, coU, extra = prepareCoast(q, g, region, bankScale, radius, inv, n.Seed, water, facet)
+		for k, v := range coU {
+			u[k] = v
+		}
+		out.Extra = append(out.Extra, extra...)
 	}
 	var curve *model.CurveSpec
 	if raw, ok := q["curve"]; ok && raw != nil {
@@ -309,12 +361,32 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 			u["sBack"] = backWidth / faceWidth
 		}
 	}
-	if (n.Kind == "hill" || n.Kind == "mountain" || n.Kind == "plateau" || n.Kind == "offset") && (param(q, "baseVary") > 0 || param(q, "moonLobes") > 0 || param(q, "baseBump") > 0 || param(q, "iceFacets") > 0) {
-		return out, fmt.Errorf("mountain outline and facet preparation not implemented")
+	if n.Kind == "hill" || n.Kind == "mountain" || n.Kind == "plateau" || n.Kind == "offset" {
+		u["bpAmp"] = math.Max(0, param(q, "baseBump"))
+		if param(q, "baseVary") > 0 {
+			u["olAmp"] = math.Min(param(q, "baseVary"), .15*radius) / radius
+			if n.Kind == "offset" {
+				u["olFlat"] = 1
+			}
+			u["olLo"], u["olHi"] = .5, .95
+			u["olW0"], u["olL0"], u["olS0"] = .6, 55, 0x2e83
+			u["olW1"], u["olL1"], u["olS1"] = .4, 21, 0x71d5
+			u["olL2"] = 1
+		} else if (n.Kind == "hill" || n.Kind == "mountain") && param(q, "moonLobes") > 0 {
+			u["olAmp"] = param(q, "moonLobes")
+			u["olLo"], u["olHi"], u["olMoon"] = .25, .8, 1
+			u["olW0"], u["olL0"], u["olS0"] = .55, radius*.5, 0x5a31
+			u["olW1"], u["olL1"], u["olS1"] = .3, radius*.18, 0x2c47
+			u["olW2"], u["olL2"], u["olS2"] = .15, radius*.07, 0x7d13
+		}
 	}
-	out.Op = PreparedOp{Region: &region, Values: u, Entry: entry, Settle: settle}
+
+	out.Op = PreparedOp{Region: &region, Values: u, Entry: entry, Settle: settle, Coast: coast}
 	if n.Kind == "plateau" {
 		out.Op.PrefixReads = []model.Point{n.Points[0]}
+	}
+	if n.Kind == "ramp" {
+		out.Op.PrefixReads = reads
 	}
 	if n.Kind == "smooth" {
 		ref := g.RefSpacing

@@ -53,7 +53,13 @@ func (s *ShapeEngine) resolvePrefix(ctx context.Context, c ShapeWindowConfig, op
 				case 1:
 					size = 7 * cells * 4
 				case 3:
-					size = 3 * cells * 4
+					scratch := 3 * cells
+					for _, prior := range ops[:i] {
+						if prior.Coast != nil {
+							scratch = max(scratch, 14*cells+prior.Coast.SiteFloats)
+						}
+					}
+					size = scratch * 4
 				}
 				b[j], err = s.gpu.Allocate("prefix window", uint64(size), usage)
 				if err != nil {

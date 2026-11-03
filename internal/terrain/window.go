@@ -29,6 +29,12 @@ type ShapeWindow struct {
 // operations with direct, world-coordinate noise. Unsupported operations fail
 // rather than returning an incomplete terrain.
 func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConfig, nodes []model.Node) (*ShapeWindow, error) {
+	return s.evaluateShapeWindow(ctx, c, nodes, true, nil)
+}
+
+type shapeBuffersCallback func(CellRect, *wgpu.Buffer, *wgpu.Buffer) error
+
+func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConfig, nodes []model.Node, expandTarget bool, callback shapeBuffersCallback) (*ShapeWindow, error) {
 	whole := CellRect{0, 0, c.Grid - 1, c.Grid - 1}
 	window, ok := intersect(c.Window, whole)
 	if !ok {
@@ -58,6 +64,9 @@ func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 		}
 	}
 	_, target := RequiredRegions(deps, window, whole)
+	if !expandTarget {
+		target = window
+	}
 	w, h := target.X1-target.X0+1, target.Y1-target.Y0+1
 	cells := w * h
 	base := map[string]float64{"grid": float64(c.Grid), "spacing": c.Spacing, "baseH": c.BaseHeight, "sea": c.Sea, "minH": c.MinHeight, "maxH": c.MaxHeight, "ox": float64(target.X0), "oy": float64(target.Y0), "pw": float64(w), "ph": float64(h), "direct": 1}
@@ -77,7 +86,13 @@ func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	for _, op := range ops {
 		reads += len(op.PrefixReads)
 	}
-	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, 3 * cells * 4, 0, 0, words * 4, max(16, reads*4)}
+	scratch := 3 * cells
+	for _, op := range ops {
+		if op.Coast != nil {
+			scratch = max(scratch, 14*cells+op.Coast.SiteFloats)
+		}
+	}
+	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, scratch * 4, 0, 0, words * 4, max(16, reads*4)}
 	var e error
 	for i := range buffers {
 		switch i {
@@ -102,6 +117,11 @@ func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	passes = append(passes, ShapePass{Entry: "pack", Region: window, Values: base, OutputWords: words})
 	if e = s.Dispatch(passes, buffers); e != nil {
 		return nil, e
+	}
+	if callback != nil {
+		if e = callback(target, buffers[0], buffers[1]); e != nil {
+			return nil, e
+		}
 	}
 	data, e := s.gpu.ReadBuffer(ctx, buffers[6], 0, uint64(words*4))
 	if e != nil {

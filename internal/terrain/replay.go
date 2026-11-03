@@ -24,6 +24,7 @@ type CoastPass struct {
 	ReadRadius, MaxCells, BlurRadius          int
 	Fingers, Layers, Plates, Scalloped, Facet bool
 	Sites                                     CellRect
+	SiteFloats                                int
 }
 
 func copyValues(a, b map[string]float64) map[string]float64 {

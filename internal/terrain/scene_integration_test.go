@@ -21,7 +21,7 @@ func TestSceneWindowAndComparison(t *testing.T) {
 	}
 	defer g.Close()
 	sources := map[string]string{}
-	for _, name := range []string{"sculpt-vert.wgsl", "engine-shape.wgsl", "engine-frag.wgsl", "engine-common.wgsl", "engine-bake.wgsl", "engine-materials.wgsl", "engine-palette.wgsl", "engine-weather.wgsl", "engine-erosion.wgsl", "materials/palette.json"} {
+	for _, name := range []string{"sculpt-vert.wgsl", "engine-shape.wgsl", "engine-feed.wgsl", "engine-frag.wgsl", "engine-common.wgsl", "engine-bake.wgsl", "engine-materials.wgsl", "engine-palette.wgsl", "engine-weather.wgsl", "engine-erosion.wgsl", "materials/palette.json"} {
 		b, e := os.ReadFile(filepath.Join("../..", name))
 		if e != nil {
 			t.Fatal(e)
@@ -53,6 +53,13 @@ func TestSceneWindowAndComparison(t *testing.T) {
 	}
 	if len(r.RGBA) != 64*64*4 || len(r.Heights) != r.HeightWidth*r.HeightHeight || r.HeightSpacing != 127./32 {
 		t.Fatalf("wrong output dimensions: %+v", r)
+	}
+	weather, err := s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, SceneWindow{X: 16, Y: 16, Width: 32, Height: 32, Scale: 1}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65, Weather: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(weather.RGBA) != 32*32*4 || len(weather.Heights) != weather.HeightWidth*weather.HeightHeight {
+		t.Fatal("invalid weather output dimensions")
 	}
 	cmp, e := s.CompareRegions(context.Background(), nodes, nil)
 	if e != nil {
