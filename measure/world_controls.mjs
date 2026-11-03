@@ -12,7 +12,7 @@
 // Sand over the first) and is not on `ALLOWED` below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
 // stands on every fixture while its reason holds (state "hidden"), which proves the reason true: it fails if the row moves HIDDEN_PX pixels or more,
 // since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
-// --set puts values in before the sweep, to probe a row under a gate.
+// --set puts values in before the sweep, to probe a row under a gate. --show-view retains background viewport bakes for comparison.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
@@ -61,7 +61,7 @@ if (!server) {
 }
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   // A pool of browsers, one child per world, the dearest worlds first; rows are merged into the same file and the same exit code.
-  const pass = []; for (const f of ['--only', '--set']) if (opt(f, '')) pass.push(f, opt(f, ''));
+  const pass = args.includes('--show-view') ? ['--show-view'] : []; for (const f of ['--only', '--set']) if (opt(f, '')) pass.push(f, opt(f, ''));
   const cost = {green: 3, zhon: 2, red: 2}, order = [...WORLDS].sort((a, b) => (cost[b] || 1) - (cost[a] || 1)), queue = [...order], codes = [], tries = {};
   const slots = Array.from({length: Math.min(JOBS, WORLDS.length)}, (_, k) => new Promise(async done => {
     for (let w; (w = queue.shift());) {
@@ -127,7 +127,7 @@ try {
   const load = async (world, query) => {
     await send('Page.navigate', {url: `${server}/sculpt?biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`});
     for (let i = 0; i < 400; i++) { await sleep(150); try { if (await ev('!!window.terraformAudit&&document.readyState==="complete"')) break; } catch {} }
-    await ev('terraformAudit.ready()'); await ev(HELPERS.replace('KINDS', JSON.stringify(Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]))))); await ev('terraformAudit.idle()');
+    await ev('terraformAudit.ready()'); if (!args.includes('--show-view')) await ev('terraformAudit.captureOnly(true)'); await ev(HELPERS.replace('KINDS', JSON.stringify(Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]))))); await ev('terraformAudit.idle()');
   };
   const strokes = world => scenes[`${world}-1`];
   // A fixture is a stroke list. The diagnostic one is runner.js's: a plateau, a mountain, a deep stroke with shore plates, sand and paint.

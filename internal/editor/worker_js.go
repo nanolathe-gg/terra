@@ -150,7 +150,7 @@ func (a *App) job(kind string, tiles []renderjob.Tile) renderjob.Request {
 	return renderjob.Request{Kind: kind, ID: a.requestID, Session: a.viewState().session, Revision: a.Revision, Config: a.Config, Nodes: a.Nodes, Knobs: a.knobStrings(), Colors: a.mergedColors(), Options: options, Tiles: tiles}
 }
 func (a *App) Schedule() {
-	if !a.workerReady || a.Busy || a.view.Width < 1 {
+	if !a.workerReady || a.Busy || a.view.Width < 1 || auditCaptureOnly {
 		return
 	}
 	if a.scheduleTimer != nil {

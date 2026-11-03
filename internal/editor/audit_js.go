@@ -13,6 +13,8 @@ import (
 	"github.com/nanolathe-gg/terraform/internal/renderjob"
 )
 
+var auditCaptureOnly bool
+
 // mountAudit exposes the real editor and model to the control-impact checks.
 // It is enabled only on an explicit audit page and creates no editor controls.
 func (a *App) mountAudit() {
@@ -87,6 +89,13 @@ func (a *App) mountAudit() {
 	expose(audit, "ready", func([]js.Value) any { return wait() })
 	expose(audit, "idle", func([]js.Value) any { return wait() })
 	expose(audit, "setBusy", func([]js.Value) any { return nil })
+	expose(audit, "captureOnly", func(args []js.Value) any {
+		auditCaptureOnly = len(args) > 0 && args[0].Truthy()
+		if !auditCaptureOnly {
+			a.Schedule()
+		}
+		return nil
+	})
 	expose(audit, "panelValues", func([]js.Value) any { return jsObject(a.worldValues()) })
 	expose(audit, "defaults", func(args []js.Value) any {
 		if len(args) < 1 {
