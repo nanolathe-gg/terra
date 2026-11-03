@@ -21,6 +21,34 @@ func (a *App) mountAudit() {
 	}
 	debug := js.Global().Get("sculptDebug")
 	expose(debug, "curve", func([]js.Value) any { return jsObject(a.Curve) })
+	expose(debug, "along", func([]js.Value) any { return jsObject(a.Along) })
+	expose(debug, "place", func([]js.Value) any { return a.landformPlace })
+	toPage := func(canvas js.Value, x, y float64) any {
+		r := canvas.Call("getBoundingClientRect")
+		return jsObject(map[string]float64{"x": r.Get("left").Float() + x*r.Get("width").Float()/canvas.Get("width").Float(), "y": r.Get("top").Float() + y*r.Get("height").Float()/canvas.Get("height").Float()})
+	}
+	expose(debug, "sectionPoint", func(args []js.Value) any {
+		c := element("section-preview")
+		l := a.sectionGeometry(c, false)
+		return toPage(c, l.sideX(args[0].String(), args[1].Float()), l.valueY(args[2].Float()))
+	})
+	expose(debug, "leanPoint", func([]js.Value) any {
+		c := element("section-preview")
+		l := a.sectionGeometry(c, false)
+		return toPage(c, l.xc, l.valueY(0))
+	})
+	expose(debug, "alongPoint", func(args []js.Value) any {
+		c := element("along-preview")
+		l := a.sectionGeometry(c, true)
+		return toPage(c, l.xL+(l.xR-l.xL)*args[0].Float(), l.valueY(args[1].Float()))
+	})
+	expose(js.Global().Get("sculptRegion"), "sectionMark", func([]js.Value) any {
+		p, q, ok := a.landformSectionMark()
+		if !ok {
+			return js.Null()
+		}
+		return jsObject(map[string]any{"a": p, "b": q})
+	})
 	expose(debug, "curveFormKnots", func(args []js.Value) any {
 		knots, _ := model.FormKnots(args[0].String(), args[1].Float())
 		return jsObject(knots)

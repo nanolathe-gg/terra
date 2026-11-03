@@ -52,6 +52,8 @@ type App struct {
 	AddPath                   bool
 	ToolSettings              map[string]map[string]any
 	Curve                     map[string]any
+	Along                     []model.Knot
+	landformPlace             float64
 	history                   [][]byte
 	historyIndex              int
 	localKey                  string
@@ -90,7 +92,7 @@ var current *App
 
 func Run() {
 	go func() {
-		a := &App{Config: map[string]any{}, MapData: map[string]any{}, Knobs: map[string]any{}, Colors: map[string]any{}, Tool: "plateau", Selected: -1, Nodes: []model.Node{}, PathPoint: -1, Seed: 2701, RefinementSeed: 2701, ToolSettings: map[string]map[string]any{}, historyIndex: -1, panels: map[string]bool{"tools": true, "inspector": true}}
+		a := &App{Config: map[string]any{}, MapData: map[string]any{}, Knobs: map[string]any{}, Colors: map[string]any{}, Tool: "plateau", Selected: -1, Nodes: []model.Node{}, PathPoint: -1, Seed: 2701, RefinementSeed: 2701, ToolSettings: map[string]map[string]any{}, historyIndex: -1, landformPlace: .5, panels: map[string]bool{"tools": true, "inspector": true}}
 		current = a
 		if e := a.boot(); e != nil {
 			showError(e)
@@ -279,6 +281,9 @@ func (a *App) params() map[string]any {
 	if a.Curve != nil {
 		p["curve"] = clone(a.Curve)
 	}
+	if a.Along != nil {
+		p["along"] = clone(a.Along)
+	}
 	return p
 }
 func (a *App) toolDefaults(kind, world string) map[string]any {
@@ -294,7 +299,10 @@ func (a *App) toolDefaults(kind, world string) map[string]any {
 	case "paint", "sand", "grass":
 		d["amount"] = 100.0
 	}
-	for k, v := range map[string]float64{"hill": 40, "mountain": 60, "plateau": 50, "crater": 30, "offset": 40} {
+	if kind == "landform" {
+		d["elevation"] = max(-80, min(300, math.Round(num(a.Config, "baseHeight", 24)+70)))
+	}
+	for k, v := range map[string]float64{"hill": 40, "mountain": 60, "plateau": 50, "crater": 30, "offset": 40, "landform": 40} {
 		if k == kind {
 			d["cracks"] = v
 		}
@@ -314,6 +322,7 @@ func (a *App) rememberTool() {
 	}
 	d["shallowMode"] = value("shallow-mode")
 	d["curve"] = clone(a.Curve)
+	d["along"] = clone(a.Along)
 	a.ToolSettings[a.Tool] = d
 }
 func (a *App) showTool(kind string) {
@@ -329,6 +338,7 @@ func (a *App) showTool(kind string) {
 	setValue("shallow-mode", str(d, "shallowMode", "area"))
 	setValue("tool-style", str(d, "preset", a.World()))
 	a.Curve = obj(d, "curve")
+	a.Along = readCurveKnots(d["along"])
 	a.Update()
 }
 func (a *App) Select(index int) {
@@ -352,6 +362,7 @@ func (a *App) Select(index int) {
 			setValue(f[1].(string), num(p, f[0].(string), num(a.Knobs, f[0].(string), 0))*f[7].(float64))
 		}
 		a.Curve = obj(p, "curve")
+		a.Along = readCurveKnots(p["along"])
 		setValue("seed", n.Seed)
 	}
 	a.Update()
@@ -621,12 +632,13 @@ func (a *App) Update() {
 	}
 	text("tool-help", a.Schema.Help[kind])
 	text("brush-title", strings.Title(kind))
-	hidden("amount-control", contains([]string{"deep", "shallow", "ramp", "erase"}, kind))
+	hidden("amount-control", contains([]string{"deep", "shallow", "ramp", "erase", "landform"}, kind))
+	hidden("roughness-control", kind == "fissure" || kind == "landform")
 	hidden("shelves-control", kind != "deep")
 	hidden("shallow-mode-control", kind != "shallow")
 	hidden("bank-control", !contains([]string{"deep", "shallow"}, kind))
 	hidden("beach-control", !contains([]string{"deep", "shallow"}, kind))
-	hidden("cracks-control", !contains([]string{"plateau", "hill", "mountain", "crater", "offset"}, kind))
+	hidden("cracks-control", !contains([]string{"plateau", "hill", "mountain", "crater", "offset", "landform"}, kind))
 	for _, id := range []string{"diameter", "amount", "roughness", "softness", "cracks", "shelves", "relief", "ring-spread", "ring-variation", "material-weathering", "deposit-spread", "transition-detail"} {
 		text(id+"-value", value(id))
 	}

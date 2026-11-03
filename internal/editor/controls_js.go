@@ -342,6 +342,12 @@ func (a *App) updateToolGroups() {
 			}
 		}
 		g.Set("hidden", !visible)
+		prior := g.Get("dataset").Get("landformContext").String()
+		if prior != kind && (kind == "landform" || prior == "landform") {
+			name := g.Get("dataset").Get("groupName").String()
+			g.Set("open", kind == "landform" && (name == "Height" || name == "Cross-section" || name == "Variation"))
+		}
+		g.Get("dataset").Set("landformContext", kind)
 	})
 }
 func (a *App) groupToolControls() {
@@ -353,6 +359,7 @@ func (a *App) groupToolControls() {
 	claimed := map[string]bool{}
 	for _, g := range groups {
 		d := create("details", "feature-group", "")
+		d.Get("dataset").Set("groupName", g.name)
 		d.Call("append", create("summary", "", g.name))
 		body := create("div", "feature-body", "")
 		d.Call("append", body)
