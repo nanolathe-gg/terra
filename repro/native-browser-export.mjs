@@ -1,6 +1,6 @@
 // Compare an editor export and native Metal export of the same complete recipe.
-// Requires built web WASM and an independently prepared catalogue, not retail
-// files in the checkout. All generated archives remain in a private temp root.
+// Builds isolated Go/WASM programs and requires an independently prepared
+// catalogue. All generated archives remain in a private temp root.
 // node repro/native-browser-export.mjs --prepared-assets /path/to/assets [--recipe path] [--port 9697] [--server-port 8898]
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, symlinkSync} from 'node:fs';

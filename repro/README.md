@@ -16,6 +16,8 @@ node repro/curveedit.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/t
 node repro/shapecheck.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-shapes
 node repro/zoom.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --port 9450
 node repro/memory-budgets.mjs --server http://127.0.0.1:8801 --port 9450
+node repro/ground-controls.mjs --server http://127.0.0.1:8801 --port 9450
+node repro/landform-ghost.mjs --server http://127.0.0.1:8801 --port 9450
 node measure/shape_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-shape-controls
 node measure/world_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-world-controls
 ```
@@ -28,6 +30,17 @@ live 128 MiB controls, unchanged terrain pixels, cache bounds, early oversized
 readback refusal and subsequent recovery. `measure/geology_controls.mjs` measures class-specific impact using current Go
 world configuration and the recorded neutral and per-world baseline values.
 Historical audit and interaction reports describe past evidence.
+
+`repro/native-browser-export.mjs --prepared-assets <assets-root>` builds its own
+isolated Go server and WASM, exports the same complete recipe through the
+browser and native Metal, and compares heights, indexed art and TNT bytes.
+Use `--recipe repro/recipes/native-landform.json` for Landform. It is a strict
+byte comparison and exits nonzero for any difference: the current Hill and
+Landform checks have exact heights but a few indexed pixels differ between
+Chrome's and native Go's shader compilers. The spike report records those
+counts and same-backend repeatability; this check is not an assertion of
+cross-backend bit identity.
+
 
 ## Retail scenes
 
