@@ -8284,6 +8284,32 @@ trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 - *Checks (`607ce99`, exit statuses as run, `rev-final4.sh`, `rev/final4-exits`).* `all.sh` exit 0, 27 scenes, mismatch 0, console clean, the tile check on each; `compare.py` against the fix's first render exit 0, 27 of 27 and nine walls byte for byte, so it repeats; `regional.mjs` exit 0 on 27; `smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago,crystal` exit 0; `gate.sh` exit 0; `node --test repro/*.test.mjs` exit 0, 40 pass; `shape_controls.mjs`, `section_check.mjs`, `curveedit.mjs` exit 0; five old saves load; `world_controls.mjs` exit 0: 1,145 enabled rows, 691 gated, 2,387 stroke rows, 13 sliders, 0 read 0, 0 hidden and moving, 62 readings under a picked color, none at 0. Perf not run: no pass changed, and a tile's lattice only gains rows.
 - *Baseline.* The next card compares against `$R/agent-H25/rev/final4` (`f` and `walls`), not H24's renders.
 
+### H26. Natural zoom
+
+**Why.** Zoomed in, the editor drew the 1x picture bigger: each ground pixel became a block of 2x2 or 4x4 screen pixels, and the material grain and dithers with it. The owner asked for the same pattern in finer pixels, "basically the same detail but smaller", and said the specific pixels may differ per zoom as long as the pattern and style hold.
+
+**The change.** Above 100% the editor bakes its final image at the screen's pixels: a level of .5 up to 200% and .25 beyond. `renderChunk` takes a scale below 1; `grainPixel` in `engine-frag.wgsl` is the world pixel at 1x and the drawn pixel below it, and only the readers of material grain and the dithers go through it (`groundTile`, `genColor`, `rockRelief`, the water and shelf jitters, the final dither). Marks (Moon's cups, Ice's hatching, wrinkles) keep their world size, since `pixel` itself does not move. Export, `sampleHeights`, `exportChunks` and `debugBake`'s default stay at level 1; export never asks for a detail level.
+
+**Steps.**
+1. The shader: `grainPixel` is `pixel / min(chunkScale, 1)` in the chunk build, and the raster limit scales with the raster. At scale 1 and above every expression equals the old one.
+2. The planner in `sculpt-canvas.js`: `detailLevel()` (1 at zoom <= 100%, .5 at <= 200%, .25 above; 1 in the overview, with `levels` off, or off the GPU-fed path); the final request wants it; a retained image whose level is not the one wanted is replaced in both directions (a non-fed image cannot be finer, so it stays); `foregroundPending` follows; a bitmap drawn smaller than its pixels is smoothed. A `400%` option in the zoom select.
+3. `repro/zoom.mjs`, the guard.
+4. These docs.
+
+**The budget rule.** A detail bake whose allocation the GPU budget refuses is caught in the planner's bake call, lowers `finest` one level (.25 to .5 to 1) and re-plans: no banner, no new field. `configureChunks` resets `finest`, so a budget change tries the finest again. Level 1 is never caught, so a real failure still shows. The lattice is untouched.
+
+**The bar.** At 1x nothing moves: 27 scenes and 9 walls byte for byte against H25b's. Above it, each level must be what a bake of that tile at that level draws, and 100% after any zoom must give the 1x picture back.
+
+**Done.** Branch `H26-natural-zoom`; assets `$R/agent-H26`.
+- *1x.* 27 of 27 scenes and 9 of 9 walls byte equal (`cmp`) to `$R/agent-H25/rev/final4`, at the shader step and again on the head.
+- *The guard.* `repro/zoom.mjs` on green-2, lava-2, moon-1 and archipelago-1, all exit 0: 25 tiles at 1x, 9 at 200% (.5), 4 at 400% (.25), every one current; the canvas at 200% is `debugBake(tile, .5)` for 0 px on all four; four 256 px tiles against one 512 px tile at .5 differ by 1, 0, 0 and 0 px (limit 16); 100% after 200% and 400% is byte equal to the first read (0 px); an edit at 200% leaves 0 dirty tiles, mismatch 0, console clean; no bake in 2 s of idle at 200% or 400% (130 to 175 bakes before, the same after).
+- *Proved both ways.* The old `upgrade` line (`want===1&&e&&(scale>1||...)`) never asks for a finer image, so the guard fails earlier: (a) the tiles stay at level 1 and (b) the canvas at 200% differs from the .5 bake by 221,377 px on green-2. With the downward half of the rule alone removed (`scale>want`, the fine image kept at 100%), (c) fails with 1,044,413 px on green-2 and tiles still at .25 and .5 at 100%. The fix passes with 0.
+- *The budget.* The editor itself refuses 128 and 192 MB on these scenes before any zoom (the GPU fields, the canvas and a 256 px chunk do not fit: `exceed the GPU memory budget` from `chunkSize`, or a 1x bake refused at 192), so the guard takes the smallest budget at which 100% settles, 256 MB on all four. There zoom 400% settles with no banner and falls back by itself: level 1 on green-2, .5 on the other three. A refused detail allocation (simulated at the allocator) falls to level 1 with the banner hidden, and a budget change returns it to .25.
+- *No loop.* A bake that is not fed returns level 1; the rule leaves it alone rather than asking for a finer one again. Bake counts are stable over 2 s of idle at both zooms.
+- *Checks (`rev-final.sh`, exit statuses as run, `rev/final-exits`).* `all.sh` exit 0 on 27 scenes; `compare.py --worlds none` against H25b's renders exit 0, 27 of 27 and nine walls byte for byte; `regional.mjs` exit 0 on 27; `smoke.mjs --page8 --worlds8 green,lava,ice,zhon,red,archipelago,crystal` exit 1 on the first run, because the assets root had no `map-catalog.json` (each export failed with that error; every brush and page-8 pass was ok), and exit 0 once it was linked; `gate.sh`, `node --test repro/*.test.mjs`, `shape_controls.mjs`, `section_check.mjs` against `classic-ref.json`, `curveedit.mjs` exit 0; five old saves load; `zoom.mjs` exit 0 on the four scenes.
+- *Not run.* `measure/world_controls.mjs` (no control changed) and `repro/perf.mjs` (a quiet machine).
+- *Left.* Export of 2x tiles, and anything in Nanolathe, are out of scope.
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
