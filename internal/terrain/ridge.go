@@ -8,6 +8,7 @@ import (
 type spurRoot struct {
 	x, y, heading float64
 	k             int
+	share         float64
 }
 
 func lineMultipliers(q map[string]any, seed uint32, a, length float64, salt uint32, taper float64, ends bool) (float64, float64) {
@@ -70,8 +71,12 @@ func spurPieces(q map[string]any, seed uint32, inv []float64, roots []spurRoot, 
 		}
 	}
 	for _, r := range roots {
+		first := len(out)
 		k := r.k
 		grow(r.x, r.y, r.heading, param(q, "spurLength")*kf*(.55+.9*random01(seed, k, 14)), param(q, "spurWidth")*(.85+.3*random01(seed, k, 15)), param(q, "spurHeight"), k, 0, fade)
+		for i := first; i < len(out); i++ {
+			out[i].Share = r.share
+		}
 	}
 	return out
 }
@@ -99,15 +104,19 @@ func ridgePieces(path []model.Point, q map[string]any, seed uint32, inv []float6
 			out = append(out, piece(at(f0), at(f1), r0, r1, h0, h1, jag))
 		}
 	}
+	roots := ridgeRoots(path, q, seed, turn, cum, L)
+	return append(out, spurPieces(q, seed, inv, roots, 1, jag)...)
+}
+func ridgeRoots(path []model.Point, q map[string]any, seed uint32, turn float64, cum []float64, L float64) []spurRoot {
 	N := int(math.Floor(clampNumber(param(q, "spurCount"), 0, 12) + .5))
 	if N < 1 {
-		return out
+		return nil
 	}
 	phase := random01(seed, 7, 0x4b1) * 2 * math.Pi
 	roots := []spurRoot{}
 	for k := 0; k < N; k++ {
 		if L <= 0 {
-			roots = append(roots, spurRoot{path[0].X, path[0].Y, phase + turn + 2*math.Pi*(float64(k)+(random01(seed, k, 11)-.5)*.5)/float64(N), k})
+			roots = append(roots, spurRoot{path[0].X, path[0].Y, phase + turn + 2*math.Pi*(float64(k)+(random01(seed, k, 11)-.5)*.5)/float64(N), k, 0})
 			continue
 		}
 		at := L * (.08 + .84*(float64(k)+.2+.6*random01(seed, k, 11))/float64(N))
@@ -125,7 +134,7 @@ func ridgePieces(path []model.Point, q map[string]any, seed uint32, inv []float6
 		}
 		a, b := path[i-1], path[i]
 		f := (at - cum[i-1]) / math.Max(cum[i]-cum[i-1], 1e-6)
-		roots = append(roots, spurRoot{a.X + (b.X-a.X)*f, a.Y + (b.Y-a.Y)*f, math.Atan2(b.Y-a.Y, b.X-a.X) + side*(.7+.95*param(q, "spurSpread"))*(.75+.5*random01(seed, k, 13)), k})
+		roots = append(roots, spurRoot{a.X + (b.X-a.X)*f, a.Y + (b.Y-a.Y)*f, math.Atan2(b.Y-a.Y, b.X-a.X) + side*(.7+.95*param(q, "spurSpread"))*(.75+.5*random01(seed, k, 13)), k, at / L})
 	}
-	return append(out, spurPieces(q, seed, inv, roots, 1, jag)...)
+	return roots
 }

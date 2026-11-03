@@ -38,3 +38,27 @@ func TestCurveAndRefinement(t *testing.T) {
 		t.Fatalf("bad invalidation: %+v", r)
 	}
 }
+
+func TestLandformCurvesAndReach(t *testing.T) {
+	front, back := LandformSides(100, 3)
+	if front != 50 || back != 150 {
+		t.Fatalf("widths %v %v", front, back)
+	}
+	if LandformBackSide(LeanSetup("landform", 3, 1, 0), 0, 1, 0) != 1 {
+		t.Fatal("left side")
+	}
+	if got := LandformReach(100, 3, 0, 0, 1, 1, 1, 1); got != 152 {
+		t.Fatalf("reach %v", got)
+	}
+	spec := &CurveSpec{Form: "lfHill", Knots: []Knot{{0, 0}, {.5, .5}, {1, 1}}, Back: []Knot{{0, 0}, {.5, 1.2}, {1, 1}}}
+	c := StrokeCurve("landform", .5, 3, .6, .35, spec, false)
+	if c == nil || len(c.Front) != 67 || len(c.Back) != 67 || c.Lip != 1 || c.Steps != 3 {
+		t.Fatalf("curves %+v", c)
+	}
+	if got := AlongKnots(nil); len(got) != 2 || got[0] != (Knot{0, 1}) || got[1] != (Knot{1, 1}) {
+		t.Fatalf("along %v", got)
+	}
+	if ShapeControlAvailable("softness", "landform", nil) || ShapeControlAvailable("breakup", "landform", map[string]any{"terraces": 0.}) {
+		t.Fatal("landform gate")
+	}
+}

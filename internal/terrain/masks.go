@@ -56,7 +56,7 @@ func ShapeMaskWrites(kind string, q map[string]any, satellite bool) []MaskWrite 
 		return choiceWrites(7, 1)
 	}
 	switch kind {
-	case "plateau", "offset", "hill", "mountain", "crater", "deep", "shallow":
+	case "plateau", "offset", "hill", "mountain", "crater", "deep", "shallow", "landform":
 	default:
 		return nil
 	}

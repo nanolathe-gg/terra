@@ -76,6 +76,14 @@ func smoothKnots() []Knot {
 }
 func FormKnots(form string, softness float64) ([]Knot, []Knot) {
 	switch form {
+	case "lfPlateau":
+		return []Knot{{0, 0}, {.1, 0}, {.34, 1}, {1, 1}}, nil
+	case "lfHill":
+		return []Knot{{0, 0}, {.28, .1}, {.58, .45}, {.82, .86}, {1, 1}}, nil
+	case "lfMountain":
+		return []Knot{{0, 0}, {.36, .04}, {.66, .2}, {.88, .6}, {1, 1}}, nil
+	case "lfTerraced":
+		return []Knot{{0, 0}, {.08, 0}, {.2, .3}, {.34, .3}, {.46, .62}, {.6, .62}, {.72, 1}, {1, 1}}, nil
 	case "hill":
 		return []Knot{{0, 0}, {1.0 / 3, .02}, {2.0 / 3, .34}, {1, 1}}, smoothKnots()
 	case "mountain", "dome":
@@ -101,6 +109,9 @@ func FormKnots(form string, softness float64) ([]Knot, []Knot) {
 	}
 }
 func DefaultForm(kind string, shouldered bool) string {
+	if kind == "landform" {
+		return "lfPlateau"
+	}
 	if kind == "hill" {
 		if shouldered {
 			return "hill"
@@ -116,7 +127,7 @@ func StrokeKnots(kind string, softness float64, curve *CurveSpec, shouldered boo
 	form := DefaultForm(kind, shouldered)
 	if curve != nil {
 		switch curve.Form {
-		case "hill", "mountain", "plateau", "mesa", "cliff", "terrace", "dome":
+		case "hill", "mountain", "plateau", "mesa", "cliff", "terrace", "dome", "lfPlateau", "lfHill", "lfMountain", "lfTerraced":
 			form = curve.Form
 		}
 	}
@@ -131,25 +142,34 @@ func StrokeKnots(kind string, softness float64, curve *CurveSpec, shouldered boo
 }
 func StrokeCurve(kind string, softness, terraces, ledge, jitter float64, curve *CurveSpec, shouldered bool) *CurveTables {
 	switch kind {
-	case "paint", "erase", "sand", "grass", "lower", "smooth", "offset", "deep", "shallow", "plateau", "mountain", "hill":
+	case "paint", "erase", "sand", "grass", "lower", "smooth", "offset", "deep", "shallow", "plateau", "mountain", "hill", "landform":
 	default:
 		return nil
 	}
 	knots, back := StrokeKnots(kind, softness, curve, shouldered)
 	out := &CurveTables{Front: SampleKnots(knots)}
-	if shouldered {
+	if shouldered || kind == "landform" {
 		if back == nil {
-			back = smoothKnots()
+			if kind == "landform" {
+				back = knots
+			} else {
+				back = smoothKnots()
+			}
 		}
 		out.Back = SampleKnots(back)
 	}
-	for _, p := range knots {
+	for _, p := range append(append([]Knot{}, knots...), func() []Knot {
+		if kind == "landform" {
+			return back
+		}
+		return nil
+	}()...) {
 		if p[1] > 1 || p[1] < 0 {
 			out.Lip = 1
 		}
 	}
 	switch kind {
-	case "plateau", "offset", "hill", "mountain", "deep", "shallow":
+	case "plateau", "offset", "hill", "mountain", "deep", "shallow", "landform":
 		out.Steps = uint32(math.Floor(clamp(terraces, 0, 8) + .5))
 		out.Flat = math.Min(ledge, .95)
 		out.Jitter = jitter

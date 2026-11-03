@@ -80,6 +80,7 @@ var shapeFields = []shapeField{
 	{"coN", 'u'},
 	{"coSNI", 'u'},
 	{"coSNJ", 'u'},
+	{"combine", 'u'}, {"alongBase", 'u'},
 	{"rx0", 'i'},
 	{"ry0", 'i'},
 	{"rx1", 'i'},
@@ -186,6 +187,7 @@ var shapeFields = []shapeField{
 	{"coLReach", 'f'},
 	{"coRiser", 'f'},
 	{"coRs", 'f'},
+	{"sBreak", 'f'}, {"elev", 'f'}, {"lfFront", 'f'}, {"lfBack", 'f'}, {"lfWander", 'f'}, {"lfWidth", 'f'}, {"lfHeight", 'f'}, {"lfSize", 'f'}, {"lfFoot", 'f'}, {"lfMid", 'f'},
 }
 
 type shapeField struct {

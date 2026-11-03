@@ -85,3 +85,35 @@ func ShapeVariability(kind string, naturalWater, naturalPlateau, shouldered, pla
 	}
 	return out
 }
+
+// LandformSides returns the front and back half-widths of a section.
+func LandformSides(radius, lean float64) (front, back float64) {
+	ratio := 1.0
+	if lean > 0 {
+		ratio = clamp(lean, .25, 4)
+	}
+	front = 2 * radius / (1 + ratio)
+	return front, front * ratio
+}
+func LandformReach(radius, lean, widthVary, wander, varyFoot, varyMiddle, frameScale, widthMul float64) float64 {
+	front, back := LandformSides(radius, lean)
+	weight := math.Max(varyFoot, varyMiddle)
+	return math.Max(front, back)*widthMul*math.Exp(1.35*widthVary*weight) + wander*frameScale*weight + 2
+}
+func LandformBackSide(lean Lean, turn, dx, dy float64) int {
+	if lean.Side != 0 {
+		return lean.Side
+	}
+	bx := lean.BX*math.Cos(turn) - lean.BY*math.Sin(turn)
+	by := lean.BX*math.Sin(turn) + lean.BY*math.Cos(turn)
+	if dy*bx-dx*by < 0 {
+		return -1
+	}
+	return 1
+}
+func AlongKnots(knots []Knot) []Knot {
+	if len(knots) >= 2 {
+		return knots
+	}
+	return []Knot{{0, 1}, {1, 1}}
+}

@@ -15,6 +15,7 @@ type Segment struct {
 	F0, F1         [2]float64
 	NX, NY         float64
 	Frame          bool
+	W2, W3         *float64
 	Jag            float64
 	Box            CellRect
 }
@@ -27,7 +28,14 @@ func PackSegments(segs []Segment) []byte {
 		if s.Frame {
 			frame = 1
 		}
-		floats := []float64{s.PX, s.PY, s.EX, s.EY, s.F0[0], s.F0[1], s.F1[0], s.F1[1], s.NX, s.NY, frame, s.Jag}
+		w2, w3 := frame, s.Jag
+		if s.W2 != nil {
+			w2 = *s.W2
+		}
+		if s.W3 != nil {
+			w3 = *s.W3
+		}
+		floats := []float64{s.PX, s.PY, s.EX, s.EY, s.F0[0], s.F0[1], s.F1[0], s.F1[1], s.NX, s.NY, w2, w3}
 		for j, v := range floats {
 			binary.LittleEndian.PutUint32(out[off+j*4:], math.Float32bits(float32(v)))
 		}
@@ -126,7 +134,7 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 		out.Op = PreparedOp{Ground: true, Values: map[string]float64{"seed": float64(n.Seed), "gAmp": n.Amplitude, "gWave": n.Wavelength, "gCover": n.Coverage}}
 		return out, nil
 	}
-	codes := map[string]int{"paint": 0, "erase": 1, "deep": 2, "shallow": 3, "mountain": 4, "hill": 5, "plateau": 6, "offset": 7, "lower": 8, "sand": 9, "grass": 10, "smooth": 11, "ramp": 12, "crater": 13, "fissure": 14, "crystal": 15}
+	codes := map[string]int{"paint": 0, "erase": 1, "deep": 2, "shallow": 3, "mountain": 4, "hill": 5, "plateau": 6, "offset": 7, "lower": 8, "sand": 9, "grass": 10, "smooth": 11, "ramp": 12, "crater": 13, "fissure": 14, "crystal": 15, "landform": 16}
 	code, ok := codes[n.Kind]
 	if !ok {
 		return out, fmt.Errorf("shape %q preparation not implemented", n.Kind)
@@ -214,6 +222,9 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 	if n.Kind != "crater" && n.Kind != "fissure" && param(q, "moonLobes") > 0 {
 		extent += param(q, "moonLobes") * radius
 	}
+	if n.Kind == "landform" {
+		extent = model.LandformReach(radius, param(q, "lean"), param(q, "widthVary"), param(q, "wander"), get("varyFoot", 1), get("varyMiddle", 1), fissureK, 1)
+	}
 	fx, fy := 0, 1
 	if natural || naturalWater {
 		fx, fy = 3, 4
@@ -242,6 +253,48 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 		pts := make([]model.Point, len(indices))
 		for i, j := range indices {
 			pts[i] = n.Points[j]
+		}
+		if n.Kind == "landform" {
+			path0 := model.SimplifyPath(pts, math.Max(1, radius*.04))
+			path := make([]model.Point, 0, len(path0))
+			for _, p := range path0 {
+				if len(path) == 0 || math.Hypot(p.X-path[len(path)-1].X, p.Y-path[len(path)-1].Y) >= 1e-4 {
+					path = append(path, p)
+				}
+			}
+			if len(path) < 2 {
+				path = append(path, model.Point{X: path[0].X + .01, Y: path[0].Y})
+			}
+			cum := []float64{0}
+			for k := 1; k < len(path); k++ {
+				cum = append(cum, cum[k-1]+math.Hypot(path[k].X-path[k-1].X, path[k].Y-path[k-1].Y))
+			}
+			total := cum[len(cum)-1]
+			side := model.LandformBackSide(lean, turn, path[1].X-path[0].X, path[1].Y-path[0].Y)
+			for k := 1; k < len(path); k++ {
+				flags := 0
+				if k == 1 {
+					flags |= 1
+				}
+				if k == len(path)-1 {
+					flags |= 2
+				}
+				a, b := path[k-1], path[k]
+				out.Segments = append(out.Segments, Segment{PX: a.X, PY: a.Y, EX: b.X, EY: b.Y, F0: [2]float64{cum[k-1], cum[k] - cum[k-1]}, F1: [2]float64{total, float64(side)}, NX: float64(flags), Box: segmentBox(a, b)})
+			}
+			if math.Floor(param(q, "spurCount")+.5) >= 1 {
+				for _, pc := range spurPieces(q, n.Seed, inv, ridgeRoots(path, q, n.Seed, turn, cum, total), 1, 0) {
+					a, b := pc.A, pc.B
+					ex := model.LandformReach(radius, param(q, "lean"), param(q, "widthVary"), param(q, "wander"), get("varyFoot", 1), get("varyMiddle", 1), fissureK, math.Max(pc.R0, pc.R1))
+					if param(q, "spurBulb") > 0 {
+						ex += param(q, "spurBulb") * radius
+					}
+					box := CellRect{int(clampNumber(math.Floor((math.Min(a.X, b.X)-ex)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Floor((math.Min(a.Y, b.Y)-ex)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(a.X, b.X)+ex)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(a.Y, b.Y)+ex)/g.Spacing), 0, float64(g.Grid-1)))}
+					h0, h1 := pc.H0, pc.H1
+					out.Segments = append(out.Segments, Segment{PX: a.X, PY: a.Y, EX: b.X, EY: b.Y, F1: [2]float64{-1 - pc.Share, float64(model.LandformBackSide(lean, turn, b.X-a.X, b.Y-a.Y))}, NX: pc.R0, NY: pc.R1, W2: &h0, W3: &h1, Box: box})
+				}
+			}
+			continue
 		}
 		if n.Kind == "crystal" {
 			segs, rows := crystalSegments(pts, q, g, n.Seed, inv, turn, len(out.Extra))
@@ -374,7 +427,7 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 			u["settle"] = 1
 		}
 	}
-	if n.Kind == "mountain" || n.Kind == "hill" || n.Kind == "plateau" || n.Kind == "offset" || n.Kind == "crater" {
+	if n.Kind == "mountain" || n.Kind == "hill" || n.Kind == "plateau" || n.Kind == "offset" || n.Kind == "crater" || n.Kind == "landform" {
 		u["crackAmt"] = math.Max(0, param(q, "cracks"))
 	}
 	entry := "stamp"
@@ -395,6 +448,9 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 		for k, v := range map[string]float64{"cgForm": form, "cgSize": math.Max(4, param(q, "crystalSize")), "cgFacet": clampNumber(param(q, "crystalFacet"), 0, 1), "cgSizeVar": clampNumber(param(q, "crystalSizeVar"), 0, 1), "cgSmooth": clampNumber(param(q, "crystalSmooth"), 0, 1), "cgTiers": param(q, "crystalTiers"), "cgStep": param(q, "crystalStep"), "cgVar": param(q, "crystalVariation"), "bgFace": param(q, "bergFace"), "bgTilt": param(q, "bergTilt"), "bgFlat": param(q, "bergFlat"), "bgRough": param(q, "bergRough"), "bgTx": math.Cos(bt), "bgTy": math.Sin(bt), "bgJit": clampNumber(param(q, "bergJitter"), 0, 1), "bgTurn": turn, "cTop": clampNumber(param(q, "crystalTop"), 0, .95)} {
 			u[k] = v
 		}
+	}
+	if n.Kind == "landform" {
+		entry = "stampLandform"
 	}
 	if n.Kind == "ramp" {
 		entry = "stampRamp"
@@ -444,20 +500,42 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 		u["sSteps"] = float64(cv.Steps)
 		u["sFlat"] = cv.Flat
 		u["sJit"] = cv.Jitter
+		u["sBreak"] = clampNumber(param(q, "breakup"), 0, 1)
 		u["curveBase"] = float64(len(out.Extra))
 		for j := 0; j < len(cv.Front); j += 4 {
 			var row [4]float64
 			copy(row[:], cv.Front[j:min(j+4, len(cv.Front))])
 			out.Extra = append(out.Extra, row)
 		}
-		if shouldered {
+		if shouldered || n.Kind == "landform" {
 			u["backBase"] = float64(len(out.Extra))
 			for j := 0; j < len(cv.Back); j += 4 {
 				var row [4]float64
 				copy(row[:], cv.Back[j:min(j+4, len(cv.Back))])
 				out.Extra = append(out.Extra, row)
 			}
-			u["sBack"] = backWidth / faceWidth
+			if shouldered {
+				u["sBack"] = backWidth / faceWidth
+			}
+		}
+	}
+	if n.Kind == "landform" {
+		front, back := model.LandformSides(radius, param(q, "lean"))
+		u["lfFront"], u["lfBack"] = front, back
+		u["elev"], u["combine"] = param(q, "elevation"), clampNumber(math.Floor(param(q, "combine")+.5), 0, 2)
+		u["lfWander"], u["lfWidth"], u["lfHeight"], u["lfSize"] = math.Max(0, param(q, "wander"))*fissureK, math.Max(0, param(q, "widthVary")), math.Max(0, param(q, "heightVary")), math.Max(8, param(q, "varySize"))
+		u["lfFoot"], u["lfMid"] = get("varyFoot", 1), get("varyMiddle", 1)
+		var along []model.Knot
+		if v, ok := q["along"]; ok {
+			b, _ := json.Marshal(v)
+			_ = json.Unmarshal(b, &along)
+		}
+		tab := model.SampleKnots(model.AlongKnots(along))
+		u["alongBase"] = float64(len(out.Extra))
+		for j := 0; j < len(tab); j += 4 {
+			var row [4]float64
+			copy(row[:], tab[j:min(j+4, len(tab))])
+			out.Extra = append(out.Extra, row)
 		}
 	}
 	if n.Kind == "hill" || n.Kind == "mountain" || n.Kind == "plateau" || n.Kind == "offset" {

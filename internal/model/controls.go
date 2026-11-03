@@ -54,6 +54,9 @@ func shapeObject(v map[string]any, k string) map[string]any {
 }
 func ShapeControlAvailable(key, kind string, p map[string]any) bool {
 	n := func(k string) float64 { return controlNum(p, k, 0) }
+	if kind == "landform" && inControl(key, "facePx", "softness", "faceVariation", "outlineVar", "widthVar", "heightVar") {
+		return false
+	}
 	form := math.Floor(n("crystalForm") + .5)
 	plates := n("shorePlates") > 0
 	slab := controlNum(p, "plateMaterial", math.NaN()) < 2
@@ -124,7 +127,7 @@ func ShapeControlAvailable(key, kind string, p map[string]any) bool {
 	if key == "iceFacetSize" {
 		return kind == "mountain" && n("iceFacets") > 0
 	}
-	if inControl(key, "ledge", "terraceJitter") {
+	if inControl(key, "ledge", "terraceJitter", "breakup") {
 		return n("terraces") > 0
 	}
 	if key == "lavaSpread" {

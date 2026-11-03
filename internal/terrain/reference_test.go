@@ -179,3 +179,57 @@ func TestComplexCompositionRegionalGPU(t *testing.T) {
 		}
 	}
 }
+
+func TestLandformPreparationReference(t *testing.T) {
+	data, err := os.ReadFile("testdata/landform-reference.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Node     model.Node     `json:"node"`
+		Expected map[string]any `json:"expected"`
+	}
+	if err = json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range cases {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			shapes, err := PrepareShapes(c.Node, ShapeGeometry{Grid: 256, Spacing: 1}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(shapes) != 1 {
+				t.Fatalf("shapes %d", len(shapes))
+			}
+			p := shapes[0]
+			r := p.Op.Region
+			u := map[string]any{}
+			for k, v := range p.Op.Values {
+				u[k] = v
+			}
+			segs := make([]any, len(p.Segments))
+			for j, s := range p.Segments {
+				w2, w3 := 0., 0.
+				if s.W2 != nil {
+					w2 = *s.W2
+				}
+				if s.W3 != nil {
+					w3 = *s.W3
+				}
+				segs[j] = map[string]any{"px": s.PX, "py": s.PY, "ex": s.EX, "ey": s.EY, "f0": []any{s.F0[0], s.F0[1]}, "f1": []any{s.F1[0], s.F1[1]}, "nx": s.NX, "ny": s.NY, "w2": w2, "w3": w3, "box": []any{float64(s.Box.X0), float64(s.Box.Y0), float64(s.Box.X1), float64(s.Box.Y1)}}
+			}
+			rows := make([]any, len(p.Extra))
+			for j, row := range p.Extra {
+				rows[j] = []any{row[0], row[1], row[2], row[3]}
+			}
+			writes := make([]any, len(p.Writes))
+			for j, w := range p.Writes {
+				writes[j] = []any{w[0], w[1], w[2], w[3]}
+			}
+			got := map[string]any{"region": map[string]any{"x0": float64(r.X0), "y0": float64(r.Y0), "x1": float64(r.X1), "y1": float64(r.Y1)}, "entry": p.Op.Entry, "u": u, "segments": segs, "extra": rows, "writes": writes}
+			if err := referenceCompare(c.Expected, got, ""); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

@@ -6,12 +6,12 @@ import (
 )
 
 type shapePiece struct {
-	A, B                       model.Point
-	R0, R1, H0, H1, Jag, Reach float64
+	A, B                              model.Point
+	R0, R1, H0, H1, Jag, Reach, Share float64
 }
 
 func piece(a, b model.Point, r0, r1, h0, h1, jag float64) shapePiece {
-	return shapePiece{a, b, r0, r1, h0, h1, jag, math.Max(r0, r1)}
+	return shapePiece{a, b, r0, r1, h0, h1, jag, math.Max(r0, r1), 0}
 }
 func smoothStep(a, b, x float64) float64 {
 	t := clampNumber((x-a)/(b-a), 0, 1)

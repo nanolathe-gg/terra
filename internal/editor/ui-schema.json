@@ -810,7 +810,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       150,
@@ -828,7 +829,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       400,
@@ -846,7 +848,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       200,
@@ -893,7 +896,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       10,
@@ -950,7 +954,7 @@
     [
       "fingers",
       "fingers",
-      "Shore lobes",
+      "Finger coasts",
       [
         "deep",
         "shallow"
@@ -1079,7 +1083,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       400,
@@ -1097,7 +1102,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       8,
@@ -1115,7 +1121,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       90,
@@ -1133,7 +1140,8 @@
         "hill",
         "mountain",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       100,
@@ -1142,13 +1150,151 @@
       "How much riser positions and step heights wander along the outline."
     ],
     [
+      "breakup",
+      "sec-breakup",
+      "Terrace breakup",
+      [
+        "plateau",
+        "offset",
+        "hill",
+        "mountain",
+        "deep",
+        "shallow",
+        "landform"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole."
+    ],
+    [
+      "elevation",
+      "lf-elevation",
+      "Elevation (height units)",
+      [
+        "landform"
+      ],
+      -80,
+      300,
+      1,
+      1,
+      "The height of the crest, in height units. The section canvas marks the plain (the map's base height) and the sea. Combine decides what the landform does to the ground it meets."
+    ],
+    [
+      "combine",
+      "lf-combine",
+      "Combine",
+      [
+        "landform"
+      ],
+      0,
+      2,
+      1,
+      1,
+      "Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.",
+      [
+        [
+          0,
+          "Raise to"
+        ],
+        [
+          1,
+          "Cut to"
+        ],
+        [
+          2,
+          "Flatten to"
+        ]
+      ]
+    ],
+    [
+      "wander",
+      "lf-wander",
+      "Wander (px)",
+      [
+        "landform"
+      ],
+      0,
+      120,
+      2,
+      1,
+      "How far the section strays sideways from the path you drew, in waves as long as the Variation size."
+    ],
+    [
+      "widthVary",
+      "lf-width-vary",
+      "Width variation",
+      [
+        "landform"
+      ],
+      0,
+      100,
+      5,
+      100,
+      "How much the section widens and narrows along the path (100: from half to twice its width)."
+    ],
+    [
+      "heightVary",
+      "lf-height-vary",
+      "Height variation (units)",
+      [
+        "landform"
+      ],
+      0,
+      40,
+      1,
+      1,
+      "How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet."
+    ],
+    [
+      "varySize",
+      "lf-vary-size",
+      "Variation size (px)",
+      [
+        "landform"
+      ],
+      20,
+      400,
+      10,
+      1,
+      "The wavelength of the wander and of the width and height variation."
+    ],
+    [
+      "varyFoot",
+      "lf-vary-foot",
+      "Variation at the foot",
+      [
+        "landform"
+      ],
+      0,
+      200,
+      5,
+      100,
+      "How much of the variation acts at the foot of the section (100: all of it, 0: none, 200: twice). It blends into the next one up to the middle of the section."
+    ],
+    [
+      "varyMiddle",
+      "lf-vary-middle",
+      "Variation up the section",
+      [
+        "landform"
+      ],
+      0,
+      200,
+      5,
+      100,
+      "How much of the variation acts from the middle of the section to its crest. Set the foot to 0 and this to 200 for variation that grows toward the crest."
+    ],
+    [
       "spurCount",
       "spur-count",
       "Spurs",
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       0,
       12,
@@ -1163,7 +1309,8 @@
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       20,
       400,
@@ -1178,7 +1325,8 @@
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       0,
       100,
@@ -1193,7 +1341,8 @@
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       20,
       200,
@@ -1208,7 +1357,8 @@
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       0,
       100,
@@ -1223,7 +1373,8 @@
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       10,
       100,
@@ -1238,7 +1389,8 @@
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       0,
       100,
@@ -1253,7 +1405,8 @@
       [
         "hill",
         "mountain",
-        "crater"
+        "crater",
+        "landform"
       ],
       0,
       100,
@@ -1451,7 +1604,7 @@
     [
       "fissureNetwork",
       "fissure-network",
-      "Cut layout",
+      "Mode (0 line, 1 network)",
       [
         "fissure"
       ],
@@ -1593,7 +1746,7 @@
     [
       "plateMaterial",
       "plate-material",
-      "Shore structure",
+      "Plate material (1 rock slabs, 2 frost crystals)",
       [
         "deep",
         "shallow",
@@ -1623,7 +1776,7 @@
     [
       "crystalForm",
       "crystal-form",
-      "Form",
+      "Form (0 crystals, 1 column mound, 2 berg)",
       [
         "crystal"
       ],
@@ -1649,7 +1802,7 @@
     [
       "crystalSides",
       "crystal-sides",
-      "Polygon sides",
+      "Sides",
       [
         "crystal"
       ],
@@ -1662,7 +1815,7 @@
     [
       "crystalSize",
       "crystal-size",
-      "Element width (px)",
+      "Crystal width (px)",
       [
         "crystal"
       ],
@@ -1688,7 +1841,7 @@
     [
       "crystalCount",
       "crystal-count",
-      "Elements per cluster",
+      "Crystals per cluster",
       [
         "crystal"
       ],
@@ -1701,7 +1854,7 @@
     [
       "crystalTop",
       "crystal-top",
-      "Flat top share",
+      "Flat tops",
       [
         "crystal"
       ],
@@ -1714,7 +1867,7 @@
     [
       "crystalLean",
       "crystal-lean",
-      "Apex lean",
+      "Lean",
       [
         "crystal"
       ],
@@ -1828,7 +1981,7 @@
     [
       "crystalAlign",
       "crystal-align",
-      "Align blocks to shape",
+      "Align faces to the frame (berg)",
       [
         "crystal"
       ],
@@ -1841,7 +1994,7 @@
     [
       "bergFace",
       "berg-face",
-      "Face steepness",
+      "Face steepness (berg, units per px)",
       [
         "crystal"
       ],
@@ -1854,7 +2007,7 @@
     [
       "bergJitter",
       "berg-jitter",
-      "Outline jitter",
+      "Outline jitter (berg)",
       [
         "crystal"
       ],
@@ -1867,7 +2020,7 @@
     [
       "bergBreak",
       "berg-break",
-      "Corner cuts",
+      "Broken corners (berg)",
       [
         "crystal"
       ],
@@ -1880,7 +2033,7 @@
     [
       "bergRough",
       "berg-rough",
-      "Face roughness",
+      "Face roughness (berg, units)",
       [
         "crystal"
       ],
@@ -1893,7 +2046,7 @@
     [
       "bergTilt",
       "berg-tilt",
-      "Top tilt",
+      "Top tilt (berg, 1% = 1 unit per 100 px)",
       [
         "crystal"
       ],
@@ -1906,7 +2059,7 @@
     [
       "bergFlat",
       "berg-flat",
-      "Level top share",
+      "Level top toward the tilt (berg, share of radius)",
       [
         "crystal"
       ],
@@ -1919,7 +2072,7 @@
     [
       "bergTiltDir",
       "berg-tilt-dir",
-      "Tilt direction (degrees)",
+      "Tilt direction (berg, degrees, 90 = south)",
       [
         "crystal"
       ],
@@ -2055,7 +2208,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       0,
       6,
@@ -2104,7 +2258,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       5,
       100,
@@ -2123,7 +2278,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2142,7 +2298,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2161,7 +2318,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2180,7 +2338,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2191,7 +2350,7 @@
     [
       "styleErosion",
       "style-erosion",
-      "Local relaxation",
+      "Override: erosion",
       [
         "plateau",
         "offset",
@@ -2199,7 +2358,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2210,7 +2370,7 @@
     [
       "styleDeposits",
       "style-deposits",
-      "Local deposits",
+      "Override: loose deposits",
       [
         "plateau",
         "offset",
@@ -2218,7 +2378,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2229,7 +2390,7 @@
     [
       "styleVegetation",
       "style-vegetation",
-      "Local vegetation",
+      "Override: vegetation",
       [
         "plateau",
         "offset",
@@ -2237,7 +2398,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2248,7 +2410,7 @@
     [
       "styleExposure",
       "style-exposure",
-      "Local rock exposure",
+      "Override: rock exposure",
       [
         "plateau",
         "offset",
@@ -2256,7 +2418,8 @@
         "mountain",
         "crater",
         "deep",
-        "shallow"
+        "shallow",
+        "landform"
       ],
       -100,
       100,
@@ -2306,7 +2469,7 @@
     [
       "craterFacets",
       "crater-facets",
-      "Bowl facets",
+      "Crystal facets",
       [
         "crater"
       ],
@@ -2351,7 +2514,7 @@
     [
       "fingerSize",
       "finger-size",
-      "Lobe size",
+      "Finger size",
       [
         "deep",
         "shallow"
@@ -2393,7 +2556,7 @@
     [
       "crystalCraterPx",
       "crystal-crater-px",
-      "Facet width (px)",
+      "Facet width (px, crystal craters)",
       [
         "crater"
       ],
@@ -2406,7 +2569,7 @@
     [
       "crystalCraterStep",
       "crystal-crater-step",
-      "Facet step height",
+      "Facet step (units, crystal craters)",
       [
         "crater"
       ],
@@ -2419,7 +2582,7 @@
     [
       "crystalCraterSkin",
       "crystal-crater-skin",
-      "Fine seam shading",
+      "Web in the shader (crystal craters)",
       [
         "crater"
       ],
@@ -2432,7 +2595,7 @@
     [
       "plateVary",
       "plate-vary",
-      "Slab variety",
+      "Rock slab variety (share of slabs broken into fine mesh)",
       [
         "deep",
         "shallow",
@@ -2447,7 +2610,7 @@
     [
       "crystalShoreSeam",
       "crystal-shore-seam",
-      "Slab seam weight",
+      "Rock slab seam mark (crystal shores)",
       [
         "deep",
         "shallow",
@@ -2475,7 +2638,7 @@
     [
       "iceFacetSize",
       "ice-facet-size",
-      "Facet width (px)",
+      "Facet size (px)",
       [
         "hill",
         "mountain"
@@ -2489,7 +2652,7 @@
     [
       "moonLobes",
       "moon-lobes",
-      "Outline lobes",
+      "Outline lobes (share of radius)",
       [
         "hill",
         "mountain"
@@ -2503,7 +2666,7 @@
     [
       "lavaCircleVary",
       "lava-circle-vary",
-      "Circular bite variation",
+      "Circle variety (circular layers)",
       [
         "deep",
         "shallow"
@@ -4378,7 +4541,8 @@
     "fissure": "Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world's own crack field is raised along the cut.",
     "erase": "Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.",
     "crater": "Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.",
-    "move": "Drag to move · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas"
+    "move": "Drag to move · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas",
+    "landform": "Draw a landform along a path: the path is the crest, and the section across it is one curve you shape on both sides. The crest stands at an elevation you set, and the ground is raised to it, cut down to it or flattened to it. A second curve sets the crest's height along the path."
   },
   "WORLD_PRIMARY_CONTROLS": [
     "groundTiles",

@@ -100,7 +100,7 @@ func PrepareShapes(n model.Node, g ShapeGeometry, defaults map[string]any) ([]Pr
 			}
 			sc := math.Max(radius*.55, 8)
 			lobe := 1 + param(q, "rough")*(.38*valueNoise(lx/(radius*.95), ly/(radius*.95), n.Seed^0x4a7)+.22*valueNoise(lx/sc, ly/sc, n.Seed^0x1c3)+.1*valueNoise(lx/(sc*.6), ly/(sc*.6), n.Seed^0x2d9))
-			roots = append(roots, spurRoot{center.X + dx*radius*lobe*1.02, center.Y + dy*radius*lobe*1.02, ang + (random01(n.Seed, k, 0x4b3)-.5)*param(q, "spurSpread")*1.2, k})
+			roots = append(roots, spurRoot{center.X + dx*radius*lobe*1.02, center.Y + dy*radius*lobe*1.02, ang + (random01(n.Seed, k, 0x4b3)-.5)*param(q, "spurSpread")*1.2, k, 0})
 		}
 		pcs := spurPieces(q, n.Seed, inv, roots, .4, param(q, "crestJag"))
 		params := map[string]any{}
