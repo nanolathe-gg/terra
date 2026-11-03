@@ -55,10 +55,12 @@ let history=[], historyIndex=-1, historySerial=0;
 let revision=0, autosaveTimer, ready=false;
 // Biomes choose starting values for the same brushes. These presets can be
 // borrowed independently of the canvas materials and then edited per tool.
+// Approved starting shapes use ordinary controls and editable knots. Preset elevation is a rise above the map plain; toolDefaults resolves the absolute height.
+const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
 const TOOL_PRESETS={
   green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,facePx:210,curve:{form:'mesa'}},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  desert:{landform:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,facePx:210,curve:{form:'mesa'}},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks.
@@ -308,7 +310,8 @@ const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind=
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40,landform:40}[kind]??0,diameter:200,elevation:clamp(Math.round((config?.baseHeight??24)+70),-80,300),amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
+  const starting={...(kind==='landform'?LANDFORM_DEFAULTS:{}),...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40,landform:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...starting,elevation:clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -1130,14 +1133,14 @@ function selectNode(i) {
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Selected ${NODE_NAMES[n.kind]||n.kind} #${i+1}. Drag to transform or edit its settings.`);
 }
-function editSelectedFromControls() {
+function editSelectedFromControls(overrides={}) {
   const n=nodes[selected]; if (!n || !n.params) return;
   controlsEditing=true;
   const before=nodeBounds(n);
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
     softness:Number($('softness').value)/100,bankWidth:Number($('bank-width').value)/100,beachFlatness:Number($('beach-flatness').value)/100,
     shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,
-    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)]))};
+    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)])),...overrides};
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
@@ -1424,7 +1427,7 @@ document.addEventListener('terraform-feature-mode',()=>updateControls());
 $('tool-style').addEventListener('change',() => {
   const preset=$('tool-style').value;if(!Object.hasOwn(TOOL_PRESETS,preset))return;
   const kind=nodes[selected]?.kind||tool;toolSettings[tool]=toolDefaults(kind,preset);showTool(toolSettings[tool],kind);
-  if(selected>=0){editSelectedFromControls();checkpoint();queueWeather();}
+  if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}
   updateControls();schedule();persistLater();
 });
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
