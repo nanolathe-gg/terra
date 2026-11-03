@@ -436,4 +436,4 @@ try {
   ws.close(); chrome.kill(); await sleep(500);
 }
 // A timer or the socket can keep node alive after the JSON is written; --only stops are not failures.
-process.exit((result.error && !result.error.includes('(--only)')) || (result.drag?.latency?.censored > 0) || (result.drag?.latencyAny?.censored > 0) || (result.drag?.pixelProbe?.unverified > 0) || (result.drag?.pixelProbe?.errors > 0) || (result.drag?.pickedMissing > 0) ? 1 : 0);
+process.exit((result.console?.length > 0) || (result.error && !result.error.includes('(--only)')) || (result.drag?.latency?.censored > 0) || (result.drag?.latencyAny?.censored > 0) || (result.drag?.pixelProbe?.unverified > 0) || (result.drag?.pixelProbe?.errors > 0) || (result.drag?.pickedMissing > 0) ? 1 : 0);
