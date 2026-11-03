@@ -18,6 +18,7 @@ node repro/zoom.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --p
 node repro/memory-budgets.mjs --server http://127.0.0.1:8801 --port 9450
 node repro/ground-controls.mjs --server http://127.0.0.1:8801 --port 9450
 node repro/landform-ghost.mjs --server http://127.0.0.1:8801 --port 9450
+node repro/worker-rpc.mjs --server http://127.0.0.1:8801 --port 9450
 node measure/shape_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-shape-controls
 node measure/world_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-world-controls
 ```
