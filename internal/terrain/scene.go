@@ -239,9 +239,9 @@ func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
 			s.config[key] = v
 		}
 	}
-	if s.cacheBudget() != oldBudget {
-		s.clearShapeCache()
-		s.clearWeatherCache()
+	if s.cacheBudget() < oldBudget {
+		s.trimPageCache(s.shapePages, s.cacheBudget())
+		s.trimPageCache(s.weatherPages, s.cacheBudget())
 	}
 	if column, ok := config["column"]; ok {
 		s.config["column"] = column
@@ -264,6 +264,7 @@ func (s *SceneRenderer) LastRenderProfile() SceneProfile {
 
 // cacheBudget reserves at most one fifth of the configured GPU budget for
 // each of the authored and weather caches, capped at 96 MiB apiece.
+// UI bitmap reservations displace the two caches equally.
 func (s *SceneRenderer) cacheBudget() int {
 	bytes := param(s.config, "gpuBudgetBytes")
 	if bytes <= 0 {
@@ -276,7 +277,30 @@ func (s *SceneRenderer) cacheBudget() int {
 		}
 		bytes = mb * 1024 * 1024
 	}
-	return min(96*1024*1024, max(0, int(bytes/5)))
+	base := min(96*1024*1024, max(0, int(bytes/5)))
+	return max(0, base-int(math.Max(0, param(s.config, "uiBitmapBytes")))/2)
+}
+
+// trimPageCache releases least-recently-used pages without invalidating the
+// graph snapshot or newer pages when external bitmap residency grows.
+func (s *SceneRenderer) trimPageCache(pages map[[2]int]*weatherFeed, budget int) {
+	total := 0
+	for _, page := range pages {
+		total += page.bytes
+	}
+	for total > budget && len(pages) > 0 {
+		var oldest *weatherFeed
+		var key [2]int
+		for id, page := range pages {
+			if oldest == nil || page.used < oldest.used {
+				oldest = page
+				key = id
+			}
+		}
+		total -= oldest.bytes
+		oldest.Close()
+		delete(pages, key)
+	}
 }
 
 // reservedGPUBytes includes external browser bitmap residency in addition to terrain caches.
