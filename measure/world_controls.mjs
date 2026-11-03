@@ -6,7 +6,7 @@
 //   node measure/world_controls.mjs [--find key,key] [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--worlds green,lava] [--only key,key] [--set key=v,key=v] [--jobs 3]
 // --jobs splits the worlds over that many browsers (CDP ports --port, then --port+2, +3, ...): a world takes about four minutes alone.
 // --find key,key: instead of the sweep, set each other enabled row to its high end in turn and print which of the named rows then move (the search for a row's parent).
-// Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885; --assets DIR is that host's assets root: it needs map-catalog.json and features/, as a card's own root has): terraformAudit exists only on that host's ?audit pages.
+// Without --server the tool starts the Go editor server (--audit-port, default 8885; --assets DIR supplies its asset root).
 // Writes DIR/world-controls.json and prints one row per control and world. Exit 1 on a console error or on an unexplained exact 0, that is a
 // row that reads 0 on every fixture (the world's three scenes, the diagnostic fixture, the painted fixture; stroke rows the second and wide stroke fixtures and
 // Sand over the first) and is not on `ALLOWED` below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
@@ -14,14 +14,14 @@
 // since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
 // --set puts values in before the sweep, to probe a row under a gate.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
-import {worldControlRequirement, shapeControlAvailable, PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname, join, resolve} from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url)), repo = resolve(here, '..');
+const PARKED_WORLD_CONTROLS = new Set(JSON.parse(readFileSync(join(repo, 'internal/editor/ui-schema.json'), 'utf8')).PARKED_WORLD_CONTROLS);
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-const JOBS = Number(opt('--jobs', 3)), CHILD = args.includes('--child');
+const JOBS = Number(opt('--jobs', 1)), CHILD = args.includes('--child');
 const assets = opt('--assets', ''), port = Number(opt('--port', 9685)), out = resolve(opt('--out', 'world-controls')), auditPort = Number(opt('--audit-port', 8885));
 const WORLDS = opt('--worlds', 'green,archipelago,crystal,desert,ice,lava,moon,red,zhon').split(',');
 const FIND = opt('--find', '') ? opt('--find', '').split(',') : null;
@@ -47,18 +47,17 @@ if (args.includes('--recheck')) {
 const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['scree', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
 const KIND_AT = {plateau: [130, 170], offset: [380, 170], hill: [630, 170], mountain: [880, 170], deep: [130, 500], shallow: [380, 500], crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830]};
-// The panel hides these until their switch is above 0 (updateControls in sculpt.js).
-const GATE = {layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerSize: 'fingers',
-  spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
 mkdirSync(out, {recursive: true});
 let server = opt('--server', ''), audit = null;
 if (!server) {
   server = `http://127.0.0.1:${auditPort}`;
-  const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
-  audit = spawn(py, [join(repo, 'repro/audit/server.py'), '--source', repo, '--port', String(auditPort), '--out', join(out, 'audit-out'), ...(assets ? ['--assets', assets] : [])], {stdio: 'ignore'});
-  for (let i = 0; i < 100; i++) { try { if ((await fetch(server + '/audit/index.html')).ok) break; } catch {} await sleep(100); }
+  if (!assets) throw new Error('Pass --server or an isolated --assets root containing prepared catalogues and features.');
+  audit = spawn('go', ['run', './cmd/terraform', '--source-root', repo, '--port', String(auditPort), '--assets-root', assets, '--prepared'], {cwd: repo, stdio: 'ignore'});
+  let started = false;
+  for (let i = 0; i < 200; i++) { try { if ((await fetch(server + '/sculpt-config.json?biome=green')).ok) { started = true; break; } } catch {} await sleep(100); }
+  if (!started) throw new Error('Go audit server did not start');
 }
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   // A pool of browsers, one child per world, the dearest worlds first; rows are merged into the same file and the same exit code.
@@ -117,7 +116,7 @@ try {
         return best;
       },
       // The Colors panel's own row: a hex picks the color, nothing clears it.
-      pickColor(label, hex) { const [box, pick] = [...document.querySelectorAll('#world-colors .color-row')].find(r => r.firstElementChild.textContent === label).querySelectorAll('input'); if (hex) { pick.value = hex; pick.dispatchEvent(new Event('input', {bubbles: true})); } else { box.checked = false; box.dispatchEvent(new Event('change', {bubbles: true})); } },
+      pickColor(label, hex) { const [box, pick] = [...document.querySelectorAll('#world-colors .color-row')].find(r => r.querySelector('span')?.textContent === label).querySelectorAll('input'); if (hex) { box.checked = true; pick.value = hex; pick.dispatchEvent(new Event('input', {bubbles: true})); } else { box.checked = false; box.dispatchEvent(new Event('change', {bubbles: true})); } },
       kinds() { return A.nodes.map(n => n.kind); },
       async putBack() { for (let i = 1; i < saved.length; i++) await A.edit(i, saved[i]); },
       // a row is off by its reason line, not its disabled flag: the audit page's busy map disables the rendering switches too
@@ -162,20 +161,10 @@ try {
     const live = all.filter(k => !PARKED_WORLD_CONTROLS.has(k.key) && (!ONLY || ONLY.includes(k.key)));
     // The parents that clear a reason: try each knob at 1, then at its midpoint, greedily, until the row is enabled (the reason is the tool's own oracle).
     // The parents that clear a row's reason: every knob that clears it alone (an "any of" row has several), else the chain that does, one knob at a time (the reason is the tool's own oracle).
-    const gatesFor = key => {
-      const alone = [];
-      for (const k of all) { for (const x of [1, (k.lo + k.hi) / 2, k.hi, k.lo]) { if (k.key === key || values[k.key] === x) continue; if (!worldControlRequirement(key, {...values, [k.key]: x})) { alone.push({[k.key]: x}); break; } } }
-      if (alone.length) return alone.slice(0, 6);
-      const v = {...values}, gates = {};
-      for (let round = 0; round < 6 && worldControlRequirement(key, v); round++) {
-        const before = worldControlRequirement(key, v); let done = false;
-        for (const k of all) { for (const x of [1, (k.lo + k.hi) / 2, k.hi]) { if (k.key === key || v[k.key] === x) continue; if (worldControlRequirement(key, {...v, [k.key]: x}) !== before) { v[k.key] = x; gates[k.key] = x; done = true; break; } } if (done) break; }
-        if (!done) return [];
-      }
-      return worldControlRequirement(key, v) ? [] : [gates];
-    };
+    const worldRequirement = (key, state) => ev(`terraformAudit.worldRequirement(${JSON.stringify(key)},${JSON.stringify(state)})`);
+    const gatesFor = key => ev(`terraformAudit.gatesFor(${JSON.stringify(key)},${JSON.stringify(values)},${JSON.stringify(all)})`);
     // The panel's own word on a row is its disabled control; the schema function must say the same, or the gate search below would be searching another question.
-    for (const k of live) if (!panelRow[k.key] || panelRow[k.key].off !== Boolean(worldControlRequirement(k.key, values))) console.log(`   ${world} ${k.key}: the panel and the schema disagree`);
+    for (const k of live) if (!panelRow[k.key] || panelRow[k.key].off !== Boolean(await worldRequirement(k.key, values))) console.log(`   ${world} ${k.key}: the panel and the schema disagree`);
     const on = live.filter(k => panelRow[k.key] && !panelRow[k.key].off), off = live.filter(k => panelRow[k.key]?.off);
     const restoreAll = async () => { await ev(`(async () => { for (const [k, v] of Object.entries(${JSON.stringify(base)})) if (terraformAudit.renderer.variant.get(k) !== v) await terraformAudit.knob(k, v); })()`); };
     if (FIND) {
@@ -201,7 +190,7 @@ try {
     const idle = async fixture => {
       const now = await ev('terraformAudit.panelValues()');
       for (const k of live) {
-        const reason = worldControlRequirement(k.key, now);
+        const reason = await worldRequirement(k.key, now);
         if (!reason) { const r = facts.get(k.key); if (r && r.max <= 0) Object.assign(r, await sweepKnob(k, fixture, 'gated', {}), {note: 'a fixture cleared the reason'}); continue; }
         const hi = k.key === 'wind' || k.key.endsWith('Dir') ? 180 : k.hi, m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${hi})`);
         if (m.px >= HIDDEN_PX) add({world, type: 'knob', key: k.key, group: k.group, fixture, state: 'hidden', reason, lo: k.lo, hi, hides: true, ...m});
@@ -213,7 +202,7 @@ try {
     const results = new Map();
     for (const k of on) { const r = await sweepKnob(k, fixtures[0][0], 'enabled', {}); results.set(k.key, r); }
     for (const k of off) {
-      const sets = gatesFor(k.key); if (!sets.length) { facts.set(k.key, {world, type: 'knob', key: k.key, group: k.group, fixture: fixtures[0][0], state: 'gated', gates: null, max: -1, px: -1, note: 'no knob clears the reason'}); continue; }
+      const sets = await gatesFor(k.key); if (!sets.length) { facts.set(k.key, {world, type: 'knob', key: k.key, group: k.group, fixture: fixtures[0][0], state: 'gated', gates: null, max: -1, px: -1, note: 'no knob clears the reason'}); continue; }
       let best = null;
       for (const gates of sets) {
         for (const [g, x] of Object.entries(gates)) await ev(`terraformAudit.knob(${JSON.stringify(g)}, ${x})`);
@@ -224,7 +213,7 @@ try {
     }
     await idle(fixtures[0][0]);
     // The page sliders.
-    for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`!!document.getElementById(${JSON.stringify(sid)}).closest('[hidden]')`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
+    for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`(id=>{const e=document.getElementById(id);return !e||!!e.closest('#ring-controls[hidden],#transition-detail-control[hidden]')})(${JSON.stringify(sid)})`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
     stage('rows', ts); ts = Date.now();
     // Leak check: the first fixture drawn again must match its first capture, so no row left a value behind.
     await restoreAll(); await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`);
@@ -252,14 +241,14 @@ try {
       await ev(`__wc.scene(${JSON.stringify(list)}, ${ground})`);
       const now = await ev('terraformAudit.panelValues()');
       for (const k of live.filter(k => COLORED_ROWS.has(k.key))) {
-        const reason = worldControlRequirement(k.key, now), m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${k.hi})`), row = {world, type: 'knob', key: k.key, group: k.group, fixture: fixture + ' + color', lo: k.lo, hi: k.hi, ...m};
+        const reason = await worldRequirement(k.key, now), m = await ev(`__wc.knobPair(${JSON.stringify(k.key)}, ${k.lo}, ${k.hi})`), row = {world, type: 'knob', key: k.key, group: k.group, fixture: fixture + ' + color', lo: k.lo, hi: k.hi, ...m};
         if (reason) { if (m.px >= HIDDEN_PX) add({...row, state: 'hidden', reason, hides: true}); }
         else if (!colored.has(k.key) || m.max > colored.get(k.key).max) colored.set(k.key, {...row, state: 'colored'});
       }
     }
     // A stroke's edge under the color: H24 hid it on a world of one or three tones, where it draws. waterPicks' third stroke is the faded one, and a ground node leads only where the world's undulation is on.
     await ev('terraformAudit.setBusy(false)');   // an edit is refused while the map is busy
-    const third = (await ev('__wc.kinds()')).indexOf('deep') + 2, shown = shapeControlAvailable('waterDeep', 'deep', {waterBed: 0, world: await ev('terraformAudit.panelValues()')});
+    const third = (await ev('__wc.kinds()')).indexOf('deep') + 2, shown = await ev(`terraformAudit.shapeAvailable('waterDeep','deep',${JSON.stringify({waterBed: 0, world: await ev('terraformAudit.panelValues()')})})`);
     const edge = await ev(`__wc.strokePair(${third}, 'waterDeep', {waterDeep: 0}, 0, [1, 2], 1, ${JSON.stringify({x: 40, y: 670, width: 440, height: 180})})`);
     colored.set('~waterDeep', {world, type: 'shape', stroke: 'deep', key: 'waterDeep', fixture: `${world}-water + color`, state: shown ? 'colored' : 'hidden', reason: shown ? '' : 'hidden under a picked color', hides: !shown && edge.px >= HIDDEN_PX, ...edge});
     await ev(`__wc.pickColor('Shallow water')`);
@@ -298,17 +287,11 @@ try {
       return p;
     };
     // The panel's own test of a row on a kind, on the state the context sets (UI units for the availability test).
-    const available = (key, kind, ctx, scales) => {
-      const ui = {...st.defaults[kind], world: values}; for (const [k, v] of Object.entries(ctx)) ui[k] = v * (scales[k] ?? 1);
-      const net = kind === 'fissure' && Number(ui.fissureNetwork) >= .5;
-      if (kind === 'fissure' && (net ? ['fissureBranches', 'fissureBranchLen', 'fissureBranchSpread', 'fissureTaper'].includes(key) : key === 'fissureCell')) return false;
-      if (kind === 'crystal' && ['crystalAlign', 'bergFace', 'bergJitter', 'bergBreak', 'bergRough', 'bergTilt', 'bergTiltDir', 'bergFlat'].includes(key) && Number(ui.crystalForm) < 2) return false;
-      if (key === 'frostNeedles' && Number(ui.plateMaterial) < 2) return false;
-      if (GATE[key] && !(Number(ui[GATE[key]]) > 0)) return false;
-      if (kind === 'crater' && ['crestJag', 'crestVary'].includes(key) && !(Number(ui.spurCount) > 0)) return false;   // on a crater the crest options only shape its spurs
-      if (key === 'maskAmount' && !(Number(ui.maskChannel) >= 1)) return false;
-      if (key === 'layerCircle' && Number(ui.layerStyle) !== 1) return false;
-      return shapeControlAvailable(key, kind, ui);
+    const available = async (key, kind, ctx) => {
+      const d = st.defaults[kind], p = {softness: Number(d.softness || 0) / 100, radius: Number(d.diameter || 0) / 2, amount: Number(d.amount || 0), world: values};
+      for (const f of st.fields) if (d[f[0]] !== undefined) p[f[0]] = Number(d[f[0]]) / f[7];
+      Object.assign(p, ctx);
+      return ev(`terraformAudit.shapeAvailable(${JSON.stringify(key)},${JSON.stringify(kind)},${JSON.stringify(p)})`);
     };
     // What a row's fixture needs whatever the panel shows: an offset has a shore only where it lowers the ground below the sea.
     const fixtureFor = (key, kind) => kind === 'offset' && (key.startsWith('plate') || key === 'shorePlates' || key.startsWith('frost') || key.startsWith('crystalShore')) ? {amount: -60} : {};
@@ -316,8 +299,8 @@ try {
     const sresults = [];
     for (const r of shapeRows) {
       // A row the panel shows at the stroke's defaults is read there; one it hides until a parent is set is read with the parents set ("gated"), which is the proof it comes back.
-      const i = nodeKinds.indexOf(r.kind), shown = available(r.key, r.kind, {}, scaleOf), gate = shown ? {} : ctxFor(r.key, r.kind), ctx = {...gate, ...fixtureFor(r.key, r.kind)};
-      if (!shown && !available(r.key, r.kind, ctx, scaleOf)) continue;
+      const i = nodeKinds.indexOf(r.kind), shown = await available(r.key, r.kind, {}, scaleOf), gate = shown ? {} : ctxFor(r.key, r.kind), ctx = {...gate, ...fixtureFor(r.key, r.kind)};
+      if (!shown && !(await available(r.key, r.kind, ctx, scaleOf))) continue;
       const [cx, cy] = KIND_AT[r.kind], crop = {x: cx - 210, y: cy - 165, width: 420, height: 330}, m = await ev(`__wc.strokePair(${i}, ${JSON.stringify(r.key)}, ${JSON.stringify(ctx)}, ${r.lo}, ${JSON.stringify(r.his)}, ${r.scale}, ${JSON.stringify(crop)})`);
       sresults.push({world, type: 'shape', key: r.key, stroke: r.kind, fixture: 'strokes-A', state: shown ? 'enabled' : 'gated', gates: shown ? {} : ctx, lo: r.lo, ...m, _r: r, _ctx: ctx, _i: i});
     }
