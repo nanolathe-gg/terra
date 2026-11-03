@@ -28,7 +28,8 @@ type Request struct {
 	Kind        string            `json:"kind"`
 	ID          int               `json:"id"`
 	Config      map[string]any    `json:"config"`
-	Nodes       []model.Node      `json:"nodes"`
+	Nodes       []model.Node      `json:"nodes,omitempty"`
+	Graph       *GraphDelta       `json:"graph,omitempty"`
 	Knobs       map[string]string `json:"knobs"`
 	Colors      map[string]any    `json:"colors"`
 	Options     map[string]any    `json:"options"`

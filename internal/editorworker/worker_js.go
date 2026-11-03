@@ -31,6 +31,9 @@ var activeRPC bool
 var activeSession int
 var cancel context.CancelFunc
 var generation int
+var bitmapSequence, pendingBitmapToken int
+var pendingBitmapAck chan struct{}
+var graphDecoder renderjob.GraphDecoder
 
 func post(m map[string]any) { js.Global().Call("postMessage", js.ValueOf(m)) }
 func sendBytes(m map[string]any, key string, data []byte) {
@@ -41,11 +44,30 @@ func sendBytes(m map[string]any, key string, data []byte) {
 }
 func Run() {
 	callback = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		data := args[0].Get("data")
+		if data.Get("kind").String() == "bitmap-ack" {
+			if token := data.Get("token").Int(); token != 0 && token == pendingBitmapToken {
+				close(pendingBitmapAck)
+				pendingBitmapToken = 0
+			}
+			return nil
+		}
 		var job renderjob.Request
 		b := js.Global().Get("JSON").Call("stringify", args[0].Get("data")).String()
 		if err := json.Unmarshal([]byte(b), &job); err != nil {
 			post(map[string]any{"kind": "error", "error": err.Error()})
 			return nil
+		}
+		if job.Kind == "init" {
+			graphDecoder.Reset()
+		}
+		if job.Graph != nil {
+			nodes, err := graphDecoder.Decode(job.Graph)
+			if err != nil {
+				post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+				return nil
+			}
+			job.Nodes = nodes
 		}
 		job.ReceivedAt = clockMilliseconds()
 		generation = job.ID
@@ -146,7 +168,7 @@ func loop() {
 			// Presentation transfers the image before its GPU work completes. Drain
 			// that captured fence before every subsequent GPU job, including RPCs,
 			// ghosts and fills, so their allocation checks see no retired work.
-			if err := engine.WaitView(ctx); err != nil {
+			if err := waitPresentation(ctx, engine); err != nil {
 				if ctx.Err() == nil {
 					post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
 				}
@@ -300,7 +322,7 @@ func loop() {
 					return
 				}
 				if job.Kind == "view" && !job.RPC {
-					if err := engine.WaitView(ctx); err != nil {
+					if err := waitPresentation(ctx, engine); err != nil {
 						if ctx.Err() == nil {
 							post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
 						}
@@ -386,7 +408,7 @@ func loop() {
 						m["heightSpacing"] = r.HeightSpacing
 						transfer = append(transfer, heights.Get("buffer"))
 					}
-					js.Global().Call("postMessage", js.ValueOf(m), js.ValueOf(transfer))
+					sendBitmap(m, transfer)
 				} else {
 					transfer := int64(len(r.RGBA)) + int64(len(r.Heights))*4
 					if err := membudget.Require("Terrain tile transfer", transfer*3, membudget.FromConfig(job.Config).Transfer()); err != nil {
@@ -424,7 +446,7 @@ func loop() {
 					if ctx.Err() != nil || generation != job.ID {
 						return
 					}
-					if err := engine.WaitView(ctx); err != nil {
+					if err := waitPresentation(ctx, engine); err != nil {
 						if ctx.Err() == nil {
 							post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
 						}
@@ -519,4 +541,43 @@ func sampleAuthoredPoints(ctx context.Context, engine *terrain.SceneRenderer, jo
 func clockMilliseconds() float64 {
 	p := js.Global().Get("performance")
 	return p.Get("timeOrigin").Float() + p.Call("now").Float()
+}
+
+// Keep at most one image in transit. GPU completion alone does not prove the
+// UI has admitted the transfer and trimmed its retained bitmap cache. Preserve
+// this acknowledgement across cancellation so the next job drains it as well.
+func waitPresentation(ctx context.Context, engine *terrain.SceneRenderer) error {
+	if err := engine.WaitView(ctx); err != nil {
+		return err
+	}
+	ack := pendingBitmapAck
+	if ack == nil {
+		return ctx.Err()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-ack:
+		if pendingBitmapAck == ack {
+			pendingBitmapAck = nil
+		}
+		return nil
+	}
+}
+func sendBitmap(m map[string]any, transfer []any) {
+	bitmapSequence++
+	pendingBitmapToken = bitmapSequence
+	pendingBitmapAck = make(chan struct{})
+	m["bitmapToken"] = bitmapSequence
+	defer func() {
+		if p := recover(); p != nil {
+			// A transfer that throws never reaches the UI and cannot be acked.
+			if pendingBitmapToken != 0 {
+				close(pendingBitmapAck)
+				pendingBitmapToken = 0
+			}
+			panic(p)
+		}
+	}()
+	js.Global().Call("postMessage", js.ValueOf(m), js.ValueOf(transfer))
 }
