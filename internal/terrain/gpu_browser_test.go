@@ -3,6 +3,7 @@
 package terrain
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -133,6 +134,43 @@ func TestBrowserTerrain(t *testing.T) {
 		t.Fatal(e)
 	}
 	t.Logf("browser GPU feed %d bytes SHA256 %x", len(feedPixels), sha256.Sum256(feedPixels))
+	for _, size := range [][2]int{{64, 64}, {32, 32}, {37, 29}, {64, 64}} {
+		bitmap, err := r.PresentBitmap(context.Background(), size[0], size[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		canvas := js.Global().Get("OffscreenCanvas").New(size[0], size[1])
+		dc := canvas.Call("getContext", "2d")
+		dc.Call("drawImage", bitmap, 0, 0)
+		bitmap.Call("close")
+		actual := make([]byte, size[0]*size[1]*4)
+		js.CopyBytesToGo(actual, dc.Call("getImageData", 0, 0, size[0], size[1]).Get("data"))
+		expected := feedPixels
+		if size[0] != 64 || size[1] != 64 {
+			expected = resizeRGBA(feedPixels, 64, 64, size[0], size[1])
+		}
+		if !bytes.Equal(actual, expected) {
+			for i := range actual {
+				if actual[i] != expected[i] {
+					t.Fatalf("bitmap %dx%d byte%d: %d want%d", size[0], size[1], i, actual[i], expected[i])
+				}
+			}
+		}
+		t.Logf("GPU bitmap %dx%d exact SHA256 %x", size[0], size[1], sha256.Sum256(actual))
+	}
+	window.SkipRGBA = true
+	skipped, err := r.RenderWindow(context.Background(), WindowInput{Window: window, Region: reg, Feed: &GPUFeed{Planes: pb, Masks: mb, Weather: er.Weather, Maps: er.Maps, Field: mf, Grid: 33, Cells: 33 * 33, MaskCount: 25}}, DefaultDrawOptions(config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != nil || r.LastProfile.ReadbackMilliseconds != 0 {
+		t.Fatal("ordinary view performed RGBA readback")
+	}
+	bitmap, err := r.PresentBitmap(context.Background(), 64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bitmap.Call("close")
 
 }
 

@@ -14,6 +14,7 @@ import (
 )
 
 type Renderer struct {
+	presentation                                                                                                                 interface{ Release() }
 	reservedGPUBytes                                                                                                             int
 	materialReady                                                                                                                bool
 	LastProfile                                                                                                                  RenderProfile
@@ -201,6 +202,10 @@ func NewRenderer(g *GPU, config map[string]any, sources map[string]string, mater
 	return r, nil
 }
 func (r *Renderer) Close() {
+	if r.presentation != nil {
+		r.presentation.Release()
+		r.presentation = nil
+	}
 	r.closeFeed()
 	if r.vertices != nil {
 		r.vertices.Release()

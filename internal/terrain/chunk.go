@@ -174,7 +174,7 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 	if in.Window.HeightsOnly {
 		working = gw*gh*(24+layers*4) + ((gw*4+255)/256*256)*gh
 	}
-	needed := float64(working) + float64(r.FixedBytes()) + math.Max(number(r.Config, "gpuReservedBytes", 0), float64(r.reservedGPUBytes))
+	needed := float64(working) + float64(r.FixedBytes()) + number(r.Config, "uiBitmapBytes", 0) + math.Max(number(r.Config, "gpuReservedBytes", 0), float64(r.reservedGPUBytes))
 	if needed > budget {
 		return nil, fmt.Errorf("terrain chunk needs %.1f MB, budget %.1f MB", needed/1048576, budget/1048576)
 	}
@@ -309,6 +309,9 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 		return nil, e
 	}
 	profile.EncodeMilliseconds = elapsed(encodeStart)
+	if in.Window.SkipRGBA {
+		return nil, nil
+	}
 	readStart := time.Now()
 	pixels, err = r.ReadRGBA(ctx)
 	if err != nil {
@@ -412,8 +415,15 @@ func (r *Renderer) FixedBytes() int {
 		side := 512 >> level
 		mips += side * side
 	}
-	return mips*(len(r.Table.Order)*4+8) + 512*512*4 + 1024*96*4 + 512*32*4 + len(r.Uniform.Data)
+	return r.presentationBytes() + mips*(len(r.Table.Order)*4+8) + 512*512*4 + 1024*96*4 + 512*32*4 + len(r.Uniform.Data)
 }
 
 // SetReservedGPUBytes accounts for external GPU fields/pages and image caches.
 func (r *Renderer) SetReservedGPUBytes(bytes int) { r.reservedGPUBytes = max(0, bytes) }
+
+func (r *Renderer) presentationBytes() int {
+	if p, ok := r.presentation.(interface{ Bytes() int }); ok {
+		return p.Bytes()
+	}
+	return 0
+}
