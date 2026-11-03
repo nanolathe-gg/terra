@@ -296,7 +296,9 @@ func (f *FeatureUI) sync() {
 		f.a.MapData["features"] = f.store.SortedFeatures()
 	}
 	f.a.MapData["starts"] = f.store.Starts
-	f.a.MapData["fill"] = map[string]any{"kind": f.kind, "region": f.region, "density": f.density, "clustering": f.cluster, "gap": f.gap, "seed": f.seed, "margin": f.margin, "radius": f.radius, "generated": generated}
+	if !f.preserveFeatures {
+		f.a.MapData["fill"] = map[string]any{"kind": f.kind, "region": f.region, "density": f.density, "clustering": f.cluster, "gap": f.gap, "seed": f.seed, "margin": f.margin, "radius": f.radius, "generated": generated}
+	}
 }
 func (f *FeatureUI) changed() {
 	f.sync()
