@@ -111,7 +111,7 @@ func (s *Server) config(world, variant string) (map[string]any, error) {
 		d := c["defaults"].(map[string]any)
 		if knobs, ok := v["knobs"].(map[string]any); ok {
 			for k, x := range knobs {
-				d[k] = pythonString(x)
+				d[k] = fmt.Sprint(x)
 			}
 		}
 		if v["river"] == true {
@@ -139,12 +139,6 @@ func (s *Server) config(world, variant string) (map[string]any, error) {
 		c["variant"] = variant
 	}
 	return c, nil
-}
-func pythonString(x any) string {
-	if f, ok := x.(float64); ok {
-		return fmt.Sprint(f)
-	}
-	return fmt.Sprint(x)
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")

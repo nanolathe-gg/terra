@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,7 +14,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -503,10 +500,6 @@ func (s *exportStore) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if r.Method == "POST" && p == "/map-export" {
-		s.legacy(w, r)
-		return
-	}
 	if !(r.Method == "DELETE" && p == "/map-export" || r.Method == "POST" && (p == "/map-export/chunk" || p == "/map-export/finish")) {
 		http.NotFound(w, r)
 		return
@@ -566,63 +559,6 @@ func (s *exportStore) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	reply(w, v)
 }
-func (s *exportStore) legacy(w http.ResponseWriter, r *http.Request) {
-	m, e := requestObject(r, 96<<20)
-	if e != nil {
-		bad(w, e)
-		return
-	}
-	chunks, ok := m["chunks"].([]any)
-	delete(m, "chunks")
-	if !ok || len(chunks) < 1 || len(chunks) > 25 {
-		bad(w, fmt.Errorf("Expected 1–25 terrain chunks"))
-		return
-	}
-	ready, e := s.start(r.Context(), m)
-	if e != nil {
-		bad(w, e)
-		return
-	}
-	j := s.claimJob(ready["id"].(string))
-	if j == nil {
-		bad(w, fmt.Errorf("Export id is unknown or no longer active"))
-		return
-	}
-	defer s.releaseJob(j)
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	defer s.discard(j)
-	sort.Slice(chunks, func(a, b int) bool {
-		x, _ := chunks[a].(map[string]any)
-		y, _ := chunks[b].(map[string]any)
-		return num(x["y"]) < num(y["y"]) || num(x["y"]) == num(y["y"]) && num(x["x"]) < num(y["x"])
-	})
-	for _, raw := range chunks {
-		c, ok := raw.(map[string]any)
-		if !ok {
-			bad(w, fmt.Errorf("Invalid chunk"))
-			return
-		}
-		str, _ := c["png"].(string)
-		b, err := base64.StdEncoding.DecodeString(str)
-		if err != nil || len(b) < 24 || string(b[:8]) != "\x89PNG\r\n\x1a\n" {
-			bad(w, fmt.Errorf("Expected a PNG terrain chunk"))
-			return
-		}
-		_, e = s.chunk(j, []int{num(c["x"]), num(c["y"]), int(binary.BigEndian.Uint32(b[16:20])), int(binary.BigEndian.Uint32(b[20:24]))}, b)
-		if e != nil {
-			bad(w, e)
-			return
-		}
-	}
-	v, e := s.finish(j)
-	if e != nil {
-		bad(w, e)
-		return
-	}
-	reply(w, v)
-}
-func num(v any) int { f, _ := v.(float64); return int(f) }
 
 // Close stops all outstanding export helpers and removes their temporary files.
 func (s *Server) Close() {
