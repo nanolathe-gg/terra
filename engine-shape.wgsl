@@ -697,8 +697,8 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
 // segment nearest it (the first on a tie, as stampRamp), finds how far up the section it stands (q: 0 at the feet, 1 at the crest, a lip above), and reads the
 // crest's height at its place along the path from the along table. The cell's value is base + (crest - base) * q, `base` being the height the strokes before
 // it left, and combine keeps max(base, value) (raise to), min (cut to) or value (flatten to). Every read is the cell's own height and its position, so a
-// regional replay of a window finds what the whole map did. A spur piece (total < 0 in s1, its place along the trunk -total) is a candidate of its own.
-// Segment layout: s0 = a, b; s1 = (length before, length, the path's length | -place, the back side: +1 left of the way drawn, -1 right);
+// regional replay of a window finds what the whole map did. A spur piece (s1.z < 0, its root's place along the trunk -1 - s1.z) is a candidate of its own.
+// Segment layout: s0 = a, b; s1 = (length before, length, the path's length | -1 - place, the back side: +1 left of the way drawn, -1 right);
 // s2 = a trunk's end flags (1 start, 2 end: the section closes round it) | a spur piece's (width, width, height, height) at its ends.
 fn lfFractal(x: f32, y: f32, salt: u32) -> f32 {
   return 0.57 * vnoise(x, y, u.seed ^ salt) + 0.29 * vnoise(x * 2.17 + 19.1, y * 2.17 - 7.3, u.seed ^ (salt + 0x65u)) + 0.14 * vnoise(x * 5.03 - 11.7, y * 5.03 + 31.2, u.seed ^ (salt + 0xd1u));
@@ -746,7 +746,7 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
     wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
   }
   let q = lfShare(cc, e, cap, s1.w, wm);
-  let share = select(clamp((s1.x + tt * s1.y) / max(s1.z, 1e-4), 0.0, 1.0), -s1.z, spur);
+  let share = select(clamp((s1.x + tt * s1.y) / max(s1.z, 1e-4), 0.0, 1.0), -1.0 - s1.z, spur);
   let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
   let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);

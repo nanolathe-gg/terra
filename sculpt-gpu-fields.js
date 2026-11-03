@@ -144,8 +144,9 @@ function spurPieces(s, roots, fade, jag) {
     }
   };
   for (const root of roots) {
-    const k = root.k;
+    const k = root.k, first = out.length;
     grow(root.x, root.y, root.heading, s.spurLength * kf * (.55 + .9 * rand01(s.seed, k, 14)), s.spurWidth * (.85 + .3 * rand01(s.seed, k, 15)), s.spurHeight, k, 0, fade);
+    for (let j = first; j < out.length; j++) out[j].share = root.share;   // a landform reads its crest at the root's place along its path
   }
   return out;
 }
@@ -161,17 +162,23 @@ function ridgePieces(s, path) {
       out.push(mkPiece({x: a.x + (b.x - a.x) * f0, y: a.y + (b.y - a.y) * f0}, {x: a.x + (b.x - a.x) * f1, y: a.y + (b.y - a.y) * f1}, m0[0], m1[0], m0[1], m1[1], jag));
     }
   }
-  const N = Math.round(clamp(s.spurCount, 0, 12));
-  if (N < 1) return out;
-  const roots = [], spread = s.spurSpread, phase = rand01(s.seed, 7, 0x4b1) * Math.PI * 2;
+  const roots = ridgeRoots(s, path, cum, L);
+  if (!roots.length) return out;
+  return out.concat(spurPieces(s, roots, 1, jag));
+}
+// Where a ridge's spurs leave it: along the path, alternating sides with a seeded wobble (share: how far along the path, 0 to 1, for a landform's along curve).
+function ridgeRoots(s, path, cum, L) {
+  const N = Math.round(clamp(s.spurCount, 0, 12)), roots = [];
+  if (N < 1) return roots;
+  const spread = s.spurSpread, phase = rand01(s.seed, 7, 0x4b1) * Math.PI * 2;
   for (let k = 0; k < N; k++) {
-    if (L <= 0) { roots.push({x: path[0].x, y: path[0].y, heading: phase + Math.atan2(s.rot[1], s.rot[0]) + Math.PI * 2 * (k + (rand01(s.seed, k, 11) - .5) * .5) / N, k}); continue; }
+    if (L <= 0) { roots.push({x: path[0].x, y: path[0].y, heading: phase + Math.atan2(s.rot[1], s.rot[0]) + Math.PI * 2 * (k + (rand01(s.seed, k, 11) - .5) * .5) / N, k, share: 0}); continue; }
     const at = L * (.08 + .84 * (k + .2 + .6 * rand01(s.seed, k, 11)) / N), side = ((k + (rand01(s.seed, k, 12) < .25 ? 1 : 0)) & 1) ? 1 : -1;
     let i = 1; while (i < cum.length - 1 && cum[i] < at) i++;
     const a = path[i - 1], b = path[i], f = (at - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-6);
-    roots.push({x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, heading: Math.atan2(b.y - a.y, b.x - a.x) + side * (.7 + .95 * spread) * (.75 + .5 * rand01(s.seed, k, 13)), k});
+    roots.push({x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, heading: Math.atan2(b.y - a.y, b.x - a.x) + side * (.7 + .95 * spread) * (.75 + .5 * rand01(s.seed, k, 13)), k, share: at / L});
   }
-  return out.concat(spurPieces(s, roots, 1, jag));
+  return roots;
 }
 // The crater's lobed outline at an authoring-frame position (craterLobe in sculpt.js).
 function craterLobe(s, lx, ly) {
@@ -347,6 +354,16 @@ export function prepareNode(n, geom, c) {
     // The back is the lean side: left or right of the way drawn, or whichever side a map bearing (turned with the frame) falls on, decided once by the first segment.
     const side = landformBackSide(lean, turn, dx, dy);
     for (let k = 1; k < path.length; k++) segs.push({px: path[k - 1].x, py: path[k - 1].y, ex: path[k].x, ey: path[k].y, f0: [cum[k - 1], cum[k] - cum[k - 1]], f1: [total, side], nx: (k === 1 ? 1 : 0) | (k === path.length - 1 ? 2 : 0), ny: 0});
+    // Spurs (the ridge's own, spurPieces): each piece draws the landform's section scaled by its width and height multipliers, closed at both ends, and takes the crest at
+    // its root's place along the path. Its back side follows its own direction the way the trunk's does.
+    if (Math.round(q.spurCount) >= 1) {
+      const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
+      for (const pc of spurPieces(rs, ridgeRoots(rs, path, cum, total), 1, 0)) {
+        const e = pc.b || pc.a, at = segs.length, ex = landformReach(q, frameScale, Math.max(pc.r0, pc.r1)) + (q.spurBulb > 0 ? q.spurBulb * radius : 0);
+        segs.push({px: pc.a.x, py: pc.a.y, ex: e.x, ey: e.y, f0: [0, 0], f1: [-1 - (pc.share ?? 0), landformBackSide(lean, turn, e.x - pc.a.x, e.y - pc.a.y)], nx: pc.r0, ny: pc.r1, w2: pc.h0, w3: pc.h1});
+        segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
+      }
+    }
   } else if (ridgeOn(kind, q) || n.pieces) {
     // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
     const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
@@ -590,7 +607,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (!p.region) continue;
       const node = {...p.u, nseg: p.segs.length, kind: p.kind, segBase: segCount, mwBase: mwCount, nwrites: p.writes.length};
       for (const s of p.segs) {
-        segData.push(s.px, s.py, s.ex, s.ey, s.f0?.[0] ?? 0, s.f0?.[1] ?? 0, s.f1?.[0] ?? 0, s.f1?.[1] ?? 0, s.nx, s.ny, s.frame ? 1 : 0, s.jag ?? 0, {box: s.box});
+        segData.push(s.px, s.py, s.ex, s.ey, s.f0?.[0] ?? 0, s.f0?.[1] ?? 0, s.f1?.[0] ?? 0, s.f1?.[1] ?? 0, s.nx, s.ny, s.w2 ?? (s.frame ? 1 : 0), s.w3 ?? s.jag ?? 0, {box: s.box});
       }
       segCount += p.segs.length;
       for (const w of p.writes) mwData.push(...w);
