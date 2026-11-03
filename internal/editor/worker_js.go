@@ -37,11 +37,12 @@ type cachedTile struct {
 }
 
 type workerViewState struct {
-	session     int
-	nodes       []model.Node
-	visual      string
-	revision    int
-	initialized bool
+	inFlightBitmapBytes int64
+	session             int
+	nodes               []model.Node
+	visual              string
+	revision            int
+	initialized         bool
 }
 
 var workerViews = map[*App]*workerViewState{}
@@ -69,9 +70,18 @@ func (a *App) startWorker() {
 		showError(fmt.Errorf("Terrain worker: %s", e.Get("message").String()))
 		a.rendering = false
 	})
+	worker := a.worker
 	on(a.worker, "message", func(e js.Value) {
 		m := e.Get("data")
 		kind := m.Get("kind").String()
+		// Admission acknowledgments are independent of terrain generations. Even a
+		// rejected/stale bitmap must release the worker's one in-flight allowance.
+		if kind == "tile" && exists(m.Get("bitmap")) && exists(m.Get("bitmapToken")) {
+			defer func() {
+				worker.Call("postMessage", js.ValueOf(map[string]any{"kind": "bitmap-ack", "token": m.Get("bitmapToken"), "uiBitmapBytes": a.liveBitmapBytes()}))
+			}()
+		}
+
 		id := 0
 		if exists(m.Get("id")) {
 			id = m.Get("id").Int()
@@ -110,7 +120,7 @@ func (a *App) startWorker() {
 			a.requestID++
 			a.activeID = a.requestID
 			a.viewState().session = a.requestID
-			a.worker.Call("postMessage", jsObject(renderjob.Request{Kind: "init", ID: a.requestID, Session: a.viewState().session, Config: a.Config}))
+			a.postRequest(renderjob.Request{Kind: "init", ID: a.requestID, Session: a.viewState().session, Config: a.Config})
 		case "ready":
 			a.workerReady = true
 			text("status", "Terrain ready. Draw a shape to begin.")
@@ -140,6 +150,7 @@ func (a *App) startWorker() {
 				return
 			}
 			a.rendering = false
+			a.viewState().inFlightBitmapBytes = 0
 			ms := m.Get("milliseconds").Float()
 			a.frameTimes = append(a.frameTimes, ms)
 			text("timing", fmt.Sprintf("Render %.0f ms", ms))
@@ -167,7 +178,7 @@ func (a *App) job(kind string, tiles []renderjob.Tile) renderjob.Request {
 	if kind == "export" || kind == "heights" {
 		options["Weather"] = checked("weather")
 	}
-	return renderjob.Request{SentAt: clockMilliseconds(), Kind: kind, ID: a.requestID, Session: a.viewState().session, Revision: a.Revision, Config: a.workerConfig(), Nodes: a.Nodes, Knobs: a.knobStrings(), Colors: a.mergedColors(), Options: options, Tiles: tiles}
+	return renderjob.Request{SentAt: clockMilliseconds(), Kind: kind, ID: a.requestID, Session: a.viewState().session, Revision: a.Revision, Config: a.workerConfig(kind, tiles), Nodes: a.Nodes, Knobs: a.knobStrings(), Colors: a.mergedColors(), Options: options, Tiles: tiles}
 }
 func (a *App) Schedule() {
 	if !a.workerReady || a.Busy || a.view.Width < 1 || auditCaptureOnly {
@@ -244,9 +255,14 @@ func (a *App) queueView() {
 			sort.SliceStable(job.Tiles, func(i, j int) bool { return distance(job.Tiles[i]) < distance(job.Tiles[j]) })
 		}
 	}
+	for _, tile := range job.Tiles {
+		if n, err := membudget.BitmapBytes(tile.Width, tile.Height, tile.Scale); err == nil {
+			a.viewState().inFlightBitmapBytes = max(a.viewState().inFlightBitmapBytes, n)
+		}
+	}
 	a.activeID = job.ID
 	a.rendering = true
-	a.worker.Call("postMessage", jsObject(job))
+	a.postRequest(job)
 	text("status", "Rendering visible terrain…")
 }
 func (a *App) acceptTile(m js.Value) {
@@ -394,12 +410,12 @@ func (a *App) rpcRequest(ctx context.Context, job renderjob.Request) (js.Value, 
 	ch := make(chan js.Value, 4)
 	a.rpc[job.ID] = ch
 	defer delete(a.rpc, job.ID)
-	a.worker.Call("postMessage", jsObject(job))
+	a.postRequest(job)
 	for {
 		select {
 		case <-ctx.Done():
 			a.requestID++
-			a.worker.Call("postMessage", jsObject(renderjob.Request{Kind: "cancel", ID: a.requestID}))
+			a.postRequest(renderjob.Request{Kind: "cancel", ID: a.requestID})
 			return js.Undefined(), ctx.Err()
 		case msg := <-ch:
 			switch msg.Get("kind").String() {
@@ -465,7 +481,7 @@ func (a *App) tileBudget() int {
 	l := membudget.FromConfig(a.Config)
 	return int(min(l.Cache(), l.GPU/4))
 }
-func (a *App) workerConfig() map[string]any {
+func (a *App) workerConfig(kind string, tiles []renderjob.Tile) map[string]any {
 	a.trimTiles()
 	// Immutable world tables and export catalogs are sent only by init.
 	// Every replaceable job includes all mutable renderer settings, so dropping
@@ -476,14 +492,29 @@ func (a *App) workerConfig() map[string]any {
 			c[k] = v
 		}
 	}
-	bytes := 0
-	for _, t := range a.tiles {
-		if exists(t.Canvas) {
-			bytes += t.Width * t.Height * 4
+	bytes := a.liveBitmapBytes()
+	outputs := []int64{}
+	if kind == "view" {
+		for _, tile := range tiles {
+			n, err := membudget.BitmapBytes(tile.Width, tile.Height, tile.Scale)
+			if err != nil {
+				showError(err)
+				n = math.MaxInt64
+			}
+			outputs = append(outputs, n)
 		}
 	}
-	c["uiBitmapBytes"] = bytes
+	c["uiBitmapBytes"] = membudget.ProjectedBitmapResident(membudget.FromConfig(a.Config), bytes, a.viewState().inFlightBitmapBytes, outputs)
 	return c
+}
+func (a *App) liveBitmapBytes() int64 {
+	var bytes int64
+	for _, t := range a.tiles {
+		if exists(t.Canvas) {
+			bytes += int64(t.Width) * int64(t.Height) * 4
+		}
+	}
+	return bytes
 }
 func releaseTile(t *cachedTile) {
 	if exists(t.Canvas) {
