@@ -116,6 +116,18 @@ func (a *App) mountDebug() {
 		}
 		return jsObject(a.Nodes)
 	})
+	expose(d, "strokeTip", func([]js.Value) any {
+		g := a.gesture
+		if g == nil || g.Kind != "stroke" || g.Index < 0 || g.Index >= len(a.Nodes) {
+			return nil
+		}
+		n := a.Nodes[g.Index]
+		if len(n.Points) == 0 {
+			return nil
+		}
+		p := n.Points[len(n.Points)-1]
+		return js.ValueOf(map[string]any{"x": p.X, "y": p.Y, "radius": num(n.Params, "radius", 0)})
+	})
 	expose(d, "uniforms", func([]js.Value) any {
 		return promise(func() (any, error) {
 			if e := a.idle(); e != nil {
