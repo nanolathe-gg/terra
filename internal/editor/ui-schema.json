@@ -770,6 +770,51 @@
       "lava-spread",
       0,
       200
+    ],
+    "breakup": [
+      "sec-breakup",
+      0,
+      100
+    ],
+    "elevation": [
+      "lf-elevation",
+      -80,
+      300
+    ],
+    "combine": [
+      "lf-combine",
+      0,
+      2
+    ],
+    "wander": [
+      "lf-wander",
+      0,
+      120
+    ],
+    "widthVary": [
+      "lf-width-vary",
+      0,
+      100
+    ],
+    "heightVary": [
+      "lf-height-vary",
+      0,
+      40
+    ],
+    "varySize": [
+      "lf-vary-size",
+      20,
+      400
+    ],
+    "varyFoot": [
+      "lf-vary-foot",
+      0,
+      200
+    ],
+    "varyMiddle": [
+      "lf-vary-middle",
+      0,
+      200
     ]
   },
   "SHAPE_FIELDS": [
