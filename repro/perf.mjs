@@ -32,12 +32,25 @@ const q = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) =
 
 // ---------------------------------------------------------------- hooks, installed before the page's own scripts
 const HOOKS = `(() => {
-const P = window.__perf = {ev: [], gpu: [], passes: [], waits: [], images: [], draws: [], frames: [], stage: {}, ctx: ''};
+const P = window.__perf = {workerProfiles: [], worker: false, ev: [], gpu: [], passes: [], waits: [], images: [], draws: [], frames: [], stage: {}, ctx: ''};
 const now = () => performance.now();
 const ev = (type, data) => P.ev.push({t: now(), type, ...data});
 P.mark = ev;
 const add = (name, ms) => { const s = P.stage[name] ??= {n: 0, ms: 0, max: 0}; s.n++; s.ms += ms; s.max = Math.max(s.max, ms); };
 P.add = add;
+// The Go worker owns its GPU device; public tile telemetry crosses that boundary.
+window.addEventListener('terraform-render', event => {
+ const d=event.detail||{},t=now();P.worker=true;
+ if(d.phase==='start') {ev('bake-start',{x:d.x,y:d.y,w:d.width,h:d.height,level:d.scale??1,id:d.id,rev:d.revision});return;}
+ if(d.phase==='tile'||d.phase==='end') {
+  const p=d.profile||{};ev('bake-end',{x:d.x,y:d.y,ms:d.milliseconds??p.TotalMilliseconds??0,level:d.scale??1,id:d.id,rev:d.revision});
+  P.workerProfiles.push({t,...d});
+  for(const [key,name] of Object.entries({TotalMilliseconds:'worker surface (wall)',FeedMilliseconds:'worker GPU feed (encode)',UploadMilliseconds:'worker field upload (CPU)',EncodeMilliseconds:'worker draw + bake (encode)',ReadbackMilliseconds:'worker GPU readback (wait + copy)'})) if(Number.isFinite(p[key]))add(name,p[key]);
+  if(Number.isFinite(d.milliseconds)){add('worker tile (shape + time + surface)',d.milliseconds);if(Number.isFinite(p.TotalMilliseconds))add('worker shape + time + gather',Math.max(0,d.milliseconds-p.TotalMilliseconds));}
+  return;
+ }
+ ev('worker-'+d.phase,d);
+});
 // ---- GPU: timestamps on every pass without its own, waits on the queue, submits
 const devices = new WeakMap();
 const cd = GPUDevice.prototype.createCommandEncoder;
@@ -89,7 +102,7 @@ qp.onSubmittedWorkDone = function () {
 const di = CanvasRenderingContext2D.prototype.drawImage;
 CanvasRenderingContext2D.prototype.drawImage = function (src, ...rest) {
   if (this.canvas?.id === 'terrain' || this.canvas?.id === 'map' || this.canvas?.dataset?.map !== undefined || this.canvas?.parentElement?.id === 'stage') {
-    P.draws.push({t: now(), chunk: src instanceof ImageBitmap, x: rest.length === 5 ? rest[0] : null});
+    P.draws.push({t: now(), chunk: src instanceof ImageBitmap || (P.worker && src instanceof HTMLCanvasElement), x: rest.length === 5 ? rest[0] : null});
   }
   return di.call(this, src, ...rest);
 };
@@ -113,6 +126,7 @@ const wrap = (obj, name, stage, tag) => {
   g.__wrapped = true; obj[name] = g;
 };
 function patch(c) {
+ if(!c?.renderer){P.worker=true;return;}
   const r = c.renderer, Base = Object.getPrototypeOf(Object.getPrototypeOf(r));
   r.timer = Base.timer;                 // the chunk renderer turns the timestamp slots off; the renderer's own pass timers stay off here
   r.timer = () => null;                 // (our hooks time every pass instead)
@@ -147,6 +161,9 @@ function patch(c) {
       return v;
     };
   }
+  // Original-build instrumentation only: worker builds returned above and never
+  // request a removed application JavaScript module. This remains for alternating
+  // measurements against the original baseline server.
   // The Time pass: every run of the erosion class, whether the fields feed it whole or a page asks for its window.
   import('/sculpt-erosion.js').then(m => {
     const proto = m.GpuErosion.prototype, run = proto.runGpu;
@@ -184,7 +201,8 @@ const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, butt
 
 const url = `${server}/sculpt?biome=${scene.biome || 'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
 const result = {mode, label, query: extraQuery, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
-const stable = async (quietMs = 1500, limitMs = 120000) => {   // wait for no bake/erode/read event for quietMs
+const stable = async (quietMs = 1500, limitMs = 120000) => {
+  if(await ev('Boolean(window.sculptCanvas?.stats?.().worker)')){await ev('sculptCanvas.idle()');return true;}   // wait for no bake/erode/read event for quietMs
   const t0 = Date.now();
   while (Date.now() - t0 < limitMs) {
     const last = await ev(`(() => { const e = __perf.ev.filter(x => x.type !== 'weather-state' || true); return performance.now() - (e.length ? e[e.length - 1].t : 0); })()`);
@@ -216,11 +234,11 @@ function analyse(events, visible, t0) {
   return {weatherReady, finalInView: finalAll, shownInView: shownAll, visibleWithoutFinal: missing, quarterBakes: [...bakes.values()].reduce((n, l) => n + l.filter(b => b.level > 1).length, 0), chunksNotFinalAfterWeather: staleFinal, bakeCount: [...bakes.values()].reduce((n, l) => n + l.length, 0), erodeEnds: erode, visible: perChunk};
 }
 const splitStages = async () => {
-  const stage = await ev('__perf.stage'), passes = await ev('__perf.readPasses()'), waits = await ev('__perf.waits.map(w=>w.ms)');
-  return {stage, sampleCallers: await ev('Object.entries(__perf.callers).sort((a, b) => b[1].n - a[1].n).slice(0, 6).map(([k, v]) => [k, v.n * 97])'), longTasks: await ev('(() => { const l = __perf.long, sum = l.reduce((n, x) => n + x.ms, 0); return {n: l.length, totalMs: sum, top: l.slice().sort((a, b) => b.ms - a.ms).slice(0, 8).map(x => [Math.round(x.t), Math.round(x.ms)])}; })()'), gpuPassesMs: passes, erodeParts: await ev('__perf.erodeParts||null'), lastErosionParts: await ev('window.lastErosionParts||null')};
+  const workerProfiles=await ev('__perf.workerProfiles'),stage = await ev('__perf.stage'), passes = await ev('__perf.readPasses()'), waits = await ev('__perf.waits.map(w=>w.ms)');
+  return {stage, workerProfiles, sampleCallers: await ev('Object.entries(__perf.callers).sort((a, b) => b[1].n - a[1].n).slice(0, 6).map(([k, v]) => [k, v.n * 97])'), longTasks: await ev('(() => { const l = __perf.long, sum = l.reduce((n, x) => n + x.ms, 0); return {n: l.length, totalMs: sum, top: l.slice().sort((a, b) => b.ms - a.ms).slice(0, 8).map(x => [Math.round(x.t), Math.round(x.ms)])}; })()'), gpuPassesMs: passes, erodeParts: await ev('__perf.erodeParts||null'), lastErosionParts: await ev('window.lastErosionParts||null')};
 };
 const flush = () => writeFileSync(`${out}/${mode}${label ? '-' + label : ''}-perf.json`, JSON.stringify({...result, console: logs.slice(0, 10)}, null, 1));
-const reset = async () => ev('(() => { const P = __perf; P.ev.length = 0; P.draws.length = 0; P.waits.length = 0; P.stage = {}; P.passes.length = 0; P.long.length = 0; P.callers = {}; if (P.ring) P.ring.next = 0; P.erodeParts = null; return true; })()');
+const reset = async () => ev('(() => { const P = __perf; P.ev.length = 0; P.draws.length = 0; P.waits.length = 0; P.stage = {}; P.passes.length = 0; P.long.length = 0; P.callers = {}; if (P.ring) P.ring.next = 0; P.erodeParts = null; P.workerProfiles=[]; return true; })()');
 
 try {
   await send('Runtime.enable'); await send('Page.enable'); await send('Inspector.enable');
@@ -232,6 +250,8 @@ try {
     const e = await ev('document.getElementById("error")?.textContent'); if (e) throw new Error(e);
     await sleep(200);
   }
+  result.bootReadyMs = Date.now() - bootStart;
+  await ev('sculptCanvas.idle()');
   result.bootMs = Date.now() - bootStart; console.error('booted', result.bootMs);
   result.patchError = await ev('__perf.patchError||null');
   await reset();
@@ -266,14 +286,14 @@ try {
   // revision of the fields it read (a fed bake: the revision submitted when it took the buffers; a CPU bake: the last region read before it); the
   // picture is the first chunk paint after that bake ends.
   const drawSize = Number(opt2('--diameter', 0)); if (drawSize) await ev(`(() => { const d = document.getElementById('diameter'); d.value = ${drawSize}; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })(); true`);
-  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; await ev(`__perf.mark('move', {k: ${i}})`); await mouse('mouseMoved', cx + i * 9, cy + Math.sin(i / 6) * 60); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats().revision ?? null})`); await sleep(30); }
+  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; await ev(`__perf.mark('move', {k: ${i}})`); await mouse('mouseMoved', cx + i * 9, cy + Math.sin(i / 6) * 60); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats?.()?.revision ?? window.sculptCanvas?.stats().revision ?? null})`); await sleep(30); }
   const frames = await ev('__perf.frameStop()');
   const dragEnd = await ev('performance.now()');
   const dragDraws = (await ev('__perf.draws')).filter(d => d.t >= dragT0 && d.t <= dragEnd);
   result.drag = {durationMs: dragEnd - dragT0, movesDelivered: moves, rafMs: {n: frames.length, p50: q(frames, .5), p95: q(frames, .95), max: Math.max(...frames, 0)}, chunkPaintsPerSecond: dragDraws.filter(d => d.chunk).length / ((dragEnd - dragT0) / 1000),
     erodeDuringDrag: (await ev('__perf.ev')).filter(e => e.type === 'erode-start').length, split: await splitStages()};
   {
-    const events = await ev('__perf.ev'), draws = (await ev('__perf.draws')).filter(d => d.chunk), runs = (await ev('window.sculptRegion?.stats().gpuShape?.runLog || []')) || [];
+    const events = await ev('__perf.ev'), draws = (await ev('__perf.draws')).filter(d => d.chunk), runs = (await ev('window.sculptRegion?.stats?.()?.gpuShape?.runLog || []')) || [];
     const marks = new Map(); for (const e of events) { if (e.type === 'move') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).t = e.t; if (e.type === 'rev') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).rev = e.rev; }
     const bakes = []; let lastRead = null;
     for (const e of events) { if (e.type === 'read') lastRead = e; if (e.type === 'bake-end') { const start = e.t - e.ms, read = events.filter(r => r.type === 'read' && r.t <= start).at(-1); bakes.push({end: e.t, rev: e.rev ?? read?.rev ?? null, key: e.x + ',' + e.y, level: e.level ?? 1}); } }
@@ -324,7 +344,7 @@ try {
     const target = Math.min(sc.w - sc.cw, sc.left + 2400);
     const t0 = await ev(`new Promise(resolve => { const v = document.getElementById('viewport'), t0 = performance.now(), from = v.scrollLeft, to = ${target}, frames = 60; let k = 0; __perf.frameStart();
       const step = () => { k++; v.scrollLeft = from + (to - from) * k / frames; if (k < frames) requestAnimationFrame(step); else resolve(performance.now()); }; requestAnimationFrame(step); })`);
-    const rafs = await ev('__perf.frameStop()'), stats = await ev('sculptCanvas.stats().frameMilliseconds');
+    const rafs = await ev('__perf.frameStop()'), stats = await ev('sculptCanvas.stats().frameMilliseconds || []');
     const stopT = t0;
     await sleep(300); await stable(2500);
     const events = await ev('__perf.ev'), vis = await visibleOf(), a = analyse(events, vis.keys, stopT), draws = await ev('__perf.draws');
@@ -343,7 +363,7 @@ try {
     let g = null; for (let i = 0; i < 2400 && !g?.done; i++) { g = await ev('window.gateExport'); if (!g?.done) await sleep(500); }
     result.export = {name, ms: g?.ms ?? null, error: g?.error ?? null, split: await splitStages()};
   }
-  result.memory = await ev('(() => { const m = sculptCanvas.stats(); return {gpuBytes: m.gpuBytes, peakGPUBytes: m.peakGPUBytes, heapBytes: m.heapBytes, peakHeapBytes: m.peakHeapBytes, cachedChunks: m.cachedChunks, bakes: m.bakes, rebakes: m.rebakes, cacheBytes: m.cacheBytes, levels: m.levels}; })()');
+  result.memory = await ev('(() => { const m = sculptCanvas.stats(); return {gpuBytes: m.gpuBytes, peakGPUBytes: m.peakGPUBytes, heapBytes: m.heapBytes, peakHeapBytes: m.peakHeapBytes, cachedChunks: m.cachedChunks, bakes: m.bakes, worker:m.worker, pending:m.pending, rebakes: m.rebakes, cacheBytes: m.cacheBytes, levels: m.levels}; })()');
 } catch (e) {
   result.error = String(e.stack || e);
 } finally {
