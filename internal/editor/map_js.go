@@ -82,17 +82,42 @@ func (a *App) mountMap() {
 		q.Call("delete", "pendingSketch")
 		js.Global().Get("location").Set("href", u.Get("href"))
 	})
-	click("map-export", func() { go a.exportMap() })
+	click("map-export", func() { go func() { _, _ = a.exportMap() }() })
 	click("map-cancel", func() {
 		if a.cancelExport != nil {
 			a.cancelExport()
 		}
 	})
 	a.mountFeatures()
+	api := js.Global().Get("Object").New()
+	js.Global().Set("sculptMap", api)
+	expose(api, "export", func(args []js.Value) any {
+		if len(args) > 0 && args[0].Type() == js.TypeString {
+			setValue("map-name", args[0].String())
+		}
+		if len(args) > 1 && args[1].Type() == js.TypeString {
+			setValue("map-description", args[1].String())
+		}
+		return promise(func() (any, error) {
+			result, e := a.exportMap()
+			if e != nil {
+				return nil, e
+			}
+			return jsObject(result), nil
+		})
+	})
+	api.Set("geometry", jsObject(a.Map()))
+	api.Set("catalogue", jsObject(obj(a.Config, "exportCatalog")))
 }
-func (a *App) exportMap() {
+func (a *App) exportMap() (map[string]any, error) {
+	if len(obj(obj(obj(obj(a.Config, "exportCatalog"), "worlds"), a.World()), "climate")) == 0 {
+		return nil, fmt.Errorf("Export is unavailable for this canvas or world.")
+	}
+	if !a.workerReady {
+		return nil, fmt.Errorf("Wait for the finished terrain before exporting.")
+	}
 	if a.Busy {
-		return
+		return nil, fmt.Errorf("Wait for the finished terrain before exporting.")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancelExport = cancel
@@ -100,11 +125,19 @@ func (a *App) exportMap() {
 		cancel()
 		a.cancelExport = nil
 		a.Busy = false
+		a.rendering = false
+		for _, id := range []string{"editor", "world-editor", "map-controls"} {
+			disabled(id, false)
+		}
+		a.Schedule()
 		hidden("map-cancel", true)
 		disabled("map-export", false)
 		a.Update()
 	}()
 	a.Busy = true
+	for _, id := range []string{"editor", "world-editor", "map-controls"} {
+		disabled(id, true)
+	}
 	disabled("map-export", true)
 	hidden("map-cancel", false)
 	token := a.Revision
@@ -113,20 +146,20 @@ func (a *App) exportMap() {
 		v := number("map-" + f.key)
 		if v < 0 || math.Trunc(v) != v || v > 2147483647 || f.key == "surfaceMetal" && v > 255 {
 			text("map-export-state", "Use nonnegative integer OTA settings within the displayed bounds.")
-			return
+			return nil, fmt.Errorf("Use nonnegative integer OTA settings within the displayed bounds.")
 		}
 		settings[f.key] = v
 	}
 	if settings["minWind"].(float64) > settings["maxWind"].(float64) {
 		text("map-export-state", "Minimum wind must not exceed maximum wind.")
-		return
+		return nil, fmt.Errorf("Minimum wind must not exceed maximum wind.")
 	}
 	settings["lava"] = checked("map-lava")
 	text("map-export-state", "Sampling TNT cell corners…")
 	heights, clipped, err := a.ExportHeights(ctx)
 	if err != nil {
 		text("map-export-state", err.Error())
-		return
+		return nil, err
 	}
 	body := map[string]any{"name": value("map-name"), "description": value("map-description"), "world": a.World(), "unitsX": a.Map()["unitsX"], "unitsY": a.Map()["unitsY"], "seaLevel": a.Config["seaLevel"], "heights": heights, "settings": settings}
 	if a.featureUI != nil {
@@ -141,7 +174,7 @@ func (a *App) exportMap() {
 	var started map[string]any
 	if err = request("/map-export/start", "POST", body, &started); err != nil {
 		text("map-export-state", err.Error())
-		return
+		return nil, err
 	}
 	id := str(started, "id", "")
 	finished := false
@@ -173,12 +206,12 @@ func (a *App) exportMap() {
 	})
 	if err != nil {
 		text("map-export-state", err.Error())
-		return
+		return nil, err
 	}
 	var result map[string]any
 	if err = request("/map-export/finish?id="+url.QueryEscape(id), "POST", nil, &result); err != nil {
 		text("map-export-state", err.Error())
-		return
+		return nil, err
 	}
 	finished = true
 	text("map-export-state", fmt.Sprintf("%v unique tiles / %v slots. Self-check passed. %d clamped cells.", result["uniqueTiles"], result["tileSlots"], clipped))
@@ -192,6 +225,8 @@ func (a *App) exportMap() {
 			host.Call("append", link)
 		}
 	}
+	result["clampedCells"] = clipped
+	return result, nil
 }
 
 // restoreMapMetadata reapplies settings after loading a recipe or undo state.

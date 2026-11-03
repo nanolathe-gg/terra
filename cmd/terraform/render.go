@@ -31,17 +31,17 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		return e
 	}
 	var recipe struct {
-		Format, Biome, Variant                                                                              string
-		Nodes                                                                                               []model.Node
-		Map                                                                                                 map[string]any
-		MapData                                                                                             map[string]any
-		Knobs                                                                                               map[string]any
-		Colors                                                                                              map[string]any
-		BaseHeight, SeaLevel, Size, Grid                                                                    float64
-		Relief, MineralRing, RingSpread, RingVariation, MaterialWeathering, DepositSpread, TransitionDetail *float64
-		RefinementSeed                                                                                      *uint32
-		Weather, WeatheredView, Clay                                                                        *bool
-		Light                                                                                               string
+		Format, Biome, Variant                                                                                     string
+		Nodes                                                                                                      []model.Node
+		Map                                                                                                        map[string]any
+		MapData                                                                                                    map[string]any
+		Knobs                                                                                                      map[string]any
+		Colors                                                                                                     map[string]any
+		BaseHeight, SeaLevel, Size, Grid                                                                           float64
+		Relief, MineralRing, RingSpread, RingVariation, MaterialWeathering, DepositSpread, TransitionDetail, Scree *float64
+		RefinementSeed                                                                                             *uint32
+		Weather, WeatheredView, Clay                                                                               *bool
+		Light                                                                                                      string
 	}
 	if e = json.Unmarshal(b, &recipe); e != nil {
 		return e
@@ -117,6 +117,24 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	if w <= 0 || h <= 0 {
 		return fmt.Errorf("recipe has no map dimensions")
 	}
+	colors := map[string]any{}
+	if defaults, ok := config["colors"].(map[string]any); ok {
+		for k, v := range defaults {
+			if c, ok := v.(string); ok {
+				var r, g, b int
+				if _, err := fmt.Sscanf(c, "#%02x%02x%02x", &r, &g, &b); err == nil {
+					colors[k] = []float64{float64(r) / 255, float64(g) / 255, float64(b) / 255}
+				}
+			}
+		}
+	}
+	for k, v := range recipe.Colors {
+		if v == nil {
+			delete(colors, k)
+		} else {
+			colors[k] = v
+		}
+	}
 	knobs := map[string]string{}
 	for k, v := range recipe.Knobs {
 		knobs[k] = fmt.Sprint(v)
@@ -138,12 +156,24 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		os.Remove(tileDir)
 	}()
 	draw := terrain.DefaultDrawOptions(config)
+	materialOptions, _ := config["material"].(map[string]any)
+	if v, ok := materialOptions["ringAmount"].(float64); ok {
+		draw.Ring = v
+	} else {
+		draw.Ring = 0
+	}
+	if v, ok := materialOptions["ringSpread"].(float64); ok {
+		draw.RingSpread = v
+	}
+	if v, ok := materialOptions["ringVariation"].(float64); ok {
+		draw.RingVariation = v
+	}
 	draw.Full = true
 	draw.ExportArt = true
 	for _, item := range []struct {
 		src *float64
 		dst *float64
-	}{{recipe.Relief, &draw.Detail}, {recipe.MineralRing, &draw.Ring}, {recipe.RingSpread, &draw.RingSpread}, {recipe.RingVariation, &draw.RingVariation}, {recipe.MaterialWeathering, &draw.MaterialWeathering}, {recipe.DepositSpread, &draw.DepositSpread}, {recipe.TransitionDetail, &draw.TransitionDetail}} {
+	}{{recipe.Relief, &draw.Detail}, {recipe.MineralRing, &draw.Ring}, {recipe.RingSpread, &draw.RingSpread}, {recipe.RingVariation, &draw.RingVariation}, {recipe.MaterialWeathering, &draw.MaterialWeathering}, {recipe.DepositSpread, &draw.DepositSpread}, {recipe.TransitionDetail, &draw.TransitionDetail}, {recipe.Scree, &draw.Scree}} {
 		if item.src != nil {
 			*item.dst = *item.src / 100
 		}
@@ -165,7 +195,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	for y := 0; y < h; y += side {
 		for x := 0; x < w; x += side {
 			tw, th := min(side, w-x), min(side, h-y)
-			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true, ReadHeights: true}, func() terrain.DrawOptions { d := draw; d.Width = tw; d.Height = th; return d }())
+			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true, ReadHeights: true}, func() terrain.DrawOptions { d := draw; d.Width = tw; d.Height = th; return d }())
 			if err != nil {
 				return fmt.Errorf("render tile (%d,%d): %w", x, y, err)
 			}
