@@ -29,12 +29,12 @@ type ShapeWindow struct {
 // operations with direct, world-coordinate noise. Unsupported operations fail
 // rather than returning an incomplete terrain.
 func (s *ShapeEngine) EvaluateShapeWindow(ctx context.Context, c ShapeWindowConfig, nodes []model.Node) (*ShapeWindow, error) {
-	return s.evaluateShapeWindow(ctx, c, nodes, true, nil)
+	return s.evaluateShapeWindow(ctx, c, nodes, true, true, nil)
 }
 
 type shapeBuffersCallback func(CellRect, *wgpu.Buffer, *wgpu.Buffer) error
 
-func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConfig, nodes []model.Node, expandTarget bool, callback shapeBuffersCallback) (*ShapeWindow, error) {
+func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConfig, nodes []model.Node, expandTarget, readback bool, callback shapeBuffersCallback) (*ShapeWindow, error) {
 	whole := CellRect{0, 0, c.Grid - 1, c.Grid - 1}
 	window, ok := intersect(c.Window, whole)
 	if !ok {
@@ -92,7 +92,11 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 			scratch = max(scratch, 14*cells+op.Coast.SiteFloats)
 		}
 	}
-	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, scratch * 4, 0, 0, words * 4, max(16, reads*4)}
+	outputBytes := 16
+	if readback {
+		outputBytes = words * 4
+	}
+	sizes := []int{6 * cells * 4, 7 * cells * 4, 16, scratch * 4, 0, 0, outputBytes, max(16, reads*4)}
 	var e error
 	for i := range buffers {
 		switch i {
@@ -114,7 +118,9 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	if e != nil {
 		return nil, e
 	}
-	passes = append(passes, ShapePass{Entry: "pack", Region: window, Values: base, OutputWords: words})
+	if readback {
+		passes = append(passes, ShapePass{Entry: "pack", Region: window, Values: base, OutputWords: words})
+	}
 	if e = s.Dispatch(passes, buffers); e != nil {
 		return nil, e
 	}
@@ -122,6 +128,9 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 		if e = callback(target, buffers[0], buffers[1]); e != nil {
 			return nil, e
 		}
+	}
+	if !readback {
+		return &ShapeWindow{Rect: window, Width: outW, Height: outH}, nil
 	}
 	data, e := s.gpu.ReadBuffer(ctx, buffers[6], 0, uint64(words*4))
 	if e != nil {

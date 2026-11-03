@@ -47,19 +47,39 @@ func TestSceneWindowAndComparison(t *testing.T) {
 	}
 	defer s.Close()
 	nodes := []model.Node{{Kind: "paint", Seed: 123, Points: []model.Point{{X: 40, Y: 40}}, Params: map[string]any{"radius": 20., "amount": 50., "rough": .2, "softness": .5, "paintChannel": 3.}}}
-	r, e := s.Render(context.Background(), nodes, nil, nil, SceneWindow{X: 16, Y: 16, Width: 64, Height: 64, Scale: 1}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65})
+	r, e := s.Render(context.Background(), nodes, nil, nil, SceneWindow{X: 16, Y: 16, Width: 64, Height: 64, Scale: 1, ReadHeights: true}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65})
 	if e != nil {
 		t.Fatal(e)
 	}
 	if len(r.RGBA) != 64*64*4 || len(r.Heights) != r.HeightWidth*r.HeightHeight || r.HeightSpacing != 127./32 {
 		t.Fatalf("wrong output dimensions: %+v", r)
 	}
-	weather, err := s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, SceneWindow{X: 16, Y: 16, Width: 32, Height: 32, Scale: 1}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65, Weather: true})
+	if s.shapeRuns != 1 {
+		t.Fatalf("shape runs=%d want 1", s.shapeRuns)
+	}
+	_, repeatErr := s.Render(context.Background(), nodes, nil, nil, SceneWindow{X: 20, Y: 20, Width: 32, Height: 32, Scale: 1}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65})
+	if repeatErr != nil {
+		t.Fatal(repeatErr)
+	}
+	if s.shapeRuns != 1 {
+		t.Fatalf("repeated view reran shape: %d", s.shapeRuns)
+	}
+	weather, err := s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, SceneWindow{X: 16, Y: 16, Width: 32, Height: 32, Scale: 1, ReadHeights: true}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65, Weather: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(weather.RGBA) != 32*32*4 || len(weather.Heights) != weather.HeightWidth*weather.HeightHeight {
 		t.Fatal("invalid weather output dimensions")
+	}
+	if s.weatherRuns != 1 {
+		t.Fatalf("weather runs=%d want 1", s.weatherRuns)
+	}
+	_, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, SceneWindow{X: 20, Y: 20, Width: 32, Height: 32, Scale: 1}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65, Weather: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.weatherRuns != 1 {
+		t.Fatalf("repeated view reran weather: %d", s.weatherRuns)
 	}
 	cmp, e := s.CompareRegions(context.Background(), nodes, nil)
 	if e != nil {

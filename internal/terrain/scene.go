@@ -18,6 +18,7 @@ type SceneWindow struct {
 	Scale               float64
 	ExportArt           bool
 	Preview             bool
+	ReadHeights         bool
 }
 type SceneResult struct {
 	RGBA                                        []byte
@@ -27,13 +28,19 @@ type SceneResult struct {
 	HeightOriginX, HeightOriginY, HeightSpacing float64
 }
 type SceneRenderer struct {
-	gpu      *GPU
-	config   map[string]any
-	sources  map[string]string
-	material map[string]any
-	shape    *ShapeEngine
-	renderer *Renderer
-	erosion  *Erosion
+	gpu                      *GPU
+	config                   map[string]any
+	sources                  map[string]string
+	material                 map[string]any
+	shape                    *ShapeEngine
+	renderer                 *Renderer
+	erosion                  *Erosion
+	weatherPages             map[[2]int]*weatherFeed
+	weatherKey               [32]byte
+	weatherTick, weatherRuns uint64
+	shapePages               map[[2]int]*weatherFeed
+	shapeKey                 [32]byte
+	shapeTick, shapeRuns     uint64
 }
 
 func NewSceneRenderer(gpu *GPU, config map[string]any, sources map[string]string, material map[string]any) (*SceneRenderer, error) {
@@ -61,6 +68,8 @@ func NewSceneRenderer(gpu *GPU, config map[string]any, sources map[string]string
 	return &SceneRenderer{gpu: gpu, config: chunkConfig, sources: sources, material: material, shape: shape, renderer: renderer}, nil
 }
 func (s *SceneRenderer) Close() {
+	s.clearWeatherCache()
+	s.clearShapeCache()
 	if s.erosion != nil {
 		s.erosion.Close()
 		s.erosion = nil
@@ -107,46 +116,50 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		defer func() { s.renderer.Grid = nativeGrid }()
 	}
 	region := s.renderer.RequiredRegion(window, options.Full)
-	bounds := vector(s.config, "heightBounds", []float64{-90, 300})
+	seaLevel := number(s.config, "seaLevel", 0)
+	bounds := vector(s.config, "heightBounds", []float64{seaLevel - 90, seaLevel + 300})
 	shapeDefaults := s.shapeDefaults()
 	shapeConfig := ShapeWindowConfig{Grid: s.renderer.Grid, Spacing: region.GridSpacing, RefSpacing: nativeSpacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{region.GridX, region.GridY, region.GridX + region.GridWidth - 1, region.GridY + region.GridHeight - 1}, Defaults: shapeDefaults}
-	shape, err := s.shape.EvaluateShapeWindow(ctx, shapeConfig, nodes)
-	if err != nil {
-		return nil, err
-	}
-	masks := make([][]int8, len(shape.Masks))
-	for i := range shape.Masks {
-		masks[i] = shape.Masks[i]
-	}
-	input := WindowInput{Window: window, Region: region, Heights: shape.Planes[0], Routes: shape.Planes[2], Cracks: shape.Planes[3], Cover: shape.Planes[4], Crystal: shape.Planes[5], Masks: masks, ExportArt: window.ExportArt}
-	var feed *weatherFeed
+	var pixels []byte
+	var err error
+	input := WindowInput{Window: window, Region: region, ExportArt: window.ExportArt}
 	if options.Weather && !window.Preview {
-		feed, err = s.buildWeatherFeed(ctx, nodes, shapeConfig, shapeConfig.Window, options)
-		if err != nil {
-			return nil, err
+		feed, e := s.buildWeatherFeed(ctx, nodes, shapeConfig, shapeConfig.Window, options)
+		if e != nil {
+			return nil, e
 		}
 		defer feed.Close()
 		input.Feed = &feed.GPUFeed
+		pixels, err = s.renderer.RenderWindow(ctx, input, options)
+	} else {
+		feed, e := s.buildShapeFeed(ctx, nodes, shapeConfig, shapeConfig.Window)
+		if e != nil {
+			return nil, e
+		}
+		defer feed.Close()
+		input.Feed = &feed.GPUFeed
+		pixels, err = s.renderer.RenderWindow(ctx, input, options)
 	}
-	pixels, err := s.renderer.RenderWindow(ctx, input, options)
 	if err != nil {
 		return nil, err
 	}
-	if feed != nil {
-		gw, gh := pow2(shape.Width), pow2(shape.Height)
+	rw, rh := region.GridWidth, region.GridHeight
+	var heights []float32
+	if window.ReadHeights {
+		gw, gh := pow2(rw), pow2(rh)
 		data, e := s.renderer.ReadTexture(ctx, s.renderer.HeightTexture, gw, gh, 0, 0)
 		if e != nil {
 			return nil, e
 		}
 		sea := float32(shapeConfig.Sea)
-		for y := 0; y < shape.Height; y++ {
-			for x := 0; x < shape.Width; x++ {
-				i := y*shape.Width + x
-				shape.Planes[0][i] = math.Float32frombits(binary.LittleEndian.Uint32(data[(y*gw+x)*4:])) + sea
+		heights = make([]float32, rw*rh)
+		for y := 0; y < rh; y++ {
+			for x := 0; x < rw; x++ {
+				heights[y*rw+x] = math.Float32frombits(binary.LittleEndian.Uint32(data[(y*gw+x)*4:])) + sea
 			}
 		}
 	}
-	return &SceneResult{RGBA: pixels, Heights: shape.Planes[0], Width: int(math.Ceil(float64(window.Width) / window.Scale)), Height: int(math.Ceil(float64(window.Height) / window.Scale)), HeightWidth: shape.Width, HeightHeight: shape.Height, HeightOriginX: float64(shape.Rect.X0) * region.GridSpacing, HeightOriginY: float64(shape.Rect.Y0) * region.GridSpacing, HeightSpacing: region.GridSpacing}, nil
+	return &SceneResult{RGBA: pixels, Heights: heights, Width: int(math.Ceil(float64(window.Width) / window.Scale)), Height: int(math.Ceil(float64(window.Height) / window.Scale)), HeightWidth: rw, HeightHeight: rh, HeightOriginX: float64(region.GridX) * region.GridSpacing, HeightOriginY: float64(region.GridY) * region.GridSpacing, HeightSpacing: region.GridSpacing}, nil
 }
 
 func (s *SceneRenderer) shapeDefaults() map[string]any {
