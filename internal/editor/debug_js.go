@@ -44,7 +44,7 @@ func promise(fn func() (any, error)) js.Value {
 }
 func (a *App) idle() error {
 	deadline := time.Now().Add(5 * time.Minute)
-	for !a.workerReady || a.rendering || a.scheduleQueued || a.navigating {
+	for !a.workerReady || a.rendering || a.scheduleQueued || a.navigationPreview() {
 		if !element("error").Get("hidden").Bool() {
 			return fmt.Errorf("%s", element("error").Get("textContent").String())
 		}
