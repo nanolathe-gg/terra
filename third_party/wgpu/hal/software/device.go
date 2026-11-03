@@ -1,0 +1,574 @@
+//go:build !(js && wasm)
+
+package software
+
+import (
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+	"unsafe"
+
+	"github.com/gogpu/gputypes"
+	"github.com/gogpu/naga/backend"
+	"github.com/gogpu/naga/ir"
+	"github.com/gogpu/naga/spirv"
+	"github.com/gogpu/wgpu/hal"
+	"github.com/gogpu/wgpu/hal/software/shader"
+	"github.com/gogpu/wgpu/internal/shaderir"
+)
+
+// ErrComputeRequiresSPIRV indicates that a compute pipeline requires a shader
+// module with SPIR-V bytecode. WGSL shaders must be compilable to SPIR-V via
+// naga for the SPIR-V interpreter to execute them.
+var ErrComputeRequiresSPIRV = errors.New("software: compute pipeline requires SPIR-V shader (WGSL compilation may have failed)")
+
+// ErrWorkgroupBarrierUnsupported is returned by CreateComputePipeline for a
+// compute shader that has both workgroup memory and a control barrier. The
+// interpreter runs the invocations of a workgroup one after another and does
+// not share workgroup memory between them, so such a shader (a tree
+// reduction, a shared tile) would compute wrong results; it is refused
+// instead until the backend implements workgroup memory (P1-SW-025). It is
+// hal.ErrWorkgroupBarrierUnsupported, which the wgpu package re-exports.
+var ErrWorkgroupBarrierUnsupported = hal.ErrWorkgroupBarrierUnsupported
+
+// Device implements hal.Device for the software backend.
+// It maintains a resource registry for resolving handle-based bind group entries
+// back to typed software resources.
+type Device struct {
+	mu           sync.RWMutex
+	textureViews map[uintptr]*TextureView     // handle -> TextureView
+	buffers      map[uintptr]*Buffer          // handle -> Buffer
+	samplers     map[uintptr]*SamplerResource // handle -> SamplerResource
+}
+
+// CreateBuffer creates a software buffer with real data storage.
+func (d *Device) CreateBuffer(desc *hal.BufferDescriptor) (hal.Buffer, error) {
+	if desc == nil {
+		return nil, fmt.Errorf("BUG: buffer descriptor is nil in Software.CreateBuffer — core validation gap")
+	}
+	id := nextResourceID.Add(1)
+	buf := &Buffer{
+		id:    id,
+		data:  make([]byte, desc.Size),
+		size:  desc.Size,
+		usage: desc.Usage,
+	}
+	d.registerBuffer(buf)
+	return buf, nil
+}
+
+// DestroyBuffer is a no-op (Go GC handles cleanup).
+func (d *Device) DestroyBuffer(_ hal.Buffer) {}
+
+// MapBuffer returns a pointer into the buffer's backing Go slice.
+// Software buffers are always host-visible and coherent.
+func (d *Device) MapBuffer(buffer hal.Buffer, offset, size uint64) (hal.BufferMapping, error) {
+	buf, ok := buffer.(*Buffer)
+	if !ok || buf == nil || buf.data == nil {
+		return hal.BufferMapping{}, hal.ErrInvalidMapRange
+	}
+	if offset+size > buf.size {
+		return hal.BufferMapping{}, hal.ErrInvalidMapRange
+	}
+	// Pointer arithmetic into a Go slice is safe as long as the slice is
+	// kept alive by the caller (core retains the Buffer via ResourceRef).
+	return hal.BufferMapping{
+		Ptr:        unsafe.Pointer(&buf.data[offset]),
+		IsCoherent: true,
+	}, nil
+}
+
+// UnmapBuffer is a no-op — software buffers are persistently host-visible.
+func (d *Device) UnmapBuffer(_ hal.Buffer) error { return nil }
+
+// CreateTexture creates a software texture with real pixel storage.
+func (d *Device) CreateTexture(desc *hal.TextureDescriptor) (hal.Texture, error) {
+	if desc == nil {
+		return nil, fmt.Errorf("BUG: texture descriptor is nil in Software.CreateTexture — core validation gap")
+	}
+	if desc.SampleCount > 1 {
+		return nil, fmt.Errorf("software backend does not support MSAA (SampleCount=%d)", desc.SampleCount)
+	}
+	// Calculate total size needed for texture data: width * height * depth *
+	// bytesPerPixel, where bytesPerPixel is derived from the format (R8=1,
+	// RG8/R16=2, RGBA8/BGRA8=4). Hardcoding 4 here corrupted single-channel
+	// formats such as the R8 glyph atlas.
+	bytesPerPixel := formatBytesPerPixel(desc.Format)
+	totalSize := uint64(desc.Size.Width) * uint64(desc.Size.Height) * uint64(desc.Size.DepthOrArrayLayers) * bytesPerPixel
+
+	return &Texture{
+		id:            nextResourceID.Add(1),
+		data:          make([]byte, totalSize),
+		width:         desc.Size.Width,
+		height:        desc.Size.Height,
+		depth:         desc.Size.DepthOrArrayLayers,
+		format:        desc.Format,
+		usage:         desc.Usage,
+		mipLevelCount: desc.MipLevelCount,
+		sampleCount:   desc.SampleCount,
+	}, nil
+}
+
+// DestroyTexture is a no-op (Go GC handles cleanup).
+func (d *Device) DestroyTexture(_ hal.Texture) {}
+
+// CreateTextureView creates a software texture view.
+func (d *Device) CreateTextureView(texture hal.Texture, _ *hal.TextureViewDescriptor) (hal.TextureView, error) {
+	// Views in software backend just reference the original texture
+	if tex, ok := texture.(*Texture); ok {
+		view := &TextureView{
+			id:      nextResourceID.Add(1),
+			texture: tex,
+		}
+		d.registerTextureView(view)
+		return view, nil
+	}
+	// Also handle SurfaceTexture (embeds Texture)
+	if st, ok := texture.(*SurfaceTexture); ok {
+		view := &TextureView{
+			id:      nextResourceID.Add(1),
+			texture: &st.Texture,
+		}
+		d.registerTextureView(view)
+		return view, nil
+	}
+	return &Resource{}, nil
+}
+
+// DestroyTextureView is a no-op.
+func (d *Device) DestroyTextureView(_ hal.TextureView) {}
+
+// CreateSampler creates a software sampler with actual parameters.
+// The sampler is stored in the device registry so CreateBindGroup can resolve
+// the handle back to a SamplerResource for the SPIR-V interpreter.
+func (d *Device) CreateSampler(desc *hal.SamplerDescriptor) (hal.Sampler, error) {
+	s := &SamplerResource{
+		id:   nextResourceID.Add(1),
+		Desc: desc,
+	}
+	d.registerSampler(s)
+	return s, nil
+}
+
+// DestroySampler is a no-op.
+func (d *Device) DestroySampler(_ hal.Sampler) {}
+
+// BindGroupLayout stores layout entries for the software backend.
+// Entries are needed at draw time to determine which buffer bindings
+// have HasDynamicOffset and should consume dynamic offset values.
+type BindGroupLayout struct {
+	Resource
+	entries []gputypes.BindGroupLayoutEntry
+}
+
+// CreateBindGroupLayout creates a software bind group layout.
+func (d *Device) CreateBindGroupLayout(desc *hal.BindGroupLayoutDescriptor) (hal.BindGroupLayout, error) {
+	bgl := &BindGroupLayout{}
+	if desc != nil {
+		bgl.entries = desc.Entries
+	}
+	return bgl, nil
+}
+
+// DestroyBindGroupLayout is a no-op.
+func (d *Device) DestroyBindGroupLayout(_ hal.BindGroupLayout) {}
+
+// CreateBindGroup creates a software bind group.
+// It resolves handle-based entries to typed software resources using the device registry.
+// Layout entries are inspected to build the hasDynamicOffset map so that dynamic
+// offsets are only applied to bindings explicitly marked with HasDynamicOffset.
+func (d *Device) CreateBindGroup(desc *hal.BindGroupDescriptor) (hal.BindGroup, error) {
+	bg := &BindGroup{
+		desc:             desc,
+		textureViews:     make(map[uint32]*TextureView),
+		buffers:          make(map[uint32]*Buffer),
+		bufferBindings:   make(map[uint32]bufferSlice),
+		samplers:         make(map[uint32]*SamplerResource),
+		hasDynamicOffset: make(map[uint32]bool),
+	}
+
+	// Extract HasDynamicOffset from layout entries.
+	if desc != nil {
+		if bgl, ok := desc.Layout.(*BindGroupLayout); ok && bgl != nil {
+			for _, le := range bgl.entries {
+				if le.Buffer != nil && le.Buffer.HasDynamicOffset {
+					bg.hasDynamicOffset[le.Binding] = true
+				}
+			}
+		}
+
+		for _, entry := range desc.Entries {
+			switch res := entry.Resource.(type) {
+			case gputypes.TextureViewBinding:
+				if view := d.lookupTextureView(res.TextureView); view != nil {
+					bg.textureViews[entry.Binding] = view
+				}
+			case gputypes.BufferBinding:
+				if buf := d.lookupBuffer(res.Buffer); buf != nil {
+					bg.buffers[entry.Binding] = buf
+					bg.bufferBindings[entry.Binding] = bufferSlice{
+						buf:    buf,
+						offset: res.Offset,
+						size:   res.Size,
+					}
+				}
+			case gputypes.SamplerBinding:
+				if samp := d.lookupSampler(res.Sampler); samp != nil {
+					bg.samplers[entry.Binding] = samp
+				}
+			}
+		}
+	}
+	return bg, nil
+}
+
+// DestroyBindGroup is a no-op.
+func (d *Device) DestroyBindGroup(_ hal.BindGroup) {}
+
+// CreatePipelineLayout creates a software pipeline layout.
+func (d *Device) CreatePipelineLayout(_ *hal.PipelineLayoutDescriptor) (hal.PipelineLayout, error) {
+	return &Resource{}, nil
+}
+
+// DestroyPipelineLayout is a no-op.
+func (d *Device) DestroyPipelineLayout(_ hal.PipelineLayout) {}
+
+// CreateShaderModule creates a software shader module.
+// If the source is WGSL, it compiles to SPIR-V via naga for interpretation.
+// If SPIR-V is provided directly, it is stored as-is.
+// Compilation failure is non-fatal: the module falls back to the existing
+// callback-based shader path (fullscreen blit, vertex buffer draw).
+//
+// A WGSL module with overrides keeps only its IR; every pipeline stage
+// specializes it (specializeStage).
+func (d *Device) CreateShaderModule(desc *hal.ShaderModuleDescriptor) (hal.ShaderModule, error) {
+	sm := &ShaderModule{desc: desc}
+
+	switch {
+	case len(desc.Source.SPIRV) > 0:
+		sm.spirv = desc.Source.SPIRV
+	case desc.Source.WGSL != "":
+		// Compilation failure is non-fatal — existing draw paths don't need
+		// SPIR-V, so the module then has neither IR nor SPIR-V.
+		if lowered, err := shaderir.LowerDescriptor(desc); err == nil {
+			sm.irModule = &lowered
+			if !shaderir.PerStage(lowered.IR, nil) {
+				sm.spirv, _ = shaderir.SPIRV(lowered.IR, spirvOptions())
+			}
+		}
+	}
+
+	return sm, nil
+}
+
+// stageModule returns the parsed SPIR-V of one pipeline stage. When the
+// module has overrides or the stage gives pipeline constants, the module's IR
+// is specialized for this stage (Rust wgpu-hal calls process_overrides for
+// every pipeline stage, vulkan/device.rs:804). Otherwise it is the module's
+// own SPIR-V, which is nil if the module has none.
+func stageModule(sm *ShaderModule, stage ir.ShaderStage, entryPoint string, constants map[string]float64) (*shader.Module, error) {
+	if sm.irModule == nil && len(constants) > 0 {
+		return nil, fmt.Errorf("software: pipeline constants need a WGSL shader module that compiles")
+	}
+	if sm.irModule == nil || !shaderir.PerStage(sm.irModule.IR, constants) {
+		return sm.ParsedModule(), nil
+	}
+	module, err := shaderir.Specialize(*sm.irModule, stage, entryPoint, constants)
+	if err != nil {
+		return nil, fmt.Errorf("software: %w", err)
+	}
+	words, err := shaderir.SPIRV(module.IR, spirvOptions())
+	if err != nil {
+		return nil, fmt.Errorf("software: SPIR-V for %s entry point %q: %w", shaderir.StageName(stage), entryPoint, err)
+	}
+	parsed, err := shader.ParseModule(words)
+	if err != nil {
+		return nil, fmt.Errorf("software: parse SPIR-V for %s entry point %q: %w", shaderir.StageName(stage), entryPoint, err)
+	}
+	return parsed, nil
+}
+
+// spirvOptions are the naga SPIR-V options for the interpreter.
+//
+// SPIR-V 1.3 is the version the interpreter is tested on. Index and buffer
+// accesses are clamped by the shader (Restrict, OpExtInst UMin). Image loads
+// stay Unchecked: the interpreter answers the image queries naga's checked
+// loads emit (P1-SW-017), but the clamp arithmetic runs on integer vectors,
+// which the interpreter does not hold exactly yet (P1-SW-013). fetchTexel
+// clamps the coordinates itself, so an out-of-bounds load still reads inside
+// the texture. Binding arrays are Unchecked, as in every Rust wgpu-hal
+// backend.
+func spirvOptions() spirv.Options {
+	return spirv.Options{
+		Version: spirv.Version1_3,
+		BoundsCheckPolicies: backend.BoundsCheckPolicies{
+			Index:        backend.BoundsCheckRestrict,
+			Buffer:       backend.BoundsCheckRestrict,
+			ImageLoad:    backend.BoundsCheckUnchecked,
+			BindingArray: backend.BoundsCheckUnchecked,
+		},
+	}
+}
+
+// DestroyShaderModule is a no-op.
+func (d *Device) DestroyShaderModule(_ hal.ShaderModule) {}
+
+// CreateRenderPipeline creates a software render pipeline.
+func (d *Device) CreateRenderPipeline(desc *hal.RenderPipelineDescriptor) (hal.RenderPipeline, error) {
+	p := &RenderPipeline{desc: desc}
+	if desc == nil {
+		return p, nil
+	}
+	// The HAL render stages carry no pipeline constants yet: overrides take
+	// their defaults.
+	if sm, ok := desc.Vertex.Module.(*ShaderModule); ok && sm != nil {
+		vs, err := stageModule(sm, ir.StageVertex, desc.Vertex.EntryPoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		p.vertex = vs
+	}
+	if desc.Fragment != nil {
+		if sm, ok := desc.Fragment.Module.(*ShaderModule); ok && sm != nil {
+			fs, err := stageModule(sm, ir.StageFragment, desc.Fragment.EntryPoint, nil)
+			if err != nil {
+				return nil, err
+			}
+			p.fragment = fs
+			p.fragmentMayDiscard = fs != nil && fs.MayDiscard()
+		}
+	}
+	return p, nil
+}
+
+// DestroyRenderPipeline is a no-op.
+func (d *Device) DestroyRenderPipeline(_ hal.RenderPipeline) {}
+
+// CreateComputePipeline creates a software compute pipeline backed by the SPIR-V
+// interpreter. The shader module must contain SPIR-V bytecode (either provided
+// directly or compiled from WGSL via naga).
+func (d *Device) CreateComputePipeline(desc *hal.ComputePipelineDescriptor) (hal.ComputePipeline, error) {
+	if desc == nil {
+		return nil, fmt.Errorf("BUG: compute pipeline descriptor is nil in Software.CreateComputePipeline")
+	}
+	sm, ok := desc.Compute.Module.(*ShaderModule)
+	if !ok || sm == nil {
+		return nil, fmt.Errorf("software: compute pipeline requires a software ShaderModule")
+	}
+	module, err := stageModule(sm, ir.StageCompute, desc.Compute.EntryPoint, desc.Compute.Constants)
+	if err != nil {
+		return nil, err
+	}
+	if module == nil {
+		return nil, ErrComputeRequiresSPIRV
+	}
+	if module.SharesWorkgroupMemoryAcrossBarrier(desc.Compute.EntryPoint) {
+		return nil, ErrWorkgroupBarrierUnsupported
+	}
+	return &ComputePipeline{
+		desc:       desc,
+		module:     module,
+		entryPoint: desc.Compute.EntryPoint,
+	}, nil
+}
+
+// DestroyComputePipeline is a no-op.
+func (d *Device) DestroyComputePipeline(_ hal.ComputePipeline) {}
+
+// CreateQuerySet is not supported in the software backend.
+func (d *Device) CreateQuerySet(_ *hal.QuerySetDescriptor) (hal.QuerySet, error) {
+	return nil, errors.New("software: query sets not supported")
+}
+
+// DestroyQuerySet is a no-op for the software device.
+func (d *Device) DestroyQuerySet(_ hal.QuerySet) {}
+
+// CreateCommandEncoder creates a software command encoder.
+// The encoder holds a device reference so compute passes can resolve bind group
+// resources during dispatch.
+func (d *Device) CreateCommandEncoder(_ *hal.CommandEncoderDescriptor) (hal.CommandEncoder, error) {
+	return &CommandEncoder{device: d}, nil
+}
+
+// CreateFence creates a software fence with atomic counter.
+func (d *Device) CreateFence() (hal.Fence, error) {
+	return &Fence{}, nil
+}
+
+// DestroyFence is a no-op.
+func (d *Device) DestroyFence(_ hal.Fence) {}
+
+// Wait simulates waiting for a fence value.
+// Always returns true immediately (fence reached).
+func (d *Device) Wait(fence hal.Fence, value uint64, _ time.Duration) (bool, error) {
+	f, ok := fence.(*Fence)
+	if !ok {
+		return true, nil
+	}
+	// Check if fence has reached the value
+	return f.value.Load() >= value, nil
+}
+
+// ResetFence resets a fence to the unsignaled state.
+func (d *Device) ResetFence(fence hal.Fence) error {
+	f, ok := fence.(*Fence)
+	if !ok {
+		return nil
+	}
+	f.value.Store(0)
+	return nil
+}
+
+// GetFenceStatus returns true if the fence is signaled (non-blocking).
+func (d *Device) GetFenceStatus(fence hal.Fence) (bool, error) {
+	f, ok := fence.(*Fence)
+	if !ok {
+		return false, nil
+	}
+	return f.value.Load() > 0, nil
+}
+
+// FreeCommandBuffer is a no-op for the software device.
+func (d *Device) FreeCommandBuffer(_ hal.CommandBuffer) {}
+
+// CreateRenderBundleEncoder is not supported in the software backend.
+func (d *Device) CreateRenderBundleEncoder(_ *hal.RenderBundleEncoderDescriptor) (hal.RenderBundleEncoder, error) {
+	return nil, errors.New("software: render bundles not supported")
+}
+
+// DestroyRenderBundle is a no-op for the software device.
+func (d *Device) DestroyRenderBundle(_ hal.RenderBundle) {}
+
+// CreateAccelerationStructure creates a CPU-side acceleration structure.
+// The actual BVH is built later in BuildAccelerationStructures; this call
+// only allocates the container with the requested format and size.
+func (d *Device) CreateAccelerationStructure(desc *hal.AccelerationStructureDescriptor) (hal.AccelerationStructure, error) {
+	if desc == nil {
+		return nil, fmt.Errorf("software: acceleration structure descriptor is nil")
+	}
+	return &AccelerationStructure{
+		id:     nextResourceID.Add(1),
+		format: desc.Format,
+		size:   desc.Size,
+	}, nil
+}
+
+// DestroyAccelerationStructure releases the acceleration structure. The Go GC
+// handles the BVH tree memory; this just nils out the reference.
+func (d *Device) DestroyAccelerationStructure(as hal.AccelerationStructure) {
+	if swAS, ok := as.(*AccelerationStructure); ok && swAS != nil {
+		swAS.bvh = nil
+		swAS.instances = nil
+	}
+}
+
+// GetAccelerationStructureBuildSizes returns estimated sizes for an AS build.
+// Software backend BVH lives in Go heap (GC-managed), so the sizes are
+// informational rather than allocation-critical.
+func (d *Device) GetAccelerationStructureBuildSizes(desc *hal.GetAccelerationStructureBuildSizesDescriptor) hal.AccelerationStructureBuildSizes {
+	if desc == nil || desc.Entries == nil {
+		return hal.AccelerationStructureBuildSizes{}
+	}
+	return estimateBuildSize(desc.Entries)
+}
+
+// GetAccelerationStructureDeviceAddress returns a unique address for the AS.
+// In the software backend this is the Go pointer cast to uint64, which is
+// stable for the lifetime of the struct (no GC relocation of pinned data).
+func (d *Device) GetAccelerationStructureDeviceAddress(as hal.AccelerationStructure) uint64 {
+	swAS, ok := as.(*AccelerationStructure)
+	if !ok || swAS == nil {
+		return 0
+	}
+	return swAS.id
+}
+
+// TlasInstanceToBytes packs a TlasInstance into the 64-byte format
+// matching Vulkan VkAccelerationStructureInstanceKHR and DX12
+// D3D12_RAYTRACING_INSTANCE_DESC for cross-backend consistency.
+func (d *Device) TlasInstanceToBytes(instance hal.TlasInstance) []byte {
+	return packTLASInstance(instance)
+}
+
+// WaitIdle is a no-op for the software device.
+func (d *Device) WaitIdle() error { return nil }
+
+// Destroy is a no-op for the software device.
+func (d *Device) Destroy() {}
+
+// initRegistry initializes the resource maps if needed.
+func (d *Device) initRegistry() {
+	if d.textureViews == nil {
+		d.textureViews = make(map[uintptr]*TextureView)
+	}
+	if d.buffers == nil {
+		d.buffers = make(map[uintptr]*Buffer)
+	}
+	if d.samplers == nil {
+		d.samplers = make(map[uintptr]*SamplerResource)
+	}
+}
+
+// registerTextureView adds a texture view to the device registry.
+func (d *Device) registerTextureView(view *TextureView) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.initRegistry()
+	d.textureViews[uintptr(view.id)] = view
+}
+
+// registerBuffer adds a buffer to the device registry.
+func (d *Device) registerBuffer(buf *Buffer) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.initRegistry()
+	d.buffers[uintptr(buf.id)] = buf
+}
+
+// registerSampler adds a sampler to the device registry.
+func (d *Device) registerSampler(s *SamplerResource) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.initRegistry()
+	d.samplers[uintptr(s.id)] = s
+}
+
+// lookupSampler finds a sampler by its handle.
+func (d *Device) lookupSampler(handle uintptr) *SamplerResource {
+	if handle == 0 {
+		return nil
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.samplers == nil {
+		return nil
+	}
+	return d.samplers[handle]
+}
+
+// lookupTextureView finds a texture view by its handle.
+func (d *Device) lookupTextureView(handle uintptr) *TextureView {
+	if handle == 0 {
+		return nil
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.textureViews == nil {
+		return nil
+	}
+	return d.textureViews[handle]
+}
+
+// lookupBuffer finds a buffer by its handle.
+func (d *Device) lookupBuffer(handle uintptr) *Buffer {
+	if handle == 0 {
+		return nil
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.buffers == nil {
+		return nil
+	}
+	return d.buffers[handle]
+}
