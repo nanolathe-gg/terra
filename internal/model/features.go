@@ -9,7 +9,10 @@ import (
 
 const FeatureCell = 16
 
-type FeaturePoint struct{ X, Z float64 }
+type FeaturePoint struct {
+	X float64 `json:"x"`
+	Z float64 `json:"z"`
+}
 type FeaturePlacement struct {
 	Name string `json:"name"`
 	X    int    `json:"x"`
