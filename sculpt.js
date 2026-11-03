@@ -139,7 +139,7 @@ const SHAPE_FIELDS=[
   ['terraceJitter','sec-terrace-jitter','Terrace variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
   ['breakup','sec-breakup','Terrace breakup',SECTION_KINDS,0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
   // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
-  ['elevation','lf-elevation','Elevation (height units)',['landform'],-80,300,1,1,'The height of the crest, in height units. The plain is the map\'s base height, and the sea is 0. Combine decides what the landform does to the ground it meets.'],
+  ['elevation','lf-elevation','Elevation (height units)',['landform'],-80,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
   ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
   ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the section strays sideways from the path you drew, in waves as long as the Variation size.'],
   ['widthVary','lf-width-vary','Width variation',['landform'],0,100,5,100,'How much the section widens and narrows along the path (100: from half to twice its width).'],
@@ -583,8 +583,9 @@ function drawAlong(c) {
   rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`);
   const node=selectedLandform(),N=48;
   if (node && regionalFields) {
-    const lp=landformPath(node),reach=Math.max(0,c.q.wander||0)*1.2+4;
-    g.beginPath(); for (let k=0;k<=N;k++) { const t=k/N,p=landformAt(lp,t); let h=-1e9; for (let j=-2;j<=2;j++) h=Math.max(h,regionalFields.sample(p.x+p.bx*reach*j/2,p.y+p.by*reach*j/2)); g[k?'lineTo':'moveTo'](L.X(t),L.yH(h)); }
+    // The crest wanders, so the line takes the extreme toward the elevation (the highest for a ridge, the lowest for a cut below the plain) near the path.
+    const lp=landformPath(node),reach=Math.max(0,c.q.wander||0)*1.2+4,dir=L.E<L.plain?-1:1;
+    g.beginPath(); for (let k=0;k<=N;k++) { const t=k/N,p=landformAt(lp,t); let h=-1e9; for (let j=-2;j<=2;j++) h=Math.max(h,dir*regionalFields.sample(p.x+p.bx*reach*j/2,p.y+p.by*reach*j/2)); g[k?'lineTo':'moveTo'](L.X(t),L.yH(dir*h)); }
     g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
     g.strokeStyle='#ffd27a'; g.beginPath(); g.moveTo(L.X(lfPlace),L.top); g.lineTo(L.X(lfPlace),L.bottom); g.stroke();
   }

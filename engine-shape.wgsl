@@ -725,7 +725,8 @@ fn lfShare(c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
   return curveAt(u.curveBase, 1.0 - r / fw);
 }
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
-fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, x: i32, y: i32, i: u32, cells: u32) -> vec2f {
+// trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
+fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec2f {
   let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len = max(sqrt(dx * dx + dy * dy), 1e-4);
   let ux = dx / len; let uy = dy / len;
   let ahead = (wx - s0.x) * ux + (wy - s0.y) * uy;
@@ -738,15 +739,18 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let e = max(max(ahead - len, -ahead), 0.0);
   let wm0 = select(1.0, mix(s2.x, s2.y, tt), spur);
   let hm = select(1.0, mix(s2.z, s2.w, tt), spur);
-  var cc = c; var wm = wm0;
+  var cc = c; var ee = e; var wm = wm0;
   if (u.lfWander > 0.0 || u.lfWidth > 0.0) {
     // The weight is read at the cell's place on the section as drawn, then the section moves: sideways by the wander, narrower or wider by the width variation.
+    // Past an inner joint the distance is round the joint, and the wander moves that distance: moving c alone would carry the joint a different way for each
+    // of its two segments and leave a seam on the outside of the bend. A free end's cap moves sideways with its segment.
     let wt = lfWeight(lfShare(c, e, cap, s1.w, wm0));
-    cc = c - u.lfWander * wt * nA;
+    let shift = u.lfWander * wt * nA;
+    if (cap || e <= 0.0) { cc = c - shift; } else { cc = select(-1.0, 1.0, c >= 0.0) * sqrt(c * c + e * e) - shift; ee = 0.0; }
     wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
   }
-  let q = lfShare(cc, e, cap, s1.w, wm);
-  let share = select(clamp((s1.x + tt * s1.y) / max(s1.z, 1e-4), 0.0, 1.0), -1.0 - s1.z, spur);
+  let q = lfShare(cc, ee, cap, s1.w, wm);
+  let share = select(trunkShare, -1.0 - s1.z, spur);
   let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
   let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
@@ -789,7 +793,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
       if (d2 < nearest) { nearest = d2; trunk = k; }
       continue;
     }
-    let cand = lfEval(s0, s1, s2, wx, wy, base, nA, nB, nC, x, y, i, cells);
+    let cand = lfEval(s0, s1, s2, wx, wy, base, nA, nB, nC, 0.0, x, y, i, cells);
     if (cand.y <= 0.0) { continue; }
     var better = !seen;
     if (seen) {
@@ -798,7 +802,29 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     if (better) { pick = cand; seen = true; }
   }
   if (trunk != 0xffffffffu) {
-    let cand = lfEval(Seg[(u.segBase + trunk) * 4u], Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], wx, wy, base, nA, nB, nC, x, y, i, cells);
+    // The cell's place along the path. On the inside of a bend the nearest point jumps from one segment to the next, so the place is blended over the
+    // segments nearly as near (within a band of half the distance) and the crest's height along the path meets itself with no seam. The band ends before
+    // the reach, inside every segment's box, so no box cuts a weight off.
+    let dn = sqrt(nearest); let wmax = max(u.lfFoot, u.lfMid);
+    let band = min(max(4.0, 0.5 * dn), max(u.lfFront, u.lfBack) * exp(1.35 * u.lfWidth * wmax) + u.lfWander * wmax - dn);
+    var sw = 0.0; var ss = 0.0;
+    for (var k = 0u; k < u.nseg; k++) {
+      let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+      if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+      let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+      if (s1.z < 0.0) { continue; }
+      let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len2 = max(dx * dx + dy * dy, 1e-8);
+      let t = clamp(((wx - s0.x) * dx + (wy - s0.y) * dy) / len2, 0.0, 1.0);
+      var w = 1.0;
+      if (k != trunk) {
+        if (band <= 0.0) { continue; }
+        let f = 1.0 - (sqrt((wx - s0.x - dx * t) * (wx - s0.x - dx * t) + (wy - s0.y - dy * t) * (wy - s0.y - dy * t)) - dn) / band;
+        if (f <= 0.0) { continue; }
+        w = f * f;
+      }
+      sw += w; ss += w * clamp((s1.x + t * s1.y) / max(s1.z, 1e-4), 0.0, 1.0);
+    }
+    let cand = lfEval(Seg[(u.segBase + trunk) * 4u], Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], wx, wy, base, nA, nB, nC, ss / sw, x, y, i, cells);
     if (cand.y > 0.0) {
       var better = !seen;
       if (seen) {
