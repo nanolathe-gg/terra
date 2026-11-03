@@ -31,13 +31,17 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		return e
 	}
 	var recipe struct {
-		Format, Biome, Variant           string
-		Nodes                            []model.Node
-		Map                              map[string]any
-		MapData                          map[string]any
-		Knobs                            map[string]any
-		Colors                           map[string]any
-		BaseHeight, SeaLevel, Size, Grid float64
+		Format, Biome, Variant                                                                              string
+		Nodes                                                                                               []model.Node
+		Map                                                                                                 map[string]any
+		MapData                                                                                             map[string]any
+		Knobs                                                                                               map[string]any
+		Colors                                                                                              map[string]any
+		BaseHeight, SeaLevel, Size, Grid                                                                    float64
+		Relief, MineralRing, RingSpread, RingVariation, MaterialWeathering, DepositSpread, TransitionDetail *float64
+		RefinementSeed                                                                                      *uint32
+		Weather, WeatheredView, Clay                                                                        *bool
+		Light                                                                                               string
 	}
 	if e = json.Unmarshal(b, &recipe); e != nil {
 		return e
@@ -132,11 +136,35 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		}
 		os.Remove(tileDir)
 	}()
+	draw := terrain.DefaultDrawOptions(config)
+	draw.Full = true
+	draw.ExportArt = true
+	for _, item := range []struct {
+		src *float64
+		dst *float64
+	}{{recipe.Relief, &draw.Detail}, {recipe.MineralRing, &draw.Ring}, {recipe.RingSpread, &draw.RingSpread}, {recipe.RingVariation, &draw.RingVariation}, {recipe.MaterialWeathering, &draw.MaterialWeathering}, {recipe.DepositSpread, &draw.DepositSpread}, {recipe.TransitionDetail, &draw.TransitionDetail}} {
+		if item.src != nil {
+			*item.dst = *item.src / 100
+		}
+	}
+	if recipe.RefinementSeed != nil {
+		draw.RefinementSeed = *recipe.RefinementSeed
+	}
+	if recipe.Weather != nil {
+		draw.Weather = *recipe.Weather
+	}
+	if recipe.WeatheredView != nil {
+		draw.Weather = draw.Weather && *recipe.WeatheredView
+	}
+	if recipe.Clay != nil {
+		draw.Clay = *recipe.Clay
+	}
+	draw.AlternateLight = recipe.Light == "alternate"
 	const side = 512
 	for y := 0; y < h; y += side {
 		for x := 0; x < w; x += side {
 			tw, th := min(side, w-x), min(side, h-y)
-			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true}, terrain.DrawOptions{Width: tw, Height: th, Full: true})
+			result, err := renderer.Render(context.Background(), recipe.Nodes, knobs, recipe.Colors, terrain.SceneWindow{X: x, Y: y, Width: tw, Height: th, Scale: 1, ExportArt: true}, func() terrain.DrawOptions { d := draw; d.Width = tw; d.Height = th; return d }())
 			if err != nil {
 				return fmt.Errorf("render tile (%d,%d): %w", x, y, err)
 			}
