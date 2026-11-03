@@ -108,7 +108,8 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 	}
 	region := s.renderer.RequiredRegion(window, options.Full)
 	bounds := vector(s.config, "heightBounds", []float64{-90, 300})
-	shapeConfig := ShapeWindowConfig{Grid: s.renderer.Grid, Spacing: region.GridSpacing, RefSpacing: nativeSpacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{region.GridX, region.GridY, region.GridX + region.GridWidth - 1, region.GridY + region.GridHeight - 1}, Defaults: object(s.config, "defaults")}
+	shapeDefaults := s.shapeDefaults()
+	shapeConfig := ShapeWindowConfig{Grid: s.renderer.Grid, Spacing: region.GridSpacing, RefSpacing: nativeSpacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{region.GridX, region.GridY, region.GridX + region.GridWidth - 1, region.GridY + region.GridHeight - 1}, Defaults: shapeDefaults}
 	shape, err := s.shape.EvaluateShapeWindow(ctx, shapeConfig, nodes)
 	if err != nil {
 		return nil, err
@@ -146,4 +147,32 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		}
 	}
 	return &SceneResult{RGBA: pixels, Heights: shape.Planes[0], Width: int(math.Ceil(float64(window.Width) / window.Scale)), Height: int(math.Ceil(float64(window.Height) / window.Scale)), HeightWidth: shape.Width, HeightHeight: shape.Height, HeightOriginX: float64(shape.Rect.X0) * region.GridSpacing, HeightOriginY: float64(shape.Rect.Y0) * region.GridSpacing, HeightSpacing: region.GridSpacing}, nil
+}
+
+func (s *SceneRenderer) shapeDefaults() map[string]any {
+	d := map[string]any{}
+	for k, v := range object(s.config, "defaults") {
+		d[k] = v
+	}
+	for _, k := range []string{"frostGapSize", "frostGapDepth", "frostGaps", "frostGapReach"} {
+		d[k] = s.renderer.num(k, number(d, k, 0))
+	}
+	return d
+}
+
+// UpdateConfig applies same-world editor settings without rebuilding GPU resources.
+func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
+	if s.renderer == nil {
+		return errors.New("scene renderer is closed")
+	}
+	if v, ok := config["size"]; ok && int(number(map[string]any{"size": v}, "size", -1)) != s.renderer.Size {
+		return errors.New("scene size changed; recreate renderer")
+	}
+	if v, ok := config["grid"]; ok && int(number(map[string]any{"grid": v}, "grid", -1)) != s.renderer.Grid {
+		return errors.New("scene grid changed; recreate renderer")
+	}
+	if column, ok := config["column"]; ok {
+		s.config["column"] = column
+	}
+	return nil
 }

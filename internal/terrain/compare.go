@@ -29,13 +29,14 @@ func (s *SceneRenderer) CompareRegions(ctx context.Context, nodes []model.Node, 
 	if s.shape == nil || s.renderer == nil {
 		return nil, fmt.Errorf("scene renderer is closed")
 	}
+	s.renderer.ApplyKnobs(knobs)
 	grid := s.renderer.Grid
 	if grid < 2 || grid > 2048 {
 		return nil, fmt.Errorf("whole-map regional comparison requires grid between 2 and 2048; got %d", grid)
 	}
 	spacing := float64(s.renderer.Size-1) / float64(grid-1)
 	bounds := vector(s.config, "heightBounds", []float64{-90, 300})
-	c := ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{0, 0, grid - 1, grid - 1}, Defaults: object(s.config, "defaults")}
+	c := ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: number(s.config, "seaLevel", 0), MinHeight: bounds[0], MaxHeight: bounds[1], Window: CellRect{0, 0, grid - 1, grid - 1}, Defaults: s.shapeDefaults()}
 	a, e := s.shape.EvaluateShapeWindow(ctx, c, nodes)
 	if e != nil {
 		return nil, e

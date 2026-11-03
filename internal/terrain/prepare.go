@@ -115,6 +115,9 @@ func sampledShapeNoise(field int, seed uint32, x, y float64, g ShapeGeometry, in
 // PrepareBasicShape handles only operations that do not need coast, prefix,
 // ridge, crater, or crystal preparation. Unsupported kinds return an error.
 func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (PreparedShape, error) {
+	return prepareBasicShape(n, g, defaults, false, nil, nil)
+}
+func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, satellite bool, pieces []shapePiece, hole *craterHole) (PreparedShape, error) {
 	out := PreparedShape{}
 	if n.Hidden {
 		return out, nil
@@ -123,7 +126,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		out.Op = PreparedOp{Ground: true, Values: map[string]float64{"seed": float64(n.Seed), "gAmp": n.Amplitude, "gWave": n.Wavelength, "gCover": n.Coverage}}
 		return out, nil
 	}
-	codes := map[string]int{"paint": 0, "erase": 1, "deep": 2, "shallow": 3, "mountain": 4, "hill": 5, "plateau": 6, "offset": 7, "lower": 8, "sand": 9, "grass": 10, "smooth": 11, "ramp": 12}
+	codes := map[string]int{"paint": 0, "erase": 1, "deep": 2, "shallow": 3, "mountain": 4, "hill": 5, "plateau": 6, "offset": 7, "lower": 8, "sand": 9, "grass": 10, "smooth": 11, "ramp": 12, "crater": 13, "fissure": 14, "crystal": 15}
 	code, ok := codes[n.Kind]
 	if !ok {
 		return out, fmt.Errorf("shape %q preparation not implemented", n.Kind)
@@ -139,9 +142,8 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		q[k] = v
 
 	}
-	if (n.Kind == "hill" || n.Kind == "mountain") && (param(q, "spurCount") >= .5 || param(q, "crestJag") > 0 || param(q, "crestVary") > 0 || param(q, "crestTaper") > 0) {
-		return out, fmt.Errorf("ridge preparation not implemented")
-	}
+	ridge := pieces != nil || (n.Kind == "hill" || n.Kind == "mountain") && (math.Floor(param(q, "spurCount")+.5) >= 1 || param(q, "crestJag") > 0 || param(q, "crestVary") > 0 || param(q, "crestTaper") > 0)
+
 	radius, rough := param(q, "radius"), param(q, "rough")
 	if radius <= 0 || g.Grid <= 0 || g.Spacing <= 0 {
 		return out, fmt.Errorf("invalid shape geometry")
@@ -155,7 +157,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	if water {
 		bankScale = math.Pow(2, (param(q, "bankWidth")-.5)*1.3)
 	}
-	shouldered := model.IsShouldered(n.Kind, param(q, "lean"), false)
+	shouldered := model.IsShouldered(n.Kind, param(q, "lean"), ridge)
 	plainHill := n.Kind == "hill" && !shouldered
 	natural := n.Kind == "paint" || n.Kind == "erase" || n.Kind == "sand" || n.Kind == "grass" || n.Kind == "plateau" || n.Kind == "offset"
 	get := func(k string, fallback float64) float64 {
@@ -165,9 +167,20 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		return param(q, k)
 	}
 	vary := model.ShapeVariability(n.Kind, naturalWater, natural, shouldered, plainHill, get("outlineVar", 1), get("widthVar", 1), get("heightVar", 1))
+	fissureK := 1.0
+	if inv != nil {
+		fissureK = 1 / math.Hypot(inv[0], inv[1])
+	}
+	fissureHW0 := math.Max(param(q, "fissureWidth"), 1) * .5
+	fissureHW := fissureHW0 * fissureK
+	fissureAmp := fissureHW*(.5+2.2*param(q, "fissureJag")) + 1
+	network := param(q, "fissureNetwork") >= .5
 	amp := rough * radius * vary.Amp
 	if n.Kind == "ramp" {
 		amp = rough * radius * .14
+	}
+	if n.Kind == "crater" {
+		amp = rough * radius * .45
 	}
 	extent := radius
 	if vary.WK != 0 {
@@ -183,6 +196,15 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		extent *= *lean.Ratio
 	}
 	extent += 2 * amp
+	if n.Kind == "crater" {
+		extent = radius*1.9*(1+.45*rough) + 2*amp
+	}
+	if n.Kind == "fissure" {
+		extent = fissureHW*3.5 + fissureAmp + 6
+		if network {
+			extent = radius*1.05 + fissureHW + 8
+		}
+	}
 	if water && !(param(q, "facePx") > 0) {
 		extent += math.Max(0, param(q, "bankPx"))
 	}
@@ -220,6 +242,37 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 		pts := make([]model.Point, len(indices))
 		for i, j := range indices {
 			pts[i] = n.Points[j]
+		}
+		if n.Kind == "crystal" {
+			segs, rows := crystalSegments(pts, q, g, n.Seed, inv, turn, len(out.Extra))
+			out.Segments = append(out.Segments, segs...)
+			out.Extra = append(out.Extra, rows...)
+			continue
+		}
+		if ridge {
+			path := model.SimplifyPath(pts, math.Max(1, radius*.04))
+			pcs := pieces
+			if pcs == nil {
+				pcs = ridgePieces(path, q, n.Seed, inv, turn)
+			}
+			for _, pc := range pcs {
+				at := len(out.Segments)
+				dab(pc.A, pc.B)
+				seg := &out.Segments[at]
+				seg.F0 = [2]float64{pc.R0, pc.R1}
+				seg.F1 = [2]float64{pc.H0, pc.H1}
+				seg.Jag = pc.Jag
+				ex := radius*pc.Reach + 2*amp*(pc.R0+pc.R1)/2 + math.Max(0, param(q, "baseVary")) + math.Max(0, param(q, "moonLobes"))*radius
+				seg.Box = CellRect{int(clampNumber(math.Floor((math.Min(pc.A.X, pc.B.X)-ex)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Floor((math.Min(pc.A.Y, pc.B.Y)-ex)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(pc.A.X, pc.B.X)+ex)/g.Spacing), 0, float64(g.Grid-1))), int(clampNumber(math.Ceil((math.Max(pc.A.Y, pc.B.Y)+ex)/g.Spacing), 0, float64(g.Grid-1)))}
+			}
+			continue
+		}
+		if n.Kind == "fissure" {
+			path := model.SimplifyPath(pts, math.Max(1.5, fissureHW))
+			for _, p := range fissurePieces(path, q, n.Seed, radius, fissureK, fissureHW, network) {
+				out.Segments = append(out.Segments, Segment{PX: p.A.X, PY: p.A.Y, EX: p.B.X, EY: p.B.Y, F0: [2]float64{p.R0, p.R1}, F1: [2]float64{p.H0, p.H1}, Box: segmentBox(p.A, p.B)})
+			}
+			continue
 		}
 		if n.Kind == "ramp" {
 			segs, ptsRead := prepareRampPath(pts, radius, len(reads), segmentBox)
@@ -275,7 +328,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	for _, s := range out.Segments[1:] {
 		region = union(region, s.Box)
 	}
-	out.Writes = ShapeMaskWrites(n.Kind, q, false)
+	out.Writes = ShapeMaskWrites(n.Kind, q, satellite)
 	u := map[string]float64{"kind": float64(code), "seed": float64(n.Seed), "radius": radius, "amount": param(q, "amount"), "amountPct": clampNumber(param(q, "amount")/100, 0, 1), "rough": rough, "softness": param(q, "softness"), "leanK": lean.K, "bearX": lean.BX, "bearY": lean.BY, "leanSide": float64(lean.Side), "wK": vary.WK, "wLo": vary.WLo, "wHi": vary.WHi, "hgtA": vary.HgtA, "hgtB": vary.HgtB, "bankScale": bankScale, "amp": amp, "faceVar": get("faceVariation", .8), "shelves": param(q, "shelves"), "beachFlat": param(q, "beachFlatness"), "coreEdge": .38, "faceX": face[0], "faceY": face[1], "faceSide": float64(faceSide), "faceWidth": faceWidth, "backWidth": backWidth, "rotX": math.Cos(turn), "rotY": math.Sin(turn), "cOffX": math.Cos(float64(n.Seed%628)/100 + turn), "cOffY": math.Sin(float64(n.Seed%628)/100 + turn), "facePx": math.Max(0, param(q, "facePx"))}
 	if naturalWater {
 		u["natural"] = 1
@@ -292,9 +345,22 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 			u[fmt.Sprintf("inv%d", i)] = v
 		}
 	}
+	if n.Kind == "fissure" {
+		u["fHw"], u["fKf"], u["fJag"], u["fAmp"] = fissureHW0, fissureK, param(q, "fissureJag"), fissureAmp
+		u["fCell"], u["fCrack"], u["fDark"] = param(q, "fissureCell"), param(q, "fissureCrack"), param(q, "fissureDark")
+		if network {
+			u["fNet"] = 1
+		}
+	}
 	if n.Kind == "offset" {
 		u["bpOffset"] = 1
 
+	}
+	if ridge {
+		u["ridge"] = 1
+	}
+	if hole != nil {
+		u["hole"], u["hx"], u["hy"], u["hR"], u["hRough"], u["hSeed"] = 1, hole.X, hole.Y, hole.R, hole.Rough, float64(hole.Seed)
 	}
 	if n.Kind == "hill" {
 		if plainHill {
@@ -304,18 +370,47 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 			u["settle"] = 1
 		}
 	}
-	if n.Kind == "mountain" || n.Kind == "hill" || n.Kind == "plateau" || n.Kind == "offset" {
+	if n.Kind == "mountain" || n.Kind == "hill" || n.Kind == "plateau" || n.Kind == "offset" || n.Kind == "crater" {
 		u["crackAmt"] = math.Max(0, param(q, "cracks"))
 	}
 	entry := "stamp"
 	if code >= 6 {
 		entry = "stampN"
 	}
+	if n.Kind == "crystal" {
+		form := 0.0
+		entry = "stampCrystal"
+		if param(q, "crystalForm") >= 1.5 {
+			form = 2
+			entry = "stampBerg"
+		} else if param(q, "crystalForm") >= .5 {
+			form = 1
+			entry = "stampColumns"
+		}
+		bt := turn + param(q, "bergTiltDir")*math.Pi/180
+		for k, v := range map[string]float64{"cgForm": form, "cgSize": math.Max(4, param(q, "crystalSize")), "cgFacet": clampNumber(param(q, "crystalFacet"), 0, 1), "cgSizeVar": clampNumber(param(q, "crystalSizeVar"), 0, 1), "cgSmooth": clampNumber(param(q, "crystalSmooth"), 0, 1), "cgTiers": param(q, "crystalTiers"), "cgStep": param(q, "crystalStep"), "cgVar": param(q, "crystalVariation"), "bgFace": param(q, "bergFace"), "bgTilt": param(q, "bergTilt"), "bgFlat": param(q, "bergFlat"), "bgRough": param(q, "bergRough"), "bgTx": math.Cos(bt), "bgTy": math.Sin(bt), "bgJit": clampNumber(param(q, "bergJitter"), 0, 1), "bgTurn": turn, "cTop": clampNumber(param(q, "crystalTop"), 0, .95)} {
+			u[k] = v
+		}
+	}
 	if n.Kind == "ramp" {
 		entry = "stampRamp"
 	}
+	if n.Kind == "fissure" {
+		entry = "stampFissure"
+	}
+	if n.Kind == "crater" {
+		entry = "stampCrater"
+		u["rimH"] = param(q, "rimHeight")
+		u["ejecta"] = param(q, "craterEjecta")
+		rows, ns, ng, hw := craterRim(q, n.Seed)
+		out.Extra = append(out.Extra, rows...)
+		u["nSect"], u["nGap"], u["gapHw"] = float64(ns), float64(ng), hw
+	}
 	facet := 0
-	if n.Kind == "mountain" && param(q, "iceFacets") > 0 && param(q, "amount") >= 8 {
+	if n.Kind == "crater" && !satellite && param(q, "craterFacets") > 0 {
+		facet = 1
+	}
+	if n.Kind == "mountain" && !satellite && param(q, "iceFacets") > 0 && param(q, "amount") >= 8 {
 		facet = 2
 	}
 	var coast *CoastPass
@@ -382,7 +477,7 @@ func PrepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any) (
 	}
 
 	out.Op = PreparedOp{Region: &region, Values: u, Entry: entry, Settle: settle, Coast: coast}
-	if n.Kind == "plateau" {
+	if n.Kind == "plateau" || n.Kind == "crater" {
 		out.Op.PrefixReads = []model.Point{n.Points[0]}
 	}
 	if n.Kind == "ramp" {

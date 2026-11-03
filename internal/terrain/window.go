@@ -48,11 +48,11 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	geometry := ShapeGeometry{Grid: c.Grid, Spacing: c.Spacing, RefSpacing: c.RefSpacing}
 	shapes := make([]PreparedShape, 0, len(nodes))
 	for i, n := range nodes {
-		p, e := PrepareBasicShape(n, geometry, c.Defaults)
+		p, e := PrepareShapes(n, geometry, c.Defaults)
 		if e != nil {
 			return nil, fmt.Errorf("node %d: %w", i, e)
 		}
-		shapes = append(shapes, p)
+		shapes = append(shapes, p...)
 	}
 	ops, segData, maskData := PackPreparedShapes(shapes)
 	deps := make([]RegionalDependency, len(ops))
