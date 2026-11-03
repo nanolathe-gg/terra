@@ -741,12 +741,13 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let hm = select(1.0, mix(s2.z, s2.w, tt), spur);
   var cc = c; var ee = e; var wm = wm0;
   if (u.lfWander > 0.0 || u.lfWidth > 0.0) {
-    // The weight is read at the cell's place on the section as drawn, then the section moves: sideways by the wander, narrower or wider by the width variation.
-    // Past an inner joint the distance is round the joint, and the wander moves that distance: moving c alone would carry the joint a different way for each
-    // of its two segments and leave a seam on the outside of the bend. A free end's cap moves sideways with its segment.
+    // Move the radial outline, including the free ends. Shifting only c left round caps unchanged and could fold a face when the section crossed its path.
+    // The same position-based noise moves a bend's equal-distance candidates together; taper and both sides keep one bounded footprint.
     let wt = lfWeight(lfShare(c, e, cap, s1.w, wm0));
-    let shift = u.lfWander * wt * nA;
-    if (cap || e <= 0.0) { cc = c - shift; } else { cc = select(-1.0, 1.0, c >= 0.0) * sqrt(c * c + e * e) - shift; ee = 0.0; }
+    let r = sqrt(c * c + e * e);
+    let shift = u.lfWander * wt * nA * sm(0.0, max(u.lfFront, u.lfBack) * wm0 * 0.18, r);
+    let moved = max(0.0, r + shift) / max(r, 1e-5);
+    cc = c * moved; ee = e * moved;
     wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
   }
   let q = lfShare(cc, ee, cap, s1.w, wm);
@@ -771,13 +772,13 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
   let base = F[PH * cells + i];
-  // The variation noise: functions of the position in the shape's frame only (never of a tile or a page), warped at a few scales; one cell's three values serve every segment.
+  // The variation noise: functions of the position in the shape's frame only (never of a tile or a page), at a few scales; one cell's three values serve every segment.
   var nA = 0.0; var nB = 0.0; var nC = 0.0;
   if (u.lfWander > 0.0 || u.lfWidth > 0.0 || u.lfHeight > 0.0) {
     let sz = max(u.lfSize, 8.0);
-    let warp = 0.55 * vnoise(lx / (sz * 0.8), ly / (sz * 0.8), u.seed ^ 0x2f1u);
-    if (u.lfWander > 0.0) { nA = lfFractal(lx / (sz * 0.73) + warp, ly / (sz * 0.73) + warp, 0x7a3u); }
-    if (u.lfWidth > 0.0) { nB = lfFractal(lx / sz + warp, ly / sz - warp, 0x3b1u); }
+    // Broad scallops carry smaller notches on the same outline. The two section weights let the shoulder break up more than the foot, without another control.
+    if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+    if (u.lfWidth > 0.0) { nB = noiseValue(5u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
     if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
   }
   var nearest = 3.0e38; var trunk = 0xffffffffu;
