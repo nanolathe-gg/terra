@@ -2,6 +2,8 @@
 
 November 3, 2026. Follow-up to [the first comparison](LANDFORM_COMPARISON.md), on branch `landform-compare`, based on main `dfee4b4`. This round changes the landform shape implementation and its controls. No specialized tool has been removed. The first-round fixtures and captures remain available for comparison.
 
+**Later review:** the busier mesa apron was accepted. The green plateau received a further [outline and grassy-foot refinement](#green-plateau-refinement-after-review) using existing settings. The second-round results below remain a historical comparison.
+
 **[By eye]** The plateau and mesa now have more varied shoulders and free ends. The ramp's travel strip is much closer, and the ridge ends have the missing narrowing. This is enough to review the controls, but not enough to retire the specialized tools: automatic ramp endpoint sampling and the exact dedicated natural-outline character remain different.
 
 ![Dedicated tool, previous landform, updated landform](/private/tmp/nanolathe-map-editor/agent-landform-improve/review/comparison-overview.png)
@@ -67,3 +69,29 @@ The 12 additional-seed captures use seeds **2702 and 2717**, with the selected p
 **[By eye]** Crest taper fills the specific end-width gap demonstrated here; the center can still be fitted further using the existing along curve. More variability controls are not justified by this round. The plateau and mesa still need the owner's visual judgment, and the changed natural outlines need broader retail-based fitting before declaring equivalence. The 27 standard retail-window scenes are regression checks, not proof that converting those scenes to landform improves their retail match.
 
 No tools were retired, no world material settings changed, and nothing was merged into main. Evidence (renders, heights, measurements, logs, scripts, and native sheets) stays outside Git at `/private/tmp/nanolathe-map-editor/agent-landform-improve`.
+
+
+## Green plateau refinement after review
+
+The owner accepted the busier mesa apron and asked for more natural variation and a better grass transition on the green plateau. The refined fit is `repro/comparisons/landform/02-plateau-natural-refined.json`. It preserves the exact path, seed 2701, diameter 300 px, elevation 94, material settings, and camera. The previous `*-improved.json` fixture remains unchanged for comparison. No production code or preset default changed in this refinement.
+
+![Previous and refined green plateau](/private/tmp/nanolathe-map-editor/agent-landform-plateau/review/plateau-overview.png)
+
+**[By eye]** Shorter variation creates more frequent indentations and projections. A low, curved foot makes the rock face give way to irregular grassy slopes, while a little more height variation breaks up the otherwise level cap. The first fit was retained after checking two additional seeds, with no further tuning. [Native 1x textured and clay comparison](/private/tmp/nanolathe-map-editor/agent-landform-plateau/review/plateau-native.png); [additional seeds](/private/tmp/nanolathe-map-editor/agent-landform-plateau/review/seeds.png); [same variation, original versus softened foot](/private/tmp/nanolathe-map-editor/agent-landform-plateau/review/foot-detail.png).
+
+| Existing setting | Previous | Refined |
+| --- | ---: | ---: |
+| Wander | 85 px | 90 px |
+| Width variation | 35% | 35% |
+| Height variation | 1 unit | 3 units |
+| Variation size | 210 px | 140 px |
+| Foot variation weight | 90% | 115% |
+| Middle variation weight | 150% | 145% |
+
+The new front cross-section knots are `[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]]`. The back stretches the intermediate distances by 1.2, keeping the crest knot at `[1,1]`. These are ordinary editable curve knots, not a new foot control or a shader exception.
+
+**[Measured]** Before applying variation, the section's lowest 10% of its 70-unit rise spans **12.92 → 36.75 px** on the front and **17.62 → 44.10 px** on the back. This measures the broader transition into the surrounding ground; it is not a rendered grass-coverage score. An isolation render with the new variation but the previous curve confirms the foot change separately from the new outline.
+
+**[Measured]** Six captures (baseline, refined fit, seeds 2702/2717, original-foot isolation, and mesa check) report full replay mismatch 0, empty console logs, and 0–1 differing colored tile pixels within the existing 16-pixel tolerance. Regional replay of the refined fit reports 0 mismatches in every plane. The accepted mesa's textured PNG, clay PNG, and authored-height samples match the second-round output byte for byte. A repeat from the committed refined fixture also matches the refined capture byte for byte. Production code is unchanged, so the previous full engine/UI/export/performance checks were not repeated.
+
+**[By eye]** This addresses the requested green-plateau refinement with existing controls. It is an artistic fit, not a claim of exact dedicated-tool or retail equivalence. The previously documented automatic-ramp workflow gap remains open. Evidence is in `/private/tmp/nanolathe-map-editor/agent-landform-plateau`.
