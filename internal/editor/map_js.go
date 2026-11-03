@@ -135,6 +135,7 @@ func (a *App) exportMap() (map[string]any, error) {
 		a.Update()
 	}()
 	a.Busy = true
+	element("map-download").Call("replaceChildren")
 	for _, id := range []string{"editor", "world-editor", "map-controls"} {
 		disabled(id, true)
 	}
