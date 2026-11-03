@@ -70,6 +70,7 @@ type App struct {
 	coarseWidth, coarseHeight int
 	view                      viewState
 	gesture                   *gesture
+	controlEditing            bool
 	space                     bool
 	focused                   bool
 	panels                    map[string]bool

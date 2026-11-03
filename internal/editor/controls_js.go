@@ -204,6 +204,23 @@ func (a *App) layout() {
 	}
 }
 func (a *App) mountControls() {
+	// Sliders that edit a selected shape use the same interactive preview as a
+	// canvas drag; release always queues the canonical render.
+	on(document, "pointerdown", func(e js.Value) {
+		target := e.Get("target")
+		if !a.Busy && exists(target) && target.Get("tagName").String() == "INPUT" && target.Get("type").String() == "range" && element("brush-panel").Call("contains", target).Bool() {
+			a.controlEditing = true
+		}
+	})
+	finishControl := func(js.Value) {
+		if a.controlEditing {
+			a.controlEditing = false
+			a.Schedule()
+		}
+	}
+	on(document, "pointerup", finishControl)
+	on(document, "pointercancel", finishControl)
+	on(document, "lostpointercapture", finishControl)
 	root := element("shape-options")
 	for _, f := range a.Schema.Shapes {
 		f := f

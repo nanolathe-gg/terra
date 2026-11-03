@@ -115,6 +115,10 @@ func (a *App) sectionGeometry(canvas js.Value, along bool) sectionLayout {
 		ratio = 1
 	}
 	l := sectionLayout{w: w, h: h, xL: 9, xR: w - 9, top: 11, bottom: h - 11, plain: num(a.Config, "baseHeight", 24), sea: num(a.Config, "seaLevel", 0), elevation: number("lf-elevation"), land: a.curveKind() == "landform"}
+	if along {
+		l.top = 9
+		l.bottom = h - 9
+	}
 	l.xc = l.xL + (l.xR-l.xL)*ratio/(1+ratio)
 	l.span = l.elevation - l.plain
 	if math.Abs(l.span) < 1 {
@@ -318,6 +322,7 @@ func (a *App) sectionEvents() {
 		l := a.sectionGeometry(c, false)
 		if math.Hypot(l.xc-x, l.valueY(0)-y) < 9 {
 			leanDrag = true
+			a.controlEditing = true
 			c.Call("setPointerCapture", e.Get("pointerId"))
 			return
 		}
@@ -367,6 +372,7 @@ func (a *App) sectionEvents() {
 			a.storeSection(f, b)
 			drag = sectionHandle{side: side, edit: edit, index: i}
 		}
+		a.controlEditing = true
 		c.Call("setPointerCapture", e.Get("pointerId"))
 	})
 	on(c, "pointermove", func(e js.Value) {
@@ -408,6 +414,8 @@ func (a *App) sectionEvents() {
 		if leanDrag || drag.index >= 0 {
 			leanDrag = false
 			drag.index = -1
+			a.controlEditing = false
+			a.Schedule()
 			if a.selected() != nil {
 				a.Checkpoint()
 			}
@@ -415,6 +423,7 @@ func (a *App) sectionEvents() {
 	}
 	on(c, "pointerup", finish)
 	on(c, "pointercancel", finish)
+	on(c, "lostpointercapture", finish)
 	on(c, "dblclick", func(e js.Value) {
 		x, y := sectionPoint(c, e)
 		if h := hit(a.sectionGeometry(c, false), x, y); h != nil && remove(*h) && a.selected() != nil {
@@ -460,6 +469,7 @@ func (a *App) alongEvents() {
 		}
 		if i >= 0 {
 			drag = i
+			a.controlEditing = true
 			c.Call("setPointerCapture", e.Get("pointerId"))
 			return
 		}
@@ -487,6 +497,8 @@ func (a *App) alongEvents() {
 	finish := func(js.Value) {
 		if drag >= 0 {
 			drag = -1
+			a.controlEditing = false
+			a.Schedule()
 			if moved && a.selected() != nil {
 				a.Checkpoint()
 			}
@@ -494,6 +506,7 @@ func (a *App) alongEvents() {
 	}
 	on(c, "pointerup", finish)
 	on(c, "pointercancel", finish)
+	on(c, "lostpointercapture", finish)
 	on(c, "dblclick", func(e js.Value) {
 		x, y := sectionPoint(c, e)
 		l := a.sectionGeometry(c, true)
@@ -604,7 +617,7 @@ func (a *App) drawCurve() {
 		return
 	}
 	kind := a.curveKind()
-	visible := contains([]string{"plateau", "offset", "hill", "mountain", "deep", "shallow", "erase", "paint", "sand", "grass", "landform"}, kind)
+	visible := contains([]string{"plateau", "offset", "hill", "mountain", "deep", "shallow", "landform"}, kind)
 	hidden("section-preview-control", !visible)
 	if !visible {
 		return
@@ -673,7 +686,7 @@ func (a *App) drawCurve() {
 	g.Set("lineWidth", 1.5)
 	g.Call("stroke")
 	g.Set("lineWidth", 1)
-	if p := a.selectedLandformPath(); p != nil && l.land {
+	if p := a.selectedLandformPath(); p != nil && l.land && !a.controlEditing && a.gesture == nil {
 		line := func(t float64, color string, width float64) {
 			x, y, bx, by := p.at(t)
 			g.Call("beginPath")
@@ -784,7 +797,7 @@ func (a *App) drawAlong() {
 		g.Call("fillText", fmt.Sprintf("%s %g", v.label, v.height), l.xL+2, y-2)
 	}
 	g.Call("setLineDash", js.ValueOf([]any{}))
-	if p := a.selectedLandformPath(); p != nil {
+	if p := a.selectedLandformPath(); p != nil && !a.controlEditing && a.gesture == nil {
 		reach := math.Max(0, p.wander)*1.2 + 4
 		dir := 1.0
 		if l.elevation < l.plain {
@@ -840,7 +853,7 @@ func (a *App) drawAlong() {
 
 // Refresh visible map-sampled ghost lines after a new GPU height tile arrives.
 func (a *App) refreshLandformSection() {
-	if a.selectedLandformPath() == nil {
+	if a.gesture != nil || a.controlEditing || a.selectedLandformPath() == nil {
 		return
 	}
 	control := element("section-preview-control")
