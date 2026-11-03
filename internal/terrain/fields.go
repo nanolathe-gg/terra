@@ -24,6 +24,7 @@ type ShapeEngine struct {
 	pipelineLayout *wgpu.PipelineLayout
 	module         *wgpu.ShaderModule
 	kernels        map[string]*wgpu.ComputePipeline
+	prepared       *preparedGraph
 }
 
 func shapeUniformSize() int { return (len(shapeFields)*4 + 255) &^ 255 }
@@ -72,9 +73,10 @@ func NewShapeEngine(g *GPU, source string, pages bool) (*ShapeEngine, error) {
 		layout.Release()
 		return nil, e
 	}
-	return &ShapeEngine{g, layout, pl, module, map[string]*wgpu.ComputePipeline{}}, nil
+	return &ShapeEngine{gpu: g, layout: layout, pipelineLayout: pl, module: module, kernels: map[string]*wgpu.ComputePipeline{}}, nil
 }
 func (s *ShapeEngine) Close() {
+	s.prepared = nil
 	for _, p := range s.kernels {
 		p.Release()
 	}

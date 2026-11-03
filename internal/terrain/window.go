@@ -50,16 +50,17 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	if c.Grid <= 0 || c.Spacing <= 0 {
 		return nil, fmt.Errorf("invalid shape geometry")
 	}
-	geometry := ShapeGeometry{Grid: c.Grid, Spacing: c.Spacing, RefSpacing: c.RefSpacing}
-	shapes := make([]PreparedShape, 0, len(nodes))
-	for i, n := range nodes {
-		p, e := PrepareShapes(n, geometry, c.Defaults)
-		if e != nil {
-			return nil, fmt.Errorf("node %d: %w", i, e)
-		}
-		shapes = append(shapes, p...)
+	ops, segData, maskData, e := s.prepareGraph(nodes, c)
+	if e != nil {
+		return nil, e
 	}
-	ops, segData, maskData := PackPreparedShapes(shapes)
+	// Prefix resolution annotates operations; never mutate the cached graph.
+	ops = append([]PreparedOp(nil), ops...)
+	for i := range ops {
+		if len(ops[i].PrefixReads) != 0 {
+			ops[i].Values = copyValues(ops[i].Values, nil)
+		}
+	}
 	deps := make([]RegionalDependency, len(ops))
 	for i, op := range ops {
 		deps[i] = RegionalDependency{Region: op.Region, SmoothRadius: op.SmoothRadius}
@@ -117,7 +118,6 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 	if c.preflightOnly {
 		return &ShapeWindow{Rect: window, Width: outW, Height: outH}, nil
 	}
-	var e error
 	for i := range buffers {
 		switch i {
 		case 4:
