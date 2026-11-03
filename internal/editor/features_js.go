@@ -284,6 +284,7 @@ func (f *FeatureUI) load() error {
 		}
 	}
 	f.store = next
+	f.preserveFeatures = false
 	return nil
 }
 func (f *FeatureUI) sync() {
