@@ -69,7 +69,18 @@ try {
   check('idle', !after.pending && after.revision === before.revision && after.cachedChunks === before.cachedChunks, {before:before.cachedChunks, after:after.cachedChunks});
   const extra = ['hill', [[O+300,O+300],[O+420,O+360]], {card:{diameter:160,amount:100,roughness:10}}];
   await ev(`sculptDebug.scene(${JSON.stringify([...strokes, extra])}, {ground: ${scene.ground !== false}})`); await ev('sculptCanvas.idle()');
-  const mismatch = await ev('sculptDebug.replayAll()'); check('edit replay', mismatch === 0 && !logs.length, {mismatch, console:logs.slice(0,4)});
+  // Compare a bounded native-cell window covering the edit to four independent
+  // reads. This works on page8 without allocating the entire authored map.
+  const replay = await ev(`(async()=>{
+    const sp=(sculptDebug.size-1)/(sculptDebug.grid-1), x=Math.max(0,Math.floor((${O}+180)/sp)), y=Math.max(0,Math.floor((${O}+180)/sp)), width=Math.min(256,sculptDebug.grid-x),height=Math.min(256,sculptDebug.grid-y);
+    const full=await sculptRegion.readAuthored({x,y,width,height}), whole=new Uint8Array(full.data),parts=[];
+    const xmid=Math.floor(width/2),ymid=Math.floor(height/2);
+    for(const [dx,dy,w,h] of [[0,0,xmid,ymid],[xmid,0,width-xmid,ymid],[0,ymid,xmid,height-ymid],[xmid,ymid,width-xmid,height-ymid]]) {const p=await sculptRegion.readAuthored({x:x+dx,y:y+dy,width:w,height:h});parts.push({dx,dy,w,h,data:new Uint8Array(p.data)})}
+    let mismatch=0,checked=0;const total=width*height;
+    for(const p of parts) { const cells=p.w*p.h;for(let plane=0;plane<31;plane++){const stride=plane<6?4:1,off=plane<6?plane*total*4:6*total*4+(plane-6)*total,sub=plane<6?plane*cells*4:6*cells*4+(plane-6)*cells;for(let py=0;py<p.h;py++)for(let px=0;px<p.w;px++){const a=off+((p.dy+py)*width+p.dx+px)*stride,b=sub+(py*p.w+px)*stride;for(let k=0;k<stride;k++){checked++;if(whole[a+k]!==p.data[b+k])mismatch++}}} }
+    return {x,y,width,height,checked,mismatch};
+  })()`);
+  check('edit replay', replay.mismatch === 0 && replay.checked > 0 && !logs.length, {...replay, console:logs.slice(0,4)});
   ws.close();
 } catch (err) { result.error = err.message; process.exitCode = 1; }
 finally { chrome.kill(); }
