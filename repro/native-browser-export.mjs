@@ -1,7 +1,7 @@
 // Compare an editor export and native Metal export of the same complete recipe.
 // Requires built web WASM and an independently prepared catalogue, not retail
 // files in the checkout. All generated archives remain in a private temp root.
-// node repro/native-browser-export.mjs --prepared-assets /path/to/assets [--port 9697] [--server-port 8898]
+// node repro/native-browser-export.mjs --prepared-assets /path/to/assets [--recipe path] [--port 9697] [--server-port 8898]
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -9,7 +9,7 @@ import {join, resolve} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
 
 const args=process.argv.slice(2), opt=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1]};
-const prepared=opt('--prepared-assets','');
+const prepared=opt('--prepared-assets',''), recipeFile=opt('--recipe','repro/recipes/native-hill.json');
 if(!prepared)throw Error('--prepared-assets must name an independent prepared catalogue');
 const port=Number(opt('--port',9697)),serverPort=Number(opt('--server-port',8898));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -39,7 +39,7 @@ try {
  ready=false;for(let i=0;i<600;i++){if(await ev(`!!window.sculptCanvas && !document.getElementById('map-export')?.disabled`)){ready=true;break}await sleep(300)}
  if(!ready)throw Error('editor did not become ready');
  await ev('sculptCanvas.idle()');
- const fixture=JSON.parse(readFileSync('repro/recipes/native-hill.json','utf8'));
+ const fixture=JSON.parse(readFileSync(recipeFile,'utf8'));
  await ev(`sculptDebug.loadSketch(${JSON.stringify(fixture)});true`);
  const error=await ev(`document.getElementById('error').hidden ? '' : document.getElementById('error').textContent`);if(error)throw Error('recipe: '+error);
  const name='TerraformParity'+Date.now();

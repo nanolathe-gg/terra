@@ -1,0 +1,120 @@
+{
+  "format": "nanolathe-terrain-sculpt",
+  "biome": "green",
+  "size": 800,
+  "grid": 400,
+  "baseHeight": 24,
+  "seaLevel": 0,
+  "map": {
+    "width": 544,
+    "height": 640,
+    "widthCells": 34,
+    "heightCells": 40,
+    "unitsX": 1,
+    "unitsY": 1,
+    "playRight": 512,
+    "playBottom": 512
+  },
+  "nodes": [
+    {
+      "kind": "landform",
+      "seed": 8291,
+      "points": [
+        {
+          "x": 120,
+          "y": 300
+        },
+        {
+          "x": 300,
+          "y": 280
+        },
+        {
+          "x": 430,
+          "y": 320
+        }
+      ],
+      "params": {
+        "radius": 60,
+        "elevation": 100,
+        "combine": 0,
+        "lean": 2,
+        "facing": 1,
+        "softness": 0.5,
+        "rough": 0.35,
+        "curve": {
+          "form": "lfHill",
+          "knots": [
+            [
+              0,
+              0
+            ],
+            [
+              0.28,
+              0.1
+            ],
+            [
+              0.58,
+              0.45
+            ],
+            [
+              0.82,
+              0.86
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "back": [
+            [
+              0,
+              0
+            ],
+            [
+              0.34,
+              0.05
+            ],
+            [
+              0.7,
+              0.6
+            ],
+            [
+              1,
+              1
+            ]
+          ]
+        },
+        "along": [
+          [
+            0,
+            0.75
+          ],
+          [
+            0.5,
+            1
+          ],
+          [
+            1,
+            0.8
+          ]
+        ],
+        "wander": 8,
+        "widthVary": 0.2,
+        "heightVary": 3,
+        "varySize": 100,
+        "varyFoot": 1,
+        "varyMiddle": 1
+      }
+    }
+  ],
+  "knobs": {},
+  "colors": {},
+  "mapData": {
+    "name": "Terraform Go Landform parity"
+  },
+  "version": 6,
+  "encoding": "stroke-graph",
+  "weather": true,
+  "weatheredView": false,
+  "seed": 8291
+}
