@@ -78,7 +78,7 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 		}
 	}()
 	const core = 512
-	const budget = 96 * 1024 * 1024
+	budget := s.cacheBudget()
 	for py := region.Y0 / core; py <= region.Y1/core; py++ {
 		for px := region.X0 / core; px <= region.X1/core; px++ {
 			if err = ctx.Err(); err != nil {
@@ -103,7 +103,9 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 					page.Close()
 					return nil, fmt.Errorf("authored page %d,%d: %w", px, py, err)
 				}
-				s.shapePages[id] = page
+				if page.bytes <= budget {
+					s.shapePages[id] = page
+				}
 				s.shapeRuns++
 			}
 			s.shapeTick++
@@ -112,6 +114,10 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 				if err = s.copyAuthored(&page.GPUFeed, &feed.GPUFeed, hit); err != nil {
 					return nil, err
 				}
+			}
+			if page.bytes > budget {
+				page.Close()
+				continue
 			}
 			for {
 				total := 0

@@ -184,8 +184,43 @@ func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
 	if v, ok := config["grid"]; ok && int(number(map[string]any{"grid": v}, "grid", -1)) != s.renderer.Grid {
 		return errors.New("scene grid changed; recreate renderer")
 	}
+	oldBudget := s.cacheBudget()
+	for _, key := range []string{"gpuMB", "gpuBudgetBytes", "gpuBudgetMB"} {
+		if v, ok := config[key]; ok {
+			s.config[key] = v
+		}
+	}
+	if s.cacheBudget() != oldBudget {
+		s.clearShapeCache()
+		s.clearWeatherCache()
+	}
 	if column, ok := config["column"]; ok {
 		s.config["column"] = column
 	}
 	return nil
+}
+
+// LastRenderProfile reports the renderer's most recent completed tile timings.
+func (s *SceneRenderer) LastRenderProfile() RenderProfile {
+	if s.renderer == nil {
+		return RenderProfile{}
+	}
+	return s.renderer.LastProfile
+}
+
+// cacheBudget reserves at most one fifth of the configured GPU budget for
+// each of the authored and weather caches, capped at 96 MiB apiece.
+func (s *SceneRenderer) cacheBudget() int {
+	bytes := param(s.config, "gpuBudgetBytes")
+	if bytes <= 0 {
+		mb := param(s.config, "gpuMB")
+		if mb <= 0 {
+			mb = param(s.config, "gpuBudgetMB")
+		}
+		if mb <= 0 {
+			mb = 512
+		}
+		bytes = mb * 1024 * 1024
+	}
+	return min(96*1024*1024, max(0, int(bytes/5)))
 }

@@ -64,12 +64,26 @@ func (s *ShapeEngine) evaluateShapeWindow(ctx context.Context, c ShapeWindowConf
 		}
 	}
 	_, target := RequiredRegions(deps, window, whole)
-	if !expandTarget {
+	if expandTarget {
+		for _, op := range ops {
+			if op.Settle && op.Region != nil {
+				if _, ok := intersect(target, expand(*op.Region, 4, whole)); ok {
+					target = expand(target, 4, whole)
+					break
+				}
+			}
+		}
+	} else {
 		target = window
 	}
 	w, h := target.X1-target.X0+1, target.Y1-target.Y0+1
 	cells := w * h
 	base := map[string]float64{"grid": float64(c.Grid), "spacing": c.Spacing, "baseH": c.BaseHeight, "sea": c.Sea, "minH": c.MinHeight, "maxH": c.MaxHeight, "ox": float64(target.X0), "oy": float64(target.Y0), "pw": float64(w), "ph": float64(h), "direct": 1}
+	ref := c.RefSpacing
+	if ref == 0 {
+		ref = c.Spacing
+	}
+	base["blurR"] = float64(max(1, int(math.Floor(2*ref/c.Spacing+.5))))
 	q4 := (outCells + 3) / 4
 	words := 6*outCells + 25*q4
 	usage := gputypes.BufferUsageStorage | gputypes.BufferUsageCopySrc | gputypes.BufferUsageCopyDst

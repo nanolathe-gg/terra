@@ -169,7 +169,7 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 	if c.Grid <= 1168 {
 		core, apron = c.Grid, 0
 	}
-	const budget = 96 * 1024 * 1024
+	budget := s.cacheBudget()
 	for py := region.Y0 / core; py <= region.Y1/core; py++ {
 		for px := region.X0 / core; px <= region.X1/core; px++ {
 			if err = ctx.Err(); err != nil {
@@ -182,7 +182,9 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 				if err != nil {
 					return nil, fmt.Errorf("weather page %d,%d: %w", px, py, err)
 				}
-				s.weatherPages[id] = page
+				if page.bytes <= budget {
+					s.weatherPages[id] = page
+				}
 				s.weatherRuns++
 			}
 			s.weatherTick++
@@ -192,6 +194,10 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 				if err = s.copyWeather(page, feed, hit); err != nil {
 					return nil, err
 				}
+			}
+			if page.bytes > budget {
+				page.Close()
+				continue
 			}
 			for {
 				total := 0

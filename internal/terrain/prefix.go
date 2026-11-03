@@ -37,6 +37,11 @@ func (s *ShapeEngine) resolvePrefix(ctx context.Context, c ShapeWindowConfig, op
 			w, h := window.X1-window.X0+1, window.Y1-window.Y0+1
 			cells := w * h
 			base := map[string]float64{"grid": float64(c.Grid), "spacing": c.Spacing, "baseH": c.BaseHeight, "sea": c.Sea, "minH": c.MinHeight, "maxH": c.MaxHeight, "ox": float64(window.X0), "oy": float64(window.Y0), "pw": float64(w), "ph": float64(h), "direct": 1}
+			ref := c.RefSpacing
+			if ref == 0 {
+				ref = c.Spacing
+			}
+			base["blurR"] = float64(max(1, int(math.Floor(2*ref/c.Spacing+.5))))
 			passes, err := PlanReplay(base, ops[:i], window, window, true)
 			if err != nil {
 				return err

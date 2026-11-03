@@ -1,13 +1,35 @@
 package terrain
 
-import "math"
+import (
+	"encoding/json"
+	"math"
+	"strconv"
+)
 
 type MaskWrite [4]float64
 
 var maskChoices = [][][2]float64{nil, {{0, 127}, {1, 0}, {3, 0}}, {{1, 127}, {0, 0}, {3, 0}}, {{2, 127}}, {{3, 127}, {0, 0}, {1, 0}}, {{4, 127}}, {{4, -127}}, {{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 0}, {7, 0}, {8, 0}, {9, 0}, {10, 0}, {11, 0}, {12, 0}, {13, 0}, {14, 0}, {15, 0}, {16, 0}, {17, 0}}, {{5, 127}}, {{5, -127}}, {{6, 127}}, {{6, -127}}, {{7, 127}}, {{7, -127}}, {{8, 127}}, {{8, -127}}, {{12, 127}}, {{12, -127}}, {{14, 127}}, {{14, -127}}, {{15, 127}}, {{15, -127}}, {{16, 127}}, {{16, -127}}, {{17, 127}}, {{17, -127}}}
 
-func param(q map[string]any, k string) float64 { v, _ := q[k].(float64); return v }
-func clampNumber(v, a, b float64) float64      { return math.Max(a, math.Min(b, v)) }
+func param(q map[string]any, k string) float64 {
+	switch v := q[k].(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case uint32:
+		return float64(v)
+	case string:
+		x, _ := strconv.ParseFloat(v, 64)
+		return x
+	case json.Number:
+		x, _ := v.Float64()
+		return x
+	}
+	return 0
+}
+func clampNumber(v, a, b float64) float64 { return math.Max(a, math.Min(b, v)) }
 func choiceWrites(choice int, gain float64) []MaskWrite {
 	if choice < 0 || choice >= len(maskChoices) {
 		return nil

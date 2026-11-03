@@ -31,48 +31,56 @@ func TestShapePreparationReference(t *testing.T) {
 			if len(shapes) != len(c.Expected) {
 				t.Fatalf("got %d shapes want %d", len(shapes), len(c.Expected))
 			}
-			for j, s := range shapes {
-				if s.Op.Region == nil {
-					t.Fatal("missing region")
-				}
-				r := s.Op.Region
-				got := map[string]any{"region": map[string]any{"x0": float64(r.X0), "y0": float64(r.Y0), "x1": float64(r.X1), "y1": float64(r.Y1)}, "entry": s.Op.Entry, "settle": s.Op.Settle, "smoothR": float64(s.Op.SmoothRadius), "u": map[string]any{}}
-				for k, v := range s.Op.Values {
-					got["u"].(map[string]any)[k] = v
-				}
-				segs := make([]any, len(s.Segments))
-				for k, x := range s.Segments {
-					segs[k] = map[string]any{"px": x.PX, "py": x.PY, "ex": x.EX, "ey": x.EY, "f0": []any{x.F0[0], x.F0[1]}, "f1": []any{x.F1[0], x.F1[1]}, "nx": x.NX, "ny": x.NY, "frame": x.Frame, "jag": x.Jag, "box": []any{float64(x.Box.X0), float64(x.Box.Y0), float64(x.Box.X1), float64(x.Box.Y1)}}
-				}
-				got["segments"] = segs
-				rows := make([]any, len(s.Extra))
-				for k, x := range s.Extra {
-					rows[k] = []any{x[0], x[1], x[2], x[3]}
-				}
-				got["extra"] = rows
-				writes := make([]any, len(s.Writes))
-				for k, x := range s.Writes {
-					writes[k] = []any{x[0], x[1], x[2], x[3]}
-				}
-				got["writes"] = writes
-				reads := make([]any, len(s.Op.PrefixReads))
-				for k, x := range s.Op.PrefixReads {
-					reads[k] = map[string]any{"x": x.X, "y": x.Y}
-				}
-				got["reads"] = reads
-				if s.Op.Coast != nil {
-					x := s.Op.Coast
-					got["coast"] = map[string]any{"box": map[string]any{"x0": float64(x.Box.X0), "y0": float64(x.Box.Y0), "x1": float64(x.Box.X1), "y1": float64(x.Box.Y1)}, "readR": float64(x.ReadRadius), "maxCells": float64(x.MaxCells), "blurR": float64(x.BlurRadius), "siteFloats": float64(x.SiteFloats)}
-				} else {
-					got["coast"] = nil
-				}
-				if err := referenceCompare(c.Expected[j], got, ""); err != nil {
-					t.Errorf("shape %d: %v", j, err)
-				}
-			}
+			referenceShapes(t, shapes, c.Expected)
 		})
 	}
 }
+func referenceShapes(t *testing.T, shapes []PreparedShape, expected []map[string]any) {
+	t.Helper()
+	if len(shapes) != len(expected) {
+		t.Fatalf("got %d shapes want %d", len(shapes), len(expected))
+	}
+	for j, s := range shapes {
+		if s.Op.Region == nil {
+			t.Fatal("missing region")
+		}
+		r := s.Op.Region
+		got := map[string]any{"region": map[string]any{"x0": float64(r.X0), "y0": float64(r.Y0), "x1": float64(r.X1), "y1": float64(r.Y1)}, "entry": s.Op.Entry, "settle": s.Op.Settle, "smoothR": float64(s.Op.SmoothRadius), "u": map[string]any{}}
+		for k, v := range s.Op.Values {
+			got["u"].(map[string]any)[k] = v
+		}
+		segs := make([]any, len(s.Segments))
+		for k, x := range s.Segments {
+			segs[k] = map[string]any{"px": x.PX, "py": x.PY, "ex": x.EX, "ey": x.EY, "f0": []any{x.F0[0], x.F0[1]}, "f1": []any{x.F1[0], x.F1[1]}, "nx": x.NX, "ny": x.NY, "frame": x.Frame, "jag": x.Jag, "box": []any{float64(x.Box.X0), float64(x.Box.Y0), float64(x.Box.X1), float64(x.Box.Y1)}}
+		}
+		got["segments"] = segs
+		rows := make([]any, len(s.Extra))
+		for k, x := range s.Extra {
+			rows[k] = []any{x[0], x[1], x[2], x[3]}
+		}
+		got["extra"] = rows
+		writes := make([]any, len(s.Writes))
+		for k, x := range s.Writes {
+			writes[k] = []any{x[0], x[1], x[2], x[3]}
+		}
+		got["writes"] = writes
+		reads := make([]any, len(s.Op.PrefixReads))
+		for k, x := range s.Op.PrefixReads {
+			reads[k] = map[string]any{"x": x.X, "y": x.Y}
+		}
+		got["reads"] = reads
+		if s.Op.Coast != nil {
+			x := s.Op.Coast
+			got["coast"] = map[string]any{"box": map[string]any{"x0": float64(x.Box.X0), "y0": float64(x.Box.Y0), "x1": float64(x.Box.X1), "y1": float64(x.Box.Y1)}, "readR": float64(x.ReadRadius), "maxCells": float64(x.MaxCells), "blurR": float64(x.BlurRadius), "siteFloats": float64(x.SiteFloats)}
+		} else {
+			got["coast"] = nil
+		}
+		if err := referenceCompare(expected[j], got, ""); err != nil {
+			t.Errorf("shape %d: %v", j, err)
+		}
+	}
+}
+
 func referenceCompare(want, got any, path string) error {
 	switch a := want.(type) {
 	case map[string]any:

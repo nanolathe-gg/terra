@@ -3,6 +3,7 @@ package terrain
 import (
 	"context"
 	"github.com/nanolathe-gg/terraform/internal/model"
+	"math"
 	"os"
 	"testing"
 )
@@ -196,6 +197,46 @@ func TestGPURegionalWaterCoast(t *testing.T) {
 			for p := range part.Planes {
 				if part.Planes[p][a] != whole.Planes[p][b] {
 					t.Fatalf("plane %d mismatch at %d,%d: %v vs %v", p, x, y, part.Planes[p][a], whole.Planes[p][b])
+				}
+			}
+		}
+	}
+}
+func TestSettledHillWindowEdges(t *testing.T) {
+	g, e := NewGPU()
+	if e != nil {
+		t.Skipf("GPU unavailable: %v", e)
+	}
+	defer g.Close()
+	src, e := os.ReadFile("../../engine-shape.wgsl")
+	if e != nil {
+		t.Fatal(e)
+	}
+	s, e := NewShapeEngine(g, string(src), true)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Close()
+	q := map[string]any{"radius": 24., "amount": 70., "rough": .35, "softness": .5, "outlineVar": 1., "widthVar": 1., "heightVar": 1.}
+	nodes := []model.Node{{Kind: "hill", Seed: 2701, Points: []model.Point{{X: 15, Y: 30}, {X: 60, Y: 35}, {X: 90, Y: 22}}, Params: q}}
+	c := ShapeWindowConfig{Grid: 128, Spacing: 1, RefSpacing: 1, BaseHeight: 24, MinHeight: -90, MaxHeight: 300, Window: CellRect{0, 0, 127, 127}}
+	whole, e := s.EvaluateShapeWindow(context.Background(), c, nodes)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, r := range []CellRect{{0, 0, 63, 63}, {64, 0, 127, 63}, {0, 64, 63, 127}, {64, 64, 127, 127}} {
+		c.Window = r
+		part, e := s.EvaluateShapeWindow(context.Background(), c, nodes)
+		if e != nil {
+			t.Fatal(e)
+		}
+		for y := 0; y < part.Height; y++ {
+			for x := 0; x < part.Width; x++ {
+				a, b := y*part.Width+x, (y+r.Y0)*whole.Width+x+r.X0
+				for k := range part.Planes {
+					if math.Float32bits(part.Planes[k][a]) != math.Float32bits(whole.Planes[k][b]) {
+						t.Fatalf("region %+v plane %d at %d,%d: %v vs %v", r, k, x, y, part.Planes[k][a], whole.Planes[k][b])
+					}
 				}
 			}
 		}

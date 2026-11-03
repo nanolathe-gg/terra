@@ -208,10 +208,10 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 	if water && !(param(q, "facePx") > 0) {
 		extent += math.Max(0, param(q, "bankPx"))
 	}
-	if param(q, "baseVary") > 0 {
+	if n.Kind != "crater" && n.Kind != "fissure" && param(q, "baseVary") > 0 {
 		extent += param(q, "baseVary")
 	}
-	if param(q, "moonLobes") > 0 {
+	if n.Kind != "crater" && n.Kind != "fissure" && param(q, "moonLobes") > 0 {
 		extent += param(q, "moonLobes") * radius
 	}
 	fx, fy := 0, 1
@@ -287,8 +287,10 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 			}
 			face = [2]float64{math.Cos(fa), math.Sin(fa)}
 			start := len(out.Segments)
-			var didSettle bool
-			faceSide, didSettle = prepareHillPath(pts, radius, face, lean.Side, dab, &out.Segments)
+			nextSide, didSettle := prepareHillPath(pts, radius, face, lean.Side, dab, &out.Segments)
+			if nextSide != 0 {
+				faceSide = nextSide
+			}
 			settle = settle || didSettle
 			if len(paths) > 1 {
 				for i := start; i < len(out.Segments); i++ {

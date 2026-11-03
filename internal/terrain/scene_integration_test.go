@@ -4,8 +4,10 @@ package terrain
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"github.com/nanolathe-gg/terraform/internal/model"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,6 +82,43 @@ func TestSceneWindowAndComparison(t *testing.T) {
 	}
 	if s.weatherRuns != 1 {
 		t.Fatalf("repeated view reran weather: %d", s.weatherRuns)
+	}
+	// Compare a gathered feed crossing the 512-cell page boundary to direct replay.
+	seamNodes := []model.Node{{Kind: "hill", Seed: 12, Points: []model.Point{{X: 500, Y: 25}, {X: 525, Y: 30}}, Params: map[string]any{"radius": 30., "amount": 40., "rough": .2, "softness": .5}}}
+	c := ShapeWindowConfig{Grid: 1025, Spacing: 1, RefSpacing: 1, BaseHeight: 24, MinHeight: -90, MaxHeight: 300, Window: CellRect{500, 12, 525, 40}}
+	direct, err := s.shape.EvaluateShapeWindow(context.Background(), c, seamNodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gathered, err := s.buildShapeFeed(context.Background(), seamNodes, c, c.Window)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gathered.Close()
+	raw, err := s.gpu.ReadBuffer(context.Background(), gathered.Planes, 0, uint64(gathered.Cells*6*4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawMasks, err := s.gpu.ReadBuffer(context.Background(), gathered.Masks, 0, uint64(gathered.Cells*28))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < direct.Height; y++ {
+		for x := 0; x < direct.Width; x++ {
+			a := y*direct.Width + x
+			b := y*gathered.Grid + x
+			for k := range direct.Planes {
+				v := math.Float32frombits(binary.LittleEndian.Uint32(raw[(k*gathered.Cells+b)*4:]))
+				if math.Float32bits(v) != math.Float32bits(direct.Planes[k][a]) {
+					t.Fatalf("cached seam plane %d at %d,%d", k, x, y)
+				}
+			}
+			for k := range direct.Masks {
+				if int8(rawMasks[b*28+k]) != direct.Masks[k][a] {
+					t.Fatalf("cached seam mask %d at %d,%d", k, x, y)
+				}
+			}
+		}
 	}
 	cmp, e := s.CompareRegions(context.Background(), nodes, nil)
 	if e != nil {

@@ -109,3 +109,20 @@ func (s *SceneRenderer) CompareRegions(ctx context.Context, nodes []model.Node, 
 	}
 	return out, nil
 }
+
+// ReadAuthored replays an explicit native-grid rectangle for diagnostics and
+// consumers that need authored fields. Normal rendering remains GPU-resident.
+func (s *SceneRenderer) ReadAuthored(ctx context.Context, nodes []model.Node, knobs map[string]string, rect CellRect) (*ShapeWindow, error) {
+	if s.shape == nil || s.renderer == nil {
+		return nil, fmt.Errorf("scene renderer is closed")
+	}
+	s.renderer.ApplyKnobs(knobs)
+	grid := s.renderer.Grid
+	if grid < 2 {
+		return nil, fmt.Errorf("invalid scene grid")
+	}
+	spacing := float64(s.renderer.Size-1) / float64(grid-1)
+	sea := number(s.config, "seaLevel", 0)
+	bounds := vector(s.config, "heightBounds", []float64{sea - 90, sea + 300})
+	return s.shape.EvaluateShapeWindow(ctx, ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, BaseHeight: number(s.config, "baseHeight", 24), Sea: sea, MinHeight: bounds[0], MaxHeight: bounds[1], Window: rect, Defaults: s.shapeDefaults()}, nodes)
+}
