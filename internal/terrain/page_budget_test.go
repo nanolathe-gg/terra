@@ -34,3 +34,28 @@ func TestPageCacheBudgetTracksBitmapAndEvictsLRU(t *testing.T) {
 		t.Fatal("large reservation did not evict pages")
 	}
 }
+
+func TestWholeWeatherPageUsesSharedCacheCapacity(t *testing.T) {
+	const mb = 1024 * 1024
+	s := &SceneRenderer{config: map[string]any{"gpuMB": 512., "uiBitmapBytes": float64(16 * mb)}, renderer: &Renderer{Size: 2336, Grid: 1168}, shapePages: map[[2]int]*weatherFeed{}, weatherPages: map[[2]int]*weatherFeed{}}
+	s.weatherPages[[2]int{0, 0}] = &weatherFeed{GPUFeed: GPUFeed{Grid: 1168}, bytes: 94 * mb, used: 1}
+	s.shapePages[[2]int{0, 0}] = &weatherFeed{bytes: 50 * mb, used: 100}
+	if s.weatherCacheBudget() < 94*mb || s.shapeCacheBudget() != 82*mb {
+		t.Fatalf("weather %d shape %d", s.weatherCacheBudget(), s.shapeCacheBudget())
+	}
+	if !s.evictOldestPage() || len(s.shapePages) != 0 || len(s.weatherPages) != 1 {
+		t.Fatal("authored page should yield before weather page")
+	}
+	if err := s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(32 * mb)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.weatherPages) != 1 {
+		t.Fatal("discarded whole weather page despite shared headroom")
+	}
+	if err := s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(110 * mb)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.weatherPages) != 0 {
+		t.Fatal("retained whole weather page beyond shared cap")
+	}
+}

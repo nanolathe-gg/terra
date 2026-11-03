@@ -170,7 +170,7 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 		}
 	}()
 	const core = 512
-	budget := s.cacheBudget()
+	budget := s.shapeCacheBudget()
 	for py := region.Y0 / core; py <= region.Y1/core; py++ {
 		for px := region.X0 / core; px <= region.X1/core; px++ {
 			if err = ctx.Err(); err != nil {

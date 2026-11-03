@@ -220,6 +220,27 @@ func TestSceneBudgetChangeBoundsPages(t *testing.T) {
 	if _, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options); err != nil {
 		t.Fatal(err)
 	}
+	// The canonical weather page exceeds one cache share, but fits the
+	// pooled retention budget and must be reused by the next visible tile.
+	if err = s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(186 * 1024 * 1024)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options); err != nil {
+		t.Fatal(err)
+	}
+	runs := s.weatherRuns
+	if len(s.weatherPages) != 1 || pageCacheBytes(s.weatherPages) <= s.cacheBudget() {
+		t.Fatal("fixture did not exercise pooled weather cache")
+	}
+	if _, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options); err != nil {
+		t.Fatal(err)
+	}
+	if s.weatherRuns != runs {
+		t.Fatal("whole-map weather replay repeated on cache hit")
+	}
+	if err = s.UpdateConfig(map[string]any{"uiBitmapBytes": 0.}); err != nil {
+		t.Fatal(err)
+	}
 	before := s.cacheResidentBytes()
 	if before <= 0 {
 		t.Fatal("expected retained pages")

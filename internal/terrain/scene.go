@@ -241,8 +241,8 @@ func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
 		}
 	}
 	if s.cacheBudget() < oldBudget {
-		s.trimPageCache(s.shapePages, s.cacheBudget())
-		s.trimPageCache(s.weatherPages, s.cacheBudget())
+		s.trimPageCache(s.shapePages, s.shapeCacheBudget())
+		s.trimPageCache(s.weatherPages, s.weatherCacheBudget())
 	}
 	if column, ok := config["column"]; ok {
 		s.config["column"] = column
@@ -283,6 +283,41 @@ func (s *SceneRenderer) cacheBudget() int {
 	return max(0, base-int(math.Max(0, param(s.config, "uiBitmapBytes")))/2)
 }
 
+func pageCacheBytes(pages map[[2]int]*weatherFeed) int {
+	total := 0
+	for _, page := range pages {
+		total += page.bytes
+	}
+	return total
+}
+
+// A canonical small-map weather page may use the unused authored-cache share.
+// This keeps the combined retention cap unchanged while avoiding repeated
+// whole-map weather replays on each visible tile.
+func (s *SceneRenderer) shapeCacheBudget() int {
+	budget := s.cacheBudget()
+	if len(s.weatherPages) == 1 {
+		for _, p := range s.weatherPages {
+			if p.Grid == s.renderer.Grid {
+				return min(budget, max(0, 2*budget-p.bytes))
+			}
+		}
+	}
+	return budget
+}
+
+func (s *SceneRenderer) weatherCacheBudget() int {
+	budget := s.cacheBudget()
+	if len(s.weatherPages) == 1 {
+		for _, p := range s.weatherPages {
+			if p.Grid == s.renderer.Grid {
+				return max(budget, 2*budget-pageCacheBytes(s.shapePages))
+			}
+		}
+	}
+	return budget
+}
+
 // trimPageCache releases least-recently-used pages without invalidating the
 // graph snapshot or newer pages when external bitmap residency grows.
 func (s *SceneRenderer) trimPageCache(pages map[[2]int]*weatherFeed, budget int) {
@@ -321,6 +356,9 @@ func (s *SceneRenderer) evictOldestPage() bool {
 				key = id
 			}
 		}
+		if oldest != nil {
+			break
+		} // Authored pages yield before expensive weather.
 	}
 	if oldest == nil {
 		return false
