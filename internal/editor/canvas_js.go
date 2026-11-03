@@ -617,7 +617,7 @@ func (a *App) paintOverlay() {
 	g.Call("setLineDash", js.ValueOf([]any{8, 6}))
 	g.Call("strokeRect", -a.view.X*a.view.Scale, (num(a.Config, "baseHeight", 0)/2-a.view.Y)*a.view.Scale, num(a.Map(), "playRight", a.Width())*a.view.Scale, num(a.Map(), "playBottom", a.Height())*a.view.Scale)
 	g.Call("setLineDash", js.ValueOf([]any{}))
-	if hoverNode >= 0 && hoverNode < len(a.Nodes) && hoverNode != a.Selected && a.gesture == nil && (a.featureUI == nil || !a.featureUI.Active) {
+	if !a.navigationPreview() && hoverNode >= 0 && hoverNode < len(a.Nodes) && hoverNode != a.Selected && a.gesture == nil && (a.featureUI == nil || !a.featureUI.Active) {
 		if h := a.geometryFor(hoverNode); h != nil && h.Visible {
 			g.Call("save")
 			g.Call("scale", h.Scale, h.Scale)
@@ -629,10 +629,12 @@ func (a *App) paintOverlay() {
 			g.Call("restore")
 		}
 	}
-	if selection := a.selectionGeometry(); selection != nil && selection.Visible {
-		a.drawSelection(g, selection)
+	if !a.navigationPreview() {
+		if selection := a.selectionGeometry(); selection != nil && selection.Visible {
+			a.drawSelection(g, selection)
+		}
 	}
-	if a.Tool == "move" && (a.featureUI == nil || !a.featureUI.Active) {
+	if !a.navigationPreview() && a.Tool == "move" && (a.featureUI == nil || !a.featureUI.Active) {
 		if left, right, ok := a.landformSectionMark(); ok {
 			left, right = a.project(left), a.project(right)
 			g.Call("save")
@@ -645,7 +647,7 @@ func (a *App) paintOverlay() {
 			g.Call("restore")
 		}
 	}
-	if hoverPoint != nil && a.gesture == nil && (a.Tool != "move" || a.AddPath) && (a.featureUI == nil || !a.featureUI.Active) {
+	if !a.navigationPreview() && hoverPoint != nil && a.gesture == nil && (a.Tool != "move" || a.AddPath) && (a.featureUI == nil || !a.featureUI.Active) {
 		p := a.project(*hoverPoint)
 		g.Call("save")
 		g.Set("strokeStyle", "#b8eef3")
