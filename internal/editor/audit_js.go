@@ -240,17 +240,10 @@ func (a *App) mountAudit() {
 				return nil, e
 			}
 			a.Knobs[key] = v
-			for i := range a.Nodes {
-				if a.Nodes[i].Kind == "ground" {
-					switch key {
-					case "undulation":
-						a.Nodes[i].Amplitude = num(a.Knobs, key, 0)
-					case "undulationScale":
-						a.Nodes[i].Wavelength = num(a.Knobs, key, 200)
-					case "undulationCover":
-						a.Nodes[i].Coverage = num(a.Knobs, key, .45)
-					}
-				}
+			var inserted bool
+			a.Nodes, inserted = model.SetGroundKnob(a.Nodes, key, num(a.Knobs, key, 0), a.Seed)
+			if inserted && a.Selected >= 0 {
+				a.Selected++
 			}
 			if input := element("knob-" + key); exists(input) {
 				input.Set("value", fmt.Sprint(v))
