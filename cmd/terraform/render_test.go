@@ -53,3 +53,45 @@ done
 		t.Fatal(e)
 	}
 }
+
+func TestSceneGeometryValidation(t *testing.T) {
+	geometry := func() map[string]any {
+		return map[string]any{"unitsX": float64(1), "unitsY": float64(1), "widthCells": float64(34), "heightCells": float64(40), "width": float64(544), "height": float64(640), "playRight": float64(512), "playBottom": float64(512)}
+	}
+	if err := validateSceneGeometry(geometry(), 800, 400); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		key   string
+		value float64
+	}{
+		{"unitsX", -1}, {"unitsY", 41}, {"unitsX", 1.5}, {"width", 1000000000}, {"heightCells", 999999999}, {"playRight", 0},
+	} {
+		g := geometry()
+		g[tc.key] = tc.value
+		if err := validateSceneGeometry(g, 800, 400); err == nil {
+			t.Errorf("accepted %s=%g", tc.key, tc.value)
+		}
+	}
+	if err := validateSceneGeometry(geometry(), 800, 399); err == nil {
+		t.Error("accepted inconsistent grid")
+	}
+}
+
+func TestSceneExportWeatherIgnoresViewToggle(t *testing.T) {
+	yes, no := true, false
+	if !sceneExportWeather(false, &yes) || sceneExportWeather(true, &no) || !sceneExportWeather(true, nil) {
+		t.Fatal("export weather should follow weather setting, independent of preview")
+	}
+}
+
+func TestSceneDefaultScree(t *testing.T) {
+	config := map[string]any{"defaults": map[string]any{"scree": "70"}}
+	if got := sceneDefaultScree(config, nil); got != .7 {
+		t.Fatalf("default scree=%g", got)
+	}
+	config["engineDefaults"] = map[string]any{"scree": "40"}
+	if got := sceneDefaultScree(config, map[string]any{"scree": float64(20)}); got != .2 {
+		t.Fatalf("recipe scree=%g", got)
+	}
+}

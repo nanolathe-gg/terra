@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,7 +16,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 )
 
 // renderScene runs the same terrain renderer used by the browser, through the
@@ -36,6 +37,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		Map                                                                                                        map[string]any
 		MapData                                                                                                    map[string]any
 		Knobs                                                                                                      map[string]any
+		Column                                                                                                     any
 		Colors                                                                                                     map[string]any
 		BaseHeight, SeaLevel, Size, Grid                                                                           float64
 		Relief, MineralRing, RingSpread, RingVariation, MaterialWeathering, DepositSpread, TransitionDetail, Scree *float64
@@ -62,6 +64,38 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	var config map[string]any
 	if e = json.Unmarshal(response.Body.Bytes(), &config); e != nil {
 		return e
+	}
+	defaultColumn := config["column"]
+	if e = model.ValidateColumn(recipe.Column, defaultColumn); e != nil {
+		return e
+	}
+	if recipe.Column != nil {
+		config["column"] = recipe.Column
+	}
+	if recipe.Size < 2 || recipe.Size > 21000 || recipe.Grid < 2 || recipe.Grid > 10500 || recipe.Size != math.Trunc(recipe.Size) || recipe.Grid != math.Trunc(recipe.Grid) {
+		return fmt.Errorf("Invalid scene lattice dimensions")
+	}
+	if recipe.SeaLevel < 0 || recipe.SeaLevel > 255 || recipe.SeaLevel != math.Trunc(recipe.SeaLevel) {
+		return fmt.Errorf("Invalid scene sea level")
+	}
+	if e = validateSceneGeometry(recipe.Map, recipe.Size, recipe.Grid); e != nil {
+		return e
+	}
+	for _, n := range recipe.Nodes {
+		if n.Kind == "" || n.Kind == "raster" {
+			return fmt.Errorf("The recipe contains an unsupported stroke")
+		}
+		if len(n.Points) > 0 {
+			p := model.ShapePath{Points: n.Points, Paths: n.Paths}
+			if e = model.ValidatePaths(&p); e != nil {
+				return e
+			}
+		}
+	}
+	if features, ok := recipe.MapData["features"].([]any); ok && len(features) > 0 {
+		if err := s.EnsureFeatures(recipe.Biome); err != nil {
+			return fmt.Errorf("prepare features: %w", err)
+		}
 	}
 	for k, v := range map[string]float64{"baseHeight": recipe.BaseHeight, "seaLevel": recipe.SeaLevel, "size": recipe.Size, "grid": recipe.Grid} {
 		config[k] = v
@@ -135,6 +169,9 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 			colors[k] = v
 		}
 	}
+	for k, v := range model.ColumnColorOverrides(recipe.Column, defaultColumn) {
+		colors[k] = v
+	}
 	knobs := map[string]string{}
 	for k, v := range recipe.Knobs {
 		knobs[k] = fmt.Sprint(v)
@@ -170,6 +207,9 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	}
 	draw.Full = true
 	draw.ExportArt = true
+	if recipe.Scree == nil {
+		draw.Scree = sceneDefaultScree(config, recipe.Knobs)
+	}
 	for _, item := range []struct {
 		src *float64
 		dst *float64
@@ -181,12 +221,7 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 	if recipe.RefinementSeed != nil {
 		draw.RefinementSeed = *recipe.RefinementSeed
 	}
-	if recipe.Weather != nil {
-		draw.Weather = *recipe.Weather
-	}
-	if recipe.WeatheredView != nil {
-		draw.Weather = draw.Weather && *recipe.WeatheredView
-	}
+	draw.Weather = sceneExportWeather(draw.Weather, recipe.Weather)
 	if recipe.Clay != nil {
 		draw.Clay = *recipe.Clay
 	}
@@ -263,6 +298,62 @@ func sampleNativeHeight(result *terrain.SceneResult, x, y float64) (int, error) 
 
 func numberMap(m map[string]any, k string) float64 { v, _ := m[k].(float64); return v }
 
+func sceneDefaultScree(config, knobs map[string]any) float64 {
+	value := any(nil)
+	for _, source := range []map[string]any{mapObject(config["defaults"]), mapObject(config["engineDefaults"]), knobs} {
+		if v, ok := source["scree"]; ok {
+			value = v
+		}
+	}
+	var n float64
+	switch v := value.(type) {
+	case float64:
+		n = v
+	case string:
+		n, _ = strconv.ParseFloat(v, 64)
+	}
+	return math.Max(0, math.Min(100, n)) / 100
+}
+func mapObject(v any) map[string]any { m, _ := v.(map[string]any); return m }
+
+func sceneExportWeather(fallback bool, weather *bool) bool {
+	if weather != nil {
+		return *weather
+	}
+	return fallback
+}
+
+// Validate the complete map geometry before GPU initialization or allocation.
+func validateSceneGeometry(m map[string]any, size, grid float64) error {
+	x, y := numberMap(m, "unitsX"), numberMap(m, "unitsY")
+	if x < 1 || x > 40 || y < 1 || y > 40 || x != math.Trunc(x) || y != math.Trunc(y) {
+		return fmt.Errorf("Invalid map dimensions: expected 1–40 whole units per side")
+	}
+	wc, hc := x*32+2, y*32+8
+	w, h := wc*16, hc*16
+	for k, expected := range map[string]float64{"widthCells": wc, "heightCells": hc, "width": w, "height": h, "playRight": x * 512, "playBottom": y * 512} {
+		if numberMap(m, k) != expected {
+			return fmt.Errorf("Invalid map geometry: %s must be %g", k, expected)
+		}
+	}
+	if size != math.Max(w, h)+160 || grid != math.Floor(size/2) {
+		return fmt.Errorf("Map geometry and scene lattice do not match")
+	}
+	return nil
+}
+
+type synchronizedBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (b *synchronizedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+func (b *synchronizedBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
 func exportNative(o server.Options, out, world string, sea float64, geometry, data map[string]any, heights []int, tiles []nativeTile) error {
 	name, _ := data["name"].(string)
 	if name == "" {
@@ -309,7 +400,7 @@ func exportNative(o server.Options, out, world string, sea float64, geometry, da
 	if e != nil {
 		return e
 	}
-	var stderr bytes.Buffer
+	var stderr synchronizedBuffer
 	cmd.Stderr = &stderr
 	if e = cmd.Start(); e != nil {
 		return e
