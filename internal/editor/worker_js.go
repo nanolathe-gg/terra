@@ -5,6 +5,7 @@ package editor
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -14,14 +15,20 @@ import (
 	"time"
 
 	"github.com/nanolathe-gg/terraform/internal/membudget"
+	"github.com/nanolathe-gg/terraform/internal/model"
 	"github.com/nanolathe-gg/terraform/internal/renderjob"
+	"github.com/nanolathe-gg/terraform/internal/terrain"
 )
 
 type cachedTile struct {
+	Presented                                   bool
+	JobID, Session                              int
 	Heights                                     []float32
 	HeightWidth, HeightHeight                   int
 	HeightOriginX, HeightOriginY, HeightSpacing float64
 	Revision                                    int
+	ValidRevision                               int
+	Input                                       model.Rect
 	Canvas                                      js.Value
 	X, Y, Width, Height                         int
 	Scale                                       float64
@@ -29,7 +36,13 @@ type cachedTile struct {
 	Bytes                                       int
 }
 
-type workerViewState struct{ session int }
+type workerViewState struct {
+	session     int
+	nodes       []model.Node
+	visual      string
+	revision    int
+	initialized bool
+}
 
 var workerViews = map[*App]*workerViewState{}
 
@@ -64,7 +77,7 @@ func (a *App) startWorker() {
 			id = m.Get("id").Int()
 		}
 		if kind == "render-start" || kind == "tile" && (id == a.activeID || a.acceptsViewTile(m)) {
-			detail := map[string]any{"phase": "start", "id": id, "revision": a.Revision}
+			detail := map[string]any{"phase": "start", "id": id, "revision": a.Revision, "uiReceivedAt": clockMilliseconds()}
 			if kind == "tile" {
 				detail["phase"] = "tile"
 				// A received image belongs to the revision encoded in its key,
@@ -77,7 +90,7 @@ func (a *App) startWorker() {
 					}
 				}
 			}
-			for _, key := range []string{"x", "y", "width", "height", "scale", "profile", "milliseconds"} {
+			for _, key := range []string{"x", "y", "width", "height", "scale", "profile", "milliseconds", "sentAt", "receivedAt", "startedAt", "renderedAt", "presentedAt"} {
 				if exists(m.Get(key)) {
 					detail[key] = m.Get(key)
 				}
@@ -110,8 +123,15 @@ func (a *App) startWorker() {
 			showError(fmt.Errorf("%s", m.Get("error").String()))
 			a.rendering = false
 			text("status", "Terrain job failed. The recipe is retained.")
+		case "heightPatch":
+			if id == a.activeID {
+				a.acceptHeightPatch(m)
+			}
 		case "tile":
 			if id != a.activeID && !a.acceptsViewTile(m) {
+				if exists(m.Get("bitmap")) {
+					m.Get("bitmap").Call("close")
+				}
 				return
 			}
 			a.acceptTile(m)
@@ -147,7 +167,7 @@ func (a *App) job(kind string, tiles []renderjob.Tile) renderjob.Request {
 	if kind == "export" || kind == "heights" {
 		options["Weather"] = checked("weather")
 	}
-	return renderjob.Request{Kind: kind, ID: a.requestID, Session: a.viewState().session, Revision: a.Revision, Config: a.Config, Nodes: a.Nodes, Knobs: a.knobStrings(), Colors: a.mergedColors(), Options: options, Tiles: tiles}
+	return renderjob.Request{SentAt: clockMilliseconds(), Kind: kind, ID: a.requestID, Session: a.viewState().session, Revision: a.Revision, Config: a.workerConfig(), Nodes: a.Nodes, Knobs: a.knobStrings(), Colors: a.mergedColors(), Options: options, Tiles: tiles}
 }
 func (a *App) Schedule() {
 	if !a.workerReady || a.Busy || a.view.Width < 1 || auditCaptureOnly {
@@ -176,6 +196,7 @@ func (a *App) queueView() {
 	level := 1 / scale
 	size := max(64, int(math.Ceil(256*level)))
 	interactive := a.terrainGesture()
+	a.retainUnaffectedTiles(interactive)
 	if interactive {
 		level *= 2
 	}
@@ -186,7 +207,7 @@ func (a *App) queueView() {
 		for x := max(0, x0); x < x1; x += size {
 			w, h := min(size, int(a.Width())-x), min(size, int(a.Height())-y)
 			key := a.tileKey(x, y, w, h, level)
-			if _, ok := a.tiles[key]; !ok {
+			if _, ok := a.tiles[key]; !ok && !a.hasCurrentDetail(x, y, w, h, level) {
 				tiles = append(tiles, renderjob.Tile{Key: key, X: x, Y: y, Width: w, Height: h, Scale: level})
 			}
 		}
@@ -199,7 +220,6 @@ func (a *App) queueView() {
 	job.Interactive = interactive
 	job.Options["Preview"] = a.view.Fit
 	if interactive {
-		job.Options["Full"] = false
 		job.Options["Weather"] = false
 		if hoverPoint != nil {
 			projected := a.project(*hoverPoint)
@@ -225,22 +245,38 @@ func (a *App) acceptTile(m js.Value) {
 		incoming += int64(m.Get("heights").Get("byteLength").Int())
 	}
 	if err := membudget.Require("Terrain tile transfer", incoming*3, limits.Transfer()); err != nil {
+		if exists(m.Get("bitmap")) {
+			m.Get("bitmap").Call("close")
+		}
 		showError(err)
 		return
 	}
 	// Drop old browser backing stores before allocating the incoming canvas and
 	// float heights; transfer copies fit in the separately reserved headroom.
-	a.trimTilesTo(max(0, int(limits.Cache()-incoming)))
-	c := create("canvas", "", "")
-	c.Get("dataset").Set("terrainTile", "true")
-	c.Set("width", w)
-	c.Set("height", h)
-	bytes := js.Global().Get("Uint8ClampedArray").New(m.Get("rgba"))
-	data := js.Global().Get("ImageData").New(bytes, w, h)
-	c.Call("getContext", "2d").Call("putImageData", data, 0, 0)
+	a.trimTilesTo(max(0, a.tileBudget()-int(incoming)))
+	var c js.Value
+	if exists(m.Get("bitmap")) {
+		c = m.Get("bitmap")
+	} else {
+		c = create("canvas", "", "")
+		c.Get("dataset").Set("terrainTile", "true")
+		c.Set("width", w)
+		c.Set("height", h)
+		bytes := js.Global().Get("Uint8ClampedArray").New(m.Get("rgba"))
+		data := js.Global().Get("ImageData").New(bytes, w, h)
+		c.Call("getContext", "2d").Call("putImageData", data, 0, 0)
+	}
 	t := &cachedTile{Canvas: c, X: m.Get("x").Int(), Y: m.Get("y").Int(), Width: w, Height: h, Scale: m.Get("scale").Float(), Used: time.Now(), Bytes: w * h * 4, Revision: a.Revision}
 	if exists(m.Get("revision")) {
 		t.Revision = m.Get("revision").Int()
+	}
+	t.ValidRevision = t.Revision
+	t.JobID = m.Get("id").Int()
+	if exists(m.Get("session")) {
+		t.Session = m.Get("session").Int()
+	}
+	if exists(m.Get("inputX")) {
+		t.Input = model.Rect{X: m.Get("inputX").Float(), Y: m.Get("inputY").Float(), Width: m.Get("inputWidth").Float(), Height: m.Get("inputHeight").Float()}
 	}
 	if exists(m.Get("heights")) {
 		ha := js.Global().Get("Uint8Array").New(m.Get("heights"))
@@ -257,10 +293,17 @@ func (a *App) acceptTile(m js.Value) {
 		t.HeightSpacing = m.Get("heightSpacing").Float()
 		t.Bytes += len(hb)
 	}
-	if old := a.tiles[m.Get("key").String()]; old != nil {
-		old.Canvas.Set("width", 0)
-		old.Canvas.Set("height", 0)
-		old.Heights = nil
+	// A replacement at the same resolution owns the previous tile's coverage.
+	// Keeping every edit revision wastes backing stores and redraws hidden images.
+	for key, old := range a.tiles {
+		if exists(old.Canvas) && old.X == t.X && old.Y == t.Y && old.Width == t.Width && old.Height == t.Height && old.Scale == t.Scale {
+			if old.Revision > t.Revision {
+				releaseTile(t)
+				return
+			}
+			releaseTile(old)
+			delete(a.tiles, key)
+		}
 	}
 	a.tiles[m.Get("key").String()] = t
 	a.trimTiles()
@@ -268,7 +311,7 @@ func (a *App) acceptTile(m js.Value) {
 	a.refreshLandformSection()
 }
 func (a *App) trimTiles() {
-	a.trimTilesTo(int(membudget.FromConfig(a.Config).Cache()))
+	a.trimTilesTo(a.tileBudget())
 }
 func (a *App) trimTilesTo(budget int) {
 	entries := make([]membudget.Entry, 0, len(a.tiles))
@@ -277,9 +320,7 @@ func (a *App) trimTilesTo(budget int) {
 	}
 	for _, key := range membudget.Evictions(entries, int64(budget)) {
 		t := a.tiles[key]
-		t.Canvas.Set("width", 0)
-		t.Canvas.Set("height", 0)
-		t.Heights = nil
+		releaseTile(t)
 		delete(a.tiles, key)
 	}
 
@@ -300,7 +341,11 @@ func (a *App) paintTiles() {
 		}
 		return math.Abs(ordered[i].Scale-1/a.view.Scale) > math.Abs(ordered[j].Scale-1/a.view.Scale)
 	})
+	presented := []map[string]any{}
 	for _, t := range ordered {
+		if !exists(t.Canvas) {
+			continue
+		}
 		x, y := (float64(t.X)-a.view.X)*a.view.Scale, (float64(t.Y)-a.view.Y)*a.view.Scale
 		w, h := float64(t.Width)*t.Scale*a.view.Scale, float64(t.Height)*t.Scale*a.view.Scale
 		if x+w < 0 || y+h < 0 || x > float64(a.view.Width) || y > float64(a.view.Height) {
@@ -308,8 +353,14 @@ func (a *App) paintTiles() {
 		}
 		t.Used = time.Now()
 		g.Call("drawImage", t.Canvas, x, y, w, h)
+		if !t.Presented {
+			t.Presented = true
+			presented = append(presented, map[string]any{"phase": "presented", "id": t.JobID, "session": t.Session, "revision": t.Revision, "x": t.X, "y": t.Y, "width": float64(t.Width) * t.Scale, "height": float64(t.Height) * t.Scale, "scale": t.Scale, "screenX": x, "screenY": y, "screenWidth": w, "screenHeight": h})
+		}
 	}
-
+	for _, detail := range presented {
+		js.Global().Call("dispatchEvent", js.Global().Get("CustomEvent").New("terraform-render", js.ValueOf(map[string]any{"detail": js.ValueOf(detail)})))
+	}
 	a.drawOverlay()
 	if a.view.Fit {
 		nav := element("navigator")
@@ -395,4 +446,135 @@ func (a *App) ExportChunks(ctx context.Context, onChunk func(x, y, width, height
 		}
 	}
 	return nil
+}
+
+// Tile backing stores count against both the UI heap partition and GPU headroom.
+func (a *App) tileBudget() int {
+	l := membudget.FromConfig(a.Config)
+	return int(min(l.Cache(), l.GPU/4))
+}
+func (a *App) workerConfig() map[string]any {
+	a.trimTiles()
+	// Immutable world tables and export catalogs are sent only by init.
+	// Every replaceable job includes all mutable renderer settings, so dropping
+	// an older queued job cannot lose a configuration change.
+	c := make(map[string]any, 12)
+	for _, k := range []string{"size", "grid", "column", "gpuMB", "gpuBudgetBytes", "gpuBudgetMB", "heapMB", "heapBudgetBytes", "heapBudgetMB"} {
+		if v, ok := a.Config[k]; ok {
+			c[k] = v
+		}
+	}
+	bytes := 0
+	for _, t := range a.tiles {
+		if exists(t.Canvas) {
+			bytes += t.Width * t.Height * 4
+		}
+	}
+	c["uiBitmapBytes"] = bytes
+	return c
+}
+func releaseTile(t *cachedTile) {
+	if exists(t.Canvas) {
+		if t.Canvas.Get("close").Type() == js.TypeFunction {
+			t.Canvas.Call("close")
+		} else {
+			t.Canvas.Set("width", 0)
+			t.Canvas.Set("height", 0)
+		}
+	}
+	t.Canvas = js.Undefined()
+	t.Heights = nil
+}
+func (a *App) acceptHeightPatch(m js.Value) {
+	arr := js.Global().Get("Uint8Array").New(m.Get("heights"))
+	hb := make([]byte, arr.Get("byteLength").Int())
+	js.CopyBytesToGo(hb, arr)
+	t := &cachedTile{Heights: make([]float32, len(hb)/4), HeightWidth: m.Get("heightWidth").Int(), HeightHeight: m.Get("heightHeight").Int(), HeightOriginX: m.Get("heightOriginX").Float(), HeightOriginY: m.Get("heightOriginY").Float(), HeightSpacing: m.Get("heightSpacing").Float(), Revision: m.Get("revision").Int(), Used: time.Now(), Bytes: len(hb)}
+	for i := range t.Heights {
+		t.Heights[i] = math.Float32frombits(binary.LittleEndian.Uint32(hb[i*4:]))
+	}
+	key := fmt.Sprintf("height/%g/%g/%d/%d", t.HeightOriginX, t.HeightOriginY, t.HeightWidth, t.HeightHeight)
+	if old := a.tiles[key]; old != nil {
+		releaseTile(old)
+	}
+	a.tiles[key] = t
+	a.trimTiles()
+	a.drawOverlay()
+}
+
+func clockMilliseconds() float64 {
+	p := js.Global().Get("performance")
+	return p.Get("timeOrigin").Float() + p.Call("now").Float()
+}
+
+func (a *App) hasCurrentDetail(x, y, w, h int, level float64) bool {
+	for _, t := range a.tiles {
+		if exists(t.Canvas) && t.ValidRevision == a.Revision && t.X == x && t.Y == y && float64(t.Width)*t.Scale == float64(w) && float64(t.Height)*t.Scale == float64(h) && t.Scale <= level {
+			return true
+		}
+	}
+	return false
+}
+
+// Reuse images only when their complete renderer input apron is untouched.
+// Global material/lighting changes and weather transitions still invalidate all.
+func (a *App) retainUnaffectedTiles(interactive bool) {
+	state := a.viewState()
+	if state.initialized && state.revision == a.Revision {
+		return
+	}
+	options := a.drawOptions()
+	if interactive {
+		options["Weather"] = false
+	}
+	visual, _ := json.Marshal([]any{a.Knobs, a.mergedColors(), options, a.Config["column"], a.Config["size"], a.Config["grid"], a.Config["baseHeight"], a.Config["seaLevel"], a.view.Fit})
+	data, err := json.Marshal(a.Nodes)
+	if err != nil {
+		return
+	}
+	defer func() {
+		_ = json.Unmarshal(data, &state.nodes)
+		state.visual = string(visual)
+		state.revision = a.Revision
+		state.initialized = true
+	}()
+	if !state.initialized || state.visual != string(visual) || a.view.Fit || options["Weather"] == true {
+		return
+	}
+	grid := int(num(a.Config, "grid", 1))
+	spacing := (num(a.Config, "size", 1) - 1) / float64(max(1, grid-1))
+	defaults := clone(obj(a.Config, "defaults"))
+	for _, key := range []string{"frostGapSize", "frostGapDepth", "frostGaps", "frostGapReach"} {
+		if v, ok := a.Knobs[key]; ok {
+			defaults[key] = v
+		}
+	}
+	changed, full, e := terrain.ChangedShapeRegion(state.nodes, a.Nodes, terrain.ShapeWindowConfig{Grid: grid, Spacing: spacing, RefSpacing: spacing, Defaults: defaults})
+	if e != nil || full {
+		return
+	}
+	var dirty model.Rect
+	if changed != nil {
+		dirty = terrain.CellRegionWorld(*changed, spacing)
+	}
+	for key, t := range a.tiles {
+		if !exists(t.Canvas) || t.ValidRevision != state.revision || t.Input.Width <= 0 {
+			continue
+		}
+		r := t.Input
+		if changed != nil && r.X <= dirty.X+dirty.Width && r.X+r.Width >= dirty.X && r.Y <= dirty.Y+dirty.Height && r.Y+r.Height >= dirty.Y {
+			continue
+		}
+		_, suffix, ok := strings.Cut(key, "/")
+		if !ok {
+			continue
+		}
+		next := fmt.Sprintf("%d/%s", a.Revision, suffix)
+		if a.tiles[next] != nil {
+			continue
+		}
+		delete(a.tiles, key)
+		a.tiles[next] = t
+		t.ValidRevision = a.Revision
+	}
 }

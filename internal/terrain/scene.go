@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
@@ -21,6 +22,7 @@ type SceneWindow struct {
 	Preview             bool
 	ReadHeights         bool
 	HeightsOnly         bool
+	SkipRGBA            bool // Browser presentation keeps color on the GPU.
 }
 type SceneResult struct {
 	RGBA                                        []byte
@@ -46,6 +48,7 @@ type SceneRenderer struct {
 	shapeNodes               []model.Node
 	shapeNodesSet            bool
 	shapeTick, shapeRuns     uint64
+	shapeProfile             ShapeProfile
 }
 
 func NewSceneRenderer(gpu *GPU, config map[string]any, sources map[string]string, material map[string]any) (*SceneRenderer, error) {
@@ -92,6 +95,13 @@ func (s *SceneRenderer) Close() {
 
 // Render replays authored fields on the native lattice and renders one bounded window.
 func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs map[string]string, colors map[string]any, window SceneWindow, options DrawOptions) (*SceneResult, error) {
+	started := time.Now()
+	s.shapeProfile = ShapeProfile{}
+	if s.shape != nil {
+		s.shape.profile = &s.shapeProfile
+		defer func() { s.shape.profile = nil }()
+	}
+	defer func() { s.shapeProfile.SceneMilliseconds = elapsed(started) }()
 	if s.shape == nil {
 		return nil, errors.New("scene renderer is closed")
 	}
@@ -240,11 +250,16 @@ func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
 }
 
 // LastRenderProfile reports the renderer's most recent completed tile timings.
-func (s *SceneRenderer) LastRenderProfile() RenderProfile {
+type SceneProfile struct {
+	RenderProfile
+	ShapeProfile
+}
+
+func (s *SceneRenderer) LastRenderProfile() SceneProfile {
 	if s.renderer == nil {
-		return RenderProfile{}
+		return SceneProfile{ShapeProfile: s.shapeProfile}
 	}
-	return s.renderer.LastProfile
+	return SceneProfile{RenderProfile: s.renderer.LastProfile, ShapeProfile: s.shapeProfile}
 }
 
 // cacheBudget reserves at most one fifth of the configured GPU budget for

@@ -19,6 +19,8 @@ type FillRequest struct {
 	Settings    model.FeatureFill
 }
 type Request struct {
+	SentAt      float64           `json:"sentAt,omitempty"`
+	ReceivedAt  float64           `json:"-"`
 	RPC         bool              `json:"rpc,omitempty"`
 	Session     int               `json:"session"`
 	Revision    int               `json:"revision"`

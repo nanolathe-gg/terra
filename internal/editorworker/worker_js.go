@@ -47,6 +47,7 @@ func Run() {
 			post(map[string]any{"kind": "error", "error": err.Error()})
 			return nil
 		}
+		job.ReceivedAt = clockMilliseconds()
 		generation = job.ID
 		if cancel != nil && (activeRPC || !renderjob.FinishViewTile(activeKind, activeSession, job)) {
 			cancel()
@@ -118,7 +119,7 @@ func loop() {
 				var e error
 				gpu, e = terrain.NewGPU()
 				if e == nil {
-					gpu.OnError = func(err error) { post(map[string]any{"kind": "error", "id": generation, "error": err.Error()}) }
+					gpu.OnError = func(err error) { post(map[string]any{"kind": "error", "id": 0, "error": err.Error()}) }
 				}
 				if e == nil {
 					engine, e = terrain.NewSceneRenderer(gpu, config, sources, material)
@@ -141,6 +142,10 @@ func loop() {
 				b, _ := json.Marshal(engine.UniformSnapshot())
 				post(map[string]any{"kind": "uniforms", "id": job.ID, "result": js.Global().Get("JSON").Call("parse", string(b))})
 				return
+			}
+			if job.Kind == "view" && !job.RPC {
+				restore := engine.BeginViewValidation()
+				defer restore()
 			}
 			if err := engine.UpdateConfig(job.Config); err != nil {
 				post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
@@ -285,9 +290,21 @@ func loop() {
 				if ctx.Err() != nil || generation != job.ID {
 					return
 				}
+				if job.Kind == "view" && !job.RPC {
+					if err := engine.WaitView(ctx); err != nil {
+						if ctx.Err() == nil {
+							post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+						}
+						return
+					}
+					if generation != job.ID {
+						return
+					}
+				}
 				tileStart := time.Now()
+				startedAt := clockMilliseconds()
 				post(map[string]any{"kind": "render-start", "id": job.ID, "x": tile.X, "y": tile.Y, "width": tile.Width, "height": tile.Height, "scale": tile.Scale, "session": job.Session, "revision": job.Revision})
-				r, e := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, terrain.SceneWindow{X: tile.X, Y: tile.Y, Width: tile.Width, Height: tile.Height, Scale: tile.Scale, Preview: job.Kind == "view" && job.Options["Preview"] == true, ExportArt: job.Kind == "export", ReadHeights: job.Kind != "export", HeightsOnly: job.Kind == "heights"}, options)
+				r, e := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, terrain.SceneWindow{X: tile.X, Y: tile.Y, Width: tile.Width, Height: tile.Height, Scale: tile.Scale, Preview: job.Kind == "view" && job.Options["Preview"] == true, ExportArt: job.Kind == "export", ReadHeights: job.Kind != "export" && (job.Kind != "view" || job.RPC || job.Options["Preview"] == true && !job.Interactive), HeightsOnly: job.Kind == "heights", SkipRGBA: job.Kind == "view" && !job.RPC}, options)
 				if e != nil {
 					if ctx.Err() == nil {
 						post(map[string]any{"kind": "error", "id": job.ID, "error": e.Error()})
@@ -297,8 +314,10 @@ func loop() {
 				if ctx.Err() != nil || generation != job.ID && job.Kind != "view" {
 					return
 				}
-				m := map[string]any{"kind": "tile", "id": job.ID, "key": tile.Key, "x": tile.X, "y": tile.Y, "width": r.Width, "height": r.Height, "scale": tile.Scale, "index": index, "total": len(job.Tiles), "session": job.Session, "revision": job.Revision, "view": job.Kind == "view" && !job.RPC, "preview": job.Interactive}
+				m := map[string]any{"sentAt": job.SentAt, "receivedAt": job.ReceivedAt, "startedAt": startedAt, "renderedAt": clockMilliseconds(), "kind": "tile", "id": job.ID, "key": tile.Key, "x": tile.X, "y": tile.Y, "width": r.Width, "height": r.Height, "scale": tile.Scale, "index": index, "total": len(job.Tiles), "session": job.Session, "revision": job.Revision, "view": job.Kind == "view" && !job.RPC, "preview": job.Interactive}
 				profile, _ := json.Marshal(engine.LastRenderProfile())
+				m["inputX"], m["inputY"] = r.HeightOriginX, r.HeightOriginY
+				m["inputWidth"], m["inputHeight"] = float64(r.HeightWidth-1)*r.HeightSpacing, float64(r.HeightHeight-1)*r.HeightSpacing
 				m["profile"] = js.Global().Get("JSON").Call("parse", string(profile))
 				m["milliseconds"] = float64(time.Since(tileStart).Microseconds()) / 1000
 				if job.Kind == "export" {
@@ -334,6 +353,31 @@ func loop() {
 						}
 					}
 					post(map[string]any{"kind": "heights", "id": job.ID, "values": values, "clipped": clipped, "columns": wc, "rows": hc})
+				} else if job.Kind == "view" && !job.RPC {
+					bitmap, err := engine.PresentBitmap(ctx, r.Width, r.Height)
+					if err != nil {
+						post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+						return
+					}
+					m["bitmap"] = bitmap
+					m["presentedAt"] = clockMilliseconds()
+					transfer := []any{bitmap}
+					if len(r.Heights) > 0 {
+						hb := make([]byte, len(r.Heights)*4)
+						for i, h := range r.Heights {
+							binary.LittleEndian.PutUint32(hb[i*4:], math.Float32bits(h))
+						}
+						heights := js.Global().Get("Uint8Array").New(len(hb))
+						js.CopyBytesToJS(heights, hb)
+						m["heights"] = heights.Get("buffer")
+						m["heightWidth"] = r.HeightWidth
+						m["heightHeight"] = r.HeightHeight
+						m["heightOriginX"] = r.HeightOriginX
+						m["heightOriginY"] = r.HeightOriginY
+						m["heightSpacing"] = r.HeightSpacing
+						transfer = append(transfer, heights.Get("buffer"))
+					}
+					js.Global().Call("postMessage", js.ValueOf(m), js.ValueOf(transfer))
 				} else {
 					transfer := int64(len(r.RGBA)) + int64(len(r.Heights))*4
 					if err := membudget.Require("Terrain tile transfer", transfer*3, membudget.FromConfig(job.Config).Transfer()); err != nil {
@@ -363,6 +407,33 @@ func loop() {
 					return
 				}
 				time.Sleep(time.Millisecond)
+			}
+			// Like main, keep the CPU picking copy frozen during a gesture. Refresh
+			// it once for the completed view, after visible images have been delivered.
+			if job.Kind == "view" && !job.RPC && !job.Interactive && job.Options["Preview"] != true && len(job.Tiles) > 0 && ctx.Err() == nil && generation == job.ID {
+				x0, y0, x1, y1 := job.Tiles[0].X, job.Tiles[0].Y, 0, 0
+				for _, t := range job.Tiles {
+					x0 = min(x0, t.X)
+					y0 = min(y0, t.Y)
+					x1 = max(x1, t.X+t.Width)
+					y1 = max(y1, t.Y+t.Height)
+				}
+				w := engine.HeightWindow(terrain.SceneWindow{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0, Scale: 1}, options)
+				r, err := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, w, options)
+				if err != nil {
+					if ctx.Err() == nil {
+						post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+					}
+					return
+				}
+				if generation != job.ID {
+					return
+				}
+				hb := make([]byte, len(r.Heights)*4)
+				for i, h := range r.Heights {
+					binary.LittleEndian.PutUint32(hb[i*4:], math.Float32bits(h))
+				}
+				sendBytes(map[string]any{"kind": "heightPatch", "id": job.ID, "revision": job.Revision, "heightWidth": r.HeightWidth, "heightHeight": r.HeightHeight, "heightOriginX": r.HeightOriginX, "heightOriginY": r.HeightOriginY, "heightSpacing": r.HeightSpacing}, "heights", hb)
 			}
 			post(map[string]any{"kind": "done", "id": job.ID, "session": job.Session, "milliseconds": float64(time.Since(start).Microseconds()) / 1000})
 		}()
@@ -430,4 +501,9 @@ func sampleAuthoredPoints(ctx context.Context, engine *terrain.SceneRenderer, jo
 		time.Sleep(time.Millisecond)
 	}
 	return values, nil
+}
+
+func clockMilliseconds() float64 {
+	p := js.Global().Get("performance")
+	return p.Get("timeOrigin").Float() + p.Call("now").Float()
 }
