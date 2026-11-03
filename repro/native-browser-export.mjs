@@ -3,7 +3,7 @@
 // files in the checkout. All generated archives remain in a private temp root.
 // node repro/native-browser-export.mjs --prepared-assets /path/to/assets [--recipe path] [--port 9697] [--server-port 8898]
 import {spawn, execFileSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
@@ -14,13 +14,19 @@ if(!prepared)throw Error('--prepared-assets must name an independent prepared ca
 const port=Number(opt('--port',9697)),serverPort=Number(opt('--server-port',8898));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 await cdpPortFree(port);await cdpPortFree(serverPort);
-const root=mkdtempSync(join(tmpdir(),'terraform-native-browser-')),assets=join(root,'assets'),native=join(root,'native');
-mkdirSync(assets);mkdirSync(native);
+const root=mkdtempSync(join(tmpdir(),'terraform-native-browser-')),assets=join(root,'assets'),native=join(root,'native'),source=join(root,'source');
+mkdirSync(assets);mkdirSync(native);mkdirSync(source);mkdirSync(join(source,'web'));
+copyFileSync('sculpt.html',join(source,'sculpt.html'));
+symlinkSync(resolve('materials'),join(source,'materials'),'dir');
+for(const f of readdirSync('.'))if(f.endsWith('.wgsl'))symlinkSync(resolve(f),join(source,f));
+for(const f of ['bootstrap.js','worker.js'])copyFileSync(join('web',f),join(source,'web',f));
+const goroot=execFileSync('go',['env','GOROOT'],{encoding:'utf8'}).trim();copyFileSync(join(goroot,'lib','wasm','wasm_exec.js'),join(source,'web','wasm_exec.js'));
+for(const [pkg,file] of [['./cmd/editor','terraform.wasm'],['./cmd/renderworker','renderworker.wasm']])execFileSync('go',['build','-o',join(source,'web',file),pkg],{env:{...process.env,GOOS:'js',GOARCH:'wasm'},stdio:'inherit'});
 copyFileSync(join(prepared,'map-catalog.json'),join(assets,'map-catalog.json'));
 const binary=join(root,'terraform'), exporter=join(assets,'map-export');
 execFileSync('go',['build','-o',binary,'./cmd/terraform'],{stdio:'inherit'});
 execFileSync('go',['build','-o',exporter,'./export'],{stdio:'inherit'});
-const server=spawn(binary,['--port',String(serverPort),'--source-root',resolve('.'),'--assets-root',assets,'--export-tool',exporter,'--prepared'],{stdio:'ignore'});
+const server=spawn(binary,['--port',String(serverPort),'--source-root',source,'--assets-root',assets,'--export-tool',exporter,'--prepared'],{stdio:'ignore'});
 let chrome;
 try {
  const origin=`http://127.0.0.1:${serverPort}`;
@@ -53,7 +59,7 @@ try {
  for(const [key,path] of [['archive',join(root,'browser.ufo')],['indexed',join(root,'browser.png')]]){
   const response=await fetch(origin+'/map-exports/'+encodeURIComponent(outcome.result[key]));if(!response.ok)throw Error(`${key}: HTTP ${response.status}`);writeFileSync(path,Buffer.from(await response.arrayBuffer()));
  }
- const nativeRun=execFileSync(binary,['--source-root',resolve('.'),'--assets-root',assets,'--export-tool',exporter,'--prepared','--scene',scene,'--out',native],{encoding:'utf8',timeout:600000});
+ const nativeRun=execFileSync(binary,['--source-root',source,'--assets-root',assets,'--export-tool',exporter,'--prepared','--scene',scene,'--out',native],{encoding:'utf8',timeout:600000});
  let comparison;
  try { comparison=execFileSync('go',['run','repro/exportcompare.go',join(root,'browser.ufo'),join(native,name+'.ufo'),join(root,'browser.png'),join(native,name+'-indexed.png'),join(native,'heights.json'),name],{encoding:'utf8',timeout:120000}); }
  catch(e) { console.error(`Comparison artifacts: ${root}`); if(e.stdout)console.error(String(e.stdout)); throw e; }
