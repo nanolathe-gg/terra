@@ -401,6 +401,9 @@ func (a *App) LoadSketch(data []byte) error {
 	if e := json.Unmarshal(b, &nodes); e != nil {
 		return e
 	}
+	if e := validateRecipeCurves(s, nodes); e != nil {
+		return e
+	}
 	for _, n := range nodes {
 		if n.Kind == "" || n.Kind == "raster" {
 			return fmt.Errorf("The recipe contains an unsupported stroke.")
@@ -792,6 +795,25 @@ func (a *App) loadSketchFile(data []byte, documentID string) (bool, error) {
 	return false, nil
 }
 
+func validateRecipeCurves(s map[string]any, nodes []model.Node) error {
+	for _, n := range nodes {
+		if err := model.ValidateNodeCurves(n); err != nil {
+			return err
+		}
+	}
+	if err := model.ValidateNodeCurves(model.Node{Params: map[string]any{"curve": s["curve"], "along": s["along"]}}); err != nil {
+		return err
+	}
+	for _, raw := range obj(s, "toolSettings") {
+		if params, ok := raw.(map[string]any); ok {
+			if err := model.ValidateNodeCurves(model.Node{Params: params}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func validatePortableRecipe(s, config map[string]any) error {
 	raw, e := json.Marshal(s["nodes"])
 	if e != nil {
@@ -799,6 +821,9 @@ func validatePortableRecipe(s, config map[string]any) error {
 	}
 	var nodes []model.Node
 	if e = json.Unmarshal(raw, &nodes); e != nil {
+		return e
+	}
+	if e := validateRecipeCurves(s, nodes); e != nil {
 		return e
 	}
 	for _, n := range nodes {

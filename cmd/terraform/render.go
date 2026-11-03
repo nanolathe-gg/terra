@@ -82,6 +82,9 @@ func renderScene(o server.Options, s *server.Server, path, out string) error {
 		return e
 	}
 	for _, n := range recipe.Nodes {
+		if e := model.ValidateNodeCurves(n); e != nil {
+			return e
+		}
 		if n.Kind == "" || n.Kind == "raster" {
 			return fmt.Errorf("The recipe contains an unsupported stroke")
 		}
