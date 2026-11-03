@@ -230,7 +230,14 @@ func (a *App) queueView() {
 	a.paintTiles()
 	var heightTiles []renderjob.Tile
 	if !interactive && !a.view.Fit {
-		heightTiles = renderjob.MissingHeightTiles(int(math.Floor(a.view.X)), int(math.Floor(a.view.Y)), x1, y1, int(a.Width()), int(a.Height()), a.Revision, func(key string) bool {
+		span := 256
+		gpuBytes := membudget.FromConfig(a.Config).GPU
+		if gpuBytes >= 512*1024*1024 {
+			span = 2048
+		} else if gpuBytes >= 256*1024*1024 {
+			span = 512
+		}
+		heightTiles = renderjob.MissingHeightTiles(int(math.Floor(a.view.X)), int(math.Floor(a.view.Y)), x1, y1, int(a.Width()), int(a.Height()), a.Revision, span, func(key string) bool {
 			t := a.tiles[key]
 			return t != nil && t.Revision == a.Revision && len(t.Heights) > 0
 		})

@@ -5,8 +5,8 @@ import "fmt"
 // MissingHeightTiles plans independently of image tiles. Stable world-aligned
 // keys let a cached picture be revisited after its picking heights are evicted.
 // Each request is bounded before the renderer adds its normal input apron.
-func MissingHeightTiles(x0, y0, x1, y1, worldWidth, worldHeight, revision int, covered func(string) bool) []Tile {
-	const span = 2048
+func MissingHeightTiles(x0, y0, x1, y1, worldWidth, worldHeight, revision, span int, covered func(string) bool) []Tile {
+	span = max(256, min(2048, span))
 	x0 = max(0, min(worldWidth, x0))
 	y0 = max(0, min(worldHeight, y0))
 	x1 = max(0, min(worldWidth, x1))
