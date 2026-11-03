@@ -76,32 +76,6 @@ func (s *SceneRenderer) newWeatherFeed(side, originX, originY int, material bool
 	return f, nil
 }
 
-// copyWeather copies an inclusive rectangle between square GPU feed lattices.
-func (s *SceneRenderer) copyWeather(src, dst *weatherFeed, hit CellRect) error {
-	enc, e := s.gpu.Device.CreateCommandEncoder(nil)
-	if e != nil {
-		return e
-	}
-	width := hit.X1 - hit.X0 + 1
-	for y := hit.Y0; y <= hit.Y1; y++ {
-		a := (y-src.OriginY)*src.Grid + hit.X0 - src.OriginX
-		b := (y-dst.OriginY)*dst.Grid + hit.X0 - dst.OriginX
-		for k := 0; k < 6; k++ {
-			enc.CopyBufferToBuffer(src.Planes, uint64((k*src.Cells+a)*4), dst.Planes, uint64((k*dst.Cells+b)*4), uint64(width*4))
-		}
-		enc.CopyBufferToBuffer(src.Masks, uint64(a*28), dst.Masks, uint64(b*28), uint64(width*28))
-		for k := 0; k < 2; k++ {
-			enc.CopyBufferToBuffer(src.Weather, uint64((k*src.Cells+a)*4), dst.Weather, uint64((k*dst.Cells+b)*4), uint64(width*4))
-		}
-		for k := 0; k < 3; k++ {
-			enc.CopyBufferToBuffer(src.Maps[k], uint64(a*4), dst.Maps[k], uint64(b*4), uint64(width*4))
-		}
-		if src.Field != nil && dst.Field != nil {
-			enc.CopyBufferToBuffer(src.Field, uint64(a*16), dst.Field, uint64(b*16), uint64(width*16))
-		}
-	}
-	return s.gpu.Submit(enc)
-}
 func weatherFeedBytes(side int, material bool) int64 {
 	per := int64(72)
 	if material {
@@ -187,14 +161,10 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 	if c.Grid <= 1168 {
 		core, apron = c.Grid, 0
 	}
-	// The whole-map page already covers the requested window. Borrow its GPU
-	// buffers directly rather than allocating and copying another square feed.
-	if core == c.Grid {
-		if page := s.weatherPages[[2]int{0, 0}]; page != nil {
-			s.weatherTick++
-			page.used = s.weatherTick
-			return &weatherFeed{GPUFeed: page.GPUFeed, borrowedFrom: page}, nil
-		}
+	// Any one cached core can directly feed a contained window. Its ownership
+	// remains in the cache and the render retry protects this borrowed page.
+	if borrowed := s.borrowWeatherPage(region, core); borrowed != nil {
+		return borrowed, nil
 	}
 	// Preflight every missing page before allocating even the gathered feed.
 	// If retained pages consume headroom needed by the exact transient replay,

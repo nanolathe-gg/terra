@@ -38,6 +38,7 @@ type SceneRenderer struct {
 	material                          map[string]any
 	shape                             *ShapeEngine
 	shapeGather                       *Kernel
+	weatherGather                     [3]*Kernel
 	renderer                          *Renderer
 	erosion                           *Erosion
 	weatherPages                      map[[2]int]*weatherFeed
@@ -78,6 +79,7 @@ func NewSceneRenderer(gpu *GPU, config map[string]any, sources map[string]string
 }
 func (s *SceneRenderer) Close() {
 	s.closeShapeGather()
+	s.closeWeatherGather()
 	s.clearWeatherCache()
 	s.clearShapeCache()
 	if s.erosion != nil {
