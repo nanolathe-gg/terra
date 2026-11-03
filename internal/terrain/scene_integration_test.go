@@ -252,5 +252,20 @@ func TestSceneBudgetChangeBoundsPages(t *testing.T) {
 	if err == nil && s.LastRenderProfile().WorkingBytes > 128*1024*1024 {
 		t.Fatalf("tile exceeded 128 MiB: %+v", s.LastRenderProfile())
 	}
+	// Refuse an impossible working set before touching retained textures/buffers.
+	if err = s.UpdateConfig(map[string]any{"gpuBudgetBytes": 1}); err != nil {
+		t.Fatal(err)
+	}
+	region := s.renderer.RequiredRegion(window, true)
+	heights := make([]float32, region.GridWidth*region.GridHeight)
+	resourcesBefore := len(s.renderer.resources)
+	heightBefore := s.renderer.HeightTexture
+	_, err = s.renderer.RenderWindow(context.Background(), WindowInput{Window: window, Region: region, Heights: heights}, options)
+	if err == nil || !strings.Contains(err.Error(), "budget") {
+		t.Fatalf("expected preallocation refusal, got %v", err)
+	}
+	if len(s.renderer.resources) != resourcesBefore || s.renderer.HeightTexture != heightBefore {
+		t.Fatal("budget refusal changed GPU working allocations")
+	}
 	t.Logf("retained before=%d, after authored=%d weather=%d, per-cache budget=%d", before, shapeBytes, weatherBytes, s.cacheBudget())
 }
