@@ -217,10 +217,18 @@ func (a *App) queueView() {
 		}
 	}
 	a.paintTiles()
-	if len(tiles) == 0 {
+	var heightTiles []renderjob.Tile
+	if !interactive && !a.view.Fit {
+		heightTiles = renderjob.MissingHeightTiles(int(math.Floor(a.view.X)), int(math.Floor(a.view.Y)), x1, y1, int(a.Width()), int(a.Height()), a.Revision, func(key string) bool {
+			t := a.tiles[key]
+			return t != nil && t.Revision == a.Revision && len(t.Heights) > 0
+		})
+	}
+	if len(tiles) == 0 && len(heightTiles) == 0 {
 		return
 	}
 	job := a.job("view", tiles)
+	job.HeightTiles = heightTiles
 	job.Interactive = interactive
 	job.Options["Preview"] = a.view.Fit
 	if interactive {
@@ -497,7 +505,7 @@ func (a *App) acceptHeightPatch(m js.Value) {
 	for i := range t.Heights {
 		t.Heights[i] = math.Float32frombits(binary.LittleEndian.Uint32(hb[i*4:]))
 	}
-	key := fmt.Sprintf("height/%g/%g/%d/%d", t.HeightOriginX, t.HeightOriginY, t.HeightWidth, t.HeightHeight)
+	key := m.Get("heightKey").String()
 	if old := a.tiles[key]; old != nil {
 		releaseTile(old)
 	}

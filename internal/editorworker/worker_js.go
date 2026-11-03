@@ -417,32 +417,36 @@ func loop() {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			// Like main, keep the CPU picking copy frozen during a gesture. Refresh
-			// it once for the completed view, after visible images have been delivered.
-			if job.Kind == "view" && !job.RPC && !job.Interactive && job.Options["Preview"] != true && len(job.Tiles) > 0 && ctx.Err() == nil && generation == job.ID {
-				x0, y0, x1, y1 := job.Tiles[0].X, job.Tiles[0].Y, 0, 0
-				for _, t := range job.Tiles {
-					x0 = min(x0, t.X)
-					y0 = min(y0, t.Y)
-					x1 = max(x1, t.X+t.Width)
-					y1 = max(y1, t.Y+t.Height)
-				}
-				w := engine.HeightWindow(terrain.SceneWindow{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0, Scale: 1}, options)
-				r, err := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, w, options)
-				if err != nil {
-					if ctx.Err() == nil {
-						post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+			// Refresh picking independently of visible image replacements. Each
+			// request is bounded and cancellation is checked between tiles.
+			if job.Kind == "view" && !job.RPC && !job.Interactive && job.Options["Preview"] != true {
+				for _, tile := range job.HeightTiles {
+					if ctx.Err() != nil || generation != job.ID {
+						return
 					}
-					return
+					if err := engine.WaitView(ctx); err != nil {
+						if ctx.Err() == nil {
+							post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+						}
+						return
+					}
+					w := engine.HeightWindow(terrain.SceneWindow{X: tile.X, Y: tile.Y, Width: tile.Width, Height: tile.Height, Scale: 1}, options)
+					r, err := engine.Render(ctx, job.Nodes, job.Knobs, job.Colors, w, options)
+					if err != nil {
+						if ctx.Err() == nil {
+							post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+						}
+						return
+					}
+					if ctx.Err() != nil || generation != job.ID {
+						return
+					}
+					hb := make([]byte, len(r.Heights)*4)
+					for i, h := range r.Heights {
+						binary.LittleEndian.PutUint32(hb[i*4:], math.Float32bits(h))
+					}
+					sendBytes(map[string]any{"kind": "heightPatch", "id": job.ID, "revision": job.Revision, "heightKey": tile.Key, "heightWidth": r.HeightWidth, "heightHeight": r.HeightHeight, "heightOriginX": r.HeightOriginX, "heightOriginY": r.HeightOriginY, "heightSpacing": r.HeightSpacing}, "heights", hb)
 				}
-				if generation != job.ID {
-					return
-				}
-				hb := make([]byte, len(r.Heights)*4)
-				for i, h := range r.Heights {
-					binary.LittleEndian.PutUint32(hb[i*4:], math.Float32bits(h))
-				}
-				sendBytes(map[string]any{"kind": "heightPatch", "id": job.ID, "revision": job.Revision, "heightWidth": r.HeightWidth, "heightHeight": r.HeightHeight, "heightOriginX": r.HeightOriginX, "heightOriginY": r.HeightOriginY, "heightSpacing": r.HeightSpacing}, "heights", hb)
 			}
 			post(map[string]any{"kind": "done", "id": job.ID, "session": job.Session, "milliseconds": float64(time.Since(start).Microseconds()) / 1000})
 		}()
