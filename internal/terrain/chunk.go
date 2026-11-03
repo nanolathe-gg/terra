@@ -170,12 +170,20 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 	budget := number(r.Config, "gpuBudgetBytes", number(r.Config, "gpuBudgetMB", number(r.Config, "gpuMB", 512))*1024*1024)
 	cols, rows := reg.Col1-reg.Col0, reg.Row1-reg.Row0
 	meshBytes := (cols+1)*(rows+1)*8 + max(4, cols*rows*24)
-	needed := float64(fw*fh*8+gw*gh*(24+layers*4)+outputW*outputH*12+meshBytes) + float64(r.FixedBytes()) + math.Max(number(r.Config, "gpuReservedBytes", 0), float64(r.reservedGPUBytes))
+	working := fw*fh*8 + gw*gh*(24+layers*4) + outputW*outputH*12 + meshBytes
+	if in.Window.HeightsOnly {
+		working = gw*gh*(24+layers*4) + ((gw*4+255)/256*256)*gh
+	}
+	needed := float64(working) + float64(r.FixedBytes()) + math.Max(number(r.Config, "gpuReservedBytes", 0), float64(r.reservedGPUBytes))
 	if needed > budget {
 		return nil, fmt.Errorf("terrain chunk needs %.1f MB, budget %.1f MB", needed/1048576, budget/1048576)
 	}
 	limit := int(r.GPU.Device.Limits().MaxTextureDimension2D)
-	if max(fw, fh, gw, gh, outputW, outputH) > limit {
+	maxDimension := max(gw, gh)
+	if !in.Window.HeightsOnly {
+		maxDimension = max(maxDimension, fw, fh, outputW, outputH)
+	}
+	if maxDimension > limit {
 		return nil, fmt.Errorf("terrain chunk exceeds %d pixel texture limit", limit)
 	}
 	// The working set belongs to one window. Shared material resources remain resident.
@@ -185,7 +193,10 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 	r.RouteTexture = r.texture("chunk routes", gw, gh, 1, 1, gputypes.TextureFormatRGBA8Unorm, u)
 	r.GridTexture = r.texture("chunk weather", gw, gh, 4, 1, gputypes.TextureFormatRGBA8Unorm, u)
 	r.MaskTexture = r.texture("chunk masks", gw, gh, layers, 1, gputypes.TextureFormatRGBA8Snorm, u)
-	r.FieldsTexture = r.texture("chunk fields", fw, fh, 1, 1, gputypes.TextureFormatRGBA16Float, gputypes.TextureUsageStorageBinding|gputypes.TextureUsageTextureBinding)
+	r.FieldsTexture = nil
+	if !in.Window.HeightsOnly {
+		r.FieldsTexture = r.texture("chunk fields", fw, fh, 1, 1, gputypes.TextureFormatRGBA16Float, gputypes.TextureUsageStorageBinding|gputypes.TextureUsageTextureBinding)
+	}
 	r.maskLayers = layers
 	profile.Width, profile.Height = outputW, outputH
 	profile.GridWidth, profile.GridHeight = gw, gh
@@ -264,6 +275,10 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 		profile.FeedMilliseconds = elapsed(feedStart)
 	}
 	profile.UploadMilliseconds = elapsed(uploadStart) - profile.FeedMilliseconds
+	if in.Window.HeightsOnly {
+		profile.FieldWidth, profile.FieldHeight = 0, 0
+		return nil, nil
+	}
 	r.Set("uGrid", float64(r.Grid))
 	r.Set("uSize", float64(r.Size))
 	r.Set("uChunkGridOrigin", float64(reg.GridX), float64(reg.GridY))

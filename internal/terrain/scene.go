@@ -19,6 +19,7 @@ type SceneWindow struct {
 	ExportArt           bool
 	Preview             bool
 	ReadHeights         bool
+	HeightsOnly         bool
 }
 type SceneResult struct {
 	RGBA                                        []byte
@@ -111,11 +112,21 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 	}
 	nativeGrid := s.renderer.Grid
 	nativeSpacing := float64(s.renderer.Size-1) / float64(nativeGrid-1)
-	if window.Preview && nativeGrid > 512 {
+	if window.Preview && !window.HeightsOnly && nativeGrid > 512 {
 		s.renderer.Grid = 512
 		defer func() { s.renderer.Grid = nativeGrid }()
 	}
 	region := s.renderer.RequiredRegion(window, options.Full)
+	if window.HeightsOnly {
+		spacing := nativeSpacing
+		top := nativeGrid - 1
+		x0 := clampInt(int(math.Floor(float64(window.X)/spacing)), 0, top)
+		y0 := clampInt(int(math.Floor(float64(window.Y)/spacing)), 0, top)
+		x1 := clampInt(int(math.Ceil(float64(window.X+window.Width)/spacing)), 0, top)
+		y1 := clampInt(int(math.Ceil(float64(window.Y+window.Height)/spacing)), 0, top)
+		region = &RenderRegion{GridX: x0, GridY: y0, GridWidth: x1 - x0 + 1, GridHeight: y1 - y0 + 1, GridSpacing: spacing, WorldGrid: nativeGrid, WorldSize: s.renderer.Size}
+	}
+
 	seaLevel := number(s.config, "seaLevel", 0)
 	bounds := vector(s.config, "heightBounds", []float64{seaLevel - 90, seaLevel + 300})
 	shapeDefaults := s.shapeDefaults()
@@ -123,7 +134,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 	var pixels []byte
 	var err error
 	input := WindowInput{Window: window, Region: region, ExportArt: window.ExportArt}
-	if options.Weather && !window.Preview {
+	if options.Weather && (!window.Preview || window.HeightsOnly) {
 		feed, e := s.buildWeatherFeed(ctx, nodes, shapeConfig, shapeConfig.Window, options)
 		if e != nil {
 			return nil, e
@@ -147,7 +158,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 	}
 	rw, rh := region.GridWidth, region.GridHeight
 	var heights []float32
-	if window.ReadHeights {
+	if window.ReadHeights || window.HeightsOnly {
 		gw, gh := pow2(rw), pow2(rh)
 		data, e := s.renderer.ReadTexture(ctx, s.renderer.HeightTexture, gw, gh, 0, 0)
 		if e != nil {
@@ -236,4 +247,12 @@ func (s *SceneRenderer) cacheResidentBytes() int {
 		n += p.bytes
 	}
 	return n
+}
+
+// UniformSnapshot exposes the last terrain draw's values for renderer parity checks.
+func (s *SceneRenderer) UniformSnapshot() map[string][]float64 {
+	if s.renderer == nil {
+		return nil
+	}
+	return s.renderer.UniformSnapshot()
 }

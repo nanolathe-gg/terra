@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSceneWindowAndComparison(t *testing.T) {
@@ -73,6 +74,36 @@ func TestSceneWindowAndComparison(t *testing.T) {
 	if len(weather.RGBA) != 32*32*4 || len(weather.Heights) != weather.HeightWidth*weather.HeightHeight {
 		t.Fatal("invalid weather output dimensions")
 	}
+	normalStart := time.Now()
+	_, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, SceneWindow{X: 16, Y: 16, Width: 32, Height: 32, Scale: 1, ReadHeights: true}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65, Weather: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalElapsed := time.Since(normalStart)
+	start := time.Now()
+	only, err := s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, SceneWindow{X: 16, Y: 16, Width: 32, Height: 32, Scale: 1, HeightsOnly: true}, DrawOptions{Full: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65, Weather: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	elapsedOnly := time.Since(start)
+	if len(only.RGBA) != 0 || len(only.Heights) != only.HeightWidth*only.HeightHeight || s.renderer.FieldsTexture != nil || s.renderer.Color != nil || s.renderer.Depth != nil {
+		t.Fatal("height-only render allocated a color, depth or relief target")
+	}
+	for y := 0; y < only.HeightHeight; y++ {
+		for x := 0; x < only.HeightWidth; x++ {
+			wx := only.HeightOriginX + float64(x)*only.HeightSpacing
+			wy := only.HeightOriginY + float64(y)*only.HeightSpacing
+			ix := int(math.Round((wx - weather.HeightOriginX) / weather.HeightSpacing))
+			iy := int(math.Round((wy - weather.HeightOriginY) / weather.HeightSpacing))
+			if ix < 0 || iy < 0 || ix >= weather.HeightWidth || iy >= weather.HeightHeight {
+				t.Fatal("normal render does not cover height-only sample")
+			}
+			if math.Float32bits(only.Heights[y*only.HeightWidth+x]) != math.Float32bits(weather.Heights[iy*weather.HeightWidth+ix]) {
+				t.Fatalf("height-only sample differs at %d,%d", x, y)
+			}
+		}
+	}
+	t.Logf("normal warm weathered tile: %s; height-only warm tile: %s, %dx%d samples", normalElapsed, elapsedOnly, only.HeightWidth, only.HeightHeight)
 	if s.weatherRuns != 1 {
 		t.Fatalf("weather runs=%d want 1", s.weatherRuns)
 	}
@@ -120,6 +151,21 @@ func TestSceneWindowAndComparison(t *testing.T) {
 			}
 		}
 	}
+	// A 40x40 map height tile stays bounded to its requested native lattice.
+	oldSize, oldGrid := s.renderer.Size, s.renderer.Grid
+	s.renderer.Size, s.renderer.Grid = 20768, 10384
+	start = time.Now()
+	large, err := s.Render(context.Background(), nil, nil, nil, SceneWindow{X: 10000, Y: 10000, Width: 256, Height: 256, Scale: 1, HeightsOnly: true}, DrawOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	largeElapsed := time.Since(start)
+	profile := s.LastRenderProfile()
+	if large.HeightWidth > 132 || large.HeightHeight > 132 || len(large.RGBA) != 0 || profile.FieldWidth != 0 || profile.WorkingBytes > 64*1024*1024 {
+		t.Fatalf("unbounded large height tile: %dx%d %+v", large.HeightWidth, large.HeightHeight, profile)
+	}
+	t.Logf("40x40 height tile: %s, %dx%d samples, %d working bytes", largeElapsed, large.HeightWidth, large.HeightHeight, profile.WorkingBytes)
+	s.renderer.Size, s.renderer.Grid = oldSize, oldGrid
 	cmp, e := s.CompareRegions(context.Background(), nodes, nil)
 	if e != nil {
 		t.Fatal(e)
