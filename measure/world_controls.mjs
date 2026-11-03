@@ -150,7 +150,7 @@ try {
   // card: a Face width fills a smaller stroke's reach, leaving a lean no room, and the overlaps cut the deep stroke through the plateau, the steep ground Style: face rock acts on there.
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
-  const sandOver = () => [170, 500].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
+  const sandOver = () => [170, 500, 830].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? '  !' : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
   const add = r => { rows.push(r); if (process.stdout.isTTY || !process.env.QUIET) console.log(fmt(r)); };
   for (const world of WORLDS) {
