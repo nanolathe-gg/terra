@@ -25,9 +25,13 @@ type ErosionResult struct {
 }
 
 func (e *ErosionResult) Close() {
-	e.Weather.Release()
+	if e.Weather != nil {
+		e.Weather.Release()
+	}
 	for _, m := range e.Maps {
-		m.Release()
+		if m != nil {
+			m.Release()
+		}
 	}
 }
 
@@ -42,13 +46,18 @@ type Erosion struct {
 func (r *Renderer) NewErosion() (*Erosion, error) {
 	e := &Erosion{Renderer: r, kernels: map[string]*Kernel{}, feed: map[string]*Kernel{}, field: map[string]*Kernel{}}
 	source := Preprocess(r.Sources["engine-erosion.wgsl"], r.Sources["engine-common.wgsl"], map[string]bool{"EROSION": true})
-	for _, entry := range []string{"offsetMain", "fluxMain", "waterMain", "exchangeMain", "settleMain", "carryMain", "thermalMain"} {
-		k, err := r.GPU.Kernel(source, entry)
-		if err != nil {
-			return nil, err
-		}
-		e.kernels[entry] = k
+	var err error
+	e.kernels, err = sharedErosionKernels(r.GPU, source)
+	if err != nil {
+		return nil, err
 	}
+	ready := false
+	defer func() {
+		if !ready {
+			e.Close()
+		}
+	}()
+
 	for _, entry := range []string{"seedMain", "tileFlagMain", "tileListMain", "tileArgsMain", "refinedMain"} {
 		k, err := r.GPU.Kernel(r.Sources["engine-feed.wgsl"], entry)
 		if err != nil {
@@ -62,6 +71,7 @@ func (r *Renderer) NewErosion() (*Erosion, error) {
 		return nil, err
 	}
 	e.maps = k
+	ready = true
 	return e, nil
 }
 func (e *Erosion) Close() {
@@ -71,14 +81,18 @@ func (e *Erosion) Close() {
 			all = append(all, k)
 		}
 	}
+	layouts := map[*wgpu.BindGroupLayout]bool{}
 	for _, k := range all {
 		if k == nil {
 			continue
 		}
 		k.Pipeline.Release()
 		for _, l := range k.Layouts {
-			l.Release()
+			layouts[l] = true
 		}
+	}
+	for l := range layouts {
+		l.Release()
 	}
 }
 func FeedUniform(g *GPU, values map[string]float64) (*wgpu.Buffer, error) {
@@ -95,6 +109,12 @@ func FeedUniform(g *GPU, values map[string]float64) (*wgpu.Buffer, error) {
 	return g.Buffer("feed uniform", b, gputypes.BufferUsageUniform)
 }
 func (e *Erosion) RunGPU(ctx context.Context, q ErosionRequest) (result *ErosionResult, err error) {
+	var ownedResult *ErosionResult
+	defer func() {
+		if err != nil && ownedResult != nil {
+			ownedResult.Close()
+		}
+	}()
 	defer recoverError(&err)
 	defer e.Renderer.GPU.scope()(&err)
 	if q.Grid < 2 || q.Planes == nil || q.Masks == nil {
@@ -144,6 +164,7 @@ func (e *Erosion) RunGPU(ctx context.Context, q ErosionRequest) (result *Erosion
 	params := uniformBuf("erosion params", []float32{float32(q.Grid), float32(spacing), float32(rain), .12, .85, .3, .5, .3, .01, .01, float32(r.num("columnContrast", 1)), 15, float32(math.Tan(q.TalusAngle * math.Pi / 180)), float32(math.Min(q.TalusAngle, 85) * math.Pi / 180), float32(80 * math.Pi / 180), .05, float32(q.Ox), float32(q.Oy), 0, 0})
 	weather := must(g.Allocate("time height", uint64(n*8), storageUsage))
 	result = &ErosionResult{Weather: weather, Grid: q.Grid}
+	ownedResult = result
 	for i := range result.Maps {
 		result.Maps[i] = must(g.Allocate("time map", uint64(n*4), storageUsage))
 	}
@@ -181,22 +202,34 @@ func (e *Erosion) RunGPU(ctx context.Context, q ErosionRequest) (result *Erosion
 	binding := func(src, dst, fin, fout *wgpu.Buffer) Bindings {
 		return Bindings{0: {{Binding: 0, Buffer: r.UniformBuffer}}, 1: {{Binding: 0, Buffer: params}, {Binding: 1, Buffer: src}, {Binding: 2, Buffer: dst}, {Binding: 3, Buffer: fin}, {Binding: 4, Buffer: fout}, {Binding: 5, Buffer: vel}, {Binding: 6, Buffer: acc}, {Binding: 7, Buffer: fixed}, {Binding: 8, Buffer: tileList}}}
 	}
-	flux := binding(state[0], state[1], fluxA, fluxB)
-	water := binding(state[0], state[2], fluxB, fluxA)
-	exchange := binding(state[2], state[1], fluxA, fluxB)
-	carry := binding(state[1], state[0], fluxA, fluxB)
-	thermalA, thermalB := flux, binding(state[1], state[0], fluxA, fluxB)
-	step := func(name string, b Bindings) {
-		indirect := tileArgs
-		if name == "offsetMain" {
-			indirect = nil
-		}
-		run(e.kernels[name], b, groups, groups, indirect)
+	cached := func(b Bindings) map[uint32]*wgpu.BindGroup {
+		set := must(g.Groups(e.kernels["fluxMain"], b))
+		allGroups = append(allGroups, set)
+		return set
 	}
+	flux := cached(binding(state[0], state[1], fluxA, fluxB))
+	water := cached(binding(state[0], state[2], fluxB, fluxA))
+	exchange := cached(binding(state[2], state[1], fluxA, fluxB))
+	carry := cached(binding(state[1], state[0], fluxA, fluxB))
+	thermalA, thermalB := flux, carry
+	erosionPass := must(enc.BeginComputePass(&wgpu.ComputePassDescriptor{Label: "erosion"}))
+	erosionPass.SetBindGroup(0, flux[0], nil)
+	step := func(name string, set map[uint32]*wgpu.BindGroup) {
+		erosionPass.SetPipeline(e.kernels[name].Pipeline)
+		erosionPass.SetBindGroup(1, set[1], nil)
+		if name == "offsetMain" {
+			erosionPass.Dispatch(groups, groups, 1)
+		} else {
+			erosionPass.DispatchIndirect(tileArgs, 0)
+		}
+	}
+
 	step("offsetMain", flux)
 	for i := 0; i < age; i++ {
 		if i%16 == 0 {
 			if err = ctx.Err(); err != nil {
+				check(erosionPass.End())
+				enc.DiscardEncoding()
 				return nil, err
 			}
 		}
@@ -210,9 +243,10 @@ func (e *Erosion) RunGPU(ctx context.Context, q ErosionRequest) (result *Erosion
 		step("thermalMain", thermalB)
 	}
 	step("settleMain", thermalA)
-	for _, b := range []Bindings{thermalB, thermalA, thermalB, thermalA} {
+	for _, b := range []map[uint32]*wgpu.BindGroup{thermalB, thermalA, thermalB, thermalA} {
 		step("thermalMain", b)
 	}
+	check(erosionPass.End())
 	run(e.feed["refinedMain"], res, groups, groups, nil)
 	wet, talus, wear, flow := q.WetReach, q.TalusFull, q.WearFull, q.FlowK
 	if wet == 0 {
@@ -243,6 +277,12 @@ type MaterialFieldRequest struct {
 }
 
 func (e *Erosion) MaterialField(q MaterialFieldRequest) (field *wgpu.Buffer, err error) {
+	defer func() {
+		if err != nil && field != nil {
+			field.Release()
+			field = nil
+		}
+	}()
 	defer recoverError(&err)
 	defer e.Renderer.GPU.scope()(&err)
 	r, g := e.Renderer, e.Renderer.GPU
@@ -332,4 +372,52 @@ func (e *Erosion) MaterialField(q MaterialFieldRequest) (field *wgpu.Buffer, err
 	run("mfCombineMain", []uint32{1, 2, 5, 10, 11, 12, 13, 14}, []*wgpu.Buffer{height, src, basin, field, settled, broad, runoff, soft}, u0, groups, groups)
 	check(g.Submit(enc))
 	return field, nil
+}
+
+// The original Time pass shares one explicit layout across all erosion entries.
+// Reusing it keeps four bind groups and one compute pass across every iteration.
+func sharedErosionKernels(g *GPU, source string) (map[string]*Kernel, error) {
+	uniform := gputypes.BufferBindingTypeUniform
+	read := gputypes.BufferBindingTypeReadOnlyStorage
+	write := gputypes.BufferBindingTypeStorage
+	entry := func(binding uint32, typ gputypes.BufferBindingType) gputypes.BindGroupLayoutEntry {
+		return gputypes.BindGroupLayoutEntry{Binding: binding, Visibility: gputypes.ShaderStageCompute, Buffer: &gputypes.BufferBindingLayout{Type: typ}}
+	}
+	l0, err := g.Device.CreateBindGroupLayout(&wgpu.BindGroupLayoutDescriptor{Label: "erosion world", Entries: []gputypes.BindGroupLayoutEntry{entry(0, uniform)}})
+	if err != nil {
+		return nil, err
+	}
+	l1, err := g.Device.CreateBindGroupLayout(&wgpu.BindGroupLayoutDescriptor{Label: "erosion", Entries: []gputypes.BindGroupLayoutEntry{entry(0, uniform), entry(1, read), entry(2, write), entry(3, read), entry(4, write), entry(5, write), entry(6, write), entry(7, write), entry(8, read)}})
+	if err != nil {
+		l0.Release()
+		return nil, err
+	}
+	layout, err := g.Device.CreatePipelineLayout(&wgpu.PipelineLayoutDescriptor{BindGroupLayouts: []*wgpu.BindGroupLayout{l0, l1}})
+	if err != nil {
+		l0.Release()
+		l1.Release()
+		return nil, err
+	}
+	defer layout.Release()
+	module, err := g.Shader("erosion", source)
+	if err != nil {
+		l0.Release()
+		l1.Release()
+		return nil, err
+	}
+	defer module.Release()
+	out := map[string]*Kernel{}
+	for _, name := range []string{"offsetMain", "fluxMain", "waterMain", "exchangeMain", "settleMain", "carryMain", "thermalMain"} {
+		p, err := g.Device.CreateComputePipeline(&wgpu.ComputePipelineDescriptor{Label: name, Layout: layout, Module: module, EntryPoint: name})
+		if err != nil {
+			for _, k := range out {
+				k.Pipeline.Release()
+			}
+			l0.Release()
+			l1.Release()
+			return nil, err
+		}
+		out[name] = &Kernel{Pipeline: p, Layouts: []*wgpu.BindGroupLayout{l0, l1}}
+	}
+	return out, nil
 }
