@@ -14,6 +14,9 @@ import (
 )
 
 type Renderer struct {
+	cachedSamplerGroup, cachedMaterialGroup                                                                                      *wgpu.BindGroup
+	cachedMaterialTextures                                                                                                       [4]*wgpu.Texture
+	cachedMaterialViews                                                                                                          []*wgpu.TextureView
 	presentation                                                                                                                 interface{ Release() }
 	reservedGPUBytes                                                                                                             int
 	materialReady                                                                                                                bool
@@ -202,6 +205,11 @@ func NewRenderer(g *GPU, config map[string]any, sources map[string]string, mater
 	return r, nil
 }
 func (r *Renderer) Close() {
+	r.releaseMaterialBindings()
+	if r.cachedSamplerGroup != nil {
+		r.cachedSamplerGroup.Release()
+		r.cachedSamplerGroup = nil
+	}
 	if r.presentation != nil {
 		r.presentation.Release()
 		r.presentation = nil
@@ -493,8 +501,7 @@ func (r *Renderer) Render(o DrawOptions) (err error) {
 	}
 	draw := r.common(false)
 	defer draw.Release()
-	mat := must(r.GPU.Device.CreateBindGroup(&wgpu.BindGroupDescriptor{Layout: r.MaterialLayout, Entries: []wgpu.BindGroupEntry{{Binding: 0, TextureView: r.view(r.Grass, false, -1)}, {Binding: 1, Sampler: r.NearestRepeat}, {Binding: 18, TextureView: r.view(r.Palette, false, -1)}, {Binding: 19, TextureView: r.view(r.Generated, true, -1)}, {Binding: 20, TextureView: r.view(r.Relief, false, -1)}}}))
-	defer mat.Release()
+	mat := r.materialGroup()
 	p.SetBindGroup(0, draw, nil)
 	p.SetBindGroup(1, mat, nil)
 	p.SetBindGroup(2, r.samplerGroup(), nil)
@@ -539,9 +546,40 @@ func (r *Renderer) ReadTexture(ctx context.Context, t *wgpu.Texture, w, h, layer
 }
 
 func (r *Renderer) samplerGroup() *wgpu.BindGroup {
-	bg := must(r.GPU.Device.CreateBindGroup(&wgpu.BindGroupDescriptor{Layout: r.SamplerLayout, Entries: []wgpu.BindGroupEntry{{Binding: 7, Sampler: r.LinearClamp}, {Binding: 8, Sampler: r.LinearRepeat}}}))
-	r.own(bg)
-	return bg
+	if r.cachedSamplerGroup == nil {
+		r.cachedSamplerGroup = must(r.GPU.Device.CreateBindGroup(&wgpu.BindGroupDescriptor{Layout: r.SamplerLayout, Entries: []wgpu.BindGroupEntry{{Binding: 7, Sampler: r.LinearClamp}, {Binding: 8, Sampler: r.LinearRepeat}}}))
+	}
+	return r.cachedSamplerGroup
+}
+func (r *Renderer) releaseMaterialBindings() {
+	if r.cachedMaterialGroup != nil {
+		r.cachedMaterialGroup.Release()
+		r.cachedMaterialGroup = nil
+	}
+	for _, view := range r.cachedMaterialViews {
+		view.Release()
+	}
+	r.cachedMaterialViews = nil
+}
+func (r *Renderer) materialGroup() *wgpu.BindGroup {
+	textures := [4]*wgpu.Texture{r.Grass, r.Palette, r.Generated, r.Relief}
+	if r.cachedMaterialGroup != nil && r.cachedMaterialTextures == textures {
+		return r.cachedMaterialGroup
+	}
+	r.releaseMaterialBindings()
+	entries := []wgpu.BindGroupEntry{{Binding: 1, Sampler: r.NearestRepeat}}
+	for i, binding := range []uint32{0, 18, 19, 20} {
+		desc := &wgpu.TextureViewDescriptor{}
+		if binding == 19 {
+			desc.Dimension = gputypes.TextureViewDimension2DArray
+		}
+		view := must(r.GPU.Device.CreateTextureView(textures[i], desc))
+		r.cachedMaterialViews = append(r.cachedMaterialViews, view)
+		entries = append(entries, wgpu.BindGroupEntry{Binding: binding, TextureView: view})
+	}
+	r.cachedMaterialTextures = textures
+	r.cachedMaterialGroup = must(r.GPU.Device.CreateBindGroup(&wgpu.BindGroupDescriptor{Layout: r.MaterialLayout, Entries: entries}))
+	return r.cachedMaterialGroup
 }
 
 func (r *Renderer) defines(bake bool) map[string]bool {
