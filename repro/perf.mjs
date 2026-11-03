@@ -22,8 +22,28 @@ const server = opt('--server', 'http://127.0.0.1:8867'), port = Number(opt('--po
 const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out', 'perf-out'), label = opt('--label', '');
 const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : fallback; };
 const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
+const diagnosticGPU = flag('--diagnostic-gpu'), verifyPixels = flag('--verify-pixels'), selfTest = flag('--self-test');
 const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
 const dragTool = opt('--tool', 'hill');   // H27: the brush the drag draws (hill, or landform to measure it beside a hill)
+// A matching presentation must be a real tile drawing from the move's source
+// revision or newer, intersecting the brush footprint and the visible viewport.
+function matchesPresentation(p, move, revision, viewport) {
+  return p.type === 'presented' && p.t >= move.t && Number.isFinite(p.revision) && p.revision >= revision &&
+    Number.isFinite(p.x) && Number.isFinite(p.y) && p.width > 0 && p.height > 0 &&
+    p.x < move.worldX + move.radius && p.x + p.width > move.worldX - move.radius &&
+    p.y < move.worldY + move.radius && p.y + p.height > move.worldY - move.radius &&
+    Number.isFinite(p.screenX) && Number.isFinite(p.screenY) && p.screenWidth > 0 && p.screenHeight > 0 &&
+    p.screenX < viewport.width && p.screenX + p.screenWidth > 0 &&
+    p.screenY < viewport.height && p.screenY + p.screenHeight > 0;
+}
+if (selfTest) {
+  const m = {t:10, worldX:30, worldY:30, radius:5}, v = {width:100,height:100};
+  const p = {type:'presented',t:12,revision:2,x:20,y:20,width:20,height:20,screenX:20,screenY:20,screenWidth:20,screenHeight:20};
+  if (!matchesPresentation(p,m,2,v) || matchesPresentation({...p,revision:1},m,2,v) ||
+      matchesPresentation({...p,x:60},m,2,v) || matchesPresentation({...p,screenX:120},m,2,v) ||
+      matchesPresentation({...p,type:'bake-end'},m,2,v) || matchesPresentation({...p,t:9},m,2,v)) throw Error('presentation matching self-test failed');
+  console.log('presentation matching self-test passed'); process.exit(0);
+}
 const [mode] = args;
 if (!['map4', 'map8', 'map16', 'map40'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|map16|map40> --scene <scene.json> --out <dir>'); process.exit(1); }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
@@ -33,15 +53,41 @@ const q = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) =
 
 // ---------------------------------------------------------------- hooks, installed before the page's own scripts
 const HOOKS = `(() => {
+const diagnosticGPU = ${diagnosticGPU}, verifyPixels = ${verifyPixels};
+const bitmapInfo = new WeakMap(), canvasInfo = new WeakMap();
 const P = window.__perf = {workerProfiles: [], worker: false, ev: [], gpu: [], passes: [], waits: [], images: [], draws: [], frames: [], stage: {}, ctx: ''};
 const now = () => performance.now();
 const ev = (type, data) => P.ev.push({t: now(), type, ...data});
-P.mark = ev;
+const probes = new Map();
+const probe = m => {
+  const c = document.getElementById('terrain') || document.getElementById('map');
+  if (!c || !Number.isFinite(m.screenX) || !Number.isFinite(m.screenY)) return null;
+  const x=Math.max(0,Math.min(c.width-16,Math.floor(m.screenX)-8)), y=Math.max(0,Math.min(c.height-16,Math.floor(m.screenY)-8));
+  if(c.width<16 || c.height<16)return null;
+  return c.getContext('2d').getImageData(x,y,16,16).data;
+};
+P.mark = (type, data) => {
+  ev(type,data);
+  if(!verifyPixels)return;
+  if(type==='move') { try { probes.set(data.k,{...data,before:probe(data)}); } catch(e) { ev('pixel-probe-error',{message:String(e)}); } }
+  if(type==='rev' && probes.has(data.k)) probes.get(data.k).revision=data.rev;
+};
+P.present = d => {
+  ev('presented',d);
+  if(!verifyPixels)return;
+  for(const [k,m] of probes) {
+    if(m.revision==null || d.revision==null || d.revision<m.revision || !m.before ||
+       !(d.x<m.worldX+m.radius && d.x+d.width>m.worldX-m.radius && d.y<m.worldY+m.radius && d.y+d.height>m.worldY-m.radius)) continue;
+    try { const after=probe(m); if(after && after.some((v,i)=>v!==m.before[i])) { ev('pixel-change',{k,revision:d.revision}); probes.delete(k); } }
+    catch(e) { ev('pixel-probe-error',{message:String(e)}); probes.delete(k); }
+  }
+};
 const add = (name, ms) => { const s = P.stage[name] ??= {n: 0, ms: 0, max: 0}; s.n++; s.ms += ms; s.max = Math.max(s.max, ms); };
 P.add = add;
 // The Go worker owns its GPU device; public tile telemetry crosses that boundary.
 window.addEventListener('terraform-render', event => {
  const d=event.detail||{},t=now();P.worker=true;
+ if(d.phase==='presented') { P.present(d); return; }
  if(d.phase==='start') {ev('bake-start',{x:d.x,y:d.y,w:d.width,h:d.height,level:d.scale??1,id:d.id,rev:d.revision});return;}
  if(d.phase==='tile'||d.phase==='end') {
   const p=d.profile||{};ev('bake-end',{x:d.x,y:d.y,ms:d.milliseconds??p.TotalMilliseconds??0,level:d.scale??1,id:d.id,rev:d.revision});
@@ -52,7 +98,9 @@ window.addEventListener('terraform-render', event => {
  }
  ev('worker-'+d.phase,d);
 });
-// ---- GPU: timestamps on every pass without its own, waits on the queue, submits
+// ---- Optional original-only diagnostics. End-to-end runs do not instrument GPU passes.
+P.readPasses = async () => ({});
+if (diagnosticGPU) {
 const devices = new WeakMap();
 const cd = GPUDevice.prototype.createCommandEncoder;
 const ring = new WeakMap();   // device -> {qs, resolve, next}
@@ -69,8 +117,8 @@ GPUDevice.prototype.createCommandEncoder = function (d) { const e = cd.call(this
 for (const kind of ['Compute', 'Render']) {
   const orig = GPUCommandEncoder.prototype['begin' + kind + 'Pass'];
   GPUCommandEncoder.prototype['begin' + kind + 'Pass'] = function (desc = {}) {
-    const device = devices.get(this), r = device && slots(device);
-    if (!r || desc.timestampWrites || r.next >= r.count) return orig.call(this, desc);
+    const device = devices.get(this), r = diagnosticGPU && device && slots(device);
+    if (!diagnosticGPU || !r || desc.timestampWrites || r.next >= r.count) return orig.call(this, desc);
     const i = r.next++, enc = this, endWrite = kind === 'Compute' ? 'endOfPassWriteIndex' : 'endOfPassWriteIndex';
     const pass = orig.call(this, {...desc, timestampWrites: {querySet: r.qs, beginningOfPassWriteIndex: 2 * i, [endWrite]: 2 * i + 1}});
     P.passes[i] = {label: desc.label || kind, kind, ctx: P.ctx};
@@ -99,16 +147,22 @@ qp.onSubmittedWorkDone = function () {
   const t = now(), ctx = P.ctx;
   return done.call(this).then(v => { const ms = now() - t; P.waits.push({t, ms, ctx}); add('queue wait | ' + ctx, ms); return v; });
 };
+}
 // ---- display canvas paints: ImageBitmap draws are chunks, other draws are the overview
 const di = CanvasRenderingContext2D.prototype.drawImage;
 CanvasRenderingContext2D.prototype.drawImage = function (src, ...rest) {
+  const result = di.call(this, src, ...rest);
   if (this.canvas?.id === 'terrain' || this.canvas?.id === 'map' || this.canvas?.dataset?.map !== undefined || this.canvas?.parentElement?.id === 'stage') {
-    P.draws.push({t: now(), chunk: src instanceof ImageBitmap || (P.worker && src instanceof HTMLCanvasElement), x: rest.length === 5 ? rest[0] : null});
+    const info = bitmapInfo.get(src);
+    P.draws.push({t: now(), chunk: src instanceof ImageBitmap || (P.worker && src instanceof HTMLCanvasElement), x: rest[0] ?? null});
+    // A bitmap is tagged at the exact renderChunk result used to create it.
+    // Cached paints keep their old source revision; they cannot impersonate a fresh bake.
+    if (!P.worker && info && rest.length >= 4) P.present({...info, screenX:rest[0],screenY:rest[1],screenWidth:rest[2],screenHeight:rest[3]});
   }
-  return di.call(this, src, ...rest);
+  return result;
 };
 const cib = window.createImageBitmap;
-window.createImageBitmap = function (...a) { const t = now(); return cib.apply(window, a).then(v => { add('bitmap copy', now() - t); return v; }); };
+window.createImageBitmap = function (...a) { const t = now(), info = canvasInfo.get(a[0]); return cib.apply(window, a).then(v => { if(info) bitmapInfo.set(v, info); add('bitmap copy', now() - t); return v; }); };
 // ---- main-thread long tasks (over 50 ms): what blocks the page while a queue wait looks like GPU time
 P.long = []; P.callers = {};
 try { new PerformanceObserver(list => { for (const e of list.getEntries()) P.long.push({t: e.startTime, ms: e.duration}); }).observe({type: 'longtask', buffered: true}); } catch (e) {}
@@ -134,7 +188,7 @@ function patch(c) {
   const rc = r.renderChunk.bind(r);
   r.renderChunk = async (request, options) => {
     const t = now(); ev('bake-start', {x: request.x, y: request.y, w: request.width, h: request.height, level: options?.scale ?? 1}); const prev = P.ctx; P.ctx = 'chunk';
-    try { return await rc(request, options); } finally { P.ctx = prev; ev('bake-end', {x: request.x, y: request.y, ms: now() - t, rev: options?.feed?.revision ?? null, level: options?.scale ?? 1}); add('chunk bake (wall)', now() - t); }
+    try { const result = await rc(request, options); const rev = options?.feed?.revision ?? request?.revision ?? null; if(result?.canvas) canvasInfo.set(result.canvas, {x:request.x,y:request.y,width:request.width,height:request.height,scale:options?.scale??1,revision:rev}); return result; } finally { P.ctx = prev; ev('bake-end', {x: request.x, y: request.y, ms: now() - t, rev: options?.feed?.revision ?? request?.revision ?? null, level: options?.scale ?? 1}); add('chunk bake (wall)', now() - t); }
   };
   wrap(r, 'upload', 'field upload (CPU pack + write)');
   wrap(Base, 'draw', 'draw + bake encode (CPU)');
@@ -201,7 +255,7 @@ const ev = async expression => { const r = await Promise.race([send('Runtime.eva
 const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
 
 const url = `${server}/sculpt?biome=${scene.biome || 'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
-const result = {mode, label, query: extraQuery, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
+const result = {mode, label, query: extraQuery, scene: sceneFile, diagnosticGPU, verifyPixels, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
 const stable = async (quietMs = 1500, limitMs = 120000) => {
   if(await ev('Boolean(window.sculptCanvas?.stats?.().worker)')){await ev('sculptCanvas.idle()');return true;}   // wait for no bake/erode/read event for quietMs
   const t0 = Date.now();
@@ -232,7 +286,7 @@ function analyse(events, visible, t0) {
     if (last) { finalAll = Math.max(finalAll, last.end - t0); if (weatherReady !== null && last.start - t0 < weatherReady - 1) staleFinal++; } else missing++;
   }
   const erode = events.filter(e => e.type === 'erode-end').map(e => e.t - t0);
-  return {weatherReady, finalInView: finalAll, shownInView: shownAll, visibleWithoutFinal: missing, quarterBakes: [...bakes.values()].reduce((n, l) => n + l.filter(b => b.level > 1).length, 0), chunksNotFinalAfterWeather: staleFinal, bakeCount: [...bakes.values()].reduce((n, l) => n + l.length, 0), erodeEnds: erode, visible: perChunk};
+  return {weatherReady, finalInView: missing ? null : finalAll, completionNote: 'Fresh bakes observed; missing tiles may be retained and cannot be certified by this event log.', shownInView: shownAll, visibleWithoutFinal: missing, quarterBakes: [...bakes.values()].reduce((n, l) => n + l.filter(b => b.level > 1).length, 0), chunksNotFinalAfterWeather: staleFinal, bakeCount: [...bakes.values()].reduce((n, l) => n + l.length, 0), erodeEnds: erode, visible: perChunk};
 }
 const splitStages = async () => {
   const workerProfiles=await ev('__perf.workerProfiles'),stage = await ev('__perf.stage'), passes = await ev('__perf.readPasses()'), waits = await ev('__perf.waits.map(w=>w.ms)');
@@ -280,14 +334,20 @@ try {
   await ev(`document.querySelector('[data-tool="${dragTool}"]').click(); true`);
   await reset();
   const cx = box.x + box.w * .35, cy = box.y + box.h * .5;
+  const drawSize = Number(opt2('--diameter', 0)); if (drawSize) await ev(`(() => { const d = document.getElementById('diameter'); d.value = ${drawSize}; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })(); true`);
+  const brushDiameter = await ev(`Number(document.getElementById('diameter')?.value || 0)`);
+  if (!(brushDiameter > 0)) throw new Error('Cannot establish brush footprint');
+  const dragView = await ev('sculptCanvas.view()');
+  const viewportPixels = await ev(`(() => { const c = document.getElementById('terrain') || document.getElementById('map'); return {width:c.width,height:c.height}; })()`);
   await ev('__perf.frameStart(); true');
   const dragT0 = await ev('performance.now()'), dragWall = Date.now();
   await mouse('mousePressed', cx, cy);
   // H6b: move-to-picture latency. Each move is marked before it is sent and with the fields' revision after it was handled; a bake carries the
   // revision of the fields it read (a fed bake: the revision submitted when it took the buffers; a CPU bake: the last region read before it); the
   // picture is the first chunk paint after that bake ends.
-  const drawSize = Number(opt2('--diameter', 0)); if (drawSize) await ev(`(() => { const d = document.getElementById('diameter'); d.value = ${drawSize}; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })(); true`);
-  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; await ev(`__perf.mark('move', {k: ${i}})`); await mouse('mouseMoved', cx + i * 9, cy + Math.sin(i / 6) * 60); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats?.()?.revision ?? window.sculptCanvas?.stats().revision ?? null})`); await sleep(30); }
+  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; await ev(`__perf.mark('move', {k: ${i}, worldX: ${dragView.x + (cx + i * 9 - box.x) / dragView.scale}, worldY: ${dragView.y + (cy + Math.sin(i / 6) * 60 - box.y) / dragView.scale}, radius: ${brushDiameter / 2}, screenX: ${cx + i * 9 - box.x}, screenY: ${cy + Math.sin(i / 6) * 60 - box.y}})`); await mouse('mouseMoved', cx + i * 9, cy + Math.sin(i / 6) * 60); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats?.()?.revision ?? window.sculptCanvas?.stats().revision ?? null})`); await sleep(30); }
+  // Keep the pointer held while the final move has an opportunity to present.
+  await sleep(500);
   const frames = await ev('__perf.frameStop()');
   const dragEnd = await ev('performance.now()');
   const dragDraws = (await ev('__perf.draws')).filter(d => d.t >= dragT0 && d.t <= dragEnd);
@@ -298,28 +358,21 @@ try {
     const marks = new Map(); for (const e of events) { if (e.type === 'move') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).t = e.t; if (e.type === 'rev') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).rev = e.rev; }
     const bakes = []; let lastRead = null;
     for (const e of events) { if (e.type === 'read') lastRead = e; if (e.type === 'bake-end') { const start = e.t - e.ms, read = events.filter(r => r.type === 'read' && r.t <= start).at(-1); bakes.push({end: e.t, rev: e.rev ?? read?.rev ?? null, key: e.x + ',' + e.y, level: e.level ?? 1}); } }
-    const lat = [], share = []; let censored = 0;
+    const presented = events.filter(e => e.type === 'presented');
+    const moveEvents = new Map(events.filter(e => e.type === 'move').map(e => [e.k, e]));
+    const lat = []; let censored = 0;
     for (const [k, m] of marks) {
-      if (m.t === undefined || m.rev == null) continue;
-      const b = bakes.find(b => b.end >= m.t && b.rev != null && b.rev >= m.rev), d = b && draws.find(d => d.t >= b.end);
-      if (!d) { censored++; continue; }
-      lat.push(d.t - m.t);
-      const run = runs.find(r => r.t >= m.t - 1 && r.doneAt); if (run) share.push((run.doneAt - m.t) / (d.t - m.t));
+      const move = moveEvents.get(k);
+      if (m.t === undefined || m.rev == null || !move) { censored++; continue; }
+      const p = presented.find(p => matchesPresentation(p, move, m.rev, viewportPixels));
+      if (!p) { censored++; continue; }
+      lat.push(p.t - m.t);
     }
     writeFileSync(`${out}/${mode}-events-drag.json`, JSON.stringify({t0: dragT0, events, draws}));
-    // H7b: the first picture is only the first dirty chunk to show the move. 'All' waits for every chunk the drag keeps rebaking (one that
-    // baked at least 10 times) to show it, which is what a picture of the whole edit needs.
-    const counts = {}; for (const b of bakes) counts[b.key] = (counts[b.key] ?? 0) + 1;
-    const dirty = Object.keys(counts).filter(k => counts[k] >= 10), all = [];
-    for (const [k, m] of marks) {
-      if (m.t === undefined || m.rev == null || !dirty.length) continue;
-      let worst = 0, ok = true;
-      for (const key of dirty) { const b = bakes.find(b => b.key === key && b.end >= m.t && b.rev != null && b.rev >= m.rev), d = b && draws.find(d => d.t >= b.end); if (!d) { ok = false; break; } worst = Math.max(worst, d.t - m.t); }
-      if (ok) all.push(worst);
-    }
-    result.drag.latencyAll = {dirtyChunks: dirty.length, measured: all.length, p50: q(all, .5), p95: q(all, .95), max: Math.max(...all, 0)};
+    result.drag.latencyAll = {available: false, reason: 'Whole-dirty-region presentation is not certified by tile counts; unchanged cached tiles may remain valid.'};
+    if (verifyPixels) { const changed = new Set(events.filter(e => e.type === 'pixel-change').map(e => e.k)); result.drag.pixelProbe = {size: '16x16 at pointer', verified: changed.size, unverified: moves - changed.size, errors: events.filter(e => e.type === 'pixel-probe-error').length, note: 'Diagnostic only: canvas readback can perturb performance.'}; }
     result.drag.quarterBakes = bakes.filter(b => b.level > 1).length; result.drag.bakes = bakes.length;
-    result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), shapeShareP50: q(share, .5), shapeShareP95: q(share, .95), shapeShareN: share.length};
+    result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), basis: 'matching source revision, actual bitmap draw, visible tile intersects brush footprint'};
   }
 
   if (only === 'drag') throw new Error('stopped after drag (--only)');
@@ -374,4 +427,4 @@ try {
   ws.close(); chrome.kill(); await sleep(500);
 }
 // A timer or the socket can keep node alive after the JSON is written; --only stops are not failures.
-process.exit(result.error && !result.error.includes('(--only)') ? 1 : 0);
+process.exit((result.error && !result.error.includes('(--only)')) || (result.drag?.latency?.censored > 0) || (result.drag?.pixelProbe?.unverified > 0) || (result.drag?.pixelProbe?.errors > 0) ? 1 : 0);
