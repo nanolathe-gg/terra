@@ -330,7 +330,7 @@ func (a *App) rpcRequest(ctx context.Context, job renderjob.Request) (js.Value, 
 			switch msg.Get("kind").String() {
 			case "error":
 				return js.Undefined(), fmt.Errorf("%s", msg.Get("error").String())
-			case "exportTile", "heights", "tile", "check", "authored", "uniforms", "fill":
+			case "exportTile", "heights", "tile", "check", "authored", "uniforms", "fill", "ghost":
 				return msg, nil
 			}
 		}

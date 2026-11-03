@@ -23,6 +23,13 @@ func (a *App) mountAudit() {
 	expose(debug, "curve", func([]js.Value) any { return jsObject(a.Curve) })
 	expose(debug, "along", func([]js.Value) any { return jsObject(a.Along) })
 	expose(debug, "place", func([]js.Value) any { return a.landformPlace })
+	expose(debug, "ghostSamples", func([]js.Value) any {
+		s := landformGhosts[a]
+		if s == nil {
+			return js.Null()
+		}
+		return jsObject(map[string]any{"key": s.key, "points": s.points, "values": s.values, "pending": s.pending, "timer": s.timer != nil})
+	})
 	toPage := func(canvas js.Value, x, y float64) any {
 		r := canvas.Call("getBoundingClientRect")
 		return jsObject(map[string]float64{"x": r.Get("left").Float() + x*r.Get("width").Float()/canvas.Get("width").Float(), "y": r.Get("top").Float() + y*r.Get("height").Float()/canvas.Get("height").Float()})

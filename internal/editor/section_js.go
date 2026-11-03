@@ -687,8 +687,8 @@ func (a *App) drawCurve() {
 	g.Call("stroke")
 	g.Set("lineWidth", 1)
 	if p := a.selectedLandformPath(); p != nil && l.land && !a.controlEditing && a.gesture == nil {
-		line := func(t float64, color string, width float64) {
-			x, y, bx, by := p.at(t)
+		values := a.landformGhostSamples(p)
+		line := func(offset int, color string, width float64) {
 			g.Call("beginPath")
 			for i := 0; i < 33; i++ {
 				distance := -p.back + (p.back+p.front)*float64(i)/32
@@ -698,7 +698,7 @@ func (a *App) drawCurve() {
 				} else if p.front > 0 {
 					px += distance * (l.xR - l.xc) / p.front
 				}
-				h := a.Sample(x-bx*distance, y-by*distance)
+				h := values[offset+i]
 				method := "lineTo"
 				if i == 0 {
 					method = "moveTo"
@@ -709,11 +709,13 @@ func (a *App) drawCurve() {
 			g.Set("lineWidth", width)
 			g.Call("stroke")
 		}
-		for _, t := range []float64{.1, .3, .5, .7, .9} {
-			line(t, "rgba(160,200,255,.38)", 1)
+		if len(values) == 6*33+49*5 {
+			for i := 0; i < 5; i++ {
+				line(i*33, "rgba(160,200,255,.38)", 1)
+			}
+			line(5*33, "#ffd27a", 2)
+			g.Set("lineWidth", 1)
 		}
-		line(a.landformPlace, "#ffd27a", 2)
-		g.Set("lineWidth", 1)
 	}
 	for _, h := range a.sectionHandles(l) {
 		g.Set("fillStyle", "#e8f2d8")
@@ -798,29 +800,30 @@ func (a *App) drawAlong() {
 	}
 	g.Call("setLineDash", js.ValueOf([]any{}))
 	if p := a.selectedLandformPath(); p != nil && !a.controlEditing && a.gesture == nil {
-		reach := math.Max(0, p.wander)*1.2 + 4
+		values := a.landformGhostSamples(p)
 		dir := 1.0
 		if l.elevation < l.plain {
 			dir = -1
 		}
-		g.Call("beginPath")
-		for i := 0; i <= 48; i++ {
-			t := float64(i) / 48
-			x, y, bx, by := p.at(t)
-			h := -1e9
-			for j := -2; j <= 2; j++ {
-				h = math.Max(h, dir*a.Sample(x+bx*reach*float64(j)/2, y+by*reach*float64(j)/2))
+		if len(values) == 6*33+49*5 {
+			g.Call("beginPath")
+			for i := 0; i <= 48; i++ {
+				t := float64(i) / 48
+				h := -1e9
+				for j := 0; j < 5; j++ {
+					h = math.Max(h, dir*values[6*33+i*5+j])
+				}
+				method := "lineTo"
+				if i == 0 {
+					method = "moveTo"
+				}
+				g.Call(method, l.xL+(l.xR-l.xL)*t, l.yHeight(dir*h))
 			}
-			method := "lineTo"
-			if i == 0 {
-				method = "moveTo"
-			}
-			g.Call(method, l.xL+(l.xR-l.xL)*t, l.yHeight(dir*h))
+			g.Set("strokeStyle", "#b4d589")
+			g.Set("lineWidth", 1.5)
+			g.Call("stroke")
+			g.Set("lineWidth", 1)
 		}
-		g.Set("strokeStyle", "#b4d589")
-		g.Set("lineWidth", 1.5)
-		g.Call("stroke")
-		g.Set("lineWidth", 1)
 		x := l.xL + (l.xR-l.xL)*a.landformPlace
 		g.Set("strokeStyle", "#ffd27a")
 		g.Call("beginPath")

@@ -30,5 +30,6 @@ type Request struct {
 	Colors      map[string]any    `json:"colors"`
 	Options     map[string]any    `json:"options"`
 	Tiles       []Tile            `json:"tiles"`
+	Points      []model.Point     `json:"points,omitempty"`
 	Fill        *FillRequest      `json:"fill,omitempty"`
 }

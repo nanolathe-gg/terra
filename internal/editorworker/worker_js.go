@@ -14,6 +14,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"sort"
 	"syscall/js"
 	"time"
 
@@ -186,6 +187,20 @@ func loop() {
 			var options terrain.DrawOptions
 			b, _ := json.Marshal(job.Options)
 			_ = json.Unmarshal(b, &options)
+			if job.Kind == "ghost" {
+				values, err := sampleAuthoredPoints(ctx, engine, job)
+				if err != nil {
+					if ctx.Err() == nil {
+						post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+					}
+					return
+				}
+				if ctx.Err() != nil || generation != job.ID {
+					return
+				}
+				post(map[string]any{"kind": "ghost", "id": job.ID, "values": values})
+				return
+			}
 			if job.Kind == "fill" {
 				f := job.Fill
 				if f == nil || f.Cols < 1 || f.Rows < 1 || f.Cols > 1280 || f.Rows > 1280 {
@@ -347,4 +362,56 @@ func nestedNumber(m map[string]any, k, p string) float64 {
 	v, _ := m[k].(map[string]any)
 	n, _ := v[p].(float64)
 	return n
+}
+
+// sampleAuthoredPoints replays only bounded native-grid windows around the
+// requested points. It shares the editor's GPU engine and is cancelable at
+// every window so foreground view work can preempt the passive preview.
+func sampleAuthoredPoints(ctx context.Context, engine *terrain.SceneRenderer, job renderjob.Request) ([]any, error) {
+	size, _ := job.Config["size"].(float64)
+	gridValue, _ := job.Config["grid"].(float64)
+	grid := int(gridValue)
+	if size < 2 || grid < 2 || grid > 10500 || len(job.Points) > 1024 {
+		return nil, fmt.Errorf("Invalid authored sample request.")
+	}
+	spacing := (size - 1) / float64(grid-1)
+	type key struct{ x, y int }
+	groups := map[key][]int{}
+	keys := []key{}
+	coords := make([][2]float64, len(job.Points))
+	for i, p := range job.Points {
+		if math.IsNaN(p.X) || math.IsInf(p.X, 0) || math.IsNaN(p.Y) || math.IsInf(p.Y, 0) {
+			return nil, fmt.Errorf("Invalid authored sample point.")
+		}
+		gx, gy := math.Max(0, math.Min(float64(grid-1), p.X/spacing)), math.Max(0, math.Min(float64(grid-1), p.Y/spacing))
+		coords[i] = [2]float64{gx, gy}
+		k := key{int(math.Floor(gx)) / 64, int(math.Floor(gy)) / 64}
+		if _, ok := groups[k]; !ok {
+			keys = append(keys, k)
+		}
+		groups[k] = append(groups[k], i)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i].y < keys[j].y || keys[i].y == keys[j].y && keys[i].x < keys[j].x })
+	values := make([]any, len(job.Points))
+	for _, k := range keys {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		x0, y0 := k.x*64, k.y*64
+		x1, y1 := min(grid-1, x0+64), min(grid-1, y0+64)
+		r, err := engine.ReadAuthored(ctx, job.Nodes, job.Knobs, terrain.CellRect{X0: x0, Y0: y0, X1: x1, Y1: y1})
+		if err != nil {
+			return nil, err
+		}
+		for _, i := range groups[k] {
+			gx, gy := coords[i][0], coords[i][1]
+			ix, iy := int(math.Floor(gx)), int(math.Floor(gy))
+			jx, jy := min(ix+1, grid-1), min(iy+1, grid-1)
+			fx, fy := gx-float64(ix), gy-float64(iy)
+			at := func(x, y int) float64 { return float64(r.Planes[0][(y-y0)*r.Width+x-x0]) }
+			values[i] = (at(ix, iy)*(1-fx)+at(jx, iy)*fx)*(1-fy) + (at(ix, jy)*(1-fx)+at(jx, jy)*fx)*fy
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return values, nil
 }
