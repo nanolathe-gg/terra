@@ -102,6 +102,12 @@ func (r *Renderer) RequiredRegion(w SceneWindow, full bool) *RenderRegion {
 	if full {
 		step0 = 1023. / 512
 	}
+	// Fit overview uses main's meshScale: keep mesh density proportional to
+	// displayed pixels. Canonical and ordinary 1x/zoom windows keep the native
+	// global lattice regardless of their output reduction scale.
+	if w.Preview && w.Scale > 0 {
+		step0 *= w.Scale
+	}
 	resolution := int(math.Ceil(float64(size-1) / step0))
 	step := float64(size-1) / float64(resolution)
 	col0 := clampInt(int(math.Floor(float64(w.X)/step))-1, 0, resolution)
