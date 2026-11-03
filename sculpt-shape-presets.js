@@ -130,6 +130,12 @@ export function landformSides(q) {
   const ratio = q.lean > 0 ? clamp(q.lean, .25, 4) : 1, front = 2 * q.radius / (1 + ratio);
   return {front, back: front * ratio, ratio};
 }
+// H27: which side of the way a landform is drawn its back (the lean side) is on, +1 left and -1 right, decided once by the path's first segment (dx, dy): Left or
+// Right of the line, or whichever side a map bearing (turned with the shape's frame) falls on.
+export function landformBackSide(lean, turn, dx, dy) {
+  const bx = lean.bx * Math.cos(turn) - lean.by * Math.sin(turn), by = lean.bx * Math.sin(turn) + lean.by * Math.cos(turn);
+  return lean.side || ((dy * bx - dx * by) < 0 ? -1 : 1);
+}
 // H27: the most a cell can stand from a landform's path and still be on it (world px; `scale` is the frame's), over the widest side grown by the width
 // variation at its largest weight, the wander, and the spurs. The segment boxes and nodeBounds both use it.
 export function landformReach(q, scale = 1) {

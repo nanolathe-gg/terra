@@ -1,6 +1,6 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, alongKnots} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -345,8 +345,7 @@ export function prepareNode(n, geom, c) {
     for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
     const total = cum[cum.length - 1], first = path[1], dx = first.x - path[0].x, dy = first.y - path[0].y, len = Math.hypot(dx, dy) || 1;
     // The back is the lean side: left or right of the way drawn, or whichever side a map bearing (turned with the frame) falls on, decided once by the first segment.
-    const bx = lean.bx * Math.cos(turn) - lean.by * Math.sin(turn), by = lean.bx * Math.sin(turn) + lean.by * Math.cos(turn);
-    const side = lean.side || ((dy * bx - dx * by) < 0 ? -1 : 1);
+    const side = landformBackSide(lean, turn, dx, dy);
     for (let k = 1; k < path.length; k++) segs.push({px: path[k - 1].x, py: path[k - 1].y, ex: path[k].x, ey: path[k].y, f0: [cum[k - 1], cum[k] - cum[k - 1]], f1: [total, side], nx: (k === 1 ? 1 : 0) | (k === path.length - 1 ? 2 : 0), ny: 0});
   } else if (ridgeOn(kind, q) || n.pieces) {
     // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
