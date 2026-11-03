@@ -15,6 +15,7 @@ node repro/smoke.mjs --server http://127.0.0.1:8801 --port 9450 --page8
 node repro/curveedit.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-curves
 node repro/shapecheck.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-shapes
 node repro/zoom.mjs repro/scenes/green-1.json --server http://127.0.0.1:8801 --port 9450
+node repro/memory-budgets.mjs --server http://127.0.0.1:8801 --port 9450
 node measure/shape_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-shape-controls
 node measure/world_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out /tmp/terraform-world-controls
 ```
@@ -22,7 +23,9 @@ node measure/world_controls.mjs --server http://127.0.0.1:8801 --port 9450 --out
 `measure/section_check.mjs` compares the authored GPU height field with the Go
 curve model; `measure/swatch.mjs` uses the Go material model. The zoom test
 checks split tiles, restored 1x pixels, idle stability, and replay; it does not
-currently exercise allocator refusal or budget fallback. `measure/geology_controls.mjs` measures class-specific impact using current Go
+exercise allocator refusal. `repro/memory-budgets.mjs` separately checks the
+live 128 MiB controls, unchanged terrain pixels, cache bounds, early oversized
+readback refusal and subsequent recovery. `measure/geology_controls.mjs` measures class-specific impact using current Go
 world configuration and the recorded neutral and per-world baseline values.
 Historical audit and interaction reports describe past evidence.
 
