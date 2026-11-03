@@ -330,6 +330,8 @@ func prepareBasicShape(n model.Node, g ShapeGeometry, defaults map[string]any, s
 	}
 	out.Writes = ShapeMaskWrites(n.Kind, q, satellite)
 	u := map[string]float64{"kind": float64(code), "seed": float64(n.Seed), "radius": radius, "amount": param(q, "amount"), "amountPct": clampNumber(param(q, "amount")/100, 0, 1), "rough": rough, "softness": param(q, "softness"), "leanK": lean.K, "bearX": lean.BX, "bearY": lean.BY, "leanSide": float64(lean.Side), "wK": vary.WK, "wLo": vary.WLo, "wHi": vary.WHi, "hgtA": vary.HgtA, "hgtB": vary.HgtB, "bankScale": bankScale, "amp": amp, "faceVar": get("faceVariation", .8), "shelves": param(q, "shelves"), "beachFlat": param(q, "beachFlatness"), "coreEdge": .38, "faceX": face[0], "faceY": face[1], "faceSide": float64(faceSide), "faceWidth": faceWidth, "backWidth": backWidth, "rotX": math.Cos(turn), "rotY": math.Sin(turn), "cOffX": math.Cos(float64(n.Seed%628)/100 + turn), "cOffY": math.Sin(float64(n.Seed%628)/100 + turn), "facePx": math.Max(0, param(q, "facePx"))}
+	u["fCell"], u["fCrack"], u["fDark"] = param(q, "fissureCell"), param(q, "fissureCrack"), param(q, "fissureDark")
+	u["rimH"], u["ejecta"], u["cTop"] = param(q, "rimHeight"), param(q, "craterEjecta"), clampNumber(param(q, "crystalTop"), 0, .95)
 	if naturalWater {
 		u["natural"] = 1
 	}

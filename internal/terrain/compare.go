@@ -53,10 +53,16 @@ func (s *SceneRenderer) CompareRegions(ctx context.Context, nodes []model.Node, 
 				j := (x.Rect.Y0+y)*grid + x.Rect.X0 + xx
 				for k, name := range fieldNames {
 					v, w := a.Planes[k][j], x.Planes[k][i]
+					m := dst[name]
+					if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) || math.IsNaN(float64(w)) || math.IsInf(float64(w), 0) {
+						m.Cells++
+						m.NonFinite++
+						dst[name] = m
+						continue
+					}
 					if math.Float32bits(v) == math.Float32bits(w) {
 						continue
 					}
-					m := dst[name]
 					m.Cells++
 					d := math.Abs(float64(v) - float64(w))
 					if math.IsNaN(d) || math.IsInf(d, 0) {

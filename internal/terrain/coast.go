@@ -36,7 +36,7 @@ func prepareCoast(q map[string]any, g ShapeGeometry, region CellRect, bankScale,
 		}
 		m := int(math.Ceil(2.1*l/spacing)) + 6
 		box := expand(region, m, whole)
-		c := &CoastPass{Box: box, ReadRadius: m + 2, Facet: true}
+		c := &CoastPass{Box: box, ReadRadius: m + 2, BlurRadius: 1, Facet: true}
 		return c, map[string]float64{"fcMode": float64(facet), "fcL": l, "fcStrength": clampNumber(v("craterFacets"), 0, 1), "fcStep": v("crystalCraterStep"), "fcSkin": boolNumber(v("crystalCraterSkin") >= .5), "fcShare": .2 + .5*clampNumber(v("iceFacets"), 0, 1), "coPutW": 1, "coBx0": float64(box.X0), "coBy0": float64(box.Y0), "coBx1": float64(box.X1), "coBy1": float64(box.Y1)}, nil
 	}
 	n := max(1, int(math.Floor(v("shoreLayers")+.5)))
