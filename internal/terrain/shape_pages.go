@@ -17,9 +17,13 @@ func (s *SceneRenderer) clearShapeCache() {
 	s.shapePages = nil
 	s.shapeKey = [32]byte{}
 }
-func (s *SceneRenderer) newShapeFeed(side, x, y int) (*weatherFeed, error) {
+func (s *SceneRenderer) newShapeFeed(side, x, y int, additional ...int) (*weatherFeed, error) {
 	limits := membudget.FromConfig(s.config)
-	if err := membudget.Require("Authored feed", int64(s.renderer.FixedBytes()+s.cacheResidentBytes())+membudget.Area(side, side, 52), limits.GPU); err != nil {
+	reserved := int64(s.renderer.FixedBytes() + s.cacheResidentBytes())
+	for _, n := range additional {
+		reserved += int64(n)
+	}
+	if err := membudget.Require("Authored feed", reserved+membudget.Area(side, side, 52), limits.GPU); err != nil {
 		return nil, err
 	}
 	cells := side * side
@@ -93,7 +97,7 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 			page := s.shapePages[id]
 			pageRect := CellRect{px * core, py * core, min(c.Grid-1, (px+1)*core-1), min(c.Grid-1, (py+1)*core-1)}
 			if page == nil {
-				page, err = s.newShapeFeed(core, pageRect.X0, pageRect.Y0)
+				page, err = s.newShapeFeed(core, pageRect.X0, pageRect.Y0, feed.bytes)
 				if err != nil {
 					return nil, err
 				}
