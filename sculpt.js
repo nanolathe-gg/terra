@@ -87,7 +87,7 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
 const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter','breakup'];
 // Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
-const LANDFORM_KEYS=['elevation','combine','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
+const LANDFORM_KEYS=['elevation','combine','routeSmooth','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -141,6 +141,7 @@ const SHAPE_FIELDS=[
   // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
   ['elevation','lf-elevation','Elevation (height units)',['landform'],-80,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
   ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
+  ['routeSmooth','lf-route-smooth','Smooth route',['landform'],0,100,5,100,'Keep the center of this landform clear of surface relief, cracks and debris, and protect its grade from weathering. The shoulders fade into the surrounding terrain.'],
   ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the outline moves in and out around the sides and ends, in waves as long as the Variation size. The drawn crest stays in place.'],
   ['widthVary','lf-width-vary','Width variation',['landform'],0,100,5,100,'How much the section widens and narrows along the path (100: from half to twice its width).'],
   ['heightVary','lf-height-vary','Height variation (units)',['landform'],0,40,1,1,'How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet.'],

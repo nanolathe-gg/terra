@@ -841,10 +841,12 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   // The influence: how much of the section the cell stands in, where the stroke moved the height (a unit or more is all of it). Masks, routes, protection and
   // cracks follow as a plateau's do.
   let inf = pick.y * clamp(abs(value - base), 0.0, 1.0);
+  // A route is a shared field, not a draw/bake mode. It also works on already-level ground, where there is no height-change influence.
+  let route = u.lfRoute * sm(0.30, 0.92, pick.y);
+  F[PR * cells + i] = max(F[PR * cells + i] * (1.0 - inf), route);
+  F[PP * cells + i] = max(max(F[PP * cells + i] * (1.0 - inf), sm(0.65, 0.95, inf)), u.lfRoute * sm(0.55, 0.92, pick.y));
   if (inf <= 0.0) { return; }
   if (u.nwrites > 0u) { shapeMasks(i, inf); }
-  F[PR * cells + i] = F[PR * cells + i] * (1.0 - inf);
-  F[PP * cells + i] = max(F[PP * cells + i] * (1.0 - inf), sm(0.65, 0.95, inf));
   if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, inf * 1.6) * u.crackAmt); }
 }
 

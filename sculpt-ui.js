@@ -68,7 +68,7 @@ export function mountEditorUI(){
 export function groupToolControls(fields){
  const root=$('shape-options'),groups=[],claimed=new Set();
  const definitions=[
- ['','Height',['elevation','combine']],
+ ['','Height',['elevation','combine','routeSmooth']],
  ['','Cross-section',['facePx','terraces','ledge','terraceJitter','breakup','lean','facing']],
  ['','Variation',['wander','widthVary','heightVary','varySize','varyFoot','varyMiddle']],
  ['','Variability',['faceVariation','outlineVar','widthVar','heightVar']],
