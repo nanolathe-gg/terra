@@ -275,6 +275,7 @@ func (a *App) mountControls() {
 			return
 		}
 		a.Seed = uint32(v)
+		a.persist()
 		if n := a.selected(); n != nil {
 			n.Seed = a.Seed
 			a.Checkpoint()
@@ -284,12 +285,14 @@ func (a *App) mountControls() {
 	click("seed-randomize", func() {
 		a.Seed = randomSeed()
 		setValue("seed", a.Seed)
+		a.persist()
 		if n := a.selected(); n != nil {
 			n.Seed = a.Seed
 			a.Checkpoint()
 			a.Schedule()
 		}
 	})
+	on(element("seed-vary"), "change", func(js.Value) { a.persist() })
 	a.mountCurve()
 	a.groupToolControls()
 }

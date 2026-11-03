@@ -496,6 +496,7 @@ func (a *App) Checkpoint() {
 		return
 	}
 	if a.historyIndex >= 0 && string(a.history[a.historyIndex]) == string(b) {
+		a.persist()
 		return
 	}
 	a.history = append(a.history[:a.historyIndex+1], b)
