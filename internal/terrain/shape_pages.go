@@ -230,6 +230,8 @@ func (s *SceneRenderer) buildShapeFeed(ctx context.Context, nodes []model.Node, 
 				if total <= budget || oldest == nil {
 					break
 				}
+				s.cacheEvictions++
+				s.cacheEvictedBytes += uint64(oldest.bytes)
 				oldest.Close()
 				delete(s.shapePages, oldestID)
 			}

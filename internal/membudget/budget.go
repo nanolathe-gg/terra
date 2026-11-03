@@ -47,9 +47,18 @@ func bytes(c map[string]any, exact, mb, alias string, fallback int64) int64 {
 func (l Limits) Cache() int64    { return l.Heap / 4 }
 func (l Limits) Working() int64  { return l.Heap / 2 }
 func (l Limits) Transfer() int64 { return l.Heap / 4 }
+
+type LimitError struct {
+	Label             string
+	Needed, Available int64
+}
+
+func (e *LimitError) Error() string {
+	return fmt.Sprintf("%s needs %.1f MiB; available budget is %.1f MiB. Use a smaller window or increase the memory budget.", e.Label, float64(e.Needed)/float64(MiB), float64(e.Available)/float64(MiB))
+}
 func Require(label string, needed, available int64) error {
 	if needed < 0 || needed > available {
-		return fmt.Errorf("%s needs %.1f MiB; available budget is %.1f MiB. Use a smaller window or increase the memory budget.", label, float64(needed)/float64(MiB), float64(available)/float64(MiB))
+		return &LimitError{Label: label, Needed: needed, Available: available}
 	}
 	return nil
 }

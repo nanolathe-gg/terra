@@ -32,23 +32,24 @@ type SceneResult struct {
 	HeightOriginX, HeightOriginY, HeightSpacing float64
 }
 type SceneRenderer struct {
-	gpu                      *GPU
-	config                   map[string]any
-	sources                  map[string]string
-	material                 map[string]any
-	shape                    *ShapeEngine
-	shapeGather              *Kernel
-	renderer                 *Renderer
-	erosion                  *Erosion
-	weatherPages             map[[2]int]*weatherFeed
-	weatherKey               [32]byte
-	weatherTick, weatherRuns uint64
-	shapePages               map[[2]int]*weatherFeed
-	shapeKey                 [32]byte
-	shapeNodes               []model.Node
-	shapeNodesSet            bool
-	shapeTick, shapeRuns     uint64
-	shapeProfile             ShapeProfile
+	gpu                               *GPU
+	config                            map[string]any
+	sources                           map[string]string
+	material                          map[string]any
+	shape                             *ShapeEngine
+	shapeGather                       *Kernel
+	renderer                          *Renderer
+	erosion                           *Erosion
+	weatherPages                      map[[2]int]*weatherFeed
+	weatherKey                        [32]byte
+	weatherTick, weatherRuns          uint64
+	shapePages                        map[[2]int]*weatherFeed
+	shapeKey                          [32]byte
+	shapeNodes                        []model.Node
+	shapeNodesSet                     bool
+	shapeTick, shapeRuns              uint64
+	cacheEvictions, cacheEvictedBytes uint64
+	shapeProfile                      ShapeProfile
 }
 
 func NewSceneRenderer(gpu *GPU, config map[string]any, sources map[string]string, material map[string]any) (*SceneRenderer, error) {
@@ -253,13 +254,14 @@ func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
 type SceneProfile struct {
 	RenderProfile
 	ShapeProfile
+	CacheEvictions, CacheEvictedBytes uint64
 }
 
 func (s *SceneRenderer) LastRenderProfile() SceneProfile {
 	if s.renderer == nil {
 		return SceneProfile{ShapeProfile: s.shapeProfile}
 	}
-	return SceneProfile{RenderProfile: s.renderer.LastProfile, ShapeProfile: s.shapeProfile}
+	return SceneProfile{RenderProfile: s.renderer.LastProfile, ShapeProfile: s.shapeProfile, CacheEvictions: s.cacheEvictions, CacheEvictedBytes: s.cacheEvictedBytes}
 }
 
 // cacheBudget reserves at most one fifth of the configured GPU budget for
@@ -298,9 +300,36 @@ func (s *SceneRenderer) trimPageCache(pages map[[2]int]*weatherFeed, budget int)
 			}
 		}
 		total -= oldest.bytes
+		s.cacheEvictions++
+		s.cacheEvictedBytes += uint64(oldest.bytes)
 		oldest.Close()
 		delete(pages, key)
 	}
+}
+
+// evictOldestPage releases one retained page before retrying a bounded
+// transient allocation. It leaves graph keys and all other pages intact.
+func (s *SceneRenderer) evictOldestPage() bool {
+	var oldest *weatherFeed
+	var victim map[[2]int]*weatherFeed
+	var key [2]int
+	for _, pages := range []map[[2]int]*weatherFeed{s.shapePages, s.weatherPages} {
+		for id, page := range pages {
+			if oldest == nil || page.used < oldest.used {
+				oldest = page
+				victim = pages
+				key = id
+			}
+		}
+	}
+	if oldest == nil {
+		return false
+	}
+	s.cacheEvictions++
+	s.cacheEvictedBytes += uint64(oldest.bytes)
+	oldest.Close()
+	delete(victim, key)
+	return true
 }
 
 // reservedGPUBytes includes external browser bitmap residency in addition to terrain caches.

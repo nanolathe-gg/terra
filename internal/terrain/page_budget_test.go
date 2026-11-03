@@ -18,6 +18,9 @@ func TestPageCacheBudgetTracksBitmapAndEvictsLRU(t *testing.T) {
 	if s.cacheBudget() != 64*mb || len(s.shapePages) != 2 || len(s.weatherPages) != 2 || s.shapePages[[2]int{0, 0}] != nil || s.weatherPages[[2]int{0, 0}] != nil {
 		t.Fatalf("did not evict oldest pages: shape=%v weather=%v budget=%d", s.shapePages, s.weatherPages, s.cacheBudget())
 	}
+	if s.cacheEvictions != 2 || s.cacheEvictedBytes != uint64(60*mb) {
+		t.Fatal("eviction telemetry incorrect")
+	}
 	if err := s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(60 * mb)}); err != nil {
 		t.Fatal(err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/gogpu/wgpu"
@@ -186,18 +187,31 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 		core, apron = c.Grid, 0
 	}
 	// Preflight every missing page before allocating even the gathered feed.
-	for py := region.Y0 / core; py <= region.Y1/core; py++ {
-		for px := region.X0 / core; px <= region.X1/core; px++ {
-			if s.weatherPages[[2]int{px, py}] != nil {
-				continue
+	// If retained pages consume headroom needed by the exact transient replay,
+	// discard the oldest page and retry with an updated reservation.
+	for {
+		retry := false
+		for py := region.Y0 / core; py <= region.Y1/core && !retry; py++ {
+			for px := region.X0 / core; px <= region.X1/core; px++ {
+				if s.weatherPages[[2]int{px, py}] != nil {
+					continue
+				}
+				q := c
+				q.ReservedGPUBytes = s.reservedGPUBytes() + weatherFeedBytes(side, o.MaterialWeathering > 0)
+				q = weatherShapeConfig(q, px, py, core, apron, o)
+				q.preflightOnly = true
+				if _, e := s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, nil); e != nil {
+					var limit *membudget.LimitError
+					if errors.As(e, &limit) && limit.Label == "Expanded shape GPU buffers" && s.evictOldestPage() {
+						retry = true
+						break
+					}
+					return nil, e
+				}
 			}
-			q := c
-			q.ReservedGPUBytes = s.reservedGPUBytes() + weatherFeedBytes(side, o.MaterialWeathering > 0)
-			q = weatherShapeConfig(q, px, py, core, apron, o)
-			q.preflightOnly = true
-			if _, e := s.shape.evaluateShapeWindow(ctx, q, nodes, false, false, nil); e != nil {
-				return nil, e
-			}
+		}
+		if !retry {
+			break
 		}
 	}
 	if s.erosion == nil {
@@ -261,6 +275,8 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 				if total <= budget || oldest == nil {
 					break
 				}
+				s.cacheEvictions++
+				s.cacheEvictedBytes += uint64(oldest.bytes)
 				oldest.Close()
 				delete(s.weatherPages, oldestID)
 			}
