@@ -132,6 +132,13 @@ type RenderProfile struct {
 	GPUFed                                                                                            bool
 }
 
+// ChunkBudgetError is returned before a window allocates GPU resources.
+type ChunkBudgetError struct{ Needed, Budget float64 }
+
+func (e *ChunkBudgetError) Error() string {
+	return fmt.Sprintf("terrain chunk needs %.1f MB, budget %.1f MB", e.Needed/1048576, e.Budget/1048576)
+}
+
 func elapsed(start time.Time) float64 { return float64(time.Since(start)) / float64(time.Millisecond) }
 func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptions) (pixels []byte, err error) {
 	started := time.Now()
@@ -182,7 +189,7 @@ func (r *Renderer) RenderWindow(ctx context.Context, in WindowInput, o DrawOptio
 	}
 	needed := float64(working) + float64(r.FixedBytes()) + number(r.Config, "uiBitmapBytes", 0) + math.Max(number(r.Config, "gpuReservedBytes", 0), float64(r.reservedGPUBytes))
 	if needed > budget {
-		return nil, fmt.Errorf("terrain chunk needs %.1f MB, budget %.1f MB", needed/1048576, budget/1048576)
+		return nil, &ChunkBudgetError{Needed: needed, Budget: budget}
 	}
 	limit := int(r.GPU.Device.Limits().MaxTextureDimension2D)
 	maxDimension := max(gw, gh)

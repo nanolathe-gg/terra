@@ -179,7 +179,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		defer feed.Close()
 		input.Feed = &feed.GPUFeed
 		s.renderer.SetReservedGPUBytes(s.cacheResidentBytes() + feed.bytes)
-		pixels, err = s.renderer.RenderWindow(ctx, input, options)
+		pixels, err = s.renderWindowWithCacheRetry(ctx, input, options, feed.bytes, feed.borrowedFrom)
 	} else {
 		feed, e := s.buildShapeFeed(ctx, nodes, shapeConfig, shapeConfig.Window)
 		if e != nil {
@@ -188,7 +188,7 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		defer feed.Close()
 		input.Feed = &feed.GPUFeed
 		s.renderer.SetReservedGPUBytes(s.cacheResidentBytes() + feed.bytes)
-		pixels, err = s.renderer.RenderWindow(ctx, input, options)
+		pixels, err = s.renderWindowWithCacheRetry(ctx, input, options, feed.bytes, feed.borrowedFrom)
 	}
 	if err != nil {
 		return nil, err
@@ -210,6 +210,31 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		}
 	}
 	return &SceneResult{RGBA: pixels, Heights: heights, Width: int(math.Ceil(float64(window.Width) / window.Scale)), Height: int(math.Ceil(float64(window.Height) / window.Scale)), HeightWidth: rw, HeightHeight: rh, HeightOriginX: float64(region.GridX) * region.GridSpacing, HeightOriginY: float64(region.GridY) * region.GridSpacing, HeightSpacing: region.GridSpacing}, nil
+}
+
+// A render-window budget refusal is raised before its GPU allocations. The
+// gathered feed already owns the inputs, so retained cache pages can be freed
+// and that exact same tile retried without rerunning the authored pipeline.
+func (s *SceneRenderer) renderWindowWithCacheRetry(ctx context.Context, input WindowInput, options DrawOptions, feedBytes int, protected *weatherFeed) ([]byte, error) {
+	for {
+		pixels, err := s.renderer.RenderWindow(ctx, input, options)
+		if err == nil {
+			return pixels, nil
+		}
+		var budget *ChunkBudgetError
+		if !errors.As(err, &budget) || s.cacheResidentBytes() == 0 {
+			return nil, err
+		}
+		// The gather feeding this tile may still read a retained page. Wait for
+		// submitted uses to finish before reclaiming its budget and retrying.
+		if waitErr := s.gpu.waitCacheUses(ctx); waitErr != nil {
+			return nil, waitErr
+		}
+		if !s.evictOldestPageExcept(protected) {
+			return nil, err
+		}
+		s.renderer.SetReservedGPUBytes(s.cacheResidentBytes() + feedBytes)
+	}
 }
 
 func (s *SceneRenderer) shapeDefaults() map[string]any {
@@ -344,12 +369,17 @@ func (s *SceneRenderer) trimPageCache(pages map[[2]int]*weatherFeed, budget int)
 
 // evictOldestPage releases one retained page before retrying a bounded
 // transient allocation. It leaves graph keys and all other pages intact.
-func (s *SceneRenderer) evictOldestPage() bool {
+func (s *SceneRenderer) evictOldestPage() bool { return s.evictOldestPageExcept(nil) }
+
+func (s *SceneRenderer) evictOldestPageExcept(protected *weatherFeed) bool {
 	var oldest *weatherFeed
 	var victim map[[2]int]*weatherFeed
 	var key [2]int
 	for _, pages := range []map[[2]int]*weatherFeed{s.shapePages, s.weatherPages} {
 		for id, page := range pages {
+			if page == protected {
+				continue
+			}
 			if oldest == nil || page.used < oldest.used {
 				oldest = page
 				victim = pages

@@ -3,6 +3,7 @@
 package terrain
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -217,7 +218,8 @@ func TestSceneBudgetChangeBoundsPages(t *testing.T) {
 	nodes := []model.Node{{Kind: "hill", Seed: 123, Points: []model.Point{{X: 100, Y: 100}, {X: 180, Y: 140}}, Params: map[string]any{"radius": 50., "amount": 70., "rough": .2, "softness": .5}}}
 	window := SceneWindow{X: 64, Y: 64, Width: 128, Height: 128, Scale: 1, ReadHeights: true}
 	options := DrawOptions{Full: true, Weather: true, Detail: 1, Ring: .85, RingSpread: .65, RingVariation: .7, TransitionDetail: .65}
-	if _, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options); err != nil {
+	copied, err := s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options)
+	if err != nil {
 		t.Fatal(err)
 	}
 	// The canonical weather page exceeds one cache share, but fits the
@@ -225,8 +227,20 @@ func TestSceneBudgetChangeBoundsPages(t *testing.T) {
 	if err = s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(186 * 1024 * 1024)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options); err != nil {
+	borrowed, err := s.Render(context.Background(), nodes, map[string]string{"erosionAge": "1"}, nil, window, options)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !bytes.Equal(copied.RGBA, borrowed.RGBA) {
+		t.Fatal("borrowed weather feed changed pixels")
+	}
+	if len(copied.Heights) != len(borrowed.Heights) {
+		t.Fatal("borrowed height dimensions changed")
+	}
+	for i := range copied.Heights {
+		if math.Float32bits(copied.Heights[i]) != math.Float32bits(borrowed.Heights[i]) {
+			t.Fatal("borrowed weather feed changed heights")
+		}
 	}
 	runs := s.weatherRuns
 	if len(s.weatherPages) != 1 || pageCacheBytes(s.weatherPages) <= s.cacheBudget() {

@@ -14,9 +14,10 @@ import (
 
 type weatherFeed struct {
 	GPUFeed
-	owned []*wgpu.Buffer
-	used  uint64
-	bytes int
+	owned        []*wgpu.Buffer
+	borrowedFrom *weatherFeed
+	used         uint64
+	bytes        int
 }
 
 func (f *weatherFeed) Close() {
@@ -185,6 +186,15 @@ func (s *SceneRenderer) buildWeatherFeed(ctx context.Context, nodes []model.Node
 	core, apron := 512, 128
 	if c.Grid <= 1168 {
 		core, apron = c.Grid, 0
+	}
+	// The whole-map page already covers the requested window. Borrow its GPU
+	// buffers directly rather than allocating and copying another square feed.
+	if core == c.Grid {
+		if page := s.weatherPages[[2]int{0, 0}]; page != nil {
+			s.weatherTick++
+			page.used = s.weatherTick
+			return &weatherFeed{GPUFeed: page.GPUFeed, borrowedFrom: page}, nil
+		}
 	}
 	// Preflight every missing page before allocating even the gathered feed.
 	// If retained pages consume headroom needed by the exact transient replay,

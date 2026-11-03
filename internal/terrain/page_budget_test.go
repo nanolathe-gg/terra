@@ -43,8 +43,12 @@ func TestWholeWeatherPageUsesSharedCacheCapacity(t *testing.T) {
 	if s.weatherCacheBudget() < 94*mb || s.shapeCacheBudget() != 82*mb {
 		t.Fatalf("weather %d shape %d", s.weatherCacheBudget(), s.shapeCacheBudget())
 	}
-	if !s.evictOldestPage() || len(s.shapePages) != 0 || len(s.weatherPages) != 1 {
-		t.Fatal("authored page should yield before weather page")
+	protected := s.weatherPages[[2]int{0, 0}]
+	if !s.evictOldestPageExcept(protected) || len(s.shapePages) != 0 || len(s.weatherPages) != 1 {
+		t.Fatal("authored page should yield before protected weather page")
+	}
+	if s.evictOldestPageExcept(protected) {
+		t.Fatal("evicted protected borrowed page")
 	}
 	if err := s.UpdateConfig(map[string]any{"uiBitmapBytes": float64(32 * mb)}); err != nil {
 		t.Fatal(err)
