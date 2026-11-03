@@ -7,8 +7,11 @@ import (
 )
 
 func shapeScratch(cells int, ops []PreparedOp) int {
-	scratch := 3 * cells
+	scratch := 4 // Valid dummy binding when replay has no neighbourhood passes.
 	for _, op := range ops {
+		if op.Settle || op.SmoothRadius > 0 {
+			scratch = max(scratch, 3*cells)
+		}
 		if op.Coast != nil {
 			scratch = max(scratch, 14*cells+op.Coast.SiteFloats)
 		}

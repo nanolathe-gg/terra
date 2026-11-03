@@ -38,8 +38,9 @@ func TestShapeMemoryIncludesCoastPrefixAndReadback(t *testing.T) {
 }
 
 func TestWeatherRefusesBeforeFeedOrShapeAllocation(t *testing.T) {
-	c := ShapeWindowConfig{Grid: 768, Spacing: 1, RefSpacing: 1, Window: CellRect{0, 0, 0, 0}, Memory: membudget.FromConfig(map[string]any{"gpuMB": 128, "heapMB": 128})}
-	// The authored window alone fits. Its simultaneous output feed and Time
+	c := ShapeWindowConfig{Grid: 768, Spacing: 1, RefSpacing: 1, Window: CellRect{0, 0, 0, 0}, Memory: membudget.FromConfig(map[string]any{"gpuMB": 128, "heapMB": 128}), ReservedGPUBytes: 16 * membudget.MiB}
+	// Reserve shared material resources, as the real renderer does. The authored
+	// window alone fits. Its simultaneous output feed and Time
 	// state/flux/result buffers do not. Nil GPU proves no feed or shape allocation.
 	s := &SceneRenderer{shape: &ShapeEngine{}}
 	for _, material := range []float64{0, 1} {
