@@ -1,5 +1,7 @@
 # Landform compared with the dedicated tools
 
+**Historical first round.** The implementation follow-up and updated three-column images are in [Landform follow-up](LANDFORM_FOLLOWUP.md). The results below describe the original main implementation.
+
 Rendered November 3, 2026 from main `dfee4b4`, in worktree `landform-compare`.
 This is a comparison dataset and review, with no editor or shader changes.
 
