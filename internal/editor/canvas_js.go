@@ -613,6 +613,19 @@ func (a *App) paintOverlay() {
 	if selection := a.selectionGeometry(); selection != nil && selection.Visible {
 		a.drawSelection(g, selection)
 	}
+	if a.Tool == "move" && (a.featureUI == nil || !a.featureUI.Active) {
+		if left, right, ok := a.landformSectionMark(); ok {
+			left, right = a.project(left), a.project(right)
+			g.Call("save")
+			g.Set("strokeStyle", "#ffd27a")
+			g.Set("lineWidth", 2.5)
+			g.Call("beginPath")
+			g.Call("moveTo", left.X, left.Y)
+			g.Call("lineTo", right.X, right.Y)
+			g.Call("stroke")
+			g.Call("restore")
+		}
+	}
 	if hoverPoint != nil && a.gesture == nil && (a.Tool != "move" || a.AddPath) && (a.featureUI == nil || !a.featureUI.Active) {
 		p := a.project(*hoverPoint)
 		g.Call("save")
