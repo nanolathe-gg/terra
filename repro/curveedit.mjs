@@ -185,10 +185,18 @@ for (const world of worlds) {
       const alongAfterUndo = (await nodes())[L0].params.along;
       check('undo restores the knot the drag moved', alongAfterUndo?.length === 3 && alongAfterUndo[1][1] > al[1][1] + .05, {before: al, after: alongAfterUndo});
       // save (the autosave) and reload: the curve with its sides, the along knots and the render come back
+      // Undo clears selection; select the saved stroke again before editing its controls.
+      await ev(`document.querySelector('#layers [data-index="${L0}"] .layer-name').click(); true`);
+      await setValue('lf-route-smooth', 80); await setValue('crest-taper', 65);
+      check('landform route and taper edits reach the selected node', (await nodes())[L0].params.routeSmooth === .8 && (await nodes())[L0].params.crestTaper === .65);
+      await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()'); await sleep(300);
+      check('undo restores the taper independently of the route', (await nodes())[L0].params.crestTaper === 0 && (await nodes())[L0].params.routeSmooth === .8);
+      await ev(`document.querySelector('#layers [data-index="${L0}"] .layer-name').click(); true`);
+      await setValue('crest-taper', 65); await ev('sculptCanvas.idle()'); await sleep(500);
       await brush('landform');
-      ns = await nodes(); const savedL = ns.map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean] : null), heightsL = await grid(); await sleep(1500);
+      ns = await nodes(); const savedL = ns.map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean, x.params.routeSmooth, x.params.crestTaper] : null), heightsL = await grid(); await sleep(1500);
       await send('Page.navigate', {url}); await sleep(1500); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500); await ev('sculptCanvas.idle()'); await sleep(500);
-      const backL = (await nodes()).map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean] : null), h3 = await grid();
+      const backL = (await nodes()).map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean, x.params.routeSmooth, x.params.crestTaper] : null), h3 = await grid();
       check('the landform comes back the same after reload', same(savedL, backL) && savedL.some(x => x?.[1]), {savedL, backL});
       check('the landform render is the same after reload', h3.length === heightsL.length && h3.every((v, i) => Math.abs(v - heightsL[i]) < 1e-3), h3.reduce((m, v, i) => Math.max(m, Math.abs(v - heightsL[i])), 0));
       // 7. Flatten to over an existing hill, the along curve at 0 at one end: that end comes down to the plain (decision 24)

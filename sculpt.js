@@ -158,7 +158,7 @@ const SHAPE_FIELDS=[
   ['spurBulb','spur-bulb','Bulbous spur tips',['hill','mountain','crater','landform'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
   ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
   ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
-  ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain'],0,100,5,100,'The ridge narrows and lowers toward both ends of its path.'],
+  ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain','landform'],0,100,5,100,'The main ridge narrows and lowers toward both ends of its path. On a landform this multiplies the height along the path.'],
   ['rimHeight','rim-height','Rim height (share of depth)',['crater'],0,150,1,100,'How high the rim stands, as a share of the crater\'s Depth (34% is the usual rim); the bowl floor does not change, so a tall rim needs no deeper bowl.'],
   ['rimSectors','rim-sectors','Rim sectors',['crater'],0,8,1,1,'Split the rim into this many sectors of different height and width (a lopsided ring, not an even one).'],
   ['rimUnequal','rim-unequal','Sector inequality',['crater'],0,100,5,100,'How different the sectors are: 0 equal; 100 from a faint low ridge to a tall, broad massif.'],

@@ -737,8 +737,11 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let flags = select(u32(s2.x), 3u, spur);
   let cap = (ahead < 0.0 && (flags & 1u) != 0u) || (ahead > len && (flags & 2u) != 0u);
   let e = max(max(ahead - len, -ahead), 0.0);
-  let wm0 = select(1.0, mix(s2.x, s2.y, tt), spur);
-  let hm = select(1.0, mix(s2.z, s2.w, tt), spur);
+  let share = select(trunkShare, -1.0 - s1.z, spur);
+  // The existing crest taper narrows and lowers the trunk; its along curve remains independently editable.
+  let taper = select(u.lfTaper * (1.0 - sm(0.0, 0.4, min(share, 1.0 - share))), 0.0, spur || s1.z < 1.0);
+  let wm0 = select(1.0 - 0.62 * taper, mix(s2.x, s2.y, tt), spur);
+  let hm = select(1.0 - 0.7 * taper, mix(s2.z, s2.w, tt), spur);
   var cc = c; var ee = e; var wm = wm0;
   if (u.lfWander > 0.0 || u.lfWidth > 0.0) {
     // Move the radial outline, including the free ends. Shifting only c left round caps unchanged and could fold a face when the section crossed its path.
@@ -751,7 +754,6 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
     wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
   }
   let q = lfShare(cc, ee, cap, s1.w, wm);
-  let share = select(trunkShare, -1.0 - s1.z, spur);
   let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
   let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
