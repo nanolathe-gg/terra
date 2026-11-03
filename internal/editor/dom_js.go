@@ -5,6 +5,7 @@
 package editor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -136,6 +137,9 @@ func await(p js.Value) (js.Value, error) {
 	return r.v, r.e
 }
 func request(path, method string, body any, out any) error {
+	return requestContext(context.Background(), path, method, body, out)
+}
+func requestContext(ctx context.Context, path, method string, body, out any) error {
 	opt := map[string]any{"method": method}
 	if body != nil {
 		b, e := json.Marshal(body)
@@ -145,11 +149,37 @@ func request(path, method string, body any, out any) error {
 		opt["headers"] = map[string]any{"Content-Type": "application/json"}
 		opt["body"] = string(b)
 	}
+	return fetchContext(ctx, path, opt, out)
+}
+
+// Abort the fetch and body read together; releasing a promise callback before
+// rejection would leak it or call a released Go function.
+func fetchContext(ctx context.Context, path string, opt map[string]any, out any) error {
+	if e := ctx.Err(); e != nil {
+		return e
+	}
+	controller := js.Global().Get("AbortController").New()
+	opt["signal"] = controller.Get("signal")
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			controller.Call("abort")
+		case <-done:
+		}
+	}()
 	r, e := await(js.Global().Call("fetch", path, js.ValueOf(opt)))
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if e != nil {
 		return e
 	}
 	v, e := await(r.Call("text"))
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if e != nil {
 		return e
 	}

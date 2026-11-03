@@ -172,7 +172,7 @@ func (a *App) exportMap() (map[string]any, error) {
 		body["starts"] = v
 	}
 	var started map[string]any
-	if err = request("/map-export/start", "POST", body, &started); err != nil {
+	if err = requestContext(ctx, "/map-export/start", "POST", body, &started); err != nil {
 		text("map-export-state", err.Error())
 		return nil, err
 	}
@@ -193,14 +193,10 @@ func (a *App) exportMap() (map[string]any, error) {
 		q := url.Values{"id": {id}, "x": {fmt.Sprint(x)}, "y": {fmt.Sprint(y)}, "width": {fmt.Sprint(w)}, "height": {fmt.Sprint(h)}}
 		arr := js.Global().Get("Uint8Array").New(len(png))
 		js.CopyBytesToJS(arr, png)
-		r, e := await(js.Global().Call("fetch", "/map-export/chunk?"+q.Encode(), js.ValueOf(map[string]any{"method": "POST", "headers": map[string]any{"Content-Type": "image/png"}, "body": arr})))
-		if e != nil {
+		if e := fetchContext(ctx, "/map-export/chunk?"+q.Encode(), map[string]any{"method": "POST", "headers": map[string]any{"Content-Type": "image/png"}, "body": arr}, nil); e != nil {
 			return e
 		}
-		if !r.Get("ok").Bool() {
-			v, _ := await(r.Call("text"))
-			return fmt.Errorf("%s", v.String())
-		}
+
 		text("map-export-state", fmt.Sprintf("Baking and encoding %d / %d chunks", index+1, total))
 		return nil
 	})
@@ -209,9 +205,12 @@ func (a *App) exportMap() (map[string]any, error) {
 		return nil, err
 	}
 	var result map[string]any
-	if err = request("/map-export/finish?id="+url.QueryEscape(id), "POST", nil, &result); err != nil {
+	if err = requestContext(ctx, "/map-export/finish?id="+url.QueryEscape(id), "POST", nil, &result); err != nil {
 		text("map-export-state", err.Error())
 		return nil, err
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 	finished = true
 	text("map-export-state", fmt.Sprintf("%v unique tiles / %v slots. Self-check passed. %d clamped cells.", result["uniqueTiles"], result["tileSlots"], clipped))
