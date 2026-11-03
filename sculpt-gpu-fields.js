@@ -1,6 +1,6 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, alongKnots} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -13,7 +13,7 @@ import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N} fro
 // rectangle; read() waits (readAsync/ready) so a bake never sees a half-written copy and the frame never waits.
 
 const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x'];
-const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10, smooth: 11, ramp: 12, crater: 13, fissure: 14, crystal: 15};
+const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10, smooth: 11, ramp: 12, crater: 13, fissure: 14, crystal: 15, landform: 16};
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],
@@ -26,7 +26,7 @@ const MASK_WRITES = [null, [[0, 127], [1, 0], [3, 0]], [[1, 127], [0, 0], [3, 0]
   [[14, 127]], [[14, -127]], [[15, 127]], [[15, -127]], [[16, 127]], [[16, -127]], [[17, 127]], [[17, -127]]];
 const STYLE_KEYS = ['styleRelief', 'styleCracks', 'styleBanding', 'styleFace', 'styleErosion', 'styleDeposits', 'styleVegetation', 'styleExposure'];
 const WATER_KEYS = ['waterShore', 'waterDeep', 'waterBed'];
-const STYLE_PLANES = [5, 6, 7, 8, 14, 15, 16, 17], MASK_SHAPES = ['plateau', 'offset', 'hill', 'mountain', 'crater', 'deep', 'shallow'];
+const STYLE_PLANES = [5, 6, 7, 8, 14, 15, 16, 17], MASK_SHAPES = ['plateau', 'offset', 'hill', 'mountain', 'crater', 'deep', 'shallow', 'landform'];
 // H9: maskSetup() of sculpt.js for a landform or water stroke: its Paint-inside choice, style writes (target already carries the amount) and a water
 // stroke's edge and bed flags (written at full strength, `flat`). Each entry is [plane, target, gain, flat].
 function shapeMaskWrites(kind, q, sat) {
@@ -46,11 +46,12 @@ function shapeMaskWrites(kind, q, sat) {
 const NODE_FIELDS = [
   ...['cgForm', 'fcMode', 'fcSkin'].map(k => [k, 'u']), ...['fcL', 'fcStrength', 'fcStep', 'fcShare'].map(k => [k, 'f']), ...['cgSize', 'cgFacet', 'cgSizeVar', 'cgSmooth', 'cgTiers', 'cgStep', 'cgVar', 'bgFace', 'bgTilt', 'bgFlat', 'bgRough', 'bgTx', 'bgTy', 'bgJit', 'bgAlign', 'bgBreak', 'bgTurn'].map(k => [k, 'f']),
   ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plSeam', 'plVary', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'curveBase', 'backBase', 'cvLip', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ'].map(k => [k, 'u']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'curveBase', 'backBase', 'cvLip', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'combine', 'alongBase'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'leanK', 'bearX', 'bearY', 'leanSide', 'wK', 'wLo', 'wHi', 'hgtA', 'hgtB', 'bankScale', 'amp', 'faceVar', 'shelves',
     'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'facePx', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs'].map(k => [k, 'f'])];
+    'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'facePx', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs',
+    'sBreak', 'elev', 'lfFront', 'lfBack', 'lfWander', 'lfWidth', 'lfHeight', 'lfSize', 'lfFoot', 'lfMid', 'lfCrest'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -211,7 +212,8 @@ export function prepareNode(n, geom, c) {
   })() : null;
   const vary = variability(kind, {naturalWater, naturalPlateau, shouldered, plainHill}, q);
   const amp = kind === 'crater' ? q.rough * radius * .45 : kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * vary.amp;
-  const extent = fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : shouldered ? Math.max(1.4, backWidth, faceWidth) : 1) * bankScale * (!shouldered && !lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp + (water && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
+  const frameScale = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1;
+  const extent = kind === 'landform' ? landformReach(q, frameScale) : fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : shouldered ? Math.max(1.4, backWidth, faceWidth) : 1) * bankScale * (!shouldered && !lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp + (water && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
@@ -334,6 +336,18 @@ export function prepareNode(n, geom, c) {
     const readOffset=reads.length;
     for (const e of list) segs.push({px: e.a.x, py: e.a.y, ex: e.b.x, ey: e.b.y, f0: [e.cum, e.len], f1: [total, readOffset], nx: 0, ny: 0});
     if (total > 0) reads.push({x:first.x,y:first.y},{x:last.x,y:last.y});
+  } else if (kind === 'landform') {
+    // H27 landform: the path is the crest, swept as segments that carry the length before them, their own and the whole path's (stampRamp's rows, which the along
+    // curve reads), the side the back is on, and which ends close the section round them. A click is a tiny segment closed at both ends.
+    let path = simplifyPath(pts, Math.max(1, radius * .04)).filter((p, k, a) => !k || Math.hypot(p.x - a[k - 1].x, p.y - a[k - 1].y) >= 1e-4);
+    if (path.length < 2) path = [path[0], {x: path[0].x + .01, y: path[0].y}];
+    const cum = [0];
+    for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
+    const total = cum[cum.length - 1], first = path[1], dx = first.x - path[0].x, dy = first.y - path[0].y, len = Math.hypot(dx, dy) || 1;
+    // The back is the lean side: left or right of the way drawn, or whichever side a map bearing (turned with the frame) falls on, decided once by the first segment.
+    const bx = lean.bx * Math.cos(turn) - lean.by * Math.sin(turn), by = lean.bx * Math.sin(turn) + lean.by * Math.cos(turn);
+    const side = lean.side || ((dy * bx - dx * by) < 0 ? -1 : 1);
+    for (let k = 1; k < path.length; k++) segs.push({px: path[k - 1].x, py: path[k - 1].y, ex: path[k].x, ey: path[k].y, f0: [cum[k - 1], cum[k] - cum[k - 1]], f1: [total, side], nx: (k === 1 ? 1 : 0) | (k === path.length - 1 ? 2 : 0), ny: 0});
   } else if (ridgeOn(kind, q) || n.pieces) {
     // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
     const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
@@ -368,10 +382,10 @@ export function prepareNode(n, geom, c) {
   const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : shapeMaskWrites(kind, q, n.satellite);
   const rim = kind === 'crater' ? craterRim(q, seed) : null;
   if (rim) { for (const c of rim.sect) extra.push([c.a, c.h, c.w, c.rel]); for (const g of rim.gaps) extra.push([g, 0, 0, 0]); }
-  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
+  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode === 16 ? 'stampLandform' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, leanK: lean.k, bearX: lean.bx, bearY: lean.by, leanSide: lean.side, wK: vary.wK, wLo: vary.wLo, wHi: vary.wHi, hgtA: vary.hgtA, hgtB: vary.hgtB, bankScale, amp, faceVar: q.faceVariation ?? .8,
-      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater') && q.cracks > 0 ? q.cracks : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
+      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater' || kind === 'landform') && q.cracks > 0 ? q.cracks : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
       ...outlineUniforms(kind, q, radius), bankFlat: (kind === 'deep' || kind === 'shallow') && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0, facePx: Math.max(0, q.facePx || 0), bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
       faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
@@ -387,10 +401,17 @@ export function prepareNode(n, geom, c) {
   if ((water || (kind === 'offset' && q.shorePlates > 0) || facetMode) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.
   const cv = strokeCurve(kind, q, {shouldered});
+  const put = t => { const at = main.extra.length; for (let j = 0; j < t.length; j += 4) main.extra.push([t[j], t[j + 1] ?? 0, t[j + 2] ?? 0, t[j + 3] ?? 0]); return at; };
   if (cv) {
-    const put = t => { const at = main.extra.length; for (let j = 0; j < t.length; j += 4) main.extra.push([t[j], t[j + 1] ?? 0, t[j + 2] ?? 0, t[j + 3] ?? 0]); return at; };
     Object.assign(main.u, cv.u); main.u.curveBase = put(cv.front); if (cv.back) main.u.backBase = put(cv.back);
     if (shouldered) main.u.sBack = backWidth / faceWidth;
+  }
+  if (kind === 'landform') {
+    // H27: the elevation and how it combines, the two half widths, the along curve's table, and the variation (px in the shape's own frame: wander scales with it).
+    const sd = landformSides({...q, radius});
+    Object.assign(main.u, {elev: q.elevation, combine: clamp(Math.round(q.combine || 0), 0, 2), lfFront: sd.front, lfBack: sd.back, alongBase: put(sampleKnots(alongKnots(q))),
+      lfWander: Math.max(0, q.wander || 0) * frameScale, lfWidth: Math.max(0, q.widthVary || 0), lfHeight: Math.max(0, q.heightVary || 0), lfSize: Math.max(8, q.varySize || 0),
+      lfFoot: q.varyFoot ?? 1, lfMid: q.varyMiddle ?? 1, lfCrest: q.varyCrest ?? 1});
   }
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
@@ -508,7 +529,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'facetSnap', 'facetApply', 'stampColumns', 'stampBerg', 'packPlane'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'facetSnap', 'facetApply', 'stampColumns', 'stampBerg', 'packPlane'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;

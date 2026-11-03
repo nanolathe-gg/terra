@@ -47,10 +47,20 @@ export const FORMS = {
   terrace: () => ({knots: [[0, 0], [.06, 0], [.28, .33], [.38, .33], [.6, .67], [.7, .67], [.92, 1], [1, 1]]}),
   // The plain hill of a ridge (spurs and crest options): the mountain's power law at exponent 2.
   dome: () => ({knots: at(ridge(2), even(48))}),
+  // H27, a landform's half sections (foot 0 to the path 1; both sides read the table until the back is unlinked). A flat top is knots: the table
+  // reaches 1 well before the path. Numbers only; softness plays no part.
+  lfPlateau: () => ({knots: [[0, 0], [.1, 0], [.34, 1], [1, 1]]}),
+  lfHill: () => ({knots: [[0, 0], [.28, .1], [.58, .45], [.82, .86], [1, 1]]}),
+  lfMountain: () => ({knots: [[0, 0], [.36, .04], [.66, .2], [.88, .6], [1, 1]]}),
+  lfTerraced: () => ({knots: [[0, 0], [.08, 0], [.2, .3], [.34, .3], [.46, .62], [.6, .62], [.72, 1], [1, 1]]}),
 };
 export const FORM_NAMES = ['hill', 'mountain', 'plateau', 'mesa', 'cliff', 'terrace'];
+// A landform's presets: its own four, and main's mesa and cliff where they fit.
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff']];
+// The forms the curve editor offers a kind, as [id, label].
+export const formChoices = kind => kind === 'landform' ? LANDFORM_FORMS : FORM_NAMES.map(f => [f, f[0].toUpperCase() + f.slice(1)]);
 // The form a kind draws by default.
-export const defaultForm = (kind, shouldered) => kind === 'hill' ? (shouldered ? 'hill' : 'dome') : kind === 'mountain' ? 'mountain' : 'plateau';
+export const defaultForm = (kind, shouldered) => kind === 'hill' ? (shouldered ? 'hill' : 'dome') : kind === 'mountain' ? 'mountain' : kind === 'landform' ? 'lfPlateau' : 'plateau';
 
 // Lean and facing. Lean is the back's length over the face's: the slope toward the lean side runs `ratio` times the length of the other (0: the kind's own,
 // which is the shouldered hill's softness-driven back and, for the plateau family, 1.7: the face widened .7 * .32 north^2 on the side toward north).
@@ -92,7 +102,7 @@ export function variability(kind, {naturalWater, naturalPlateau, shouldered, pla
 }
 
 // The kinds that take a cross-section curve, its face width and terraces.
-export const SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow'];
+export const SECTION_KINDS = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow', 'landform'];
 const isWater = kind => kind === 'deep' || kind === 'shallow';
 
 // The stroke's curve: {knots, back?} (form at the stroke's softness unless it carries knots of its own).
@@ -105,13 +115,31 @@ export function strokeKnots(kind, q, shouldered) {
 // The front table (and the back one where the shape needs a second curve) of a stroke, with the uniforms its curve adds, or null for a kind with no
 // cross-section. lip: the table leaves 0..1 (a land lip above 1, a water lip below 0), which the shader then keeps instead of clamping.
 export function strokeCurve(kind, q, {shouldered}) {
-  if (!['paint', 'erase', 'sand', 'grass', 'lower', 'smooth', 'offset', 'deep', 'shallow', 'plateau', 'mountain', 'hill'].includes(kind)) return null;
+  if (!['paint', 'erase', 'sand', 'grass', 'lower', 'smooth', 'offset', 'deep', 'shallow', 'plateau', 'mountain', 'hill', 'landform'].includes(kind)) return null;
   const k = strokeKnots(kind, q, shouldered), out = {front: sampleKnots(k.knots), u: {}};
+  // A landform always has a back: the front's own until the sides are unlinked.
+  const back = kind === 'landform' ? k.back ?? k.knots : k.back;
   if (shouldered) out.back = sampleKnots(k.back ?? SMOOTH);
-  out.u.cvLip = k.knots.some(p => p[1] > 1 || p[1] < 0) ? 1 : 0;
-  if (SECTION_KINDS.includes(kind)) Object.assign(out.u, {sSteps: Math.round(clamp(q.terraces, 0, 8)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter});
+  else if (kind === 'landform') out.back = sampleKnots(back);
+  out.u.cvLip = k.knots.concat(kind === 'landform' ? back : []).some(p => p[1] > 1 || p[1] < 0) ? 1 : 0;
+  if (SECTION_KINDS.includes(kind)) Object.assign(out.u, {sSteps: Math.round(clamp(q.terraces, 0, 8)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter, sBreak: clamp(q.breakup || 0, 0, 1)});
   return out;
 }
+// H27: a landform's two half widths (px): the whole section is the diameter, and the back (the lean side) is Lean times the front.
+export function landformSides(q) {
+  const ratio = q.lean > 0 ? clamp(q.lean, .25, 4) : 1, front = 2 * q.radius / (1 + ratio);
+  return {front, back: front * ratio, ratio};
+}
+// H27: the most a cell can stand from a landform's path and still be on it (world px; `scale` is the frame's), over the widest side grown by the width
+// variation at its largest weight, the wander, and the spurs. The segment boxes and nodeBounds both use it.
+export function landformReach(q, scale = 1) {
+  const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1, q.varyCrest ?? 1);
+  return Math.max(front, back) * Math.exp(1.35 * (q.widthVary || 0) * weight) + (q.wander || 0) * scale * weight + 2;
+}
+// The along-the-path knots a landform carries (the elevation's share along the path, 0 to 1.2), flat at 1 until edited.
+export const ALONG_FLAT = [[0, 1], [1, 1]];
+export const alongKnots = q => q.along?.length >= 2 ? q.along : ALONG_FLAT;
+
 
 // The table as the shader reads it (Catmull-Rom over the CV_N + 3 samples), so the editor draws what a stroke draws.
 export function readTable(tab, t) {
@@ -129,6 +157,6 @@ export function thinKnots(knots, n = 9) { const f = knotCurve(knots); return Arr
 
 // The editor's preview: the stroke's table, foot to top, n + 1 samples (land: share of the rise; water: share of the descent), and its back's.
 export function sectionPreview(kind, q, shouldered, n = 160) {
-  const k = strokeKnots(kind, q, shouldered), tab = sampleKnots(k.knots), back = shouldered ? sampleKnots(k.back ?? SMOOTH) : tab, at = tb => Float32Array.from({length: n + 1}, (_, i) => readTable(tb, i / n));
+  const k = strokeKnots(kind, q, shouldered), tab = sampleKnots(k.knots), back = shouldered ? sampleKnots(k.back ?? SMOOTH) : kind === 'landform' && k.back ? sampleKnots(k.back) : tab, at = tb => Float32Array.from({length: n + 1}, (_, i) => readTable(tb, i / n));
   return {water: isWater(kind), ys: at(tab), back: at(back), knots: k.knots};
 }
