@@ -5,6 +5,7 @@ package editor
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"syscall/js"
 
@@ -77,8 +78,9 @@ func (a *App) finishLayout() {
 		if v := a.Query.Get(key); v != "" {
 			setValue(id, v)
 		}
-		on(element(id), "change", func(js.Value) { a.trimTiles(); a.Schedule() })
+		on(element(id), "change", func(js.Value) { a.applyMemoryBudgets(); a.trimTiles(); a.Revision++; a.Schedule() })
 	}
+	a.applyMemoryBudgets()
 	// Match the inspector's existing pipeline groups without duplicating settings.
 	stages := map[string]js.Value{}
 	each("#knobs > .knobs-group", func(g js.Value) {
@@ -218,4 +220,24 @@ func (a *App) shapeVisible(key, kind string, p map[string]any) bool {
 		}
 	}
 	return true
+}
+
+// applyMemoryBudgets snapshots both existing controls into every worker job's
+// Config. Updating a budget does not change terrain resolution or shader math.
+func (a *App) applyMemoryBudgets() {
+	for _, item := range []struct {
+		id, key       string
+		fallback, max int
+	}{
+		{"gpu-budget", "gpuBudgetBytes", 512, 4096}, {"heap-budget", "heapBudgetBytes", 1024, 8192},
+	} {
+		n := number(item.id)
+		if math.IsNaN(n) || math.IsInf(n, 0) {
+			n = float64(item.fallback)
+		}
+		n = math.Max(128, math.Min(float64(item.max), math.Round(n)))
+		setValue(item.id, fmt.Sprint(int(n)))
+		a.Config[item.key] = int(n) * 1024 * 1024
+	}
+	text("memory-status", fmt.Sprintf("GPU %d MiB · page data %d MiB (¼ cache, ½ worker, ¼ transfer headroom)", int(number("gpu-budget")), int(number("heap-budget"))))
 }

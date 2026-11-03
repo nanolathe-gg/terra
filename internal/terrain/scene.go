@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
 
@@ -96,6 +97,11 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if !window.HeightsOnly {
+		if err := membudget.FromConfig(s.config).Image(int(math.Ceil(float64(window.Width)/window.Scale)), int(math.Ceil(float64(window.Height)/window.Scale))); err != nil {
+			return nil, err
+		}
+	}
 	s.renderer.ApplyKnobs(knobs)
 	if len(colors) > 0 {
 		b, err := json.Marshal(colors)
@@ -125,6 +131,21 @@ func (s *SceneRenderer) Render(ctx context.Context, nodes []model.Node, knobs ma
 		x1 := clampInt(int(math.Ceil(float64(window.X+window.Width)/spacing)), 0, top)
 		y1 := clampInt(int(math.Ceil(float64(window.Y+window.Height)/spacing)), 0, top)
 		region = &RenderRegion{GridX: x0, GridY: y0, GridWidth: x1 - x0 + 1, GridHeight: y1 - y0 + 1, GridSpacing: spacing, WorldGrid: nativeGrid, WorldSize: s.renderer.Size}
+	}
+
+	if window.ReadHeights || window.HeightsOnly {
+		if err := membudget.Require("Terrain height readback", membudget.Area(pow2(region.GridWidth), pow2(region.GridHeight), 16), membudget.FromConfig(s.config).Working()); err != nil {
+			return nil, err
+		}
+	}
+
+	if window.ReadHeights && !window.HeightsOnly {
+		limits := membudget.FromConfig(s.config)
+		imageBytes := membudget.Area(int(math.Ceil(float64(window.Width)/window.Scale)), int(math.Ceil(float64(window.Height)/window.Scale)), 4)
+		heightBytes := membudget.Area(region.GridWidth, region.GridHeight, 4)
+		if err := membudget.Require("Terrain tile transfer", 3*(imageBytes+heightBytes), limits.Transfer()); err != nil {
+			return nil, err
+		}
 	}
 
 	seaLevel := number(s.config, "seaLevel", 0)
@@ -198,7 +219,7 @@ func (s *SceneRenderer) UpdateConfig(config map[string]any) error {
 		return errors.New("scene grid changed; recreate renderer")
 	}
 	oldBudget := s.cacheBudget()
-	for _, key := range []string{"gpuMB", "gpuBudgetBytes", "gpuBudgetMB"} {
+	for _, key := range []string{"gpuMB", "gpuBudgetBytes", "gpuBudgetMB", "heapMB", "heapBudgetBytes", "heapBudgetMB"} {
 		if v, ok := config[key]; ok {
 			s.config[key] = v
 		}

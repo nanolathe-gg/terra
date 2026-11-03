@@ -18,6 +18,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
 	"github.com/nanolathe-gg/terraform/internal/renderjob"
 	"github.com/nanolathe-gg/terraform/internal/terrain"
@@ -140,6 +141,10 @@ func loop() {
 				post(map[string]any{"kind": "uniforms", "id": job.ID, "result": js.Global().Get("JSON").Call("parse", string(b))})
 				return
 			}
+			if err := engine.UpdateConfig(job.Config); err != nil {
+				post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+				return
+			}
 			if job.Kind == "authored" {
 				if len(job.Tiles) != 1 {
 					post(map[string]any{"kind": "error", "id": job.ID, "error": "Expected one cell window."})
@@ -180,10 +185,6 @@ func loop() {
 				}
 				return
 			}
-			if err := engine.UpdateConfig(job.Config); err != nil {
-				post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
-				return
-			}
 			var options terrain.DrawOptions
 			b, _ := json.Marshal(job.Options)
 			_ = json.Unmarshal(b, &options)
@@ -213,6 +214,15 @@ func loop() {
 					return
 				}
 				width, height := bounds.X1-bounds.X0+1, bounds.Z1-bounds.Z0+1
+				limits := membudget.FromConfig(job.Config)
+				if err := limits.Fill(f.Cols, f.Rows); err != nil {
+					post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+					return
+				}
+				if err := membudget.Require("Fill height grid", membudget.Area(width, height, 4), limits.Working()/2); err != nil {
+					post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+					return
+				}
 				values := make([]float32, width*height)
 				for z := bounds.Z0; z < bounds.Z1; z += 32 {
 					for x := bounds.X0; x < bounds.X1; x += 32 {
@@ -324,6 +334,11 @@ func loop() {
 					}
 					post(map[string]any{"kind": "heights", "id": job.ID, "values": values, "clipped": clipped, "columns": wc, "rows": hc})
 				} else {
+					transfer := int64(len(r.RGBA)) + int64(len(r.Heights))*4
+					if err := membudget.Require("Terrain tile transfer", transfer*3, membudget.FromConfig(job.Config).Transfer()); err != nil {
+						post(map[string]any{"kind": "error", "id": job.ID, "error": err.Error()})
+						return
+					}
 					rgba := js.Global().Get("Uint8Array").New(len(r.RGBA))
 					js.CopyBytesToJS(rgba, r.RGBA)
 					hb := make([]byte, len(r.Heights)*4)

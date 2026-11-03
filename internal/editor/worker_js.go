@@ -13,6 +13,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/renderjob"
 )
 
@@ -218,6 +219,18 @@ func (a *App) queueView() {
 }
 func (a *App) acceptTile(m js.Value) {
 	w, h := m.Get("width").Int(), m.Get("height").Int()
+	limits := membudget.FromConfig(a.Config)
+	incoming := membudget.Area(w, h, 4)
+	if exists(m.Get("heights")) {
+		incoming += int64(m.Get("heights").Get("byteLength").Int())
+	}
+	if err := membudget.Require("Terrain tile transfer", incoming*3, limits.Transfer()); err != nil {
+		showError(err)
+		return
+	}
+	// Drop old browser backing stores before allocating the incoming canvas and
+	// float heights; transfer copies fit in the separately reserved headroom.
+	a.trimTilesTo(max(0, int(limits.Cache()-incoming)))
 	c := create("canvas", "", "")
 	c.Get("dataset").Set("terrainTile", "true")
 	c.Set("width", w)
@@ -244,34 +257,32 @@ func (a *App) acceptTile(m js.Value) {
 		t.HeightSpacing = m.Get("heightSpacing").Float()
 		t.Bytes += len(hb)
 	}
+	if old := a.tiles[m.Get("key").String()]; old != nil {
+		old.Canvas.Set("width", 0)
+		old.Canvas.Set("height", 0)
+		old.Heights = nil
+	}
 	a.tiles[m.Get("key").String()] = t
 	a.trimTiles()
 	a.paintTiles()
 	a.refreshLandformSection()
 }
 func (a *App) trimTiles() {
-	budget := 128 * 1024 * 1024
-	if n := number("gpu-budget"); n >= 128 {
-		budget = int(n) * 1024 * 1024 / 4
+	a.trimTilesTo(int(membudget.FromConfig(a.Config).Cache()))
+}
+func (a *App) trimTilesTo(budget int) {
+	entries := make([]membudget.Entry, 0, len(a.tiles))
+	for key, t := range a.tiles {
+		entries = append(entries, membudget.Entry{Key: key, Bytes: int64(t.Bytes), Used: t.Used.UnixNano()})
 	}
-	total := 0
-	for _, t := range a.tiles {
-		total += t.Bytes
+	for _, key := range membudget.Evictions(entries, int64(budget)) {
+		t := a.tiles[key]
+		t.Canvas.Set("width", 0)
+		t.Canvas.Set("height", 0)
+		t.Heights = nil
+		delete(a.tiles, key)
 	}
-	for total > budget {
-		oldest := ""
-		var stamp time.Time
-		for k, t := range a.tiles {
-			if oldest == "" || t.Used.Before(stamp) {
-				oldest, stamp = k, t.Used
-			}
-		}
-		if oldest == "" {
-			break
-		}
-		total -= a.tiles[oldest].Bytes
-		delete(a.tiles, oldest)
-	}
+
 }
 func (a *App) paintTiles() {
 	g := element("terrain").Call("getContext", "2d")

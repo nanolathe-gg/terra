@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/nanolathe-gg/terraform/internal/membudget"
 	"github.com/nanolathe-gg/terraform/internal/model"
 )
 
@@ -115,6 +116,9 @@ func (s *SceneRenderer) CompareRegions(ctx context.Context, nodes []model.Node, 
 func (s *SceneRenderer) ReadAuthored(ctx context.Context, nodes []model.Node, knobs map[string]string, rect CellRect) (*ShapeWindow, error) {
 	if s.shape == nil || s.renderer == nil {
 		return nil, fmt.Errorf("scene renderer is closed")
+	}
+	if err := membudget.FromConfig(s.config).Authored(rect.X1-rect.X0+1, rect.Y1-rect.Y0+1); err != nil {
+		return nil, err
 	}
 	s.renderer.ApplyKnobs(knobs)
 	grid := s.renderer.Grid
