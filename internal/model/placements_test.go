@@ -26,3 +26,17 @@ func TestPlacementsAndStarts(t *testing.T) {
 		t.Fatal("removed last start")
 	}
 }
+func TestDepositRemovesOnlyNearbyGeneratedFeatures(t *testing.T) {
+	s := NewPlacementStore(32, 32, []FeatureDefinition{{Name: "tree", Kind: "tree", FootprintX: 1, FootprintZ: 1}, {Name: "metal", Kind: "deposit", FootprintX: 1, FootprintZ: 1}}, "metal")
+	s.Margin = 32
+	s.Features = []FeaturePlacement{{"tree", 4, 4}, {"tree", 20, 20}, {"tree", 5, 4}}
+	s.Generated[featureKey(s.Features[0])] = true
+	s.Generated[featureKey(s.Features[1])] = true
+	removed, e := s.Add("metal", 4, 5)
+	if e != nil || removed != 1 {
+		t.Fatalf("removed=%d error=%v", removed, e)
+	}
+	if len(s.Features) != 3 || s.Features[0].X != 20 || s.Features[1].X != 5 {
+		t.Fatalf("wrong survivors: %+v", s.Features)
+	}
+}
