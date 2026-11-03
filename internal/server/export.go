@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -288,7 +286,7 @@ func (s *exportStore) cleanupCrashes() {
 			continue
 		}
 		// A live process, an inaccessible process, and other errors all mean skip.
-		if err := syscall.Kill(owner.PID, 0); !errors.Is(err, syscall.ESRCH) {
+		if !exportProcessGone(owner.PID) {
 			continue
 		}
 		dir := filepath.Join(parent, "export-"+owner.ID)
