@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Terrain lab</title>
+<style>
+  body { margin: 0; padding: 12px; background: #1b1d1c; color: #d8ddd9; font: 13px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 2px; } #about { color: #9aa49e; margin: 0 0 10px; max-width: 90ch; }
+  #grid { display: flex; flex-wrap: wrap; gap: 12px; }
+  figure { margin: 0; } canvas { display: block; image-rendering: pixelated; }
+  figcaption { color: #9aa49e; font: 12px ui-monospace, monospace; margin-top: 4px; max-width: 512px; }
+  #log { color: #c9a; font: 11px ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+<h1 id="title">Terrain lab</h1>
+<p id="about"></p>
+<div id="grid"></div>
+<pre id="log"></pre>
+<script type="module">
+import {run} from './core.js';
+run().catch(e => { document.getElementById('log').textContent += 'error: ' + (e.stack || e.message) + '\n'; window.__lab = {done: true, error: [String(e.message)]}; });
+</script>
