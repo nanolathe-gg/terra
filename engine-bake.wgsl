@@ -119,7 +119,7 @@ fn lsMask(c: vec2f) -> LsMask {
     source *= depositsAt(c);
     // How far along its way a stone has come: a gentler slope is further out.
     let travelled = 1.0 - smoothstep(0.25, 0.9, slope);
-    let sort = u.looseSort;
+    let sort = u.stoneSort;
     let size = u.looseSize * mix(1.0, mix(0.3 + 0.7 * travelled, 1.0 - 0.7 * travelled, carried), sort);
     let sigma = mix(2.0, 0.7, sort);
     let fines = clamp(0.15 + 0.45 * (1.0 - smoothstep(0.2, 0.8, slope)) + 0.2 * carried, 0.0, 0.85);

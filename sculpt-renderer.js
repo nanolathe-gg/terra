@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,PLACEMENT_ROW} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,PLACEMENT_ROW} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
@@ -643,7 +643,7 @@ export class TerrainRenderer {
   // (Green's); every other table leaves them to the knobs, as the world's placement always was.
   placementTable(variant) {
     const rows = this.materialData?.placement ? tablePlacementRows(this.materialData, variant) : this.placementRows(variant);
-    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows];
+    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover)];
   }
 
   // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
@@ -1037,7 +1037,7 @@ export class TerrainRenderer {
     set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
     {
       set('uWeatherMaps', this.weatherMaps ? 1 : 0);
-      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8]])
+      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['lushness', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8]])
         set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     }
     set('uReliefScale', number('reliefScale', 28));
@@ -1083,8 +1083,8 @@ export class TerrainRenderer {
     set('uWorms', number('worms', 0));
     set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
     set('uLooseSize', number('looseSize', 6));
-    set('uLooseSort', number('looseSort', 0.6));
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
+    set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
     set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
     set('uBandSoftness', number('bandSoftness', 0.35));

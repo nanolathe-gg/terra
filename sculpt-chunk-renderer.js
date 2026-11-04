@@ -4,7 +4,7 @@ import {TerrainRenderer} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
-const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
+const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','free19','fu','fv','s1','s2','s3'];
 const MB=1024*1024, pow2=n=>2**Math.ceil(Math.log2(Math.max(1,n)));
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const mipBytes=(w,h,layers,levels,bytes)=>{let total=0;for(let i=0;i<levels;i++)total+=Math.max(1,w>>i)*Math.max(1,h>>i)*layers*bytes;return total;};
@@ -81,7 +81,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   reaches(quality='full',heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),full=quality==='full';
     // H1: the close shadow march (6 px) and the cavity ring (3 px) plus the gradient's 1.4 sit inside the far taps' reach.
-    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,n('cavity',0)>0?3+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
+    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?3+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads 14 px up the slope plus its gradient (5).
     const stones=3.6*Math.min(16,3.3*n('looseSize',6))+24;
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
@@ -275,14 +275,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     }
     const q=this.device.queue;q.writeTexture({texture:this.heightTexture},height,{bytesPerRow:gw*4},[gw,gh]);q.writeTexture({texture:this.routeTexture},routes,{bytesPerRow:gw*4},[gw,gh]);
     q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,4]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,this.maskLayers]);
-    const flags={paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,12).some(Boolean)||painted[13],lumpOn:painted[12],overrideOn:painted.slice(14,18).some(Boolean),...request.maskFlags};
+    const flags={paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,12).some(Boolean)||painted[13]||painted[18],lumpOn:painted[12],overrideOn:painted.slice(14,18).some(Boolean),...request.maskFlags};
     for(const k of ChunkTerrainRenderer.FLAGS)this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     this.materialReady=Boolean(material);this.weatherMaps=Boolean(weather?.wear);this.cpuWorkingBytes=0;
   }
   // H7b: the six painted-mask flags (uniforms that gate whole branches) used to come back to the CPU through a mapped read, a full GPU round trip
   // (about 8 ms) between the feed pass and the draw. They are now expanded from the feed pass's word by one more tiny pass and copied into the
   // uniform buffer inside the same submission, so nothing waits. The expansion is the arithmetic the CPU applied to the word:
-  //   paintOn: any of bits 0-8, scatterOn: bit 4, styleOn: any of 5-8, waterOn: any of 9-11 or bit 13, lumpOn: bit 12, overrideOn: any of 14-17.
+  //   paintOn: any of bits 0-8, scatterOn: bit 4, styleOn: any of 5-8, waterOn: any of 9-11, 13 or 18, lumpOn: bit 12, overrideOn: any of 14-17.
   // While it is in use, flushUniforms writes the CPU copy around those six fields, so the CPU never overwrites the GPU's values.
   static FLAGS=['paintOn','scatterOn','styleOn','waterOn','lumpOn','overrideOn'];
   flagPass() {
@@ -296,7 +296,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
         flags[0] = any_(w, 0u, 9u);
         flags[1] = (w >> 4u) & 1u;
         flags[2] = any_(w, 5u, 9u);
-        flags[3] = max(any_(w, 9u, 12u), (w >> 13u) & 1u);
+        flags[3] = max(max(any_(w, 9u, 12u), (w >> 13u) & 1u), (w >> 18u) & 1u);
         flags[4] = (w >> 12u) & 1u;
         flags[5] = any_(w, 14u, 18u);
       }`});
@@ -345,7 +345,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     else{
       await stage.mapAsync(GPUMapMode.READ);const word=new Uint32Array(stage.getMappedRange().slice(0))[0];stage.unmap();stage.destroy();painted.destroy();uniform.destroy();
       const on=k=>(word>>>k)&1,any=(a,b)=>{for(let k=a;k<b;k++)if(on(k))return 1;return 0;};
-      const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,12)||on(13),lumpOn:on(12),overrideOn:any(14,18),...request.maskFlags};
+      const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,12)||on(13)||on(18),lumpOn:on(12),overrideOn:any(14,18),...request.maskFlags};
       for(const k of ChunkTerrainRenderer.FLAGS)this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     }
     this.materialReady=Boolean(src.field);this.weatherMaps=Boolean(src.maps);   // the material field rides in layer 1 when the Time pass made one

@@ -1025,6 +1025,7 @@
    99.1
   ],
   "materialWeathering": 0.0,
+  "stoneSort": 0.5,
   "depositSpread": 0.65,
   "rockyCoasts": false,
   "surfaceRelief": 0.35,

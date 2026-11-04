@@ -94,7 +94,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Strata/);
  assert.match(requirement('bedSpacing',{column:1,rockOrder:1,bedLedge:1}),/authored bed profile/);
  shows('bedSpacing',{column:1,rockOrder:1,bedLedge:1,cliffRise:8});   // a column's ledge scales by thickness over spacing once it has a rise
- assert.equal(requirement('looseSort',{looseSupply:0}),'','painted scatter sorts its stones by this at Supply 0');
  assert.equal(requirement('lavaDusk',{lavaCrust:0}),'','the dusk darkens any rock turned from the sun, crust or none');
  assert.match(requirement('faceEdge',{microRock:0}),/one material/);
  shows('gullyRock',{microRock:.7});

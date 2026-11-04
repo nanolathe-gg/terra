@@ -2,6 +2,9 @@
 export const MM_ROWS = 63;
 // The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): ten rows after it.
 export const PLACEMENT_ROW = 156;
+// The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them. A table without `groundCover` gives zeros: the feature is off.
+export const COVER_ROW = PLACEMENT_ROW + 10;
+export const COVER_ROWS = 39;
 // The rows engine-materials.wgsl makes the layers from: MM_ROWS per layer, in the table's order. A material named twice in the order
 // (a layer that shares its image with an earlier one) takes the same rows and its own layer's noise.
 export function materialRows(table) {
@@ -44,5 +47,24 @@ export function tablePlacementRows(table, overrides = null) {
     const values=String(overrides.get(key)).split(',').map(Number),count=key==='faceScore'?4:2;
     if(values.length===count&&values.every(Number.isFinite))values.forEach((v,i)=>rows[row][i]=v);
   }
+  return rows;
+}
+
+// Card P30: the rows of a `groundCover` block (the layout is engine-frag.wgsl's, above MM_COVER). Colours are sRGB 0..255, windows are
+// [from, full, full until, gone by] on moisture, soil depth and light; strength and lush are a class's weight and its exponent on Lushness.
+export function groundCoverRows(cover) {
+  const rows = Array.from({length: COVER_ROWS}, () => [0, 0, 0, 0]);
+  if (!cover) return rows;
+  const rgb = c => c.map(v => v / 255);
+  rows[0] = [1, cover.wet[0], cover.wet[1], cover.dry];
+  rows[1] = [cover.soil.slope[0], cover.soil.slope[1], cover.soil.convex, cover.soil.deposit];
+  rows[2] = [cover.patch, cover.moisture.perSwath, cover.moisture.swathRef, cover.moisture.shade];
+  rows[3] = [...rgb(cover.ground), cover.patchiness];
+  cover.classes.forEach((k, i) => {
+    const b = 4 + 5 * i;
+    rows[b] = [...rgb(k.rgb), k.grain];
+    rows[b + 1] = [k.strength, k.lush, 0, 0];
+    rows[b + 2] = k.moisture; rows[b + 3] = k.soil; rows[b + 4] = k.light;
+  });
   return rows;
 }

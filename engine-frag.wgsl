@@ -300,14 +300,14 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
     let r6 = pr(6u); let r7 = pr(7u); let r8 = pr(8u); let r9 = pr(9u);
     var exposure = 0.0;
-    var vegetation = 0.0;
+    var vegetation = u.lushness;   // card P30: the world-wide baseline of the painted override
     out.deposits = 1.0;
-    out.vegetation = 1.0;
+    out.vegetation = 1.0 + u.lushness;
     if (u.overrideOn != 0) {
         let uv = maskUv(p);
         let planes = textureSampleLevel(masksTex, linearClamp, uv, 4, 0.0);
-        vegetation = planes.r;
-        out.vegetation = 1.0 + planes.r;
+        vegetation = u.lushness + planes.r;
+        out.vegetation = 1.0 + vegetation;
         exposure = planes.g;
         out.deposits = 1.0 + textureSampleLevel(masksTex, linearClamp, uv, 3, 0.0).w;
     }
@@ -388,6 +388,63 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     out.top = top;
     out.faceSlope = faceSlope;
     return out;
+}
+
+// Card P30: ground cover placed by ecosystem rules. A world whose material data carries a ground-cover table (row 0, x = 1) draws its
+// grass from seven classes (0 bare soil, 1 dry grass, 2 turf, 3 meadow, 4 scrub, 5 moss, 6 wet rush) in place of the slope-only
+// ramp. Each pixel has three site values from maps the Time pass already writes: moisture (wetness, with the wet swaths' control as its bias, and
+// the sun's shade), soil depth (thin on steep and convex ground, deep in hollows and where water laid deposit) and light (the sun on the
+// broad face, level ground 1). A class is viable inside a window of each (Cordonnier et al. 2017; Gain et al. 2017); its cover is the
+// viability squared times a strength that follows Lushness (succession: grazed turf and bare ground below 1, meadow, scrub and rush above);
+// a pixel draws its class from the covers by a coherent uniform, which Patchiness moves from per-pixel noise to patches.
+// Table (MM_COVER rows): 0 x on, y wetness at which moisture starts to rise, z wetness at which it is full, w moisture of dry level ground;
+// 1 x slope where soil thins, y slope where it is gone, z convex ground's loss, w deposit's gain; 2 x patch px, y moisture per unit of
+// wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w Patchiness (0..1: how far the class draw clumps into patches);
+// then per class five rows: colour (rgb) and its grain, strength and Lushness exponent, and the windows of moisture, soil and light.
+const MM_COVER = 166u;
+fn cvr(i: u32) -> vec4f { return matRow(MM_COVER + i); }
+fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }
+fn coverZ(p: vec2f, scale: f32, patchiness: f32) -> f32 {
+    let zp = (valueNoise(p / scale + 17.0) + 0.5 * valueNoise(p / (0.45 * scale) + 31.0) + 0.25 * valueNoise(p / (0.2 * scale) + 47.0)) / 0.46;
+    let c = floor(p);
+    let pixel = (cellHash(c).x + cellHash(c + 7.3).x + cellHash(c + 19.1).y - 1.5) * 2.0;
+    let pt = clamp(patchiness, 0.0, 1.0);
+    return sqrt(pt) * zp + sqrt(1.0 - pt) * pixel;
+}
+// The grass with the class this pixel draws: the class colour carries the grass art's light and dark, and keeps its chroma only within
+// +-30% of that (the art's blue and red grain would otherwise swing a tan or a dark green to pink or teal).
+fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f) -> vec3f {
+    let c0 = cvr(0u); let c1 = cvr(1u); let c2 = cvr(2u);
+    let wn = smoothstep(c0.y, c0.z, tm.wet);
+    let nb = normalize(vec3f(-broad, 1.0));
+    let light = max(dot(nb, u.light), 0.0) / max(u.light.z, 0.05);
+    let shade = clamp(1.0 - light, -0.6, 1.0);
+    let moist = clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0);
+    let soil = clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
+    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
+    var cover: array<f32, 7>;
+    var total = 0.0;
+    for (var k = 0u; k < 7u; k++) {
+        let b = 4u + 5u * k;
+        let st = cvr(b + 1u);
+        var v = st.x * pow(lush, st.y);
+        if (k > 0u) {
+            v *= coverWin(moist, cvr(b + 2u)) * coverWin(soil, cvr(b + 3u)) * coverWin(light, cvr(b + 4u));
+            v *= v;
+        }
+        cover[k] = v;
+        total += v;
+    }
+    let z = coverZ(p, c2.x, cvr(3u).w);
+    let pick = 1.0 / (1.0 + exp(-1.702 * z)) * total;
+    var acc = 0.0;
+    var klass = 6u;
+    for (var k = 0u; k < 7u; k++) { acc += cover[k]; if (pick < acc) { klass = k; break; } }
+    let col = cvr(4u + 5u * klass);
+    let grain = (cellHash(floor(p) + 3.7).y - 0.5) * 2.0 * col.w;
+    let ratio = grass / max(cvr(3u).rgb, vec3f(0.01));
+    let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
+    return col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
 }
 
 // Moon slope marks, measured on the retail Lunar sections and the cc21
@@ -1285,6 +1342,92 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
     return mix(material, refined, materialWeather);
 }
 
+// Card P27, Surf: the shore as one cross-shore coordinate. surfShore marches 8 rays from the pixel over the height field and returns x, the signed
+// distance in world px to the drawn waterline (onshore +; the drawn edge sits where the bed is 0.6 under the sea, so the bank's own run is added),
+// the nearest shore point q, a coordinate along the coast that value noise can use, and the bed's slope there (units per px). Beyond SURF_REACH, or where the height is more than a beach
+// above or a surf zone below the sea, x is 1e3. Every term is a function of position, so a chunk replays to the same bytes.
+const SURF_REACH = 56.0;
+fn surfShore(p: vec2f) -> vec4f {
+    let h0 = baseHeight(p) - u.sea;
+    let dry = h0 >= 0.0;
+    if ((dry && h0 > 12.0) || (!dry && h0 < -16.0)) { return vec4f(1.0e3, 0.0, 0.0, 0.0); }
+    var radii = array<f32, 10>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0);
+    var best = SURF_REACH;
+    var q = p;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.785398 + 0.2;
+        let dir = vec2f(cos(a), sin(a));
+        var lastR = 0.0;
+        var lastH = h0;
+        for (var i = 0; i < 10; i++) {
+            let r = radii[i];
+            if (lastR >= best) { break; }
+            let hr = baseHeight(p + dir * r) - u.sea;
+            if ((hr >= 0.0) != dry) {
+                let d = lastR + (r - lastR) * lastH / (lastH - hr);
+                if (d < best) { best = d; q = p + dir * d; }
+                break;
+            }
+            lastR = r;
+            lastH = hr;
+        }
+    }
+    if (best >= SURF_REACH) { return vec4f(1.0e3, 0.0, 0.0, 0.0); }
+    let slope = max(bankGrad(p), 0.12);
+    return vec4f(select(-best, best, dry) + 0.6 / slope, q, slope);
+}
+// The beach the surf builds: berm height 1.5 + 3 Surf units on a face that flattens from 0.30 to 0.12, so the berm stands 5 to 38 px from the water.
+// Below Surf .2 there is only the wet line and the lace (a lake): the sand, its cusps and the breakers fade in between .2 and .45.
+fn surfBeach(e: f32) -> f32 { return smoothstep(0.2, 0.45, e); }
+fn surfBerm(e: f32) -> f32 { return (1.5 + 3.0 * e) / mix(0.30, 0.12, e); }
+// The cross-shore coordinate with the beach cusps: horns that push the swash seaward every ~26 px along the coast.
+fn surfCuspX(x: f32, q: vec2f, e: f32) -> f32 {
+    return x + 3.5 * e * surfBeach(e) * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm(e) * 0.7, surfBerm(e) * 1.1, x));
+}
+// Sand to the berm and a little past it, its inland edge ragged, where the pixel is dry.
+fn surfSand(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
+    let veg = smoothstep(-0.1, 0.15, (surfCuspX(x, q, e) - (surfBerm(e) + 20.0)) / 30.0 + 0.3 * valueNoise(p / 24.0) + 0.15 * valueNoise(p / 11.0));
+    return (1.0 - veg) * step(0.0, x) * surfBeach(e);
+}
+// The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
+fn surfWet(x: f32, q: vec2f, e: f32) -> f32 {
+    let reach = (0.5 + 0.25 * valueNoise(q / 30.0)) * surfBerm(e) * surfBeach(e) + 1.0;
+    return (1.0 - smoothstep(reach - 1.5, reach + 1.0, surfCuspX(x, q, e))) * step(0.0, x);
+}
+// Foam at a pixel, static (hashed per art pixel): on the water a lace at the waterline and, with Surf, a broken breaker line along an isobath
+// with spray behind it; on the wet sand a 1 px swash front. depth is the bed under the sea (0 on land).
+fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e: f32) -> f32 {
+    let cell = floor(grainPixel(pixel));
+    if (x < 0.0) {
+        let xs = -x;
+        let w = mix(1.2, 2.0, surfBeach(e));
+        let lace = (1.0 - smoothstep(0.4 * w, w, xs + 0.3 * (1.0 + valueNoise(p / 3.0)))) * step(shelfHash(cell + 47.0), mix(0.97, 0.75, surfBeach(e)));
+        // The breakers stand on the isobath where the water is 1.5 + 3 Surf units deep (over a bar, on its crest), in px along the bed's slope.
+        let ofBreak = (depth - (1.5 + 3.0 * e)) / slope + 0.5 * valueNoise(p / 6.0);
+        let breaking = smoothstep(-0.15, 0.2, valueNoise(q / 40.0 + vec2f(0.5, 3.0)) + e - 0.8);
+        let crest = (1.0 - smoothstep(0.5, 1.8, abs(ofBreak))) * breaking * step(shelfHash(cell + 74.0), 0.85);
+        let spray = (1.0 - smoothstep(1.5, 4.0, -ofBreak)) * smoothstep(0.0, 1.5, -ofBreak) * breaking * step(shelfHash(cell + 75.0), 0.18);
+        return clamp(max(lace, (crest + spray) * e * surfBeach(e)), 0.0, 1.0);
+    }
+    let xf = 1.5 + 0.3 * surfBerm(e) * (0.5 + 0.5 * valueNoise(q / 22.0 + vec2f(2.0, 8.0)));
+    let front = (1.0 - smoothstep(0.3, 1.0, abs(surfCuspX(x, q, e) - xf))) * step(shelfHash(cell + 45.0), 0.7) * surfBeach(e) * smoothstep(-0.1, 0.25, valueNoise(q / 30.0 + vec2f(9.0, 1.0)));
+    return front * 0.85;
+}
+// Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
+fn sandWeathered() -> vec3f {
+    let rockAverage = select(u.rockTexMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+    let weathered = mix(vec3f(mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25)), vec3f(1.0), u.sandLight * 0.55);
+    return select(weathered, u.sandBase.rgb, u.sandBase.a > 0.5);
+}
+fn sandMaterialAt(scatter: vec2f) -> vec3f {
+    let rockLevel = u.rockTexMean;
+    let weathered = sandWeathered();
+    var fragment = genColor(2, scatter);
+    fragment = mix(fragment, vec3f(1.0), u.sandLight * 0.45);
+    if (u.sandBase.a > 0.5) { fragment = saturate(fragment - rockLevel + u.sandBase.rgb); }
+    return mix(weathered, fragment, u.sandGrain);
+}
+
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -1402,6 +1545,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Retail's small hills keep nearly the plain's tone on their far sides; the dark masses are the tall hills', so it grows with height.
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
+    let timeMaps = timeMapsAt(p);
     var grass = groundBased(groundSource(pixel));
     let grass0 = grass;
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
@@ -1440,6 +1584,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         slopeShare = slopeCover;
         grass = mix(grass, slopeGrass, slopeCover);
     }
+    // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
+    if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass); }
     // Small mineral interiors supply pixel structure; the whole crown/face/
     // foot comes from this surface. Some native microshading remains baked.
     var rock = rockSource(pixel);
@@ -1469,11 +1615,23 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     var exposed = place.exposed;
     // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
-    let timeMaps = timeMapsAt(p);
     exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);
-    let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
+    var nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
+    // Card P27, Surf: the signed distance to the waterline, and the wet sand it extends the wet band with.
+    var surfX = 1.0e3;
+    var surfQ = vec2f(0.0);
+    var surfSlope = 0.12;
+    var surfE = 0.0;
+    if (u.waterOn != 0) { surfE = max(textureSampleLevel(masksTex, linearClamp, maskUv(p), 4, 0.0).b, 0.0); }
+    if (surfE > 0.0) {
+        let shore = surfShore(p);
+        surfX = shore.x;
+        surfQ = shore.yz;
+        surfSlope = shore.w;
+        if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, surfE)); }
+    }
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
         // Beach sand within reach of the water (baked), or failing that a low band above the waterline; its inland edge is ragged and breaks into grains.
@@ -1590,18 +1748,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // sampled art. Coverage comes from the bake.
         let sand = bakedFields(p).a * place.deposits;
         if (sand > 0.0) {
-            // Weathered rock: the rock's own average colour, lightened and
-            // dulled by weathering, with fragments of the rock texture as
-            // grains. A biome's sand therefore follows its own rock.
-            let rockLevel = u.rockTexMean;
-            let rockAverage = select(rockLevel, u.rockBase.rgb, u.rockBase.a > 0.5);
-            var weathered = mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25);
-            weathered = mix(weathered, vec3f(1.0), u.sandLight * 0.55);
-            if (u.sandBase.a > 0.5) { weathered = u.sandBase.rgb; }
-            var fragment = genColor(2, scatter);
-            fragment = mix(fragment, vec3f(1.0), u.sandLight * 0.45);
-            if (u.sandBase.a > 0.5) { fragment = saturate(fragment - rockLevel + u.sandBase.rgb); }
-            let sandMaterial = mix(weathered, fragment, u.sandGrain);
+            // Weathered rock and its grains (sandMaterialAt): a biome's sand follows its own rock.
+            let weathered = sandWeathered();
+            let sandMaterial = sandMaterialAt(scatter);
             // Three stages, so sand thins into the ground over tens of
             // pixels: fines tint what is there, then grains appear between
             // grass blades (a per-pixel threshold against fine noise), then
@@ -1741,6 +1890,21 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, snowMaterial(pixel) * 0.9, cap);
         exposed *= 1.0 - cap;
     }
+    // Card P27: the surf's beach is drawn last over the material, so the bake's cracks, chips and stones do not mark it: sand with its own fine
+    // grain (colour the world's Sand), the shading eased toward level, then the wet sand to the last uprush and the wrack lines.
+    if (surfE > 0.0 && surfX < 900.0 && surfX >= 0.0) {
+        let cover = surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope)) * (1.0 - exposed * 0.7);
+        let cell = floor(grainPixel(pixel));
+        let grain = 1.0 + 0.12 * (shelfHash(cell + 11.0) - 0.5) + 0.06 * valueNoise(p / 5.0) + 0.05 * valueNoise(p / 17.0);
+        let sandColour = select(sandWeathered() * grain, beachColour(pixel), u.beach != 0);
+        material = mix(material, sandColour, cover);
+        shading = mix(shading, mix(shading, 1.0, 0.6), cover);
+        material *= mix(vec3f(1.0), vec3f(0.68, 0.62, 0.52), surfWet(surfX, surfQ, surfE));
+        let wrackAt = surfBerm(surfE) * 0.78 + 2.5 * valueNoise(surfQ / 40.0 + vec2f(5.0, 5.0));
+        let wrack = (1.0 - smoothstep(0.35, 1.0, abs(surfCuspX(surfX, surfQ, surfE) - wrackAt))) * step(shelfHash(cell + 63.0), 0.65)
+                  * smoothstep(-0.2, 0.2, valueNoise(surfQ / 25.0 + vec2f(7.0, 3.0))) * cover;
+        material = mix(material, vec3f(0.33, 0.30, 0.20), wrack * 0.6 * surfE);
+    }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
         // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
@@ -1856,6 +2020,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     var shoalWeight = 0.0;   // G1: how much of this pixel is lit shallow bed, for the palette dither below
+    var surfWater = 0.0;     // Card P27: how much of this pixel is drawn as water, for the foam below
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
         // Sediment mottling varies apparent water colour without changing the
@@ -1956,9 +2121,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             submerged = mix(submerged, crisp, shoreHard);
         }
+        surfWater = submerged;
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
         if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
         if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
+    }
+    if (surfE > 0.0 && surfX < 900.0) {
+        // Card P27: static foam, white as lit as the water is. It marks the playable edge on both sides: the lace on the water, the swash on the sand.
+        let foam = surfFoam(pixel, p, surfX, surfQ, max(0.0, u.sea - baseHeight(p)), surfSlope, surfE);
+        color = mix(color, vec3f(0.93, 0.96, 0.94) * (0.9 + 0.1 * shadow), foam * select(1.0 - surfWater, surfWater, surfX < 0.0));
     }
     if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {
         // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just

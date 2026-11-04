@@ -1,4 +1,4 @@
-import {strokeKnots,sampleKnots,landformSteps,landformShore} from './sculpt-shape-presets.js';
+import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -16,7 +16,7 @@ export const WORLD_GROUP_NAMES={
 };
 export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
 const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
- desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',shoreEdge:'Waterline rim and lip',
+ desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',wetSwath:'Moisture',lushness:'Lushness',shoreEdge:'Waterline rim and lip',
  bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
  lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
  moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
@@ -38,6 +38,8 @@ export function shapeControlAvailable(key,kind,p){
   if(key==='breakup')return on&&!shore;
   if(['layerPx','layerRiser','layerVary'].includes(key))return on&&shore;
   if(key==='lavaSpread')return on&&shore&&!circular;
+  // Surf works a shore, which only a stroke that makes water has.
+  if(key==='surf')return landformMakesWater(p);
   // Gullies cut only into ground a landform raises, and Cut to never raises it.
   if(['gullies','gullySize'].includes(key))return Math.round(Number(p.combine||0))!==1;
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
@@ -134,6 +136,8 @@ export function worldControlRequirement(key,v){
  if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'This world\'s faces are one material, not rock and moss interleaved, so there is nothing for this setting to place.';
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
+ // Water wets the ground only where the Time pass has rain; the worlds that run it with rain off have no wetness map to read.
+ if(key==='wetSwath'&&n('erosionRain')<=0)return 'This world\'s weathering has no rain, so no ground is wet. Moisture has nothing to move.';
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The sediment transition is built from the ground and replaces the slope cover's color outright at 100 percent Material weathering (worldPanelValues passes slopeReplaced); the texture then scales only the slope's share of the shine.
  if(key==='slopeTexture'&&n('slopeReplaced')>0&&!shiny&&!rough)return 'The sediment transition replaces the slope color at 100 percent Material weathering, so this scales only the slope\'s gloss. Lower Material weathering, or set a Gloss or Roughness above zero in one of the Shine groups, to use this setting.';
@@ -163,9 +167,9 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
- 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','slopeMarks','wrinkles',
+ 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','wetSwath','lushness','slopeMarks','wrinkles',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
- 'looseSupply','looseSize','looseSort','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
+ 'looseSupply','looseSize','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',

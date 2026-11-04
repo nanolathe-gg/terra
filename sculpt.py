@@ -30,7 +30,7 @@ KNOB_DEFAULTS = dict(
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
     faceVariation=.8, lean=0, facing=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
-    looseSupply=0, looseSize=6, looseSort=.6,
+    looseSupply=0, looseSize=6,
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackMajor=.8, crackMinor=.75, crackHairline=.6,
@@ -64,7 +64,7 @@ KNOB_DEFAULTS = dict(
     terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
-    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, varySize=140, varyFoot=1, varyMiddle=1,
+    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
@@ -201,7 +201,7 @@ KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep
 KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
-KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8)
+KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
 KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
@@ -217,7 +217,7 @@ ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=3.2, blockWidth=5.76, blockTilt=.8, blockStep=1.5, blockSeam=1.6, blockChip=1.2,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4,
                   rockMoss=.4, hillBlocks=.5,
-                  terraceBreak=0, terraceCalm=0, wetSwath=.35, outcrop=0),
+                  terraceBreak=0, terraceCalm=0, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -227,7 +227,7 @@ WORLD_KNOBS = {
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
     # Card P16: the Scree slider's talus chips (3-5 px, a few % of the cliff feet's ground) as Supply and Size.
-    'green': dict(looseSupply=.08, looseSize=3.5, looseSort=.5, banding=.5, crackDark=.4,
+    'green': dict(looseSupply=.08, looseSize=3.5, banding=.5, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -437,7 +437,7 @@ WORLD_KNOBS = {
     # Card E6: retail's hills and crater walls are one rough, pitted surface from crest to
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
-    'moon': dict(looseSupply=.1, looseSize=3.5, looseSort=.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+    'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
                  worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # H19: at 1 the lit relief on a shaded wall reads as hard plates, at .5 as rock (repro/walls/moon.json).
@@ -632,6 +632,7 @@ WORLD_KNOBS = {
 # other config keys ('config'). A world's own preset is its
 # default, so nothing changes unless a variant is chosen (World panel, or
 # `variant=<id>` in the page's address). Every knob must be in KNOB_DEFAULTS.
+OPEN = [-9, -8, 9, 10]   # a ground-cover window with no limit
 WORLD_VARIANTS = {
     'green': {
         # Evad River Delta and the Barrier Reef: rounded hills with soft
@@ -654,9 +655,29 @@ WORLD_VARIANTS = {
         # Card P1: landforms cut by branching gullies at 40 (by eye on green-modern-1..3 at 30, 40, 60 and 100: at 40 the
         # round hills carry branching spurs and the long cliff of green-modern-2 broad, uneven valleys; from 60 they also
         # cut the grass slope above the cliff; 30 barely reads at 1x). Card P32: terracettes on steep grass (Joined
-        # wrinkles on a grass world). Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the
-        # hills' feet and in gullies, median 5 px (readable at 1x, Green's retail grit is 3-4), Sorting .7 coarsening outward from a cliff.
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(gullies=.4, wrinkles=1, looseSupply=.7, looseSize=5, looseSort=.7)),
+        # wrinkles on a grass world).
+        # Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass on top of the slope-only
+        # ramp, which still gates the slope texture (the table is read by engine-frag.wgsl groundCover). Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
+        # dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the
+        # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
+        # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
+        # higher Surf builds.
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5),
+                       # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
+                       # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
+                       material=dict(stoneSort=.7, groundCover=dict(
+                           wet=[.25, .9], dry=.4, patch=22, patchiness=.8, ground=[55, 93, 27],
+                           soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
+                           moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
+                           classes=[
+                               dict(name='bare soil', rgb=[105, 90, 38], grain=.12, strength=.015, lush=-1, moisture=OPEN, soil=OPEN, light=OPEN),
+                               dict(name='dry grass', rgb=[114, 109, 64], grain=.10, strength=.65, lush=0, moisture=[-1, 0, .2, .42], soil=[.05, .3, 9, 10], light=[1, 1.35, 9, 10]),
+                               dict(name='turf', rgb=[55, 95, 27], grain=.07, strength=1, lush=-1, moisture=[-.1, .12, .72, .92], soil=[.08, .3, 9, 10], light=OPEN),
+                               dict(name='meadow', rgb=[38, 91, 15], grain=.05, strength=1.1, lush=1, moisture=[.5, .7, .92, 1.01], soil=[.4, .75, 9, 10], light=[.55, .9, 9, 10]),
+                               dict(name='scrub', rgb=[28, 74, 9], grain=.06, strength=1.15, lush=2, moisture=[.55, .75, .9, .99], soil=[.5, .85, 9, 10], light=OPEN),
+                               dict(name='moss', rgb=[42, 84, 29], grain=.03, strength=.8, lush=0, moisture=[.12, .4, 9, 10], soil=[-9, -8, .6, 1.4], light=[-9, -8, .6, .95]),
+                               dict(name='wet rush', rgb=[38, 80, 32], grain=.10, strength=1, lush=1, moisture=[.9, .99, 9, 10], soil=[.45, .75, 9, 10], light=OPEN),
+                           ]))),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
