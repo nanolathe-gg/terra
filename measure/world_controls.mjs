@@ -44,7 +44,7 @@ if (args.includes('--recheck')) {
   for (const b of bad) console.log('!', b);
   process.exit(bad.length || f.console.length ? 1 : 0);
 }
-const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['scree', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
+const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
 const KIND_AT = {crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
 // The retired tools' strokes as the landforms the shape buttons draw (sea-relative, about as tall above this map's plain as the old fixtures' Rise).

@@ -767,7 +767,7 @@ export class TerrainRenderer {
     };
   }
 
-  draw({quality = 'preview', clay = false, light = 'original', scree = 0, detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
+  draw({quality = 'preview', clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
     const full = quality === 'full';
     this.i('uFull', full);
@@ -782,7 +782,6 @@ export class TerrainRenderer {
     this.f('uRingAmount', this.layers.has('ring') ? ring : 0);
     this.f('uRingSpread', ringSpread);
     this.f('uRingVariation', ringVariation);
-    this.i('uScree', scree > 0);
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
     this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
     this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
@@ -1038,7 +1037,7 @@ export class TerrainRenderer {
     set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
     {
       set('uWeatherMaps', this.weatherMaps ? 1 : 0);
-      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8], ['stoneDensity', 0], ['stoneSize', 5]])
+      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8]])
         set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     }
     set('uReliefScale', number('reliefScale', 28));
@@ -1052,16 +1051,6 @@ export class TerrainRenderer {
     set('uFaceStreak', number('faceStreak', 0));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));
-    set('uBoulderDensity', preview ? 0 : number('boulders', 0));
-    set('uBoulderSize', number('boulderSize', 9));
-    set('uBoulderFoot', number('boulderFoot', 0.5));
-    set('uBoulderCluster', number('boulderCluster', 0.6));
-    set('uBoulderMoss', number('boulderMoss', 0.35));
-    set('uDebris', preview ? 0 : number('debris', 0));
-    set('uDebrisReach', number('debrisReach', 48));
-    set('uDebrisSize', number('debrisSize', 6));
-    set('uDebrisSort', number('debrisSort', 0.8));
-    set('uRepose', number('repose', 0.6));
     set('uSand', number('sand', 0));
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
@@ -1098,7 +1087,6 @@ export class TerrainRenderer {
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
     set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
-    set('uBoulderRound', number('boulderRound', 0));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));

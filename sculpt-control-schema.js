@@ -51,7 +51,7 @@ export function shapeControlAvailable(key,kind,p){
  if(key==='styleFace'&&Number(world.microRock??1)<=0)return false;
  // A stroke's edge choice moves the step only where the step's deep share is drawn; its own Lit bed draws it.
  if(key==='waterDeep'&&!deepShows(world,[1,3].includes(Math.round(p.waterBed||0))))return false;
- if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.stoneDensity)>0))return false;
+ if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.looseSupply)>0))return false;
  // A side to lean toward means something once the two sides differ: a Lean other than 1, or different front and back sections.
  if(key==='facing'&&kind==='landform'){
   if(p.lean>0&&p.lean!==1)return true;
@@ -165,7 +165,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','slopeMarks','wrinkles',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
- 'boulders','boulderSize','debris','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
+ 'looseSupply','looseSize','looseSort','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',

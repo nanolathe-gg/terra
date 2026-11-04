@@ -20,7 +20,6 @@ struct Uniforms {
     materialWeathering: f32,
     materialReady: i32,
     rockyCoasts: i32,
-    scree: i32,
     detail: f32,
     layered: i32,
     terraced: i32,
@@ -138,16 +137,6 @@ struct Uniforms {
     faceStreak: f32,      // 0: ribs down steep faces; 1: ledges along the contours
     faceStreakFrom: f32,  // slope where the turn toward the contours starts
     gentleRelief: f32,    // relief on gentle slopes
-    boulderDensity: f32,  // 0 disables boulders
-    boulderSize: f32,     // typical diameter, world px
-    boulderFoot: f32,     // share of boulders sourced from cliff feet
-    boulderCluster: f32,  // how strongly boulders gather into fields
-    boulderMoss: f32,     // share of stones with mossy tops
-    debris: f32,          // 0 disables debris
-    debrisReach: f32,     // how far debris tumbles, world px
-    debrisSize: f32,      // largest debris stone, world px
-    debrisSort: f32,      // 1: coarse near the source, fine far away
-    repose: f32,          // slope below which debris comes to rest
     sand: f32,            // 0 disables sand
     crackSeverity: f32,   // crack depth
     crackWidth: f32,      // crack core width, world px
@@ -165,7 +154,6 @@ struct Uniforms {
     sandBandSpacing: f32,
     apron: f32,           // sand apron reach round raised ground, world px (0: none)
     worms: f32,           // wormy regolith relief on slopes (lunar)
-    boulderRound: f32,    // 0: angular boulders; 1: rounded domes
     bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
@@ -361,8 +349,6 @@ struct Uniforms {
     // H5 item 3b, beyond retail (0: off for Green).
     rillDepth: f32,       // height units a rill is cut, along the flow
     rillSpacing: f32,     // px between rills
-    stoneDensity: f32,    // stones and boulders where talus lies
-    stoneSize: f32,       // px: the largest stone (larger below hard beds)
     // Card P16: the one loose-material scatter (looseStones in engine-bake). Supply 0 draws none.
     looseSupply: f32,     // 0..1: ground share the stones cover where their source is full (1 is about half the ground)
     looseSize: f32,       // px: the median stone diameter
@@ -666,23 +652,6 @@ fn beachField(p: vec2f) -> f32 { return max(-bakedFields(p).g, 0.0); }
 fn crystalField(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(0.0, clamp(g - 2.0, 0.0, 1.0), g > 1.5); }
 #endif
 
-fn screeHeight(p: vec2f) -> f32 {
-    if (u.scree == 0) { return 0.0; }
-    let support = weatherAt(p / (u.size - 1.0)).b;
-    if (support < 0.005) { return 0.0; }
-    // Small authored angular fragments share lighting with the terrain. The
-    // worker admits them only in clustered dry cliff-foot deposits.
-    let cell = floor(p / 7.0);
-    let random = fract(sin(vec3f(dot(cell, vec2f(127.1, 311.7)),
-                                 dot(cell, vec2f(269.5, 183.3)),
-                                 dot(cell, vec2f(419.2, 71.9)))) * 43758.5453);
-    let present = smoothstep(random.x - 0.04, random.x + 0.04, support * 0.75);
-    let q = glslMod(p, 7.0) - 3.5 + (random.yz - 0.5) * 2.0;
-    let radius = 1.1 + random.y * 1.5;
-    let edge = max(max(abs(q.x) * 0.85, abs(q.y)), abs(q.x * 0.65 + q.y * 0.76));
-    return max(0.0, 1.0 - edge / radius) * (1.0 + random.z * 1.5) * present;
-}
-
 fn materialChipHeight(p: vec2f) -> f32 {
     if (u.materialReady == 0 || u.materialWeathering <= 0.0) { return 0.0; }
     let deposit = materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid);
@@ -703,7 +672,7 @@ fn surfaceHeight(p: vec2f) -> f32 {
     // Author intent applies to rendered geometry as well as the weathering
     // worker. A graded route cannot acquire extra clefts or rubble afterward.
     if (rough < 0.001) { return h; }
-    let debris = (screeHeight(p) + materialChipHeight(p)) * rough;
+    let debris = materialChipHeight(p) * rough;
     if (u.coastalDetail != 0 && abs(h - u.sea) < 6.0) {
         // Break only the waterline into small shared geometric irregularities.
         // The designed shallow-route bed (-7) and broad flats stay untouched.

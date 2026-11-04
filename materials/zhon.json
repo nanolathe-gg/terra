@@ -2328,6 +2328,8 @@
   "beachHeight": 6,
   "beachWidth": 178,
   "materialWeathering": 0.0,
+  "stoneRound": 1.0,
+  "stoneMoss": 0.0,
   "depositSpread": 0.65,
   "rockyCoasts": false,
   "slopeStart": 0.08,

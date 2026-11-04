@@ -50,7 +50,7 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,jointDepth:2}),/Follow terrain/);
  assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:0}),/Joint depth/);
  assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:2}),'');
- assert.equal(requirement('boulderSize',{boulders:0}),'','painted scatter still uses size when global density is zero');
+ assert.equal(requirement('looseSize',{looseSupply:0}),'','painted scatter still uses size when the world Supply is zero');
  assert.equal(requirement('bandSoftness',{banding:0}),'','painted banding still uses the riser share when the world strength is zero');
 });
 
@@ -94,7 +94,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Strata/);
  assert.match(requirement('bedSpacing',{column:1,rockOrder:1,bedLedge:1}),/authored bed profile/);
  shows('bedSpacing',{column:1,rockOrder:1,bedLedge:1,cliffRise:8});   // a column's ledge scales by thickness over spacing once it has a rise
- assert.equal(requirement('boulderFoot',{boulders:0}),'','painted scatter sources its stones by this at Density 0, as it reads boulderSize');
+ assert.equal(requirement('looseSort',{looseSupply:0}),'','painted scatter sorts its stones by this at Supply 0');
  assert.equal(requirement('lavaDusk',{lavaCrust:0}),'','the dusk darkens any rock turned from the sun, crust or none');
  assert.match(requirement('faceEdge',{microRock:0}),/one material/);
  shows('gullyRock',{microRock:.7});
@@ -168,7 +168,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('beachWidth',{beachLayer:1});
  assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
  shows('groundTiles',{groundTiled:1});
- assert.equal(requirement('repose',{debris:0}),'','partial Denser scatter reads it at Amount 0');
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
@@ -180,7 +179,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.equal(available('styleFace','landform',{}),true);
  assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:0}}),false,'a beach keeps the Sand brush for its bars');
  assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:.5}}),true);
- assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:0,stoneDensity:.2}}),true);
+ assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:0,looseSupply:.2}}),true);
  assert.equal(available('styleDeposits','landform',{world:{beachLayer:0,sand:0}}),true);
 });
 

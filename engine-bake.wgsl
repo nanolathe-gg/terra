@@ -48,8 +48,7 @@ fn gullies(q: vec2f, dir: vec2f) -> vec3f {
 // values are editor policy, not measurements). A painted-denser cell also
 // takes stones on level ground, not only where slopes and cliff feet shed
 // them. Stones read f at their centre, so a stone is wholly in or out.
-const SCATTER_BOULDERS = 0.80;
-const SCATTER_DEBRIS = 0.80;
+const SCATTER_BASE = 0.80;
 fn scatterAt(p: vec2f) -> f32 {
 #ifdef CHUNK
     return textureSampleLevel(masksTex, linearClamp, maskUv(p), 1, 0.0).r;
@@ -59,133 +58,6 @@ fn scatterAt(p: vec2f) -> f32 {
 }
 fn scatterDensity(f: f32, world: f32, base: f32) -> f32 {
     return select(world * (1.0 + f), max(world * exp2(3.0 * f), f * base), f > 0.0);
-}
-
-// Height of the tallest boulder at p (0 if none) and its rock coverage.
-fn boulders(p: vec2f, slope: f32, h: f32) -> vec2f {
-    if (u.boulderDensity <= 0.0 && u.scatterOn == 0) { return vec2f(0.0); }
-    let cellSize = u.boulderSize * 1.6;
-    let cell = floor(p / cellSize);
-    var best = 0.0;
-    var cover = 0.0;
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let c = cell + vec2f(f32(i), f32(j));
-            let r1 = cellHash(c + 31.7);
-            let r2 = cellHash(c + 77.1);
-            let centre = (c + 0.2 + 0.6 * r1) * cellSize;
-            // Where boulders come from: anywhere on sloped ground, or gathered
-            // at cliff feet where the weathering pass found talus support.
-            let talus = weatherAt(centre / (u.size - 1.0)).b;
-            let slopeAt = length(broadGradient(centre));
-            let scattered = smoothstep(0.15, 0.7, slopeAt) * (1.0 - smoothstep(1.6, 2.6, slopeAt));
-            var up = vec2f(0.0);
-            if (slopeAt > 1e-4) { up = -broadGradient(centre) / slopeAt; }
-            let cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(centre - up * 14.0)));
-            let foot = max(smoothstep(0.02, 0.25, talus), cliffAbove * (1.0 - smoothstep(0.5, 1.0, slopeAt)));
-            var source = mix(scattered, foot, u.boulderFoot);
-            let field = smoothstep(0.35, 0.75, valueNoise(centre / 120.0 + 9.0) * 0.5 + 0.5);
-            var density = u.boulderDensity;
-            if (u.scatterOn != 0) {
-                let f = scatterAt(centre);
-                density = scatterDensity(f, u.boulderDensity, SCATTER_BOULDERS);
-                source = max(source, max(f, 0.0));
-            }
-            let chance = density * source * mix(1.0, field * 2.0, u.boulderCluster);
-            if (r2.x > chance) { continue; }
-            if (routeProtection(centre) > 0.05 || baseHeight(centre) < u.sea + 1.0) { continue; }
-            // Many small stones and few large ones.
-            let radius = u.boulderSize * (0.18 + 0.82 * r2.y * r2.y * r2.y);
-            // Angular outline: the largest of three rotated plane distances.
-            var q = p - centre;
-            let a = r1.x * 6.2831;
-            let rot = mat2x2f(cos(a), -sin(a), sin(a), cos(a));
-            q = rot * q;
-            let edge = mix(max(max(abs(q.x) * 0.9, abs(q.y)), abs(q.x * 0.6 + q.y * 0.8)), length(q * vec2f(1.0, 1.15)), u.boulderRound) / radius;
-            let lift = max(0.0, 1.0 - edge * edge);
-            // Partly buried: the ground cuts each stone below its widest point.
-            let buried = mix(0.15, 0.55, fract(r1.x * 7.31));
-            let height = max(0.0, sqrt(lift) - buried) / (1.0 - buried) * radius * (0.55 + 0.35 * r1.y);
-            if (height > best) { best = height; cover = smoothstep(0.0, 0.25, height / max(radius, 1.0)) * select(1.0, 0.55, fract(r2.x * 13.7) < u.boulderMoss); }
-        }
-    }
-    return vec2f(best, cover);
-}
-
-// Debris arriving at p: walk uphill along steepest ascent and gather what
-// steep ground above sheds. Returns (amount, mean travelled fraction).
-fn debrisArrival(p: vec2f, slope: f32) -> vec2f {
-    if (u.debris <= 0.0 && u.scatterOn == 0) { return vec2f(0.0); }
-    let rest = 1.0 - smoothstep(u.repose * 0.7, u.repose * 1.3, slope);
-    var q = p;
-    var amount = 0.0;
-    var travelled = 0.0;
-    var weight = 0.0;
-    const STEPS = 14;
-    let stride = u.debrisReach / f32(STEPS);   // GLSL: step
-    var dir = vec2f(0.0);
-    for (var i = 1; i <= STEPS; i++) {
-        // Level ground below a face has no local gradient: look wider, then
-        // keep the last direction, so debris can reach the plain.
-        var g = broadGradient(q);
-        if (length(g) < 0.05) {
-            const e = 18.0;
-            g = vec2f(baseHeight(q + vec2f(e, 0.0)) - baseHeight(q - vec2f(e, 0.0)),
-                      baseHeight(q + vec2f(0.0, e)) - baseHeight(q - vec2f(0.0, e))) / (2.0 * e);
-        }
-        if (length(g) > 0.01) { dir = normalize(g); }
-        if (dot(dir, dir) < 0.5) { break; }
-        q += dir * stride;
-        let d = f32(i) * stride;
-        let shed = smoothstep(0.9, 1.7, length(broadGradient(q))) * (1.0 - routeProtection(q));
-        let w = shed * (1.0 - d / u.debrisReach);
-        amount += w;
-        travelled += w * d / u.debrisReach;
-        weight += w;
-    }
-    var mean = 1.0;
-    if (weight > 0.0) { mean = travelled / weight; }
-    return vec2f(amount / f32(STEPS) * 3.0 * rest, mean);
-}
-
-fn debrisStones(p: vec2f, arrival: vec2f) -> vec2f {
-    // Stones on a fine cell grid; presence from arrivals, size from distance.
-    let cellSize = max(3.0, u.debrisSize * 0.9);
-    let cell = floor(p / cellSize);
-    var best = 0.0;
-    var cover = 0.0;
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let c = cell + vec2f(f32(i), f32(j));
-            let r1 = cellHash(c + 5.3);
-            let r2 = cellHash(c + 61.9);
-            let centre = (c + 0.15 + 0.7 * r1) * cellSize;
-            let here = debrisArrival(centre, length(broadGradient(centre)));
-            var density = u.debris;
-            var arrival = here.x;
-            if (u.scatterOn != 0) {
-                let f = scatterAt(centre);
-                density = scatterDensity(f, u.debris, SCATTER_DEBRIS);
-                arrival = max(arrival, 0.6 * max(f, 0.0));
-            }
-            // >=: a hash of exactly 0 must not admit a stone where the density is 0
-            // (it left isolated specks on level ground in every world).
-            if (r2.x >= clamp(arrival * density, 0.0, 0.95)) { continue; }
-            if (baseHeight(centre) < u.sea + 1.0) { continue; }
-            // Rockfall puts the largest blocks furthest from the cliff; only fans and channels (where water carried the stones) fine downslope.
-            let carried = smoothstep(0.03, 0.22, timeMapsAt(centre).channel);
-            let sizeAt = mix(1.0, mix(0.25 + 0.75 * here.y, 1.0 - 0.75 * here.y, carried), u.debrisSort);
-            let radius = u.debrisSize * 0.5 * sizeAt * (0.5 + 0.5 * r2.y);
-            var q = p - centre;
-            let a = r1.y * 6.2831;
-            q = mat2x2f(cos(a), -sin(a), sin(a), cos(a)) * q;
-            let edge = max(max(abs(q.x), abs(q.y) * 1.15), abs(q.x * 0.7 - q.y * 0.7)) / max(radius, 0.5);
-            let lift = max(0.0, 1.0 - edge);
-            let height = lift * radius * 0.7;
-            if (height > best) { best = height; cover = smoothstep(0.0, 0.3, lift); }
-        }
-    }
-    return vec2f(best, cover);
 }
 
 // Card P16: one loose-material scatter. Six size classes, each half the one before (diameters 32 .. 1 px), each on its own jittered grid
@@ -240,7 +112,7 @@ fn lsMask(c: vec2f) -> LsMask {
     var source = max(max(foot, 0.5 * loose), max(0.6 * fan, 0.5 * channel));
     var supply = u.looseSupply;
     if (u.scatterOn != 0) {
-        supply = scatterDensity(paint, u.looseSupply, SCATTER_BOULDERS);
+        supply = scatterDensity(paint, u.looseSupply, SCATTER_BASE);
         source = max(source, max(paint, 0.0));
     }
     source *= depositsAt(c);
@@ -1102,47 +974,8 @@ fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
 }
 
 
-// H5 constants (retail's rates, measured in NOTES): the cracks' darkness and the grey specks' density. Specks and cracks ride on `outcrop`, so
-// engine 0 style off-states stay off.
+// H5 constants (retail's rates, measured in NOTES): the cracks' darkness. The cracks ride on `outcrop`, so engine 0 style off-states stay off.
 const ROCK_CRACK = 2.5;
-const SPECKS = 1.2;
-
-// H5: stones from the Time pass's maps. 3a's grey specks (1-2 px, on the foot slopes round the rock, in clumps) and 3b's stones
-// and boulders (where talus lies, larger below hard beds, a few px across). Returns (height, rock cover) like boulders().
-fn weatherStones(p: vec2f) -> vec2f {
-    if (u.weatherMaps < 0.5 || (u.outcrop <= 0.0 && u.stoneDensity <= 0.0)) { return vec2f(0.0); }
-    let cellSize = max(3.0, u.stoneSize * 0.9);
-    let cell = floor(p / cellSize);
-    var best = 0.0;
-    var cover = 0.0;
-    for (var j = -1; j <= 1; j++) {
-        for (var i = -1; i <= 1; i++) {
-            let c = cell + vec2f(f32(i), f32(j));
-            let r1 = cellHash(c + 17.3);
-            let r2 = cellHash(c + 83.9);
-            let centre = (c + 0.15 + 0.7 * r1) * cellSize;
-            let m = timeMapsAt(centre);
-            let clump = smoothstep(0.25, 0.75, valueNoise(centre / 23.0 + 29.0) * 0.5 + 0.5);
-            let speck = depositsAt(centre) * SPECKS * smoothstep(0.05, 0.16, m.slope) * (1.0 - smoothstep(0.5, 0.8, m.slope)) * (0.15 + 0.85 * clump);
-            let stones = depositsAt(centre) * u.stoneDensity * max(smoothstep(0.02, 0.3, m.talus), 0.5 * smoothstep(0.25, 0.8, weatherAt(centre / (u.size - 1.0)).g)) * (0.4 + 0.6 * clump);
-            if (r2.x >= clamp(speck + stones, 0.0, 0.95)) { continue; }
-            if (baseHeight(centre) < u.sea + 1.0 || routeProtection(centre) > 0.05) { continue; }
-            // A speck is 1-2 px; a stone follows stoneSize, a few times larger below hard beds, many small and few large.
-            let big = step(r2.x + 1e-6, stones);
-            let radius = mix(0.9 + 1.0 * r2.y, u.stoneSize * (0.2 + 0.8 * r2.y * r2.y * r2.y) * (0.7 + 0.7 * m.hard), big);
-            var q = p - centre;
-            let a = r1.y * 6.2831;
-            q = mat2x2f(cos(a), -sin(a), sin(a), cos(a)) * q;
-            let edge = max(max(abs(q.x), abs(q.y) * 1.15), abs(q.x * 0.7 - q.y * 0.7)) / max(radius, 0.5);
-            let lift = max(0.0, 1.0 - edge);
-            // Rounded like boulders(): steep sides and a partly buried foot, so the sun lights the top and the far side lies in shadow.
-            let buried = 0.2 + 0.2 * r1.x;
-            let height = max(0.0, sqrt(lift) - buried) / (1.0 - buried) * radius * 0.85;
-            if (height > best) { best = height; cover = smoothstep(0.0, 0.25, lift); }
-        }
-    }
-    return vec2f(best, cover);
-}
 
 // H5 3b: rills cut along the flow. Lines parallel to the fall line, one per u.rillSpacing px across, each present for stretches
 // of about 80 px, 1-3 px wide by the flow, only where the channel map says water runs hard over falling ground.
@@ -1521,13 +1354,8 @@ fn bake(p: vec2f) -> vec4f {
     // blob-shaped notches into the coast. Nor lifts the bed above it.
     if (h > u.sea) { height = max(height, u.sea + 0.5 - h); }
     else { height = min(height, u.sea - 0.5 - h); }
-    var rock = boulders(p, slope, h);
-    let scree = debrisStones(p, vec2f(0.0));
-    if (scree.x > rock.x) { rock = scree; }
-    let flecks = weatherStones(p);
-    if (flecks.x > rock.x) { rock = flecks; }
     let loose = looseStones(p);
-    if (loose.x > rock.x) { rock = vec2f(loose.x, loose.y); }
+    var rock = vec2f(loose.x, loose.y);
     height += rock.x;
     rock.y *= 1.0 - buried;
     rock.y = max(rock.y, structureRock);

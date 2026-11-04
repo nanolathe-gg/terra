@@ -1630,8 +1630,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // 1 (Green's dark terrace steps); up to -1 this is unchanged.
         material *= 1.0 - min(u.crackDark * max(-coverOrCrack, 0.0), 1.0);
     }
-    var chip = smoothstep(0.08, 0.45, screeHeight(p) * (1.0 - route) * place.deposits);
-    chip = max(chip, smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65);
+    let chip = smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65;
     material = mix(material, rock, chip * (1.0 - exposed));
     material *= 1.0 - weather.r * 0.06;
     // H5 3a: wet swaths. Water darkens grass along its flow: soft streaks 15-40 px across and 70 px along the fall line, where the
