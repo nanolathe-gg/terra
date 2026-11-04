@@ -217,3 +217,29 @@ generic shared tools, then speed, then the rest.
 | P7 | Carried velocity and MacCormack sediment in the pipe model | 3 |
 | P8 | A coarse stream-power pass for map-scale ranges (waits, decision 26) | 3 |
 | P19 | Dunes by Werner's model as a deterministic gather (waits, decision 26) | 3 |
+
+### Round 3 cards (2026-11-04)
+
+Four more agents ran in their own worktrees. Their commits are on this
+branch:
+
+- `realism.py`: a realism check, calibrated on USGS 3DEP 1 m lidar;
+- `vg-*`: vegetation and ground cover;
+- `ws-*`: water, shores and rivers;
+- `tx-*` and `tx-*.py`: texture families and palette rendering.
+
+| Card | What | Group |
+| --- | --- | --- |
+| P25 | Realism gates: `realism.py` on green-modern-1..3 (closed basins, fabric, hilltop roundness, Hack, hollow and valley shares) | 1 |
+| P29 | Startup material pass: dot diffusion in `makeDither`, phasor rock grain in `mmLit`, oriented grass strokes | 1 |
+| P30 | Ground cover placed by ecosystem rules: Moisture, Lushness, Patchiness | 1 |
+| P31 | Tufts, moss cushions, shrubs and flowers as lit structure in P16's scatter | 1 |
+| P32 | Terracettes on steep grass, extending `wrinkles` | 3 |
+| P26 | One water model: Beer-Lambert depth colour, murk, wind, caustics, glint (after P4) | 3 |
+| P27 | Shores from `coastSd`: beach profile, foam lace, headlands by hardness | 3 |
+| P28 | Rivers as a migrated stroke on P22's valley landform (at least 32 px wide) | 3 |
+
+Round 3 also changed P1: `realism.py` scored the round 1 gully fold (sharp
+crests) as less real than no gullies. With fold -1 (round crests, V-cut
+floors), 10 of 15 statistics fall in the real range, against 8 of 15. See
+`lab/lib.wgsl` `gulliesF`.
