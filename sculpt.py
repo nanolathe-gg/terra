@@ -65,7 +65,7 @@ KNOB_DEFAULTS = dict(
     terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
-    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, varySize=140, varyFoot=1, varyMiddle=1,
+    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, varySize=140, varyFoot=1, varyMiddle=1,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
@@ -651,9 +651,11 @@ WORLD_VARIANTS = {
         # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
         # its beds and joints, debris where gravity and water leave it, light that agrees from any sun. It starts as a
         # copy of Green's own preset; each look card sets its realistic numbers here (scenes green-modern-1..3).
-        'modern': dict(label='Modern: realistic look (in progress)',
-                       # Card P32: terracettes on steep grass (Joined wrinkles on a grass world).
-                       knobs=dict(wrinkles=1)),
+        # Card P1: landforms cut by branching gullies at 40 (by eye on green-modern-1..3 at 30, 40, 60 and 100: at 40 the
+        # round hills carry branching spurs and the long cliff of green-modern-2 broad, uneven valleys; from 60 they also
+        # cut the grass slope above the cliff; 30 barely reads at 1x). Card P32: terracettes on steep grass (Joined
+        # wrinkles on a grass world).
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(gullies=.4, wrinkles=1)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
