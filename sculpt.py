@@ -651,7 +651,10 @@ WORLD_VARIANTS = {
         # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
         # its beds and joints, debris where gravity and water leave it, light that agrees from any sun. It starts as a
         # copy of Green's own preset; each look card sets its realistic numbers here (scenes green-modern-1..3).
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict()),
+        # Card P1: landforms cut by branching gullies at 40 (by eye on green-modern-1..3 at 30, 40, 60 and 100: at 40 the
+        # round hills carry branching spurs and the long cliff of green-modern-2 broad, uneven valleys; from 60 they also
+        # cut the grass slope above the cliff; 30 barely reads at 1x).
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(gullies=.4)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
