@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {shapePaths,clonePaths,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from '../sculpt-paths.js';
 import {selectionGeometry} from '../sculpt-selection.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
-const line=()=>({kind:'mountain',points:[{x:40,y:40},{x:80,y:40},{x:120,y:40}],params:{radius:12,amount:30,rough:0,softness:.5}});
+const line=()=>({kind:'erase',points:[{x:40,y:40},{x:80,y:40},{x:120,y:40}],params:{radius:12,amount:30,rough:0,softness:.5}});
 const geom={grid:256,spacing:1},context={seed:1,baseHeight:99,sea:75,params:n=>new Proxy(n.params,{get:(q,k)=>q[k]??0})};
 
 test('legacy shapes keep one path; disconnected additions have no bridging edge',()=>{
@@ -35,15 +35,4 @@ test('insert, delete and remove paths preserve valid shared references and round
 test('path input rejects malformed references before evaluation',()=>{
   for(const paths of [[],[[]],[[0,4]],[[0,-1]],[[0,1.5]],[[0,1]],'bad'])assert.throws(()=>validatePaths({...line(),paths}));
   assert.throws(()=>validatePaths({...line(),points:[{x:NaN,y:0}]}));
-});
-test('ramps have independent endpoint reads in a single operation',()=>{
-  const n={...line(),kind:'ramp'};appendPath(n,[{x:40,y:180},{x:120,y:180}]);
-  const p=prepareNode(n,geom,context);assert.equal(p.multi,undefined);
-  assert.deepEqual(p.reads,[{x:40,y:40},{x:120,y:40},{x:40,y:180},{x:120,y:180}]);
-  assert.deepEqual([...new Set(p.segs.map(s=>s.f1[1]))],[0,2]);
-});
-test('mixed short and long hill paths retain their own tangent frames',()=>{
-  const n={...line(),kind:'hill'};appendPath(n,[{x:70,y:70},{x:70,y:120}]);
-  const p=prepareNode(n,geom,context);assert.equal(p.settle,true);
-  assert.ok(p.segs.every(s=>s.frame));assert.ok(p.segs.every(s=>s.f0.every(Number.isFinite)&&s.f1.every(Number.isFinite)));
 });

@@ -54,7 +54,7 @@ export function shapeControlAvailable(key,kind,p){
  if(key==='facing'&&kind==='landform'){
   if(p.lean>0&&p.lean!==1)return true;
   // Facing swaps the two sides; equal widths and equal sampled sections have no direction to choose.
-  const k=strokeKnots(kind,p,false);if(!k.back)return false;
+  const k=strokeKnots(kind,p);if(!k.back)return false;
   const front=sampleKnots(k.knots),back=sampleKnots(k.back);return front.some((v,i)=>v!==back[i]);
  }
  if(key==='facing')return p.lean>0;

@@ -3,7 +3,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
+import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -482,9 +482,8 @@ const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].k
 const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.curve : toolSettings[tool]?.curve) || null;
 const currentAlong=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.along : toolSettings[tool]?.along) || null;
 function curveContext() {
-  // Only a landform carries a section now: no shouldered hill or water section is left to edit.
   const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)]));
-  return {kind,shouldered:false,water:false,land:kind==='landform',q:{...(kind==='landform'?landformSteps(o):o),radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve(),along:currentAlong()}};
+  return {kind,land:kind==='landform',q:{...(kind==='landform'?landformSteps(o):o),radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve(),along:currentAlong()}};
 }
 // Hand the curve (or, with key 'along', the along-the-path knots) to the shape being edited, or to the brush for the next stroke; null goes back to the default.
 function setCurve(curve,key='curve') {
@@ -498,16 +497,16 @@ function setCurve(curve,key='curve') {
 const roundKnots=ks => ks.map(([x,v]) => [Math.round(x*1000)/1000,Math.round(v*1000)/1000]);
 // The knots on each side: the front's own (or its form's, thinned when the form samples a power law or a smoothstep finely); a landform's back is its own list
 // once unlinked, and the front's until then.
-const frontKnots=c => { const k=strokeKnots(c.kind,c.q,c.shouldered).knots; return c.q.curve?.knots||k.length<=12?k:thinKnots(k); };
+const frontKnots=c => { const k=strokeKnots(c.kind,c.q).knots; return c.q.curve?.knots||k.length<=12?k:thinKnots(k); };
 const backKnots=c => c.land&&c.q.curve?.back?c.q.curve.back:null;
 const sidesLinked=c => c.land&&!c.q.curve?.back;
 function storeSection(c,front,back) {
-  const curve={form:c.q.curve?.form||defaultForm(c.kind,c.shouldered),knots:roundKnots(front)}; if (back) curve.back=roundKnots(back);
+  const curve={form:c.q.curve?.form||defaultForm(c.kind),knots:roundKnots(front)}; if (back) curve.back=roundKnots(back);
   setCurve(curve);
 }
 function toggleLink() { const c=curveContext(); if (!c.land) return; const f=frontKnots(c); sidesLinked(c)?storeSection(c,f,f.map(k => [...k])):storeSection(c,f); }
 // Mirror flips the section left to right: the two lists swap and the lean turns round.
-function mirrorSides() { const c=curveContext(),b=backKnots(c); if (!c.land || !b) return; storeSection(c,b,frontKnots(c)); setLean(1/leanRatio(c.kind,c.q,c.shouldered)); }
+function mirrorSides() { const c=curveContext(),b=backKnots(c); if (!c.land || !b) return; storeSection(c,b,frontKnots(c)); setLean(1/leanRatio(c.kind,c.q)); }
 function setLean(ratio) { const el=$('lean'); el.value=String(clamp(Math.round(ratio*20)*5,25,400)); el.dispatchEvent(new Event('input',{bubbles:true})); }
 // The height axis of a landform's canvases: the plain, the sea and the elevation, with room for an along curve up to 1.2.
 function heightAxis(c) {
@@ -516,7 +515,7 @@ function heightAxis(c) {
   return {plain,sea,E,span,lo,hi};
 }
 function sectionLayout(c) {
-  const cv=$('section-preview'),W=cv.width,H=cv.height,ratio=leanRatio(c.kind,c.q,c.shouldered),xL=CV_PAD,xR=W-CV_PAD,xc=xL+(xR-xL)*ratio/(1+ratio),top=CV_PAD+2,bottom=H-CV_PAD-2,L={W,H,ratio,xL,xR,xc,top,bottom,land:c.land};
+  const cv=$('section-preview'),W=cv.width,H=cv.height,ratio=leanRatio(c.kind,c.q),xL=CV_PAD,xR=W-CV_PAD,xc=xL+(xR-xL)*ratio/(1+ratio),top=CV_PAD+2,bottom=H-CV_PAD-2,L={W,H,ratio,xL,xR,xc,top,bottom,land:c.land};
   if (c.land) {
     const a=heightAxis(c); Object.assign(L,a,{yH:h => bottom-(bottom-top)*(h-a.lo)/(a.hi-a.lo),hY:y => a.lo+(a.hi-a.lo)*(bottom-y)/(bottom-top)});
     L.yv=v => L.yH(a.plain+a.span*v); L.vy=y => (L.hY(y)-a.plain)/a.span;
@@ -558,13 +557,13 @@ function sectionMark() {
 function fitCanvas(cv,ratio) { const w=Math.round(cv.clientWidth); if (w>=120 && cv.width!==w) { cv.width=w; cv.height=Math.round(w*ratio); } }
 function drawSection() {
   fitCanvas($('section-preview'),.5); fitCanvas($('along-preview'),.3);
-  const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{water,ys,back}=sectionPreview(c.kind,c.q,c.shouldered),n=ys.length-1;
+  const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{ys,back}=sectionPreview(c.kind,c.q),n=ys.length-1;
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
   const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); if (label) { g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); } };
   if (c.land) { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
   else { rule(L.yv(0),'#465344'); rule(L.yv(1),'#465344'); }
   const base=L.yv(0),trace=() => { for (let k=0;k<=n;k++) g.lineTo(L.xL+(L.xc-L.xL)*k/n,L.yv(back[k])); for (let k=n;k>=0;k--) g.lineTo(L.xc+(L.xR-L.xc)*(n-k)/n,L.yv(ys[k])); };
-  g.beginPath(); g.moveTo(L.xL,base); trace(); g.lineTo(L.xR,base); g.closePath(); g.fillStyle=water?'rgba(102,170,200,.28)':'rgba(180,213,137,.25)'; g.fill();
+  g.beginPath(); g.moveTo(L.xL,base); trace(); g.lineTo(L.xR,base); g.closePath(); g.fillStyle='rgba(180,213,137,.25)'; g.fill();
   g.beginPath(); g.moveTo(L.xL,L.yv(back[0])); trace(); g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
   // The map's own sections across the selected landform, at five places along it and at the place picked below, in height units.
   const node=c.land?selectedLandform():null;
@@ -581,7 +580,7 @@ function drawSection() {
   g.strokeStyle='rgba(255,210,122,.35)'; g.setLineDash([2,3]); g.beginPath(); g.moveTo(L.xc,L.top); g.lineTo(L.xc,L.bottom); g.stroke(); g.setLineDash([]);
   g.fillStyle='#a8b7a5'; g.textAlign='left'; g.fillText('lean side',L.xL+2,L.H-2); g.textAlign='right'; g.fillText('steep side',L.xR-2,L.H-2); g.textAlign='left';
   // The controls round the canvas.
-  const form=$('curve-form'),choices=formChoices(c.kind); if (form.dataset.kind!==c.kind) { form.replaceChildren(new Option('The shape\'s own',''),...choices.map(([id,label]) => new Option(label,id))); form.dataset.kind=c.kind; }
+  const form=$('curve-form'),choices=LANDFORM_FORMS; if (form.dataset.kind!==c.kind) { form.replaceChildren(new Option('The shape\'s own',''),...choices.map(([id,label]) => new Option(label,id))); form.dataset.kind=c.kind; }
   form.value=choices.some(([id]) => id===c.q.curve?.form)?c.q.curve.form:''; $('curve-reset').disabled=!c.q.curve?.knots;
   $('curve-link').hidden=$('curve-mirror').hidden=!c.land; $('curve-link').setAttribute('aria-pressed',String(sidesLinked(c))); $('curve-link').textContent=sidesLinked(c)?'Sides linked':'Link sides'; $('curve-mirror').disabled=sidesLinked(c);
   $('along-block').hidden=!c.land;
@@ -617,7 +616,7 @@ function curveEditorEvents() {
   const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
   const hit=(c,L,p) => { let best=null,d=8; for (const h of sectionHandles(c,L)) { const dd=Math.hypot(h.X-p.px,h.Y-p.py); if (dd<d) { d=dd; best=h; } } return best; };
   const distShare=(L,side,px) => clamp(1-Math.abs(px-L.xc)/(side==='back'?L.xc-L.xL:L.xR-L.xc),0,1);
-  const vOf=(c,L,py) => clamp(L.vy(py),c.water?-.5:0,1.5);
+  const vOf=(c,L,py) => clamp(L.vy(py),0,1.5);
   const finish=() => { if (drag) { drag=null; if (selected>=0) { checkpoint(); queueWeather(); } } };
   const remove=(c,h) => { const list=(h.edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); if (h.i>0 && h.i<list.length-1 && list.length>2) { list.splice(h.i,1); h.edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c)); return true; } return false; };
   cv.addEventListener('contextmenu',e => e.preventDefault());

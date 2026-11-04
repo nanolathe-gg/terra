@@ -1,6 +1,6 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -13,7 +13,8 @@ import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sam
 // rectangle; read() waits (readAsync/ready) so a bake never sees a half-written copy and the frame never waits.
 
 const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x'];
-const KIND = {paint: 0, erase: 1, deep: 2, shallow: 3, mountain: 4, hill: 5, plateau: 6, offset: 7, lower: 8, sand: 9, grass: 10, smooth: 11, ramp: 12, crater: 13, fissure: 14, crystal: 15, landform: 16};
+// spurs: a crater's spurs, a hidden ridge stroke of tapering pieces (prepareNode adds it after the crater); no tool draws it.
+const KIND = {paint: 0, erase: 1, spurs: 4, sand: 9, grass: 10, smooth: 11, crater: 13, fissure: 14, crystal: 15, landform: 16};
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],
@@ -26,14 +27,14 @@ const MASK_WRITES = [null, [[0, 127], [1, 0], [3, 0]], [[1, 127], [0, 0], [3, 0]
   [[14, 127]], [[14, -127]], [[15, 127]], [[15, -127]], [[16, 127]], [[16, -127]], [[17, 127]], [[17, -127]]];
 const STYLE_KEYS = ['styleRelief', 'styleCracks', 'styleBanding', 'styleFace', 'styleErosion', 'styleDeposits', 'styleVegetation', 'styleExposure'];
 const WATER_KEYS = ['waterShore', 'waterDeep', 'waterBed'];
-const STYLE_PLANES = [5, 6, 7, 8, 14, 15, 16, 17], MASK_SHAPES = ['plateau', 'offset', 'hill', 'mountain', 'crater', 'deep', 'shallow', 'landform'];
-// H9: maskSetup() of sculpt.js for a landform or water stroke: its Paint-inside choice, style writes (target already carries the amount) and a water
+const STYLE_PLANES = [5, 6, 7, 8, 14, 15, 16, 17], MASK_SHAPES = ['crater', 'landform'];
+// H9: maskSetup() of sculpt.js for a landform or crater: its Paint-inside choice, style writes (target already carries the amount) and a landform
 // stroke's edge and bed flags (written at full strength, `flat`). Each entry is [plane, target, gain, flat].
 function shapeMaskWrites(kind, q, sat) {
   if (!MASK_SHAPES.includes(kind) || sat) return [];
   const gain = clamp(q.maskAmount, 0, 1), out = (MASK_WRITES[Math.round(q.maskChannel)] || []).map(([p, t]) => [p, t, gain, 0]);
   STYLE_KEYS.forEach((k, j) => { const v = clamp(q[k] || 0, -1, 1); if (Math.abs(v) >= .005) out.push([STYLE_PLANES[j], Math.round(127 * v), 1, 0]); });
-  if (['deep', 'shallow', 'landform'].includes(kind)) WATER_KEYS.forEach((k, j) => {
+  if (kind === 'landform') WATER_KEYS.forEach((k, j) => {
     const c = Math.round(q[k] || 0);
     if (c < 1 || c > (k === 'waterBed' ? 3 : 2)) return;
     out.push([9 + j, c === 2 ? -127 : 127, 1, 1]);
@@ -46,11 +47,11 @@ function shapeMaskWrites(kind, q, sat) {
 const NODE_FIELDS = [
   ...['cgForm', 'fcMode', 'fcSkin'].map(k => [k, 'u']), ...['fcL', 'fcStrength', 'fcStep', 'fcShare'].map(k => [k, 'f']), ...['cgSize', 'cgFacet', 'cgSizeVar', 'cgSmooth', 'cgTiers', 'cgStep', 'cgVar', 'bgFace', 'bgTilt', 'bgFlat', 'bgRough', 'bgTx', 'bgTy', 'bgJit', 'bgAlign', 'bgBreak', 'bgTurn'].map(k => [k, 'f']),
   ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plSeam', 'plVary', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
-  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'natural', 'passage', 'settle', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olFlat', 'olMoon', 'olS0', 'olS1', 'olS2', 'bpOffset', 'plain', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'curveBase', 'backBase', 'cvLip', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'combine', 'alongBase'].map(k => [k, 'u']),
+  ...['grid', 'kind', 'nseg', 'seed', 'framed', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'preIdx', 'olS0', 'olS1', 'olS2', 'ridge', 'hole', 'hSeed', 'nSect', 'nGap', 'curveBase', 'backBase', 'cvLip', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'combine', 'alongBase'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
-  ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'leanK', 'bearX', 'bearY', 'leanSide', 'wK', 'wLo', 'wHi', 'hgtA', 'hgtB', 'bankScale', 'amp', 'faceVar', 'shelves',
-    'beachFlat', 'coreEdge', 'crackAmt', 'faceX', 'faceY', 'faceSide', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 'backWidth', 'faceWidth',
-    'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'bankFlat', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'facePx', 'sBack', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs',
+  ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'leanK', 'bearX', 'bearY', 'leanSide', 'wK', 'wLo', 'wHi', 'hgtA', 'hgtB', 'amp', 'faceVar', 
+    'crackAmt', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 
+    'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs',
     'sBreak', 'elev', 'lfFront', 'lfBack', 'lfWander', 'lfWidth', 'lfHeight', 'lfSize', 'lfFoot', 'lfMid', 'lfTaper', 'lfRoute'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
@@ -109,20 +110,19 @@ function fissurePieces(f, path, s, seed, radius) {
   }
   return out;
 }
-const BASE_KINDS = ['plateau', 'offset', 'hill', 'mountain'];
-// H9: the outline displacement of baseOutline (Desert's baseVary, px) and moonOutline (Moon's moonLobes, a share of the radius) as the parameters of
-// one shader function: amplitude in radius units, the smoothstep window on r (none for an offset), and up to three noise terms (weight, wavelength px, salt).
+// H9: the outline displacement of a crater's spurs, baseOutline (Desert's baseVary, px) and moonOutline (Moon's moonLobes, a share of the radius), as the
+// parameters of one shader function: amplitude in radius units, the smoothstep window on r, and up to three noise terms (weight, wavelength px, salt).
 function outlineUniforms(kind, q, radius) {
-  if (BASE_KINDS.includes(kind) && q.baseVary > 0) {
-    return {olAmp: Math.min(q.baseVary, .15 * radius) / radius, olFlat: kind === 'offset' ? 1 : 0, olLo: .5, olHi: .95, olMoon: 0, olW0: .6, olL0: 55, olS0: 0x2e83, olW1: .4, olL1: 21, olS1: 0x71d5, olW2: 0, olL2: 1, olS2: 0};
+  if (kind !== 'spurs') return {};
+  if (q.baseVary > 0) {
+    return {olAmp: Math.min(q.baseVary, .15 * radius) / radius, olLo: .5, olHi: .95, olW0: .6, olL0: 55, olS0: 0x2e83, olW1: .4, olL1: 21, olS1: 0x71d5, olW2: 0, olL2: 1, olS2: 0};
   }
-  if ((kind === 'hill' || kind === 'mountain') && q.moonLobes > 0) {
-    return {olAmp: q.moonLobes, olFlat: 0, olLo: .25, olHi: .8, olMoon: 1, olW0: .55, olL0: radius * .5, olS0: 0x5a31, olW1: .3, olL1: radius * .18, olS1: 0x2c47, olW2: .15, olL2: radius * .07, olS2: 0x7d13};
+  if (q.moonLobes > 0) {
+    return {olAmp: q.moonLobes, olLo: .25, olHi: .8, olW0: .55, olL0: radius * .5, olS0: 0x5a31, olW1: .3, olL1: radius * .18, olS1: 0x2c47, olW2: .15, olL2: radius * .07, olS2: 0x7d13};
   }
   return {};
 }
-// H9: line features (card C4): lineMultipliers, spurPieces, ridgePieces of sculpt.js, the seeded arithmetic that lays out a ridge's crest and spurs as short pieces.
-const ridgeOn = (kind, o) => (kind === 'hill' || kind === 'mountain') && (Math.round(o.spurCount) >= 1 || o.crestJag > 0 || o.crestVary > 0 || o.crestTaper > 0);
+// H9: line features (card C4): lineMultipliers and spurPieces of sculpt.js, the seeded arithmetic that lays out spurs as short pieces (a landform's, a crater's).
 function lineMultipliers(s, a, len, salt, taper, ends) {
   const R = s.radius, f = len > 0 ? clamp(a / len, 0, 1) : 0, u = ends ? 1 - smooth(0, .4, Math.min(f, 1 - f)) : smooth(0, 1, f), n = valueNoise(a / (R * 2.2), .37, s.seed ^ salt), m = valueNoise(a / (R * 1.6), 2.9, s.seed ^ (salt + 0x55));
   return [clamp(1 + .45 * s.crestVary * n, .6, 1.4) * (1 - .62 * taper * u) * (ends ? 1 : 1 + .5 * (1 - smooth(0, .4, f))), (1 - .45 * s.crestVary * (.5 - .5 * m)) * (1 - .7 * taper * u)];
@@ -149,22 +149,6 @@ function spurPieces(s, roots, fade, jag) {
     for (let j = first; j < out.length; j++) out[j].share = root.share;   // a landform reads its crest at the root's place along its path
   }
   return out;
-}
-function ridgePieces(s, path) {
-  const cum = [0], longest = Math.max(16, s.radius * 1.5), out = [];
-  for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
-  const L = cum[cum.length - 1], jag = s.crestJag;
-  if (path.length < 2) out.push(mkPiece(path[0], null, 1, 1, 1, 1, jag));
-  for (let k = 1; k < path.length; k++) {
-    const a = path[k - 1], b = path[k], len = cum[k] - cum[k - 1], n = Math.max(1, Math.ceil(len / longest));
-    for (let j = 0; j < n; j++) {
-      const f0 = j / n, f1 = (j + 1) / n, m0 = lineMultipliers(s, cum[k - 1] + len * f0, L, 0x71d, s.crestTaper, true), m1 = lineMultipliers(s, cum[k - 1] + len * f1, L, 0x71d, s.crestTaper, true);
-      out.push(mkPiece({x: a.x + (b.x - a.x) * f0, y: a.y + (b.y - a.y) * f0}, {x: a.x + (b.x - a.x) * f1, y: a.y + (b.y - a.y) * f1}, m0[0], m1[0], m0[1], m1[1], jag));
-    }
-  }
-  const roots = ridgeRoots(s, path, cum, L);
-  if (!roots.length) return out;
-  return out.concat(spurPieces(s, roots, 1, jag));
 }
 // Where a ridge's spurs leave it: along the path, alternating sides with a seeded wobble (share: how far along the path, 0 to 1, for a landform's along curve).
 function ridgeRoots(s, path, cum, L) {
@@ -208,20 +192,17 @@ export function prepareNode(n, geom, c) {
   const kind = n.kind, q = kind === 'landform' ? landformSteps(c.params(n)) : c.params(n), kcode = KIND[kind];
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), allPoints = n.points, paths = shapePaths(n), radius = q.radius;
-  const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
-  const shoreShape = water || kind === 'landform';
-  const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), shouldered = isShouldered(kind, q, ridgeOn(kind, q)), plainHill = kind === 'hill' && !shouldered;
-  const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
-  const lean = leanSetup(kind, q), {face: faceWidth, back: backWidth} = hillWidths(q, lean.ratio);
+  const shoreShape = kind === 'landform', naturalPlateau = ['erase', 'paint', 'sand', 'grass'].includes(kind);
+  const lean = leanSetup(kind, q);
   // fissureSetup(): the cut's half width in px (scaled by the frame), the zigzag amplitude, and how far a cell feels a piece.
   const fis = kind === 'fissure' ? (() => {
     const kf = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1, hw0 = Math.max(q.fissureWidth, 1) * .5, hw = hw0 * kf, net = q.fissureNetwork >= .5, jag = q.fissureJag, famp = hw * (.5 + 2.2 * jag) + 1;
     return {kf, hw0, hw, net, jag, amp: famp, reach: net ? radius * 1.05 + hw + 8 : hw * 3.5 + famp + 6};
   })() : null;
-  const vary = variability(kind, {naturalWater, naturalPlateau, shouldered, plainHill}, q);
-  const amp = kind === 'crater' ? q.rough * radius * .45 : kind === 'ramp' ? q.rough * radius * .14 : q.rough * radius * vary.amp;
+  const vary = variability(kind, {naturalPlateau}, q);
+  const amp = kind === 'crater' ? q.rough * radius * .45 : q.rough * radius * vary.amp;
   const frameScale = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1;
-  const extent = kind === 'landform' ? landformReach(q, frameScale) : fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : shouldered ? Math.max(1.4, backWidth, faceWidth) : 1) * bankScale * (!shouldered && !lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp + (water && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0) + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0);
+  const extent = kind === 'landform' ? landformReach(q, frameScale) : fis ? fis.reach : kind === 'crater' ? radius * 1.9 * (1 + .45 * q.rough) + 2 * amp : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : 1) * (!lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp + (kind === 'spurs' ? (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0) : 0);
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
@@ -235,54 +216,15 @@ export function prepareNode(n, geom, c) {
     const jx = Math.min(ix + 1, grid - 1), jy = Math.min(iy + 1, grid - 1), fx = gx - ix, fy = gy - iy;
     return (cellNoise(f, ix, iy) * (1 - fx) + cellNoise(f, jx, iy) * fx) * (1 - fy) + (cellNoise(f, ix, jy) * (1 - fx) + cellNoise(f, jx, jy) * fx) * fy;
   };
-  const macro = naturalWater || naturalPlateau, fx = macro ? F_COAST_X : F_X, fy = macro ? F_COAST_Y : F_Y;
+  const fx = naturalPlateau ? F_COAST_X : F_X, fy = naturalPlateau ? F_COAST_Y : F_Y;
   const segs = [], extra = [];
-  let reads = kind === 'plateau' || kind === 'crater' ? [{x: allPoints[0].x, y: allPoints[0].y}] : [];
+  const reads = kind === 'crater' ? [{x: allPoints[0].x, y: allPoints[0].y}] : [];
   const dab = (p, e, f0, f1) => segs.push({px: p.x, py: p.y, ex: (e || p).x, ey: (e || p).y, f0, f1, nx: sampleNoise(fx, p.x, p.y), ny: sampleNoise(fy, p.x, p.y)});
-  let settle = false, faceSide = 1, face = [1, 0];
   // Prepare paths independently, then submit their capsules as one shape.
   // Heights, masks, smoothing and coastal effects are applied once to the union.
   for (const indices of paths) {
-  const pts=indices.map(i=>allPoints[i]),segmentStart=segs.length;
-  if (shouldered) {
-    const fa = Math.atan2(-lean.by, -lean.bx) + (q.facing ? 0 : sampleNoise(F_COAST_X, pts[0].x, pts[0].y) * 1.8) + turn;   // a chosen side holds; the default wanders
-    face = [Math.cos(fa), Math.sin(fa)];
-    const path = [pts[0]];
-    for (const p of pts.slice(1)) if (Math.hypot(p.x - path[path.length - 1].x, p.y - path[path.length - 1].y) >= .2) path.push(p);
-    if (path.length >= 3) {
-      const sx = path[1].x - path[0].x, sy = path[1].y - path[0].y;
-      faceSide = lean.side || ((-sy * face[0] + sx * face[1]) < 0 ? -1 : 1);
-      settle = true;
-      // settleHill: round the corners twice, sweep the rounded path in a few sections, soften the weights.
-      let rounded = [path[0]];
-      for (const p of path.slice(1, -1)) { const last = rounded[rounded.length - 1]; if (Math.hypot(p.x - last.x, p.y - last.y) > radius * .16) rounded.push(p); }
-      rounded.push(path[path.length - 1]);
-      for (let pass = 0; pass < 2; pass++) {
-        const next = [rounded[0]];
-        for (let i = 0; i < rounded.length - 1; i++) {
-          const a = rounded[i], b = rounded[i + 1];
-          next.push({x: .75 * a.x + .25 * b.x, y: .75 * a.y + .25 * b.y}, {x: .25 * a.x + .75 * b.x, y: .25 * a.y + .75 * b.y});
-        }
-        next.push(rounded[rounded.length - 1]); rounded = next;
-      }
-      const frames = rounded.map((p, i) => {
-        const a = rounded[Math.max(0, i - 1)], b = rounded[Math.min(rounded.length - 1, i + 1)];
-        const dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy) || 1;
-        return [-dy / length * faceSide, dx / length * faceSide];
-      });
-      const kept = simplifyPath(rounded.map((p, i) => ({...p, i})), Math.max(1, radius * .02)), longest = Math.max(16, radius * 1.5);
-      for (let k = 0; k < kept.length - 1; k++) {
-        const a = kept[k], b = kept[k + 1], fa = frames[a.i], fb = frames[b.i], pieces = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / longest);
-        const at = t => ({x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t}), fc = t => [fa[0] + (fb[0] - fa[0]) * t, fa[1] + (fb[1] - fa[1]) * t];
-        for (let j = 0; j < pieces; j++) { const s = segs.length; dab(at(j / pieces), at((j + 1) / pieces), fc(j / pieces), fc((j + 1) / pieces)); segs[s].frame = true; }
-      }
-    } else if (path.length === 2) {
-      // One span: the point preview is discarded when the first span arrives, and settleHill returns on a path under three points.
-      const sx = path[1].x - path[0].x, sy = path[1].y - path[0].y;
-      faceSide = lean.side || ((-sy * face[0] + sx * face[1]) < 0 ? -1 : 1);
-      dab(path[0], path[1]);
-    } else dab(path[0]);
-  } else if (kind === 'crystal') {
+  const pts=indices.map(i=>allPoints[i]);
+  if (kind === 'crystal') {
     // crystalList() (the pyramid form): crystals scattered along the path and within the brush, each a polygon of planes that meets at the apex.
     const rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return (x >>> 0) / 4294967296; };
     const path = simplifyPath(pts, Math.max(1, radius * .05)), lengths = [0], form = q.crystalForm >= 1.5 ? 2 : q.crystalForm >= .5 ? 1 : 0;
@@ -320,32 +262,8 @@ export function prepareNode(n, geom, c) {
     }
   } else if (kind === 'fissure') {
     for (const pc of fissurePieces(fis, simplifyPath(pts, Math.max(1.5, fis.hw)), q, seed, radius)) segs.push({px: pc.a.x, py: pc.a.y, ex: (pc.b || pc.a).x, ey: (pc.b || pc.a).y, f0: [pc.r0, pc.r1], f1: [pc.h0, pc.h1], nx: 0, ny: 0});
-  } else if (kind === 'ramp') {
-    // ramp()/settleRamp(): drop repeats, then (from three points) thin the path and round its corners twice; the grade runs between the first and last point.
-    let path = [pts[0]];
-    for (const p of pts.slice(1)) if (Math.hypot(p.x - path[path.length - 1].x, p.y - path[path.length - 1].y) >= 1e-4) path.push(p);
-    const first = path[0], last = path[path.length - 1];
-    if (path.length >= 3) {
-      const thin = [path[0]];
-      for (const p of path.slice(1, -1)) if (Math.hypot(p.x - thin[thin.length - 1].x, p.y - thin[thin.length - 1].y) > radius * .12) thin.push(p);
-      thin.push(path[path.length - 1]); path = thin;
-      for (let pass = 0; pass < 2; pass++) {
-        const next = [path[0]];
-        for (let i = 0; i < path.length - 1; i++) { const a = path[i], b = path[i + 1]; next.push({x: .75 * a.x + .25 * b.x, y: .75 * a.y + .25 * b.y}, {x: .25 * a.x + .75 * b.x, y: .25 * a.y + .75 * b.y}); }
-        next.push(path[path.length - 1]); path = next;
-      }
-    }
-    let total = 0; const list = [];
-    for (let i = 0; i < path.length - 1; i++) {
-      const a = path[i], b = path[i + 1], l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
-      if (l2 < 1e-8) continue;
-      const len = Math.sqrt(l2); list.push({a, b, cum: total, len}); total += len;
-    }
-    const readOffset=reads.length;
-    for (const e of list) segs.push({px: e.a.x, py: e.a.y, ex: e.b.x, ey: e.b.y, f0: [e.cum, e.len], f1: [total, readOffset], nx: 0, ny: 0});
-    if (total > 0) reads.push({x:first.x,y:first.y},{x:last.x,y:last.y});
   } else if (kind === 'landform') {
-    // H27 landform: the path is the crest, swept as segments that carry the length before them, their own and the whole path's (stampRamp's rows, which the along
+    // H27 landform: the path is the crest, swept as segments that carry the length before them, their own and the whole path's (the rows the along
     // curve reads), the side the back is on, and which ends close the section round them. A click is a tiny segment closed at both ends.
     let path = simplifyPath(pts, Math.max(1, radius * .04)).filter((p, k, a) => !k || Math.hypot(p.x - a[k - 1].x, p.y - a[k - 1].y) >= 1e-4);
     if (path.length < 2) path = [path[0], {x: path[0].x + .01, y: path[0].y}];
@@ -365,10 +283,10 @@ export function prepareNode(n, geom, c) {
         segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
       }
     }
-  } else if (ridgeOn(kind, q) || n.pieces) {
-    // sweepRidge(): the crest and its spurs are pieces with a width and a height multiplier at each end, each swept as one capsule.
+  } else if (n.pieces) {
+    // A crater's spurs (sweepRidge()): pieces with a width and a height multiplier at each end, each swept as one capsule.
     const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
-    for (const pc of n.pieces ?? ridgePieces(rs, simplifyPath(pts, Math.max(1, radius * .04)))) {
+    for (const pc of n.pieces) {
       const at = segs.length, ex = radius * pc.reach * (1) + 2 * amp * (pc.r0 + pc.r1) / 2 + (q.baseVary > 0 ? q.baseVary : 0) + (q.moonLobes > 0 ? q.moonLobes * radius : 0), e = pc.b || pc.a;
       dab(pc.a, pc.b, [pc.r0, pc.r1], [pc.h0, pc.h1]); segs[at].jag = pc.jag;
       segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
@@ -380,12 +298,6 @@ export function prepareNode(n, geom, c) {
       const a = path[k - 1], b = path[k], pieces = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / longest);
       for (let j = 0; j < pieces; j++) dab({x: a.x + (b.x - a.x) * j / pieces, y: a.y + (b.y - a.y) * j / pieces}, {x: a.x + (b.x - a.x) * (j + 1) / pieces, y: a.y + (b.y - a.y) * (j + 1) / pieces});
     }
-  }
-  // Each short hill path owns its tangent, even alongside longer paths.
-  if(shouldered&&paths.length>1)for(let k=segmentStart;k<segs.length;k++){
-    const s=segs[k];if(s.frame)continue;
-    const dx=s.ex-s.px,dy=s.ey-s.py,len=Math.hypot(dx,dy);
-    s.f0=s.f1=len?[-dy/len*faceSide,dx/len*faceSide]:face.slice();s.frame=true;
   }
   }
   // The integer box of every capsule, as dab() clamps it; the union is the node's region.
@@ -399,14 +311,14 @@ export function prepareNode(n, geom, c) {
   const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : shapeMaskWrites(kind, q, n.satellite);
   const rim = kind === 'crater' ? craterRim(q, seed) : null;
   if (rim) { for (const c of rim.sect) extra.push([c.a, c.h, c.w, c.rel]); for (const g of rim.gaps) extra.push([g, 0, 0, 0]); }
-  const main = {op: 'stamp', kind: kcode, segs, region, settle, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 12 ? 'stampRamp' : kcode === 16 ? 'stampLandform' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
-    u: {seed, framed: inv ? 1 : 0, natural: naturalWater ? 1 : 0, passage: kind === 'shallow' && q.shallowMode === 'passage' ? 1 : 0, settle: settle ? 1 : 0,
-      radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, leanK: lean.k, bearX: lean.bx, bearY: lean.by, leanSide: lean.side, wK: vary.wK, wLo: vary.wLo, wHi: vary.wHi, hgtA: vary.hgtA, hgtB: vary.hgtB, bankScale, amp, faceVar: q.faceVariation ?? .8,
-      shelves: q.shelves, beachFlat: q.beachFlatness, coreEdge: .38, crackAmt: (kind === 'hill' || kind === 'mountain' || kind === 'plateau' || kind === 'offset' || kind === 'crater' || kind === 'landform') && q.cracks > 0 ? q.cracks : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
-      ...outlineUniforms(kind, q, radius), bankFlat: (kind === 'deep' || kind === 'shallow') && !(q.facePx > 0) ? Math.max(0, q.bankPx || 0) : 0, facePx: Math.max(0, q.facePx || 0), bpAmp: BASE_KINDS.includes(kind) ? Math.max(0, q.baseBump || 0) : 0, bpOffset: kind === 'offset' ? 1 : 0,
-      faceX: face[0], faceY: face[1], faceSide, rotX: Math.cos(turn), rotY: Math.sin(turn),
+  const main = {op: 'stamp', kind: kcode, segs, region, extra, entry: kcode === 15 ? (q.crystalForm >= 1.5 ? 'stampBerg' : q.crystalForm >= .5 ? 'stampColumns' : 'stampCrystal') : kcode === 14 ? 'stampFissure' : kcode === 13 ? 'stampCrater' : kcode === 16 ? 'stampLandform' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, reads, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
+    u: {seed, framed: inv ? 1 : 0,
+      radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, leanK: lean.k, bearX: lean.bx, bearY: lean.by, leanSide: lean.side, wK: vary.wK, wLo: vary.wLo, wHi: vary.wHi, hgtA: vary.hgtA, hgtB: vary.hgtB, amp, faceVar: q.faceVariation ?? .8,
+      crackAmt: (kind === 'crater' || kind === 'landform') && q.cracks > 0 ? q.cracks : 0, cOffX: Math.cos(seed % 628 / 100 + turn), cOffY: Math.sin(seed % 628 / 100 + turn), rimH: q.rimHeight ?? 0, ejecta: q.craterEjecta || 0,
+      ...outlineUniforms(kind, q, radius), bpAmp: kind === 'spurs' ? Math.max(0, q.baseBump || 0) : 0,
+      rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
-      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), backWidth, faceWidth, plain: plainHill ? 1 : 0, ridge: ridgeOn(kind, q) || n.pieces ? 1 : 0,
+      fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark, cTop: clamp(q.crystalTop ?? 0, 0, .95), ridge: n.pieces ? 1 : 0,
       hole: n.hole ? 1 : 0, hx: n.hole?.x ?? 0, hy: n.hole?.y ?? 0, hR: n.hole?.R ?? 0, hRough: n.hole?.rough ?? 0, hSeed: n.hole?.seed ?? 0,
       nSect: rim ? rim.sect.length : 0, nGap: rim ? rim.gaps.length : 0, gapHw: rim?.hw ?? 0}};
   if (kind === 'crystal') {
@@ -415,14 +327,13 @@ export function prepareNode(n, geom, c) {
       cgTiers: q.crystalTiers ?? 0, cgStep: q.crystalStep ?? 0, cgVar: q.crystalVariation ?? 0, bgFace: q.bergFace, bgTilt: q.bergTilt, bgFlat: q.bergFlat, bgRough: q.bergRough, bgTx: Math.cos(bt), bgTy: Math.sin(bt), bgJit: clamp(q.bergJitter, 0, 1), bgTurn: turn});
   }
   // Angular facets re-tile a raised result; a landform with shore features keeps its coast pass instead (shapeControlAvailable hides the row there).
-  const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : q.iceFacets > 0 && (kind === 'mountain' && q.amount >= 8 || kind === 'landform' && !landformShore(q)) ? 2 : 0;
-  if ((shoreShape || (kind === 'offset' && q.shorePlates > 0) || facetMode) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, shoreShape, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
+  const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : q.iceFacets > 0 && kind === 'landform' && !landformShore(q) ? 2 : 0;
+  if ((shoreShape || facetMode) && region) { const co = coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.
-  const cv = strokeCurve(kind, q, {shouldered});
+  const cv = strokeCurve(kind, q);
   const put = t => { const at = main.extra.length; for (let j = 0; j < t.length; j += 4) main.extra.push([t[j], t[j + 1] ?? 0, t[j + 2] ?? 0, t[j + 3] ?? 0]); return at; };
   if (cv) {
     Object.assign(main.u, cv.u); main.u.curveBase = put(cv.front); if (cv.back) main.u.backBase = put(cv.back);
-    if (shouldered) main.u.sBack = backWidth / faceWidth;
   }
   if (kind === 'landform') {
     // H27: the elevation and how it combines, the two half widths, the along curve's table, and the variation (px in the shape's own frame: wander scales with it).
@@ -450,8 +361,8 @@ export function prepareNode(n, geom, c) {
       roots.push({x: centre.x + dx * radius * lobe * 1.02, y: centre.y + dy * radius * lobe * 1.02, heading: ang + (rand01(seed, k, 0x4b3) - .5) * q.spurSpread * 1.2, k});
     }
     const pieces = spurPieces(rs, roots, .4, q.crestJag);
-    out.push(prepareNode({kind: 'mountain', satellite: true, points: [roots[0]], frame: n.frame, seed, pieces, hole: {x: centre.x, y: centre.y, R: radius, rough: q.rough, seed},
-      params: {...n.params, radius, amount: q.amount * q.rimHeight, rough: q.rough * .8, softness: .8, cracks: 0, craterlets: 0, craterEjecta: 0, spurCount: 0, rimSectors: 0, rimGaps: 0, crestJag: 0, crestVary: 0, crestTaper: 0, facePx: 0, curve: null, terraces: 0}}, geom, c));
+    out.push(prepareNode({kind: 'spurs', satellite: true, points: [roots[0]], frame: n.frame, seed, pieces, hole: {x: centre.x, y: centre.y, R: radius, rough: q.rough, seed},
+      params: {...n.params, radius, amount: q.amount * q.rimHeight, rough: q.rough * .8, softness: .8, cracks: 0, craterlets: 0, craterEjecta: 0, spurCount: 0, rimSectors: 0, rimGaps: 0, crestJag: 0, crestVary: 0, crestTaper: 0, curve: null, terraces: 0}}, geom, c));
   }
   return {multi: out};
 }
@@ -469,7 +380,7 @@ const coastLayerReach = q => {
 // The shared coast pass of a shape with shore features, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
 // beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
 // size of the circular bites' lattice.
-function coastSetup(q, geom, region, bankScale, radius, inv, seed, shoreShape, c, facet = 0) {
+function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0) {
   const fingers = shoreShape && q.fingers > 0, layers = shoreShape && Math.round(q.shoreLayers) >= 1;
   const plWater = Math.max(0, q.plateWaterPx || 0), plLand = Math.max(0, q.plateLandPx || 0), plates = q.shorePlates > 0 && Math.max(plWater, plLand) > 0;
   if (!fingers && !layers && !plates && !facet) return null;
@@ -480,7 +391,7 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed, shoreShape, c
     return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, sideR: 0, extra: [],
       u: {fcMode: facet, fcL: L, fcStrength: clamp(q.craterFacets, 0, 1), fcStep: q.crystalCraterStep ?? 0, fcSkin: q.crystalCraterSkin >= .5 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
   }
-  const fReach = .5 * radius * bankScale, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
+  const fReach = .5 * radius, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
   const m = Math.ceil(reach / spacing) + 12, box = expand(region, m, grid), blurR = Math.max(1, Math.round(10 * refSpacing / spacing));
   const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), vary = clamp(q.layerVary, 0, 1), scal = layers && Math.round(q.layerStyle) === 1;
   const Rc = Math.max(8, q.layerCircle), cv = clamp(q.lavaCircleVary || 0, 0, 1), C = Rc * 1.3;
@@ -502,7 +413,7 @@ function coastSetup(q, geom, region, bankScale, radius, inv, seed, shoreShape, c
     u: {
       plMat: plates ? (q.plateMaterial >= 1.5 ? 2 : 1) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plSeam: q.crystalShoreSeam ?? .5, plVary: q.plateVary ?? 0, plNeedles: q.frostNeedles ?? 0,
       frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
-      coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius * bankScale / 140, .35, 1),
+      coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius / 140, .35, 1),
       cfSize: q.fingerSize ?? 1,
       coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: LAYER_MEANDER,
       coLReach: lReach, coRiser: q.layerRiser > 0 ? q.layerRiser : 0, coScal: scal ? 1 : 0, coRc: Rc, coCV: cv, coRs: 1.4 * Rc + cv * .1 * Rc + n * W * (1 + .45 * cv) + spacing,
@@ -547,7 +458,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampRamp', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'compose', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'facetSnap', 'facetApply', 'stampColumns', 'stampBerg', 'packPlane'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'facetSnap', 'facetApply', 'stampColumns', 'stampBerg', 'packPlane'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;
@@ -660,7 +571,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     };
     // The node's own stamp passes over R (the host's coast pass runs them with the footprint plane switched on).
     const emitBody = (p, node, R, ex, noise) => {
-      const reg = p.settle ? ex(p.region, 4) : p.region, body = reg ? intersect(R, reg) : null;
+      const body = p.region ? intersect(R, p.region) : null;
       if (!body) return;
       if (noise) add('noise', ex(p.region, 1), node);
       const entry = p.entry || 'stamp';
@@ -670,11 +581,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
         add('smoothCopy', wide, node); add('blurH', wide, {...node, bsrc: 0, bdst: 1, blurR: p.smoothR}); add('blurV', body, {...node, bsrc: 1, bdst: 2, blurR: p.smoothR});
         add(entry, body, node); return;
       }
-      if (!p.settle) { add(entry, body, node); return; }
-      const wide = ex(body, 4);
-      add(entry, wide, node);
-      for (const [e, bsrc, bdst] of [['blurH', 0, 1], ['blurV', 1, 2], ['blurH', 2, 1], ['blurV', 1, 2]]) add(e, wide, {...node, bsrc, bdst});
-      add('compose', body, node);
+      add(entry, body, node);
     };
     const exMain = (r, m) => expandIn(r, m);
     // A smooth node reads the prefix height `smoothR` cells beyond its footprint, so every node before it is evaluated over that much more (rects[k]: what node k

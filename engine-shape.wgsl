@@ -156,10 +156,8 @@ fn curveRaw(off: u32, t: f32) -> f32 {
 fn keepLip(c: f32) -> f32 { return select(clamp(c, 0.0, 1.0), c, u.cvLip != 0u); }
 fn curveAt(off: u32, t: f32) -> f32 { return keepLip(curveRaw(off, t)); }
 
-// One thread per cell: every capsule of the node in order. Kinds: 0 paint 1 erase 2 deep 3 shallow 4 mountain 5 hill.
-// A hill with settle != 0 only writes its raw weights (Sc plane 0); blur and compose passes finish it.
-// H9 parametric cross-section, after H15 part 2: the curve is a host table (curveAt); what stays here is the terraces on the curve's value (terraced)
-// and the face share a cell's reach gives the curve (faceOf).
+// One thread per cell: every capsule of the node in order. Kinds: 0 paint, 1 erase, 4 a crater's spurs (the pieces of a hidden ridge stroke).
+// H9 parametric cross-section, after H15 part 2: the curve is a host table (curveAt); what stays here is the terraces on the curve's value (terraced).
 fn terraceLevel(m: u32, n: u32, nA: f32, nB: f32) -> f32 {
   let fm = f32(m); let fnn = f32(n);
   var j = 0.0;
@@ -187,13 +185,6 @@ fn terraced(c: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
   let bar = u.sBreak * 0.8;
   let intact = sm(bar - 0.12, bar + 0.12, ticket + 0.12);
   return mix(c, terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g), intact);
-}
-// The share of its reach the curve covers at a cell, foot to top (flat beyond): the kind's own share `own` (1 minus the shoulder, or 1), or facePx, kept
-// that wide whatever the stroke's size, wandering with the cell's width noise (kw, shared by the whole face) and stretched by the lean.
-fn faceOf(own: f32, reach: f32, nCW: f32, leaned: f32) -> f32 {
-  if (u.facePx <= 0.0) { return own; }
-  let kw = clamp(1.0 + 0.5 * u.faceVar * nCW, 0.4, 1.8);
-  return min(u.facePx * kw * leaned / reach, 0.98);
 }
 // The height lumps: the stroke's height wanders by rough times its two noise fields (nCW, nDet) at the host's weights hgtA and hgtB.
 fn lumps(nCW: f32, nDet: f32) -> f32 { return 1.0 + u.rough * (u.hgtA * nCW + u.hgtB * nDet); }
@@ -261,21 +252,19 @@ fn nzF(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
 #endif
 }
 
-// H9 outline displacement: baseVary (Desert's ragged feet) and moonLobes (Moon's folded outline) are one function with two parameter sets (u.ol*).
-// It returns the shift of r in radius units; the caller divides by width * bankScale. Window: smoothstep(olLo, olHi, r), or 1 for an offset (olFlat).
+// H9 outline displacement of a crater's spurs: baseVary (Desert's ragged feet) and moonLobes (Moon's folded outline) are one function with two
+// parameter sets (u.ol*). It returns the shift of r in radius units; the caller divides by width. Window: smoothstep(olLo, olHi, r).
 fn outlineShift(r: f32, lx: f32, ly: f32) -> f32 {
   if (u.olAmp <= 0.0) { return 0.0; }
-  var win = 1.0;
-  if (u.olFlat == 0u) { win = sm(u.olLo, u.olHi, r); }
+  let win = sm(u.olLo, u.olHi, r);
   var n = u.olW0 * vnoise(lx / u.olL0, ly / u.olL0, u.seed ^ u.olS0) + u.olW1 * vnoise(lx / u.olL1, ly / u.olL1, u.seed ^ u.olS1);
   if (u.olW2 > 0.0) { n = n + u.olW2 * vnoise(lx / u.olL2, ly / u.olL2, u.seed ^ u.olS2); }
   return u.olAmp * win * n;
 }
-// baseBump: lumps on the apron and lower face, added to the value of a plateau, offset, hill or mountain (baseBumps in sculpt.js).
+// baseBump: lumps on the apron and lower face of a crater's spurs (Desert's foot bumps).
 fn baseBump(lx: f32, ly: f32, w: f32) -> f32 {
   if (u.bpAmp <= 0.0) { return 0.0; }
-  let off = u.bpOffset != 0u;
-  return u.bpAmp * sm(0.03, select(0.12, 0.2, off), w) * select(1.0 - sm(0.12, 0.3, w), 1.0, off)
+  return u.bpAmp * sm(0.03, 0.12, w) * (1.0 - sm(0.12, 0.3, w))
     * (0.55 * vnoise(lx / 30.0, ly / 30.0, u.seed ^ 0x4c91u) + 0.3 * vnoise(lx / 13.0, ly / 13.0, u.seed ^ 0x1a77u) + 0.25 * vnoise(lx / 6.5, ly / 6.5, u.seed ^ 0x63d9u));
 }
 
@@ -292,18 +281,17 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
   let kind = u.kind;
-  let shouldered = kind == 5u && u.plain == 0u;   // H9: a hill with a cross-section or ridge options is the plain swept hill, like the mountain (startStroke)
-  let coastal = kind == 0u || kind == 1u || (kind == 2u && u.natural != 0u);
+  let coastal = kind == 0u || kind == 1u;
   let fxF = select(0u, 3u, coastal); let fyF = select(1u, 4u, coastal);
 #ifdef PAGES
   let nzx = nzCell(fxF, x, y, i, cells); let nzy = nzCell(fyF, x, y, i, cells);
-  let nCW = nzCell(5u, x, y, i, cells); let nDet = nzCell(2u, x, y, i, cells); let nShelf = nzCell(6u, x, y, i, cells);
+  let nCW = nzCell(5u, x, y, i, cells); let nDet = nzCell(2u, x, y, i, cells);
 #else
   let nzx = Nz[fxF * cells + i]; let nzy = Nz[fyF * cells + i];
-  let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i]; let nShelf = Nz[6u * cells + i];
+  let nCW = Nz[5u * cells + i]; let nDet = Nz[2u * cells + i];
 #endif
   let radius = u.radius;
-  var best = -1.0e30; var bc = 0.0; var br = 0.0; var bcore = 0.0; var dist = 3.0e38; var visited = false;
+  var best = -1.0e30; var bc = 0.0; var visited = false;
   for (var k = 0u; k < u.nseg; k++) {
     let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -314,11 +302,6 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var t = 0.0;
     if (span2 > 0.0) { t = clamp(((wx - px) * sx + (wy - py) * sy) / span2, 0.0, 1.0); }
     let cx = px + sx * t; let cy = py + sy * t;
-    if (shouldered) {
-      let d2 = (wx - cx) * (wx - cx) + (wy - cy) * (wy - cy);
-      if (d2 > dist) { continue; }
-      dist = d2;
-    }
     var ex = nzx; var ey = nzy;
     if (span2 > 0.0) { ex = nzx - sampleN(fxF, cx, cy); ey = nzy - sampleN(fyF, cx, cy); }
     else { ex = nzx - s2.x; ey = nzy - s2.y; }
@@ -328,74 +311,34 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     let dy = wy - cy + ampK * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
-    var reach = radius * width * u.bankScale;
+    var reach = radius * width;
     if (u.ridge != 0u) { reach = reach * (s1.x + (s1.y - s1.x) * t); }
-    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): the reach stretches, or on a kind with a shoulder the face does.
+    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): a spur's reach stretches, a brush's shoulder widens.
     var leaned = 1.0;
-    if (!shouldered && u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
+    if (u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
     if (kind >= 2u) { reach = reach * leaned; }
     var r = sqrt(dx * dx + dy * dy) / reach;
-    var lobe = 0.0;
-    if (u.olAmp > 0.0) { let shift = outlineShift(r, lx, ly) / (width * u.bankScale); r = r - shift; if (u.olMoon != 0u) { lobe = shift; } }
-    // Dry bank (bankPx): the dry part of the outline radius, from this cell's waterline out, is stretched to bankPx; reads only the cell's own prefix height.
-    if (u.bankFlat > 0.0 && F[PH * cells + i] > u.sea) {
-      let pre = F[PH * cells + i];
-      let bed = u.sea + select(-7.0, -55.0, kind == 2u) + select(0.0, 42.0 * sm(-0.15, 0.55, nShelf) * u.shelves, kind == 2u && u.natural != 0u);
-      let yy = 1.0 - (pre - u.sea) / (pre - bed);
-      let rw = 0.1 + 0.9 * (0.5 - sin(asin(clamp(1.0 - 2.0 * yy, -1.0, 1.0)) / 3.0));
-      if (r > rw) { r = rw + (r - rw) * (1.0 - rw) * radius * width * u.bankScale / u.bankFlat; }
-    }
-    var core = 0.0;
-    if (kind == 2u && u.natural != 0u) { core = 1.0 - sm(0.20, u.coreEdge, sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / radius); }
-    if (r >= 1.0 && core == 0.0 && !shouldered) { continue; }
-    // The curve's raw value c: a lip is c above 1 on land or below 0 on water, split off after the loop (w = clamp(c), the rest lifts the value).
+    if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / width; }
+    if (r >= 1.0) { continue; }
+    // The curve's raw value c: a lip is c above 1, split off after the loop (w = clamp(c), the rest lifts the value).
     var c = 0.0;
     if (kind == 0u || kind == 1u) {
       // Plateau-like edge: a broad-scale face-width variation, the north foreshortening term, then the shoulder.
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
       let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW, leaned));
-    } else if (kind == 2u || kind == 3u) {
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(0.9, reach, nCW, leaned));
-    } else if (kind == 5u && shouldered) {
-      var face = vec2f(u.faceX, u.faceY);
-      if (span2 > 0.0) { let len = sqrt(span2); face = vec2f(-sy / len * u.faceSide, sx / len * u.faceSide); }
-      var fx = face.x; var fy = face.y;
-      if (s2.z > 0.5) {
-        fx = s1.x * (1.0 - t) + s1.z * t; fy = s1.y * (1.0 - t) + s1.w * t;
-        let len = sqrt(fx * fx + fy * fy);
-        if (len > 1e-5) { fx = fx / len; fy = fy / len; } else { fx = face.x; fy = face.y; }
-      }
-      let localRadius = radius * (1.0 + u.rough * 0.75 * nShelf + lobe);
-      let uu = (dx * fx + dy * fy) / localRadius;
-      let vv = (-dx * fy + dy * fx) / localRadius;
-      let cross = uu - u.rough * 0.18 * nDet;
-      let along = cross / select(u.faceWidth, u.backWidth, cross < 0.0);
-      let side2 = 1.0 - along * along;
-      if (side2 > vv * vv) {
-        let q = 1.0 - vv * vv / side2;
-        // The face side reads the front curve over faceWidth, the back side the back curve over sBack (the lean) times that.
-        if (cross >= 0.0) { c = curveAt(u.curveBase, 1.0 - cross / u.faceWidth) * q * q; }
-        else { c = curveAt(u.backBase, 1.0 + cross / (u.sBack * u.faceWidth)) * q * q; }
-      }
+      c = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
     } else {
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW, leaned));
+      c = curveAt(u.curveBase, 1.0 - r);
     }
     c = terraced(c, x, y, i, cells);
     if (u.ridge != 0u) { c = c * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
-    if (kind == 4u || (kind == 5u && !shouldered)) { c = keepLip(c * lumps(nCW, nDet)); }
-    let key = select(max(c, core), c, core == 0.0);
-    if (!shouldered && (key <= best || (c == 0.0 && core == 0.0))) { continue; }
-    best = key; bc = c; br = r; bcore = core; visited = true;
+    if (kind == 4u) { c = keepLip(c * lumps(nCW, nDet)); }
+    if (c <= best || c == 0.0) { continue; }
+    best = c; bc = c; visited = true;
   }
-  if (!visited) {
-    if (u.settle != 0u) { Sc[i] = 0.0; }
-    return;
-  }
-  if (u.settle != 0u) { Sc[i] = best; return; }
-  let w = clamp(bc, 0.0, 1.0); let ex = bc - w; let influence = max(w, bcore);
-  if (u.coPutW != 0u) { Sc[4u * cells + i] = influence; }   // H10: the footprint the coast pass guards its crossings with (CW)
+  if (!visited) { return; }
+  let w = clamp(bc, 0.0, 1.0); let ex = bc - w;
   let base = F[PH * cells + i];
   var value = base; var lift = 0.0;
   let pbase = F[PP * cells + i];
@@ -414,41 +357,18 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
       maskSet(i, pl, i32(floor(b + (mw.y - b) * w * mw.z + 0.5)));
     }
-  } else if (kind == 4u) {
+  } else {
     value = base + u.amount * w + baseBump(lx, ly, w);
     lift = u.amount * ex;
-  } else if (kind == 5u) {
-    var mult = 1.0;
-    if (u.plain == 0u) { mult = lumps(nCW, nDet); }
-    value = base + u.amount * w * mult + baseBump(lx, ly, w);
-    lift = u.amount * ex * mult;
-  } else {
-    var bed = u.sea + select(-7.0, -55.0, kind == 2u);
-    if (kind == 2u && u.natural != 0u) { bed = bed + 42.0 * (sm(-0.15, 0.55, nShelf) * sm(0.08, 0.50, br)) * u.shelves; }
-    value = base + (bed - base) * w;
-    lift = (bed - base) * ex;   // a water lip is the curve below 0: the ground stands above where it was
-    if (kind == 2u && u.natural != 0u && bcore != 0.0) { value = min(value, base + (u.sea - 55.0 - base) * bcore); }
-    if (u.beachFlat != 0.5 && base > u.sea && base <= u.baseH + 1.0 && value > u.sea) {
-      let above = (value - u.sea) / (base - u.sea);
-      value = u.sea + (base - u.sea) * pow(above, exp2((u.beachFlat - 0.5) * 2.4));
-    }
-    if (kind == 3u && u.passage != 0u) { value = max(base, value); }
   }
   value = value + lift;
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
-  if (kind >= 2u && u.nwrites > 0u && influence > 0.0) { shapeMasks(i, influence); }
   // Routes open where the height changed; protection follows the kind (a cover brush leaves it alone).
-  if (kind != 0u && influence > 0.0) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - influence); }
-  if (kind == 3u && u.passage != 0u && value == base) { }
-  else if (kind == 3u) { F[PP * cells + i] = max(pbase * (1.0 - w), sm(0.65, 0.95, w)); }
-  else if (kind != 0u) { F[PP * cells + i] = pbase * (1.0 - influence); }
-  // applyCracks: a hill or mountain marks where cracks may open.
-  if ((kind == 4u || kind == 5u) && u.crackAmt > 0.0 && influence > 0.0) {
-    F[PC * cells + i] = max(F[PC * cells + i], min(1.0, influence * 1.6) * u.crackAmt);
-  }
+  if (kind != 0u && w > 0.0) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
+  if (kind != 0u) { F[PP * cells + i] = pbase * (1.0 - w); }
 }
 
-// settleHill's blur: a box of blurR cells either side (2 at the final grid; the host scales it with the spacing), clamped at the map edge, from scratch plane bsrc to bdst.
+// The smooth brush's blur: a box of blurR cells either side (the host scales it with the spacing), clamped at the map edge, from scratch plane bsrc to bdst.
 @compute @workgroup_size(8, 8)
 fn blurH(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -484,30 +404,6 @@ fn blurV(@builtin(global_invocation_id) g: vec3u) {
   for (var k = -rr; k <= rr; k++) { sum = sum + Sc[u.bsrc * cells + u32(clamp(y + k, 0, hi)) * n + u32(x)]; }
   Sc[u.bdst * cells + u32(y) * n + u32(x)] = sum / f32(2 * rr + 1);
 #endif
-}
-
-// The settled hill: height, protection and routes from the joined (blurred) weights; cracks from the raw weights.
-@compute @workgroup_size(8, 8)
-fn compose(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let cells = pcells(); let i = lidx(x, y);
-#else
-  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
-#endif
-  let joined = Sc[2u * cells + i]; let raw = Sc[i];
-#ifdef PAGES
-  let lift = lumps(nzCell(5u, x, y, i, cells), nzCell(2u, x, y, i, cells));
-#else
-  let lift = lumps(Nz[5u * cells + i], Nz[2u * cells + i]);
-#endif
-  // The weights are the raw curve (a lip passes 1), so the lift carries the excess through the blur; protection and routes read the clipped share.
-  F[PH * cells + i] = clamp(F[PH * cells + i] + u.amount * joined * lift, u.minH, u.maxH);
-  if (u.nwrites > 0u && raw > 0.0) { shapeMasks(i, min(raw, 1.0)); }
-  F[PP * cells + i] = F[PP * cells + i] * (1.0 - min(joined, 1.0));
-  F[PR * cells + i] = F[PR * cells + i] * (1.0 - min(joined, 1.0));
-  if (u.crackAmt > 0.0 && raw > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, raw * 1.6) * u.crackAmt); }
 }
 
 // The ground node: broad undulation of dry ground (groundHeight).
@@ -602,8 +498,8 @@ fn coarse(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: 
 
 #endif
 // ---- H6c: the remaining shapes. New entry points only; the entries above are untouched. ----
-// Kinds: 6 plateau, 7 offset, 8 lower, 9 sand, 10 grass, 11 smooth. Same capsule loop as `stamp` (the host passes the same segments); the rules for
-// value, protection, routes, cover and cracks follow dab() and applyCracks() in sculpt.js.
+// Kinds: 9 sand, 10 grass, 11 smooth. Same capsule loop as `stamp` (the host passes the same segments); the rules for value, routes and cover follow
+// dab() in sculpt.js.
 @compute @workgroup_size(8, 8)
 fn stampN(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -617,7 +513,7 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
   let kind = u.kind;
-  let natural = kind == 6u || kind == 7u || kind == 9u || kind == 10u;
+  let natural = kind == 9u || kind == 10u;
   let fxF = select(0u, 3u, natural); let fyF = select(1u, 4u, natural);
 #ifdef PAGES
   let nzx = nzCell(fxF, x, y, i, cells); let nzy = nzCell(fyF, x, y, i, cells);
@@ -645,51 +541,36 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
     let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
-    var reach = radius * width * u.bankScale;
+    var reach = radius * width;
     var leaned = 1.0;
     if (u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
     if (!natural) { reach = reach * leaned; }
-    var r = sqrt(dx * dx + dy * dy) / reach;
-    if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / (width * u.bankScale); }
+    let r = sqrt(dx * dx + dy * dy) / reach;
     if (r >= 1.0) { continue; }
     var c = 0.0;
     if (natural) {
       let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
       let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
       let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0 - shoulder, reach, nCW, leaned));
+      c = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
     } else {
-      c = curveAt(u.curveBase, (1.0 - r) / faceOf(1.0, reach, nCW, leaned));
-      if (kind == 8u) { c = keepLip(c * lumps(nCW, nDet)); }
+      c = curveAt(u.curveBase, 1.0 - r);
     }
     c = terraced(c, x, y, i, cells);
     if (c <= best) { continue; }
     best = c; visited = true;
   }
   if (!visited) { return; }
-  let w = clamp(best, 0.0, 1.0); let ex = best - w;
-  if (u.coPutW != 0u) { Sc[4u * cells + i] = w; }   // H10: the footprint of an offset that carries shore plates
+  let w = clamp(best, 0.0, 1.0);
   let base = F[PH * cells + i];
-  let pbase = F[PP * cells + i];
-  var value = base; var lift = 0.0;
-  if (kind == 6u) { let rise = PT[u.preIdx] + u.amount + u.rough * 3.0 * nDet - base; value = base + rise * w; lift = rise * ex; }
-  else if (kind == 7u) { value = base + u.amount * w; lift = u.amount * ex; }
-  else if (kind == 8u) { value = base - u.amount * w; lift = -u.amount * ex; }
-  else if (kind == 9u || kind == 10u) {
+  var value = base;
+  if (kind == 9u || kind == 10u) {
     let tv = select(-1.0, 1.0, kind == 9u); let vb = F[PV * cells + i];
     F[PV * cells + i] = vb + (tv - vb) * w * u.amountPct;
   }
   else if (kind == 11u) { value = base + (Sc[2u * cells + i] - base) * w * u.amountPct; }
-  value = value + baseBump(lx, ly, w) + lift;
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
-  if (u.nwrites > 0u && (kind == 6u || kind == 7u) && w > 0.0) { shapeMasks(i, w); }
   if (kind != 11u && value != base) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
-  if (kind == 6u) { F[PP * cells + i] = max(pbase * (1.0 - w), sm(0.65, 0.95, w)); }
-  else if (kind == 7u) { F[PP * cells + i] = pbase * (1.0 - 4.0 * w * (1.0 - w)); }
-  else if (kind == 8u) { F[PP * cells + i] = pbase * (1.0 - w); }
-  if ((kind == 6u || kind == 7u) && u.crackAmt > 0.0) {
-    F[PC * cells + i] = max(F[PC * cells + i], min(1.0, w * 1.6) * u.crackAmt);
-  }
 }
 
 // ---- H27 landform (decision 24): one path, a whole cross-section, a fixed elevation along it ----
@@ -884,54 +765,6 @@ fn smoothCopy(@builtin(global_invocation_id) g: vec3u) {
   Sc[i] = F[PH * cells + i];
 }
 
-// H6c ramp: the grade along a path between its end points' prefix heights (PT[preIdx], PT[preIdx + 1]). The host passes the settled path's segments (a, b in s0;
-// the length before the segment, its length and the whole path's length in s1); a cell takes its nearest segment (the first on a tie), as rampSegment() and gradeRamp().
-@compute @workgroup_size(8, 8)
-fn stampRamp(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let n = u.grid; let cells = pcells(); let i = lidx(x, y);
-  let nzx = nzCell(0u, x, y, i, cells); let nzy = nzCell(1u, x, y, i, cells);
-#else
-  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
-  let nzx = Nz[i]; let nzy = Nz[cells + i];
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  let radius = u.radius;
-  var bestD = 3.0e38; var along = 0.0; var total = 1.0; var readOffset = 0u; var hit = false;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
-    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
-    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
-    let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len2 = dx * dx + dy * dy;
-    let t = clamp(((wx - s0.x) * dx + (wy - s0.y) * dy) / len2, 0.0, 1.0);
-    let cx = s0.x + dx * t; let cy = s0.y + dy * t;
-    let plain = sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy));
-    let edge = sm(0.55, 1.0, plain / radius) * u.amp;
-    let ex = nzx - sampleN(0u, cx, cy); let ey = nzy - sampleN(1u, cx, cy);
-    let ax = wx - cx + edge * (u.rotX * ex - u.rotY * ey); let ay = wy - cy + edge * (u.rotY * ex + u.rotX * ey);
-    let dist = sqrt(ax * ax + ay * ay);
-    if (dist >= radius || dist >= bestD) { continue; }
-    bestD = dist; along = s1.x + t * s1.y; total = s1.z; readOffset = u32(s1.w); hit = true;
-  }
-  if (!hit) { return; }
-  let w = 1.0 - sm(0.55, 1.0, bestD / radius);
-  let tt = clamp(along / total, 0.0, 1.0);
-  let ease = min(0.18, radius / total);
-  var grade = (tt - ease * 0.5) / (1.0 - ease);
-  if (tt < ease) { grade = tt * tt / (2.0 * ease * (1.0 - ease)); }
-  else if (tt > 1.0 - ease) { grade = 1.0 - (1.0 - tt) * (1.0 - tt) / (2.0 * ease * (1.0 - ease)); }
-  let ah = PT[u.preIdx + readOffset]; let bh = PT[u.preIdx + readOffset + 1u];
-  let level = ah + (bh - ah) * grade;
-  let base = F[PH * cells + i];
-  F[PH * cells + i] = clamp(base + (level - base) * w, u.minH, u.maxH);
-  F[PP * cells + i] = max(F[PP * cells + i], sm(0.55, 0.92, w));
-  F[PR * cells + i] = max(F[PR * cells + i], sm(0.30, 0.92, w));
-}
-
-// H6c crater: dab()'s crater branch. A cell takes the capsule with the most influence (1 - rr / 1.9); its bowl, rim, lumps and ejecta are position-based noise of the
-// crater's own seed. The level it digs from, PT[preIdx], is the prefix height at the crater's centre (a satellite reads it after the main crater and the earlier satellites).
 @compute @workgroup_size(8, 8)
 fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
