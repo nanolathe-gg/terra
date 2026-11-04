@@ -654,8 +654,9 @@ WORLD_VARIANTS = {
         # Card P1: landforms cut by branching gullies at 40 (by eye on green-modern-1..3 at 30, 40, 60 and 100: at 40 the
         # round hills carry branching spurs and the long cliff of green-modern-2 broad, uneven valleys; from 60 they also
         # cut the grass slope above the cliff; 30 barely reads at 1x). Card P32: terracettes on steep grass (Joined
-        # wrinkles on a grass world).
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(gullies=.4, wrinkles=1)),
+        # wrinkles on a grass world). Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the
+        # hills' feet and in gullies, median 5 px (readable at 1x, Green's retail grit is 3-4), Sorting .7 coarsening outward from a cliff.
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(gullies=.4, wrinkles=1, looseSupply=.7, looseSize=5, looseSort=.7)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
