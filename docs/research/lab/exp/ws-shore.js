@@ -23,7 +23,7 @@
 // Own code from the published ideas.
 import {WS_WATER, WS_WATER_PARAMS} from './ws-lib.js';
 
-const MODERN = {water: [24, 54, 70], sand: [196, 180, 140], sky: [160, 182, 205]};
+const MODERN = {water: [16, 50, 86], sand: [196, 180, 140], sky: [160, 182, 205]};
 
 export const WS_SHORE = /* wgsl */`
 const SH_C = vec2f(330.0, 236.0);
@@ -193,7 +193,7 @@ export default {
     {label: 'today', note: 'plain coast, built-in water, retail colours', params: {today: 1}, colours: {water: [38, 76, 225]}},
     {label: 'beach', note: 'Surf 0.6: bar, breaker, cusps, wet sand, wrack', params: {}},
     {label: 'headlands', note: 'Rock 0.5: cliffs and platforms in hard rock, pocket beaches in soft', params: {rock: 0.5}},
-    {label: 'lake', note: 'Surf 0, Murk 0.7: mud margin, reeds', params: {surf: 0, murk: 0.7, reeds: 1, wind: 0.25, caustic: 0}},
+    {label: 'lake', note: 'Surf 0, Murk 0.55: mud margin, reeds', params: {surf: 0, murk: 0.55, reeds: 1, wind: 0.25, caustic: 0}},
     {label: 'beach-2x', note: 'the surf zone at 2x', params: {}, lab: {px: 0.5, ox: 300, oy: 230}},
   ],
   wgsl: WS_WATER + WS_SHORE,

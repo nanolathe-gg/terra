@@ -75,7 +75,7 @@ fn wsWater(p: vec2f, depth: f32, bedAlb: vec3f, bedN: vec3f, bedSh: f32, clarity
   let skyE = wsSkyLin() * 1.1;
   let caus = wsCaustic(p, depth, wv.yz * steep, caustic * (1.0 - murk), clarity);
   let bed = srgbToLin(bedAlb) * (sunE * max(dot(bedN, sdir), 0.0) * bedSh * caus + skyE) * T2;
-  let bodyS = mix(lab.cWater.rgb, vec3f(0.26, 0.28, 0.11), murk);
+  let bodyS = mix(lab.cWater.rgb, vec3f(0.22, 0.31, 0.12), murk);
   let body = srgbToLin(bodyS) * (sunE * max(sdir.z, 0.0) + skyE) * 0.5 * (vec3f(1.0) - T1);
   // Reflection of the sky (Schlick, exaggerated 3x so ripples read as grain at 1x).
   let F = min(2.0 * (0.02 + 0.98 * pow(1.0 - n.z, 5.0)), 0.5);
