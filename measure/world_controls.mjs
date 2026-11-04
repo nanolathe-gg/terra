@@ -295,6 +295,7 @@ try {
       if (key === 'maskAmount') p.maskChannel = 1;
       if (key === 'facing') p.lean = 3;
       if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
+      if(kind==='landform'&&(key.startsWith('layer')||key.startsWith('lava')))Object.assign(p,{stepReference:key==='layerCircle'||key==='lavaCircleVary'?2:1,terraces:5,ledge:.7,terraceJitter:.5});
       return p;
     };
     // The panel's own test of a row on a kind, on the state the context sets (UI units for the availability test).
@@ -304,10 +305,10 @@ try {
       if (kind === 'fissure' && (net ? ['fissureBranches', 'fissureBranchLen', 'fissureBranchSpread', 'fissureTaper'].includes(key) : key === 'fissureCell')) return false;
       if (kind === 'crystal' && ['crystalAlign', 'bergFace', 'bergJitter', 'bergBreak', 'bergRough', 'bergTilt', 'bergTiltDir', 'bergFlat'].includes(key) && Number(ui.crystalForm) < 2) return false;
       if (key === 'frostNeedles' && Number(ui.plateMaterial) < 2) return false;
-      if (GATE[key] && !(Number(ui[GATE[key]]) > 0)) return false;
+      if (GATE[key] && !(kind==='landform'&&GATE[key]==='shoreLayers') && !(Number(ui[GATE[key]]) > 0)) return false;
       if (kind === 'crater' && ['crestJag', 'crestVary'].includes(key) && !(Number(ui.spurCount) > 0)) return false;   // on a crater the crest options only shape its spurs
       if (key === 'maskAmount' && !(Number(ui.maskChannel) >= 1)) return false;
-      if (key === 'layerCircle' && Number(ui.layerStyle) !== 1) return false;
+      if (kind!=='landform' && key === 'layerCircle' && Number(ui.layerStyle) !== 1) return false;
       // The shared applicability rule receives engine units, just as updateControls does.
       return shapeControlAvailable(key, kind, {...ui, ...Object.fromEntries(Object.entries(scales).map(([k, scale]) => [k, ui[k] / scale]))});
     };
@@ -315,6 +316,8 @@ try {
     const fixtureFor = (key, kind) => {
       if(kind==='offset'&&(key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')))return {amount:-60};
       // Shore controls need a sea crossing: the ordinary raised landform fixture has none.
+      if(kind==='landform'&&key==='stepReference')return {elevation:-55,combine:1,heightVary:0,terraces:6,ledge:.8};
+      if(kind==='landform'&&key==='heightReference')return {elevation:110,heightReference:0};
       if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key==='shoreLayers'||key.startsWith('water')))return {elevation:-55,combine:1,heightVary:0};
       return {};
     };
@@ -340,6 +343,19 @@ try {
         if (m.max > 0) Object.assign(r, m, {fixture: name});
       }
       stage(name, ts); ts = Date.now();
+    }
+    // At sea zero the two height references coincide. Qualify their different
+    // behavior on a nonzero sea instead of treating that identity as a dead row.
+    const references=sresults.filter(r=>r.stroke==='landform'&&r.key==='heightReference'&&r.max===0);
+    if(references.length){
+      const query=new URLSearchParams(fixtures[0][3]||'');query.set('sea','75');
+      await load(world,query.toString());await setUp();await ev('terraformAudit.setBusy(false)');
+      await ev(`__wc.scene(${JSON.stringify(strokeFixture(0))}, true)`);
+      for(const r of references){
+        const m=await ev(`__wc.strokePair(${r._i}, ${JSON.stringify(r.key)}, ${JSON.stringify(r._ctx)}, ${r.lo}, ${JSON.stringify(r._r.his)}, ${r._r.scale}, {x:0,y:0,width:1024,height:1024})`);
+        r.tried=[...(r.tried||['strokes-A']),'strokes-A sea=75'];
+        if(m.max>0)Object.assign(r,m,{fixture:'strokes-A sea=75'});
+      }
     }
     for (const r of sresults) { delete r._r; delete r._ctx; delete r._i; r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); add(r); }
     console.log(`-- ${world}: ${((Date.now() - tw) / 1000).toFixed(0)} s`);

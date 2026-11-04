@@ -52,7 +52,7 @@ const ready = async (ev, exportable) => {
 const strokeAt = async (send, ev, tool) => {
   await ev(`document.querySelector('[data-tool="${tool}"]').click(); true`);
   if (tool === 'landform') await ev(`for (const [id,v] of [['lf-route-smooth',80],['crest-taper',65]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
-  if (tool === 'landform' && shore) await ev(`for (const [id,v] of [['lf-combine',1],['lf-elevation',sculptDebug.sea-55],['fingers',100],['finger-size',65],['shore-layers',5]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
+  if (tool === 'landform' && shore) await ev(`for (const [id,v] of [['lf-combine',1],['lf-height-reference',1],['lf-elevation',-55],['fingers',100],['finger-size',65],['lf-step-reference',1],['sec-terraces',5]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
   const x0 = 700, y0 = 650, pts = [[0, 0], [60, 20], [120, 30], [180, 10], [240, 0]];
   const m = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
   await send('Input.dispatchMouseEvent', {type: 'mouseMoved', x: x0, y: y0});
@@ -86,8 +86,8 @@ for (const world of worlds) {
           await strokeAt(send, ev, 'landform');
           r.landformParams = await ev(`sculptDebug.nodes().at(-1).params`);
           if (r.landformParams.routeSmooth !== .8 || r.landformParams.crestTaper !== .65) bad++;
-          if (shore && (r.landformParams.combine !== 1 || r.landformParams.fingers !== 1 || r.landformParams.shoreLayers !== 5)) bad++;
-          r.landformParams = {routeSmooth:r.landformParams.routeSmooth,crestTaper:r.landformParams.crestTaper,...(shore?{combine:r.landformParams.combine,elevation:r.landformParams.elevation,fingers:r.landformParams.fingers,shoreLayers:r.landformParams.shoreLayers}:{})};
+          if (shore && (r.landformParams.combine !== 1 || r.landformParams.fingers !== 1 || r.landformParams.terraces !== 5 || r.landformParams.stepReference !== 1 || r.landformParams.heightReference !== 1)) bad++;
+          r.landformParams = {routeSmooth:r.landformParams.routeSmooth,crestTaper:r.landformParams.crestTaper,...(shore?{combine:r.landformParams.combine,elevation:r.landformParams.elevation,fingers:r.landformParams.fingers,terraces:r.landformParams.terraces,stepReference:r.landformParams.stepReference,heightReference:r.landformParams.heightReference}:{})};
           for (let i = 0; i < 400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);   // the Time pass after the last undo
           const name = `Smoke${world}${Date.now() % 100000}`;
           await ev(`window.smokeExport={done:false};sculptMap.export(${JSON.stringify(name)}).then(x=>window.smokeExport={done:true,x},e=>window.smokeExport={done:true,error:e.message});true`);

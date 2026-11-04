@@ -32,6 +32,16 @@ export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?
 export function shapeControlAvailable(key,kind,p){
  // A landform has its own width (the diameter), softness-free presets and variation; the controls of the other kinds' outlines do not reach it (card H27).
  if(kind==='landform'&&['facePx','softness','faceVariation','outlineVar','widthVar','heightVar'].includes(key))return false;
+ if(kind==='landform'){
+  const shore=Number(p.stepReference)>0,circular=Number(p.stepReference)===2,on=Number(p.terraces)>0;
+  if(['shoreLayers','layerLedge','layerRough','layerStyle'].includes(key))return false;
+  if(['ledge','terraceJitter'].includes(key))return on;
+  if(key==='breakup')return on&&!shore;
+  if(['layerPx','layerRiser','layerVary'].includes(key))return on&&shore;
+  if(key==='lavaSpread')return on&&shore&&!circular;
+  if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
+ }
+
  const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2,ridge=Math.round(p.spurCount)>=1||p.crestJag>0||p.crestVary>0||p.crestTaper>0;
  const sharedFace=['plateau','offset','erase','paint','sand','grass'].includes(kind)&&!(p.facePx>0),shoulderedHill=isShouldered(kind,p,ridge);
  // The classic shouldered ridge uses a different footprint; its settled path

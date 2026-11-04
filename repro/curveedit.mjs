@@ -225,7 +225,8 @@ for (const world of worlds) {
       // 8. An isolated shore crosses sea level; the preceding knot tests need not.
       const shore = JSON.parse(readFileSync(new URL('comparisons/landform-shores/03-lava-contours.json', import.meta.url), 'utf8'));
       shore.strokes[0][2].card.elevation = (await ev('sculptDebug.sea')) - 55;
-      shore.strokes[0][2].card.shoreLayers = 0;
+      shore.strokes[0][2].card.heightReference = 0;
+      shore.strokes[0][2].card.terraces = 0;
       await ev(`sculptDebug.scene(${JSON.stringify(shore.strokes)}, {ground:false})`); await ready(ev);
       await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
       const fixedShoreHeights=await grid();
@@ -238,15 +239,24 @@ for (const world of worlds) {
       await ev(`document.getElementById('undo').click(); true`);await ready(ev);
       check('undo restores the relative depth', (await nodes())[0].params.heightReference===1 && (await nodes())[0].params.elevation===-55);
       await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
-      await setValue('fingers', 100); await setValue('finger-size', 65); await setValue('shore-layers', 5); await ready(ev);
-      check('landform shore controls reach the selected node', (await nodes())[0].params.fingers === 1 && (await nodes())[0].params.fingerSize === .65 && (await nodes())[0].params.shoreLayers === 5);
+      await setValue('fingers', 100); await setValue('finger-size', 65); await setValue('sec-terraces', 5); await ready(ev);
+      check('landform shore controls reach the selected node', (await nodes())[0].params.fingers === 1 && (await nodes())[0].params.fingerSize === .65 && (await nodes())[0].params.terraces === 5 && (await nodes())[0].params.stepReference === 1);
       const shoreHeights = await grid();
       await ev(`document.getElementById('undo').click(); true`); await ready(ev);
-      check('undo restores only the landform shore layers', (await nodes())[0].params.shoreLayers === 0 && (await nodes())[0].params.fingers === 1);
+      check('undo restores only the landform shore layers', (await nodes())[0].params.terraces === 0 && (await nodes())[0].params.fingers === 1);
       const noLayerHeights = await grid(), changed = shoreHeights.filter((h,i)=>Math.abs(h-noLayerHeights[i])>1).length;
       check('shore layers change actual landform heights', changed > 5, {changed});
       await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
-      await setValue('shore-layers', 5); await setValue('water-deep', 2, 'change'); await setValue('water-bed', 3, 'change'); await ready(ev);
+      await setValue('sec-terraces', 5); await setValue('water-deep', 2, 'change'); await setValue('water-bed', 3, 'change'); await ready(ev);
+      check('one shared step count and flat share replace shore duplicates', await ev(`['shore-layers','layer-ledge','layer-rough','layer-style'].every(id=>document.getElementById(id+'-control').hidden)&&!document.getElementById('sec-terraces-control').hidden&&!document.getElementById('sec-ledge-control').hidden`));
+      await setValue('lf-step-reference',0);await ready(ev);
+      check('profile mode keeps the shared count and hides shore-only settings', (await nodes())[0].params.terraces===5 && await ev(`document.getElementById('layer-px-control').hidden&&!document.getElementById('sec-breakup-control').hidden&&document.getElementById('sec-terraces').max==='8'`));
+      await setValue('lf-step-reference',2);await ready(ev);
+      check('circular shoreline mode shows circular settings', await ev(`!document.getElementById('layer-circle-control').hidden&&document.getElementById('lava-spread-control').hidden&&document.getElementById('sec-breakup-control').hidden&&document.getElementById('sec-terraces').max==='12'`));
+      await setValue('sec-terraces',11);await setValue('sec-ledge',95);await setValue('lf-step-reference',0);await ready(ev);
+      check('switching to profile clamps shared values to its supported range', (await nodes())[0].params.terraces===8 && (await nodes())[0].params.ledge===.9);
+      await ev(`document.getElementById('undo').click(); true`);await ready(ev);
+      check('undo restores the previous step mode and shared values atomically', (await nodes())[0].params.stepReference===2 && (await nodes())[0].params.terraces===11 && (await nodes())[0].params.ledge===.95);
       const savedShore = (await nodes())[0].params, hsShore = await grid(); await sleep(1500);
       await send('Page.navigate', {url}); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       check('shore parameters survive autosave and reload', same(savedShore, (await nodes())[0].params));

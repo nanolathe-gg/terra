@@ -3,7 +3,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FACING_CHOICES,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots,landformElevation} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FACING_CHOICES,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -89,7 +89,7 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
 const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter','breakup'];
 // Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
-const LANDFORM_KEYS=['heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
+const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -129,17 +129,18 @@ const SHAPE_FIELDS=[
   ['fingers','fingers','Finger coasts',['deep','shallow','landform'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
   ['bankPx','bank-px','Dry bank (px)',['deep','shallow'],0,160,2,1,'Width of the dry bank from the waterline to the level ground, whatever the shape\'s size (0: a share of the shape, set by Bank width).'],
   // Card E4 (Lava): fingers and terraces cut into the joined coast once the stroke is swept (stampCoastShore).
-  ['shoreLayers','shore-layers','Shore layers',['deep','shallow','landform'],0,12,1,1,'Cut the bank into this many flat terraces stepping down to the water, as real heights the sun lights (a lit top, a shaded riser), counted from the waterline this stroke leaves. 0: the plain bank.'],
-  ['layerPx','layer-px','Layer width (px)',['deep','shallow','landform'],4,60,1,1,'Width of one layer, ledge and riser together: Shore layers times this is how far the terraces reach inland.'],
+  ['shoreLayers','shore-layers','Shore layers',['deep','shallow'],0,12,1,1,'Cut the bank into this many flat terraces stepping down to the water, as real heights the sun lights (a lit top, a shaded riser), counted from the waterline this stroke leaves. 0: the plain bank.'],
+  ['layerPx','layer-px','Layer width (px)',['deep','shallow','landform'],4,60,1,1,'Width of one shoreline step, ledge and riser together. The step count times this is how far the terraces reach inland.'],
   ['layerRiser','layer-riser','Riser height (units; 0 fits the bank)',['deep','shallow','landform'],0,80,1,10,'Height of each step. 0 shares the bank\'s whole rise out between the layers, so the last one meets the plain.'],
-  ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow','landform'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
-  ['layerRough','layer-rough','Layer irregularity',['deep','shallow','landform'],0,100,5,100,'How far the layer edges wander, so neighboring risers meet and part and no two layers run parallel for long.'],
-  ['layerStyle','layer-style','Layer style',['deep','shallow','landform'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2).',[[0,'Contour'],[1,'Circular']]],
+  ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
+  ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighboring risers meet and part and no two layers run parallel for long.'],
+  ['layerStyle','layer-style','Layer style',['deep','shallow'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2).',[[0,'Contour'],[1,'Circular']]],
   ['facePx','sec-face-px','Face width (px)',SECTION_KINDS,0,400,2,1,'Width of the whole curve, foot to top, kept the same whatever the brush size (0: a share of the brush set by Slope softness).'],
-  ['terraces','sec-terraces','Terraces',SECTION_KINDS,0,8,1,1,'Cut the face into this many flat ledges with risers between them.'],
-  ['ledge','sec-ledge','Ledge (flat share of a step)',SECTION_KINDS,0,90,5,100,'How much of each step is flat; the rest is the riser.'],
-  ['terraceJitter','sec-terrace-jitter','Terrace variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
-  ['breakup','sec-breakup','Terrace breakup',SECTION_KINDS,0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
+  ['stepReference','lf-step-reference','Steps follow',['landform'],0,2,1,1,'Profile steps divide the drawn section. Shoreline steps follow the joined waterline, including overlaps and uneven banks. Circular shoreline steps cut scalloped arcs.',[[0,'Profile'],[1,'Shoreline'],[2,'Circular shoreline']]],
+  ['terraces','sec-terraces','Steps',SECTION_KINDS,0,12,1,1,'Cut the face into this many flat ledges with risers between them.'],
+  ['ledge','sec-ledge','Flat share of a step',SECTION_KINDS,0,95,5,100,'How much of each step is flat; the rest is the riser.'],
+  ['terraceJitter','sec-terrace-jitter','Step variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
+  ['breakup','sec-breakup','Step breakup',SECTION_KINDS,0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
   // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
   ['heightReference','lf-height-reference','Height reference',['landform'],0,1,1,1,'Fixed elevation uses map height units. Sea level measures above or below the current sea; negative heights are below water.',[[0,'Fixed elevation'],[1,'Sea level']]],
   ['elevation','lf-elevation','Elevation (height units)',['landform'],-335,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
@@ -257,6 +258,7 @@ const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Numb
 // Values a replayed shape uses for options it was drawn without.
 // Owner ruling (H10): fingers always join the coast as thumbs. The JS engine, which H12 deletes, still reads the two retired knobs, so they are fixed here.
 const shapeDefaults=() => ({...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,worldDefault(key)]))});
+const nodeShapeParams=n => {const q={...shapeDefaults(),...n.params};return n.kind==='landform'?landformSteps(q):q;};
 const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
 function buildShapeOptions() {
   const root=$('shape-options');
@@ -295,10 +297,11 @@ function buildShapeOptions() {
       const height=landformElevation({elevation:shapeValue('elevation'),heightReference:previous.heightReference},config.seaLevel);
       heightControlRange({heightReference:next});$('lf-elevation').value=height-(next===1?config.seaLevel:0);
     }
+    if(key==='stepReference')stepControlRange(curveKind(),{stepReference:shapeValue('stepReference')});
     rememberTool(true); updateControls(); schedule(); persistLater();
     // A reference switch changes the representation, not the other authored
     // values (which may be between the inspector sliders' ticks).
-    if (selected>=0) editSelectedFromControls(key==='heightReference'?{...nodes[selected].params,heightReference:shapeValue('heightReference'),elevation:shapeValue('elevation')}:{});
+    if (selected>=0) editSelectedFromControls(key==='heightReference'?{...nodes[selected].params,heightReference:shapeValue('heightReference'),elevation:shapeValue('elevation')}:key==='stepReference'?{...nodes[selected].params,stepReference:shapeValue('stepReference'),terraces:shapeValue('terraces'),ledge:shapeValue('ledge')}:{});
   });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -334,8 +337,12 @@ function heightControlRange(p={}) {
   const offset=Math.round(p.heightReference||0)===1?(config?.seaLevel||0):0;
   $('lf-elevation').min=String(-80-offset);$('lf-elevation').max=String(300-offset);
 }
+function stepControlRange(kind,p={}) {
+  const shore=kind==='landform'&&Number(p.stepReference)>0;
+  $('sec-terraces').max=shore?'12':'8';$('sec-ledge').min=shore?'40':'0';$('sec-ledge').max=shore?'95':'90';
+}
 function showTool(state={},kind=tool) {
-  heightControlRange(state);
+  heightControlRange(state);stepControlRange(kind,state);
   [$('amount').min,$('amount').max]=amountRange(kind).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
   $('shallow-mode').value=state.shallowMode==='passage'?'passage':'area';
@@ -395,7 +402,7 @@ function updateControls() {
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
   try {
-  heightControlRange({heightReference:shapeValue('heightReference')});
+  heightControlRange({heightReference:shapeValue('heightReference')});stepControlRange(tool,{stepReference:shapeValue('stepReference')});
   $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':'Elevation (height units) ';
   const fixed=['deep','shallow','ramp','erase','landform'].includes(tool);
   $('amount-control').hidden=fixed;
@@ -420,13 +427,14 @@ function updateControls() {
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
   const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
+  if(tool==='landform')for(const key of Object.keys(gate))if(gate[key]==='shoreLayers')delete gate[key];
   // On a crater, the crest options only shape its spurs.
   if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
   const net=tool==='fissure' && Number($('fissure-network').value)>=.5;
   const modeOff=key => tool==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
   // Berg options show only for the berg form.
-  const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (key==='layerCircle' && Number($('layer-style').value)!==1);
+  const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (tool!=='landform' && key==='layerCircle' && Number($('layer-style').value)!==1);
   const bergOff=key => tool==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
   const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
   const gated=key => !shapeControlAvailable(key,tool,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
@@ -486,7 +494,7 @@ const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selecte
 const currentAlong=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.along : toolSettings[tool]?.along) || null;
 function curveContext() {
   const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),shouldered=isShouldered(kind,o,ridgeOn(kind,o));
-  return {kind,shouldered,water:kind==='deep' || kind==='shallow',land:kind==='landform',q:{...o,radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve(),along:currentAlong()}};
+  return {kind,shouldered,water:kind==='deep' || kind==='shallow',land:kind==='landform',q:{...(kind==='landform'?landformSteps(o):o),radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve(),along:currentAlong()}};
 }
 // Hand the curve (or, with key 'along', the along-the-path knots) to the shape being edited, or to the brush for the next stroke; null goes back to the default.
 function setCurve(curve,key='curve') {
@@ -535,7 +543,7 @@ function sectionHandles(c,L) {
 }
 // A landform's path as the engine sweeps it (the simplified polyline of its first path), its back side and half widths, so the editor reads the map where the shape stands.
 function landformPath(n) {
-  const q={...shapeDefaults(),...n.params},paths=shapePaths(n),pts=paths[0].map(i => n.points[i]);
+  const q=nodeShapeParams(n),paths=shapePaths(n),pts=paths[0].map(i => n.points[i]);
   let path=simplifyPath(pts,Math.max(1,q.radius*.04)).filter((p,k,a) => !k || Math.hypot(p.x-a[k-1].x,p.y-a[k-1].y)>=1e-4);
   if (path.length<2) path=[path[0],{x:path[0].x+.01,y:path[0].y}];
   const cum=[0]; for (let k=1;k<path.length;k++) cum.push(cum[k-1]+Math.hypot(path[k].x-path[k-1].x,path[k].y-path[k-1].y));
@@ -734,7 +742,7 @@ function nodeBounds(n) {
   // World-space reach of a shape, from the same extents its brush uses,
   // plus a few cells for the hill's softening blur.
   if (!n.points) return {x0:0,y0:0,x1:grid-1,y1:grid-1};
-  const q={...shapeDefaults(),...n.params},radius=q.radius||40,rough=q.rough??.35,soft=q.softness??.5;
+  const q=nodeShapeParams(n),radius=q.radius||40,rough=q.rough??.35,soft=q.softness??.5;
   const bank=['deep','shallow'].includes(n.kind)?2**(((q.bankWidth??.5)-.5)*1.3):1;
   const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
   const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
@@ -773,7 +781,7 @@ function regionalStages(list=nodes) {
   for (const n of list) {
     if (n.hidden) continue;
     if (n.kind!=='crater') { out.push(n); continue; }
-    const q={...shapeDefaults(),...n.params},s=n.seed??seed;
+    const q=nodeShapeParams(n),s=n.seed??seed;
     out.push({...n,regionalBody:true});
     for (let k=0;k<Math.round(q.craterlets||0);k++) {
       const {p,small}=craterletSpot(n,s,q.radius,k);
@@ -785,7 +793,7 @@ function regionalStages(list=nodes) {
 }
 function regionalReadApron(n) {
   if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
-  const q={...shapeDefaults(),...n.params},bank=n.kind==='landform'?1:2**(((q.bankWidth??.5)-.5)*1.3);
+  const q=nodeShapeParams(n),bank=n.kind==='landform'?1:2**(((q.bankWidth??.5)-.5)*1.3);
   let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):isShouldered(n.kind,q,ridgeOn(n.kind,q))?4:0;
   // A framed finger cache is keyed on authoring cells; include every world
   // cell that can share that key. Radial thumbs can share a coastal key from
@@ -1146,7 +1154,7 @@ function selectNode(i) {
     if (tool!=='move') { rememberTool(); tool='move'; }
     mapFeatures?.deactivate();
     const p=n.params;
-    heightControlRange(p);
+    heightControlRange(p);stepControlRange(n.kind,p);
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
     $('diameter').value=clamp(p.radius*2,40,800); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);

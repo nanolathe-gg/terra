@@ -1,6 +1,6 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -205,7 +205,7 @@ export function prepareNode(n, geom, c) {
   if (n.hidden || (n.kind !== 'ground' && (!(n.kind in KIND) || !n.points?.length))) return {skip: true};
   const {grid, spacing} = geom;
   if (n.kind === 'ground') return {op: 'ground', seed: (n.seed ?? 1) >>> 0, amp: n.amplitude ?? 8, wave: n.wavelength ?? 160, cover: n.coverage ?? .5};
-  const q = c.params(n), kind = n.kind, kcode = KIND[kind];
+  const kind = n.kind, q = kind === 'landform' ? landformSteps(c.params(n)) : c.params(n), kcode = KIND[kind];
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), allPoints = n.points, paths = shapePaths(n), radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';

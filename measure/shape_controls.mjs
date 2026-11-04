@@ -32,6 +32,8 @@ const CONTROLS = {
   crestTaper: {set: {crestTaper: 100}},
   // The landform's own (H27). Variation sizes and weights are read with the three variations on; a weight from 0 to 200 percent, a size from its default to 360 px.
   elevation: {set: {elevation: 230}},
+  heightReference: {base:{elevation:110},set:{heightReference:1}},
+  stepReference: {base:{elevation:20,combine:1,terraces:6,ledge:80},set:{stepReference:1}},
   combine: {set: {combine: 1}},
   wander: {set: {wander: 60}},
   widthVary: {set: {widthVary: 60}},
@@ -41,7 +43,7 @@ const CONTROLS = {
   varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},
 };
 // Rows only a landform has (the others do not show them, and the sweep leaves them out).
-const LAND_ONLY = ['elevation', 'combine', 'wander', 'widthVary', 'heightVary', 'varySize', 'varyFoot', 'varyMiddle'];
+const LAND_ONLY = ['heightReference','stepReference','elevation', 'combine', 'wander', 'widthVary', 'heightVary', 'varySize', 'varyFoot', 'varyMiddle'];
 // The panel's own test: the control is shown to this kind (sculpt.js SHAPE_FIELDS kinds, then shapeControlAvailable).
 const SECTION = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow', 'landform'];
 const SHOWN = {crestTaper: ['hill', 'mountain', 'landform'], widthVar: ['plateau', 'offset', 'deep'], heightVar: ['hill', 'mountain'], softness: ['plateau', 'hill', 'mountain', 'offset'], ...Object.fromEntries(LAND_ONLY.map(k => [k, ['landform']]))};

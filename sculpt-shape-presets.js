@@ -171,3 +171,12 @@ export function sectionPreview(kind, q, shouldered, n = 160) {
 // Resolve the authored height only at evaluation/preview time, so the same
 // sea-relative stroke follows the map's sea level without rewriting its recipe.
 export const landformElevation = (q, sea) => q.elevation + (Math.round(q.heightReference || 0) === 1 ? sea : 0);
+
+// One authored step count/ledge/variation set; choose the coordinate system.
+// Resolve to the existing shared profile or coastline pass, never both.
+export function landformSteps(q) {
+  const reference=Math.round(clamp(q.stepReference||0,0,2)),shore=reference>0;
+  const count=Math.round(clamp(q.terraces||0,0,shore?12:8));
+  return {...q,terraces:shore?0:count,shoreLayers:shore?count:0,layerStyle:reference===2?1:0,
+    layerLedge:clamp(q.ledge??.6,.4,.95),layerRough:clamp(q.terraceJitter??.35,0,1)};
+}
