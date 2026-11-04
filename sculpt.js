@@ -17,8 +17,12 @@ const canvas = $('terrain'), overlay = $('overlay');
 const experiment = new URLSearchParams(location.search);
 // DEVELOPMENT CONVENIENCE (owner request, revisit before release): one working map per browser, whatever the world, variant or map.
 // It reloads on every page load and a world or variant switch carries its strokes into the new world (see carryNodes). Scratch pages keep none.
-// The older per-world keys ('nanolathe-terrain-sculpt-v3...') are ignored, not migrated.
+// Until the working map is first saved, a page opens the older per-world key of its own world, variant and map (legacyKey), so a map
+// autosaved before this change is not lost; that key is only read.
 const LOCAL_KEY = experiment.has('scratch')?null:'terraform-working-map-v1';
+// The per-world key an autosave used before the working map: the world, its variant, the map's size and sea level, and a custom world.
+const legacyKey=() => 'nanolathe-terrain-sculpt-v3'+(config.biomeId && config.biomeId!=='green'?'-'+config.biomeId:'')+(config.variant?'-v-'+config.variant:'')+
+  (config.map?`-map-${config.map.unitsX}x${config.map.unitsY}-sea-${config.seaLevel}`:'')+(worldId!==config.biomeId?'-'+worldId:'');
 let MIN_HEIGHT = -90, MAX_HEIGHT = 300;
 const HELP = {
   // The shape buttons draw landforms: the path is the crest, the section across it is one curve shaped on both sides, the ground is raised, cut or flattened
@@ -1854,7 +1858,7 @@ async function bootMap() {
   buildKnobs(); buildWorldPanel();
   syncColumnPanel=mountColumnPanel(()=>({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),editColumn,commitColumn,()=>{editColumn(null);commitColumn();});
   $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
-  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
+  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) saved=localStorage.getItem(LOCAL_KEY)??localStorage.getItem(legacyKey()); } catch (_) {}
   if (saved) {
     try {
       const s=JSON.parse(saved),same=s.biome===config.biomeId && (s.variant||'')===(config.variant||'') && (s.world||s.biome)===worldId;
