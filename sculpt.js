@@ -966,8 +966,9 @@ function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retir
 function leaseGpuWeather(w) { w.leases=(w.leases||0)+1; let given=false; return () => { if (given) return; given=true; w.leases--; if (w.retired && w.leases<=0) destroyGpuWeather(w); }; }
 function retireGpuWeather(w) { w.retired=true; if (w.leases>0) retiredWeather.add(w); else destroyGpuWeather(w); }
 // What the Time pass holds only while it runs: its own working memory and the results it is replacing. It takes no budget check of its own, so a bake that overlaps it is not asked to make room for it.
-const gpuTransientBytes=() => [...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes;
-const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+gpuTransientBytes();
+let drainageTransient=0;   // P21: the plane's working buffers while it is computed (a lattice cell: 40 bytes), and the stored plane (8 bytes a cell) is counted below
+const gpuTransientBytes=() => [...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes+drainageTransient;
+const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+(drainage?.destroyed===false?drainage.bytes:0)+gpuTransientBytes();
 function dropGpuWeather() { if (gpuWeather) { retireGpuWeather(gpuWeather); gpuWeather=null; } }
 async function gpuWeatherCpu(withMaps) {
   const w=gpuWeather; if (!w) return;
@@ -1032,7 +1033,8 @@ async function queueDrainage() {
     const {computeDrainage}=await import('./sculpt-drainage.js');
     for (let tries=0;tries<8&&!stroke&&!moving&&!(drainage&&drainage.revision===fieldsRevision());tries++) {
       const source=await drainageSource(); if (!source) continue;
-      const plane=await computeDrainage(renderer.device,{...source.input,sea:config.seaLevel});
+      const cells=(source.input.width??Math.floor((source.input.grid-1)/8)+1)**2; drainageTransient=cells*40;
+      let plane; try { plane=await computeDrainage(renderer.device,{...source.input,sea:config.seaLevel}); } finally { drainageTransient=0; }
       plane.revision=source.revision; const old=drainage; drainage=plane; old?.retire(); showDrainage();
     }
   } catch (err) { console.error(err); }

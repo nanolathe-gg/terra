@@ -150,6 +150,41 @@ async function main() {
     const same = again.area.every((v, i) => v === area[i]) && again.recv.every((v, i) => v === recv[i]);
     console.log(JSON.stringify({check: 'second run is byte-identical', identical: same, bytes: live.bytes, transientBytes: live.transientBytes, width: live.width}));
     if (!same) failures++;
+    // 3. An edit: the badge says the plane is out of date from the change until the plane for the new revision exists. Replace the scene with one stroke fewer
+    //    and watch the panel's line; the time is from the edit to a current plane (the Time stage's own work runs alongside).
+    const badge = `document.querySelector('[data-drainage]')?.textContent||''`;
+    const before = await evaluate(badge);
+    await evaluate(`(() => { window.__edit = performance.now(); sculptDebug.scene(${JSON.stringify(scene.strokes.slice(0, -1))}, {ground:${scene.ground !== false}}); return 0; })()`);
+    const seen = [];
+    for (let i = 0; i < 1500; i++) {
+      const [text, at] = await evaluate(`[${badge}, Math.round(performance.now() - window.__edit)]`);
+      if (!seen.length || seen[seen.length - 1][0] !== text) seen.push([text, at]);
+      if (/^Drainage plane: \d+ ×/.test(text) && seen.some(([t]) => /out of date/.test(t))) break;
+      await sleep(10);
+    }
+    console.log(JSON.stringify({check: 'edit and stale badge', before, seen, staleSeen: seen.some(([t]) => /out of date/.test(t)), currentAfterMs: seen[seen.length - 1][1]}));
+    if (!seen.some(([t]) => /out of date/.test(t)) || !/^Drainage plane: \d+ ×/.test(seen[seen.length - 1][0])) failures++;
+    // 4. A local stroke with real mouse events, as an artist edits: the badge turns stale on the first move, and the plane is current again some time after the release.
+    {
+      const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1}, sessionId);
+      const box = await evaluate(`(() => { const r = document.getElementById('overlay').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
+      await evaluate(`document.querySelector('[data-tool="hill"]').click(); true`);
+      await sleep(500);
+      const cx = box.x + box.w * .5, cy = box.y + box.h * .5;
+      const seenStroke = [], note = async label => { const text = await evaluate(badge); if (!seenStroke.length || seenStroke.at(-1)[1] !== text) seenStroke.push([label, text]); };
+      await mouse('mousePressed', cx, cy);
+      for (let i = 1; i <= 24; i++) { await mouse('mouseMoved', cx + i * 8, cy + Math.sin(i / 4) * 40); await sleep(30); await note('drag'); }
+      await mouse('mouseReleased', cx + 200, cy);
+      await evaluate('window.__release = performance.now(); true');
+      for (let i = 0; i < 2500; i++) {
+        const [text, at] = await evaluate(`[${badge}, Math.round(performance.now() - window.__release)]`);
+        if (!seenStroke.length || seenStroke.at(-1)[1] !== text) seenStroke.push([`+${at} ms`, text]);
+        if (/^Drainage plane: \d+ ×/.test(text) && seenStroke.some(([, t]) => /out of date/.test(t))) break;
+        await sleep(10);
+      }
+      console.log(JSON.stringify({check: 'a stroke, drag and release', states: seenStroke}));
+      if (!/^Drainage plane: \d+ ×/.test(seenStroke.at(-1)[1])) failures++;
+    }
     if (errors.length) throw new Error(errors.slice(0, 20).join('\n'));
   } finally { await cleanup(); }
   if (failures) throw new Error(`${failures} drainage checks failed.`);

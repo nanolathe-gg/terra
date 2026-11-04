@@ -312,6 +312,17 @@ sea level, and heat (lava). Each material says how it responds:
 Water runs on the GPU as a compute pass. A coarse pass covers the whole map
 for drainage, then fine tiles with aprons add the detail.
 
+**The drainage plane (P21, decision 26)** is that coarse pass: one exact
+drainage area for the whole map, on a 16-px lattice (`DRAIN_STEP` = 8 cells,
+TA's own height cell), from the authored height. Each cell's steepest-descent
+neighbour is its receiver; the receivers form a forest; one gather pass builds
+its Euler tour and ceil(log2 2N) pointer-jumping passes turn the tour into
+subtree sums, in u32 (`engine-drainage.wgsl`, `sculpt-drainage.js`). The plane
+(area, receiver) is stored on the GPU after an edit settles and read by the
+Time pass's maps pass (`drainageAt`). It is stale from the edit until the new
+plane is computed. Cells at or under sea level and cells with no strictly
+lower neighbor (flats, pits) are outlets: there is no depression filling yet.
+
 **Agents write data maps:** flow, wear, deposit, talus, wetness, snow, soil
 depth and exposure. The existing workers (droplet weathering, sand, flow)
 become agents. The droplet worker stays until the GPU agent is at least as
