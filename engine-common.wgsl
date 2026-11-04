@@ -353,6 +353,7 @@ struct Uniforms {
     // Card P16: the one loose-material scatter (looseStones in engine-bake). Supply 0 draws none.
     looseSupply: f32,     // 0..1: ground share the stones cover where their source is full (1 is about half the ground)
     looseSize: f32,       // px: the median stone diameter
+    looseGrid: vec4f,     // the loose-stone mask lattice: first cell (x, y) and cell counts (z, w), cells of 4 world px (looseMain)
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
     stoneSlab: f32,       // world material data: share of flat slabs

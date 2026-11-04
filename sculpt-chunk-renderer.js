@@ -192,7 +192,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(this.maskLayers>this.device.limits.maxTextureArrayLayers)throw new Error('nanolathe: mask planes exceed the device texture array limit');
     this.maskTexture=this.texture('chunk masks',gw,gh,this.maskLayers,'rgba8snorm',4,read);
     this.fieldsTexture=this.texture('chunk fields',fw,fh,1,'rgba16float',8,T.STORAGE_BINDING|T.TEXTURE_BINDING);
-    this.fieldsOut=this.device.createBindGroup({label:'chunk fields out',layout:this.bakePipeline.getBindGroupLayout(1),entries:[{binding:0,resource:this.fieldsTexture.createView()}]});
+    this.fieldsOut=this.makeFieldsOut();
     this.canvas.width=width;this.canvas.height=height;this.outputBytes=width*height*4+Math.ceil(world_width/scale)*Math.ceil(world_height/scale)*4;
     this.outputCanvas??=new OffscreenCanvas(width,height);this.outputCanvas.width=Math.ceil(world_width/scale);this.outputCanvas.height=Math.ceil(world_height/scale);
     this.depthTexture=this.texture('chunk depth',width,height,1,'depth32float',4,T.RENDER_ATTACHMENT);this.depthView=this.depthTexture.createView();
@@ -205,7 +205,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const rasterOrigin=this.size<=L?[0,0]:region.screenOrigin.map(v=>Math.floor(v/span)*span);
     this.f('uChunkRasterOrigin',rasterOrigin);this.f('uChunkRasterSize',rasterSize);
     this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/rasterScale,(rasterOrigin[1]-region.screenOrigin[1])/rasterScale,rasterSize/rasterScale,rasterSize/rasterScale];   // clip space stays in world units; the viewport is what scales
-    this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
+    this.bakeWindow=[region.fieldsX,region.fieldsY,this.bakeWidth*fieldScale,this.bakeHeight*fieldScale];this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
     this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',fieldScale);   // Shared shader coordinates stay in world pixels at every display scale.
     // Keep native material variance before nonlinear coverage and palette mapping.

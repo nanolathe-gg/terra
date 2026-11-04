@@ -90,21 +90,21 @@ fn lsR(k: i32) -> f32 { return LS_RMAX * exp2(-f32(k)); }
 //  - Sources: loose ground on slopes, talus aprons and the foot of a cliff, gravel where water left a deposit or runs hard.
 //  - Sorting: along the way stones travel (a gentler slope is further out) rockfall coarsens, a fan or channel fines.
 //  - Beyond the talus toe a second, coarser population lies: the runout blocks.
-fn lsMask(c: vec2f) -> LsMask {
-    var m: LsMask;
-    m.a = vec4f(0.0); m.b = vec4f(0.0);
+fn lsMaskCompute(c: vec2f) -> vec4f {
+    let none = vec4f(0.0);
     var paint = 0.0;
     if (u.scatterOn != 0) { paint = scatterAt(c); }
-    if (u.looseSupply <= 0.0 && paint <= 0.0) { return m; }
-    if (routeProtection(c) > 0.05 || baseHeight(c) < u.sea + 1.0) { return m; }
+    if (u.looseSupply <= 0.0 && paint <= 0.0) { return none; }
+    let h0 = baseHeight(c);
+    if (routeProtection(c) > 0.05 || h0 < u.sea + 1.0) { return none; }
     let tm = timeMapsAt(c);
-    let deposit = weatherAt(c / (u.size - 1.0)).g;
-    let g = broadGradient(c);
+    let deposit = tm.deposit;
+    // The slope as broadGradient's units (the height difference over 10 px), from forward differences over 5 px: three height reads, not five.
+    let g = 2.0 * vec2f(baseHeight(c + vec2f(5.0, 0.0)) - h0, baseHeight(c + vec2f(0.0, 5.0)) - h0);
     let slope = length(g);
     let talus = smoothstep(0.02, 0.25, tm.talus);
-    var cliffAbove = 0.0;
-    // A cliff above matters only on ground gentler than 1 (the foot term fades out by then).
-    if (slope > 1e-4 && slope < 1.0) { cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(c + g / slope * 14.0))); }
+    // The cliff above: the Time pass's slope map 14 px up the fall line (a smoothstep of the slope, so .9 and 1.6 of the 10-px gradient are .0107 and .032 of it).
+    let cliffAbove = smoothstep(0.0107, 0.032, timeMap2((c - tm.fall * 14.0) / (u.size - 1.0)).w);
     let foot = max(talus, cliffAbove * (1.0 - smoothstep(0.5, 1.0, slope)));
     let loose = smoothstep(0.10, 0.5, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
     let channel = smoothstep(0.03, 0.22, tm.channel);
@@ -124,10 +124,29 @@ fn lsMask(c: vec2f) -> LsMask {
     let sigma = mix(2.0, 0.7, sort);
     let fines = clamp(0.15 + 0.45 * (1.0 - smoothstep(0.2, 0.8, slope)) + 0.2 * carried, 0.0, 0.85);
     let share = supply * LS_BASE * source;
-    m.a = vec4f(min(share, 0.98), size, sigma, fines);
-    m.b = vec4f(0.35 * sort * talus * smoothstep(0.5, 1.0, travelled) * supply * LS_BASE, u.looseSize * 2.2, 0.5, fines);
+    return vec4f(min(share, 0.98), size, fines, 0.35 * sort * talus * smoothstep(0.5, 1.0, travelled) * supply * LS_BASE);
+}
+
+// The mask is computed once on a lattice of LS_CELL-px cells over the bake's window and its margin (looseMain, a pass before the bake) and read
+// here with one load: a candidate's centre reads the cell it lies in. Population a is (supply, median px, spread, fines); b the runout blocks.
+const LS_CELL = 4.0;
+@group(1) @binding(1) var<storage, read_write> looseMask: array<vec4f>;
+fn lsMask(c: vec2f) -> LsMask {
+    let nx = u32(u.looseGrid.z);
+    let cell = clamp(vec2i(floor(c / LS_CELL - u.looseGrid.xy)), vec2i(0), vec2i(i32(u.looseGrid.z) - 1, i32(u.looseGrid.w) - 1));
+    let v = looseMask[u32(cell.y) * nx + u32(cell.x)];
+    var m: LsMask;
+    m.a = vec4f(v.x, v.y, mix(2.0, 0.7, u.stoneSort), v.z);
+    m.b = vec4f(v.w, u.looseSize * 2.2, 0.5, v.z);
     return m;
 }
+
+@compute @workgroup_size(8, 8)
+fn looseMain(@builtin(global_invocation_id) id: vec3u) {
+    if (f32(id.x) >= u.looseGrid.z || f32(id.y) >= u.looseGrid.w) { return; }
+    looseMask[id.y * u32(u.looseGrid.z) + id.x] = lsMaskCompute((vec2f(id.xy) + u.looseGrid.xy + 0.5) * LS_CELL);
+}
+
 
 // Class k's share of one population (supply, median px, spread): the supply times a Gaussian in log2 diameter, over the classes' sum.
 fn lsShare(k: i32, pop: vec4f) -> f32 {
@@ -142,8 +161,21 @@ fn lsShare(k: i32, pop: vec4f) -> f32 {
     return pop.x * wk / max(wsum, 1e-6);
 }
 
-// Class k's candidate in cell cc, before the suppression test.
-fn lsCand0(k: i32, cc: vec2i) -> LsCand {
+// The most a class's candidate can be admitted with, whatever the mask: the supply times the class's share of a population (at most reach / .76,
+// the nearest class to a median is under half an octave from it), the runout blocks adding up to .35 of the supply, a deposits override
+// doubling it, painted scatter up to 8x.
+fn lsBound(k: i32) -> f32 {
+    if (u.scatterOn != 0) { return 1.0; }
+    let x = log2(2.0 * lsR(k));
+    let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize)));
+    let spread = mix(2.0, 0.7, u.stoneSort);
+    let runout = x - log2(2.2 * u.looseSize);
+    let reach = exp(-0.5 * off * off / (spread * spread)) + 0.35 * u.stoneSort * exp(-2.0 * runout * runout);
+    return clamp(select(1.0, 2.0, u.overrideOn != 0) * u.looseSupply * LS_BASE * reach / (0.76 * LS_COVER), 0.0, 1.0);
+}
+
+// Class k's candidate in cell cc: its place and radius (log-uniform within the class, so the classes join into one continuous distribution).
+fn lsGeo(k: i32, cc: vec2i) -> LsCand {
     var o: LsCand;
     let R = lsR(k);
     let cell = 3.2 * R;
@@ -151,14 +183,18 @@ fn lsCand0(k: i32, cc: vec2i) -> LsCand {
     let h1 = lsPcg(h0 ^ 0x68e31da4u);
     let h2 = lsPcg(h1 ^ 0xb5297a4du);
     o.c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.9) * cell;
-    // Log-uniform radius within the class, so the classes join into one continuous distribution.
     o.r = R * exp2(lsU(h2) - 0.5);
     o.h0 = h0;
     o.ok = false; o.fines = 0.0;
-    // The admission hash is known before the mask: no mask can admit more than its supply (the runout blocks add up to .35 of it, a deposits override up
-    // to 2x; painted scatter up to 8x), so most candidates are turned away without a single mask read. The answer is the same as testing the hash last.
-    let hAdmit = lsU(lsPcg(h2 ^ 0x1b873593u));
-    if (u.scatterOn == 0 && hAdmit >= clamp(2.7 * u.looseSupply * LS_BASE / LS_COVER, 0.0, 1.0)) { return o; }
+    return o;
+}
+
+// Admits the candidate by its own hash against the probability the mask gives at its centre. The hash is known before the mask, so most
+// candidates are turned away on the class's bound without a single mask read.
+fn lsAdmit(k: i32, g: LsCand) -> LsCand {
+    var o = g;
+    let hAdmit = lsU(lsPcg(lsPcg(lsPcg(g.h0 ^ 0x68e31da4u) ^ 0xb5297a4du) ^ 0x1b873593u));
+    if (hAdmit >= lsBound(k)) { return o; }
     let m = lsMask(o.c);
     if (m.a.x <= 0.0 && m.b.x <= 0.0) { return o; }
     o.fines = m.a.w;
@@ -166,6 +202,8 @@ fn lsCand0(k: i32, cc: vec2i) -> LsCand {
     o.ok = hAdmit < P;
     return o;
 }
+
+fn lsCand0(k: i32, cc: vec2i) -> LsCand { return lsAdmit(k, lsGeo(k, cc)); }
 
 // True where an accepted stone of the next larger class overlaps candidate o of class k.
 fn lsSuppressed(k: i32, o: LsCand) -> bool {
@@ -236,13 +274,22 @@ fn looseStones(p: vec2f) -> vec3f {
     for (var k = 0; k < LS_K; k++) {
         let R = lsR(k);
         if (R < 0.45) { break; }
-        if (2.0 * R > 3.0 * max(u.looseSize, 1.0) * 2.2) { continue; }   // classes far above the largest median are not drawn
+        // A class the mask cannot give a stone to is skipped: the median runs from .3 to 1 of Size, the runout blocks lie at 2.2 times it, and a
+        // class more than a spread away from both holds under 4% of a population.
+        let x = log2(2.0 * R);
+        let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize)));
+        let spread = mix(2.0, 0.7, u.stoneSort);
+        let runout = x - log2(2.2 * u.looseSize);
+        let reach = max(exp(-0.5 * off * off / (spread * spread)), 0.35 * u.stoneSort * exp(-2.0 * runout * runout));
+        if (reach < 0.04) { continue; }
         let cell = 3.2 * R;
         let b = vec2i(floor(p / cell - 0.5));
         for (var j = 0; j <= 1; j++) {
             for (var i = 0; i <= 1; i++) {
-                let st = lsCand0(k, b + vec2i(i, j));
-                if (!st.ok || distance(p, st.c) > 1.6 * st.r) { continue; }
+                var st = lsGeo(k, b + vec2i(i, j));
+                if (distance(p, st.c) > 1.6 * st.r) { continue; }
+                st = lsAdmit(k, st);
+                if (!st.ok) { continue; }
                 if (lsSuppressed(k, st)) { continue; }
                 let s = lsStone(p - st.c, st);
                 if (s.y < edge) { edge = s.y; edgeFines = st.fines; }

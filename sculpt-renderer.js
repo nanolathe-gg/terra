@@ -217,15 +217,19 @@ export class TerrainRenderer {
       texture(18, F), texture(19, F, 'float', '2d-array'), texture(20, F)]});
     // GL drew with LESS against a cleared depth of 1; the vertex shader maps
     // GL's clip depth onto WebGPU's 0..1 range.
-    [this.drawPipeline, this.bakePipeline] = await Promise.all([
+    // The bake's group 1: the fields texture, and the loose-stone mask lattice (looseMain fills it, the bake reads it).
+    const fieldsLayout = device.createBindGroupLayout({label: 'fields out', entries: [
+      {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}},
+      {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: 'storage'}}]});
+    const bakeLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, fieldsLayout]});
+    [this.drawPipeline, this.bakePipeline, this.loosePipeline] = await Promise.all([
       device.createRenderPipelineAsync({label: 'terrain', layout: device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout]}),
         vertex: {module: vertModule, entryPoint: 'vertexMain', buffers: [{arrayStride: 8, attributes: [{shaderLocation: 0, offset: 0, format: 'float32x2'}]}]},
         fragment: {module: fragModule, entryPoint: 'fragmentMain', targets: [{format: this.format}]},
         primitive: {topology: 'triangle-list', cullMode: 'none'},
         depthStencil: {format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less'}}),
-      device.createComputePipelineAsync({label: 'relief bake', layout: device.createPipelineLayout({bindGroupLayouts: [this.commonLayout,
-        device.createBindGroupLayout({label: 'fields out', entries: [{binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}}]})]}),
-        compute: {module: bakeModule, entryPoint: 'bakeMain'}})]);
+      device.createComputePipelineAsync({label: 'relief bake', layout: bakeLayout, compute: {module: bakeModule, entryPoint: 'bakeMain'}}),
+      device.createComputePipelineAsync({label: 'loose mask', layout: bakeLayout, compute: {module: bakeModule, entryPoint: 'looseMain'}})]);
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -239,8 +243,8 @@ export class TerrainRenderer {
     // protection or (negative) beach, b crack/line code, a sand.
     this.fieldsTexture = device.createTexture({label: 'fields', size: [this.size, this.size], format: 'rgba16float',
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
-    this.fieldsOut = device.createBindGroup({label: 'fields out', layout: this.bakePipeline.getBindGroupLayout(1),
-      entries: [{binding: 0, resource: this.fieldsTexture.createView()}]});
+    this.looseBuffer = device.createBuffer({label: 'loose mask', size: 16, usage: GPUBufferUsage.STORAGE});
+    this.fieldsOut = this.makeFieldsOut();
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
@@ -1029,6 +1033,39 @@ export class TerrainRenderer {
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.
+  makeFieldsOut() {
+    return this.device.createBindGroup({label: 'fields out', layout: this.bakePipeline.getBindGroupLayout(1),
+      entries: [{binding: 0, resource: this.fieldsTexture.createView()}, {binding: 1, resource: {buffer: this.looseBuffer}}]});
+  }
+
+  // Card P16: the loose-stone mask, computed once per cell of 4 px over the bake's window and the margin a stone reaches (see looseMain), so a
+  // candidate reads one entry where the mask would take about 20 texture reads. Nothing runs while Supply is 0 and no scatter is painted.
+  encodeLooseMask(encoder) {
+    const supply = this.uniformValue('uLooseSupply'), painted = this.uniformValue('uScatterOn');
+    if (!(supply > 0) && !painted) return;
+    const [x0, y0, w, h] = this.bakeWindow ?? [0, 0, this.bakeWidth ?? this.size, this.bakeHeight ?? this.size];
+    const margin = Math.ceil(3.6 * Math.min(16, 3.3 * this.uniformValue('uLooseSize'))) + 4;
+    const ox = Math.floor((x0 - margin) / 4), oy = Math.floor((y0 - margin) / 4);
+    const nx = Math.ceil((w + 2 * margin) / 4) + 2, ny = Math.ceil((h + 2 * margin) / 4) + 2;
+    if (nx * ny * 16 > this.looseBuffer.size) {
+      this.looseBuffer.destroy();
+      this.looseBuffer = this.device.createBuffer({label: 'loose mask', size: nx * ny * 16, usage: GPUBufferUsage.STORAGE});
+      this.fieldsOut = this.makeFieldsOut();
+    }
+    this.v('uLooseGrid', [ox, oy, nx, ny]);
+    const pass = encoder.beginComputePass({label: 'loose mask'});
+    pass.setPipeline(this.loosePipeline);
+    pass.setBindGroup(0, this.commonBindGroup('bake'));
+    pass.setBindGroup(1, this.fieldsOut);
+    pass.dispatchWorkgroups(Math.ceil(nx / 8), Math.ceil(ny / 8));
+    pass.end();
+  }
+
+  uniformValue(name) {
+    const field = this.uniform.get(name[1].toLowerCase() + name.slice(2));
+    return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
+  }
+
   bakeFields(quality = 'full', encoder = null, timer = null) {
     const preview = quality !== 'full';
     const v = this.variant;
@@ -1121,6 +1158,7 @@ export class TerrainRenderer {
     this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
+    this.encodeLooseMask(encoder);
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});
     pass.setPipeline(this.bakePipeline);
     pass.setBindGroup(0, this.commonBindGroup('bake'));
