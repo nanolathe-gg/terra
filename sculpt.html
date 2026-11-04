@@ -43,6 +43,7 @@
     <p class="scope">Materials, colors and surface settings for the whole map.</p>
     <div class="control"><label for="biome-select">World</label><select id="biome-select" style="width:100%"></select></div>
     <div class="control" id="variant-control" hidden><label for="variant-select">Variant</label><select id="variant-select" style="width:100%"></select><p class="small">A named look for this world's family of retail maps; it loads over the world's own knobs.</p></div>
+    <div class="control" id="reset-strokes-control"><button id="reset-strokes" style="width:100%">Reset strokes to world defaults</button><p class="small" id="reset-strokes-help">Every stroke keeps its shape and tool; all of its settings, including ones you changed, return to this world's and variant's defaults.</p></div>
     <div class="row"><input id="world-new-name" type="text" placeholder="New world name" aria-label="New world name"><button id="world-new">New world</button></div>
     <details class="panel" open><summary>Colors</summary><p class="small">Base color of each material; the texture's grain is kept. Off uses the world's own color.</p><div id="world-colors"></div><div class="row"><button id="world-reset">Reset colors</button></div></details>
     <details class="panel" hidden><summary>Legacy surface settings</summary>
