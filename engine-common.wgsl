@@ -360,6 +360,20 @@ struct Uniforms {
     stoneMoss: f32,       // world material data: share of stones with a mossy cap
     // H4b (Green): rock blocks on the hills' rock, outside the structured face (0: none).
     hillBlocks: f32,      // 0..1: how much of the hill rock (slope .5 and over, off the structured face) is cut into small pieces
+    // Card P10: the one rock model (rockModel in engine-bake), world material data (`rock` in the material). rockSize 0: the world has none.
+    rockSize: f32,        // px: joint-cell spacing across the beds (the preset's Size)
+    rockAspect: f32,      // cell length along the beds against across them
+    rockJitter: f32,      // 0 hexagons .. 1 irregular cells
+    rockOpen: f32,        // share of joints that are open crevices (the rest are tight steps)
+    rockBedOpen: f32,     // share of bed partings that are open
+    rockTerr: f32,        // how far each block is flattened toward its own level (basalt organ pipes)
+    rockVary: f32,        // per-block tilt and step
+    rockCrev: f32,        // height units an open parting is cut
+    rockCrevW: f32,       // px, half width of a crevice
+    rockChip: f32,        // share of small angular chips
+    rockChipSize: f32,    // px
+    rockGrit: f32,        // per-pixel height grit, units
+    rockAge: f32,         // 0..1: rounds open edges, opens more partings, wears chips
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

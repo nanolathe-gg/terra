@@ -538,7 +538,10 @@ fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
 // its own, its hardness scales how tall its ledge stands (columnContrast), and the
 // bed coordinate is columnCoord at the surface height, the one erosion reads.
 // Returns the same (offset, lip cover, bed index) as bedRelief.
-fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
+// A bed's cut: the tread's height offset, the lip and notch's (the old edge; the rock model cuts its own), the lip's rock cover, the bed's index,
+// how far through it the point lies (0 foot, 1 top) and its thickness along the ground (px).
+struct BedCut { off: f32, lipNotch: f32, lip: f32, index: f32, through: f32, px: f32 }
+fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
@@ -558,11 +561,10 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     // Hard beds (hardness 1) stand 1.7 times a hash bed's mean ledge, soft ones (0) 0.3 times: the hash's own range.
     let punch = mix(1.0, 0.3 + 1.4 * bed.hardness, u.columnContrast);
     off *= punch;
-    off += punch * bedLip() * (lip - 0.8 * notch);
-    return vec3f(off, lip, bed.index);
+    return BedCut(off, punch * bedLip() * (lip - 0.8 * notch), lip, bed.index, f, bedPx);
 }
 
-fn bedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
+fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     if (u.columnSectionCount > 0) { return columnBedRelief(p, h, gOver); }
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
@@ -596,8 +598,7 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> vec3f {
     // and the eye can follow them (0: every bed alike, as before).
     let punch = mix(1.0, 0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y, u.bedPunch);
     off *= punch;
-    off += punch * bedLip() * (lip - 0.8 * notch);
-    return vec3f(off, lip, k);
+    return BedCut(off, punch * bedLip() * (lip - 0.8 * notch), lip, k, f, bedPx);
 }
 
 // H4b: a hill's pieces against a face's: width and length (down the fall line) as shares of blockWidth and blockRow.
@@ -758,6 +759,71 @@ fn facetField(p: vec2f) -> vec2f {
     // G2: a third level at 0.45 of the fine one's size, for the small bumps that retail's pieces carry.
     if (u.cliffFine > 0.0) { f.x += facetLevel(p + vec2f(11.0, 47.0), F * 0.45, stretch, u.facetTilt * u.cliffFine, u.blockStep * u.cliffFine, 211.0).x; }
     return f;
+}
+
+// Card P10: the one rock model. Three parting sets cut the rock: beds (the bed's planes, read from the column), and two joint sets
+// (staggered cells inside each bed, on a row-offset lattice: jitter 0 gives hexagons). Each parting is open (a crevice) or tight (a step
+// only), by a hash of the two cells it separates. Each block is flattened toward its own level (terr: basalt organ pipes, stepped blocks)
+// and tilted and stepped (vary); age rounds open edges and opens more partings; chips and grit are the fine facets. A rock type is the
+// numbers u.rock* (world material data), never a branch. It replaces blockField, facetField, jointFieldAt and the lip and notch of bedRelief.
+struct RockCell { c1: vec2f, id: vec2f, id2: vec2f, edge: f32 }
+// The two nearest points of a row-staggered jittered lattice of cells `sz` px, in px: the nearest point, the cells' ids and the distance
+// to the edge between the two nearest (the bisector's, exact there).
+fn rockCells(x: vec2f, sz: vec2f, jit: f32, salt: f32) -> RockCell {
+    let q = x / sz;
+    let by = floor(q.y);
+    var d1 = 1e9; var d2 = 1e9;
+    var p1 = vec2f(0.0); var p2 = vec2f(0.0);
+    var id = vec2f(0.0); var id2 = vec2f(0.0);
+    for (var j = -1; j <= 1; j++) {
+        let row = by + f32(j);
+        let off = select(0.0, 0.5, fract(row * 0.5) > 0.25);
+        let bx = floor(q.x - off);
+        for (var i = -1; i <= 1; i++) {
+            let c = vec2f(bx + f32(i), row);
+            let pt = (vec2f(c.x + 0.5 + off, c.y + 0.5) + (cellHash(c + salt) - 0.5) * jit) * sz;
+            let d = x - pt;
+            let dd = dot(d, d);
+            if (dd < d1) { d2 = d1; p2 = p1; id2 = id; d1 = dd; p1 = pt; id = c; }
+            else if (dd < d2) { d2 = dd; p2 = pt; id2 = c; }
+        }
+    }
+    return RockCell(p1, id, id2, 0.5 * (d2 - d1) / max(length(p2 - p1), 1e-4));
+}
+// pf: the face's own coordinates; p: the world position (fine noise); bed: the bed cut here; gx: the ground's gradient in pf's axes.
+// Returns (height offset, crevice 0..1).
+fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f) -> vec2f {
+    let age = clamp(u.rockAge, 0.0, 1.0);
+    let bs = fract(bed.index * 0.6180339) * 50.0;   // this bed's own salt and offset
+    let jsz = vec2f(u.rockSize * sqrt(u.rockAspect), u.rockSize / sqrt(u.rockAspect) * select(1.0, 0.866, u.rockJitter < 0.5));
+    let cl = rockCells(pf + vec2f(bs * 1.94, 0.0), jsz, u.rockJitter, 17.0 + bs);
+    let hc = cellHash(cl.id + 23.0 + bs);
+    let hv = cellHash(cl.id + 41.0 + bs);
+    // A joint is open (a crevice) or tight (a step and tilt only), by a hash of the pair of cells it parts.
+    let pairOpen = step(cellHash(cl.id + cl.id2 + 7.0 + bs).x, u.rockOpen + 0.3 * age);
+    let bedEdge = min(bed.through, 1.0 - bed.through) * bed.px;
+    let bedOpen = step(cellHash(vec2f(bed.index, 5.5)).x, u.rockBedOpen + 0.2 * age);
+    let edge = min(select(1e9, cl.edge, pairOpen > 0.5), select(1e9, bedEdge, bedOpen > 0.5));
+    let toPt = pf - cl.c1;
+    var dh = -u.rockTerr * dot(gx, toPt) + u.rockVary * (2.4 * (hc.y - 0.5) + dot(hv - 0.5, toPt));
+    // Age: rounded shoulders.
+    let roundR = age * 0.42 * min(min(jsz.x, jsz.y), bed.px);
+    if (roundR > 0.3) {
+        let t = 1.0 - min(edge / roundR, 1.0);
+        dh -= 1.1 * roundR * (1.0 - sqrt(max(1.0 - t * t, 0.0)));
+    }
+    let crev = 1.0 - smoothstep(0.0, u.rockCrevW * (1.0 + 0.6 * age), edge + 0.6 * valueNoise(p / 2.1 + 19.0));
+    dh -= u.rockCrev * crev;
+    // Angular chips: small facets, worn away with age.
+    let chipA = u.rockChip * (1.0 - 0.7 * age);
+    if (chipA > 0.01) {
+        let ch = rockCells(pf + vec2f(5.0, 3.0), vec2f(u.rockChipSize, u.rockChipSize * 0.8), 1.0, 61.0 + bs);
+        let k = cellHash(ch.id + 3.0);
+        dh += chipA * (0.8 * dot(k - 0.5, pf - ch.c1) + 0.9 * (k.y - 0.5));
+        dh -= chipA * 0.5 * (1.0 - smoothstep(0.0, 0.7, ch.edge));
+    }
+    dh += u.rockGrit * (cellHash(floor(p) + 13.0).x - 0.5) * 2.0;
+    return vec2f(dh, crev);
 }
 
 // Rock structure that follows the ground (card G2). Retail's strata lie along the contours of the
@@ -1362,27 +1428,36 @@ fn bake(p: vec2f) -> vec4f {
         // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
         // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
         // (the offset is keyed on the bed's index). A joint of no depth cuts nothing.
+        let rocky = u.rockSize > 0.0;
         var joint = 0.0;
-        if (u.jointDepth > 0.0) {
-            let stagger = select(0.0, u.cliffStagger * max(u.grooveSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.z, 71.0)).x - 0.5), cliffOn && u.cliffStagger > 0.0);
+        if (u.jointDepth > 0.0 && !rocky) {
+            let stagger = select(0.0, u.cliffStagger * max(u.grooveSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.index, 71.0)).x - 0.5), cliffOn && u.cliffStagger > 0.0);
             joint = jointFieldAt(pf, stagger);
         }
-        height += order * steep * (bed.x + joint);
+        height += order * steep * (bed.off + select(bed.lipNotch, 0.0, rocky) + joint);
         // The form eases in over the painted edge (a smoothstep of the cover, not the cover itself), so the rim stays smooth.
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
-        if (u.blocks > 0.0) {
-            let block = blockField(p, pf, bedH + carved.x, 0.0);
-            height += gate * block.x;
-            blockCrevice = gate * block.y;
+        if (rocky) {
+            // The rock model's own parting sets, in the face's axes (the ground's gradient there: along the fall line only on a patch frame).
+            let gx = select(vec2f(0.0, -slope), g, !cliffOn);
+            let rk = rockModel(p, pf, bed, gx);
+            height += gate * rk.x;
+            blockCrevice = gate * rk.y;
+        } else {
+            if (u.blocks > 0.0) {
+                let block = blockField(p, pf, bedH + carved.x, 0.0);
+                height += gate * block.x;
+                blockCrevice = gate * block.y;
+            }
+            if (u.facetTilt > 0.0) {
+                let facet = facetField(pf);
+                height += gate * facet.x;
+                facetSeam = gate * facet.y;
+            }
         }
-        if (u.facetTilt > 0.0) {
-            let facet = facetField(pf);
-            height += gate * facet.x;
-            facetSeam = gate * facet.y;
-        }
-        structureRock = order * steep * bed.y * step(0.01, bedLip());
+        structureRock = order * steep * bed.lip * step(0.01, bedLip());
     }
     // H4b: the hills' rock (slope from .35, full at .65; the rock class of measure/material_classes.py starts at .5) off the structured face takes small
     // pieces, in patches, with the pieces' edges mostly down the fall line.
