@@ -55,7 +55,7 @@ KNOB_DEFAULTS = dict(
     fingers=0,
     # Coast pass (card E4): fingers on the joined coast and a landform's shoreline steps cut as heights
     # (layerPx px a step, riser 0 shares the bank's rise out; the count, flat share and irregularity are the landform's Steps).
-    layerPx=12, layerRiser=0, shoreEdge=0, surf=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    layerPx=12, layerRiser=0, shoreEdge=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
@@ -65,7 +65,7 @@ KNOB_DEFAULTS = dict(
     terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
-    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, varySize=140, varyFoot=1, varyMiddle=1,
+    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
@@ -655,7 +655,7 @@ WORLD_VARIANTS = {
         # round hills carry branching spurs and the long cliff of green-modern-2 broad, uneven valleys; from 60 they also
         # cut the grass slope above the cliff; 30 barely reads at 1x). Card P32: terracettes on steep grass (Joined
         # wrinkles on a grass world).
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#d3c49c'), knobs=dict(gullies=.4, wrinkles=1, surf=.6)),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a'), knobs=dict(gullies=.4, wrinkles=1, surf=.1)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro

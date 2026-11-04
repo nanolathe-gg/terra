@@ -74,7 +74,6 @@ struct Uniforms {
     slopeSand: i32,
     grassSlopes: i32,     // 1 where the world's slopes are grass: Joined wrinkles (u.wrinkles) then draw terracettes in the bake, not Moon's dark lines in the draw
     shoreEdge: f32,   // lava coast rim, outline and lip (0: none)
-    surf: f32,        // card P27: the shore's wet sand, foam and beach by the coast distance (0: the world's own)
     // Crystals: their own colour (world base colour 'crystal', else the world's).
     crystalColor: vec3f,
     crystalBase: vec4f,
@@ -216,7 +215,7 @@ struct Uniforms {
     bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)
     bedRelief: f32,       // bed lumps (bake): faint embossed relief under shallow water, 0: none
     deepEdge: f32,        // shallow-to-deep step: 0 the depth ramp, 1 a hard step with ragged stairs
-    waterOn: i32,         // 1 once any cell carries a painted water edge or bed choice (planes 9-11)
+    waterOn: i32,         // 1 once any cell carries a painted water edge or bed choice (planes 9-11, 13) or a Surf (plane 18)
     lumpOn: i32,          // 1 once any cell carries painted ground lumps (plane 12)
     lumpRelief: f32,      // height of a fully painted lump field, in the units of plainRelief
     shallowMean: vec3f,   // mean colour of the shallow water art: the lit bed's tint

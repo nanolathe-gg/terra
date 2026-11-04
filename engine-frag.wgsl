@@ -1320,39 +1320,40 @@ fn surfShore(p: vec2f) -> vec4f {
     return vec4f(select(-best, best, dry) + 0.6 / slope, q, slope);
 }
 // The beach the surf builds: berm height 1.5 + 3 Surf units on a face that flattens from 0.30 to 0.12, so the berm stands 5 to 38 px from the water.
-fn surfBerm() -> f32 { return (1.5 + 3.0 * u.surf) / mix(0.30, 0.12, u.surf); }
+// Below Surf .2 there is only the wet line and the lace (a lake): the sand, its cusps and the breakers fade in between .2 and .45.
+fn surfBeach(e: f32) -> f32 { return smoothstep(0.2, 0.45, e); }
+fn surfBerm(e: f32) -> f32 { return (1.5 + 3.0 * e) / mix(0.30, 0.12, e); }
 // The cross-shore coordinate with the beach cusps: horns that push the swash seaward every ~26 px along the coast.
-fn surfCuspX(x: f32, q: vec2f) -> f32 {
-    return x + 3.5 * u.surf * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm() * 0.7, surfBerm() * 1.1, x));
+fn surfCuspX(x: f32, q: vec2f, e: f32) -> f32 {
+    return x + 3.5 * e * surfBeach(e) * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm(e) * 0.7, surfBerm(e) * 1.1, x));
 }
 // Sand to the berm and a little past it, its inland edge ragged, where the pixel is dry.
-fn surfSand(x: f32, q: vec2f, p: vec2f) -> f32 {
-    let veg = smoothstep(-0.1, 0.15, (surfCuspX(x, q) - (surfBerm() + 20.0)) / 30.0 + 0.3 * valueNoise(p / 24.0) + 0.15 * valueNoise(p / 11.0));
-    return (1.0 - veg) * step(0.0, x);
+fn surfSand(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
+    let veg = smoothstep(-0.1, 0.15, (surfCuspX(x, q, e) - (surfBerm(e) + 20.0)) / 30.0 + 0.3 * valueNoise(p / 24.0) + 0.15 * valueNoise(p / 11.0));
+    return (1.0 - veg) * step(0.0, x) * surfBeach(e);
 }
 // The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
-fn surfWet(x: f32, q: vec2f) -> f32 {
-    let reach = (0.5 + 0.25 * valueNoise(q / 30.0)) * surfBerm() * smoothstep(0.02, 0.2, u.surf) + 1.0;
-    return (1.0 - smoothstep(reach - 1.5, reach + 1.0, surfCuspX(x, q))) * step(0.0, x);
+fn surfWet(x: f32, q: vec2f, e: f32) -> f32 {
+    let reach = (0.5 + 0.25 * valueNoise(q / 30.0)) * surfBerm(e) * surfBeach(e) + 1.0;
+    return (1.0 - smoothstep(reach - 1.5, reach + 1.0, surfCuspX(x, q, e))) * step(0.0, x);
 }
 // Foam at a pixel, static (hashed per art pixel): on the water a lace at the waterline and, with Surf, a broken breaker line along an isobath
 // with spray behind it; on the wet sand a 1 px swash front. depth is the bed under the sea (0 on land).
-fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32) -> f32 {
-    let e = u.surf;
+fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e: f32) -> f32 {
     let cell = floor(grainPixel(pixel));
     if (x < 0.0) {
         let xs = -x;
-        let w = mix(1.0, 2.0, smoothstep(0.1, 0.5, e));
-        let lace = (1.0 - smoothstep(0.4 * w, w, xs + 0.65 * (1.0 + valueNoise(p / 3.0)))) * step(shelfHash(cell + 47.0), mix(0.92, 0.75, smoothstep(0.1, 0.5, e)));
+        let w = mix(1.2, 2.0, surfBeach(e));
+        let lace = (1.0 - smoothstep(0.4 * w, w, xs + 0.3 * (1.0 + valueNoise(p / 3.0)))) * step(shelfHash(cell + 47.0), mix(0.97, 0.75, surfBeach(e)));
         // The breakers stand on the isobath where the water is 1.5 + 3 Surf units deep (over a bar, on its crest), in px along the bed's slope.
         let ofBreak = (depth - (1.5 + 3.0 * e)) / slope + 0.5 * valueNoise(p / 6.0);
         let breaking = smoothstep(-0.15, 0.2, valueNoise(q / 40.0 + vec2f(0.5, 3.0)) + e - 0.8);
         let crest = (1.0 - smoothstep(0.5, 1.8, abs(ofBreak))) * breaking * step(shelfHash(cell + 74.0), 0.85);
         let spray = (1.0 - smoothstep(1.5, 4.0, -ofBreak)) * smoothstep(0.0, 1.5, -ofBreak) * breaking * step(shelfHash(cell + 75.0), 0.18);
-        return clamp(max(lace, (crest + spray) * e), 0.0, 1.0);
+        return clamp(max(lace, (crest + spray) * e * surfBeach(e)), 0.0, 1.0);
     }
-    let xf = 1.5 + 0.3 * surfBerm() * (0.5 + 0.5 * valueNoise(q / 22.0 + vec2f(2.0, 8.0)));
-    let front = (1.0 - smoothstep(0.3, 1.0, abs(surfCuspX(x, q) - xf))) * step(shelfHash(cell + 45.0), 0.7) * smoothstep(0.1, 0.4, e) * smoothstep(-0.1, 0.25, valueNoise(q / 30.0 + vec2f(9.0, 1.0)));
+    let xf = 1.5 + 0.3 * surfBerm(e) * (0.5 + 0.5 * valueNoise(q / 22.0 + vec2f(2.0, 8.0)));
+    let front = (1.0 - smoothstep(0.3, 1.0, abs(surfCuspX(x, q, e) - xf))) * step(shelfHash(cell + 45.0), 0.7) * surfBeach(e) * smoothstep(-0.1, 0.25, valueNoise(q / 30.0 + vec2f(9.0, 1.0)));
     return front * 0.85;
 }
 // Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
@@ -1563,12 +1564,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var surfX = 1.0e3;
     var surfQ = vec2f(0.0);
     var surfSlope = 0.12;
-    if (u.surf > 0.0) {
+    var surfE = 0.0;
+    if (u.waterOn != 0) { surfE = max(textureSampleLevel(masksTex, linearClamp, maskUv(p), 4, 0.0).b, 0.0); }
+    if (surfE > 0.0) {
         let shore = surfShore(p);
         surfX = shore.x;
         surfQ = shore.yz;
         surfSlope = shore.w;
-        if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ)); }
+        if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, surfE)); }
     }
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
@@ -1578,21 +1581,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The low band only within the water's reach: inland hollows of a low world are not beaches; steep banks stay bare.
         var beach = max(beachSand(p, speck), (1.0 - smoothstep(top * 0.6, top, h - u.sea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)) * smoothstep(0.0, 0.15, beachField(p)));
         // A sandy slope keeps its own streaked material over the beach sand.
-        if (u.surf > 0.0 && surfX < 900.0) { beach = surfSand(surfX, surfQ, p) * (1.0 - smoothstep(0.7, 1.3, slope)); }
         if (u.slopeSand != 0) { beach *= 1.0 - slopeShare; }
         material = mix(material, beachColour(pixel), beach * (1.0 - exposed * 0.7));
-    } else if (u.surf > 0.0 && surfX < 900.0 && h > u.sea - 1.0) {
-        // Surf's beach on a world without a beach layer: the world's own sand.
-        let beach = surfSand(surfX, surfQ, p) * (1.0 - smoothstep(0.7, 1.3, slope));
-        material = mix(material, mix(sandWeathered(), sandMaterialAt(scatter), 0.3), beach * (1.0 - exposed * 0.7));
-    }
-    if (u.surf > 0.0 && surfX < 900.0 && surfX >= 0.0) {
-        // The wet sand darkens and warms to the last uprush; wrack, old high-water marks, lie in the dry sand as thin dark broken lines.
-        material *= mix(vec3f(1.0), vec3f(0.68, 0.62, 0.52), surfWet(surfX, surfQ));
-        let wrackAt = surfBerm() * 0.78 + 2.5 * valueNoise(surfQ / 40.0 + vec2f(5.0, 5.0));
-        let wrack = (1.0 - smoothstep(0.35, 1.0, abs(surfCuspX(surfX, surfQ) - wrackAt))) * step(shelfHash(floor(grainPixel(pixel)) + 63.0), 0.65)
-                  * smoothstep(-0.2, 0.2, valueNoise(surfQ / 25.0 + vec2f(7.0, 3.0))) * surfSand(surfX, surfQ, p);
-        material = mix(material, vec3f(0.33, 0.30, 0.20), wrack * 0.6 * u.surf);
     }
     material = joinSedimentTransition(material, pixel, rock, exposed, materialWeather);
     if (u.microRock > 0.0) {
@@ -1842,6 +1832,21 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, snowMaterial(pixel) * 0.9, cap);
         exposed *= 1.0 - cap;
     }
+    // Card P27: the surf's beach is drawn last over the material, so the bake's cracks, chips and stones do not mark it: sand with its own fine
+    // grain (colour the world's Sand), the shading eased toward level, then the wet sand to the last uprush and the wrack lines.
+    if (surfE > 0.0 && surfX < 900.0 && surfX >= 0.0) {
+        let cover = surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope)) * (1.0 - exposed * 0.7);
+        let cell = floor(grainPixel(pixel));
+        let grain = 1.0 + 0.12 * (shelfHash(cell + 11.0) - 0.5) + 0.06 * valueNoise(p / 5.0) + 0.05 * valueNoise(p / 17.0);
+        let sandColour = select(sandWeathered() * grain, beachColour(pixel), u.beach != 0);
+        material = mix(material, sandColour, cover);
+        shading = mix(shading, mix(shading, 1.0, 0.6), cover);
+        material *= mix(vec3f(1.0), vec3f(0.68, 0.62, 0.52), surfWet(surfX, surfQ, surfE));
+        let wrackAt = surfBerm(surfE) * 0.78 + 2.5 * valueNoise(surfQ / 40.0 + vec2f(5.0, 5.0));
+        let wrack = (1.0 - smoothstep(0.35, 1.0, abs(surfCuspX(surfX, surfQ, surfE) - wrackAt))) * step(shelfHash(cell + 63.0), 0.65)
+                  * smoothstep(-0.2, 0.2, valueNoise(surfQ / 25.0 + vec2f(7.0, 3.0))) * cover;
+        material = mix(material, vec3f(0.33, 0.30, 0.20), wrack * 0.6 * surfE);
+    }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
         // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
@@ -2063,9 +2068,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
         if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
     }
-    if (u.surf > 0.0 && surfX < 900.0) {
+    if (surfE > 0.0 && surfX < 900.0) {
         // Card P27: static foam, white as lit as the water is. It marks the playable edge on both sides: the lace on the water, the swash on the sand.
-        let foam = surfFoam(pixel, p, surfX, surfQ, max(0.0, u.sea - baseHeight(p)), surfSlope);
+        let foam = surfFoam(pixel, p, surfX, surfQ, max(0.0, u.sea - baseHeight(p)), surfSlope, surfE);
         color = mix(color, vec3f(0.93, 0.96, 0.94) * (0.9 + 0.1 * shadow), foam * select(1.0 - surfWater, surfWater, surfX < 0.0));
     }
     if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {

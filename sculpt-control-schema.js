@@ -1,4 +1,4 @@
-import {strokeKnots,sampleKnots,landformSteps,landformShore} from './sculpt-shape-presets.js';
+import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -38,6 +38,8 @@ export function shapeControlAvailable(key,kind,p){
   if(key==='breakup')return on&&!shore;
   if(['layerPx','layerRiser','layerVary'].includes(key))return on&&shore;
   if(key==='lavaSpread')return on&&shore&&!circular;
+  // Surf works a shore, which only a stroke that makes water has.
+  if(key==='surf')return landformMakesWater(p);
   // Gullies cut only into ground a landform raises, and Cut to never raises it.
   if(['gullies','gullySize'].includes(key))return Math.round(Number(p.combine||0))!==1;
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
@@ -168,7 +170,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'boulders','boulderSize','debris','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
  'banding','sandBanding','strata','strataContrast',
- 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge','surf',
+ 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
  'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','grooveSpacing','facetTilt','cliffFollow',
  'shelfWander','bedFlat','bedDots','crackedStep','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
