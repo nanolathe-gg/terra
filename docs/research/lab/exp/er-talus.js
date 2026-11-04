@@ -8,6 +8,11 @@
 // that holds on every 1-cell pair holds over s cells), so a coarse level never moves material the fine level would keep.
 // Both samples of a pair compute the same expression on the same inputs, so mass is conserved exactly and the result is
 // deterministic; each thread writes only its own pixel. The strides are in world px, so the schedule is the same at 2x.
+// Measured against a 20000-iteration stride-1 run (384 x 288, px 1.33): stride 1 needs about 2000 iterations for what the
+// dilated schedule reaches in 24 (RMS 4.6 vs 5.1 height units); with the knight star on odd steps, 24 give 2.6 and 48 give
+// 1.3. By eye the coarse levels leave marks: an 8-direction star alone turns a round needle into an 8-petalled flower
+// (mass lands on single far partners); the knight star shrinks the petals but adds a few straight rays; the lattice
+// cascade (multi 2) keeps the needle round but shows the lattice's squares. None is as clean as the slow reference yet.
 // Own code; the idea of dilated (a-trous) stencils is old (Holschneider 1989; Rong and Tan 2006 jump flooding).
 // The simulation: SA = (height, unused, unused, iteration counter). The counter is the same in every pixel, so a step can
 // follow a schedule while still depending only on the state.
@@ -25,22 +30,57 @@ fn strideAt(k: u32) -> i32 {
 // property of both ends, so the two samples agree. (One-sided coarse pairs at the edge push material along rows: streaks.
 // In the engine the page apron, 128 cells, holds this margin.)
 fn pairInside(x: i32, y: i32, s: i32) -> bool {
-  let m = select(0, s, s > 1);
+  let m = select(0, 2 * s, s > 1);
   return x >= m && y >= m && x < labW() - m && y < labH() - m;
 }
 fn pairMove(hi: f32, lo: f32, run: f32) -> f32 { return prm.share * max(0.0, hi - lo - prm.talus * run); }
-fn thermalStep(x: i32, y: i32, s: i32) -> f32 {
+// The 8 neighbours, and the 8 knight moves (the same star turned 26.6 degrees). At a coarse stride, the odd iterations of
+// a level use the knight moves when prm.knight is 1: an 8-direction stencil alone moves mass along 8 rays and leaves
+// lobes (a round needle relaxes to an 8-petalled flower); alternating the two stars breaks the 8-fold symmetry.
+var<private> STAR: array<vec2i, 16> = array<vec2i, 16>(vec2i(1, 0), vec2i(1, 1), vec2i(0, 1), vec2i(-1, 1), vec2i(-1, 0), vec2i(-1, -1), vec2i(0, -1), vec2i(1, -1),
+  vec2i(2, 1), vec2i(1, 2), vec2i(-1, 2), vec2i(-2, 1), vec2i(-2, -1), vec2i(-1, -2), vec2i(1, -2), vec2i(2, -1));
+fn thermalStep(x: i32, y: i32, s: i32, odd: bool) -> f32 {
   let h = SA[idx(x, y)].x;
   var out = 0.0; var gain = 0.0;
-  for (var dy = -1; dy <= 1; dy++) { for (var dx = -1; dx <= 1; dx++) {
-    if (dx == 0 && dy == 0) { continue; }
-    let nx = x + dx * s; let ny = y + dy * s;
+  let base = select(0, 8, odd && s > 1 && prm.knight > 0.5);
+  for (var k = 0; k < 8; k++) {
+    let d = STAR[base + k];
+    let nx = x + d.x * s; let ny = y + d.y * s;
     if (!pairInside(x, y, s) || !pairInside(nx, ny, s)) { continue; }
     let hn = SA[idx(nx, ny)].x;
-    let run = select(1.0, 1.41421356, dx != 0 && dy != 0) * f32(s) * labPx();
+    let run = length(vec2f(d)) * f32(s) * labPx();
     if (h > hn) { out += pairMove(h, hn, run); } else if (hn > h) { gain += pairMove(hn, h, run); }
-  } }
+  }
   return h - out + gain;
+}
+// multi 2: the levels as a cascade of lattices. Level s relaxes only the cells of the s-px lattice (partners s cells away),
+// prm.per iterations, then one step spreads the lattice's change over the level to every pixel (bilinear), so the mass a
+// coarse level moves lands spread over the lattice cell instead of on single far partners. Most steps touch 1/s^2 of the
+// cells. SA.y holds the height at the level's start.
+struct Lvl { s: i32, local: u32 };
+fn cascadeLevel(k: u32) -> Lvl {
+  let J = levelsJ(); let m = u32(max(prm.per, 1.0)); var kk = k;
+  for (var l = 0; l <= J; l++) {
+    let s = 1 << u32(J - l); let size = select(m, m + 1u, s > 1);
+    if (kk < size) { return Lvl(s, kk); }
+    kk -= size;
+  }
+  return Lvl(1, 1000000u);
+}
+fn cascadeStep(x: i32, y: i32, c: vec4f) -> vec4f {
+  let L = cascadeLevel(u32(c.w)); let m = u32(max(prm.per, 1.0));
+  var o = c; if (L.local == 0u) { o.y = c.x; }
+  if (L.local >= 1000000u) { return o; }
+  let onLat = x % L.s == 0 && y % L.s == 0;
+  if (L.local < m) { if (onLat) { o.x = thermalStep(x, y, L.s, (L.local & 1u) == 1u); } return o; }
+  if (!onLat) {   // the spread: bilinear over the four lattice cells around this pixel, of their change over the level
+    let s = L.s; let b = vec2i(x - x % s, y - y % s); let f = vec2f(f32(x % s), f32(y % s)) / f32(s);
+    let b1 = vec2i(min(b.x + s, ((labW() - 1) / s) * s), min(b.y + s, ((labH() - 1) / s) * s));
+    let d00 = SA[idx(b.x, b.y)].x - SA[idx(b.x, b.y)].y; let d10 = SA[idx(b1.x, b.y)].x - SA[idx(b1.x, b.y)].y;
+    let d01 = SA[idx(b.x, b1.y)].x - SA[idx(b.x, b1.y)].y; let d11 = SA[idx(b1.x, b1.y)].x - SA[idx(b1.x, b1.y)].y;
+    o.x = c.x + mix(mix(d00, d10, f.x), mix(d01, d11, f.x), f.y);
+  }
+  return o;
 }
 @compute @workgroup_size(8, 8)
 fn simInit(@builtin(global_invocation_id) g: vec3u) {
@@ -53,7 +93,8 @@ fn simStep(@builtin(global_invocation_id) g: vec3u) {
   let x = i32(g.x); let y = i32(g.y);
   if (x >= labW() || y >= labH()) { return; }
   let c = SA[idx(x, y)];
-  SB[idx(x, y)] = vec4f(thermalStep(x, y, strideAt(u32(c.w))), c.y, c.z, c.w + 1.0);
+  if (prm.multi > 1.5) { var o = cascadeStep(x, y, c); o.w = c.w + 1.0; SB[idx(x, y)] = o; return; }
+  SB[idx(x, y)] = vec4f(thermalStep(x, y, strideAt(u32(c.w)), (u32(c.w) & 1u) == 1u), c.y, c.z, c.w + 1.0);
 }
 @compute @workgroup_size(8, 8)
 fn simApply(@builtin(global_invocation_id) g: vec3u) {
@@ -68,18 +109,20 @@ fn simApply(@builtin(global_invocation_id) g: vec3u) {
 
 export default {
   title: 'Talus: one grid vs multi-scale thermal',
-  about: 'Cliffs of 110 units relaxed to a 35 degree repose. single: stride 1 (the engine). multi: strides 32..1 world px, coarse first. Equal iteration counts; the long run is the reference.',
+  about: 'Cliffs of 110 units relaxed to a 35 degree repose. single: stride 1 (the engine). multi: dilated strides 32..1 world px, coarse first, knight star on odd steps. cascade: lattice levels with a bilinear spread. The 2000-iteration runs are the reference.',
   world: 'desert',
-  params: {talus: 0.7, share: 0.1, multi: 1, coarse: 32, mesa: 110, laps: 1},
+  params: {talus: 0.7, share: 0.1, multi: 1, coarse: 32, mesa: 110, laps: 1, knight: 1, per: 4},
   sim: {iterations: 24, wgsl: thermalWgsl},
   lab: {zk: 0.7},
   variants: [
     {label: 'authored', note: 'no thermal', params: {multi: 0}, lab: {iters: 0}},
     {label: 'single-24', note: 'stride 1, 24 it', params: {multi: 0}, lab: {iters: 24}},
-    {label: 'multi-24', note: 'strides 32..1, 24 it', params: {multi: 1}, lab: {iters: 24}},
+    {label: 'multi-24', note: 'dilated 32..1 px, knight star on odd steps, 24 it', params: {multi: 1}, lab: {iters: 24}},
+    {label: 'cascade-29', note: 'lattice cascade 32..1 px, 4 it a level + a spread step', params: {multi: 2}, lab: {iters: 29}},
     {label: 'single-2000', note: 'stride 1, 2000 it (reference)', params: {multi: 0}, lab: {iters: 2000}},
-    {label: 'multi-24-2x', note: '2x zoom, 28 it (one more level)', params: {multi: 1}, lab: {iters: 28, px: 0.5, ox: 120, oy: 80}},
-    {label: 'single-2000-2x', note: '2x zoom, stride 1, 2000 it', params: {multi: 0}, lab: {iters: 2000, px: 0.5, ox: 120, oy: 80}},
+    {label: 'multi-48', note: 'dilated + knight, 48 it', params: {multi: 1}, lab: {iters: 48}},
+    {label: 'multi-24-2x', note: '2x zoom on the needle, 28 it (one more level)', params: {multi: 1}, lab: {iters: 28, px: 0.5, ox: 282, oy: -10}},
+    {label: 'single-2000-2x', note: '2x zoom, stride 1, 2000 it', params: {multi: 0}, lab: {iters: 2000, px: 0.5, ox: 282, oy: -10}},
   ],
   wgsl: /* wgsl */`
 // Two mesas with steep, ragged cliffs, a needle, and a ridge: everything here is steeper than the repose.

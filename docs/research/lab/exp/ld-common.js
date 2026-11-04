@@ -2,8 +2,9 @@
 //
 // LD_SCATTER: one multi-class stone scatter, deterministic and a pure function of position.
 //   - Classes k = 0..LD_K-1 have nominal radius R_k = prm.ldRmax * 2^-k (boulders, cobbles, pebbles, gravel, grit).
-//   - Each class lives on its own jittered grid of cell 3.2 R_k (one candidate per cell). A stone never reaches past half
-//     a cell, so a pixel needs only the 2 x 2 cells nearest it: 4 candidates per class, no atomics, no lists.
+//   - Each class lives on its own jittered grid of cell 3.2 R_k (one candidate per cell). A stone reaches about half a
+//     cell at most (1.65 R_k for the largest, wobbliest), so a pixel needs only the 2 x 2 cells nearest it: 4 candidates
+//     per class, no atomics, no lists. The suppression lookups run only for candidates that reach the pixel.
 //   - A full class covers about 0.3 of the ground, so number per area goes as R^-2 (a fragmentation power law, D = 2)
 //     when every class is full; the mask picks which classes are present.
 //   - A candidate is accepted by its own hash against P_k, from the mask at its centre: supply S (share of ground covered),
