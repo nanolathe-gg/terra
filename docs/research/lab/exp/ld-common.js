@@ -117,8 +117,9 @@ fn ldStone(q0: vec2f, st: LdCand, shape: vec2f, fines: f32) -> vec2f {
   // Partly buried: the ground (fines) rises round the stone and cuts it below the top.
   let bury = clamp(0.12 + 0.55 * fines + 0.2 * (ldU(h2 * 11u + 3u) - 0.5), 0.0, 0.85);
   let hv = max(0.0, h - bury) / (1.0 - bury);
-  // The visible outline shrinks with the burial; the sdf follows the visible part (approximately).
-  let dv = select(d, max(d, -hv * 0.3), hv <= 0.0);
+  // The visible outline shrinks with the burial; the sdf follows the visible part (approximately: the height above the
+  // burial level stands in for the distance inside the outline, and is continuous with the outline's own sdf outside it).
+  let dv = select(d + 0.6 * bury, 0.6 * (bury - h), d < 0.0);
   return vec2f(hv, dv * st.r);
 }
 

@@ -21,6 +21,13 @@ fn strideAt(k: u32) -> i32 {
   let lvl = i32(min(L - 1u, k * L / n)) % (J + 1);
   return 1 << u32(J - lvl);
 }
+// A pair exists when both ends are inside the window, and, for a coarse stride, both are at least s cells from its edge: a
+// property of both ends, so the two samples agree. (One-sided coarse pairs at the edge push material along rows: streaks.
+// In the engine the page apron, 128 cells, holds this margin.)
+fn pairInside(x: i32, y: i32, s: i32) -> bool {
+  let m = select(0, s, s > 1);
+  return x >= m && y >= m && x < labW() - m && y < labH() - m;
+}
 fn pairMove(hi: f32, lo: f32, run: f32) -> f32 { return prm.share * max(0.0, hi - lo - prm.talus * run); }
 fn thermalStep(x: i32, y: i32, s: i32) -> f32 {
   let h = SA[idx(x, y)].x;
@@ -28,7 +35,7 @@ fn thermalStep(x: i32, y: i32, s: i32) -> f32 {
   for (var dy = -1; dy <= 1; dy++) { for (var dx = -1; dx <= 1; dx++) {
     if (dx == 0 && dy == 0) { continue; }
     let nx = x + dx * s; let ny = y + dy * s;
-    if (nx < 0 || ny < 0 || nx >= labW() || ny >= labH()) { continue; }
+    if (!pairInside(x, y, s) || !pairInside(nx, ny, s)) { continue; }
     let hn = SA[idx(nx, ny)].x;
     let run = select(1.0, 1.41421356, dx != 0 && dy != 0) * f32(s) * labPx();
     if (h > hn) { out += pairMove(h, hn, run); } else if (hn > h) { gain += pairMove(hn, h, run); }
@@ -79,11 +86,11 @@ export default {
 fn heightAt(p: vec2f) -> f32 {
   let wob = 7.0 * fbmBL(p, 40.0, 3, 0.5, labPx(), 0x31u);
   let m1 = sdBox(p, vec2f(150.0, 140.0), vec2f(70.0, 45.0), 0.35, 12.0) + wob;
-  let m2 = sdBox(p, vec2f(360.0, 250.0), vec2f(40.0, 70.0), -0.2, 8.0) + wob;
+  let m2 = sdBox(p, vec2f(380.0, 250.0), vec2f(36.0, 60.0), -0.2, 8.0) + wob;
   let cliff = max(1.0 - sstep(-3.0, 3.0, m1), 0.75 * (1.0 - sstep(-3.0, 3.0, m2)));
-  let needle = max(0.0, 1.0 - length(p - vec2f(400.0, 90.0)) / 34.0);
-  let ridge = max(0.0, 1.0 - segDist(p, vec2f(40.0, 330.0), vec2f(250.0, 300.0)) / 30.0);
-  let lumps = 4.0 * fbmBL(p, 24.0, 4, 0.5, labPx(), 0x77u);
+  let needle = max(0.0, 1.0 - length(p - vec2f(410.0, 95.0)) / 34.0);
+  let ridge = max(0.0, 1.0 - segDist(p, vec2f(70.0, 310.0), vec2f(240.0, 290.0)) / 30.0);
+  let lumps = 2.0 * fbmBL(p, 30.0, 3, 0.35, labPx(), 0x77u);
   return 20.0 + prm.mesa * cliff + 95.0 * needle * needle + 70.0 * sqrt(ridge) + lumps;
 }
 // Bare rock where the thermal pass took material, loose debris where it laid it down (m.x, m.y).
