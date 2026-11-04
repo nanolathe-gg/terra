@@ -1,48 +1,6 @@
-{
- "biome": "red",
- "ground": true,
- "query": "",
+{"biome": "red",
+ "ground": true, "query": "",
  "strokes": [
-  [
-   "plateau",
-   [
-    [
-     512,
-     512
-    ]
-   ],
-   {
-    "card": {
-     "diameter": 720,
-     "amount": 14,
-     "roughness": 20,
-     "softness": 60
-    }
-   }
-  ],
-  [
-   "fissure",
-   [
-    [
-     480,
-     480
-    ],
-    [
-     560,
-     540
-    ]
-   ],
-   {
-    "card": {
-     "diameter": 460,
-     "amount": 22,
-     "fissureNetwork": 1,
-     "fissureWidth": 8,
-     "fissureCell": 70,
-     "fissureJag": 40,
-     "fissureCrack": 30
-    }
-   }
-  ]
- ]
-}
+  ["landform", [[512,512]], {"card": {"roughness": 0, "softness": 50, "faceVariation": 0, "facePx": 0, "lean": 100, "facing": 3, "terraces": 0, "ledge": 60, "terraceJitter": 35, "breakup": 0, "stepReference": 0, "heightReference": 1, "combine": 0, "routeSmooth": 0, "crestTaper": 0, "wander": 68.4, "widthVary": 17.5, "heightVary": 1, "varySize": 210, "varyFoot": 100, "varyMiddle": 100, "fingers": 0, "shorePlates": 0, "spurCount": 0, "iceFacets": 0, "maskChannel": 0, "waterShore": 0, "waterDeep": 0, "waterBed": 0, "diameter": 720, "cracks": 50, "maskAmount": 100, "styleRelief": 0, "styleCracks": 0, "styleBanding": 0, "styleFace": 0, "styleErosion": 0, "styleDeposits": 0, "styleVegetation": 0, "styleExposure": 0, "spurLength": 120, "spurSpread": 40, "spurWidth": 80, "spurTaper": 60, "spurHeight": 70, "spurForks": 0, "spurBulb": 0, "elevation": 37, "curve": {"form": "lfPlateau", "knots": [[0,0],[0.031,0.011],[0.062,0.043],[0.094,0.092],[0.125,0.156],[0.156,0.232],[0.187,0.316],[0.219,0.407],[0.25,0.5],[0.281,0.593],[0.312,0.684],[0.344,0.768],[0.375,0.844],[0.406,0.908],[0.437,0.957],[0.469,0.989],[0.5,1],[1,1]]}}}],
+  ["fissure", [[480,480],[560,540]], {"card": {"diameter": 460, "amount": 22, "fissureNetwork": 1, "fissureWidth": 8, "fissureCell": 70, "fissureJag": 40, "fissureCrack": 30}}]
+ ]}
