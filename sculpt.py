@@ -647,6 +647,11 @@ WORLD_VARIANTS = {
         'evad': dict(label='Evad River: broken slopes',
                      knobs=dict(banding=.35, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
                                 reliefAmount=.5, microRock=.7)),
+        # Modern Green (card P24, decision 25): where the realistic look accumulates. It is judged on green-1..3 for
+        # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
+        # its beds and joints, debris where gravity and water leave it, light that agrees from any sun. It starts as a
+        # copy of Green's own preset; each look card sets its realistic numbers here (scenes green-modern-1..3).
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict()),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
