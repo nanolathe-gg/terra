@@ -97,17 +97,18 @@ fn lsMask(c: vec2f) -> LsMask {
     if (u.scatterOn != 0) { paint = scatterAt(c); }
     if (u.looseSupply <= 0.0 && paint <= 0.0) { return m; }
     if (routeProtection(c) > 0.05 || baseHeight(c) < u.sea + 1.0) { return m; }
-    let w = weatherAt(c / (u.size - 1.0));
     let tm = timeMapsAt(c);
+    let deposit = weatherAt(c / (u.size - 1.0)).g;
     let g = broadGradient(c);
     let slope = length(g);
-    let talus = smoothstep(0.02, 0.25, w.b);
+    let talus = smoothstep(0.02, 0.25, tm.talus);
     var cliffAbove = 0.0;
-    if (slope > 1e-4) { cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(c + g / slope * 14.0))); }
+    // A cliff above matters only on ground gentler than 1 (the foot term fades out by then).
+    if (slope > 1e-4 && slope < 1.0) { cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(c + g / slope * 14.0))); }
     let foot = max(talus, cliffAbove * (1.0 - smoothstep(0.5, 1.0, slope)));
     let loose = smoothstep(0.10, 0.5, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
     let channel = smoothstep(0.03, 0.22, tm.channel);
-    let fan = smoothstep(0.05, 0.3, w.g) * (1.0 - smoothstep(0.2, 0.6, tm.slope));
+    let fan = smoothstep(0.05, 0.3, deposit) * (1.0 - smoothstep(0.2, 0.6, tm.slope));
     let carried = max(channel, fan);
     var source = max(max(foot, 0.8 * loose), max(0.6 * fan, 0.5 * channel));
     var supply = u.looseSupply;
@@ -154,11 +155,15 @@ fn lsCand0(k: i32, cc: vec2i) -> LsCand {
     o.r = R * exp2(lsU(h2) - 0.5);
     o.h0 = h0;
     o.ok = false; o.fines = 0.0;
+    // The admission hash is known before the mask: no mask can admit more than its supply (the runout blocks add up to .35 of it, a deposits override up
+    // to 2x; painted scatter up to 8x), so most candidates are turned away without a single mask read. The answer is the same as testing the hash last.
+    let hAdmit = lsU(lsPcg(h2 ^ 0x1b873593u));
+    if (u.scatterOn == 0 && hAdmit >= clamp(2.7 * u.looseSupply * LS_BASE / LS_COVER, 0.0, 1.0)) { return o; }
     let m = lsMask(o.c);
     if (m.a.x <= 0.0 && m.b.x <= 0.0) { return o; }
     o.fines = m.a.w;
     let P = clamp((lsShare(k, m.a) + lsShare(k, m.b)) / LS_COVER, 0.0, 1.0);
-    o.ok = lsU(lsPcg(h2 ^ 0x1b873593u)) < P;
+    o.ok = hAdmit < P;
     return o;
 }
 
