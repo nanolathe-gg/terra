@@ -55,7 +55,7 @@ KNOB_DEFAULTS = dict(
     fingers=0,
     # Coast pass (card E4): fingers on the joined coast and a landform's shoreline steps cut as heights
     # (layerPx px a step, riser 0 shares the bank's rise out; the count, flat share and irregularity are the landform's Steps).
-    layerPx=12, layerRiser=0, shoreEdge=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    layerPx=12, layerRiser=0, shoreEdge=0, surf=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
@@ -655,7 +655,7 @@ WORLD_VARIANTS = {
         # round hills carry branching spurs and the long cliff of green-modern-2 broad, uneven valleys; from 60 they also
         # cut the grass slope above the cliff; 30 barely reads at 1x). Card P32: terracettes on steep grass (Joined
         # wrinkles on a grass world).
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(gullies=.4, wrinkles=1)),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#d3c49c'), knobs=dict(gullies=.4, wrinkles=1, surf=.6)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro

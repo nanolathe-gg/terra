@@ -1285,6 +1285,91 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
     return mix(material, refined, materialWeather);
 }
 
+// Card P27, Surf: the shore as one cross-shore coordinate. surfShore marches 8 rays from the pixel over the height field and returns x, the signed
+// distance in world px to the drawn waterline (onshore +; the drawn edge sits where the bed is 0.6 under the sea, so the bank's own run is added),
+// the nearest shore point q, a coordinate along the coast that value noise can use, and the bed's slope there (units per px). Beyond SURF_REACH, or where the height is more than a beach
+// above or a surf zone below the sea, x is 1e3. Every term is a function of position, so a chunk replays to the same bytes.
+const SURF_REACH = 56.0;
+fn surfShore(p: vec2f) -> vec4f {
+    let h0 = baseHeight(p) - u.sea;
+    let dry = h0 >= 0.0;
+    if ((dry && h0 > 12.0) || (!dry && h0 < -16.0)) { return vec4f(1.0e3, 0.0, 0.0, 0.0); }
+    var radii = array<f32, 10>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0);
+    var best = SURF_REACH;
+    var q = p;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.785398 + 0.2;
+        let dir = vec2f(cos(a), sin(a));
+        var lastR = 0.0;
+        var lastH = h0;
+        for (var i = 0; i < 10; i++) {
+            let r = radii[i];
+            if (lastR >= best) { break; }
+            let hr = baseHeight(p + dir * r) - u.sea;
+            if ((hr >= 0.0) != dry) {
+                let d = lastR + (r - lastR) * lastH / (lastH - hr);
+                if (d < best) { best = d; q = p + dir * d; }
+                break;
+            }
+            lastR = r;
+            lastH = hr;
+        }
+    }
+    if (best >= SURF_REACH) { return vec4f(1.0e3, 0.0, 0.0, 0.0); }
+    let slope = max(bankGrad(p), 0.12);
+    return vec4f(select(-best, best, dry) + 0.6 / slope, q, slope);
+}
+// The beach the surf builds: berm height 1.5 + 3 Surf units on a face that flattens from 0.30 to 0.12, so the berm stands 5 to 38 px from the water.
+fn surfBerm() -> f32 { return (1.5 + 3.0 * u.surf) / mix(0.30, 0.12, u.surf); }
+// The cross-shore coordinate with the beach cusps: horns that push the swash seaward every ~26 px along the coast.
+fn surfCuspX(x: f32, q: vec2f) -> f32 {
+    return x + 3.5 * u.surf * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm() * 0.7, surfBerm() * 1.1, x));
+}
+// Sand to the berm and a little past it, its inland edge ragged, where the pixel is dry.
+fn surfSand(x: f32, q: vec2f, p: vec2f) -> f32 {
+    let veg = smoothstep(-0.1, 0.15, (surfCuspX(x, q) - (surfBerm() + 20.0)) / 30.0 + 0.3 * valueNoise(p / 24.0) + 0.15 * valueNoise(p / 11.0));
+    return (1.0 - veg) * step(0.0, x);
+}
+// The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
+fn surfWet(x: f32, q: vec2f) -> f32 {
+    let reach = (0.5 + 0.25 * valueNoise(q / 30.0)) * surfBerm() * smoothstep(0.02, 0.2, u.surf) + 1.0;
+    return (1.0 - smoothstep(reach - 1.5, reach + 1.0, surfCuspX(x, q))) * step(0.0, x);
+}
+// Foam at a pixel, static (hashed per art pixel): on the water a lace at the waterline and, with Surf, a broken breaker line along an isobath
+// with spray behind it; on the wet sand a 1 px swash front. depth is the bed under the sea (0 on land).
+fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32) -> f32 {
+    let e = u.surf;
+    let cell = floor(grainPixel(pixel));
+    if (x < 0.0) {
+        let xs = -x;
+        let w = mix(1.0, 2.0, smoothstep(0.1, 0.5, e));
+        let lace = (1.0 - smoothstep(0.4 * w, w, xs + 0.65 * (1.0 + valueNoise(p / 3.0)))) * step(shelfHash(cell + 47.0), mix(0.92, 0.75, smoothstep(0.1, 0.5, e)));
+        // The breakers stand on the isobath where the water is 1.5 + 3 Surf units deep (over a bar, on its crest), in px along the bed's slope.
+        let ofBreak = (depth - (1.5 + 3.0 * e)) / slope + 0.5 * valueNoise(p / 6.0);
+        let breaking = smoothstep(-0.15, 0.2, valueNoise(q / 40.0 + vec2f(0.5, 3.0)) + e - 0.8);
+        let crest = (1.0 - smoothstep(0.5, 1.8, abs(ofBreak))) * breaking * step(shelfHash(cell + 74.0), 0.85);
+        let spray = (1.0 - smoothstep(1.5, 4.0, -ofBreak)) * smoothstep(0.0, 1.5, -ofBreak) * breaking * step(shelfHash(cell + 75.0), 0.18);
+        return clamp(max(lace, (crest + spray) * e), 0.0, 1.0);
+    }
+    let xf = 1.5 + 0.3 * surfBerm() * (0.5 + 0.5 * valueNoise(q / 22.0 + vec2f(2.0, 8.0)));
+    let front = (1.0 - smoothstep(0.3, 1.0, abs(surfCuspX(x, q) - xf))) * step(shelfHash(cell + 45.0), 0.7) * smoothstep(0.1, 0.4, e) * smoothstep(-0.1, 0.25, valueNoise(q / 30.0 + vec2f(9.0, 1.0)));
+    return front * 0.85;
+}
+// Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
+fn sandWeathered() -> vec3f {
+    let rockAverage = select(u.rockTexMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+    let weathered = mix(vec3f(mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25)), vec3f(1.0), u.sandLight * 0.55);
+    return select(weathered, u.sandBase.rgb, u.sandBase.a > 0.5);
+}
+fn sandMaterialAt(scatter: vec2f) -> vec3f {
+    let rockLevel = u.rockTexMean;
+    let weathered = sandWeathered();
+    var fragment = genColor(2, scatter);
+    fragment = mix(fragment, vec3f(1.0), u.sandLight * 0.45);
+    if (u.sandBase.a > 0.5) { fragment = saturate(fragment - rockLevel + u.sandBase.rgb); }
+    return mix(weathered, fragment, u.sandGrain);
+}
+
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -1473,7 +1558,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);
-    let nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
+    var nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
+    // Card P27, Surf: the signed distance to the waterline, and the wet sand it extends the wet band with.
+    var surfX = 1.0e3;
+    var surfQ = vec2f(0.0);
+    var surfSlope = 0.12;
+    if (u.surf > 0.0) {
+        let shore = surfShore(p);
+        surfX = shore.x;
+        surfQ = shore.yz;
+        surfSlope = shore.w;
+        if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ)); }
+    }
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
         // Beach sand within reach of the water (baked), or failing that a low band above the waterline; its inland edge is ragged and breaks into grains.
@@ -1482,8 +1578,21 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The low band only within the water's reach: inland hollows of a low world are not beaches; steep banks stay bare.
         var beach = max(beachSand(p, speck), (1.0 - smoothstep(top * 0.6, top, h - u.sea + (speck - 0.5) * 1.5)) * (1.0 - smoothstep(0.7, 1.3, slope)) * smoothstep(0.0, 0.15, beachField(p)));
         // A sandy slope keeps its own streaked material over the beach sand.
+        if (u.surf > 0.0 && surfX < 900.0) { beach = surfSand(surfX, surfQ, p) * (1.0 - smoothstep(0.7, 1.3, slope)); }
         if (u.slopeSand != 0) { beach *= 1.0 - slopeShare; }
         material = mix(material, beachColour(pixel), beach * (1.0 - exposed * 0.7));
+    } else if (u.surf > 0.0 && surfX < 900.0 && h > u.sea - 1.0) {
+        // Surf's beach on a world without a beach layer: the world's own sand.
+        let beach = surfSand(surfX, surfQ, p) * (1.0 - smoothstep(0.7, 1.3, slope));
+        material = mix(material, mix(sandWeathered(), sandMaterialAt(scatter), 0.3), beach * (1.0 - exposed * 0.7));
+    }
+    if (u.surf > 0.0 && surfX < 900.0 && surfX >= 0.0) {
+        // The wet sand darkens and warms to the last uprush; wrack, old high-water marks, lie in the dry sand as thin dark broken lines.
+        material *= mix(vec3f(1.0), vec3f(0.68, 0.62, 0.52), surfWet(surfX, surfQ));
+        let wrackAt = surfBerm() * 0.78 + 2.5 * valueNoise(surfQ / 40.0 + vec2f(5.0, 5.0));
+        let wrack = (1.0 - smoothstep(0.35, 1.0, abs(surfCuspX(surfX, surfQ) - wrackAt))) * step(shelfHash(floor(grainPixel(pixel)) + 63.0), 0.65)
+                  * smoothstep(-0.2, 0.2, valueNoise(surfQ / 25.0 + vec2f(7.0, 3.0))) * surfSand(surfX, surfQ, p);
+        material = mix(material, vec3f(0.33, 0.30, 0.20), wrack * 0.6 * u.surf);
     }
     material = joinSedimentTransition(material, pixel, rock, exposed, materialWeather);
     if (u.microRock > 0.0) {
@@ -1590,18 +1699,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // sampled art. Coverage comes from the bake.
         let sand = bakedFields(p).a * place.deposits;
         if (sand > 0.0) {
-            // Weathered rock: the rock's own average colour, lightened and
-            // dulled by weathering, with fragments of the rock texture as
-            // grains. A biome's sand therefore follows its own rock.
-            let rockLevel = u.rockTexMean;
-            let rockAverage = select(rockLevel, u.rockBase.rgb, u.rockBase.a > 0.5);
-            var weathered = mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25);
-            weathered = mix(weathered, vec3f(1.0), u.sandLight * 0.55);
-            if (u.sandBase.a > 0.5) { weathered = u.sandBase.rgb; }
-            var fragment = genColor(2, scatter);
-            fragment = mix(fragment, vec3f(1.0), u.sandLight * 0.45);
-            if (u.sandBase.a > 0.5) { fragment = saturate(fragment - rockLevel + u.sandBase.rgb); }
-            let sandMaterial = mix(weathered, fragment, u.sandGrain);
+            // Weathered rock and its grains (sandMaterialAt): a biome's sand follows its own rock.
+            let weathered = sandWeathered();
+            let sandMaterial = sandMaterialAt(scatter);
             // Three stages, so sand thins into the ground over tens of
             // pixels: fines tint what is there, then grains appear between
             // grass blades (a per-pixel threshold against fine noise), then
@@ -1857,6 +1957,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     var shoalWeight = 0.0;   // G1: how much of this pixel is lit shallow bed, for the palette dither below
+    var surfWater = 0.0;     // Card P27: how much of this pixel is drawn as water, for the foam below
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
         // Sediment mottling varies apparent water colour without changing the
@@ -1957,9 +2058,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             submerged = mix(submerged, crisp, shoreHard);
         }
+        surfWater = submerged;
         color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
         if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
         if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
+    }
+    if (u.surf > 0.0 && surfX < 900.0) {
+        // Card P27: static foam, white as lit as the water is. It marks the playable edge on both sides: the lace on the water, the swash on the sand.
+        let foam = surfFoam(pixel, p, surfX, surfQ, max(0.0, u.sea - baseHeight(p)), surfSlope);
+        color = mix(color, vec3f(0.93, 0.96, 0.94) * (0.9 + 0.1 * shadow), foam * select(1.0 - surfWater, surfWater, surfX < 0.0));
     }
     if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {
         // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just

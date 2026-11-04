@@ -168,7 +168,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'boulders','boulderSize','debris','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
  'banding','sandBanding','strata','strataContrast',
- 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
+ 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge','surf',
  'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','grooveSpacing','facetTilt','cliffFollow',
  'shelfWander','bedFlat','bedDots','crackedStep','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
