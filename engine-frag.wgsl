@@ -306,8 +306,8 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     if (u.overrideOn != 0) {
         let uv = maskUv(p);
         let planes = textureSampleLevel(masksTex, linearClamp, uv, 4, 0.0);
-        vegetation = planes.r;
-        out.vegetation = 1.0 + planes.r;
+        vegetation = u.lushness + planes.r;
+        out.vegetation = 1.0 + vegetation;
         exposure = planes.g;
         out.deposits = 1.0 + textureSampleLevel(masksTex, linearClamp, uv, 3, 0.0).w;
     }
