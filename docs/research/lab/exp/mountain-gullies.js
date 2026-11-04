@@ -4,12 +4,14 @@ export default {
   title: 'Mountain with gullies',
   about: 'A three-segment ridge stroke with the engine\'s lumps, then lib.wgsl gullies() steered by the stroke\'s analytic fall line (soft minimum at bends).',
   world: 'green',
-  params: {gully: 0.45, wave: 62, octaves: 5, reach: 150, amount: 125},
+  params: {gully: 0.45, wave: 62, octaves: 5, reach: 150, amount: 125, fold: 1, gain: 0.5},
   variants: [
     {label: 'swept', note: 'today', params: {gully: 0}},
     {label: 'gullies', note: 'fall-line steered', params: {}},
     {label: 'gullies-raw', note: 'no palette', params: {}, lab: {pal: 0}},
     {label: 'gullies-2x', note: '2x zoom, same world', params: {}, lab: {px: 0.5, ox: 160, oy: 110}},
+    {label: 'inverted', note: 'round crests, V floors (fold -1)', params: {fold: -1}},
+    {label: 'inverted-soft', note: 'fold -1, depth .3, gain .7: energy spread over octaves', params: {fold: -1, gully: 0.3, gain: 0.7}},
   ],
   wgsl: /* wgsl */`
 const PTS = array<vec2f, 4>(vec2f(60.0, 290.0), vec2f(200.0, 180.0), vec2f(350.0, 220.0), vec2f(470.0, 120.0));
@@ -37,7 +39,7 @@ fn heightAt(p: vec2f) -> f32 {
   let steer = -vec2f(gsx, gsy);   // uphill is toward the crest: minus the distance gradient
   let slope = prm.amount * dcurve(t) * lumps / reach;
   let foot = sstep(0.0, 0.25, t);
-  return gullies(p, h0, steer, slope * foot, prm.wave, prm.gully, i32(prm.octaves), 3.0 * labPx(), 0x1234u);
+  return gulliesF(p, h0, steer, slope * foot, prm.wave, prm.gully, i32(prm.octaves), 3.0 * labPx(), 0x1234u, prm.fold, prm.gain);
 }
 fn matAt(p: vec2f, h: f32) -> vec4f { return vec4f(0.0); }
 `,

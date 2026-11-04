@@ -151,6 +151,11 @@ fn stripes(p: vec2f, dir: vec2f, f: f32, seed: u32) -> vec2f {
 // Branching gullies cut into a height h0 whose fall line is steer (any length) and slope magnitude slope0.
 // wave0: first wavelength (px); depth: depth per wavelength per unit slope; octaves; minWave: stop below this.
 fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32, octaves: i32, minWave: f32, seed: u32) -> f32 {
+  return gulliesF(p, h0, steer, slope0, wave0, depth, octaves, minWave, seed, 1.0, 0.5);
+}
+// fold +1: sharp crests and round floors (round 1); fold -1: round crests and sharp, V-cut floors, the soil-mantled form that
+// realism.py scores closer to real lidar. gain: each octave's depth against the one before (0.5 in round 1).
+fn gulliesF(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32, octaves: i32, minWave: f32, seed: u32, fold: f32, gain: f32) -> f32 {
   if (length(steer) < 1e-6) { return h0; }
   var h = h0; var g = normalize(steer) * max(slope0, 1e-3);
   var f = 1.0 / wave0; var dk = depth;
@@ -160,9 +165,9 @@ fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32,
     let dir = g / s; let perp = vec2f(-dir.y, dir.x);
     let cs = stripes(p, dir, f, seed + u32(k) * 0x3c6ef35fu);
     let a = dk * (1.0 / f) * min(slope0, 1.6);
-    h += a * (0.5 - abs(cs.y));
-    g += -a * sign(cs.y) * cs.x * TAU * f * perp;
-    f *= 2.0; dk *= 0.5;
+    h += fold * a * (0.5 - abs(cs.y));
+    g += -fold * a * sign(cs.y) * cs.x * TAU * f * perp;
+    f *= 2.0; dk *= gain;
   }
   return h;
 }
