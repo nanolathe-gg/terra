@@ -1092,6 +1092,12 @@ export class TerrainRenderer {
     set('uBanding', number('banding', 0));
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
+    set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
+    set('uLooseSize', number('looseSize', 6));
+    set('uLooseSort', number('looseSort', 0.6));
+    set('uStoneRound', this.config.material?.stoneRound ?? 0);
+    set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
+    set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
     set('uBoulderRound', number('boulderRound', 0));
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandJag', number('bandJag', 0));

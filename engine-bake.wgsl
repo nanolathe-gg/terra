@@ -188,6 +188,200 @@ fn debrisStones(p: vec2f, arrival: vec2f) -> vec2f {
     return vec2f(best, cover);
 }
 
+// Card P16: one loose-material scatter. Six size classes, each half the one before (diameters 32 .. 1 px), each on its own jittered grid
+// of cells 3.2 radii wide with one candidate per cell. A pixel looks at the 2 x 2 candidates nearest it in each class, so nothing scatters and
+// nothing needs atomics. A candidate is admitted by its own hash against a probability from the mask at its centre: Supply (the ground share
+// it covers), a Gaussian in log size around the median diameter (Size) whose width is Sorting's. A larger class suppresses a smaller
+// stone that overlaps it, by lookup. Shapes: angular chips, rounded stones with a wobbly outline, flat slabs, partly buried by the fines.
+// Original code, after the ld-* lab modules (Wei 2010's multi-class idea; Turcotte's fragmentation power law).
+const LS_K = 6;
+const LS_COVER = 0.30;       // the ground share one full class covers
+const LS_RMAX = 16.0;        // class 0's nominal radius, px
+const LS_BASE = 0.50;        // the cover a Supply of 1 gives where the source is full (one candidate per cell caps it near half)
+const LS_HEIGHT = 0.8;       // a stone's height as a share of its radius
+const LS_CONTACT = 0.35;     // darkness of the fines in contact with a stone
+
+struct LsCand { c: vec2f, r: f32, ok: bool, h0: u32, fines: f32 }
+struct LsMask { a: vec4f, b: vec4f }   // two populations (supply, median px, log2 spread, fines); b is the runout blocks
+
+fn lsPcg(v: u32) -> u32 {
+    let s = v * 747796405u + 2891336453u;
+    let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+fn lsHash(c: vec2i, salt: u32) -> u32 { return lsPcg(bitcast<u32>(c.x) ^ lsPcg(bitcast<u32>(c.y) + salt)); }
+fn lsU(h: u32) -> f32 { return f32(h >> 8u) / 16777216.0; }
+fn lsR(k: i32) -> f32 { return LS_RMAX * exp2(-f32(k)); }
+
+// Where stones are, how big and how buried, at p, from the engine's own masks: the Time pass's talus, flow, channel and deposit
+// (weatherAt, timeMapsAt), the slope and the cliff above (baseHeight), the painted scatter (scatterAt) and the deposits override.
+//  - Sources: loose ground on slopes, talus aprons and the foot of a cliff, gravel where water left a deposit or runs hard.
+//  - Sorting: along the way stones travel (a gentler slope is further out) rockfall coarsens, a fan or channel fines.
+//  - Beyond the talus toe a second, coarser population lies: the runout blocks.
+fn lsMask(c: vec2f) -> LsMask {
+    var m: LsMask;
+    m.a = vec4f(0.0); m.b = vec4f(0.0);
+    var paint = 0.0;
+    if (u.scatterOn != 0) { paint = scatterAt(c); }
+    if (u.looseSupply <= 0.0 && paint <= 0.0) { return m; }
+    if (routeProtection(c) > 0.05 || baseHeight(c) < u.sea + 1.0) { return m; }
+    let w = weatherAt(c / (u.size - 1.0));
+    let tm = timeMapsAt(c);
+    let g = broadGradient(c);
+    let slope = length(g);
+    let talus = smoothstep(0.02, 0.25, w.b);
+    var cliffAbove = 0.0;
+    if (slope > 1e-4) { cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(c + g / slope * 14.0))); }
+    let foot = max(talus, cliffAbove * (1.0 - smoothstep(0.5, 1.0, slope)));
+    let loose = smoothstep(0.15, 0.7, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
+    let channel = smoothstep(0.03, 0.22, tm.channel);
+    let fan = smoothstep(0.05, 0.3, w.g) * (1.0 - smoothstep(0.2, 0.6, tm.slope));
+    let carried = max(channel, fan);
+    var source = max(max(foot, 0.5 * loose), max(0.6 * fan, 0.5 * channel));
+    var supply = u.looseSupply;
+    if (u.scatterOn != 0) {
+        supply = scatterDensity(paint, u.looseSupply, SCATTER_BOULDERS);
+        source = max(source, max(paint, 0.0));
+    }
+    source *= depositsAt(c);
+    // How far along its way a stone has come: a gentler slope is further out.
+    let travelled = 1.0 - smoothstep(0.25, 0.9, slope);
+    let sort = u.looseSort;
+    let size = u.looseSize * mix(1.0, mix(0.3 + 0.7 * travelled, 1.0 - 0.7 * travelled, carried), sort);
+    let sigma = mix(2.0, 0.7, sort);
+    let fines = clamp(0.15 + 0.45 * (1.0 - smoothstep(0.2, 0.8, slope)) + 0.2 * carried, 0.0, 0.85);
+    let share = supply * LS_BASE * source;
+    m.a = vec4f(min(share, 0.98), size, sigma, fines);
+    m.b = vec4f(0.35 * sort * talus * smoothstep(0.5, 1.0, travelled) * supply * LS_BASE, u.looseSize * 2.2, 0.5, fines);
+    return m;
+}
+
+// Class k's share of one population (supply, median px, spread): the supply times a Gaussian in log2 diameter, over the classes' sum.
+fn lsShare(k: i32, pop: vec4f) -> f32 {
+    if (pop.x <= 0.0) { return 0.0; }
+    let ls = log2(max(pop.y, 0.5));
+    var wsum = 0.0; var wk = 0.0;
+    for (var j = 0; j < LS_K; j++) {
+        let z = (log2(2.0 * lsR(j)) - ls) / max(pop.z, 0.15);
+        let e = exp(-0.5 * z * z);
+        wsum += e; if (j == k) { wk = e; }
+    }
+    return pop.x * wk / max(wsum, 1e-6);
+}
+
+// Class k's candidate in cell cc, before the suppression test.
+fn lsCand0(k: i32, cc: vec2i) -> LsCand {
+    var o: LsCand;
+    let R = lsR(k);
+    let cell = 3.2 * R;
+    let h0 = lsHash(cc, 0x1d5au + u32(k) * 0x9e3779b9u);
+    let h1 = lsPcg(h0 ^ 0x68e31da4u);
+    let h2 = lsPcg(h1 ^ 0xb5297a4du);
+    o.c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.9) * cell;
+    // Log-uniform radius within the class, so the classes join into one continuous distribution.
+    o.r = R * exp2(lsU(h2) - 0.5);
+    o.h0 = h0;
+    o.ok = false; o.fines = 0.0;
+    let m = lsMask(o.c);
+    if (m.a.x <= 0.0 && m.b.x <= 0.0) { return o; }
+    o.fines = m.a.w;
+    let P = clamp((lsShare(k, m.a) + lsShare(k, m.b)) / LS_COVER, 0.0, 1.0);
+    o.ok = lsU(lsPcg(h2 ^ 0x1b873593u)) < P;
+    return o;
+}
+
+// True where an accepted stone of the next larger class overlaps candidate o of class k.
+fn lsSuppressed(k: i32, o: LsCand) -> bool {
+    if (k == 0) { return false; }
+    let j = k - 1;
+    let b = vec2i(floor(o.c / (3.2 * lsR(j)) - 0.5));
+    for (var jj = 0; jj <= 1; jj++) {
+        for (var ii = 0; ii <= 1; ii++) {
+            let pc = lsCand0(j, b + vec2i(ii, jj));
+            if (pc.ok && distance(pc.c, o.c) < 0.85 * (pc.r + o.r)) { return true; }
+        }
+    }
+    return false;
+}
+
+// One stone's height (0..1 of its own height) and signed distance (px, negative inside) at q, local to its centre.
+fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
+    let h1 = lsPcg(st.h0 ^ 0x2545f491u); let h2 = lsPcg(h1 ^ 0x9e3779b9u); let h3 = lsPcg(h2 ^ 0x85ebca6bu); let h4 = lsPcg(h3 ^ 0xc2b2ae35u);
+    let ang = lsU(h1) * TAU;
+    let asp = 0.62 + 0.38 * lsU(h2);
+    let q = turn(-ang) * q0 / st.r;
+    let round = lsU(h3) < u.stoneRound;
+    let slab = lsU(h4) < u.stoneSlab;
+    var h = 0.0; var d = 0.0;
+    if (slab) {
+        let hb = vec2f(1.0, asp * 0.7);
+        let qq = abs(q) - hb + 0.25;
+        d = length(max(qq, vec2f(0.0))) + min(max(qq.x, qq.y), 0.0) - 0.25;
+        let tilt = 0.25 * (vec2f(lsU(h4 * 7u + 1u), lsU(h4 * 13u + 5u)) - 0.5);
+        h = select(0.0, (0.42 + dot(q, tilt)) * smoothstep(0.0, 0.18, -d), d < 0.0);
+    } else if (round || st.r < 1.3) {
+        let n = 2.0 + 1.5 * lsU(h4);
+        let e = vec2f(abs(q.x), abs(q.y) / asp);
+        let a = atan2(q.y, q.x);
+        let wob = 1.0 + 0.10 * sin(2.0 * a + lsU(h2) * TAU) + 0.07 * sin(3.0 * a + lsU(h3) * TAU);
+        let s = pow(pow(e.x, n) + pow(e.y, n), 1.0 / n) / wob;
+        d = s - 1.0;
+        h = sqrt(max(0.0, 1.0 - s * s));
+    } else {
+        // An angular chip: 5-7 half planes make a convex outline; the facets meet at an off-centre apex under a flat cap.
+        let N = 5 + i32(lsU(h4) * 3.0);
+        let apex = (vec2f(lsU(h2 * 3u + 7u), lsU(h3 * 5u + 3u)) - 0.5) * 0.7;
+        var dd = -1e9; var roof = 1e9;
+        for (var i = 0; i < N; i++) {
+            let hi = lsPcg(st.h0 + u32(i) * 0x27d4eb2du);
+            let th = (f32(i) + 0.8 * (lsU(hi) - 0.5)) * TAU / f32(N);
+            let nn = vec2f(cos(th), sin(th) / asp);
+            let len = length(nn);
+            let nrm = nn / len;
+            let off = (0.78 + 0.22 * lsU(lsPcg(hi))) / len;
+            dd = max(dd, dot(q, nrm) - off);
+            roof = min(roof, (off - dot(q, nrm)) / max(off - dot(apex, nrm), 0.05));
+        }
+        d = dd;
+        h = min(1.0, max(roof, 0.0) * (1.25 + 0.5 * lsU(h1 * 9u + 1u)));
+    }
+    // Partly buried: the fines round the stone cut it below its top; the outline shrinks with the burial.
+    let bury = clamp(0.12 + 0.55 * st.fines + 0.2 * (lsU(h2 * 11u + 3u) - 0.5), 0.0, 0.85);
+    let hv = max(0.0, h - bury) / (1.0 - bury);
+    let dv = select(d + 0.6 * bury, 0.6 * (bury - h), d < 0.0);
+    return vec2f(hv, dv * st.r);
+}
+
+// The scatter at p: (stone height, rock cover, contact shade of the fines beside a stone).
+fn looseStones(p: vec2f) -> vec3f {
+    if (u.looseSupply <= 0.0 && u.scatterOn == 0) { return vec3f(0.0); }
+    var best = 0.0; var cover = 0.0; var edge = 1e9; var edgeFines = 0.0; var bestR = 1.0;
+    for (var k = 0; k < LS_K; k++) {
+        let R = lsR(k);
+        if (R < 0.45) { break; }
+        if (2.0 * R > 3.0 * max(u.looseSize, 1.0) * 2.2) { continue; }   // classes far above the largest median are not drawn
+        let cell = 3.2 * R;
+        let b = vec2i(floor(p / cell - 0.5));
+        for (var j = 0; j <= 1; j++) {
+            for (var i = 0; i <= 1; i++) {
+                let st = lsCand0(k, b + vec2i(i, j));
+                if (!st.ok || distance(p, st.c) > 1.6 * st.r) { continue; }
+                if (lsSuppressed(k, st)) { continue; }
+                let s = lsStone(p - st.c, st);
+                if (s.y < edge) { edge = s.y; edgeFines = st.fines; }
+                let hh = s.x * st.r * LS_HEIGHT * (0.75 + 0.5 * lsU(lsPcg(st.h0 ^ 0x51u)));
+                if (hh > best) {
+                    best = hh; bestR = st.r;
+                    cover = smoothstep(0.0, 0.15, s.x) * select(1.0, 0.55, lsU(lsPcg(st.h0 ^ 0x7f4a7c15u)) < u.stoneMoss);
+                }
+            }
+        }
+    }
+    var contact = 0.0;
+    if (best <= 0.0 && edge < 1e8) { contact = LS_CONTACT * (1.0 - edgeFines) * (1.0 - smoothstep(0.0, 1.0 + 0.25 * min(bestR, 6.0), edge)); }
+    return vec3f(best, cover, contact);
+}
+
 // Cracks, as a fractured surface rather than lines drawn on it. Three
 // nested cellular networks, as retail rock and Gaea's eroded surfaces show:
 //  - major cracks bound blocks; cells stretch down the fall line, so most
@@ -1332,6 +1526,8 @@ fn bake(p: vec2f) -> vec4f {
     if (scree.x > rock.x) { rock = scree; }
     let flecks = weatherStones(p);
     if (flecks.x > rock.x) { rock = flecks; }
+    let loose = looseStones(p);
+    if (loose.x > rock.x) { rock = vec2f(loose.x, loose.y); }
     height += rock.x;
     rock.y *= 1.0 - buried;
     rock.y = max(rock.y, structureRock);
@@ -1342,6 +1538,7 @@ fn bake(p: vec2f) -> vec4f {
     // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
     lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
     lineDark = max(lineDark, crustDark);
+    lineDark = max(lineDark, loose.z * (1.0 - buried));
     lineDark = max(lineDark, 0.5 * stepWorn * (1.0 - buried));
     lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).

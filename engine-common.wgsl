@@ -363,6 +363,13 @@ struct Uniforms {
     rillSpacing: f32,     // px between rills
     stoneDensity: f32,    // stones and boulders where talus lies
     stoneSize: f32,       // px: the largest stone (larger below hard beds)
+    // Card P16: the one loose-material scatter (looseStones in engine-bake). Supply 0 draws none.
+    looseSupply: f32,     // 0..1: ground share the stones cover where their source is full (1 is about half the ground)
+    looseSize: f32,       // px: the median stone diameter
+    looseSort: f32,       // 0..1: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
+    stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
+    stoneSlab: f32,       // world material data: share of flat slabs
+    stoneMoss: f32,       // world material data: share of stones with a mossy cap
     // H4b (Green): rock blocks on the hills' rock, outside the structured face (0: none).
     hillBlocks: f32,      // 0..1: how much of the hill rock (slope .5 and over, off the structured face) is cut into small pieces
 #ifdef CHUNK
