@@ -3,7 +3,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FACING_CHOICES,FORMS,landformTool,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
+import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -55,7 +55,7 @@ let revision=0, autosaveTimer, ready=false;
 // Biomes choose starting values for the same brushes. These presets can be
 // borrowed independently of the canvas materials and then edited per tool.
 // Approved starting shapes use ordinary controls and editable knots. Preset elevation is a rise above the map plain; toolDefaults resolves the absolute height.
-const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"fingers":0,"shoreLayers":0,"shorePlates":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
+const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"fingers":0,"shoreLayers":0,"shorePlates":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
 // The palette's landform presets over LANDFORM_DEFAULTS (Plateau is the defaults themselves): numbers for Landform's own controls, each the fit of the
 // retired tool's default stroke that re-authored the fixtures. Elevation is a rise above the map plain, or with Height reference: Sea level, above the sea.
 const smoothKnots=n=>Array.from({length:n+1},(_,i)=>{const t=i/n;return [Math.round(1000*t)/1000,Math.round(1000*t*t*(3-2*t))/1000];});
@@ -74,7 +74,7 @@ const TOOL_PRESETS={
   green:{crater:{roughness:60}},
   red:{crater:{roughness:65,softness:40},hill:{wander:34,widthVary:30,heightVary:21,lean:250},mountain:{wander:8,heightVary:4},deep:{diameter:176,wander:34,widthVary:35},shallow:{wander:4}},
   // The reviewed mesa; ragged feet and foot bumps on the ridges (the retired baseVary and baseBump, as wander and height variation).
-  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},hill:{wander:46,widthVary:25,heightVary:23,lean:160,cracks:10},mountain:{wander:24,heightVary:8,cracks:10},deep:{wander:34,widthVary:35}},
+  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},hill:{wander:46,widthVary:25,heightVary:23,lean:160,cracks:10},mountain:{wander:24,heightVary:8,cracks:10},deep:{wander:34,widthVary:35}},
   // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
   moon:{crater:{roughness:65,softness:45},hill:{wander:42,widthVary:30,heightVary:17,varySize:60,varyMiddle:150,lean:185},mountain:{wander:24,widthVary:5,heightVary:4,varySize:60,varyMiddle:150},deep:{wander:34,widthVary:35}},
   crystal:{crystal:{amount:140,diameter:480,roughness:40},mountain:{wander:6,heightVary:2},deep:{wander:24,widthVary:25},shallow:{wander:6}},
@@ -85,24 +85,23 @@ const TOOL_PRESETS={
   zhon:{crater:{roughness:55,softness:60},hill:{wander:20,widthVary:15,heightVary:13,lean:280},deep:{diameter:240,wander:48,widthVary:40},shallow:{diameter:240,wander:6}},
   archipelago:{crater:{roughness:60,softness:65},hill:{lean:120},deep:{diameter:256,wander:52,widthVary:40},shallow:{diameter:248,wander:6}}
 };
-const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
+const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],softness:['softness',0,100]};
 // Shape options: per-shape settings, shown for the tools they apply to and
 // kept in each shape, so a selected shape can be changed like a new stroke.
 // Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
 // Cross-section (card C1): the kinds that take the parametric profile, and the
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
 // card scriptedScene builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
-// Card E8: the kinds whose feet may be ragged and bumpy (baseVary, baseBump).
-const BASE_KINDS=['plateau','offset','hill','mountain'];
+// A crater's spurs keep the outline of the retired ridges: Moon's lobes, Desert's ragged foot and foot bumps. World values, no control: they ride with the stroke for the spur stamp.
+const SPUR_OUTLINE_KEYS=['moonLobes','baseVary','baseBump'];
 // Line features (card C4): spurs, crest variation and crater rim sectors. All
-// default off; spurs and crest options turn a hill or mountain into a ridge
-// built from tapering pieces (ridgePieces), rim options reshape a crater's rim.
+// default off; spurs branch off a landform's crest or a crater's rim (the crest options shape a crater's spurs),
+// rim options reshape a crater's rim.
 const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestJag','crestVary','crestTaper','rimHeight','rimSectors','rimUnequal','rimGaps','rimGapWidth'];
-const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.spurCount)>=1 || o.crestJag>0 || o.crestVary>0 || o.crestTaper>0);
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
-const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter','breakup'];
+const SECTION_KEYS=['terraces','ledge','terraceJitter','breakup'];
 // Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
 const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
@@ -118,7 +117,7 @@ const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','ro
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','free18','free19','fu','fv','s1','s2','s3'];
 const WATER_KEYS=['waterShore','waterDeep','waterBed'];
-const MASK_SHAPES=['plateau','offset','hill','mountain','crater','deep','shallow','landform'];
+const MASK_SHAPES=['crater','landform'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // H3 override planes 14-17 (a signed value v multiplies the control it names by 1 + v; 0 changes nothing): erosion rate (H2's pass),
@@ -135,27 +134,17 @@ const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough'
 const SHAPE_FIELDS=[
   ['craterlets','craterlets','Craterlets',['crater'],0,12,1,1,'Small satellite craters round the rim.'],
   ['craterEjecta','crater-ejecta','Ejecta',['crater'],0,100,5,100,'Ragged patches of throw-out beyond the rim.'],
-  ['faceVariation','face-variation','Face width variation',['plateau','offset','erase',...SECTION_KINDS.slice(2)],0,150,5,100,'How much the edge face widens and narrows along the outline (on a carried cross-section, every width of it).'],
-  ['lean','lean','Lean (back length over face; 0: the shape\'s own)',SECTION_KINDS,0,400,5,100,'How much longer the slope toward the lean side runs than the one away from it (100: the same both sides). 0 keeps what the shape does on its own: a hill\'s long back, a plateau\'s wider faces toward north, no lean on the rest.'],
-  ['outlineVar','outline-var','Outline wander',SECTION_KINDS,0,200,5,100,'How far the outline strays from the line you drew, as a share of what roughness gives this kind (100: as it is; 0: a clean outline).'],
-  ['widthVar','width-var','Width variation',['plateau','offset','deep'],0,200,5,100,'How much the shape widens and narrows along its outline, as a share of what roughness gives it (100: as it is; 0: an even width).'],
-  ['heightVar','height-var','Height lumps',['hill','mountain'],0,200,5,100,'How much the height wanders along the shape, as a share of what roughness gives it (100: as it is; 0: an even crest).'],
-  ['facing','facing','Lean toward',SECTION_KINDS,0,10,1,1,'The side the shape leans toward, the long gentle slope: a map direction or a side of the line you draw (a ridge\'s steep face is the opposite side).',FACING_CHOICES],
-  ['fingers','fingers','Finger coasts',['deep','shallow','landform'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
-  ['bankPx','bank-px','Dry bank (px)',['deep','shallow'],0,160,2,1,'Width of the dry bank from the waterline to the level ground, whatever the shape\'s size (0: a share of the shape, set by Bank width).'],
-  // Card E4 (Lava): fingers and terraces cut into the joined coast once the stroke is swept (stampCoastShore).
-  ['shoreLayers','shore-layers','Shore layers',['deep','shallow'],0,12,1,1,'Cut the bank into this many flat terraces stepping down to the water, as real heights the sun lights (a lit top, a shaded riser), counted from the waterline this stroke leaves. 0: the plain bank.'],
-  ['layerPx','layer-px','Layer width (px)',['deep','shallow','landform'],4,60,1,1,'Width of one shoreline step, ledge and riser together. The step count times this is how far the terraces reach inland.'],
-  ['layerRiser','layer-riser','Riser height (units; 0 fits the bank)',['deep','shallow','landform'],0,80,1,10,'Height of each step. 0 shares the bank\'s whole rise out between the layers, so the last one meets the plain.'],
-  ['layerLedge','layer-ledge','Flat share of a layer',['deep','shallow'],40,95,5,100,'How much of each layer is flat ledge; the rest is the riser, which the sun shades.'],
-  ['layerRough','layer-rough','Layer irregularity',['deep','shallow'],0,100,5,100,'How far the layer edges wander, so neighboring risers meet and part and no two layers run parallel for long.'],
-  ['layerStyle','layer-style','Layer style',['deep','shallow'],0,1,1,1,'Contour: the layers follow the shoreline. Circular: many round bites cut out of the bank, layer after layer, each step a scalloped arc (retail lava-2).',[[0,'Contour'],[1,'Circular']]],
-  ['facePx','sec-face-px','Face width (px)',SECTION_KINDS,0,400,2,1,'Width of the whole curve, foot to top, kept the same whatever the brush size (0: a share of the brush set by Slope softness).'],
+  ['faceVariation','face-variation','Face width variation',['erase'],0,150,5,100,'How much the edge face widens and narrows along the outline (on a carried cross-section, every width of it).'],
+  ['lean','lean','Lean (back length over face)',['landform'],0,400,5,100,'How much longer the slope toward the lean side runs than the one away from it (100 or 0: the same both sides).'],
+  ['facing','facing','Lean toward',['landform'],0,10,1,1,'The side the shape leans toward, the long gentle slope: a map direction or a side of the line you draw (a ridge\'s steep face is the opposite side).',FACING_CHOICES],
+  ['fingers','fingers','Finger coasts',['landform'],0,150,5,100,'Interlocking land fingers and inlets along the shore.'],
+  ['layerPx','layer-px','Layer width (px)',['landform'],4,60,1,1,'Width of one shoreline step, ledge and riser together. The step count times this is how far the terraces reach inland.'],
+  ['layerRiser','layer-riser','Riser height (units; 0 fits the bank)',['landform'],0,80,1,10,'Height of each step. 0 shares the bank\'s whole rise out between the layers, so the last one meets the plain.'],
   ['stepReference','lf-step-reference','Steps follow',['landform'],0,2,1,1,'Profile steps divide the drawn section. Shoreline steps follow the joined waterline, including overlaps and uneven banks. Circular shoreline steps cut scalloped arcs.',[[0,'Profile'],[1,'Shoreline'],[2,'Circular shoreline']]],
-  ['terraces','sec-terraces','Steps',SECTION_KINDS,0,12,1,1,'Cut the face into this many flat ledges with risers between them.'],
-  ['ledge','sec-ledge','Flat share of a step',SECTION_KINDS,0,95,5,100,'How much of each step is flat; the rest is the riser.'],
-  ['terraceJitter','sec-terrace-jitter','Step variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
-  ['breakup','sec-breakup','Step breakup',SECTION_KINDS,0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
+  ['terraces','sec-terraces','Steps',['landform'],0,12,1,1,'Cut the face into this many flat ledges with risers between them.'],
+  ['ledge','sec-ledge','Flat share of a step',['landform'],0,95,5,100,'How much of each step is flat; the rest is the riser.'],
+  ['terraceJitter','sec-terrace-jitter','Step variation',['landform'],0,100,5,100,'How much riser positions and step heights wander along the outline.'],
+  ['breakup','sec-breakup','Step breakup',['landform'],0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
   // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
   ['heightReference','lf-height-reference','Height reference',['landform'],0,1,1,1,'Fixed elevation uses map height units. Sea level measures above or below the current sea; negative heights are below water.',[[0,'Fixed elevation'],[1,'Sea level']]],
   ['elevation','lf-elevation','Elevation (height units)',['landform'],-335,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
@@ -167,17 +156,17 @@ const SHAPE_FIELDS=[
   ['varySize','lf-vary-size','Variation size (px)',['landform'],20,400,10,1,'The wavelength of the wander and of the width and height variation.'],
   ['varyFoot','lf-vary-foot','Variation at the foot',['landform'],0,200,5,100,'How much of the variation acts at the foot of the section (100: all of it, 0: none, 200: twice). It blends into the next one up to the middle of the section.'],
   ['varyMiddle','lf-vary-middle','Variation up the section',['landform'],0,200,5,100,'How much of the variation acts from the middle of the section to its crest. Set the foot to 0 and this to 200 for variation that grows toward the crest.'],
-  ['spurCount','spur-count','Spurs',['hill','mountain','crater','landform'],0,12,1,1,'Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape\'s own seed. Each joins its parent at the crest.'],
-  ['spurLength','spur-length','Spur length (px)',['hill','mountain','crater','landform'],20,400,10,1,'Average reach of a spur; each runs from about half to one and a half times this.'],
-  ['spurSpread','spur-spread','Spur angle spread',['hill','mountain','crater','landform'],0,100,5,100,'0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding.'],
-  ['spurWidth','spur-width','Spur width',['hill','mountain','crater','landform'],20,200,5,100,'A spur\'s width at its root, as a share of the ridge\'s own (a crater\'s radius, on a crater); it flares a little where it joins.'],
-  ['spurTaper','spur-taper','Spur taper',['hill','mountain','crater','landform'],0,100,5,100,'How much a spur narrows and lowers toward its tip.'],
-  ['spurHeight','spur-height','Spur height',['hill','mountain','crater','landform'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the crater\'s rim height).'],
-  ['spurForks','spur-forks','Spur forks',['hill','mountain','crater','landform'],0,100,5,100,'The share of spurs that fork once, two thirds of the way out, into a shorter spur.'],
-  ['spurBulb','spur-bulb','Bulbous spur tips',['hill','mountain','crater','landform'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
-  ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
-  ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
-  ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain','landform'],0,100,5,100,'The main ridge narrows and lowers toward both ends of its path. On a landform this multiplies the height along the path.'],
+  ['spurCount','spur-count','Spurs',['crater','landform'],0,12,1,1,'Tapering spurs that branch off this ridge (off a crater, its rim), grown from the shape\'s own seed. Each joins its parent at the crest.'],
+  ['spurLength','spur-length','Spur length (px)',['crater','landform'],20,400,10,1,'Average reach of a spur; each runs from about half to one and a half times this.'],
+  ['spurSpread','spur-spread','Spur angle spread',['crater','landform'],0,100,5,100,'0: spurs leave swept back at about 40 degrees (off a crater, straight out); 100: scattered up to square and beyond, and more winding.'],
+  ['spurWidth','spur-width','Spur width',['crater','landform'],20,200,5,100,'A spur\'s width at its root, as a share of the ridge\'s own (a crater\'s radius, on a crater); it flares a little where it joins.'],
+  ['spurTaper','spur-taper','Spur taper',['crater','landform'],0,100,5,100,'How much a spur narrows and lowers toward its tip.'],
+  ['spurHeight','spur-height','Spur height',['crater','landform'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the crater\'s rim height).'],
+  ['spurForks','spur-forks','Spur forks',['crater','landform'],0,100,5,100,'The share of spurs that fork once, two thirds of the way out, into a shorter spur.'],
+  ['spurBulb','spur-bulb','Bulbous spur tips',['crater','landform'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
+  ['crestJag','crest-jag','Crest irregularity',['crater'],0,100,5,100,'Jagged spurs: each spur\'s crest drops in and out along it (the peaks keep full height).'],
+  ['crestVary','crest-vary','Crest width and height variation',['crater'],0,100,5,100,'Each spur swells and shrinks, wider and lower in places, along its length.'],
+  ['crestTaper','crest-taper','Crest taper (both ends)',['landform'],0,100,5,100,'The crest narrows and lowers toward both ends of its path; it multiplies the height along the path.'],
   ['rimHeight','rim-height','Rim height (share of depth)',['crater'],0,150,1,100,'How high the rim stands, as a share of the crater\'s Depth (34% is the usual rim); the bowl floor does not change, so a tall rim needs no deeper bowl.'],
   ['rimSectors','rim-sectors','Rim sectors',['crater'],0,8,1,1,'Split the rim into this many sectors of different height and width (a lopsided ring, not an even one).'],
   ['rimUnequal','rim-unequal','Sector inequality',['crater'],0,100,5,100,'How different the sectors are: 0 equal; 100 from a faint low ridge to a tall, broad massif.'],
@@ -193,14 +182,14 @@ const SHAPE_FIELDS=[
   ['fissureCell','fissure-cell','Network block size (px)',['fissure'],30,160,5,1,'Typical width of a block between the cuts.'],
   ['fissureCrack','fissure-crack','Fractured rock beside the cut',['fissure'],0,100,5,100,'Raises the world\'s own crack field along the cut, so the rock beside it breaks up (0 leaves only the cut).'],
   ['fissureDark','fissure-dark','Darkness',['fissure'],0,100,5,100,'Paints the world\'s own wet (dark) ground along the cut, so it reads dark whatever the ground (it layers on rock, snow or moss).'],
-  ['shorePlates','shore-plates','Shore plates',['deep','shallow','offset','landform'],0,1,1,1,'Add a band of broken plates on this stroke only. Off preserves the original water shape.'],
-  ['plateWaterPx','plate-water-px','Plates: water width (px)',['deep','shallow','offset','landform'],0,240,4,1,'Reach from this stroke\'s waterline into the water.'],
-  ['plateLandPx','plate-land-px','Plates: land width (px)',['deep','shallow','offset','landform'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
-  ['plateSize','plate-size','Plate size (px)',['deep','shallow','offset','landform'],8,96,2,1,'Typical width of the interlocking polygonal plates.'],
-  ['plateGap','plate-gap','Plate gap (px)',['deep','shallow','offset','landform'],0,160,5,10,'Open gap between adjacent plates.'],
-  ['plateHeight','plate-height','Plate height above sea',['deep','shallow','offset','landform'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height. Rock slabs: how far the land slabs stand above their seams.'],
-  ['plateMaterial','plate-material','Plate material (1 rock slabs, 2 frost crystals)',['deep','shallow','offset','landform'],1,2,1,1,'2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
-  ['frostNeedles','frost-needles','Frost needle share (plate material 2)',['deep','shallow','offset','landform'],0,100,5,100,'Frost crystals: the share of patches that carry needles at all; the rest of the band is plain ice. Needles in a patch are also dropped at random, so lines are sparse, fine and of varied length.'],
+  ['shorePlates','shore-plates','Shore plates',['landform'],0,1,1,1,'Add a band of broken plates on this stroke only. Off preserves the original water shape.'],
+  ['plateWaterPx','plate-water-px','Plates: water width (px)',['landform'],0,240,4,1,'Reach from this stroke\'s waterline into the water.'],
+  ['plateLandPx','plate-land-px','Plates: land width (px)',['landform'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
+  ['plateSize','plate-size','Plate size (px)',['landform'],8,96,2,1,'Typical width of the interlocking polygonal plates.'],
+  ['plateGap','plate-gap','Plate gap (px)',['landform'],0,160,5,10,'Open gap between adjacent plates.'],
+  ['plateHeight','plate-height','Plate height above sea',['landform'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height. Rock slabs: how far the land slabs stand above their seams.'],
+  ['plateMaterial','plate-material','Plate material (1 rock slabs, 2 frost crystals)',['landform'],1,2,1,1,'2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
+  ['frostNeedles','frost-needles','Frost needle share (plate material 2)',['landform'],0,100,5,100,'Frost crystals: the share of patches that carry needles at all; the rest of the band is plain ice. Needles in a patch are also dropped at random, so lines are sparse, fine and of varied length.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound, 2 berg)',['crystal'],0,2,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world). Berg: a rough ice block with an uneven outline, broken corners and rough faces that take the world\'s own slope relief (Ice); Sides, Width, Height and Variation apply.'],
   ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbors.'],
   ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
@@ -211,9 +200,9 @@ const SHAPE_FIELDS=[
   ['crystalLean','crystal-lean','Lean',['crystal'],0,100,5,100,'How far each apex leans off its base center.'],
   ['crystalVariation','crystal-variation','Variation',['crystal'],0,100,5,100,'Spread of sizes, heights and side counts.'],
   // Water looks (card E1): each stroke may keep the world's choice (0) or set its own.
-  ['waterShore','water-shore','Shore edge (shore to shallow)',['deep','shallow','landform'],0,2,1,1,'World default keeps the World panel\'s Crisp waterline. Hard: the water starts at the shoreline with ragged stairs, as retail draws it. Faded: the water fades in over a few pixels.',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
-  ['waterDeep','water-deep','Shallow-to-deep edge',['deep','shallow','landform'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
-  ['waterBed','water-bed','Shallow water look',['deep','shallow','landform'],0,3,1,1,'World default keeps the World panel\'s Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture. Cracked bed: lit bed over cracked rock-like ground, tinted (Red\'s shelf shallows).',[[0,'World default'],[1,'Lit bed'],[2,'Noise water'],[3,'Cracked bed']]],
+  ['waterShore','water-shore','Shore edge (shore to shallow)',['landform'],0,2,1,1,'World default keeps the World panel\'s Crisp waterline. Hard: the water starts at the shoreline with ragged stairs, as retail draws it. Faded: the water fades in over a few pixels.',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
+  ['waterDeep','water-deep','Shallow-to-deep edge',['landform'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
+  ['waterBed','water-bed','Shallow water look',['landform'],0,3,1,1,'World default keeps the World panel\'s Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture. Cracked bed: lit bed over cracked rock-like ground, tinted (Red\'s shelf shallows).',[[0,'World default'],[1,'Lit bed'],[2,'Noise water'],[3,'Cracked bed']]],
   ['crystalAlign','crystal-align','Align faces to the frame (berg)',['crystal'],0,100,5,100,'Berg: 0 turns each block at random, 100 sets its faces square to the shape\'s frame (four sides then make an axis-aligned box).'],
   ['bergFace','berg-face','Face steepness (berg, units per px)',['crystal'],20,200,5,100,'Berg: how fast the faces rise, in height units per px (shown in percent: 90% is 0.9 units per px). Each face varies by Outline jitter.'],
   ['bergJitter','berg-jitter','Outline jitter (berg)',['crystal'],0,100,5,100,'Berg: how far the face angles, distances and steepness stray from a regular polygon, and how much each face wavers along its length.'],
@@ -239,29 +228,24 @@ const SHAPE_FIELDS=[
   ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal'],0,100,5,100,'Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width.'],
   ['crystalSmooth','crystal-smooth','Smooth hill between crystals (column mound)',['crystal'],0,100,5,100,'Column mound: the share of the widest columns (and some of the middle ones) left as smooth hill with no flat top, taking the world\'s hill relief. 0 tiles the whole mound.'],
   ['craterFacets','crater-facets','Crystal facets',['crater'],0,100,5,100,'Crater: tiles the bowl, rim and apron with polygonal facets (planes fitted to the crater\'s own surface, stepped a few units from each other), so its contours are straight-edged like crystal. 0 keeps the smooth crater.'],
-  // E8 (Painted Desert): ragged feet and bumpy aprons.
-  ['baseVary','base-vary','Foot outline raggedness (px)',BASE_KINDS,0,60,2,1,'How far the outline of the foot strays in and out, in lobes of about 20 and 55 px (Painted Desert aprons and mesa feet).'],
-  ['baseBump','base-bump','Foot bumps (height units)',BASE_KINDS,0,80,5,10,'Lumps of this height, 13 to 30 px across, on the apron and the lower face; the level cap and the plain are left alone.'],
   // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
-  ['fingerSize','finger-size','Finger size',['deep','shallow','landform'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
-  ['layerVary','layer-vary','Layer width variation',['deep','shallow','landform'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
-  ['layerCircle','layer-circle','Circle size (px, circular layers)',['deep','shallow','landform'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
+  ['fingerSize','finger-size','Finger size',['landform'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
+  ['layerVary','layer-vary','Layer width variation',['landform'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
+  ['layerCircle','layer-circle','Circle size (px, circular layers)',['landform'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
   // G7 (Crystal): craters with smaller, softer facets.
   ['crystalCraterPx','crystal-crater-px','Facet width (px, crystal craters)',['crater'],0,48,2,1,'Crater facets: the width of each polygonal facet. 0 sizes them by the crater\'s radius (about a third of it, 14-36 px); retail\'s crater walls break into cells of 12-20 px.'],
   ['crystalCraterStep','crystal-crater-step','Facet step (units, crystal craters)',['crater'],0,60,5,10,'Crater facets: how far each facet may stand above or below the crater\'s own surface, in height units either way (shown in tenths: 3 is the earlier ragged crater). Retail\'s crater walls are smooth planes broken by a thin web, so a small step keeps the sun\'s light running smoothly across the wall.'],
   ['crystalCraterSkin','crystal-crater-skin','Web in the shader (crystal craters)',['crater'],0,100,100,100,'Crater facets: 100 marks the whole crater as one crystal skin (no seams in the crystal field) and leaves the thin web between the facets to the shader (World knobs crystalCraterWeb and its relatives), drawn at pixel size so its lines run thin and wander; 0 inks each facet\'s seam in the field as before.'],
   // G7 (Crystal): finer shore slabs.
   // H20b (Crystal): some slabs break into a fine mesh.
-  ['plateVary','plate-vary','Rock slab variety (share of slabs broken into fine mesh)',['deep','shallow','offset','landform'],0,100,5,100,'Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole.'],
-  ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['deep','shallow','offset','landform'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
-  // G6 (Ice): angular facets that belong to the mountain.
-  ['iceFacets','ice-facets','Angular facets',['mountain','landform'],0,100,5,100,'Breaks part of the raised shape into angular facets: tilted planes fitted to the shape\'s own surface, a little steeper, stepped a few units off their neighbors and partly buried where the ground rises past them. They share the shape\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth surface. A landform with shore features keeps those instead.'],
-  ['iceFacetSize','ice-facet-size','Facet size (px)',['hill','mountain','landform'],16,96,2,1,'Ice facets: the typical width of one facet.'],
-  // G8 (Moon): lumpy, folded outlines.
-  ['moonLobes','moon-lobes','Outline lobes (share of radius)',['hill','mountain'],0,60,2,100,'How far the hill\'s whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline.'],
+  ['plateVary','plate-vary','Rock slab variety (share of slabs broken into fine mesh)',['landform'],0,100,5,100,'Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole.'],
+  ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['landform'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
+  // G6 (Ice): angular facets on a raised landform.
+  ['iceFacets','ice-facets','Angular facets',['landform'],0,100,5,100,'Breaks part of the raised shape into angular facets: tilted planes fitted to the shape\'s own surface, a little steeper, stepped a few units off their neighbors and partly buried where the ground rises past them. They share the shape\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth surface. A landform with shore features keeps those instead.'],
+  ['iceFacetSize','ice-facet-size','Facet size (px)',['landform'],16,96,2,1,'Ice facets: the typical width of one facet.'],
   // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
-  ['lavaCircleVary','lava-circle-vary','Circle variety (circular layers)',['deep','shallow','landform'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
-  ['lavaSpread','lava-spread','Layer width spread',['deep','shallow','landform'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
+  ['lavaCircleVary','lava-circle-vary','Circle variety (circular layers)',['landform'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
+  ['lavaSpread','lava-spread','Layer width spread',['landform'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
 const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFacets'];
 const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreSeam','plateVary'];
@@ -298,7 +282,7 @@ function buildShapeOptions() {
     `<div id="along-block" hidden><label for="along-preview">Height along the path</label><canvas id="along-preview" width="480" height="140" style="${cvStyle};cursor:crosshair"></canvas>`+
     '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" id="along-reset" style="flex:none">Level along the path</button></div>'+
     '<p class="small">The dashed line is the crest\'s height along the path you drew, as a share of the elevation above the plain; the solid line is read from the map. Click to pick the place the section shows (marked on the map); double-click the line to add a knot, drag a knot to move it, Shift-click a knot to remove it.</p></div>';
-  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='facePx')].before(preview);
+  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='lean')].before(preview);
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('along-reset').addEventListener('click',() => { setCurve(null,'along'); if (selected>=0) { checkpoint(); queueWeather(); } });
@@ -334,7 +318,7 @@ setFailureHandler(err => error(err?.message??String(err)));
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
 function status(message) { $('status').textContent=message; }
 // Height slider range per shape kind; Raise / lower is signed.
-const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind==='offset'?[-80,80]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
+const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
@@ -342,11 +326,11 @@ const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(entry,preset=config?.biomeId||'green') {
   const shape=entry==='landform'?'plateau':entry,kind=strokeKind(shape);
   const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_TOOLS[shape]}:{}),...TOOL_PRESETS[preset]?.[shape]},sea=Math.round(starting.heightReference||0)===1;
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{crater:30}[kind]??0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...starting,
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{crater:30}[kind]??0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...starting,
     elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
 function rememberTool(custom=false) {
-  const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
+  const state={...toolSettings[tool]};
   for (const [key,[id]] of Object.entries(TOOL_FIELDS)) state[key]=Number($(id).value);
   if (custom) state.preset='custom';
   toolSettings[tool]=state;
@@ -363,7 +347,6 @@ function showTool(state={},kind=strokeKind(tool)) {
   heightControlRange(state);stepControlRange(kind,state);
   [$('amount').min,$('amount').max]=amountRange(kind).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
-  $('shallow-mode').value=state.shallowMode==='passage'?'passage':'area';
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
@@ -421,26 +404,21 @@ function updateControls() {
   {
   heightControlRange({heightReference:shapeValue('heightReference')});stepControlRange(kind,{stepReference:shapeValue('stepReference')});
   $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':'Elevation (height units) ';
-  const fixed=['deep','shallow','ramp','erase','landform'].includes(kind);
+  const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='crystal'?'Height':kind==='lower'?'Lower by':kind==='crater' || kind==='fissure'?'Depth':kind==='offset'?'Height change':'Rise';
+  $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='crystal'?'Height':kind==='crater' || kind==='fissure'?'Depth':'Rise';
   const [lo,hi]=amountRange(kind); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
-  $('amount-value').textContent=kind==='smooth' || isCover(kind)?amountNow+'%':kind==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(kind==='lower'?'−':'+')+amountNow;
+  $('amount-value').textContent=kind==='smooth' || isCover(kind)?amountNow+'%':'+'+amountNow;
   $('diameter-value').textContent=$('diameter').value+' units';
   $('roughness-value').textContent=$('roughness').value+'%';
-  $('roughness-label').textContent=kind==='ramp'?'Shoulder freedom':kind==='deep'?'Coast freedom':['plateau','erase','sand','grass','paint'].includes(kind)?'Edge freedom':'Roughness';
-  $('shelves-control').hidden=kind!=='deep';
-  $('shallow-mode-control').hidden=kind!=='shallow';
-  $('shelves-value').textContent=$('shelves').value+'%';
-  $('bank-control').hidden=!['deep','shallow'].includes(kind);
+  $('roughness-label').textContent=['erase','sand','grass','paint'].includes(kind)?'Edge freedom':'Roughness';
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
   $('roughness').closest('.control').hidden=kind==='fissure'||kind==='landform';
-  $('beach-control').hidden=!['deep','shallow'].includes(kind);
-  $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(kind);
+  $('softness-control').hidden=!['crater','erase','sand','grass','paint'].includes(kind);
   if (kind==='crystal') $('roughness-label').textContent='Irregularity';
-  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset','landform'].includes(kind);
+  $('cracks-control').hidden=!['crater','landform'].includes(kind);
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
   const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
@@ -456,12 +434,8 @@ function updateControls() {
   const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
   const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
-  if(SECTION_KINDS.includes(kind) && !shapeControlAvailable('softness',kind,{...shapeOptions,curve:currentCurve()}))$('softness-control').hidden=true;
-  if(shapeOptions.bankPx>0 && !(shapeOptions.facePx>0))$('bank-control').hidden=true;
-  $('section-preview-control').hidden=!SECTION_KINDS.includes(kind);
+  $('section-preview-control').hidden=kind!=='landform';
   if (!$('section-preview-control').hidden) drawSection();
-  $('bank-value').textContent=$('bank-width').value+'%';
-  $('beach-value').textContent=$('beach-flatness').value+'%';
   $('softness-value').textContent=$('softness').value+'%';
   $('relief-value').textContent=$('relief').value+'%';
   $('ring-value').textContent=$('mineral-ring').value+'%';
@@ -478,7 +452,7 @@ function updateControls() {
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
   }
-  if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase','landform'].includes(nodes[selected]?.kind); }
+  if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['erase','landform'].includes(nodes[selected]?.kind); }
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
@@ -508,8 +482,9 @@ const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].k
 const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.curve : toolSettings[tool]?.curve) || null;
 const currentAlong=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.along : toolSettings[tool]?.along) || null;
 function curveContext() {
-  const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),shouldered=isShouldered(kind,o,ridgeOn(kind,o));
-  return {kind,shouldered,water:kind==='deep' || kind==='shallow',land:kind==='landform',q:{...(kind==='landform'?landformSteps(o):o),radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve(),along:currentAlong()}};
+  // Only a landform carries a section now: no shouldered hill or water section is left to edit.
+  const kind=curveKind(),o=Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)]));
+  return {kind,shouldered:false,water:false,land:kind==='landform',q:{...(kind==='landform'?landformSteps(o):o),radius:Number($('diameter').value)/2,softness:Number($('softness').value)/100,curve:currentCurve(),along:currentAlong()}};
 }
 // Hand the curve (or, with key 'along', the along-the-path knots) to the shape being edited, or to the brush for the next stroke; null goes back to the default.
 function setCurve(curve,key='curve') {
@@ -708,7 +683,7 @@ function alongEditorEvents() {
 // with no seam and no detached lump. Spur geometry comes from the stroke seed
 // and the path alone, never from the heights, and each cell reads only its own
 // position and the pieces, so region replay stays exact.
-const hasCoastPass=(kind,p) => ['deep','shallow','landform'].includes(kind) && ((p?.fingers??worldDefault('fingers'))>0 || Math.round(p?.shoreLayers??worldDefault('shoreLayers'))>=1);
+const hasCoastPass=(kind,p) => kind==='landform' && ((p?.fingers??worldDefault('fingers'))>0 || Math.round(p?.shoreLayers??worldDefault('shoreLayers'))>=1);
 // The lowest layer stands LAYER_FOOT units above the lava (retail's first shelf is
 // 6-10 above it) and is reached over LAYER_WALL px: a ledge nearer the water than
 // ~3 units dips under the sea in the shader's relief, and a 1-cell wall is a
@@ -735,8 +710,8 @@ function markChanged() { markViewChanged(false); error(); }
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
-const NODE_NAMES={landform:'Landform',crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',offset:'Raise / lower',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',smooth:'Smooth',lower:'Lower',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,/* E8 */'baseVary','baseBump','moonLobes'].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,bankWidth:s.bankWidth,softness:s.softness,beachFlatness:s.beachFlatness,shelves:s.shelves,shallowMode:s.shallowMode,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,outlineVar:s.outlineVar,widthVar:s.widthVar,heightVar:s.heightVar,fingers:s.fingers,bankPx:s.bankPx,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+const NODE_NAMES={landform:'Landform',crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',smooth:'Smooth',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,...SPUR_OUTLINE_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,softness:s.softness,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,fingers:s.fingers,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
 const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);
@@ -754,17 +729,11 @@ function addNode(n) {
   nodes.push(n); regionalFields.changed(nodeBounds(n));
 }
 function nodeBounds(n) {
-  // World-space reach of a shape, from the same extents its brush uses,
-  // plus a few cells for the hill's softening blur.
+  // World-space reach of a shape, from the same extents its brush uses.
   if (!n.points) return {x0:0,y0:0,x1:grid-1,y1:grid-1};
-  const q=nodeShapeParams(n),radius=q.radius||40,rough=q.rough??.35,soft=q.softness??.5;
-  const bank=['deep','shallow'].includes(n.kind)?2**(((q.bankWidth??.5)-.5)*1.3):1;
-  const back=soft===.5?1.34:2-(.66+(soft-.5)*.9);
-  const reach={plateau:Math.min(1.7,1+rough*1.3)+1.9*rough,offset:Math.min(1.7,1+rough*1.3)+1.9*rough,erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,hill:Math.max(1.4,back)*1.75+1.7*rough,deep:Math.min(1.9,1+rough*1.6)*bank+2.2*rough,
-    shallow:bank+.4*rough,crater:2.9*(1+.45*rough)+.9*rough,ramp:1+.28*rough}[n.kind] ?? 1+.4*rough;
-  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5 && q.crystalForm<1.5?1.35:1)+(q.crystalForm>=.5 && q.crystalForm<1.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing+(['deep','shallow'].includes(n.kind)?(q.fingers||0)*110+(q.bankPx||0)+(q.shoreLayers>=1?coastLayerReach(q):0):0)+(['deep','shallow','offset'].includes(n.kind)&&q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0):0);
-  if(BASE_KINDS.includes(n.kind))r+=Math.max(0,q.baseVary||0);
-  if(['hill','mountain'].includes(n.kind))r+=Math.max(0,q.moonLobes||0)*radius;
+  const q=nodeShapeParams(n),radius=q.radius||40,rough=q.rough??.35;
+  const reach={erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,crater:2.9*(1+.45*rough)+.9*rough}[n.kind] ?? 1+.4*rough;
+  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5 && q.crystalForm<1.5?1.35:1)+(q.crystalForm>=.5 && q.crystalForm<1.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing;
   // A landform reaches its widest side grown by the width variation, the wander and the spurs (the same reach its segment boxes use).
   if(n.kind==='landform'){
     r=landformReach({...q,radius},n.frame?Math.hypot(n.frame[0],n.frame[1]):1)+12*spacing;
@@ -776,9 +745,8 @@ function nodeBounds(n) {
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
   if (n.kind==='fissure') { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r=(q.fissureNetwork>=.5?radius*1.1:0)+(Math.round(q.fissureBranches)>=1?(q.fissureBranchLen||0)*2.4*k:0)+(q.fissureWidth||5)*3*k+24+12*spacing; }
   // Spurs (card C4) reach up to one and a half spur lengths past the ridge or rim, plus their own width.
-  // A ridge's crest also swells to 1.4 of its radius and a spur's root flares to about 1.7 times Spur width.
-  if (ridgeOn(n.kind,q)) r+=radius;
-  if (Math.round(q.spurCount)>=1 && ['hill','mountain','crater','landform'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
+  // A spur's root flares to about 1.7 times Spur width.
+  if (Math.round(q.spurCount)>=1 && ['crater','landform'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
   return {x0:clamp(Math.floor((ax-r)/spacing-originCellX),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing-originCellY),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
@@ -808,31 +776,29 @@ function regionalStages(list=nodes) {
 }
 function regionalReadApron(n) {
   if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
-  const q=nodeShapeParams(n),bank=n.kind==='landform'?1:2**(((q.bankWidth??.5)-.5)*1.3);
-  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):isShouldered(n.kind,q,ridgeOn(n.kind,q))?4:0;
+  const q=nodeShapeParams(n);
+  let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):0;
   // A framed finger cache is keyed on authoring cells; include every world
   // cell that can share that key. Radial thumbs can share a coastal key from
   // both sides of the radial band, so their first-call order needs that band.
-  if (['deep','shallow','landform'].includes(n.kind) && q.fingers>0) {
+  if (n.kind==='landform' && q.fingers>0) {
     if (n.frame) cells+=Math.ceil(2*Math.max(Math.hypot(n.frame[0],n.frame[1]),Math.hypot(n.frame[2],n.frame[3])))+2;
   }
   if (hasCoastPass(n.kind,q)) {
     // Signed-distance normals read ten neighbors and a derivative. A new
     // tongue can reach another tongue before reaching its original shore,
     // so keep the connection band as well as the visible finger reach.
-    if (q.fingers>0) cells+=Math.ceil(3*(.5*q.radius*bank+spacing*3)/spacing)+32;
+    if (q.fingers>0) cells+=Math.ceil(3*(.5*q.radius+spacing*3)/spacing)+32;
     if (Math.round(q.shoreLayers)>=1) cells+=Math.ceil(coastLayerReach(q)/spacing)+2;
   }
-  if(Math.round(q.layerStyle)===1&&Math.round(q.shoreLayers)>=1&&['deep','shallow','landform'].includes(n.kind)){
+  if(Math.round(q.layerStyle)===1&&Math.round(q.shoreLayers)>=1&&n.kind==='landform'){
     const Rc=Math.max(8,q.layerCircle),N=Math.max(1,Math.round(q.shoreLayers)),W=Math.max(4,q.layerPx),cv=clamp(q.lavaCircleVary||0,0,1),B=Math.ceil((1.4*Rc+cv*.1*Rc+N*W*(1+.45*cv))/spacing);
     cells+=Math.max(0,2*B+1+Math.ceil(1.12*Rc/spacing)+2-(Math.ceil(coastLayerReach(q)/spacing)+2));
   }
-  if(BASE_KINDS.includes(n.kind))cells+=Math.ceil(Math.max(0,q.baseVary||0)/spacing);
-  if(['hill','mountain'].includes(n.kind))cells+=Math.ceil(Math.max(0,q.moonLobes||0)*(q.radius||40)/spacing);
   // G6: a facet plane is fitted at its center, up to half a facet away and three cells either side of it, in the stroke's frame.
-  if(['mountain','landform'].includes(n.kind)&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
+  if(n.kind==='landform'&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
   if(n.kind==='crater'&&q.craterFacets>0){const f=n.frame??IDENTITY,L=craterFacetWidth(q);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+3;}
-  if (['deep','shallow','offset','landform'].includes(n.kind) && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
+  if (n.kind==='landform' && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
   return cells;
 }
 // A remote baseline can change a later shape far outside the edited cells.
@@ -843,7 +809,7 @@ function regionalDirtyRect(from,rect) {
   const pointTouched=p => { const x=p.x/spacing,y=p.y/spacing; return overlaps(dirty,{x0:Math.floor(x),y0:Math.floor(y),x1:Math.ceil(x),y1:Math.ceil(y)}); };
   for (let i=Math.max(0,from+1);i<nodes.length;i++) {
     const n=nodes[i]; if (n.hidden || !n.points?.length) continue;
-    const b=nodeBounds(n),points=['plateau','crater'].includes(n.kind)?[n.points[0]]:n.kind==='ramp'?shapePaths(n).flatMap(path=>[n.points[path[0]],n.points[path.at(-1)]]):[];
+    const b=nodeBounds(n),points=n.kind==='crater'?[n.points[0]]:[];   // a crater reads its rim height at its first point
     if (n.kind==='crater') for (let k=0;k<Math.round(n.params?.craterlets??worldDefault('craterlets'));k++) points.push(craterletSpot(n,n.seed??seed,n.params?.radius??40,k).p);
     if (points.some(pointTouched)) { dirty=unionRect(dirty,b); continue; }
     const pad=regionalReadApron(n),reach={x0:Math.max(0,dirty.x0-pad),y0:Math.max(0,dirty.y0-pad),x1:Math.min(worldGrid-1,dirty.x1+pad),y1:Math.min(worldGrid-1,dirty.y1+pad)};
@@ -871,7 +837,7 @@ function makeRegionalFields() {
 // field snapshot or world-sized noise array in map mode.
 function currentStrokeOptions() {
   applySeedControl();
-  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,bankWidth:Number($('bank-width').value)/100,softness:Number($('softness').value)/100,beachFlatness:Number($('beach-flatness').value)/100,shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{}),...(toolSettings[tool]?.along?{along:toolSettings[tool].along}:{})};
+  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...Object.fromEntries(SPUR_OUTLINE_KEYS.map(k => [k,worldDefault(k)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{}),...(toolSettings[tool]?.along?{along:toolSettings[tool].along}:{})};
 }
 function regionalPoints(points) {
   if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');
@@ -1172,8 +1138,7 @@ function selectNode(i) {
     heightControlRange(p);stepControlRange(n.kind,p);
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
     $('diameter').value=clamp(p.radius*2,40,800); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
-    $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);
-    $('shelves').value=Math.round(p.shelves*100); $('shallow-mode').value=p.shallowMode==='passage'?'passage':'area'; $('cracks').value=Math.round((p.cracks||0)*100);
+    $('softness').value=Math.round(p.softness*100); $('cracks').value=Math.round((p.cracks||0)*100);
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
   }
   renderLayers(); updateControls(); schedule(false);
@@ -1184,8 +1149,7 @@ function editSelectedFromControls(overrides={}) {
   controlsEditing=true;
   const before=nodeBounds(n);
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
-    softness:Number($('softness').value)/100,bankWidth:Number($('bank-width').value)/100,beachFlatness:Number($('beach-flatness').value)/100,
-    shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,
+    softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,
     ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)])),...overrides};
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
@@ -1332,8 +1296,8 @@ function scriptedScene(list,{ground=true}={}) {
   if (ground) addGroundNode();
   list.forEach(([kind,points,options={}],i) => {
     const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
-    const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,shelves:d.shelves/100,bankWidth:d.bankWidth/100,beachFlatness:d.beachFlatness/100,softness:d.softness/100,cracks:d.cracks/100,shallowMode:d.shallowMode,
-      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along,seed:(seed+i*7919)>>>0};
+    const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
+      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),...Object.fromEntries(SPUR_OUTLINE_KEYS.map(k => [k,worldDefault(k)])),curve:d.curve,along:d.along,seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
   });
@@ -1347,10 +1311,10 @@ function sketch() {
   rememberTool();
   return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
     ...(columnOverride?{column:structuredClone(columnOverride)}:{}),
-    toolSettings,bankWidth:Number($('bank-width').value),softness:Number($('softness').value),relief:Number($('relief').value),
-    beachFlatness:Number($('beach-flatness').value),mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
+    toolSettings,softness:Number($('softness').value),relief:Number($('relief').value),
+    mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
-    tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),shelves:Number($('shelves').value),shallowMode:$('shallow-mode').value,scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'stroke-graph'};
+    tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'stroke-graph'};
 }
 function persistLater() {
   if (experiment.has('scratch')) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
@@ -1366,11 +1330,12 @@ function loadSketch(s) {
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
-  for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(s.toolSettings?.[kind]||{})};
+  // A shape button's saved settings count only when a landform made them (its section carries landform knots); the retired tools' settings start from the preset.
+  const keep=(kind,t) => t && (strokeKind(kind)!=='landform' || (t.curve?.knots && LANDFORM_FORMS.some(([id]) => id===t.curve.form)));
+  for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(keep(kind,s.toolSettings?.[kind])?s.toolSettings[kind]:{})};
   showTool(toolSettings[tool]);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
-  for (const [key,id,lo,hi] of [['bankWidth','bank-width',0,100],['beachFlatness','beach-flatness',0,100],['softness','softness',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
-  $('shallow-mode').value=s.shallowMode==='area'?'area':'passage';
+  for (const [key,id,lo,hi] of [['softness','softness',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
@@ -1442,8 +1407,8 @@ for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('cl
   else{selected=-1;pathPoint=-1;renderLayers();showTool(toolSettings[tool]);}
   updateControls();schedule();persistLater();
 });
-for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
-for (const id of ['diameter','amount','roughness','shelves','bank-width','beach-flatness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
+for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
 $('feature-tool').onclick=()=>{if(stroke||moving)return;selected=-1;pathAdding=false;drawMode='select';mapFeatures?.activate('deposit');renderLayers();updateControls();};
 function setPathMode(on){if(stroke||moving||loading)return;pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
@@ -1480,7 +1445,6 @@ $('tool-style').addEventListener('change',() => {
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for (const id of ['mineral-ring','ring-spread','ring-variation']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
 for(const id of ['material-weathering','deposit-spread']) $(id).addEventListener('input',()=>{markViewChanged();updateControls();schedule();queueWeather();persistLater();});
-$('shallow-mode').addEventListener('change',() => { rememberTool(true); updateControls(); persistLater(); if (selected>=0) { editSelectedFromControls(); checkpoint(); queueWeather(); } });
 $('scree').addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); queueWeather(); persistLater(); });
 function applySeedControl() {
   const next=clamp(Math.trunc(Number($('seed').value) || 0),0,4294967295);
@@ -1548,7 +1512,7 @@ window.addEventListener('keydown',event => {
   if (selected>=0 && nodes[selected]?.points && (turn || grow || lift) && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
     changeSelected(n => {
-      if (lift) { if (n.params && !['deep','shallow','ramp','erase'].includes(n.kind)) n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; return; }
+      if (lift) { if (n.params && n.kind!=='erase') n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; return; }
       transformNode(n,nodeState(n),about(nodePivot(n),turn?rotation(turn):scaling(grow)));
     });
   }
@@ -1779,7 +1743,7 @@ function buildKnobs() {
 }
 // A shape's own water choices, which turn the hard step, the ramp and the lit bed on inside its footprint whatever the world says (engine-frag.wgsl's `pick`).
 function strokeWaterPicks() {
-  const water=nodes.filter(n=>['deep','shallow','landform'].includes(n.kind)),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
+  const water=nodes.filter(n=>n.kind==='landform'),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
   return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2),bedLit:picked('waterBed',1,3),crackedBed:picked('waterBed',3)};
 }
 // A Shallow water or Deep water base color picked in the Colors panel: the water is then two flat tones, whatever the world's own (engine-frag.wgsl skips the lit bed and the third colour).

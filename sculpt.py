@@ -29,7 +29,7 @@ KNOB_DEFAULTS = dict(
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
-    faceVariation=.8, lean=0, facing=0, outlineVar=1, widthVar=1, heightVar=1, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
+    faceVariation=.8, lean=0, facing=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
     boulders=0, boulderSize=9, boulderFoot=.5, boulderCluster=.6, boulderMoss=.35, boulderRound=0,
     debris=0, debrisReach=48, debrisSize=6, debrisSort=.8, repose=.6,
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
@@ -52,17 +52,17 @@ KNOB_DEFAULTS = dict(
     frostWet=0, frostNeedles=.5,
     banding=0, bandSoftness=.35, bandWater=0, sandBanding=0, sandBandSpacing=2,
     strata=0, strataContrast=.6, strataGrain=1,
-    fingers=0, bankPx=0,
-    # Coast pass (card E4): fingers on the joined coast and flat shore layers cut as heights
-    # (layerPx px a layer, riser 0 shares the bank's rise out, ledge and irregularity in shares).
-    shoreLayers=0, layerPx=12, layerRiser=0, layerLedge=.75, layerRough=.5, layerStyle=0, shoreEdge=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    fingers=0,
+    # Coast pass (card E4): fingers on the joined coast and a landform's shoreline steps cut as heights
+    # (layerPx px a step, riser 0 shares the bank's rise out; the count, flat share and irregularity are the landform's Steps).
+    layerPx=12, layerRiser=0, shoreEdge=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
     # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
     flatBank=0,
-    # Cross-section (card C1): the face width in px (0: a share of the brush) and the terraces on the curve (sculpt-shape-presets.js).
-    facePx=0, terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
+    # Cross-section (card C1): the terraces on a landform's section (sculpt-shape-presets.js).
+    terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
     heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, varySize=140, varyFoot=1, varyMiddle=1,
@@ -419,7 +419,8 @@ WORLD_KNOBS = {
                    # so the lit ledges stay with the strata colours: cliffBed 0).
                    cliffFollow=1, cliffReach=40, cliffBed=0,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
-                   # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8).
+                   # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8). The ridge presets carry
+                   # this as variation (sculpt.js TOOL_PRESETS); the knobs still shape a crater's spurs.
                    baseVary=36, baseBump=3.5, baseBand=1,
                    # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
                    desertCapFlat=1),
@@ -458,8 +459,8 @@ WORLD_KNOBS = {
                  # G8: lit slopes carry thin dark folds that follow the form (contours of the sculpted
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
-                 # G8: retail's hills and walls fold: lumpy, lobed outlines (a shape option; the scenes' own
-                 # strokes carry none, so this is the world's default for hills and mountains).
+                 # G8: retail's hills and walls fold: lumpy, lobed outlines. The ridge presets carry them as
+                 # variation (sculpt.js TOOL_PRESETS); the knob still folds a crater's spurs.
                  moonLobes=.5,
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
@@ -483,14 +484,13 @@ WORLD_KNOBS = {
     # rim, outline and lip at the coast. Worms gave way to the lines.
     'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0,
-                 fingers=1, worms=0, shoreEdge=1, slopeTexture=0,
-                 # Dry banks ~60 px wide whatever the lake's size (measure/lava_coasts.py bank).
-                 bankPx=60,
+                 worms=0, shoreEdge=1, slopeTexture=0,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
                  # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
-                 # a shaded riser) in place of dark band lines (Banding 0 above).
-                 shoreLayers=11, layerPx=9, layerLedge=.8, layerRough=.7,
-                 # Fingers are low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
+                 # a shaded riser) in place of dark band lines (Banding 0 above). The Water presets
+                 # carry the count, flat share and irregularity as shoreline Steps (sculpt.js TOOL_PRESETS).
+                 layerPx=9,
+                 # The Water presets turn Fingers on: low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
                  # Less ambient light, so the shaded risers read as retail's near-black lines.
                  ambient=.3,
                  # Card E4: hills and mountains are rough rock, not smooth cones crossed by black
@@ -602,7 +602,7 @@ WORLD_KNOBS = {
                 # height 4 keeps the frost over the water level with the bank behind it
                 # (14 made a dark wall there); frostWet 1 keeps the band white instead of
                 # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
-                shorePlates=1, plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=5, plateHeight=4, frostWet=1,
+                plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=5, plateHeight=4, frostWet=1,
                 # Card E6: retail's common ice mountain (Etorrep Glacier, Polar Range) is one monotone,
                 # very rough, shiny slate-blue ice lit strongly: every face is the rock art (contrast
                 # .55) from the first slope to the crest, with a fine grain 2.5 px wide (stretch 2)

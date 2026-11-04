@@ -34,7 +34,6 @@ test('landform step details follow the active reference and count',async()=>{
   const {shapeControlAvailable:available}=await import('../sculpt-control-schema.js');
   for(const reference of [0,1,2]){
     const p={stepReference:reference,terraces:6};
-    for(const key of ['shoreLayers','layerLedge','layerRough','layerStyle'])assert.equal(available(key,'landform',p),false);
     assert.equal(available('breakup','landform',p),reference===0);
     assert.equal(available('layerPx','landform',p),reference!==0);
     assert.equal(available('layerCircle','landform',p),reference===2);

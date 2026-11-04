@@ -1,4 +1,4 @@
-import {isShouldered,strokeKnots,sampleKnots,landformSteps,landformShore} from './sculpt-shape-presets.js';
+import {strokeKnots,sampleKnots,landformSteps,landformShore} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -24,17 +24,16 @@ const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:
  crystalForm:'Form',crystalSize:'Element width (px)',crystalCount:'Elements per cluster',crystalSides:'Polygon sides',crystalTop:'Flat top share',crystalLean:'Apex lean',
  crystalTiers:'Stepped column tops',crystalAlign:'Align blocks to shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
  craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
- iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',moonLobes:'Outline lobes',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
+ iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
  fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerSize:'Lobe size',
  styleErosion:'Local relaxation',styleDeposits:'Local deposits',styleVegetation:'Local vegetation',styleExposure:'Local rock exposure',
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
 export function shapeControlAvailable(key,kind,p){
- // A landform has its own width (the diameter), softness-free presets and variation; the controls of the other kinds' outlines do not reach it (card H27).
- if(kind==='landform'&&['facePx','softness','faceVariation','outlineVar','widthVar','heightVar'].includes(key))return false;
+ // A landform has its own width (the diameter), softness-free presets and variation (card H27).
+ if(kind==='landform'&&['softness','faceVariation'].includes(key))return false;
  if(kind==='landform'){
   const shore=Number(p.stepReference)>0,circular=Number(p.stepReference)===2,on=Number(p.terraces)>0;
-  if(['shoreLayers','layerLedge','layerRough','layerStyle'].includes(key))return false;
   if(['ledge','terraceJitter'].includes(key))return on;
   if(key==='breakup')return on&&!shore;
   if(['layerPx','layerRiser','layerVary'].includes(key))return on&&shore;
@@ -42,29 +41,23 @@ export function shapeControlAvailable(key,kind,p){
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
  }
 
- const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2,ridge=Math.round(p.spurCount)>=1||p.crestJag>0||p.crestVary>0||p.crestTaper>0;
- const sharedFace=['plateau','offset','erase','paint','sand','grass'].includes(kind)&&!(p.facePx>0),shoulderedHill=isShouldered(kind,p,ridge);
- // The classic shouldered ridge uses a different footprint; its settled path
- // bypasses these foot effects. Custom/variable ridges use the shared profile.
- if(shoulderedHill&&['baseVary','baseBump','faceVariation'].includes(key))return false;
- // The face wanders on a share face (its shoulder) or a px one; softness reads the shoulder, a hill's widths, and the forms that follow it.
- if(key==='faceVariation')return sharedFace||p.facePx>0;
- if(key==='softness')return sharedFace||shoulderedHill||(!p.curve?.knots&&['mountain','cliff'].includes(p.curve?.form||(kind==='mountain'?'mountain':'')));
- if(key==='moonLobes'&&p.baseVary>0)return false;
+ const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
+ // The face wanders on the shoulder of Reset ground and the cover brushes.
+ if(key==='faceVariation')return ['erase','paint','sand','grass'].includes(kind);
  // p.world is what worldControlRequirement reads. A face share needs faces of rock and moss; deposits need sand or stones that a world can lay down, and a beach keeps the Sand brush for its bars.
  const world=p.world||{};
  if(key==='styleFace'&&Number(world.microRock??1)<=0)return false;
  // A stroke's edge choice moves the step only where the step's deep share is drawn; its own Lit bed draws it.
  if(key==='waterDeep'&&!deepShows(world,[1,3].includes(Math.round(p.waterBed||0))))return false;
  if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.stoneDensity)>0))return false;
- // A hill leans on its own, and a plateau or offset too until a Face width takes that away; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
+ // A side to lean toward means something once the two sides differ: a Lean other than 1, or different front and back sections.
  if(key==='facing'&&kind==='landform'){
   if(p.lean>0&&p.lean!==1)return true;
   // Facing swaps the two sides; equal widths and equal sampled sections have no direction to choose.
   const k=strokeKnots(kind,p,false);if(!k.back)return false;
   const front=sampleKnots(k.knots),back=sampleKnots(k.back);return front.some((v,i)=>v!==back[i]);
  }
- if(key==='facing')return kind==='hill'||['plateau','offset'].includes(kind)&&!(p.facePx>0)||p.lean>0;
+ if(key==='facing')return p.lean>0;
  if(kind==='crystal'){
   if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;
   if(['crystalCount','crystalSides','crystalVariation'].includes(key))return form!==1;
@@ -75,10 +68,7 @@ export function shapeControlAvailable(key,kind,p){
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  // A landform's coast pass and its facets are one pass over its result; shore features take it.
  if(kind==='landform'&&['iceFacets','iceFacetSize'].includes(key)&&landformShore(landformSteps(p)))return false;
- if(key==='iceFacetSize')return ['mountain','landform'].includes(kind)&&p.iceFacets>0;
- if(['ledge','terraceJitter','breakup'].includes(key))return p.terraces>0;
- if(key==='lavaSpread')return p.shoreLayers>0&&p.layerStyle<.5;
- if(['layerCircle','lavaCircleVary'].includes(key))return p.shoreLayers>0&&p.layerStyle>=.5;
+ if(key==='iceFacetSize')return p.iceFacets>0;
  return true;
 }
 

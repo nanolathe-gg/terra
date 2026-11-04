@@ -3,16 +3,9 @@ import assert from 'node:assert/strict';
 import {shapeControlAvailable as available,controlLabel,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
-test('a hill exposes foot effects only as a ridge',()=>{
- assert.equal(available('baseVary','hill',{}),false);
- assert.equal(available('baseBump','hill',{crestJag:.2}),true);
- assert.equal(available('baseVary','hill',{spurCount:3}),true);
- assert.equal(available('moonLobes','mountain',{baseVary:15}),false);
- assert.equal(available('iceFacetSize','hill',{iceFacets:1}),false);
- assert.equal(available('iceFacetSize','mountain',{iceFacets:1}),true);
-});
 test('a landform takes angular facets unless its coast pass is on',()=>{
  assert.equal(available('iceFacetSize','landform',{iceFacets:1}),true);
+ assert.equal(available('iceFacetSize','landform',{iceFacets:0}),false);
  assert.equal(available('iceFacets','landform',{iceFacets:1,fingers:1}),false);
  assert.equal(available('iceFacets','landform',{stepReference:1,terraces:4}),false);
  assert.equal(available('iceFacets','landform',{stepReference:0,terraces:4}),true);
@@ -23,9 +16,9 @@ test('faceted forms and shoreline materials keep their own dependent controls',(
  assert.equal(available('crystalCount','crystal',{crystalForm:1}),false);
  assert.equal(available('bergTiltDir','crystal',{crystalForm:2,bergTilt:0}),false);
  assert.equal(available('bergTiltDir','crystal',{crystalForm:2,bergTilt:.2}),true);
- assert.equal(available('frostNeedles','deep',{shorePlates:1,plateMaterial:1}),false);
- assert.equal(available('frostNeedles','deep',{shorePlates:1,plateMaterial:2}),true);
- assert.equal(available('crystalShoreSeam','deep',{shorePlates:1,plateMaterial:2}),false);
+ assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:1}),false);
+ assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:2}),true);
+ assert.equal(available('crystalShoreSeam','landform',{shorePlates:1,plateMaterial:2}),false);
 });
 test('erase all masks includes all eight local style planes',()=>{
  const context={seed:1,baseHeight:99,sea:75,params:n=>new Proxy(n.params,{get:(q,k)=>q[k]??0})};
@@ -160,13 +153,13 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('deepDepth',{waterTones:2,rampWater:0,deepEdge:1});   // the hard step sits at their midpoint
  assert.match(requirement('shallowDepth',{waterTones:1}),/one colour/);
  // a stroke's edge choice, on its own Lit bed or the world's
- assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterTones:1}}),false);
- assert.equal(available('waterDeep','deep',{waterBed:1,world:{waterTones:1}}),true);
- assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterTones:3,bedLit:1}}),true);
- assert.equal(available('waterDeep','shallow',{waterBed:0,world:{waterTones:2}}),true);
+ assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterTones:1}}),false);
+ assert.equal(available('waterDeep','landform',{waterBed:1,world:{waterTones:1}}),true);
+ assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterTones:3,bedLit:1}}),true);
+ assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterTones:2}}),true);
  // under a picked water color Lit bed and Noise water need the hard step, but Cracked bed still draws, so a stroke's bed row stays
- assert.equal(available('waterBed','deep',{waterDeep:2,world:{waterColored:1,waterTones:2}}),true);
- assert.equal(available('waterDeep','deep',{waterBed:0,world:{waterColored:1,waterTones:2}}),true,'a picked color makes two tones, so a stroke\'s edge shows');
+ assert.equal(available('waterBed','landform',{waterDeep:2,world:{waterColored:1,waterTones:2}}),true);
+ assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterColored:1,waterTones:2}}),true,'a picked color makes two tones, so a stroke\'s edge shows');
  // facts of the world's material the panel passes in with the settings
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});
@@ -180,19 +173,15 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
  shows('dither',{paletteMix:0});
- assert.equal(available('facing','mountain',{lean:0}),false);
- assert.equal(available('facing','mountain',{lean:2}),true);
- assert.equal(available('facing','hill',{lean:0}),true,'a hill leans on its own');
- assert.equal(available('facing','plateau',{lean:0}),true,'a plateau leans on its own');
- assert.equal(available('styleFace','hill',{world:{microRock:0}}),false,'faces of one material have no rock share to set');
- assert.equal(available('styleFace','hill',{world:{microRock:1}}),true);
- assert.equal(available('styleFace','hill',{}),true);
- assert.equal(available('styleDeposits','hill',{world:{beachLayer:1,sand:0}}),false,'a beach keeps the Sand brush for its bars');
- assert.equal(available('styleDeposits','hill',{world:{beachLayer:1,sand:.5}}),true);
- assert.equal(available('styleDeposits','hill',{world:{beachLayer:1,sand:0,stoneDensity:.2}}),true);
- assert.equal(available('styleDeposits','hill',{world:{beachLayer:0,sand:0}}),true);
- assert.equal(available('facing','plateau',{lean:0,facePx:6}),false,'until a Face width takes that away');
- assert.equal(available('facing','plateau',{lean:2,facePx:6}),true);
+ assert.equal(available('facing','landform',{lean:0}),false,'equal sides have no side to lean toward');
+ assert.equal(available('facing','landform',{lean:2}),true);
+ assert.equal(available('styleFace','landform',{world:{microRock:0}}),false,'faces of one material have no rock share to set');
+ assert.equal(available('styleFace','landform',{world:{microRock:1}}),true);
+ assert.equal(available('styleFace','landform',{}),true);
+ assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:0}}),false,'a beach keeps the Sand brush for its bars');
+ assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:.5}}),true);
+ assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:0,stoneDensity:.2}}),true);
+ assert.equal(available('styleDeposits','landform',{world:{beachLayer:0,sand:0}}),true);
 });
 
 // A symmetric mesa cannot change by turning its identical sides; an unlinked plateau can, even at equal widths.
