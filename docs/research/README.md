@@ -3,8 +3,9 @@
 Research notes for the owner and the next implementation agent. Nothing here
 is part of the editor: the two pages are standalone WebGPU prototypes, and
 no card below has landed. The full brief, with figures, licenses and the
-hand-off prompt, is the artifact "Terraform Prior-Art Review" (link in the
-session report).
+hand-off prompt, is the artifact "Terraform Prior-Art Review":
+<https://claude.ai/artifact/61EeARxFRnFAFRHPGgTrtE> (private to the owner until
+shared).
 
 ## The pages
 
@@ -46,6 +47,8 @@ By eye:
 | P1 | Gullies: the filter on hill, mountain and landform strokes, steered by the fall line; one stroke row | prototype now |
 | P2 | Rills in the bake, steered by the Time pass's fall-line map, in place of fixed-angle gully grooves | experiment |
 | P3 | Derivative-damped lumps, fractional octaves and a smooth crease, tilted broken terraces (from ProceduralTerrains, MIT) | experiment |
-| P4 | WGSL `override` constants for per-world gates in the bake and draw, measured with `perf.mjs` | measure first |
-| P6 | Carried velocity and MacCormack sediment in the pipe model (LanLou123/Webgl-Erosion, MIT) | experiment |
-| P7 | A coarse whole-map stream-power pass for map-scale ranges (H-Schott, MIT; GPU-Gang WGSL port, BSD-3) | later, needs a ruling |
+| P4 | The draw: evaluate the surface once per pixel instead of about 47 times (`surfaceHeight` taps in `engine-frag.wgsl`) | measure first |
+| P5 | The Time pass: several erosion iterations per dispatch in workgroup memory, byte-identical | measure first |
+| P6 | WGSL `override` constants for per-world gates in the bake and draw, measured with `perf.mjs` | measure first |
+| P7 | Carried velocity and MacCormack sediment in the pipe model (LanLou123/Webgl-Erosion, MIT) | experiment |
+| P8 | A coarse whole-map stream-power pass for map-scale ranges (H-Schott, MIT; GPU-Gang WGSL port, BSD-3) | later, needs a ruling |
