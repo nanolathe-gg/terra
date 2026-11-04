@@ -55,14 +55,77 @@ import numpy as np
 WIN = (384, 288)
 STATS = ['slope50', 'slope90', 'slopeShape', 'curvSkew2', 'curvSkew8', 'betaLong', 'betaShort', 'pitArea', 'hack',
          'concavity', 'saHill', 'gmRidge', 'gmSpur', 'gmHollow', 'gmValley', 'hypso', 'aniso', 'relief']
-SCORED = [s for s in STATS if s not in ('hypso', 'relief')]
+SCORED = [s for s in STATS if s not in ('slope50', 'hypso', 'relief')]  # slope50 says how much of the window is plain
 MIN_RELIEF = 24  # TA units: flatter windows (a prairie table, a valley floor) say nothing about erosion and are skipped
 
-# Ranges measured with this file from USGS 3DEP 1 m lidar DEMs (public domain), resampled by area to 1.5 m per px,
-# windows of 384 x 288 px. Each site: p10, p50, p90 over its windows; 'real': p5 and p95 over all of them.
-# Filled in by `--ranges`; see SOURCES.
-REFERENCE = {}
-SOURCES = {}
+# Ranges measured with this file from USGS 3DEP 1 m lidar DEMs (public domain; SOURCES), resampled by area to 1.5 m
+# per px and cut into 20 windows of 384 x 288 px a site; windows with under MIN_RELIEF units of relief are skipped.
+# Each site: p10, p50, p90 over its windows; 'real': p5, p50, p95 over all of them. Reproduce with, for each site,
+#   --dem https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1m/Projects/<path> --box <box> --limit 20 --name <site>
+# then --ranges over the five outputs. Scale: TA's art px as 1.5 m (the brief's 1-2 m; at 1 m and 2 m the pooled
+# medians move by the amounts in docs/research/README.md). Height: one TA unit is zk = 0.7 px of true height (the
+# lab's lighting), so 1.05 m; slopes are true tangents on both sides.
+REFERENCE = {
+    'ia-loess': {  # 20 windows
+        'slope50': [0.161, 0.245, 0.275], 'slope90': [0.397, 0.456, 0.667], 'slopeShape': [0.387, 0.467, 0.560],
+        'curvSkew2': [-0.534, -0.033, 0.653], 'curvSkew8': [-1.181, -0.743, 0.395],
+        'betaLong': [3.616, 4.152, 4.705], 'betaShort': [4.488, 4.954, 5.697], 'pitArea': [0.000, 0.000, 0.003],
+        'hack': [0.320, 0.336, 0.386], 'concavity': [0.199, 0.281, 0.343], 'saHill': [0.010, 0.052, 0.160],
+        'gmRidge': [0.029, 0.047, 0.078], 'gmSpur': [0.100, 0.141, 0.234], 'gmHollow': [0.104, 0.129, 0.159],
+        'gmValley': [0.020, 0.051, 0.088], 'hypso': [0.320, 0.427, 0.597], 'aniso': [0.052, 0.168, 0.339],
+        'relief': [49.8, 59.4, 65.5],
+    },
+    'nd-badlands': {  # 20 windows
+        'slope50': [0.218, 0.354, 0.413], 'slope90': [0.653, 0.725, 0.831], 'slopeShape': [0.307, 0.510, 0.556],
+        'curvSkew2': [-0.704, -0.044, 0.345], 'curvSkew8': [-0.902, -0.542, -0.075],
+        'betaLong': [3.566, 4.135, 5.224], 'betaShort': [4.383, 4.650, 5.007], 'pitArea': [0.000, 0.000, 0.004],
+        'hack': [0.355, 0.411, 0.449], 'concavity': [0.144, 0.308, 0.438], 'saHill': [0.022, 0.086, 0.169],
+        'gmRidge': [0.050, 0.081, 0.121], 'gmSpur': [0.150, 0.180, 0.207], 'gmHollow': [0.115, 0.144, 0.176],
+        'gmValley': [0.049, 0.092, 0.134], 'hypso': [0.371, 0.489, 0.576], 'aniso': [0.058, 0.133, 0.257],
+        'relief': [51.3, 65.8, 75.7],
+    },
+    'sd-badlands': {  # 11 windows
+        'slope50': [0.096, 0.582, 0.717], 'slope90': [0.868, 1.150, 1.198], 'slopeShape': [0.150, 0.506, 0.614],
+        'curvSkew2': [-0.291, 0.042, 0.267], 'curvSkew8': [-0.542, -0.063, 0.321], 'betaLong': [2.406, 3.144, 3.814],
+        'betaShort': [4.233, 4.805, 4.936], 'pitArea': [0.000, 0.000, 0.001], 'hack': [0.356, 0.476, 0.539],
+        'concavity': [0.095, 0.272, 0.466], 'saHill': [-0.809, -0.142, -0.065], 'gmRidge': [0.077, 0.149, 0.163],
+        'gmSpur': [0.133, 0.185, 0.206], 'gmHollow': [0.110, 0.143, 0.165], 'gmValley': [0.057, 0.112, 0.177],
+        'hypso': [0.287, 0.448, 0.692], 'aniso': [0.052, 0.146, 0.317], 'relief': [60.4, 67.7, 90.3],
+    },
+    'co-mesa': {  # 20 windows
+        'slope50': [0.108, 0.164, 0.443], 'slope90': [0.350, 0.494, 1.000], 'slopeShape': [0.261, 0.385, 0.522],
+        'curvSkew2': [-0.286, 0.433, 1.233], 'curvSkew8': [-0.171, 0.204, 0.844], 'betaLong': [3.966, 4.330, 4.681],
+        'betaShort': [4.210, 4.481, 4.849], 'pitArea': [0.000, 0.000, 0.005], 'hack': [0.380, 0.424, 0.481],
+        'concavity': [0.025, 0.222, 0.401], 'saHill': [0.027, 0.093, 0.210], 'gmRidge': [0.027, 0.037, 0.054],
+        'gmSpur': [0.158, 0.175, 0.195], 'gmHollow': [0.107, 0.128, 0.139], 'gmValley': [0.028, 0.041, 0.060],
+        'hypso': [0.394, 0.549, 0.699], 'aniso': [0.144, 0.317, 0.426], 'relief': [51.5, 78.6, 227.9],
+    },
+    'wy-teton': {  # 20 windows
+        'slope50': [0.299, 0.741, 0.871], 'slope90': [0.626, 1.292, 2.377], 'slopeShape': [0.395, 0.514, 0.605],
+        'curvSkew2': [-0.889, -0.401, 0.220], 'curvSkew8': [-1.038, -0.437, 0.619],
+        'betaLong': [3.335, 3.930, 4.548], 'betaShort': [3.231, 3.807, 4.143], 'pitArea': [0.000, 0.000, 0.000],
+        'hack': [0.411, 0.454, 0.499], 'concavity': [0.017, 0.057, 0.380], 'saHill': [-0.124, -0.043, 0.071],
+        'gmRidge': [0.003, 0.018, 0.036], 'gmSpur': [0.115, 0.156, 0.187], 'gmHollow': [0.113, 0.148, 0.190],
+        'gmValley': [0.004, 0.017, 0.038], 'hypso': [0.348, 0.419, 0.477], 'aniso': [0.101, 0.234, 0.393],
+        'relief': [123.8, 374.9, 466.8],
+    },
+    'real': {  # 91 windows
+        'slope50': [0.116, 0.300, 0.794], 'slope90': [0.367, 0.691, 1.623], 'slopeShape': [0.226, 0.482, 0.606],
+        'curvSkew2': [-0.806, 0.009, 1.131], 'curvSkew8': [-1.182, -0.251, 0.931], 'betaLong': [2.878, 4.111, 5.111],
+        'betaShort': [3.618, 4.547, 5.288], 'pitArea': [0.000, 0.000, 0.007], 'hack': [0.326, 0.414, 0.511],
+        'concavity': [0.009, 0.234, 0.468], 'saHill': [-0.161, 0.050, 0.219], 'gmRidge': [0.006, 0.046, 0.149],
+        'gmSpur': [0.106, 0.171, 0.219], 'gmHollow': [0.098, 0.136, 0.188], 'gmValley': [0.008, 0.049, 0.139],
+        'hypso': [0.316, 0.454, 0.695], 'aniso': [0.049, 0.182, 0.417], 'relief': [45.8, 68.6, 428.9],
+    },
+}
+SOURCES = {  # USGS 3DEP 1 m DEMs, public domain: prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1m/Projects/<path>
+    # site: (landform, project/TIFF/tile, --box in the tile's pixels, region relief in m)
+    'ia-loess': ('dissected loess hills, Loess Hills near Preparation Canyon, IA', 'IA_WesternIA_2020_D21/TIFF/USGS_1M_15_x25y465_IA_WesternIA_2020_D21.tif', (6656, 6144, 2560, 2560), 104),
+    'nd-badlands': ('badlands, Theodore Roosevelt NP south unit, ND', 'ND_SouthWest_2021_D21/TIFF/USGS_1M_13_x61y520_ND_SouthWest_2021_D21.tif', (4608, 0, 2560, 2560), 147),
+    'sd-badlands': ('the Badlands Wall and the table above it, SD', 'SD_Southwest_NRCS_SD_2018_D18/TIFF/USGS_1M_13_x72y487_SD_Southwest_NRCS_SD_2018_D18.tif', (0, 7168, 2560, 2560), 133),
+    'co-mesa': ('canyons and mesa rims, Colorado National Monument, CO', 'CO_MesaCo_QL2_UTM12_2016/TIFF/USGS_one_meter_x69y433_CO_MesaCo_QL2_UTM12_2016.tif', (5120, 3072, 2560, 2560), 466),
+    'wy-teton': ('alpine peaks, cirques, talus and a U valley, Cascade Canyon, Teton Range, WY', 'WY_GrandTetonNP_D22/TIFF/USGS_1M_12_x51y485_WY_GrandTetonNP_D22.tif', (4608, 3072, 2560, 2560), 1087),
+}
 
 
 # ---- reading ----------------------------------------------------------------------------------------------------
@@ -379,7 +442,8 @@ def ranges(rows):
 
 
 def score(st, ref=None):
-    """Statistics inside the pooled real p5..p95, and the distance outside in units of that range's width."""
+    """Statistics inside the pooled real p5..p95, and each miss's distance outside in widths of that range ('excess'
+    in the table sums them, each capped at 1: 0 when every statistic is inside, 15 when all are far out)."""
     ref = ref or REFERENCE['real']
     inside, miss = 0, []
     for s in SCORED:
@@ -407,18 +471,19 @@ def nearest_site(st):
 
 
 def table(rows, names):
-    head = ['in'] + [s[:9] for s in STATS] + ['nearest']
+    head = ['in', 'excess'] + [s[:9] for s in STATS] + ['nearest']
     print(f'{"field":<34}' + ''.join(f'{h:>10}' for h in head))
     if REFERENCE:
         for site, r in REFERENCE.items():
-            print(f'{"  " + site + " (p50)":<34}' + f'{"":>10}' + ''.join(f'{r[s][1]:>10.3f}' for s in STATS))
+            print(f'{"  " + site + " (p50)":<34}' + f'{"":>20}' + ''.join(f'{r[s][1]:>10.3f}' for s in STATS))
         lo, hi = REFERENCE['real'], REFERENCE['real']
-        print(f'{"  real p5":<34}{"":>10}' + ''.join(f'{lo[s][0]:>10.3f}' for s in STATS))
-        print(f'{"  real p95":<34}{"":>10}' + ''.join(f'{hi[s][2]:>10.3f}' for s in STATS))
+        print(f'{"  real p5":<34}{"":>20}' + ''.join(f'{lo[s][0]:>10.3f}' for s in STATS))
+        print(f'{"  real p95":<34}{"":>20}' + ''.join(f'{hi[s][2]:>10.3f}' for s in STATS))
     for name, st in zip(names, rows):
-        inside = f'{score(st)[0]}/{len(SCORED)}' if REFERENCE else ''
+        inside, miss = score(st) if REFERENCE else (0, [])
+        excess = sum(min(d, 1.0) for _, d in miss)
         near = nearest_site(st) if REFERENCE else ''
-        print(f'{name:<34}{inside:>10}' + ''.join(f'{st[s]:>10.3f}' for s in STATS) + f'{near:>12}')
+        print(f'{name:<34}{f"{inside}/{len(SCORED)}" if REFERENCE else "":>10}{excess:>10.2f}' + ''.join(f'{st[s]:>10.3f}' for s in STATS) + f'{near:>12}')
 
 
 def opt(k, d=None):
