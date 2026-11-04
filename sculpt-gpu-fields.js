@@ -1,6 +1,6 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformMakesWater} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -40,6 +40,8 @@ function shapeMaskWrites(kind, q, sat) {
     out.push([9 + j, c === 2 ? -127 : 127, 1, 1]);
     if (k === 'waterBed') out.push([13, c === 3 ? 127 : 0, 1, 1]);
   });
+  // P27: Surf, 0..1 into plane 18, at full strength inside the footprint of a stroke that makes water.
+  if (kind === 'landform' && q.surf > 0 && landformMakesWater(q)) out.push([18, Math.round(127 * clamp(q.surf, 0, 1)), 1, 1]);
   return out;
 }
 

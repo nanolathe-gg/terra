@@ -82,7 +82,7 @@ export function groupToolControls(fields){
  [null,'Faceted form',['crystalForm','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation']],
  [null,'Column structure',['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth']],
  [null,'Planar block',['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat']],
- [null,'Water appearance',['waterShore','waterDeep','waterBed']],
+ [null,'Water appearance',['waterShore','waterDeep','waterBed','surf']],
  [null,'Crest variation',['crestJag','crestVary','crestTaper']],
  ['maskChannel','Paint inside shape',['maskChannel','maskAmount']],['craterFacets','Bowl facets',['craterFacets','crystalCraterPx','crystalCraterStep','crystalCraterSkin']],['iceFacets','Angular facets',['iceFacets','iceFacetSize']]
  ];

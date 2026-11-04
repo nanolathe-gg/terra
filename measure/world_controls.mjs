@@ -320,7 +320,7 @@ try {
       // Shore controls need a sea crossing: the ordinary raised landform fixture has none.
       if(kind==='landform'&&key==='stepReference')return {elevation:-55,combine:1,heightVary:0,terraces:6,ledge:.8};
       if(kind==='landform'&&key==='heightReference')return {elevation:110,heightReference:0};
-      if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')||key.startsWith('water')))return {elevation:-55,combine:1,heightVary:0};
+      if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')||key.startsWith('water')||key==='surf'))return {elevation:-55,combine:1,heightVary:0};
       return {};
     };
     const scaleOf = Object.fromEntries(st.fields.map(f => [f[0], f[7]]));

@@ -65,7 +65,7 @@ KNOB_DEFAULTS = dict(
     terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
-    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, varySize=140, varyFoot=1, varyMiddle=1,
+    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,
@@ -218,7 +218,7 @@ ENGINE_KNOBS = {
     'green': dict(blocks=1, blockRow=3.2, blockWidth=5.76, blockTilt=.8, blockStep=1.5, blockSeam=1.6, blockChip=1.2,
                   facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4,
                   rockMoss=.4, hillBlocks=.5,
-                  terraceBreak=0, terraceCalm=0, wetSwath=.35, outcrop=0),
+                  terraceBreak=0, terraceCalm=0, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -227,7 +227,7 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
-    'green': dict(banding=.5, crackDark=.4,
+    'green': dict(banding=.5, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -660,7 +660,9 @@ WORLD_VARIANTS = {
         # ramp, which still gates the slope texture (the table is read by engine-frag.wgsl groundCover). Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
         # dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the
         # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(gullies=.4, wrinkles=1),
+        # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
+        # higher Surf builds.
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a'), knobs=dict(gullies=.4, wrinkles=1, surf=.1),
                        material=dict(groundCover=dict(
                            wet=[.25, .9], dry=.4, patch=22, patchiness=.8, ground=[55, 93, 27],
                            soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
