@@ -189,6 +189,50 @@ feature.
     - It is a new tool beside plateau, hill and mountain until it can replace
       them. Then their controls go (card H27 lists which).
 
+## Decisions (owner, 2026-11-04, on the terrain research brief)
+
+The brief (`docs/research/README.md`, cards P1-P24) proposed a more modern,
+realistic look in the same palette and asked four questions (D1-D4).
+
+25. **A modern Green, first and alone (D1).** *"For now let's just add a
+    modern green planet and see how that goes. We can add other modern
+    biomes later."*
+    - Green gets a `modern` variant (`WORLD_VARIANTS['green']`), on the one
+      engine: only numbers, colours and config, like every variant.
+    - The modern variant is judged on green-1..3 for palette, scale and
+      readability at 1x, and by eye for realism. The checklist:
+      - drainage that branches;
+      - rock that breaks along its beds and joints;
+      - debris where gravity and water leave it;
+      - light that agrees from any sun.
+    - Retail presets keep rule 10: a change keeps their bytes or moves them
+      toward retail. No other world gets a modern variant yet.
+26. **One stored whole-map drainage pass (D2).** *"yes"*: a coarse
+    whole-map drainage plane (exact area by Euler tour, card P21). It
+    follows the flow-bake pattern: a hash of its inputs, a stale badge,
+    stored planes that regional replay copies. Dunes and stream power (P19,
+    P8) stay out until a modern world asks for them.
+27. **The merges that remove controls, with the removals (D3).** *"Yes we
+    should do it, including the removals"*:
+    - Gullies replaces the eight `spur*` rows, `heightVar` and `crestJag`
+      (P1).
+    - Supply, Size and Sorting replace the boulder, debris, stone and scree
+      rows (P16).
+    - The rock model's Size, Age and Open joints replace `blockWidth`,
+      `blockRow`, `blockChip`, `blockSeam` and `jointDepth` (P10).
+    - Each card removes what it replaces once every world's preset is
+      re-expressed in the new rows and the retail windows hold. An old save
+      loads without the removed keys (rule 7).
+28. **Pipelines specialized by data are fine (D4), and the order of work.**
+    *"They are probably fine. Prefer generic shared tools first, then speed,
+    then whatever after that."*
+    - `override` constants that specialize one shader source by a world's
+      fixed numbers count as one render path (P6).
+    - Cards go in this order:
+      1. generic shared tools: one mechanism that many looks and worlds use;
+      2. then speed;
+      3. then the rest.
+
 ## The Green slice
 
 Green gets its own engine: new shaders and GPU passes for every stage,
@@ -514,6 +558,9 @@ for each control as of c4b1b80; it goes stale as cards delete knobs.
 | The `rim` URL knob; the bridge's fringe, ring, beach and body knobs | H14e | No longer name an image; the Shores, Bodies and Geology cards may settle them first |
 | Keys in each table's `world.defaults` that nothing registers: `noise`, `rock`, `fingerBlunt`, `hillLobes`, `lavaTread` and others | H14e | Carried verbatim from the old configs; not audited |
 | The `shine*` knobs | H14e | All in `KNOB_DEFAULTS` or `WORLD_KNOBS`; none moved to a table |
+| The eight `spur*` rows, `heightVar`, `crestJag` | research P1 | Gullies grows spurs and crest breaks from the fall line. **Replace (owner, decision 27)** once every preset is re-expressed |
+| The boulder, debris, stone and scree size and density rows (`boulderSize`, `boulderFoot`, `boulderCluster`, `debrisSize`, `debrisReach`, the scree and stone rows) | research P16 | One scatter: Supply, Size, Sorting. **Replace (owner, decision 27)** |
+| `blockWidth`, `blockRow`, `blockChip`, `blockSeam`, `jointDepth` | research P10 | The rock model's Size, Age and Open joints. **Replace (owner, decision 27)** |
 
 ## Rules for the cards
 

@@ -68,6 +68,9 @@ page and an older card disagree, this page wins.
     - Fix the shape before the colour.
     - Tables measured from retail art may be committed. Retail pixels and
       maps are never read at run time.
+    - One exception, Green's `modern` variant (decision 25). It is judged
+      on green-1..3 for palette, scale and 1x readability, and by eye for
+      realism. It never changes the retail preset's bytes.
 11. **TA's scale.** One art pixel is the unit, and detail must read at 1x:
     grit, stones, gouges and scratches. The game keeps one height byte per
     16-pixel cell, so anything finer exists only in the art. Anything meant
