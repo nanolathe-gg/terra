@@ -916,7 +916,9 @@ export function createPagedFields(opts) {
   let pendingStale = null, coarseDone = 0, coarseStart = 0, coarseFirstView = 0, focus = null;
   const coarseW = Math.floor((worldGrid - 1) / COARSE) + 1, coarse = new Float32Array(coarseW * coarseW).fill(baseHeight), coarseHave = new Uint8Array(coarseW * coarseW);
   const coarseQueue = new Map();   // page key -> the world rect to announce when it is done
-  let coarseRunning = false, coarseTimer = 0;
+  let coarseRunning = false, coarseTimer = 0, coarseWaiters = [];
+  // P21: the lattice is whole when every page has filled it and none is queued (an edit queues the pages it touches again).
+  const coarseComplete = () => !coarseRunning && !coarseTimer && !coarseQueue.size && coarseFilled === coarse.length;
   const key = (px, py) => py * np + px;
   const page = (px, py) => {
     let pg = pagesMap.get(key(px, py));
@@ -1109,7 +1111,7 @@ export function createPagedFields(opts) {
       if (!coarseFullAt) coarseFullAt = performance.now();
       scratchT?.destroy(); scratchT = null;   // the evaluation target the background fill borrowed (14 MB) goes back
     } catch (err) { error = err; fail(err); }
-    finally { coarseRunning = false; }
+    finally { coarseRunning = false; if (coarseComplete()) { const w = coarseWaiters; coarseWaiters = []; for (const fn of w) fn(); } }
   }
   let coarseFullAt = 0;
   const coarseAt = (ix, iy) => {   // the lattice, bilinear, at cell (ix, iy)
@@ -1342,6 +1344,9 @@ export function createPagedFields(opts) {
     },
     setTime, timeOn: () => Boolean(time),
     setFocus: r => { focus = r; },
+    // P21: the authored heights at every COARSE-th cell once all of them are current (null while pages are queued), and a promise for the moment they are.
+    coarseLattice: () => coarseComplete() ? {heights: coarse, width: coarseW, step: COARSE, revision} : null,
+    coarseSettled: () => coarseComplete() ? Promise.resolve() : new Promise(resolve => coarseWaiters.push(resolve)),
     startCoarse: () => getEngine().then(() => { coarseStart = performance.now(); for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }),
     debugGather: async rect => {
       const lease = await prepareRect(rect, true), passes = await feedPasses(device()), d = device(), n = (rect.x1 - rect.x0 + 1) * (rect.y1 - rect.y0 + 1), set = makeSet(n, 'dbg');
