@@ -1926,6 +1926,7 @@
   ]
  },
  "material": {
+  "grassSlopes": true,
   "rockSlope": 1.145,
   "rockFeather": 0.43,
   "rockCurvature": 0.28,

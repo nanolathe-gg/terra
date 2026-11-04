@@ -1,0 +1,6 @@
+{"biome": "green", "source": {"note": "Card P1: two Peaked ridges that cross, with Gullies at 100, for the seam where two strokes' gullies meet (each stroke cuts its own along its own fall line; the higher wins). Sea 0."},
+ "ground": true, "query": "sea=0",
+ "strokes": [
+  ["landform", [[140,260],[500,500],[880,760]], {"card": {"diameter": 300, "heightReference": 1, "elevation": 150, "lean": 100, "wander": 8, "widthVary": 0, "heightVary": 3, "varySize": 100, "gullies": 100}, "curve": {"form": "lfMountain"}}],
+  ["landform", [[140,780],[520,520],[900,250]], {"card": {"diameter": 300, "heightReference": 1, "elevation": 130, "lean": 100, "wander": 8, "widthVary": 0, "heightVary": 3, "varySize": 100, "gullies": 100}, "curve": {"form": "lfMountain"}}]
+ ]}

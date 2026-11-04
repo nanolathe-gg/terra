@@ -32,6 +32,8 @@ const CONTROLS = {
   wander: {set: {wander: 60}},
   widthVary: {set: {widthVary: 60}},
   heightVary: {set: {heightVary: 20}},
+  gullies: {set: {gullies: 100}},   // P1
+  gullySize: {base: {gullies: 100}, set: {gullySize: 100}},
   varySize: {base: {wander: 40, widthVary: 40, heightVary: 12}, set: {varySize: 360}},
   varyFoot: {base: {wander: 40, widthVary: 40, heightVary: 12, varyFoot: 0}, set: {varyFoot: 200}},
   varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},

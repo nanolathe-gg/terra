@@ -1901,8 +1901,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             else if (mark < 0.0) { color = min(color * (1.0 + 0.32 * away), max(color, material * 0.9)); }
         }
     }
-    if (u.wrinkles > 0.0 && h > u.sea + 1.0) {
-        // Joined wrinkles (Moon): on every slope, more on faces turned from the light.
+    if (u.wrinkles > 0.0 && u.grassSlopes == 0 && h > u.sea + 1.0) {
+        // Joined wrinkles (Moon; a grass world's are the bake's terracettes): on every slope, more on faces turned from the light.
         let away = smoothstep(-0.05, 0.10, dot(broad, normalize(u.light.xy)));
         let gate = smoothstep(0.05, 0.30, slope) * mix(0.55, 1.0, away);
         if (gate > 0.0) {

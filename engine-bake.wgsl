@@ -989,6 +989,31 @@ fn outcropCracks(p: vec2f, slope: f32) -> f32 {
     return ROCK_CRACK * line * present * smoothstep(0.1, 0.5, zone);
 }
 
+// Terracettes (card P32): the steps grazing and creep wear into steep grass, a riser and a level tread along the contours (the lab's vg-bands).
+// The phase is the height itself, so the steps follow the contours; a phase noise braids them. The sawtooth is reshaped to a riser over a
+// third of the cycle and a level tread, about 0.7 of a step high (2.8 for a 4-unit step), art only: the 16-px height bytes never see them.
+// They wear on straight slopes of 15 to 35 degrees: round hills and hollows (a contour of small radius) would close them into rings, so the
+// amount fades as the radius of the contour falls. Returns (height added, worn-path darkness).
+const TERRACE_STEP = 4.0;
+fn terracettes(p: vec2f, h: f32, slope: f32) -> vec2f {
+    let w = smoothstep(0.22, 0.34, slope) * (1.0 - smoothstep(0.62, 0.84, slope));
+    if (w <= 0.0) { return vec2f(0.0); }
+    // 1 / radius of the contour (px): the ring of heights 14 px out against the middle, over the slope.
+    let d = 14.0;
+    let ring = 0.25 * (baseHeight(p + vec2f(d, 0.0)) + baseHeight(p - vec2f(d, 0.0)) + baseHeight(p + vec2f(0.0, d)) + baseHeight(p - vec2f(0.0, d))) - h;
+    let curve = abs(ring) * 4.0 / (d * d * max(slope, 0.1));
+    let straight = 1.0 - smoothstep(0.008, 0.02, curve);
+    let amount = w * straight;
+    if (amount <= 0.0) { return vec2f(0.0); }
+    let ph = h / TERRACE_STEP + 0.5 * (valueNoise(p / 24.0 + 83.0) * 0.7 + valueNoise(p / 11.0 + 29.0) * 0.3);
+    let t = fract(ph);
+    let dz = amount * TERRACE_STEP * (smoothstep(0.0, 0.3, t) - t);
+    // The worn path along the inner tread: bare, in dashes.
+    let tread = smoothstep(0.5, 0.6, t) * (1.0 - smoothstep(0.8, 0.9, t));
+    let dash = smoothstep(-0.2, 0.2, valueNoise(p / 5.0 + 47.0));
+    return vec2f(dz, amount * tread * dash);
+}
+
 // GLSL main(): the fields at world pixel p.
 fn bake(p: vec2f) -> vec4f {
     let h = baseHeight(p);
@@ -1155,6 +1180,13 @@ fn bake(p: vec2f) -> vec4f {
     // The same flatBank worlds start them 8 units above the dry base.
     if (u.flatBank > 0.0) { bands.y *= smoothstep(u.base + 4.0 * u.flatBank, u.base + 8.0 * u.flatBank, h); }
     height += bands.x;
+    // Terracettes (P32): Joined wrinkles on a grass world. Rock, sand and routes take them away below, as they do the bands.
+    var stepWorn = 0.0;
+    if (u.wrinkles > 0.0 && u.grassSlopes != 0 && h > u.sea + 1.0) {
+        let terrace = terracettes(p, h, slope);
+        height += terrace.x * u.wrinkles * (1.0 - route);
+        stepWorn = terrace.y * u.wrinkles * (1.0 - route);
+    }
     let bandDark = bands.y * smoothstep(-0.25, 0.35, -bandsAt.z);
     let bandLit = bands.y * smoothstep(0.1, 0.6, bandsAt.z) * 0.6;
     var sand = sandCover(p, slope, height) * (1.0 - route);
@@ -1308,6 +1340,7 @@ fn bake(p: vec2f) -> vec4f {
     // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
     lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
     lineDark = max(lineDark, crustDark);
+    lineDark = max(lineDark, 0.5 * stepWorn * (1.0 - buried));
     lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
     lineDark = max(lineDark, facetSeam * u.blockSeam * (1.0 - buried));
