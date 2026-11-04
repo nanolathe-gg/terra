@@ -256,7 +256,7 @@ const worldSetting=key => experiment.has(key)?Number(experiment.get(key)):worldD
 const worldDefault=key => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
 // Owner ruling (H10): fingers always join the coast as thumbs. The JS engine, which H12 deletes, still reads the two retired knobs, so they are fixed here.
-const shapeDefaults=() => ({...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,worldDefault(key)]))});
+const shapeDefaults=() => ({...Object.fromEntries([...SHAPE_FIELDS.map(([key]) => key),...SPUR_OUTLINE_KEYS].map(key => [key,worldDefault(key)]))});
 const nodeShapeParams=n => {const q={...shapeDefaults(),...n.params};return n.kind==='landform'?landformSteps(q):q;};
 const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
 function buildShapeOptions() {
@@ -429,7 +429,7 @@ function updateControls() {
   const net=kind==='fissure' && Number($('fissure-network').value)>=.5;
   const modeOff=key => kind==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
   // Berg options show only for the berg form.
-  const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (kind!=='landform' && key==='layerCircle' && Number($('layer-style').value)!==1);
+  const frostOff=key => key==='frostNeedles' && Number($('plate-material').value)<2;
   const bergOff=key => kind==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
   const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
   const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
@@ -444,7 +444,7 @@ function updateControls() {
   $('material-weathering-value').textContent=$('material-weathering').value+'%';
   $('deposit-spread-value').textContent=$('deposit-spread').value+'%';
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
-  $('tool-style').value=toolSettings[entry]?.preset||'custom';
+  $('tool-style').value=toolSettings[entry==='landform'?landformTool(nodes[selected]?.params):entry]?.preset||'custom';
   $('scree-value').textContent=$('scree').value+'%';
   $('tool-help').textContent=HELP[entry]||'';
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
@@ -843,7 +843,7 @@ function regionalPoints(points) {
   return points.map(p => ({x:clamp(p.x,0,(config.map?.width??size)-1),y:clamp(p.y,0,(config.map?.height??size)-1)}));
 }
 function beginRegionalStroke(kind,point,options={},attachment=-1,target=-1,advanceSeed=false) {
-  if(stroke||moving||!(HELP[kind]||kind==='landform')||kind==='move')throw new Error('A terrain gesture is already active or the brush is invalid.');
+  if(stroke||moving||!(kind==='landform'||HELP[kind]&&strokeKind(kind)===kind)||kind==='move')throw new Error('A terrain gesture is already active or the brush is invalid.');
   const points=regionalPoints([point]),adding=target>=0&&nodes[target]?.points;
   const selectionBefore=selected,index=adding?target:nodes.length;
   const original=adding?cloneNodes([nodes[index]])[0]:null;
@@ -1293,8 +1293,8 @@ function scriptedScene(list,{ground=true}={}) {
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
   nodes=[]; selected=-1;
   if (ground) addGroundNode();
-  list.forEach(([kind,points,options={}],i) => {
-    const {card:override,...rest}=options,d={...toolDefaults(kind),...override},pts=points.map(([x,y]) => ({x,y}));
+  list.forEach(([entry,points,options={}],i) => {
+    const kind=strokeKind(entry),{card:override,...rest}=options,d={...toolDefaults(entry),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
       ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),...Object.fromEntries(SPUR_OUTLINE_KEYS.map(k => [k,worldDefault(k)])),curve:d.curve,along:d.along,seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
@@ -1330,8 +1330,10 @@ function loadSketch(s) {
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
   // A shape button's saved settings count only when a landform made them (its section carries landform knots); the retired tools' settings start from the preset.
-  const keep=(kind,t) => t && (strokeKind(kind)!=='landform' || (t.curve?.knots && LANDFORM_FORMS.some(([id]) => id===t.curve.form)));
-  for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(keep(kind,s.toolSettings?.[kind])?s.toolSettings[kind]:{})};
+  // A shape button's saved settings count only when a landform made them: the retired tools' (shallowMode marks every one) start from the preset,
+  // and Plateau takes the old Landform brush's own.
+  const retired=t => Boolean(t) && Object.hasOwn(t,'shallowMode'),saved=kind => { const t=s.toolSettings?.[kind]; return strokeKind(kind)!=='landform'||!retired(t)?t:kind==='plateau'?s.toolSettings?.landform:null; };
+  for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(saved(kind)||{})};
   showTool(toolSettings[tool]);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
   for (const [key,id,lo,hi] of [['softness','softness',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
@@ -1399,7 +1401,7 @@ function deserializeNodes(list) {
   });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
-editorUI.onMode(entry=>document.querySelector(`[data-tool="${entry}"]`)?.click());
+editorUI.onMode(entry=>{if(selected>=0&&nodes[selected]?.params&&strokeKind(entry)===entry){changeSelected(n=>{n.kind=entry;});}else document.querySelector(`[data-tool="${entry}"]`)?.click();});
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => {
   if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
   if(tool==='move'&&selected>=0)selectNode(selected);
