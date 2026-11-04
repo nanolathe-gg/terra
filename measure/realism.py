@@ -33,10 +33,18 @@ Horton/Strahler ratios are left out: random networks give the same bifurcation a
 discriminate (Kirchner 1993). Orometry (Argudo et al. 2019) needs hundreds of peaks, many kilometres of map, so it
 does not fit a window.
 
-    python3 -I docs/research/realism.py lab-out/*.f32 [--w 384] [--zk 0.7]          score lab height fields
-    python3 -I docs/research/realism.py --synthetic                                  noise baselines and discrimination
-    python3 -I docs/research/realism.py --dem SRC [--box x0,y0,w,h] [--dem-mpp 1] [--mpp 1.5] [--name site] > site.json
-    python3 -I docs/research/realism.py --ranges site.json ...                       pooled ranges for REFERENCE
+    python3 -I measure/realism.py lab-out/*.f32 [--w 384] [--zk 0.7]          score lab height fields
+    python3 -I measure/realism.py --scenes OUT/green-modern-1 OUT/green-modern-2 ...  engine renders: table and six gates
+    python3 -I measure/realism.py --synthetic                                  noise baselines and discrimination
+    python3 -I measure/realism.py --dem SRC [--box x0,y0,w,h] [--dem-mpp 1] [--mpp 1.5] [--name site] > site.json
+    python3 -I measure/realism.py --ranges site.json ...                       pooled ranges for REFERENCE
+
+--scenes reads ours-heights.json of rendered scene directories (repro/render.mjs, repro/all.sh): the displayed final
+heights over the 1024 px window, 512 x 512 samples 2 px apart, in TA height units. They are scaled by zk (0.7) to true
+px, brought to the 1 px spacing the statistics assume by bilinear interpolation (resample() only averages down; bilinear
+adds no detail and no new extremes), cut into the usual 384 x 288 windows (6 a scene), and windows under MIN_RELIEF are
+skipped. Each window is scored as usual and against the six gates. betaShort (4..12 px) and curvSkew2 (sigma 2 px) sit
+at or below the field's native 2 px spacing, so on engine heights they measure the interpolation; none of the gates uses them.
 
 SRC for --dem is a local .npy, raw .f32 (--dem-w), or float32 GeoTIFF, or an https URL of a cloud-optimized GeoTIFF:
 only the tiles inside --box are fetched, by curl range requests (LZW or deflate, predictor 1-3). Needs numpy only.
@@ -486,6 +494,43 @@ def table(rows, names):
         print(f'{name:<34}{f"{inside}/{len(SCORED)}" if REFERENCE else "":>10}{excess:>10.2f}' + ''.join(f'{st[s]:>10.3f}' for s in STATS) + f'{near:>12}')
 
 
+# The gates for modern Green (card P25), applied to windows with relief >= MIN_RELIEF.
+GATES = [('pitArea', lambda v: v <= 0.007), ('aniso', lambda v: v >= 0.05), ('saHill', lambda v: v >= 0),
+         ('hack', lambda v: 0.33 <= v <= 0.51), ('gmHollow', lambda v: v <= 0.19), ('gmValley', lambda v: v <= 0.14)]
+
+
+def read_engine_heights(path, zk):
+    """ours-heights.json (TA units, 2 px apart) -> true heights in px at 1 px spacing, bilinear."""
+    d = json.load(open(path))
+    n = d['grid']
+    z = np.array([np.nan if v is None else v for v in d['heights']], dtype=np.float64).reshape(n, n) * zk
+    x = np.arange(2 * (n - 1) + 1) / 2.0
+    z = np.array([np.interp(x, np.arange(n), r) for r in z])
+    return np.array([np.interp(x, np.arange(n), c) for c in z.T]).T
+
+
+def scenes_mode(dirs, zk):
+    rows, names = [], []
+    for d in dirs:
+        g = read_engine_heights(os.path.join(d, 'ours-heights.json'), zk)
+        for i, w in enumerate(windows(g)):
+            st = measure(w, zk)
+            if st['relief'] < MIN_RELIEF:
+                print(f'{os.path.basename(d.rstrip("/"))} w{i}: relief {st["relief"]:.1f} < {MIN_RELIEF}, skipped')
+                continue
+            rows.append(st)
+            names.append(f'{os.path.basename(d.rstrip("/"))} w{i}')
+    print('betaShort and curvSkew2 sit at or below the 2 px native spacing: on engine heights they measure the interpolation (no gate uses them).')
+    table(rows, names)
+    print('gates (PASS/FAIL):  ' + '  '.join(f'{n}{"<=" if n in ("pitArea", "gmHollow", "gmValley") else ">=" if n != "hack" else " in "}{ {"pitArea": "0.007", "aniso": "0.05", "saHill": "0", "hack": "0.33-0.51", "gmHollow": "0.19", "gmValley": "0.14"}[n]}' for n, _ in GATES))
+    bad = 0
+    for name, st in zip(names, rows):
+        res = [(n, f(st[n])) for n, f in GATES]
+        bad += sum(not ok for _, ok in res)
+        print(f'{name:<24}' + '  '.join(f'{n}={st[n]:.3f} {"PASS" if ok else "FAIL"}' for n, ok in res))
+    print(f'{len(rows)} windows, {bad} gate failures')
+
+
 def opt(k, d=None):
     return sys.argv[sys.argv.index(k) + 1] if k in sys.argv else d
 
@@ -506,6 +551,9 @@ def main():
         lim = int(opt('--limit', 0)) or None
         rows = [dict(site=opt('--name', 'dem'), **measure(w, zk)) for w in windows(g, limit=lim)]
         print(json.dumps(rows))
+        return
+    if '--scenes' in sys.argv:
+        scenes_mode([a for a in sys.argv[sys.argv.index('--scenes') + 1:] if not a.startswith('--')], zk)
         return
     if '--ranges' in sys.argv:
         rows = [r for f in sys.argv[sys.argv.index('--ranges') + 1:] for r in json.load(open(f))]
