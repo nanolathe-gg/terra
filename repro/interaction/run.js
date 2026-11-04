@@ -38,7 +38,7 @@ $('run').onclick=()=>run(async()=>{const name=$('scene').value,units=Number($('u
 });
 
 $('cache').onclick=()=>run(async()=>{const name=$('scene').value,units=Number($('units').value),label=$('label').value+'/'+name+'-'+units,a=await load(name,units),d=frame.contentDocument;const snap=()=>a.canvas.cacheSnapshot?.()||[];const before=snap(),bakes=a.canvas.stats().bakes;
- a.region.applyStroke('hill',[{x:units*512-200,y:units*512-200}],{radius:70,amount:50,rough:.35,softness:.5,bankWidth:.5});await a.settle();const far=snap(),farBakes=a.canvas.stats().bakes-bakes;
+ a.region.applyStroke('landform',[{x:units*512-200,y:units*512-200}],{radius:70,elevation:a.config.baseHeight+50,combine:0,wander:0,widthVary:0,heightVary:0,varySize:140,varyFoot:1,varyMiddle:1,lean:1,curve:{form:'lfHill'}});await a.settle();const far=snap(),farBakes=a.canvas.stats().bakes-bakes;
  a.region.editNode(1,n=>{n.points=n.points?.map(p=>({x:p.x+25,y:p.y+15}));});await a.settle();const cache=document.createElement('canvas');cache.width=d.getElementById('terrain').width;cache.height=d.getElementById('terrain').height;cache.getContext('2d').drawImage(d.getElementById('terrain'),0,0);const updated=snap();
  a.canvas.invalidate();await a.settle();const x=cache.getContext('2d').getImageData(0,0,cache.width,cache.height).data,y=d.getElementById('terrain').getContext('2d').getImageData(0,0,cache.width,cache.height).data;let max=0,count=0;for(let i=0;i<x.length;i++){const e=Math.abs(x[i]-y[i]);max=Math.max(max,e);if(e)count++;}
  const view=a.canvas.view(),overlaps=e=>e.x<view.x+view.width&&e.y<view.y+view.height&&e.x+e.width>view.x&&e.y+e.height>view.y,farVisibleChanges=far.filter(e=>overlaps(e)&&before.find(b=>b.key===e.key)?.seq!==e.seq).length;
@@ -49,7 +49,7 @@ $('cache').onclick=()=>run(async()=>{const name=$('scene').value,units=Number($(
 
 $('fitdraw').onclick=()=>run(async()=>{const name=$('scene').value,units=Number($('units').value),label=$('label').value+'/'+name+'-'+units,a=await load(name,units),d=frame.contentDocument,w=frame.contentWindow,o=d.getElementById('overlay');
  a.canvas.zoom('overview');await a.settle();const size=units*512,strokes=[];
- for(let y=0;y<3;y++)for(let x=0;x<3;x++)strokes.push(['hill',[[size*(.2+x*.3),size*(.2+y*.3)],[size*(.25+x*.3),size*(.23+y*.3)]],{card:{diameter:size*.15,amount:140,roughness:35}}]);
+ for(let y=0;y<3;y++)for(let x=0;x<3;x++)strokes.push(['landform',[[size*(.2+x*.3),size*(.2+y*.3)],[size*(.25+x*.3),size*(.23+y*.3)]],{card:{diameter:size*.15},curve:{form:'lfHill'}}]);
  a.scene(strokes,{ground:true});await a.settle();await png(label+'/fit-distributed.png',d.getElementById('terrain'));
  const cap=o.setPointerCapture.bind(o),rel=o.releasePointerCapture.bind(o);o.setPointerCapture=id=>{if(id!==9042)cap(id);};o.releasePointerCapture=id=>{if(id!==9042)rel(id);};
  const v=a.canvas.view(),r=o.getBoundingClientRect(),ev=(type,x,y)=>o.dispatchEvent(new w.PointerEvent(type,{clientX:r.left+(x-v.x)*v.scale,clientY:r.top+(y-v.y)*v.scale,pointerId:9042,pointerType:'mouse',bubbles:true,button:0,buttons:type==='pointerup'?0:1,isPrimary:true}));
@@ -117,7 +117,7 @@ $('movecheck').onclick=()=>run(async()=>{
  const difference=(a,b,rect={x:0,y:0,width:a.width,height:a.height})=>{const x=a.getContext('2d').getImageData(rect.x,rect.y,rect.width,rect.height).data,y=b.getContext('2d').getImageData(rect.x,rect.y,rect.width,rect.height).data;let max=0,changed=0,total=0;for(let i=0;i<x.length;i++){const e=Math.abs(x[i]-y[i]);max=Math.max(max,e);if(e)changed++;total+=e;}return {max,changedChannels:changed,mean:total/x.length};};
  const farRect={x:1400,y:1400,width:512,height:512};
  for(const kind of ['plateau','hill']){
-  a.scene([[kind,[[280,480],[430,480]],{card:{diameter:300,amount:100,roughness:35}}]],{ground:true});await a.settle();a.canvas.setBusy(true);
+  a.scene([['landform',[[280,480],[430,480]],{card:{diameter:300},...(kind==='hill'?{curve:{form:'lfHill'}}:{})}]],{ground:true});await a.settle();a.canvas.setBusy(true);
   try{
    const before=await capture(kind+'-before'),far=await capture(kind+'-far-before',farRect);a.region.beginMove(a.nodes.length-1);a.region.previewMove({dx:330,dy:30});
    const moving=await capture(kind+'-moving'),farMoving=await capture(kind+'-far-moving',farRect);

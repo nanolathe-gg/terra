@@ -11,7 +11,7 @@ document.querySelector('#run').onclick=async()=>{
     const started=performance.now();while(!frame.contentWindow.interactionEditor?.ready()){assert(performance.now()-started<90000,'Startup timeout');await delay(100);}
     const w=frame.contentWindow,d=frame.contentDocument,a=w.interactionEditor,c=a.canvas,v=d.getElementById('viewport'),P=w.interactionPerf,next=()=>new Promise(r=>w.requestAnimationFrame(r));
     await a.settle();c.setBusy(true);
-    const strokes=[];for(let y=0;y<3;y++)for(let x=0;x<3;x++)strokes.push([x%2?'plateau':'hill',[[400+x*1300,450+y*1250],[650+x*1300,550+y*1250]],{card:{diameter:650,amount:120,roughness:35}}]);
+    const strokes=[];for(let y=0;y<3;y++)for(let x=0;x<3;x++)strokes.push(['landform',[[400+x*1300,450+y*1250],[650+x*1300,550+y*1250]],{card:{diameter:650,amount:120,roughness:35}}]);
     a.scene(strokes,{ground:true});
     // Store the same document envelope the normal Save action writes; the
     // normal Reload action below reconstructs all terrain from its recipe.

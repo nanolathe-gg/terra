@@ -113,7 +113,7 @@ try {
   check('c', c === 0 && c1.ok, {pixels: c, level: c1});
   // e
   await ev(`__z.goto(2)`); await level(.5);
-  const extra = ['hill', [[O + 300, O + 300], [O + 420, O + 360]], {card: {diameter: 160, amount: 100, roughness: 10}}];
+  const extra = ['landform', [[O + 300, O + 300], [O + 420, O + 360]], {card: {diameter: 160, heightReference: 1, elevation: 124}, curve: {form: 'lfHill'}}];   // a rounded ridge ~100 above the plain
   await ev(`sculptDebug.scene(${JSON.stringify([...strokes, extra])}, {ground: ${scene.ground !== false}})`);
   if (!await ready()) throw new Error('edited scene never finished');
   await ev('sculptCanvas.idle()'); const e1 = await level(.5);

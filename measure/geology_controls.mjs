@@ -47,7 +47,7 @@ const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.
 // The stroke kinds that carry each shape option (sculpt.js SHAPE_FIELDS), and the scale of the card's unit.
 const KINDS = {crystalForm: ['crystal'], crystalTiers: ['crystal'], crystalSides: ['crystal'], crystalSize: ['crystal'], crystalStep: ['crystal'], crystalCount: ['crystal'], crystalTop: ['crystal'], crystalLean: ['crystal'], crystalVariation: ['crystal'],
   crystalAlign: ['crystal'], crystalFacet: ['crystal'], crystalSizeVar: ['crystal'], crystalSmooth: ['crystal'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
-  crystalShoreSeam: ['deep', 'shallow', 'offset'], frostNeedles: ['deep', 'shallow', 'offset'], iceFacets: ['mountain'], iceFacetSize: ['hill', 'mountain']};
+  crystalShoreSeam: ['landform'], frostNeedles: ['landform'], iceFacets: ['landform'], iceFacetSize: ['landform']};
 const BODY_SCALE = {crystalForm: 1, crystalTiers: 100, crystalSides: 1, crystalSize: 1, crystalStep: 1, crystalCount: 1, crystalTop: 100, crystalLean: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100, crystalSmooth: 100,
   crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value

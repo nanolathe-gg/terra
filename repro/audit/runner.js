@@ -32,12 +32,12 @@ function fieldDelta(a,b){let max=0,changed=0,nonfinite=0,hmax=0,h2=0,hchange=0;c
 $('shapes').onclick=()=>run('Shape field sensitivity',async()=>{
  const api=await load(),defaults=api.config.defaults,device=api.device,rows=[],toolRows=[];
  const engine=await createShapeEngine({device,grid:384,spacing:2,baseHeight:99,sea:75,minH:-15,maxH:375,pages:false});
- const base={...defaults,radius:140,amount:70,rough:.5,softness:.55,bankWidth:.65,beachFlatness:.5,shelves:.4,cracks:.5,seed:2701,shallowMode:'area'};
+ const base={...defaults,radius:140,amount:70,rough:.5,softness:.55,cracks:.5,seed:2701};
  const ctx={seed:2701,baseHeight:99,sea:75,params:n=>({...base,...n.params})};
  const path=[{x:240,y:310},{x:390,y:340},{x:500,y:300}];
  const ground={kind:'ground',seed:1337,amplitude:8,wavelength:100,coverage:.8};
- const prefix=[ground,{kind:'hill',seed:22,points:[{x:330,y:330}],params:{radius:220,amount:100}}];
- const runNode=async node=>{const pre=['smooth','erase','sand','grass','paint','offset'].includes(node.kind)?prefix:[ground];const t=performance.now(),h=engine.submit([...pre,node],ctx);const out=await h.land;await h.done;return {out,ms:performance.now()-t};};
+ const prefix=[ground,{kind:'landform',seed:22,points:[{x:330,y:330}],params:{radius:220,elevation:199,combine:0,wander:0,widthVary:0,heightVary:0,curve:{form:'lfHill'}}}];
+ const runNode=async node=>{const pre=['smooth','erase','sand','grass','paint'].includes(node.kind)?prefix:[ground];const t=performance.now(),h=engine.submit([...pre,node],ctx);const out=await h.land;await h.done;return {out,ms:performance.now()-t};};
  const cases=inventory.shapes.flatMap(f=>f[3].map(kind=>({field:f,kind})));$('progress').max=cases.length;
  for(const [i,{field:f,kind}] of cases.entries()){
   if(stop)break;const [key,,,kinds,lo,hi,step,scale]=f,params={...shapeContext(key,kind)},node={kind,seed:2701,points:path,params};
@@ -48,7 +48,7 @@ $('shapes').onclick=()=>run('Shape field sensitivity',async()=>{
   if(i%20===0){$('progress').value=i+1;await save(`${$('label').value}/shape-controls.json`,rows);await delay(0);}
  }
  await save(`${$('label').value}/shape-controls.json`,rows);
- for(const kind of ['plateau','hill','mountain','ramp','deep','shallow','smooth','offset','crater','fissure','erase','crystal','sand','grass','paint']){
+ for(const kind of ['landform','smooth','crater','fissure','erase','crystal','sand','grass','paint']){
   const node={kind,seed:2701,points:path,params:{...shapeContext('',kind),paintChannel:1}};const b=await runNode(node);const a=await engine.run(prefix,ctx);toolRows.push({kind,ms:b.ms,...fieldDelta(a,b.out)});
  }
  await save(`${$('label').value}/tools.json`,toolRows);engine.destroy();line(`${rows.length} control/tool combinations measured. ${rows.filter(r=>r.max===0).length} zero differences.`);
@@ -123,29 +123,29 @@ $('regressions').onclick=()=>run('GPU regression and alternative suite',async()=
  const {GpuErosion:Before}=await import('/audit/erosion-before.js'),{GpuErosion:After}=await import('/sculpt-erosion.js'),{readBuffer}=await import('/sculpt-gpu-fields.js');
  const code=api.renderer.preprocessShader(await (await fetch('/engine-erosion.wgsl')).text()),before=new Before(api.renderer,code),after=new After(api.renderer,code);
  const result={alternative:[],tools:[],basic:[],conditional:[],maskErase:null,shapePerformance:[]};
- const base={...defaults,radius:140,amount:70,rough:.5,softness:.55,bankWidth:.65,beachFlatness:.5,shelves:.4,cracks:.5,seed:2701,shallowMode:'area',craterlets:0,shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,iceFacets:0,craterFacets:0};
+ const base={...defaults,radius:140,amount:70,rough:.5,softness:.55,cracks:.5,seed:2701,craterlets:0,shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,iceFacets:0,craterFacets:0};
  const ctx={seed:2701,baseHeight:99,sea:75,params:n=>({...base,...n.params}),frost:{gaps:.3,gapSize:11,gapDepth:3,gapReach:.7}};
  const ground={kind:'ground',seed:1337,amplitude:8,wavelength:100,coverage:.8},path=[{x:240,y:310},{x:390,y:340},{x:500,y:300}];
- const hill={kind:'hill',seed:22,points:[{x:330,y:330}],params:{radius:220,amount:100}};
+ const hill={kind:'landform',seed:22,points:[{x:330,y:330}],params:{radius:220,elevation:199,combine:0,wander:0,widthVary:0,heightVary:0,curve:{form:'lfHill'}}};
  const e=await createShapeEngine({device,grid:384,spacing:2,baseHeight:99,sea:75,minH:-15,maxH:375});
  const run=async list=>{const t=performance.now(),h=e.submit(list,ctx);const out=await h.land;await h.done;return {out,ms:performance.now()-t,stats:e.stats().last};};
- for(const kind of ['plateau','hill','mountain','ramp','deep','shallow','smooth','offset','crater','fissure','erase','crystal','sand','grass','paint']){
-  const pre=['ramp','smooth','erase','offset'].includes(kind)?[ground,hill]:kind==='grass'?[ground,{kind:'sand',seed:1,points:path,params:{amount:100}}]:[ground];
+ for(const kind of ['landform','smooth','crater','fissure','erase','crystal','sand','grass','paint']){
+  const pre=['smooth','erase'].includes(kind)?[ground,hill]:kind==='grass'?[ground,{kind:'sand',seed:1,points:path,params:{amount:100}}]:[ground];
   const a=await run(pre),b=await run([...pre,{kind,seed:2701,points:path,params:{...shapeContext('',kind),paintChannel:1}}]);result.tools.push({kind,...fieldDelta(a.out,b.out),ms:b.ms});
  }
  const fields=[['radius',40,200],['amount',20,140],['rough',0,1],['softness',0,1],['bankWidth',0,1],['beachFlatness',0,1],['shelves',0,1],['cracks',0,1],['seed',11,29]];
- for(const kind of ['plateau','hill','mountain','ramp','deep','shallow','smooth','offset','crater','fissure','erase','crystal','sand','grass','paint'])for(const [key,lo,hi] of fields){
-  const pre=['ramp','smooth','erase','offset'].includes(kind)?[ground,hill]:kind==='grass'?[ground,{kind:'sand',seed:1,points:path,params:{amount:100}}]:[ground];
+ for(const kind of ['landform','smooth','crater','fissure','erase','crystal','sand','grass','paint'])for(const [key,lo,hi] of fields){
+  const pre=['smooth','erase'].includes(kind)?[ground,hill]:kind==='grass'?[ground,{kind:'sand',seed:1,points:path,params:{amount:100}}]:[ground];
   const n={kind,seed:2701,points:path,params:{}};const a=await run([...pre,{...n,seed:key==='seed'?lo:2701,params:{[key]:lo}}]),b=await run([...pre,{...n,seed:key==='seed'?hi:2701,params:{[key]:hi}}]);result.basic.push({key,kind,lo,hi,...fieldDelta(a.out,b.out)});
  }
  const initialMasks=await run([ground,...[18,20,22,24].map(paintChannel=>({kind:'paint',points:[{x:350,y:350}],params:{paintChannel,amount:100,radius:100,rough:0,softness:0}}))]);
  const erased=await run([ground,...[18,20,22,24,7].map(paintChannel=>({kind:'paint',points:[{x:350,y:350}],params:{paintChannel,amount:100,radius:100,rough:0,softness:0}}))]);
  result.maskErase={before:[14,15,16,17].map(i=>initialMasks.out.masks[i][175*384+175]),after:[14,15,16,17].map(i=>erased.out.masks[i][175*384+175])};
- for(const key of ['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','baseVary','baseBump']){
-  const f=inventory.shapes.find(f=>f[0]===key),kind=key.startsWith('base')?'hill':'offset',params={...shapeContext(key,kind),amount:kind==='offset'?-70:70};
-  for(const lean of kind==='hill'?[0,1]:[0]){const n={kind,seed:2701,points:path,params:{...params,lean}};const a=await run([ground,{...n,params:{...n.params,[key]:f[4]/f[7]}}]),b=await run([ground,{...n,params:{...n.params,[key]:f[5]/f[7]}}]);result.conditional.push({key,kind,lean,amount:params.amount,...fieldDelta(a.out,b.out)});}
+ for(const key of ['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam']){
+  const f=inventory.shapes.find(f=>f[0]===key),kind='landform',params={...shapeContext(key,kind),elevation:20,combine:1,curve:{form:'lfShore'}};   // cut below the sea of 75
+  for(const lean of [0]){const n={kind,seed:2701,points:path,params:{...params,lean}};const a=await run([ground,{...n,params:{...n.params,[key]:f[4]/f[7]}}]),b=await run([ground,{...n,params:{...n.params,[key]:f[5]/f[7]}}]);result.conditional.push({key,kind,lean,amount:params.amount,...fieldDelta(a.out,b.out)});}
  }
- for(const [kind,params] of [['hill',{}],['mountain',{spurCount:12,spurForks:2,iceFacets:1}],['deep',{shoreLayers:12,layerStyle:1,fingers:1.5}],['crater',{craterlets:12,craterEjecta:1,craterFacets:1}],['crystal',{crystalCount:24,crystalSize:100}],['smooth',{}]]){
+ for(const [kind,params] of [['landform',{curve:{form:'lfHill'}}],['landform',{spurCount:12,spurForks:2,iceFacets:1,curve:{form:'lfMountain'}}],['landform',{elevation:20,combine:1,stepReference:2,terraces:12,fingers:1.5,curve:{form:'lfShore'}}],['crater',{craterlets:12,craterEjecta:1,craterFacets:1}],['crystal',{crystalCount:24,crystalSize:100}],['smooth',{}]]){
   const times=[];for(let i=0;i<8;i++){const r=await run([ground,hill,{kind,seed:2701,points:path,params}]);if(i)times.push(r.stats);}
   result.shapePerformance.push({kind,params,times});
  }
@@ -169,7 +169,7 @@ $('regressions').onclick=()=>run('GPU regression and alternative suite',async()=
 });
 $('scale').onclick=()=>run('40×40 bounded-window editing',async()=>{
  const api=await load($('world-filter').value,'gpuPages=force',40),scene=scenes[$('world-filter').value+'-1'];
- const strokes=[];for(let y=0;y<20;y++)for(let x=0;x<20;x++)strokes.push(['hill',[[x*1024+360,y*1024+370],[x*1024+650,y*1024+500]],{card:{diameter:360,amount:75,roughness:35}}]);
+ const strokes=[];for(let y=0;y<20;y++)for(let x=0;x<20;x++)strokes.push(['landform',[[x*1024+360,y*1024+370],[x*1024+650,y*1024+500]],{card:{diameter:360},curve:{form:'lfHill'}}]);
  api.scene(strokes,{ground:true});const rows=[];
  for(const [x,y] of [[0,0],[19000,0],[0,19000],[19000,19000]]){const t=performance.now(),r=await api.capture({x,y,width:1024,height:1024});rows.push({x,y,wallMs:performance.now()-t,bakeMs:r.ms,stats:api.stats()});await png(`${$('label').value}/scale/${$('world-filter').value}-${x}-${y}.png`,r.canvas);line(`window ${x},${y}: ${rows.at(-1).wallMs.toFixed(0)}ms`);}
  for(let i=0;i<5;i++){const t=performance.now();await api.edit(1,{amount:75+i*5});const r=await api.capture();rows.push({edit:i,wallMs:performance.now()-t,bakeMs:r.ms,stats:api.stats()});}
@@ -177,7 +177,7 @@ $('scale').onclick=()=>run('40×40 bounded-window editing',async()=>{
 });
 $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtures',async()=>{
  const world=$('world-filter').value,api=await load(world),rows=[];
- const fixture=[['plateau',[[270,300],[550,300]],{card:{diameter:400,amount:110,roughness:35,cracks:100}}],['mountain',[[800,150],[860,430]],{card:{diameter:320,amount:130,cracks:100}}],['deep',[[0,850],[1024,850]],{card:{diameter:600,shelves:70,roughness:40,shorePlates:100,plateMaterial:world==='ice'?2:1},waterShore:0,waterDeep:0,waterBed:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
+ const fixture=[['landform',[[270,300],[550,300]],{card:{diameter:400,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,150],[860,430]],{card:{diameter:320,heightReference:1,elevation:154,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,850],[1024,850]],{card:{diameter:600,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterShore:0,waterDeep:0,waterBed:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
  api.scene(fixture,{ground:true});await api.idle();const original=new Map(api.renderer.variant);
  const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','iceFrost']:world==='green'?['faceEdge','gullyRock','mineralDetail','rockOrder']:world==='archipelago'?['ringShiftDir','beachWidth','apron']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','faceEdge','gullyRock','bedHeight','bedVary','bedDipDir','grooveSpacing','grooveAngle','grooveRun','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','bedPunch','cliffStagger','mineralDetail','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','cliffDomain','crackWidth','crackHairline','boulderRound'];
  const tasks=inventory.knobs.flatMap(([group,list])=>list.map(f=>({group,f}))).filter(t=>keys.includes(t.f[0]));
@@ -213,7 +213,7 @@ $('features').onclick=()=>run('Feature placement and metadata sensitivity',async
 });
 $('internal').onclick=()=>run('Preset/internal sensitivity',async()=>{
  const world=$('world-filter').value,api=await load(world),all=await(await fetch('/audit/defaults.json')).json(),known=new Set([...inventory.shapes.map(f=>f[0]),...inventory.knobs.flatMap(([,l])=>l.map(f=>f[0]))]),rows=[];
- const fixture=[['plateau',[[280,270],[550,300]],{card:{diameter:420,amount:110,cracks:100}}],['mountain',[[800,120],[880,400]],{card:{diameter:320,amount:150,cracks:100}}],['deep',[[0,830],[1000,830]],{card:{diameter:620,shelves:70,shorePlates:100,plateMaterial:world==='ice'?2:1},waterBed:0,waterDeep:0,waterShore:0}],['crater',[[760,600]],{card:{diameter:300,amount:65,craterFacets:100,crystalCraterSkin:100}}]];
+ const fixture=[['landform',[[280,270],[550,300]],{card:{diameter:420,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,120],[880,400]],{card:{diameter:320,heightReference:1,elevation:174,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,830],[1000,830]],{card:{diameter:620,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterBed:0,waterDeep:0,waterShore:0}],['crater',[[760,600]],{card:{diameter:300,amount:65,craterFacets:100,crystalCraterSkin:100}}]];
  const ranges={blockRow:[2,16],blockWidth:[3,20],blockStep:[0,2],blockChip:[0,4],columnContrast:[0,2],crystalCraterWebPx:[6,30],crystalCraterLight:[0,2],crystalShallowPx:[4,30],crystalSeamEnd:[.55,.95],crystalFace:[0,2],crystalTone:[0,2],crystalSeam:[0,2],erosionAge:[16,200],erosionRain:[0,1],talusAngle:[25,65],faceStreakFrom:[.1,1.5],rillDepth:[0,4],rillSpacing:[4,24],stoneSize:[2,16],outcrop:[0,2],cavity:[0,2],closeShadow:[0,2],microRock:[0,2]};
  const assignment=k=>k.startsWith('crystal')?'crystal':['shadeBlue','frostWet'].includes(k)?'ice':'green';
  const keys=Object.keys(all.defaults).filter(k=>!known.has(k)&&!['groundPattern'].includes(k)&&assignment(k)===world);

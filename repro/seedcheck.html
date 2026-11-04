@@ -5,7 +5,7 @@
 <script type="module">
 import {createShapeEngine} from '../sculpt-gpu-fields.js';
 const output=document.querySelector('#results'),button=document.querySelector('#run');
-const defaults={radius:24,amount:40,rough:.6,softness:.5,bankWidth:.5,beachFlatness:.5,rimHeight:.34,crestVary:0,crestJag:0,crestTaper:0,spurBulb:0,spurForks:0};
+const defaults={radius:24,amount:40,rough:.6,softness:.5,rimHeight:.34,crestVary:0,crestJag:0,crestTaper:0,spurBulb:0,spurForks:0};
 const ctx={seed:2701,baseHeight:99,sea:75,params:n=>new Proxy({...defaults,...n.params},{get:(o,k)=>o[k]??0})};
 const assert=(v,msg)=>{if(!v)throw new Error(msg);};
 const delta=(a,b)=>{let max=0;for(const key of ['floats','masks'])for(let i=0;i<a[key].length;i++)for(let j=0;j<a[key][i].length;j++){const d=Math.abs(a[key][i][j]-b[key][i][j]);assert(Number.isFinite(d),'Non-finite output');max=Math.max(max,d);}return max;};

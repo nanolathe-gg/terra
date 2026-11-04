@@ -18,7 +18,7 @@ button.onclick=async()=>{
     const w=frame.contentWindow,d=frame.contentDocument,a=w.interactionEditor,c=a.canvas,v=d.getElementById('viewport'),terrain=d.getElementById('terrain'),P=w.interactionPerf;
     const next=()=>new Promise(r=>w.requestAnimationFrame(r));
     const strokes=[];
-    for(let y=0;y<3;y++)for(let x=0;x<3;x++)strokes.push([x%2?'plateau':'hill',[[400+x*1300,450+y*1250],[650+x*1300,550+y*1250]],{card:{diameter:650,amount:120,roughness:35}}]);
+    for(let y=0;y<3;y++)for(let x=0;x<3;x++)strokes.push(['landform',[[400+x*1300,450+y*1250],[650+x*1300,550+y*1250]],{card:{diameter:650,amount:120,roughness:35}}]);
     a.scene(strokes,{ground:true});await a.settle();line('Fit preview ready');
     c.zoom(1);v.scrollTo(0,0);await next();await a.settle();line('Close view ready');
     const pixels=()=>terrain.getContext('2d').getImageData(0,0,terrain.width,terrain.height).data;

@@ -51,7 +51,7 @@ Depths above are fixture choices, not universal constants. Choose **Height refer
 
 ## All three retail windows
 
-The nine authored variants under `retail-windows/` replace only Deep/Shallow strokes; other shapes, paths, order and seeds are preserved. They use a first-fit smooth section, existing coastal feature values, diameter adjusted for the dedicated Bank width, and roughness translated into landform variation. Dedicated and candidate captures both use sea 0; the extra dedicated captures avoid comparing different map sea settings. These are authored comparison fixtures, not runtime converters.
+(November 3, later: these water strokes are now the maintained scenes' own, and the `retail-windows/` copies and the dedicated halves are deleted with the retired tools; see LANDFORM_RETIREMENT.md.) The nine authored variants under `retail-windows/` replace only Deep/Shallow strokes; other shapes, paths, order and seeds are preserved. They use a first-fit smooth section, existing coastal feature values, diameter adjusted for the dedicated Bank width, and roughness translated into landform variation. Dedicated and candidate captures both use sea 0; the extra dedicated captures avoid comparing different map sea settings. These are authored comparison fixtures, not runtime converters.
 
 [Green: all three windows](/private/tmp/nanolathe-map-editor/agent-landform-shores/retail-green.png) · [Archipelago: all three windows](/private/tmp/nanolathe-map-editor/agent-landform-shores/retail-archipelago.png) · [Lava: all three windows](/private/tmp/nanolathe-map-editor/agent-landform-shores/retail-lava.png)
 

@@ -46,7 +46,11 @@ if (args.includes('--recheck')) {
 }
 const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['scree', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
-const KIND_AT = {plateau: [130, 170], offset: [380, 170], hill: [630, 170], mountain: [880, 170], deep: [130, 500], shallow: [380, 500], crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
+const KIND_AT = {crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
+// The retired tools' strokes as the landforms the shape buttons draw (sea-relative, about as tall above this map's plain as the old fixtures' Rise).
+const PLATEAU = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, wander: 40, widthVary: 30, ...card}}];
+const RIDGE = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, lean: 100, wander: 8, widthVary: 0, ...card}, curve: {form: 'lfMountain'}}];
+const WATER = (pts, card = {}, picks = {}) => ['landform', pts, {card: {heightReference: 1, elevation: -55, combine: 1, cracks: 0, wander: 30, widthVary: 30, varySize: 210, ...card}, curve: {form: 'lfShore'}, ...picks}];
 // The panel hides these until their switch is above 0 (updateControls in sculpt.js).
 const GATE = {layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerSize: 'fingers',
   spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
@@ -131,23 +135,22 @@ try {
     await ev('terraformAudit.ready()'); await ev(HELPERS.replace('KINDS', JSON.stringify(Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]))))); await ev('terraformAudit.idle()');
   };
   const strokes = world => scenes[`${world}-1`];
-  // A fixture is a stroke list. The diagnostic one is runner.js's: a plateau, a mountain, a deep stroke with shore plates, sand and paint.
-  const diagnostic = world => [['plateau', [[270, 300], [550, 300]], {card: {diameter: 400, amount: 110, roughness: 35, cracks: 100}}], ['mountain', [[800, 150], [860, 430]], {card: {diameter: 320, amount: 130, cracks: 100}}],
-    ['deep', [[0, 850], [1024, 850]], {card: {diameter: 600, shelves: 70, roughness: 40, shorePlates: 100, plateMaterial: world === 'ice' ? 2 : 1}, waterShore: 0, waterDeep: 0, waterBed: 0}], ['sand', [[350, 470], [650, 470]], {card: {diameter: 280, amount: 100}}], ['paint', [[350, 100], [500, 270]], {card: {diameter: 220, amount: 100, paintChannel: 1}}]];
-  // The painted fixture: a mountain and a plateau with every paint channel laid on them, for the rows a painted or per-stroke path keeps alive at a world value of 0
+  // A fixture is a stroke list. The diagnostic one is runner.js's: a plateau, a ridge, deep water with shore plates, sand and paint.
+  const diagnostic = world => [PLATEAU([[270, 300], [550, 300]], 110, {diameter: 400, cracks: 100}), RIDGE([[800, 150], [860, 430]], 130, {diameter: 320, cracks: 100}),
+    WATER([[0, 850], [1024, 850]], {diameter: 600, shorePlates: 1, plateMaterial: world === 'ice' ? 2 : 1}, {waterShore: 0, waterDeep: 0, waterBed: 0}), ['sand', [[350, 470], [650, 470]], {card: {diameter: 280, amount: 100}}], ['paint', [[350, 100], [500, 270]], {card: {diameter: 220, amount: 100, paintChannel: 1}}]];
+  // The painted fixture: a ridge and a plateau with every paint channel laid on them, for the rows a painted or per-stroke path keeps alive at a world value of 0
   // (the stones of Denser scatter, the lines of Style: banding).
-  const painted = () => [['mountain', [[300, 220], [700, 220]], {card: {diameter: 420, amount: 130, cracks: 100}}], ['plateau', [[300, 760], [700, 760]], {card: {diameter: 420, amount: 100, cracks: 100}}],
+  const painted = () => [RIDGE([[300, 220], [700, 220]], 130, {diameter: 420, cracks: 100}), PLATEAU([[300, 760], [700, 760]], 100, {diameter: 420, cracks: 100}),
     // two water strokes with the choices the panel cannot show on the world: frost-needle shore plates (Melt pockets), and a cracked bed under a hard shore and step
-    ['deep', [[60, 960], [460, 960]], {card: {diameter: 200, shelves: 70, shorePlates: 100, plateMaterial: 2}}], ['deep', [[560, 960], [960, 960]], {card: {diameter: 200, shelves: 70}, waterShore: 1, waterDeep: 1, waterBed: 3}],
-    // a partial Denser scatter over the mountain's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
+    WATER([[60, 960], [460, 960]], {diameter: 200, shorePlates: 1, plateMaterial: 2}), WATER([[560, 960], [960, 960]], {diameter: 200}, {waterShore: 1, waterDeep: 1, waterBed: 3}),
+    // a partial Denser scatter over the ridge's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
     ['paint', [[240, 220], [760, 220]], {card: {diameter: 460, amount: 35, paintChannel: 5}}],
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
-  // The water picks: six deep strokes, each with one combination of a stroke's edge and bed choices (hard, lit, faded, cracked, and the pairs the water rows' gates read),
+  // The water picks: six water strokes, each with one combination of a stroke's edge and bed choices (hard, lit, faded, cracked, and the pairs the water rows' gates read),
   // for the rows a stroke's own choice keeps alive where the world's setting leaves them idle.
   const waterPicks = () => [[60, 200, {waterDeep: 1}], [60, 480, {waterBed: 1}], [60, 760, {waterDeep: 2}], [560, 200, {waterBed: 1, waterDeep: 2}], [560, 480, {waterBed: 3}], [560, 760, {waterBed: 1, waterDeep: 1}]]
-    .map(([x, y, picks]) => ['deep', [[x, y], [x + 400, y]], {card: {diameter: 150, shelves: 70}, ...picks}]);
-  // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau
-  // card: a Face width fills a smaller stroke's reach, leaving a lean no room, and the overlaps cut the deep stroke through the plateau, the steep ground Style: face rock acts on there.
+    .map(([x, y, picks]) => WATER([[x, y], [x + 400, y]], {diameter: 150}, picks));
+  // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau.
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
   const sandOver = () => [170, 500, 830].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
@@ -259,9 +262,9 @@ try {
     }
     // A stroke's edge under the color: H24 hid it on a world of one or three tones, where it draws. waterPicks' third stroke is the faded one, and a ground node leads only where the world's undulation is on.
     await ev('terraformAudit.setBusy(false)');   // an edit is refused while the map is busy
-    const third = (await ev('__wc.kinds()')).indexOf('deep') + 2, shown = shapeControlAvailable('waterDeep', 'deep', {waterBed: 0, world: await ev('terraformAudit.panelValues()')});
+    const third = (await ev('__wc.kinds()')).indexOf('landform') + 2, shown = shapeControlAvailable('waterDeep', 'landform', {waterBed: 0, world: await ev('terraformAudit.panelValues()')});
     const edge = await ev(`__wc.strokePair(${third}, 'waterDeep', {waterDeep: 0}, 0, [1, 2], 1, ${JSON.stringify({x: 40, y: 670, width: 440, height: 180})})`);
-    colored.set('~waterDeep', {world, type: 'shape', stroke: 'deep', key: 'waterDeep', fixture: `${world}-water + color`, state: shown ? 'colored' : 'hidden', reason: shown ? '' : 'hidden under a picked color', hides: !shown && edge.px >= HIDDEN_PX, ...edge});
+    colored.set('~waterDeep', {world, type: 'shape', stroke: 'landform', key: 'waterDeep', fixture: `${world}-water + color`, state: shown ? 'colored' : 'hidden', reason: shown ? '' : 'hidden under a picked color', hides: !shown && edge.px >= HIDDEN_PX, ...edge});
     await ev(`__wc.pickColor('Shallow water')`);
     for (const r of colored.values()) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); add(r); }
     stage('picked color', ts); ts = Date.now();
@@ -280,7 +283,6 @@ try {
       const p = {craterlets: 0, shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestJag: 0, crestVary: 0, crestTaper: 0, craterFacets: 0, iceFacets: 0, crystalCount: 8, crystalSize: 110, crystalForm: 0};
       if (['terraces', 'ledge', 'terraceJitter', 'breakup'].includes(key)) p.terraces = 4;
       if (['ledge', 'terraceJitter'].includes(key)) p.ledge = .55;
-      if (['faceVariation'].includes(key)) Object.assign(p, {facePx: 0});
       if (key.startsWith('spur') || key.startsWith('crest')) p.spurCount = 4;
       if (key.startsWith('rim')) Object.assign(p, {rimSectors: 4, rimUnequal: .7, rimGaps: 2});
       if (key.startsWith('fissureBranch')) p.fissureBranches = 3;
@@ -312,13 +314,12 @@ try {
       // The shared applicability rule receives engine units, just as updateControls does.
       return shapeControlAvailable(key, kind, {...ui, ...Object.fromEntries(Object.entries(scales).map(([k, scale]) => [k, ui[k] / scale]))});
     };
-    // What a row's fixture needs whatever the panel shows: an offset has a shore only where it lowers the ground below the sea.
+    // What a row's fixture needs whatever the panel shows.
     const fixtureFor = (key, kind) => {
-      if(kind==='offset'&&(key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')))return {amount:-60};
       // Shore controls need a sea crossing: the ordinary raised landform fixture has none.
       if(kind==='landform'&&key==='stepReference')return {elevation:-55,combine:1,heightVary:0,terraces:6,ledge:.8};
       if(kind==='landform'&&key==='heightReference')return {elevation:110,heightReference:0};
-      if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key==='shoreLayers'||key.startsWith('water')))return {elevation:-55,combine:1,heightVary:0};
+      if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')||key.startsWith('water')))return {elevation:-55,combine:1,heightVary:0};
       return {};
     };
     const scaleOf = Object.fromEntries(st.fields.map(f => [f[0], f[7]]));

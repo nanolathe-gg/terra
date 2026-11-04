@@ -31,13 +31,16 @@ the retail crops stay outside git.
    ```
    {"biome": "green", "source": {"map": "great divide", "x": 160, "y": 1504},
     "ground": true, "query": "",
-    "strokes": [["mountain", [[0,700],[400,700],[960,680]], {"card": {"diameter": 240, "amount": 90}}]]}
+    "strokes": [["landform", [[0,700],[400,700],[960,680]], {"card": {"diameter": 240, "heightReference": 1, "elevation": 114}, "curve": {"form": "lfMountain"}}]]}
    ```
 
    Each stroke is `[kind, points, options]`; `options.card` overrides brush
-   card values in card units (diameter, amount, roughness, softness,
-   bankWidth, beachFlatness, shelves, cracks and the shape options such as
-   craterlets or crystalSize), starting from the world's defaults. `query`
+   card values in card units (diameter, amount, roughness, softness, cracks
+   and the shape options such as elevation, combine, craterlets or
+   crystalSize), starting from the world's defaults (a landform starts as the
+   Plateau button's preset, so pin every setting the scene depends on).
+   Plateaus, ridges, ramps and water are landforms; `options.curve` carries
+   a landform's section. `query`
    adds URL knobs, and `ground: false` leaves out the undulation node.
 
 4. Render and compare:
@@ -92,7 +95,7 @@ scene names one in its `query`: `"query": "variant=evad"` (green: Evad River and
 Barrier Reef rounded hills with irregular, broken slopes; ice: `bergs`; desert: `triad`). With no variant a scene
 renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt in.
 
-Ice's shore (card E5): a deep stroke in Ice makes frost crystals by default (plate
+Ice's shore (card E5): the Water button's preset in Ice turns on frost-crystal shore plates (plate
 material 2: needles in parallel runs, straight seams, thinning toward deep water; the
 floe shelf of plate material 0 was dropped with the JS shape engine). The berg form of the
 Crystals brush (`crystalForm: 2`, with `bergFace`, `bergJitter`, `bergBreak`, `bergRough`,
@@ -102,6 +105,6 @@ ice-3's box; `variant=bergs` gives the bergs their blue ice.
 Ice blocks, frost lines and facets (card G6): the Ice world's raised ground is lit by its blurred height and
 snow-capped, its faces carry smooth fibres down the slope and its foot a hatched apron (`iceSoft`, `iceSnow`,
 `iceFall`, `iceApron`; ice-3 is the window; the variants `snow`, `crystal` and `bergs` set them to 0). The frost
-band carries fine blue hairlines (`iceFrost`). Hills and mountains take an optional **Angular facets** share
-(`iceFacets`, 0 off, with `iceFacetSize` px): part of the mountain is tiled into tilted planes fitted to its own
-surface, partly buried, in its own material. `demo/ice-facets.json` is the ice-1 mountain with facets 70, size 44.
+band carries fine blue hairlines (`iceFrost`). A raised landform takes an optional **Angular facets** share
+(`iceFacets`, 0 off, with `iceFacetSize` px; not with shore features): part of it is tiled into tilted planes fitted to its own
+surface, partly buried, in its own material. `demo/ice-facets.json` is the ice-1 ridge with facets 70, size 44.

@@ -4,7 +4,7 @@
 //   node repro/curveedit.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,desert] [--out dir]
 // Prints one JSON line per world; exit code 1 on any failed check or a console error.
 import {cdpPortFree} from './cdp-port.mjs';
-import {FORM_NAMES, FORMS, LANDFORM_FORMS} from '../sculpt-shape-presets.js';
+import {FORMS, LANDFORM_FORMS} from '../sculpt-shape-presets.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync,readFileSync} from 'node:fs';
 
@@ -218,9 +218,9 @@ for (const world of worlds) {
       const backL = (await nodes()).map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean, x.params.routeSmooth, x.params.crestTaper] : null), h3 = await grid();
       check('the landform comes back the same after reload', same(savedL, backL) && savedL.some(x => x?.[1]), {savedL, backL});
       check('the landform render is the same after reload', h3.length === heightsL.length && h3.every((v, i) => Math.abs(v - heightsL[i]) < 1e-3), h3.reduce((m, v, i) => Math.max(m, Math.abs(v - heightsL[i])), 0));
-      // 7. Flatten to over an existing hill, the along curve at 0 at one end: that end comes down to the plain (decision 24)
+      // 7. Flatten to over an existing hill (a rounded landform 80 above the plain), the along curve at 0 at one end: that end comes down to the plain (decision 24)
       const plainH = await ev(`sculptDebug.corner(10, 10).authored`);
-      const flat = along => [['hill', [[640, 300]], {card: {diameter: 200, amount: 80, roughness: 20}}], ['landform', [[100, 300], [780, 300]], {card: {diameter: 160, elevation: plainH + 91, combine: 2, wander: 0, widthVary: 0, heightVary: 0}, along}]];
+      const flat = along => [['landform', [[640, 300]], {card: {diameter: 200, elevation: plainH + 80, wander: 0, widthVary: 0, heightVary: 0}, curve: {form: 'lfHill'}}], ['landform', [[100, 300], [780, 300]], {card: {diameter: 160, elevation: plainH + 91, combine: 2, wander: 0, widthVary: 0, heightVary: 0}, along}]];
       const probe = async along => { await ev(`sculptDebug.scene(${JSON.stringify(flat(along))}, {ground: false})`); await ready(ev); return ev(`[[300, 300], [640, 300], [740, 300]].map(([x, y]) => sculptDebug.corner(x, y).authored)`); };
       const level = await probe([[0, 1], [1, 1]]), down = await probe([[0, 1], [1, 0]]);
       check('flatten to with the along curve at 0 at the end brings the hill down to the plain', level[1] > plainH + 80 && down[1] < plainH + 0.3 * 91 && down[2] < plainH + 12 && level[0] > plainH + 85, {plainH, level, down});
