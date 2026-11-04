@@ -713,16 +713,24 @@ export class TerrainRenderer {
       relief.dispatchWorkgroups(n, n);
       relief.end();
       if (level === 0) {
-        // A dithered material's level 0 (engine-materials.wgsl makeDither): one invocation per 32-px block, the levels above box-mean it.
+        // A dithered material's level 0 (engine-materials.wgsl makeDither): dot diffusion, one dispatch per class of the 8 x 8 matrix, in
+        // order; each pass gathers the errors the lower classes left in ditherErr. The levels above box-mean it.
+        const err = device.createBuffer({size: size * size * 16 * layers, usage: GPUBufferUsage.STORAGE});
         const dither = encoder.beginComputePass({label: 'materials dither'});
         dither.setPipeline(this.ditherPipeline);
-        dither.setBindGroup(0, device.createBindGroup({layout: this.ditherPipeline.getBindGroupLayout(0), entries: [
-          {binding: 0, resource: {buffer: table}},
-          {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: 0, mipLevelCount: 1})},
-          {binding: 2, resource: {buffer: buffer}}]}));
-        const blocks = Math.ceil(size / 32 / 8);
-        dither.dispatchWorkgroups(blocks, blocks, layers);
+        const n = Math.ceil(size / 8 / 8);
+        for (let cls = 0; cls < 64; cls++) {
+          const pass = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+          device.queue.writeBuffer(pass, 0, new Float32Array([size, 1, cls, 0]));
+          params.push(pass);
+          dither.setBindGroup(0, device.createBindGroup({layout: this.ditherPipeline.getBindGroupLayout(0), entries: [
+            {binding: 0, resource: {buffer: table}},
+            {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: 0, mipLevelCount: 1})},
+            {binding: 2, resource: {buffer: pass}}, {binding: 6, resource: {buffer: err}}]}));
+          dither.dispatchWorkgroups(n, n, layers);
+        }
         dither.end();
+        params.push(err);
       }
     }
     device.queue.submit([encoder.finish()]);
