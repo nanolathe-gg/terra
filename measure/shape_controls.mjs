@@ -29,6 +29,7 @@ const CONTROLS = {
   widthVar: {set: {widthVar: 200}},
   heightVar: {set: {heightVar: 200}},
   breakup: {base: {terraces: 4}, set: {breakup: 100}},
+  crestTaper: {set: {crestTaper: 100}},
   // The landform's own (H27). Variation sizes and weights are read with the three variations on; a weight from 0 to 200 percent, a size from its default to 360 px.
   elevation: {set: {elevation: 230}},
   combine: {set: {combine: 1}},
@@ -43,8 +44,8 @@ const CONTROLS = {
 const LAND_ONLY = ['elevation', 'combine', 'wander', 'widthVary', 'heightVary', 'varySize', 'varyFoot', 'varyMiddle'];
 // The panel's own test: the control is shown to this kind (sculpt.js SHAPE_FIELDS kinds, then shapeControlAvailable).
 const SECTION = ['plateau', 'offset', 'hill', 'mountain', 'deep', 'shallow', 'landform'];
-const SHOWN = {widthVar: ['plateau', 'offset', 'deep'], heightVar: ['hill', 'mountain'], softness: ['plateau', 'hill', 'mountain', 'offset'], ...Object.fromEntries(LAND_ONLY.map(k => [k, ['landform']]))};
-const shown = (key, kind, card) => (SHOWN[key] || SECTION).includes(kind) && shapeControlAvailable(key, kind, {faceVariation: 80, ...card, terraces: card.terraces || 0, ledge: .6, terraceJitter: .35});
+const SHOWN = {crestTaper: ['hill', 'mountain', 'landform'], widthVar: ['plateau', 'offset', 'deep'], heightVar: ['hill', 'mountain'], softness: ['plateau', 'hill', 'mountain', 'offset'], ...Object.fromEntries(LAND_ONLY.map(k => [k, ['landform']]))};
+const shown = (key, kind, card) => (SHOWN[key] || SECTION).includes(kind) && shapeControlAvailable(key, kind, {faceVariation: 80, ...card, lean: card.lean / 100, terraces: card.terraces || 0, ledge: .6, terraceJitter: .35});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await cdpPortFree(port);
 mkdirSync(out, {recursive: true});

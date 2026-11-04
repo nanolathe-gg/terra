@@ -49,7 +49,8 @@ export const FORMS = {
   dome: () => ({knots: at(ridge(2), even(48))}),
   // H27, a landform's half sections (foot 0 to the path 1; both sides read the table until the back is unlinked). A flat top is knots: the table
   // reaches 1 well before the path. Numbers only; softness plays no part.
-  lfPlateau: () => ({knots: [[0, 0], [.1, 0], [.34, 1], [1, 1]]}),
+  // The approved plateau's low grassy foot: its first 10% of rise spans 36.75 px at a 150 px half-width.
+  lfPlateau: () => ({knots: [[0, 0], [.08, .006], [.19, .035], [.27, .15], [.37, .65], [.45, .96], [.5, 1], [1, 1]]}),
   lfHill: () => ({knots: [[0, 0], [.28, .1], [.58, .45], [.82, .86], [1, 1]]}),
   lfMountain: () => ({knots: [[0, 0], [.36, .04], [.66, .2], [.88, .6], [1, 1]]}),
   lfTerraced: () => ({knots: [[0, 0], [.08, 0], [.2, .3], [.34, .3], [.46, .62], [.6, .62], [.72, 1], [1, 1]]}),

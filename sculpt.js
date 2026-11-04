@@ -55,10 +55,12 @@ let history=[], historyIndex=-1, historySerial=0;
 let revision=0, autosaveTimer, ready=false;
 // Biomes choose starting values for the same brushes. These presets can be
 // borrowed independently of the canvas materials and then edited per tool.
+// Approved starting shapes use ordinary controls and editable knots. Preset elevation is a rise above the map plain; toolDefaults resolves the absolute height.
+const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
 const TOOL_PRESETS={
   green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
   red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  desert:{crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,facePx:210,curve:{form:'mesa'}},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  desert:{landform:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,facePx:210,curve:{form:'mesa'}},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks.
@@ -87,7 +89,7 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
 const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter','breakup'];
 // Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
-const LANDFORM_KEYS=['elevation','combine','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
+const LANDFORM_KEYS=['elevation','combine','routeSmooth','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -141,7 +143,8 @@ const SHAPE_FIELDS=[
   // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
   ['elevation','lf-elevation','Elevation (height units)',['landform'],-80,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
   ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
-  ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the section strays sideways from the path you drew, in waves as long as the Variation size.'],
+  ['routeSmooth','lf-route-smooth','Smooth route',['landform'],0,100,5,100,'Keep the center of this landform clear of surface relief, cracks and debris, and protect its grade from weathering. The shoulders fade into the surrounding terrain.'],
+  ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the outline moves in and out around the sides and ends, in waves as long as the Variation size. The drawn crest stays in place.'],
   ['widthVary','lf-width-vary','Width variation',['landform'],0,100,5,100,'How much the section widens and narrows along the path (100: from half to twice its width).'],
   ['heightVary','lf-height-vary','Height variation (units)',['landform'],0,40,1,1,'How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet.'],
   ['varySize','lf-vary-size','Variation size (px)',['landform'],20,400,10,1,'The wavelength of the wander and of the width and height variation.'],
@@ -157,7 +160,7 @@ const SHAPE_FIELDS=[
   ['spurBulb','spur-bulb','Bulbous spur tips',['hill','mountain','crater','landform'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
   ['crestJag','crest-jag','Crest irregularity',['hill','mountain','crater'],0,100,5,100,'Jagged crest: its height drops in and out along the ridge (the peaks keep full height); on a crater, its spurs.'],
   ['crestVary','crest-vary','Crest width and height variation',['hill','mountain','crater'],0,100,5,100,'The ridge swells and shrinks, wider and lower in places, along its path (a crater\'s spurs, on a crater).'],
-  ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain'],0,100,5,100,'The ridge narrows and lowers toward both ends of its path.'],
+  ['crestTaper','crest-taper','Crest taper (both ends)',['hill','mountain','landform'],0,100,5,100,'The main ridge narrows and lowers toward both ends of its path. On a landform this multiplies the height along the path.'],
   ['rimHeight','rim-height','Rim height (share of depth)',['crater'],0,150,1,100,'How high the rim stands, as a share of the crater\'s Depth (34% is the usual rim); the bowl floor does not change, so a tall rim needs no deeper bowl.'],
   ['rimSectors','rim-sectors','Rim sectors',['crater'],0,8,1,1,'Split the rim into this many sectors of different height and width (a lopsided ring, not an even one).'],
   ['rimUnequal','rim-unequal','Sector inequality',['crater'],0,100,5,100,'How different the sectors are: 0 equal; 100 from a faint low ridge to a tall, broad massif.'],
@@ -307,7 +310,8 @@ const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind=
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 function toolDefaults(kind,preset=config?.biomeId||'green') {
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40,landform:40}[kind]??0,diameter:200,elevation:clamp(Math.round((config?.baseHeight??24)+70),-80,300),amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...TOOL_PRESETS[preset]?.[kind]};
+  const starting={...(kind==='landform'?LANDFORM_DEFAULTS:{}),...TOOL_PRESETS[preset]?.[kind]};
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40,landform:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...starting,elevation:clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -406,7 +410,7 @@ function updateControls() {
   // Berg options show only for the berg form.
   const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (key==='layerCircle' && Number($('layer-style').value)!==1);
   const bergOff=key => tool==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
-  const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),world:renderer?worldPanelValues():{}};
+  const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
   const gated=key => !shapeControlAvailable(key,tool,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   if(SECTION_KINDS.includes(tool) && !shapeControlAvailable('softness',tool,{...shapeOptions,curve:currentCurve()}))$('softness-control').hidden=true;
@@ -1129,14 +1133,14 @@ function selectNode(i) {
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Selected ${NODE_NAMES[n.kind]||n.kind} #${i+1}. Drag to transform or edit its settings.`);
 }
-function editSelectedFromControls() {
+function editSelectedFromControls(overrides={}) {
   const n=nodes[selected]; if (!n || !n.params) return;
   controlsEditing=true;
   const before=nodeBounds(n);
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
     softness:Number($('softness').value)/100,bankWidth:Number($('bank-width').value)/100,beachFlatness:Number($('beach-flatness').value)/100,
     shelves:Number($('shelves').value)/100,shallowMode:$('shallow-mode').value,cracks:Number($('cracks').value)/100,
-    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)]))};
+    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)])),...overrides};
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
@@ -1423,7 +1427,7 @@ document.addEventListener('terraform-feature-mode',()=>updateControls());
 $('tool-style').addEventListener('change',() => {
   const preset=$('tool-style').value;if(!Object.hasOwn(TOOL_PRESETS,preset))return;
   const kind=nodes[selected]?.kind||tool;toolSettings[tool]=toolDefaults(kind,preset);showTool(toolSettings[tool],kind);
-  if(selected>=0){editSelectedFromControls();checkpoint();queueWeather();}
+  if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}
   updateControls();schedule();persistLater();
 });
 for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });

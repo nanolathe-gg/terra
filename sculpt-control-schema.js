@@ -1,4 +1,4 @@
-import {isShouldered} from './sculpt-shape-presets.js';
+import {isShouldered,strokeKnots,sampleKnots} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -48,6 +48,12 @@ export function shapeControlAvailable(key,kind,p){
  if(key==='waterDeep'&&!deepShows(world,[1,3].includes(Math.round(p.waterBed||0))))return false;
  if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.stoneDensity)>0))return false;
  // A hill leans on its own, and a plateau or offset too until a Face width takes that away; the other kinds lean only once Lean is above 0, so a side to lean toward means nothing before.
+ if(key==='facing'&&kind==='landform'){
+  if(p.lean>0&&p.lean!==1)return true;
+  // Facing swaps the two sides; equal widths and equal sampled sections have no direction to choose.
+  const k=strokeKnots(kind,p,false);if(!k.back)return false;
+  const front=sampleKnots(k.knots),back=sampleKnots(k.back);return front.some((v,i)=>v!==back[i]);
+ }
  if(key==='facing')return kind==='hill'||['plateau','offset'].includes(kind)&&!(p.facePx>0)||p.lean>0;
  if(kind==='crystal'){
   if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;

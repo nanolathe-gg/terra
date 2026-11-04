@@ -6,7 +6,7 @@
 import {cdpPortFree} from './cdp-port.mjs';
 import {FORM_NAMES, FORMS, LANDFORM_FORMS} from '../sculpt-shape-presets.js';
 import {spawn} from 'node:child_process';
-import {mkdirSync} from 'node:fs';
+import {mkdirSync,readFileSync} from 'node:fs';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
@@ -75,6 +75,22 @@ for (const world of worlds) {
     const drag = async (from, to, extra = {}) => { await mouse('mousePressed', ...from, extra); await mouse('mouseMoved', ...to); await sleep(60); await mouse('mouseReleased', ...to); await sleep(250); };
     try {
       await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
+      // The approved defaults must reach a new stroke and a selected stroke through the existing Style selector.
+      const defaults = JSON.parse(readFileSync(new URL(`comparisons/landform/${world === 'desert' ? '07-mesa-improved' : '02-plateau-natural-refined'}.json`, import.meta.url), 'utf8')).strokes[0][2];
+      const baseH = await ev('sculptDebug.corner(10, 10).authored');
+      await stroke('landform');
+      // Existing slider steps snap the reviewed 300 px diameter to 304, and 75 px wander to 76.
+      const fresh = (await nodes()).at(-1).params;
+      check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === (world === 'desert' ? 200 : 152) && fresh.wander === (world === 'desert' ? 76 : 90) && fresh.widthVary === defaults.card.widthVary / 100 && fresh.elevation === baseH + defaults.card.elevation - 24 && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
+      await setValue('curve-form', 'lfHill', 'change'); await setValue('lf-wander', 0);
+      await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
+      const styled = (await nodes()).at(-1).params;
+      check('style restores the approved curve and numbers on a selected landform', same(styled.curve, defaults.curve) && styled.wander === fresh.wander && styled.elevation === fresh.elevation, styled.curve);
+      check('facing is offered only when the default section has different sides', await ev('document.getElementById("facing-control").hidden') === (world === 'desert'));
+      await setValue('lean', 200);
+      check('unequal landform widths enable facing', !await ev('document.getElementById("facing-control").hidden'));
+      await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
+      await ev(`document.getElementById('blank').click(); true`); await ready(ev);
       await ev(`document.querySelector('[data-tool="plateau"]').click(); true`); await sleep(300);
       // 1. every form at 140 and 560 px
       for (const size of [144, 560]) {   // the diameter slider steps by 8, so 144 is its nearest to 140
@@ -151,9 +167,10 @@ for (const world of worlds) {
       check('a back handle moves the shared curve while linked', c?.knots?.[1]?.[1] > kn[1][1] + .1 && !c.back, c);
       await ev(`document.getElementById('curve-link').click(); true`); await sleep(300); c = await ev('sculptDebug.curve()');
       check('unlinking copies the front to the back', c?.back && same(c.back, c.knots), c);
-      await drag(await sp('back', ...kn[2]), await sp('back', kn[2][0] + .02, kn[2][1] - .3));
+      const backKnot = kn.findIndex(k => k[1] >= .5 && k[1] < 1);
+      await drag(await sp('back', ...kn[backKnot]), await sp('back', kn[backKnot][0] + .02, kn[backKnot][1] - .3));
       const c2 = await ev('sculptDebug.curve()');
-      check('an unlinked back moves on its own', same(c2.knots, c.knots) && c2.back[2][1] < c.back[2][1] - .2, {front: c2.knots, back: c2.back});
+      check('an unlinked back moves on its own', same(c2.knots, c.knots) && c2.back[backKnot][1] < c.back[backKnot][1] - .2, {front: c2.knots, back: c2.back});
       await setValue('lean', 250); await sleep(200);
       await ev(`document.getElementById('curve-mirror').click(); true`); await sleep(300);
       const c3 = await ev('sculptDebug.curve()'), p3 = (await nodes())[L0].params;
@@ -185,10 +202,18 @@ for (const world of worlds) {
       const alongAfterUndo = (await nodes())[L0].params.along;
       check('undo restores the knot the drag moved', alongAfterUndo?.length === 3 && alongAfterUndo[1][1] > al[1][1] + .05, {before: al, after: alongAfterUndo});
       // save (the autosave) and reload: the curve with its sides, the along knots and the render come back
+      // Undo clears selection; select the saved stroke again before editing its controls.
+      await ev(`document.querySelector('#layers [data-index="${L0}"] .layer-name').click(); true`);
+      await setValue('lf-route-smooth', 80); await setValue('crest-taper', 65);
+      check('landform route and taper edits reach the selected node', (await nodes())[L0].params.routeSmooth === .8 && (await nodes())[L0].params.crestTaper === .65);
+      await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()'); await sleep(300);
+      check('undo restores the taper independently of the route', (await nodes())[L0].params.crestTaper === 0 && (await nodes())[L0].params.routeSmooth === .8);
+      await ev(`document.querySelector('#layers [data-index="${L0}"] .layer-name').click(); true`);
+      await setValue('crest-taper', 65); await ev('sculptCanvas.idle()'); await sleep(500);
       await brush('landform');
-      ns = await nodes(); const savedL = ns.map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean] : null), heightsL = await grid(); await sleep(1500);
+      ns = await nodes(); const savedL = ns.map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean, x.params.routeSmooth, x.params.crestTaper] : null), heightsL = await grid(); await sleep(1500);
       await send('Page.navigate', {url}); await sleep(1500); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500); await ev('sculptCanvas.idle()'); await sleep(500);
-      const backL = (await nodes()).map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean] : null), h3 = await grid();
+      const backL = (await nodes()).map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean, x.params.routeSmooth, x.params.crestTaper] : null), h3 = await grid();
       check('the landform comes back the same after reload', same(savedL, backL) && savedL.some(x => x?.[1]), {savedL, backL});
       check('the landform render is the same after reload', h3.length === heightsL.length && h3.every((v, i) => Math.abs(v - heightsL[i]) < 1e-3), h3.reduce((m, v, i) => Math.max(m, Math.abs(v - heightsL[i])), 0));
       // 7. Flatten to over an existing hill, the along curve at 0 at one end: that end comes down to the plain (decision 24)

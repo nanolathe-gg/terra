@@ -308,7 +308,8 @@ try {
       if (kind === 'crater' && ['crestJag', 'crestVary'].includes(key) && !(Number(ui.spurCount) > 0)) return false;   // on a crater the crest options only shape its spurs
       if (key === 'maskAmount' && !(Number(ui.maskChannel) >= 1)) return false;
       if (key === 'layerCircle' && Number(ui.layerStyle) !== 1) return false;
-      return shapeControlAvailable(key, kind, ui);
+      // The shared applicability rule receives engine units, just as updateControls does.
+      return shapeControlAvailable(key, kind, {...ui, ...Object.fromEntries(Object.entries(scales).map(([k, scale]) => [k, ui[k] / scale]))});
     };
     // What a row's fixture needs whatever the panel shows: an offset has a shore only where it lowers the ground below the sea.
     const fixtureFor = (key, kind) => kind === 'offset' && (key.startsWith('plate') || key === 'shorePlates' || key.startsWith('frost') || key.startsWith('crystalShore')) ? {amount: -60} : {};

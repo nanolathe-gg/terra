@@ -259,6 +259,8 @@ try {
   // ------------------------------------------------------------ drag: a stroke with real mouse events
   const box = await ev(`(() => { const r = document.getElementById('overlay')?.getBoundingClientRect() ?? document.querySelector('canvas').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
   await ev(`document.querySelector('[data-tool="${dragTool}"]').click(); true`);
+  // A stroke captures its parameters on pointer-down; set the requested size before starting it.
+  const drawSize = Number(opt2('--diameter', 0)); if (drawSize) await ev(`(() => { const d = document.getElementById('diameter'); d.value = ${drawSize}; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })(); true`);
   await reset();
   const cx = box.x + box.w * .35, cy = box.y + box.h * .5;
   await ev('__perf.frameStart(); true');
@@ -267,7 +269,6 @@ try {
   // H6b: move-to-picture latency. Each move is marked before it is sent and with the fields' revision after it was handled; a bake carries the
   // revision of the fields it read (a fed bake: the revision submitted when it took the buffers; a CPU bake: the last region read before it); the
   // picture is the first chunk paint after that bake ends.
-  const drawSize = Number(opt2('--diameter', 0)); if (drawSize) await ev(`(() => { const d = document.getElementById('diameter'); d.value = ${drawSize}; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })(); true`);
   // `at` is the map point under the pointer, picked before the move lands as the editor picks it, for the latency of the chunk under it.
   const at = (x, y) => `(() => { __perf.quiet = true; try { return sculptCanvas.pick(${x}, ${y}); } finally { __perf.quiet = false; } })()`;
   let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; const sx = cx + i * 9, sy = cy + Math.sin(i / 6) * 60; await ev(`__perf.mark('move', {k: ${i}, at: ${at(sx - box.x, sy - box.y)}})`); await mouse('mouseMoved', sx, sy); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats().revision ?? null})`); await sleep(30); }
@@ -276,6 +277,7 @@ try {
   const dragDraws = (await ev('__perf.draws')).filter(d => d.t >= dragT0 && d.t <= dragEnd);
   result.drag = {durationMs: dragEnd - dragT0, movesDelivered: moves, rafMs: {n: frames.length, p50: q(frames, .5), p95: q(frames, .95), max: Math.max(...frames, 0)}, chunkPaintsPerSecond: dragDraws.filter(d => d.chunk).length / ((dragEnd - dragT0) / 1000),
     erodeDuringDrag: (await ev('__perf.ev')).filter(e => e.type === 'erode-start').length, split: await splitStages()};
+  result.drag.stroke = await ev(`(() => { const n=sculptDebug.nodes().at(-1),p=n.params; return {kind:n.kind,diameter:2*p.radius,elevation:p.elevation,wander:p.wander,widthVary:p.widthVary,routeSmooth:p.routeSmooth??0,crestTaper:p.crestTaper??0}; })()`);
   {
     const events = await ev('__perf.ev'), draws = (await ev('__perf.draws')).filter(d => d.chunk), runs = (await ev('window.sculptRegion?.stats().gpuShape?.runLog || []')) || [];
     const marks = new Map(); for (const e of events) { if (e.type === 'move') Object.assign(marks.get(e.k) ?? marks.set(e.k, {}).get(e.k), {t: e.t, at: e.at}); if (e.type === 'rev') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).rev = e.rev; }
