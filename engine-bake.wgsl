@@ -172,7 +172,9 @@ fn debrisStones(p: vec2f, arrival: vec2f) -> vec2f {
             // (it left isolated specks on level ground in every world).
             if (r2.x >= clamp(arrival * density, 0.0, 0.95)) { continue; }
             if (baseHeight(centre) < u.sea + 1.0) { continue; }
-            let sizeAt = mix(1.0, 1.0 - 0.75 * here.y, u.debrisSort);
+            // Rockfall puts the largest blocks furthest from the cliff; only fans and channels (where water carried the stones) fine downslope.
+            let carried = smoothstep(0.03, 0.22, timeMapsAt(centre).channel);
+            let sizeAt = mix(1.0, mix(0.25 + 0.75 * here.y, 1.0 - 0.75 * here.y, carried), u.debrisSort);
             let radius = u.debrisSize * 0.5 * sizeAt * (0.5 + 0.5 * r2.y);
             var q = p - centre;
             let a = r1.y * 6.2831;
