@@ -660,9 +660,9 @@ fn gullyStripes(p: vec2f, dir: vec2f, f: f32, seed: u32) -> vec2f {
   let l = length(acc);
   return select(vec2f(1.0, 0.0), acc / l, l > 1e-5);
 }
-// Branching gullies cut into a height h0 whose fall line is `steer` (any length) and slope `slope0`. Each octave folds its stripes (sharp crests, round
-// floors) and feeds its own gradient back into the steering, so the next octave branches. wave0: the first wavelength (px); depth: depth per wavelength
-// per unit slope, halved each octave; minWave: no octave finer than this.
+// Branching gullies cut into a height h0 that rises along `steer` (any length) at slope `slope0`. Each octave folds its stripes (sharp crests, round
+// floors) and adds its own gradient to the steering, so the next octave branches. wave0: the first wavelength (px); depth: depth per wavelength per
+// unit slope, halved each octave; minWave: no octave finer than this.
 fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32, minWave: f32, seed: u32) -> f32 {
   if (slope0 <= 0.0 || length(steer) < 1e-6) { return h0; }
   var h = h0; var g = normalize(steer) * max(slope0, 1e-3);
@@ -702,8 +702,11 @@ fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx
   let up = lfEval(s0, s1, s2, wx - fall.x * hs, wy - fall.y * hs, base, nA, nB, nC, share, x, y, i, cells).x;
   let down = lfEval(s0, s1, s2, wx + fall.x * hs, wy + fall.y * hs, base, nA, nB, nC, share, x, y, i, cells).x;
   let slope = abs(up - down) / (2.0 * hs);
-  var steer = fall;
-  if (u.framed != 0u) { steer = vec2f(u.inv0 * fall.x + u.inv2 * fall.y, u.inv1 * fall.x + u.inv3 * fall.y); }
+  // gullies() starts from the uphill direction, as the lab's does, so each octave's own gradient, added to it, turns it the way the cut surface turns
+  // (a raised landform rises toward its path, a cut one away from it).
+  let uphill = fall * select(1.0, -1.0, up > down);
+  var steer = uphill;
+  if (u.framed != 0u) { steer = vec2f(u.inv0 * uphill.x + u.inv2 * uphill.y, u.inv1 * uphill.x + u.inv3 * uphill.y); }
   // On a long even face one wavelength cuts evenly spaced ribs, a comb; a broad warp across the fall line and a broad change of depth make them wander,
   // crowd, part and differ.
   let wv = u.gullySize; let sd = normalize(steer);
