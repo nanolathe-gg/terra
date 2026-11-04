@@ -15,7 +15,10 @@ let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=fal
 const $ = id => document.getElementById(id);
 const canvas = $('terrain'), overlay = $('overlay');
 const experiment = new URLSearchParams(location.search);
-let LOCAL_KEY = 'nanolathe-terrain-sculpt-v3' + (experiment.has('scratch')?'-'+experiment.get('scratch'):'');
+// DEVELOPMENT CONVENIENCE (owner request, revisit before release): one working map per browser, whatever the world, variant or map.
+// It reloads on every page load and a world or variant switch carries its strokes into the new world (see carryNodes). Scratch pages keep none.
+// The older per-world keys ('nanolathe-terrain-sculpt-v3...') are ignored, not migrated.
+const LOCAL_KEY = experiment.has('scratch')?null:'terraform-working-map-v1';
 let MIN_HEIGHT = -90, MAX_HEIGHT = 300;
 const HELP = {
   // The shape buttons draw landforms: the path is the crest, the section across it is one curve shaped on both sides, the ground is raised, cut or flattened
@@ -450,6 +453,7 @@ function updateControls() {
   $('tool-style').value=toolSettings[entry==='landform'?landformTool(nodes[selected]?.params):entry]?.preset||'custom';
   $('scree-value').textContent=$('scree').value+'%';
   $('tool-help').textContent=HELP[entry]||'';
+  { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a stroke first: there is nothing to reset.'; }
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
   $('export').disabled=!canExport(); mapUpdate();
@@ -1291,6 +1295,8 @@ function resize() { if (!mapCanvas) return; mapCanvas.resize(); updateControls()
 // each starting from the brush card's defaults for this world. options.card
 // overrides card values (diameter, amount, roughness ... in card units); any
 // other key is a stroke option.
+const strokeCard=d => ({radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
+  ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),...Object.fromEntries(SPUR_OUTLINE_KEYS.map(k => [k,worldDefault(k)])),curve:d.curve,along:d.along});
 function scriptedScene(list,{ground=true}={}) {
   applySeedControl(); refinementSeed=seed;
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
@@ -1298,8 +1304,7 @@ function scriptedScene(list,{ground=true}={}) {
   if (ground) addGroundNode();
   list.forEach(([entry,points,options={}],i) => {
     const kind=strokeKind(entry),{card:override,...rest}=options,d={...toolDefaults(entry),...override},pts=points.map(([x,y]) => ({x,y}));
-    const card={radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
-      ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),...Object.fromEntries(SPUR_OUTLINE_KEYS.map(k => [k,worldDefault(k)])),curve:d.curve,along:d.along,seed:(seed+i*7919)>>>0};
+    const card={...strokeCard(d),seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
   });
@@ -1318,17 +1323,59 @@ function sketch() {
     ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
     tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),scree:Number($('scree').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'stroke-graph'};
 }
+// The working copy is the sketch plus the world it was edited in and, per stroke, the settings the artist changed by hand
+// (those that differ from that world's defaults for the stroke's tool), so a switch can carry the rest to the new world's defaults.
+const sameParam=(a,b) => JSON.stringify(a)===JSON.stringify(b);
+function nodeDefaults(n) {
+  const entry=n.kind==='landform'?landformTool(n.params):n.kind;
+  return n.params && n.kind!=='ground' && entry!=='move' && Object.hasOwn(HELP,entry)?strokeParams(strokeCard(toolDefaults(entry))):null;
+}
+function workingCopy() {
+  const s=sketch();
+  s.world=worldId;
+  s.nodes=s.nodes.map(n => { const base=n.kind==='ground'?null:nodeDefaults(n); return base?{...n,edited:Object.keys(n.params).filter(k => k!=='seed' && !sameParam(n.params[k],base[k]))}:n; });
+  return s;
+}
+function saveWorking() {
+  if (!LOCAL_KEY || !ready) return false;
+  try { localStorage.setItem(LOCAL_KEY,JSON.stringify(workingCopy())); return true; } catch (_) { return false; }
+}
+// Carry a working copy's strokes into the current world: geometry, kind and tool family stay; each setting the artist changed by hand
+// stays, every other one takes this world's default. Ground undulation always takes this world's.
+function carryNodes(list) {
+  const out=list.filter(n => n.kind!=='ground').map(n => {
+    const base=n.params && Array.isArray(n.edited) && n.kind!=='ground'?nodeDefaults(n):null;
+    const {edited,...rest}=n; if (!base) return rest;
+    const keep=new Set(edited),params={};
+    for (const k of new Set([...Object.keys(base),...Object.keys(n.params)])) params[k]=keep.has(k) || !(k in base)?n.params[k]:base[k];
+    return {...rest,params};
+  });
+  const ground=list.find(n => n.kind==='ground'),g=groundDefaults();
+  if (g.amplitude>0) out.unshift({kind:'ground',...g,seed:ground?.seed??(seed^0x9e37)});
+  return out;
+}
+// Reset every stroke's settings to this world's defaults for its tool: the same defaults a carry gives an unedited setting. Marks of hand edits
+// are the differences from these defaults, so none remain. One undo step.
+const resettable=() => nodes.some(n => n.points && nodeDefaults(n));
+$('reset-strokes').onclick=() => {
+  if (stroke || moving || loading || !ready || !resettable()) return;
+  cancelWeather();
+  nodes=nodes.map(n => { const base=n.points?nodeDefaults(n):null; return base?{...n,params:{...base}}:n; });
+  selected=-1; pathPoint=-1; pathAdding=false; evaluate(0); regionalFields.changed(); checkpoint(); queueWeather(); schedule();
+  status('Reset every stroke to this world\'s defaults.');
+};
 function persistLater() {
-  if (experiment.has('scratch')) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
+  if (!LOCAL_KEY) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(() => {
     if (stroke || moving || loading) { persistLater(); return; }
-    try { localStorage.setItem(LOCAL_KEY,JSON.stringify(sketch())); $('save-state').textContent='Terrain recipe autosaved locally.'; }
-    catch (_) { $('save-state').textContent='Local autosave unavailable. Use Save sketch to keep this heightfield.'; }
+    keepSaved=false; $('save-state').textContent=saveWorking()?'Terrain recipe autosaved locally.':'Local autosave unavailable. Use Save sketch to keep this heightfield.';
   },450);
 }
-function loadSketch(s) {
+let keepSaved=false;   // set while the saved copy failed to load: leaving the page must not overwrite it with a blank map
+addEventListener('pagehide',() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
+function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const next=deserializeNodes(s.nodes),column=copyColumn(s.column,defaultColumn);
+  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column,defaultColumn);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
@@ -1336,10 +1383,11 @@ function loadSketch(s) {
   // A shape button's saved settings count only when a landform made them: the retired tools' (shallowMode marks every one) start from the preset,
   // and Plateau takes the old Landform brush's own.
   const retired=t => Boolean(t) && Object.hasOwn(t,'shallowMode'),saved=kind => { const t=s.toolSettings?.[kind]; return strokeKind(kind)!=='landform'||!retired(t)?t:kind==='plateau'?s.toolSettings?.landform:null; };
-  for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(saved(kind)||{})};
+  // Carried into another world, the brush cards and the world's sliders stay at that world's defaults.
+  if (!carry) for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(saved(kind)||{})};
   showTool(toolSettings[tool]);
-  for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
-  for (const [key,id,lo,hi] of [['softness','softness',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
+  if (!carry) for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
+  if (!carry) for (const [key,id,lo,hi] of [['softness','softness',0,100],['scree','scree',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
@@ -1390,9 +1438,10 @@ async function loadSketchFile(s,commit=true,documentId=null) {
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
 }
+const groundDefaults=() => ({amplitude:experiment.has('undulation')?Number(experiment.get('undulation')):10,wavelength:experiment.has('undulationScale')?Number(experiment.get('undulationScale')):200,coverage:experiment.has('undulationCover')?Number(experiment.get('undulationCover')):.45});
 function addGroundNode() {
-  const amplitude=experiment.has('undulation')?Number(experiment.get('undulation')):10;
-  if (amplitude>0) addNode({kind:'ground',amplitude,wavelength:experiment.has('undulationScale')?Number(experiment.get('undulationScale')):200,coverage:experiment.has('undulationCover')?Number(experiment.get('undulationCover')):.45,seed:seed^0x9e37});
+  const g=groundDefaults();
+  if (g.amplitude>0) addNode({kind:'ground',...g,seed:seed^0x9e37});
 }
 function serializeNodes() {
   return nodes.map(n => ({...n,points:n.points?.map(p => ({x:p.x,y:p.y})),paths:clonePaths(n)}));
@@ -1624,6 +1673,7 @@ function defaultColor(key) {
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
+  if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
   if (config.map) for (const [key,value] of Object.entries({mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel})) url.searchParams.set(key,value);
   // Staying in the same world keeps its variant.
@@ -1802,8 +1852,13 @@ async function bootMap() {
   buildKnobs(); buildWorldPanel();
   syncColumnPanel=mountColumnPanel(()=>({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),editColumn,commitColumn,()=>{editColumn(null);commitColumn();});
   $('scree').value=clamp(Number(experiment.get('scree'))||0,0,100);
-  let saved=null; try { if (!experiment.has('scratch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
-  if (saved) { try { loadSketch(JSON.parse(saved)); status('Restored your saved map recipe.'); } catch (err) { error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); } }
+  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
+  if (saved) {
+    try {
+      const s=JSON.parse(saved),same=s.biome===config.biomeId && (s.variant||'')===(config.variant||'') && (s.world||s.biome)===worldId;
+      loadSketch(s,!same); status(same?'Restored your saved map recipe.':'Carried your working map into this world.');
+    } catch (err) { keepSaved=true; error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); }
+  }
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
@@ -1811,28 +1866,31 @@ async function bootMap() {
   if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
+  $('one').click();   // every page load starts at 1x, centered on the map
 }
 async function boot() {
   try {
     const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
     defaultColumn=config.column;
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
-    if (!experiment.has('mapX') && !experiment.has('mapY')) { experiment.set('mapX','4'); experiment.set('mapY','4'); }
+    if (!experiment.has('mapX') && !experiment.has('mapY')) {
+      // A bare address reopens the working map's size and sea level.
+      let w=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) w=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null'); } catch (_) {}
+      const m=w?.map;
+      if (m?.unitsX>0 && m?.unitsY>0) { experiment.set('mapX',String(m.unitsX)); experiment.set('mapY',String(m.unitsY)); if (!experiment.has('sea') && w.biome===config.biomeId && Number.isFinite(w.seaLevel)) experiment.set('sea',String(w.seaLevel)); }
+      else { experiment.set('mapX','4'); experiment.set('mapY','4'); }
+    }
     {
       const response=await fetch('/map-catalog.json'),data=await response.json(); if (!response.ok) throw new Error(data.error||'Could not read map defaults from the installed content.');
       config.exportCatalog=data; config.defaultSeaLevel=config.exportCatalog.worlds[config.biomeId]?.defaultSeaLevel;
     }
     configureMap(config,experiment); MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
     if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?16384:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
-    if (config.biomeId && config.biomeId!=='green') LOCAL_KEY+='-'+config.biomeId;
-    if (config.variant) LOCAL_KEY+='-v-'+config.variant;
-    if (config.map) LOCAL_KEY+=`-map-${config.map.unitsX}x${config.map.unitsY}-sea-${config.seaLevel}`;
     document.querySelector('.canvas-caption h2').textContent=(config.biome||'Green Planet')+' terrain';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.
     loadWorlds();
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
-    if (worldId!==config.biomeId) LOCAL_KEY+='-'+worldId;
     config.presetDefaults={...config.defaults};
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
     if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
