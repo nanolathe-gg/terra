@@ -38,6 +38,8 @@ export function shapeControlAvailable(key,kind,p){
   if(key==='breakup')return on&&!shore;
   if(['layerPx','layerRiser','layerVary'].includes(key))return on&&shore;
   if(key==='lavaSpread')return on&&shore&&!circular;
+  // Gullies cut only into ground a landform raises, and Cut to never raises it.
+  if(['gullies','gullySize'].includes(key))return Math.round(Number(p.combine||0))!==1;
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
  }
 
