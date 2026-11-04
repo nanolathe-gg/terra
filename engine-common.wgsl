@@ -340,7 +340,7 @@ struct Uniforms {
     columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    materialTable: array<vec4f, 166>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl)
+    materialTable: array<vec4f, 205>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 38 rows of a world's ground-cover table (card P30; zeros: none)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
     blocks: f32,          // 1: blocks on faces (with a reduced facet and gully set, ENGINE_KNOBS); 0: none (also leaves the beds' boundaries unragged)
@@ -354,7 +354,8 @@ struct Uniforms {
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet
     terraceCalm: f32,     // 0..1: terrace lines faded on gentle slopes (the small dashes retail does not have)
-    wetSwath: f32,        // darkness of the soft swaths water leaves on grass along its flow
+    wetSwath: f32,        // darkness of the soft swaths water leaves on grass along its flow; with a ground-cover table it is also Moisture (card P30)
+    lushness: f32,        // card P30: -1..1, the world-wide baseline of the painted Vegetation override (0: none); a ground-cover table reads it as succession
     outcrop: f32,         // grey rock shown where wear has bared steep grass
     // (the fall-line cracks in outcrops, moss by wetness and the grey specks are fixed at retail's rates, ROCK_CRACK and SPECKS in engine-bake and the wetness term in engine-frag: H5 found their controls under 5% of any class)
     // H5 item 3b, beyond retail (0: off for Green).
@@ -576,11 +577,11 @@ fn depositsAt(p: vec2f) -> f32 {
     return max(0.0, 1.0 + textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).w);
 }
 // H5: the Time pass's maps at world point p. layer 2: wear, wetness, hardness, slope; layer 3: fall line (-1..1), channel, ridge.
-struct TimeMaps { wear: f32, wet: f32, hard: f32, slope: f32, fall: vec2f, channel: f32, ridge: f32, flow: f32, talus: f32 }
+struct TimeMaps { wear: f32, wet: f32, hard: f32, slope: f32, fall: vec2f, channel: f32, ridge: f32, flow: f32, talus: f32, deposit: f32 }
 fn timeMapsAt(p: vec2f) -> TimeMaps {
     let uv = p / (u.size - 1.0);
     let a = timeMap2(uv); let b = timeMap3(uv); let w = weatherAt(uv);
-    return TimeMaps(a.x, a.y, a.z, a.w, b.xy * 2.0 - 1.0, b.z, b.w, w.r, w.b);
+    return TimeMaps(a.x, a.y, a.z, a.w, b.xy * 2.0 - 1.0, b.z, b.w, w.r, w.b, w.g);
 }
 // Where wear has bared steep grass: clumps of 10-20 px on slopes, by how much rock the water took. Bake and draw share it,
 // so the cracks lie where the grey shows.

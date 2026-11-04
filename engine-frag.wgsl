@@ -300,9 +300,9 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
     let r6 = pr(6u); let r7 = pr(7u); let r8 = pr(8u); let r9 = pr(9u);
     var exposure = 0.0;
-    var vegetation = 0.0;
+    var vegetation = u.lushness;   // card P30: the world-wide baseline of the painted override
     out.deposits = 1.0;
-    out.vegetation = 1.0;
+    out.vegetation = 1.0 + u.lushness;
     if (u.overrideOn != 0) {
         let uv = maskUv(p);
         let planes = textureSampleLevel(masksTex, linearClamp, uv, 4, 0.0);
@@ -388,6 +388,63 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     out.top = top;
     out.faceSlope = faceSlope;
     return out;
+}
+
+// Card P30: ground cover placed by ecosystem rules. A world whose material data carries a ground-cover table (row 0, x = 1) draws its
+// grass from seven classes (0 bare soil, 1 dry grass, 2 turf, 3 meadow, 4 scrub, 5 moss, 6 wet rush) in place of the slope-only
+// ramp. Each pixel has three site values from maps the Time pass already writes: moisture (wetness, with the wet swaths' control as its bias, and
+// the sun's shade), soil depth (thin on steep and convex ground, deep in hollows and where water laid deposit) and light (the sun on the
+// broad face, level ground 1). A class is viable inside a window of each (Cordonnier et al. 2017; Gain et al. 2017); its cover is the
+// viability squared times a strength that follows Lushness (succession: grazed turf and bare ground below 1, meadow, scrub and rush above);
+// a pixel draws its class from the covers by a coherent uniform, which Patchiness moves from per-pixel noise to patches.
+// Table (MM_COVER rows): 0 x on, y wetness at which moisture starts to rise, z wetness at which it is full, w moisture of dry level ground;
+// 1 x slope where soil thins, y slope where it is gone, z convex ground's loss, w deposit's gain; 2 x patch px, y moisture per unit of
+// wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w Patchiness (0..1: how far the class draw clumps into patches);
+// then per class five rows: colour (rgb) and its grain, strength and Lushness exponent, and the windows of moisture, soil and light.
+const MM_COVER = 166u;
+fn cvr(i: u32) -> vec4f { return matRow(MM_COVER + i); }
+fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }
+fn coverZ(p: vec2f, scale: f32, patchiness: f32) -> f32 {
+    let zp = (valueNoise(p / scale + 17.0) + 0.5 * valueNoise(p / (0.45 * scale) + 31.0) + 0.25 * valueNoise(p / (0.2 * scale) + 47.0)) / 0.46;
+    let c = floor(p);
+    let pixel = (cellHash(c).x + cellHash(c + 7.3).x + cellHash(c + 19.1).y - 1.5) * 2.0;
+    let pt = clamp(patchiness, 0.0, 1.0);
+    return sqrt(pt) * zp + sqrt(1.0 - pt) * pixel;
+}
+// The grass with the class this pixel draws: the class colour carries the grass art's light and dark, and keeps its chroma only within
+// +-30% of that (the art's blue and red grain would otherwise swing a tan or a dark green to pink or teal).
+fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f) -> vec3f {
+    let c0 = cvr(0u); let c1 = cvr(1u); let c2 = cvr(2u);
+    let wn = smoothstep(c0.y, c0.z, tm.wet);
+    let nb = normalize(vec3f(-broad, 1.0));
+    let light = max(dot(nb, u.light), 0.0) / max(u.light.z, 0.05);
+    let shade = clamp(1.0 - light, -0.6, 1.0);
+    let moist = clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0);
+    let soil = clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
+    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
+    var cover: array<f32, 7>;
+    var total = 0.0;
+    for (var k = 0u; k < 7u; k++) {
+        let b = 4u + 5u * k;
+        let st = cvr(b + 1u);
+        var v = st.x * pow(lush, st.y);
+        if (k > 0u) {
+            v *= coverWin(moist, cvr(b + 2u)) * coverWin(soil, cvr(b + 3u)) * coverWin(light, cvr(b + 4u));
+            v *= v;
+        }
+        cover[k] = v;
+        total += v;
+    }
+    let z = coverZ(p, c2.x, cvr(3u).w);
+    let pick = 1.0 / (1.0 + exp(-1.702 * z)) * total;
+    var acc = 0.0;
+    var klass = 6u;
+    for (var k = 0u; k < 7u; k++) { acc += cover[k]; if (pick < acc) { klass = k; break; } }
+    let col = cvr(4u + 5u * klass);
+    let grain = (cellHash(floor(p) + 3.7).y - 0.5) * 2.0 * col.w;
+    let ratio = grass / max(cvr(3u).rgb, vec3f(0.01));
+    let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
+    return col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
 }
 
 // Moon slope marks, measured on the retail Lunar sections and the cc21
@@ -1402,6 +1459,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Retail's small hills keep nearly the plain's tone on their far sides; the dark masses are the tall hills', so it grows with height.
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
+    let timeMaps = timeMapsAt(p);
     var grass = groundBased(groundSource(pixel));
     let grass0 = grass;
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
@@ -1440,6 +1498,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         slopeShare = slopeCover;
         grass = mix(grass, slopeGrass, slopeCover);
     }
+    // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
+    if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass); }
     // Small mineral interiors supply pixel structure; the whole crown/face/
     // foot comes from this surface. Some native microshading remains baked.
     var rock = rockSource(pixel);
@@ -1469,7 +1529,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     var exposed = place.exposed;
     // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
-    let timeMaps = timeMapsAt(p);
     exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);

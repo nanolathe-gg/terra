@@ -202,7 +202,7 @@ KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep
 KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing, stoneDensity, stoneSize; `sand` and ripple already exist).
-KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
+KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8, stoneDensity=0, stoneSize=5)
 KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
@@ -632,6 +632,7 @@ WORLD_KNOBS = {
 # other config keys ('config'). A world's own preset is its
 # default, so nothing changes unless a variant is chosen (World panel, or
 # `variant=<id>` in the page's address). Every knob must be in KNOB_DEFAULTS.
+OPEN = [-9, -8, 9, 10]   # a ground-cover window with no limit
 WORLD_VARIANTS = {
     'green': {
         # Evad River Delta and the Barrier Reef: rounded hills with soft
@@ -651,7 +652,24 @@ WORLD_VARIANTS = {
         # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
         # its beds and joints, debris where gravity and water leave it, light that agrees from any sun. It starts as a
         # copy of Green's own preset; each look card sets its realistic numbers here (scenes green-modern-1..3).
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict()),
+        # Ground cover (card P30): seven classes placed by moisture, soil and sun in place of the slope-only grass ramp (the table is
+        # read by engine-frag.wgsl groundCover). Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
+        # dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the
+        # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(),
+                       material=dict(groundCover=dict(
+                           wet=[.25, .9], dry=.4, patch=22, patchiness=.8, ground=[55, 93, 27],
+                           soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
+                           moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
+                           classes=[
+                               dict(name='bare soil', rgb=[105, 90, 38], grain=.12, strength=.015, lush=-1, moisture=OPEN, soil=OPEN, light=OPEN),
+                               dict(name='dry grass', rgb=[114, 109, 64], grain=.10, strength=.65, lush=0, moisture=[-1, 0, .2, .42], soil=[.05, .3, 9, 10], light=[1, 1.35, 9, 10]),
+                               dict(name='turf', rgb=[55, 95, 27], grain=.07, strength=1, lush=-1, moisture=[-.1, .12, .72, .92], soil=[.08, .3, 9, 10], light=OPEN),
+                               dict(name='meadow', rgb=[38, 91, 15], grain=.05, strength=1.1, lush=1, moisture=[.5, .7, .92, 1.01], soil=[.4, .75, 9, 10], light=[.55, .9, 9, 10]),
+                               dict(name='scrub', rgb=[28, 74, 9], grain=.06, strength=1.15, lush=2, moisture=[.55, .75, .9, .99], soil=[.5, .85, 9, 10], light=OPEN),
+                               dict(name='moss', rgb=[42, 84, 29], grain=.03, strength=.8, lush=0, moisture=[.12, .4, 9, 10], soil=[-9, -8, .6, 1.4], light=[-9, -8, .6, .95]),
+                               dict(name='wet rush', rgb=[38, 80, 32], grain=.10, strength=1, lush=1, moisture=[.9, .99, 9, 10], soil=[.45, .75, 9, 10], light=OPEN),
+                           ]))),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
