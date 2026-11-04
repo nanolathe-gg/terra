@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,PLACEMENT_ROW} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,PLACEMENT_ROW} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
@@ -643,7 +643,7 @@ export class TerrainRenderer {
   // (Green's); every other table leaves them to the knobs, as the world's placement always was.
   placementTable(variant) {
     const rows = this.materialData?.placement ? tablePlacementRows(this.materialData, variant) : this.placementRows(variant);
-    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows];
+    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover)];
   }
 
   // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
@@ -1038,7 +1038,7 @@ export class TerrainRenderer {
     set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
     {
       set('uWeatherMaps', this.weatherMaps ? 1 : 0);
-      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8], ['stoneDensity', 0], ['stoneSize', 5]])
+      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['lushness', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8], ['stoneDensity', 0], ['stoneSize', 5]])
         set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     }
     set('uReliefScale', number('reliefScale', 28));
