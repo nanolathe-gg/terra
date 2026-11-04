@@ -30,7 +30,7 @@ export function mountEditorUI(){
  const grouped=document.createElement('div');grouped.className='tool-groups';
  const primary=document.createElement('div');primary.className='tools primary-tools';primary.setAttribute('role','group');primary.setAttribute('aria-label','Select and place');
  for(const kind of ['move','features']){const b=palette.querySelector(`[data-tool="${kind}"], [data-icon="${kind}"]`);b.querySelector('.tool-label').textContent=kind==='move'?'Select':'Features';if(kind==='move')b.title='Select · V';primary.append(b);}grouped.append(primary);
- for(const [label,kinds] of [['Shape',['landform','plateau','hill','ramp','offset','crater','fissure','crystal','deep']],['Finish',['smooth','erase','paint']]]){
+ for(const [label,kinds] of [['Shape',['plateau','hill','deep','ramp','crater','fissure','crystal']],['Finish',['smooth','erase','paint']]]){
   const section=document.createElement('div');section.className='tool-group';section.setAttribute('role','group');section.setAttribute('aria-label',label+' tools');
   const heading=document.createElement('span');heading.className='tool-group-label';heading.textContent=label;
   const buttons=document.createElement('div');buttons.className='tools';for(const kind of kinds)buttons.append(palette.querySelector(`[data-tool="${kind}"]`));
@@ -41,7 +41,7 @@ export function mountEditorUI(){
  for(const [kind,label] of [['hill','Ridge'],['deep','Water'],['crystal','Faceted forms'],['paint','Surface paint'],['erase','Reset ground']]){const b=grouped.querySelector(`[data-tool="${kind}"]`);b.title=label;b.setAttribute('aria-label',label);b.querySelector('.tool-label').textContent=label;}
  palette.replaceWith(grouped);
  const mode=document.createElement('div');mode.className='control';mode.id='tool-mode-control';mode.innerHTML='<label for="tool-mode">Drawing mode</label><select id="tool-mode"></select>';$('tool-style').closest('.control').after(mode);
- const families=[{root:'hill',label:'Ridge form',items:[['hill','Rounded ridge'],['mountain','Peaked ridge']]},{root:'deep',label:'Water action',items:[['deep','Deep channel'],['shallow','Shallow area / passage']]},{root:'paint',label:'Surface action',items:[['paint','Material & local style'],['sand','Sand cover'],['grass','Restore ground cover']]}];
+ const families=[{root:'hill',label:'Ridge form',items:[['hill','Rounded ridge'],['mountain','Peaked ridge']]},{root:'deep',label:'Water action',items:[['deep','Deep water'],['shallow','Shallow water']]},{root:'paint',label:'Surface action',items:[['paint','Material & local style'],['sand','Sand cover'],['grass','Restore ground cover']]}];
  let changeMode=()=>{};$('tool-mode').onchange=()=>changeMode($('tool-mode').value);
  const syncTools=(active,selected,locked,features)=>{const kind=selected||active,family=families.find(f=>f.items.some(([k])=>k===kind));mode.hidden=!family||features;if(family){const select=$('tool-mode');if(mode.dataset.family!==family.root){select.replaceChildren(...family.items.map(([k,label])=>new Option(label,k)));mode.dataset.family=family.root;}select.value=kind;select.disabled=locked;mode.querySelector('label').textContent=family.label;}
   for(const f of families)grouped.querySelector(`[data-tool="${f.root}"]`).setAttribute('aria-pressed',String(!features&&active!=='move'&&f.items.some(([k])=>k===active)));

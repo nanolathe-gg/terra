@@ -14,7 +14,7 @@ const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--po
 const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), shore = flag('--shore');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const TOOLS = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'offset', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];
+const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first six draw landforms
 
 async function session(url, fn) {
   const logs = [];
@@ -51,8 +51,8 @@ const ready = async (ev, exportable) => {
 };
 const strokeAt = async (send, ev, tool) => {
   await ev(`document.querySelector('[data-tool="${tool}"]').click(); true`);
-  if (tool === 'landform') await ev(`for (const [id,v] of [['lf-route-smooth',80],['crest-taper',65]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
-  if (tool === 'landform' && shore) await ev(`for (const [id,v] of [['lf-combine',1],['lf-height-reference',1],['lf-elevation',-55],['fingers',100],['finger-size',65],['lf-step-reference',1],['sec-terraces',5]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
+  if (tool === 'plateau') await ev(`for (const [id,v] of [['lf-route-smooth',80],['crest-taper',65]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
+  if (tool === 'plateau' && shore) await ev(`for (const [id,v] of [['lf-combine',1],['lf-height-reference',1],['lf-elevation',-55],['fingers',100],['finger-size',65],['lf-step-reference',1],['sec-terraces',5]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
   const x0 = 700, y0 = 650, pts = [[0, 0], [60, 20], [120, 30], [180, 10], [240, 0]];
   const m = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
   await send('Input.dispatchMouseEvent', {type: 'mouseMoved', x: x0, y: y0});
@@ -83,7 +83,7 @@ for (const world of worlds) {
         if (world === 'zhon') r.export = await ev(`document.getElementById('map-export').disabled ? 'disabled, by design' : 'enabled'`);
         else {
           // Export an actual landform with the route and taper fields, after the brush/undo loop left the map empty.
-          await strokeAt(send, ev, 'landform');
+          await strokeAt(send, ev, 'plateau');
           r.landformParams = await ev(`sculptDebug.nodes().at(-1).params`);
           if (r.landformParams.routeSmooth !== .8 || r.landformParams.crestTaper !== .65) bad++;
           if (shore && (r.landformParams.combine !== 1 || r.landformParams.fingers !== 1 || r.landformParams.terraces !== 5 || r.landformParams.stepReference !== 1 || r.landformParams.heightReference !== 1)) bad++;
@@ -109,7 +109,7 @@ if (page8) for (const world of worlds8) {
     try {
       await ready(ev, world !== 'zhon'); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       r.paged = await ev('sculptDebug.pageInfo()?.np ?? null');
-      for (const tool of ['hill', 'landform']) {
+      for (const tool of ['hill', 'deep']) {   // a ridge, and water with its coast pass, on pages
         const before = await ev('sculptDebug.nodes().length'); await strokeAt(send, ev, tool);
         r.added = ((r.added ?? 0)) + (await ev('sculptDebug.nodes().length')) - before;
         await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()');

@@ -3,7 +3,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FACING_CHOICES,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FACING_CHOICES,FORMS,landformTool,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -18,22 +18,21 @@ const experiment = new URLSearchParams(location.search);
 let LOCAL_KEY = 'nanolathe-terrain-sculpt-v3' + (experiment.has('scratch')?'-'+experiment.get('scratch'):'');
 let MIN_HEIGHT = -90, MAX_HEIGHT = 300;
 const HELP = {
-  plateau:'Paint a level crest above the height where this stroke begins. New strokes can build on top.',
-  hill:'Paint a rounded ridge along any path. A later stroke adds more height to the existing ground.',
-  mountain:'Paint a narrower, peaked ridge. New strokes add to the existing height, without a flat summit.',
-  ramp:'Draw between terrain levels. A smooth center joins the endpoint heights with rounded approaches; shoulder roughness stays outside the route. Longer paths make gentler grades.',
-  deep:'Guide a deep channel. Coast freedom varies the banks; Automatic shallows controls extra shelves. The center stays deep until you paint over it.',
-  shallow:'Set the bed 7 below sea level. Paint through deep water to make a shallow passage, or through land to make shallows.',
+  // The shape buttons draw landforms: the path is the crest, the section across it is one curve shaped on both sides, the ground is raised, cut or flattened
+  // to an elevation, and a second curve sets the crest's height along the path. Each button starts from its own preset; every setting stays editable.
+  plateau:'Draw a landform that starts as a plateau: a level top at the elevation you set, with a natural foot. Change any setting below.',
+  hill:'Draw a landform that starts as a rounded ridge: a short steep face and a long smooth back along the path. Change any setting below.',
+  mountain:'Draw a landform that starts as a peaked ridge: a narrow crest with no flat summit. Change any setting below.',
+  ramp:'Draw a landform that starts as a ramp: the ground is flattened to a grade that climbs from the plain at the start of the path to the elevation at its end (shape the climb in the along curve), and its center is kept smooth.',
+  deep:'Draw a landform that starts as deep water: the ground is cut to 55 below sea level behind a smooth bank. Shore lobes, steps and plates are in their own groups.',
+  shallow:'Draw a landform that starts as shallow water: the ground is flattened to 7 below sea level. Choose Raise to in Combine for a passage that leaves higher ground as it is.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
-  lower:'Lower the starting surface by the chosen amount. New strokes can dig farther.',
-  offset:'Paint an area to raise or lower by the chosen height. Its edge is natural and its softness sets cliff or slope; the ground keeps its own relief.',
   crystal:'Grow a cluster of faceted crystals along the stroke: their sides, size, count, how flat their tops are and how much they lean are brush options. Height sets the tallest.',
   sand:'Paint sand cover: the ground under the brush becomes sand (on slopes too, so a hill set in sand has sandy feet). Heights do not change.',
   grass:'Paint ground cover: clears sand (painted or weathered) back to the world\'s own ground, such as grass. Heights do not change.',
   paint:'Paint a material over the ground, or a scatter density: rock showing through, snow or ice, wet (dark) ground and moss take the world\'s own materials; denser or sparser scatter multiplies the World panel\'s Boulders and Debris (at 0 nothing shows). Strength is how fully it paints, Softness the edge. Heights do not change.',
   fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
-  landform:'Draw a landform along a path: the path is the crest, and the section across it is one curve you shape on both sides. The crest stands at an elevation you set, and the ground is raised to it, cut down to it or flattened to it. A second curve sets the crest\'s height along the path.',
   crater:'Strike a crater: a bowl below the ground where you click, a raised rim and a fading apron. Drag for an elongated crater.',
   move:'Drag to move · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas'
 };
@@ -57,18 +56,34 @@ let revision=0, autosaveTimer, ready=false;
 // borrowed independently of the canvas materials and then edited per tool.
 // Approved starting shapes use ordinary controls and editable knots. Preset elevation is a rise above the map plain; toolDefaults resolves the absolute height.
 const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"fingers":0,"shoreLayers":0,"shorePlates":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
+// The palette's landform presets over LANDFORM_DEFAULTS (Plateau is the defaults themselves): numbers for Landform's own controls, each the fit of the
+// retired tool's default stroke that re-authored the fixtures. Elevation is a rise above the map plain, or with Height reference: Sea level, above the sea.
+const smoothKnots=n=>Array.from({length:n+1},(_,i)=>{const t=i/n;return [Math.round(1000*t)/1000,Math.round(1000*t*t*(3-2*t))/1000];});
+const LANDFORM_TOOLS={
+  plateau:{},
+  hill:{diameter:200,lean:205,wander:24,widthVary:20,heightVary:15,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:[[0,0],[.333,.02],[.667,.34],[1,1]],back:smoothKnots(12)}},
+  mountain:{diameter:200,lean:100,cracks:60,wander:8,widthVary:0,heightVary:3,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfMountain',knots:thinKnots(FORMS.mountain(.5).knots,17)}},
+  ramp:{diameter:200,lean:100,combine:2,routeSmooth:100,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:160,varyFoot:100,varyMiddle:100,along:[[0,0],[1,1]],curve:{form:'lfRamp',knots:FORMS.lfRamp().knots}},
+  deep:{diameter:200,lean:100,heightReference:1,elevation:-55,combine:1,cracks:0,wander:30,widthVary:30,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
+  shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}}
+};
+const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water'};
+// A palette entry's stroke kind: the shape buttons all draw landforms.
+const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
 const TOOL_PRESETS={
-  green:{crater:{roughness:60},plateau:{roughness:40},hill:{roughness:35},mountain:{roughness:45},ramp:{roughness:18},deep:{roughness:45},shallow:{roughness:18}},
-  red:{crater:{roughness:65,softness:40},plateau:{roughness:50,softness:35},hill:{roughness:50,softness:40},mountain:{roughness:55,softness:30},ramp:{roughness:22},deep:{roughness:55,bankWidth:38,shelves:45},shallow:{roughness:25}},
-  desert:{landform:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},plateau:{roughness:30,softness:100,diameter:560,amount:67,cracks:10,facePx:210,curve:{form:'mesa'}},hill:{roughness:45,softness:62,cracks:10},mountain:{roughness:50,softness:50,cracks:10},offset:{cracks:10},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
-  moon:{crater:{roughness:65,softness:45},plateau:{roughness:45,softness:45},hill:{roughness:40,softness:55},mountain:{roughness:50,softness:40},ramp:{roughness:18},deep:{roughness:50},shallow:{roughness:20}},
+  green:{crater:{roughness:60}},
+  red:{crater:{roughness:65,softness:40},hill:{wander:34,widthVary:30,heightVary:21,lean:250},mountain:{wander:8,heightVary:4},deep:{diameter:176,wander:34,widthVary:35},shallow:{wander:4}},
+  // The reviewed mesa; ragged feet and foot bumps on the ridges (the retired baseVary and baseBump, as wander and height variation).
+  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"facePx":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},hill:{wander:46,widthVary:25,heightVary:23,lean:160,cracks:10},mountain:{wander:24,heightVary:8,cracks:10},deep:{wander:34,widthVary:35}},
+  // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
+  moon:{crater:{roughness:65,softness:45},hill:{wander:42,widthVary:30,heightVary:17,varySize:60,varyMiddle:150,lean:185},mountain:{wander:24,widthVary:5,heightVary:4,varySize:60,varyMiddle:150},deep:{wander:34,widthVary:35}},
+  crystal:{crystal:{amount:140,diameter:480,roughness:40},mountain:{wander:6,heightVary:2},deep:{wander:24,widthVary:25},shallow:{wander:6}},
+  ice:{crystal:{amount:155,diameter:120,roughness:20},mountain:{wander:6,heightVary:2},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
-  // flattening (retail coasts, measure/lava_*): wide, concave dry banks.
-  crystal:{crystal:{amount:140,diameter:480,roughness:40}},
-  ice:{crystal:{amount:155,diameter:120,roughness:20}},
-  lava:{deep:{roughness:45,bankWidth:80,beachFlatness:30},shallow:{roughness:30,bankWidth:80,beachFlatness:30}},
-  zhon:{crater:{roughness:55,softness:60},plateau:{roughness:45,softness:55},hill:{roughness:30,softness:35},mountain:{roughness:45,softness:55},ramp:{roughness:18},deep:{roughness:60,bankWidth:70,beachFlatness:75,shelves:70},shallow:{roughness:30,bankWidth:70,beachFlatness:75}},
-  archipelago:{crater:{roughness:60,softness:65},plateau:{roughness:45,softness:72},hill:{roughness:35,softness:78},mountain:{roughness:45,softness:65},ramp:{roughness:18},deep:{roughness:60,bankWidth:78,beachFlatness:80,shelves:90},shallow:{roughness:30,bankWidth:75,beachFlatness:80}}
+  // flattening (retail coasts, measure/lava_*): wide, concave dry banks, as shoreline steps and lobes.
+  lava:{mountain:{wander:6,heightVary:2},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70}},
+  zhon:{crater:{roughness:55,softness:60},hill:{wander:20,widthVary:15,heightVary:13,lean:280},deep:{diameter:240,wander:48,widthVary:40},shallow:{diameter:240,wander:6}},
+  archipelago:{crater:{roughness:60,softness:65},hill:{lean:120},deep:{diameter:256,wander:52,widthVary:40},shallow:{diameter:248,wander:6}}
 };
 const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],shelves:['shelves',0,100],bankWidth:['bank-width',0,100],beachFlatness:['beach-flatness',0,100],softness:['softness',0,100]};
 // Shape options: per-shape settings, shown for the tools they apply to and
@@ -323,9 +338,12 @@ const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:kind=
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
-function toolDefaults(kind,preset=config?.biomeId||'green') {
-  const starting={...(kind==='landform'?LANDFORM_DEFAULTS:{}),...TOOL_PRESETS[preset]?.[kind]};
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{hill:40,mountain:60,plateau:50,crater:30,offset:40,landform:40}[kind]??0,diameter:200,amount:kind==='offset'?20:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...starting,elevation:clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
+// A palette entry's starting settings in a world (a landform kind starts as the plateau). A sea-level preset keeps its elevation above the sea.
+function toolDefaults(entry,preset=config?.biomeId||'green') {
+  const shape=entry==='landform'?'plateau':entry,kind=strokeKind(shape);
+  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_TOOLS[shape]}:{}),...TOOL_PRESETS[preset]?.[shape]},sea=Math.round(starting.heightReference||0)===1;
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(key)*scale),lo,hi)])),cracks:{crater:30}[kind]??0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,shelves:25,bankWidth:50,beachFlatness:50,softness:50,shallowMode:'area',preset,...starting,
+    elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool],shallowMode:$('shallow-mode').value};
@@ -341,7 +359,7 @@ function stepControlRange(kind,p={}) {
   const shore=kind==='landform'&&Number(p.stepReference)>0;
   $('sec-terraces').max=shore?'12':'8';$('sec-ledge').min=shore?'40':'0';$('sec-ledge').max=shore?'95':'90';
 }
-function showTool(state={},kind=tool) {
+function showTool(state={},kind=strokeKind(tool)) {
   heightControlRange(state);stepControlRange(kind,state);
   [$('amount').min,$('amount').max]=amountRange(kind).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
@@ -398,50 +416,49 @@ function updateControls() {
   for(const id of ['save','load','view-clay','view-rendered','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
   const pointCount=nodes[selected]?.points?.length||0;
   $('path-help').textContent=pathEditing?pathAdding?'Click to extend from the selected point. An interior point starts a branch. Escape finishes.':`${paths.length} path${paths.length===1?'':'s'} · ${pointCount} points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Select a point to insert, extend, or branch.`:'Drag to move · labeled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
-  // With Select active, show the selected shape's own controls.
-  const activeTool=tool;
-  if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
-  try {
-  heightControlRange({heightReference:shapeValue('heightReference')});stepControlRange(tool,{stepReference:shapeValue('stepReference')});
+  // With Select active, show the selected shape's own controls; a palette entry shows its stroke kind's (the shape buttons draw landforms).
+  const activeTool=tool,entry=tool==='move'?(nodes[selected]?.params?nodes[selected].kind:'move'):tool,kind=strokeKind(entry);
+  {
+  heightControlRange({heightReference:shapeValue('heightReference')});stepControlRange(kind,{stepReference:shapeValue('stepReference')});
   $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':'Elevation (height units) ';
-  const fixed=['deep','shallow','ramp','erase','landform'].includes(tool);
+  const fixed=['deep','shallow','ramp','erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
-  const [lo,hi]=amountRange(tool); $('amount').min=String(lo); $('amount').max=String(hi);
+  $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='crystal'?'Height':kind==='lower'?'Lower by':kind==='crater' || kind==='fissure'?'Depth':kind==='offset'?'Height change':'Rise';
+  const [lo,hi]=amountRange(kind); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
-  $('amount-value').textContent=tool==='smooth' || isCover(tool)?amountNow+'%':tool==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(tool==='lower'?'−':'+')+amountNow;
+  $('amount-value').textContent=kind==='smooth' || isCover(kind)?amountNow+'%':kind==='offset'?(amountNow<0?'−':'+')+Math.abs(amountNow):(kind==='lower'?'−':'+')+amountNow;
   $('diameter-value').textContent=$('diameter').value+' units';
   $('roughness-value').textContent=$('roughness').value+'%';
-  $('roughness-label').textContent=tool==='ramp'?'Shoulder freedom':tool==='deep'?'Coast freedom':['plateau','erase','sand','grass','paint'].includes(tool)?'Edge freedom':'Roughness';
-  $('shelves-control').hidden=tool!=='deep';
-  $('shallow-mode-control').hidden=tool!=='shallow';
+  $('roughness-label').textContent=kind==='ramp'?'Shoulder freedom':kind==='deep'?'Coast freedom':['plateau','erase','sand','grass','paint'].includes(kind)?'Edge freedom':'Roughness';
+  $('shelves-control').hidden=kind!=='deep';
+  $('shallow-mode-control').hidden=kind!=='shallow';
   $('shelves-value').textContent=$('shelves').value+'%';
-  $('bank-control').hidden=!['deep','shallow'].includes(tool);
+  $('bank-control').hidden=!['deep','shallow'].includes(kind);
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
-  $('roughness').closest('.control').hidden=tool==='fissure'||tool==='landform';
-  $('beach-control').hidden=!['deep','shallow'].includes(tool);
-  $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(tool);
-  if (tool==='crystal') $('roughness-label').textContent='Irregularity';
-  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset','landform'].includes(tool);
+  $('roughness').closest('.control').hidden=kind==='fissure'||kind==='landform';
+  $('beach-control').hidden=!['deep','shallow'].includes(kind);
+  $('softness-control').hidden=!['plateau','hill','mountain','crater','offset','erase','sand','grass','paint'].includes(kind);
+  if (kind==='crystal') $('roughness-label').textContent='Irregularity';
+  $('cracks-control').hidden=!['plateau','hill','mountain','crater','offset','landform'].includes(kind);
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur and rim details show once their switch (spurs, sectors, gaps) is on.
   const gate={layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
-  if(tool==='landform')for(const key of Object.keys(gate))if(gate[key]==='shoreLayers')delete gate[key];
+  if(kind==='landform')for(const key of Object.keys(gate))if(gate[key]==='shoreLayers')delete gate[key];
   // On a crater, the crest options only shape its spurs.
-  if (tool==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
+  if (kind==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
-  const net=tool==='fissure' && Number($('fissure-network').value)>=.5;
-  const modeOff=key => tool==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
+  const net=kind==='fissure' && Number($('fissure-network').value)>=.5;
+  const modeOff=key => kind==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
   // Berg options show only for the berg form.
-  const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (tool!=='landform' && key==='layerCircle' && Number($('layer-style').value)!==1);
-  const bergOff=key => tool==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
+  const frostOff=key => (key==='frostNeedles' && Number($('plate-material').value)<2) || (kind!=='landform' && key==='layerCircle' && Number($('layer-style').value)!==1);
+  const bergOff=key => kind==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
   const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
-  const gated=key => !shapeControlAvailable(key,tool,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
-  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(tool) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
-  if(SECTION_KINDS.includes(tool) && !shapeControlAvailable('softness',tool,{...shapeOptions,curve:currentCurve()}))$('softness-control').hidden=true;
+  const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
+  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
+  if(SECTION_KINDS.includes(kind) && !shapeControlAvailable('softness',kind,{...shapeOptions,curve:currentCurve()}))$('softness-control').hidden=true;
   if(shapeOptions.bankPx>0 && !(shapeOptions.facePx>0))$('bank-control').hidden=true;
-  $('section-preview-control').hidden=!SECTION_KINDS.includes(tool);
+  $('section-preview-control').hidden=!SECTION_KINDS.includes(kind);
   if (!$('section-preview-control').hidden) drawSection();
   $('bank-value').textContent=$('bank-width').value+'%';
   $('beach-value').textContent=$('beach-flatness').value+'%';
@@ -453,21 +470,19 @@ function updateControls() {
   $('material-weathering-value').textContent=$('material-weathering').value+'%';
   $('deposit-spread-value').textContent=$('deposit-spread').value+'%';
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
-  $('tool-style').value=toolSettings[tool]?.preset||'custom';
+  $('tool-style').value=toolSettings[entry]?.preset||'custom';
   $('scree-value').textContent=$('scree').value+'%';
-  $('tool-help').textContent=tool==='shallow' && $('shallow-mode').value==='passage'
-    ?'Raise the underwater bed to 7 below sea level for a shallow passage. Existing land and shallower banks keep their shape.'
-    :HELP[tool];
+  $('tool-help').textContent=HELP[entry]||'';
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
-  } finally { tool=activeTool; }
+  }
   if (tool==='move') { $('tool-help').textContent=pathAdding?'Click to add an attached point · Escape finishes · shared junctions move together':drawMode==='add'?'Draw another path in the selected shape · start on a point to attach it · paths join without adding height':HELP.move; $('amount-control').hidden=selected<0 || ['deep','shallow','ramp','erase','landform'].includes(nodes[selected]?.kind); }
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
-  $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind} #${selected+1}`:tool==='move'?'Select':`Brush · new ${NODE_NAMES[tool]||tool}`;
+  $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind} #${selected+1}`:tool==='move'?'Select':`Brush · new ${TOOL_NAMES[tool]?`landform (${TOOL_NAMES[tool]})`:NODE_NAMES[tool]||tool}`;
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   syncToolGroups(`${tool}:${selected}`);
   editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive);
@@ -489,7 +504,7 @@ const isIdentity=m => !m || m.every((v,i) => Math.abs(v-IDENTITY[i])<1e-9);
 // are what saves, and a landform's back is a list of its own once its sides are unlinked. The canvas draws the real tables (sculpt-shape-presets.js sectionPreview)
 // across both sides, the lean side (the back) on the left, before the outline noise. A landform's axis is in height units, the plain, the sea and the elevation marked.
 const CV_LO=-.6,CV_HI=1.6,CV_PAD=9;
-const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].kind : tool;
+const curveKind=() => selected>=0 && nodes[selected]?.params ? nodes[selected].kind : strokeKind(tool);
 const currentCurve=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.curve : toolSettings[tool]?.curve) || null;
 const currentAlong=() => (selected>=0 && nodes[selected]?.params ? nodes[selected].params.along : toolSettings[tool]?.along) || null;
 function curveContext() {
@@ -863,7 +878,7 @@ function regionalPoints(points) {
   return points.map(p => ({x:clamp(p.x,0,(config.map?.width??size)-1),y:clamp(p.y,0,(config.map?.height??size)-1)}));
 }
 function beginRegionalStroke(kind,point,options={},attachment=-1,target=-1,advanceSeed=false) {
-  if(stroke||moving||!HELP[kind]||kind==='move')throw new Error('A terrain gesture is already active or the brush is invalid.');
+  if(stroke||moving||!(HELP[kind]||kind==='landform')||kind==='move')throw new Error('A terrain gesture is already active or the brush is invalid.');
   const points=regionalPoints([point]),adding=target>=0&&nodes[target]?.points;
   const selectionBefore=selected,index=adding?target:nodes.length;
   const original=adding?cloneNodes([nodes[index]])[0]:null;
@@ -1102,7 +1117,7 @@ const sculptRegion={
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuTransientBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:(commit=true)=>endRegionalStroke(commit,$('simplify-strokes').checked),beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
   sectionMark,pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
-  drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:tool,
+  drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:strokeKind(tool),
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
   addPathPoint:p=>{if(pathAdding&&pathPoint>=0)changeSelected(n=>{const added=extendPoint(n,pathPoint,regionalPoints([p])[0],pathIndex);pathPoint=added.point;pathIndex=added.path;});pathAdding=true;updateControls();},
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:i=>`${NODE_NAMES[nodes[i]?.kind]||nodes[i]?.kind} #${i+1}`,
@@ -1150,7 +1165,7 @@ function selectNode(i) {
   if(selected!==i){pathPoint=-1;pathIndex=0;}
   pathAdding=false;drawMode='select';selected=i;
   const n=nodes[i];
-  if (n && n.params && HELP[n.kind]) {
+  if (n && n.params && (HELP[n.kind]||n.kind==='landform')) {
     if (tool!=='move') { rememberTool(); tool='move'; }
     mapFeatures?.deactivate();
     const p=n.params;
@@ -1420,7 +1435,7 @@ function deserializeNodes(list) {
   });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
-editorUI.onMode(kind=>{if(selected>=0&&nodes[selected]?.params){changeSelected(n=>{n.kind=kind;});}else document.querySelector(`[data-tool="${kind}"]`)?.click();});
+editorUI.onMode(entry=>document.querySelector(`[data-tool="${entry}"]`)?.click());
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => {
   if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
   if(tool==='move'&&selected>=0)selectNode(selected);
@@ -1451,13 +1466,14 @@ $('path-add').onclick=()=>changeSelected(n=>{const added=insertPoint(n,pathIndex
 $('path-delete').onclick=()=>{if(pathPoint<0)return;changeSelected(n=>{if(removePoint(n,pathPoint)){pathPoint=-1;pathIndex=Math.min(pathIndex,shapePaths(n).length-1);pathAdding=false;}});};
 $('path-remove').onclick=()=>changeSelected(n=>{removePath(n,pathIndex);pathIndex=0;pathPoint=-1;pathAdding=false;});
 $('path-extend').onclick=()=>{pathAdding=!pathAdding;updateControls();schedule();};
-$('draw-new').onclick=()=>{if(stroke||moving||loading)return;const candidate=nodes[selected]?.kind||tool,kind=HELP[candidate]&&candidate!=='move'?candidate:'plateau';document.querySelector(`[data-tool="${kind}"]`)?.click();};
+$('draw-new').onclick=()=>{if(stroke||moving||loading)return;const n=nodes[selected],candidate=n?.kind==='landform'?landformTool(n.params):n?.kind||tool,entry=HELP[candidate]&&candidate!=='move'?candidate:'plateau';document.querySelector(`[data-tool="${entry}"]`)?.click();};
 $('draw-add').onclick=()=>{if(stroke||moving||loading||!nodes[selected]?.points||nodes[selected].hidden)return;drawMode='add';pathEditing=false;pathAdding=false;pathPoint=-1;updateControls();schedule();};
 for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>changeSelected(n=>transformNode(n,nodeState(n),about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value))));
 document.addEventListener('terraform-feature-mode',()=>updateControls());
 $('tool-style').addEventListener('change',() => {
   const preset=$('tool-style').value;if(!Object.hasOwn(TOOL_PRESETS,preset))return;
-  const kind=nodes[selected]?.kind||tool;toolSettings[tool]=toolDefaults(kind,preset);showTool(toolSettings[tool],kind);
+  // A selected landform takes the world's version of the palette entry its section form belongs to.
+  const n=nodes[selected],entry=n?.kind==='landform'?landformTool(n.params):n?.kind||tool;toolSettings[tool]=toolDefaults(entry,preset);showTool(toolSettings[tool],strokeKind(entry));
   if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}
   updateControls();schedule();persistLater();
 });

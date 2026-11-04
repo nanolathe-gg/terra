@@ -54,10 +54,16 @@ export const FORMS = {
   lfHill: () => ({knots: [[0, 0], [.28, .1], [.58, .45], [.82, .86], [1, 1]]}),
   lfMountain: () => ({knots: [[0, 0], [.36, .04], [.66, .2], [.88, .6], [1, 1]]}),
   lfTerraced: () => ({knots: [[0, 0], [.08, 0], [.2, .3], [.34, .3], [.46, .62], [.6, .62], [.72, 1], [1, 1]]}),
+  // The reviewed shore (landform-shores retail windows): a smoothstep over the outer 90% of the half width, level at the path.
+  lfShore: () => ({knots: [...even(24).map(x => [Math.round(900 * x) / 1000, Math.round(1000 * sm(x)) / 1000]), [1, 1]]}),
+  // A ramp's travel strip: a level center, rounded shoulders.
+  lfRamp: () => ({knots: [[0, 0], [.2, .1], [.45, .7], [.6, 1], [1, 1]]}),
 };
 export const FORM_NAMES = ['hill', 'mountain', 'plateau', 'mesa', 'cliff', 'terrace'];
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
-export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff']];
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp']];
+// The palette entry a landform's section form belongs to (the Tool preset menu restyles a selected landform as that entry); a shore is deep water when it cuts.
+export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow'})[p?.curve?.form] ?? 'plateau';
 // The forms the curve editor offers a kind, as [id, label].
 export const formChoices = kind => kind === 'landform' ? LANDFORM_FORMS : FORM_NAMES.map(f => [f, f[0].toUpperCase() + f.slice(1)]);
 // The form a kind draws by default.

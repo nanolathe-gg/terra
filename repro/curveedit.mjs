@@ -78,11 +78,11 @@ for (const world of worlds) {
       // The approved defaults must reach a new stroke and a selected stroke through the existing Style selector.
       const defaults = JSON.parse(readFileSync(new URL(`comparisons/landform/${world === 'desert' ? '07-mesa-improved' : '02-plateau-natural-refined'}.json`, import.meta.url), 'utf8')).strokes[0][2];
       const baseH = await ev('sculptDebug.base');
-      await stroke('landform');
+      await stroke('plateau');
       // Existing slider steps snap the reviewed 300 px diameter to 304, and 75 px wander to 76.
       const fresh = (await nodes()).at(-1).params;
       check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === (world === 'desert' ? 200 : 152) && fresh.wander === (world === 'desert' ? 76 : 90) && fresh.widthVary === defaults.card.widthVary / 100 && fresh.elevation === baseH + defaults.card.elevation - 24 && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
-      await setValue('curve-form', 'lfHill', 'change'); await setValue('lf-wander', 0);
+      await setValue('curve-form', 'lfTerraced', 'change'); await setValue('lf-wander', 0);   // a plateau form: the style restores the plateau
       await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
       const styled = (await nodes()).at(-1).params;
       check('style restores the approved curve and numbers on a selected landform', same(styled.curve, defaults.curve) && styled.wander === fresh.wander && styled.elevation === fresh.elevation, styled.curve);
@@ -95,7 +95,7 @@ for (const world of worlds) {
       // 1. every form at 140 and 560 px
       for (const size of [144, 560]) {   // the diameter slider steps by 8, so 144 is its nearest to 140
         await brush(); await setValue('diameter', size);
-        for (const form of FORM_NAMES) {
+        for (const form of LANDFORM_FORMS.map(([id]) => id)) {   // the shape buttons draw landforms
           await brush(); await setValue('curve-form', form, 'change');
           const before = (await nodes()).length;
           await stroke();
@@ -148,17 +148,19 @@ for (const world of worlds) {
       check('the same knots after reload', same(saved, back) && saved.some(x => x?.knots), {saved, back});
       check('the same render after reload', h2.length === heights.length && h2.every((v, i) => Math.abs(v - heights[i]) < 1e-3), h2.reduce((m, v, i) => Math.max(m, Math.abs(v - heights[i])), 0));
       // 6. the landform (H27): its forms, both sides of the section, Link sides and Mirror, the lean handle, the along curve and its pick, the elevation, undo, save and reload
-      await brush('landform'); await setValue('diameter', 200); await setValue('curve-form', 'lfPlateau', 'change');
+      // Sections 1-5 edited this same brush (the plateau button draws a landform) and left a landform where this one is drawn: start a blank map and the world's preset.
+      await ev(`document.getElementById('blank').click(); true`); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
+      await brush('plateau'); await setValue('tool-style', world, 'change'); await setValue('diameter', 200); await setValue('curve-form', 'lfPlateau', 'change');
       const crestHeights = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1); return n.points.map(p => sculptDebug.corner(p.x, p.y).authored); })()`);
       const plain = await ev(`sculptDebug.corner(10, 10).authored`);
       for (const [id] of LANDFORM_FORMS) {
-        await brush('landform'); await setValue('curve-form', id, 'change');
-        const before = (await nodes()).length; await stroke('landform');
+        await brush('plateau'); await setValue('curve-form', id, 'change');
+        const before = (await nodes()).length; await stroke('plateau');
         const ns2 = await nodes(), n2 = ns2.at(-1), hs = await crestHeights();
         check(`landform form ${id}`, ns2.length === before + 1 && n2.kind === 'landform' && n2.params.curve?.form === id && Math.max(...hs) > plain + 20, {nodes: ns2.length - before, kind: n2?.kind, curve: n2?.params?.curve, plain, hs: hs.map(h => Math.round(h))});
         await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()'); await sleep(200);
       }
-      await brush('landform'); await setValue('curve-form', 'lfPlateau', 'change'); await stroke('landform');   // the stroke is selected
+      await brush('plateau'); await setValue('curve-form', 'lfPlateau', 'change'); await stroke('plateau');   // the stroke is selected
       const L0 = (await nodes()).length - 1;
       let b2 = await box(); const kn = FORMS.lfPlateau().knots, sp = async (side, x, v) => { const q = await ev(`sculptDebug.sectionPoint(${JSON.stringify(side)}, ${x}, ${v})`); return [q.x, q.y]; };
       check('a landform starts with its sides linked', (await ev(`document.getElementById('curve-link').getAttribute('aria-pressed')`)) === 'true' && !(await ev('sculptDebug.curve()'))?.knots);
@@ -210,7 +212,7 @@ for (const world of worlds) {
       check('undo restores the taper independently of the route', (await nodes())[L0].params.crestTaper === 0 && (await nodes())[L0].params.routeSmooth === .8);
       await ev(`document.querySelector('#layers [data-index="${L0}"] .layer-name').click(); true`);
       await setValue('crest-taper', 65); await ev('sculptCanvas.idle()'); await sleep(500);
-      await brush('landform');
+      await brush('plateau');
       ns = await nodes(); const savedL = ns.map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean, x.params.routeSmooth, x.params.crestTaper] : null), heightsL = await grid(); await sleep(1500);
       await send('Page.navigate', {url}); await sleep(1500); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500); await ev('sculptCanvas.idle()'); await sleep(500);
       const backL = (await nodes()).map(x => x.kind === 'landform' ? [x.params.curve ?? null, x.params.along ?? null, x.params.elevation, x.params.lean, x.params.routeSmooth, x.params.crestTaper] : null), h3 = await grid();
