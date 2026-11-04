@@ -86,6 +86,10 @@ for (const world of worlds) {
       await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
       const styled = (await nodes()).at(-1).params;
       check('style restores the approved curve and numbers on a selected landform', same(styled.curve, defaults.curve) && styled.wander === fresh.wander && styled.elevation === fresh.elevation, styled.curve);
+      check('facing is offered only when the default section has different sides', await ev('document.getElementById("facing-control").hidden') === (world === 'desert'));
+      await setValue('lean', 200);
+      check('unequal landform widths enable facing', !await ev('document.getElementById("facing-control").hidden'));
+      await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
       await ev(`document.getElementById('blank').click(); true`); await ready(ev);
       await ev(`document.querySelector('[data-tool="plateau"]').click(); true`); await sleep(300);
       // 1. every form at 140 and 560 px

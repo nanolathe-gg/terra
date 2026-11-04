@@ -188,3 +188,12 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.equal(available('facing','plateau',{lean:0,facePx:6}),false,'until a Face width takes that away');
  assert.equal(available('facing','plateau',{lean:2,facePx:6}),true);
 });
+
+// A symmetric mesa cannot change by turning its identical sides; an unlinked plateau can, even at equal widths.
+test('landform facing requires unequal widths or unequal sampled sections',()=>{
+ const curve={form:'lfPlateau',knots:[[0,0],[.5,1],[1,1]]};
+ for(const lean of [undefined,0,1])assert.equal(available('facing','landform',{lean,curve}),false);
+ for(const lean of [.5,2])assert.equal(available('facing','landform',{lean,curve}),true);
+ assert.equal(available('facing','landform',{lean:1,curve:{...curve,back:curve.knots.map(k=>[...k])}}),false);
+ assert.equal(available('facing','landform',{lean:1,curve:{...curve,back:[[0,0],[.7,1],[1,1]]}}),true);
+});
