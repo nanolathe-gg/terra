@@ -660,9 +660,11 @@ fn gullyStripes(p: vec2f, dir: vec2f, f: f32, seed: u32) -> vec2f {
   let l = length(acc);
   return select(vec2f(1.0, 0.0), acc / l, l > 1e-5);
 }
-// Branching gullies cut into a height h0 that rises along `steer` (any length) at slope `slope0`. Each octave folds its stripes (sharp crests, round
-// floors) and adds its own gradient to the steering, so the next octave branches. wave0: the first wavelength (px); depth: depth per wavelength per
-// unit slope, halved each octave; minWave: no octave finer than this.
+// Branching gullies cut into a height h0 that rises along `steer` (any length) at slope `slope0`. Each octave folds its stripes downward (fold -1:
+// round crests, V-cut floors, as water cuts them; the research brief's realism check, calibrated on 1 m lidar, put 10 of 15 statistics in the real
+// range with it against 8 of 15 for the sharp-crested fold +1, which would suit badland or alpine worlds) and adds its own gradient to the steering,
+// so the next octave branches. wave0: the first wavelength (px); depth: depth per wavelength per unit slope, halved each octave; minWave: no octave
+// finer than this.
 fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32, minWave: f32, seed: u32) -> f32 {
   if (slope0 <= 0.0 || length(steer) < 1e-6) { return h0; }
   var h = h0; var g = normalize(steer) * max(slope0, 1e-3);
@@ -673,8 +675,8 @@ fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32,
     let dir = g / s; let perp = vec2f(-dir.y, dir.x);
     let cs = gullyStripes(p, dir, f, seed + u32(k) * 0x3c6ef35fu);
     let a = dk * (1.0 / f) * min(slope0, 1.6);
-    h += a * (0.5 - abs(cs.y));
-    g += -a * sign(cs.y) * cs.x * 6.2831853 * f * perp;
+    h -= a * (0.5 - abs(cs.y));
+    g += a * sign(cs.y) * cs.x * 6.2831853 * f * perp;
     f *= 2.0; dk *= 0.5;
   }
   return h;
