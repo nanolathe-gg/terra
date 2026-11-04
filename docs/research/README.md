@@ -56,37 +56,34 @@ candidates. `lab/compare-heights.mjs` compares saved height fields.
 
 ## Cards
 
-The brief orders these as P1 to P23; "Start here" cards are marked first.
+The owner ruled on the brief's four questions on 2026-11-04 (decisions 25-28
+in `docs/TERRAIN_ENGINE.md`): a modern Green variant first, one stored
+whole-map drainage pass, the merges with their removals, and this order:
+generic shared tools, then speed, then the rest.
 
-| Card | What | Status |
+| Card | What | Group |
 | --- | --- | --- |
-| P1 | Gullies: the stripe filter on hill, mountain and landform strokes | start here |
-| P16 | One loose-material scatter (Supply, Size, Sorting) in the bake; fix talus sorting, which runs backwards in `debrisStones()` | start here |
-| P13 | The column walk: differential erosion through the rock column (hogbacks, cuestas, fins, pinnacles) | start here |
-| P10 | One parametric rock model in the bake; rock types as presets; Age, Stain, Frost | start here |
-| P9 | Palette: eight Knoll candidates in the lookup cube | start here |
-| P12 | Multi-scale cavity and convexity on the cavity control | start here |
-| P18 | Ripples with defects and sand shadows | start here |
-| P22 | V, U and terraced valleys as landform presets; painted repose | start here |
-| P4 | The draw: the surface once per pixel, not about 47 times | measure first |
-| P11 | Exact sun and sky horizons by line sweep | measure first |
-| P23 | Prefix checkpoints for drags; warm-0 Time previews | measure first |
-| P14 | Scarp retreat on plateau strokes: mesas and buttes | measure first |
-| P5 | Several erosion iterations per dispatch in workgroup memory | measure first |
-| P6 | `override` constants for per-world gates | measure first |
-| P2 | Rills in the bake, steered by the fall-line map | experiment |
-| P3 | Derivative-damped lumps, fractional octaves, tilted terraces | experiment |
-| P15 | Apron hummocks, knolls and slumps around a shape | experiment |
-| P17 | Talus cones and fans as shapes, with sorting rules | experiment |
-| P20 | Multi-scale thermal in the Time pass | experiment |
-| P21 | An exact drainage plane by Euler tour, stored whole-map | experiment |
-| P7 | Carried velocity and MacCormack sediment in the pipe model | experiment |
-| P8 | A coarse stream-power pass for map-scale ranges | later, needs a ruling |
-| P19 | Dunes by Werner's model as a deterministic gather | later, needs a ruling |
-
-Decisions the brief asks the owner for:
-
-- **D1:** how a modern, realistic preset is judged beside a retail one.
-- **D2:** a stored whole-map drainage pass.
-- **D3:** the merges that remove controls.
-- **D4:** pipelines specialized by data.
+| P24 | Modern Green: a `modern` variant of Green (`WORLD_VARIANTS`), plus scenes green-modern-1..3; every look card sets its numbers there | 1, first |
+| P16 | One loose-material scatter (Supply, Size, Sorting) in the bake, replacing five generators; fix talus sorting (`debrisStones()` runs backwards); remove the old rows | 1 |
+| P1 | Gullies: the stripe filter on hill, mountain and landform strokes; remove the `spur*` rows, `heightVar`, `crestJag` | 1 |
+| P13 | The column walk: differential erosion through the rock column (hogbacks, cuestas, fins, pinnacles) | 1 |
+| P10 | One parametric rock model in the bake; rock types as presets; Age, Stain, Frost; remove the block rows it replaces | 1 |
+| P21 | A stored, exact drainage plane by Euler tour, whole-map (decision 26) | 1 |
+| P20 | Multi-scale thermal in the Time pass | 1 |
+| P9 | Palette: eight Knoll candidates in the lookup cube | 1 |
+| P12 | Multi-scale cavity and convexity on the cavity control | 1 |
+| P4 | The draw: the surface once per pixel, not about 47 times | 2, speed |
+| P11 | Exact sun and sky horizons by line sweep | 2, speed |
+| P23 | Prefix checkpoints for drags; warm-0 Time previews | 2, speed |
+| P5 | Several erosion iterations per dispatch in workgroup memory | 2, speed |
+| P6 | `override` constants for per-world gates (fine, decision 28) | 2, speed |
+| P17 | Talus cones and fans as shapes, with sorting rules | 3 |
+| P18 | Ripples with defects and sand shadows | 3 |
+| P22 | V, U and terraced valleys as landform presets; painted repose | 3 |
+| P14 | Scarp retreat on plateau strokes: mesas and buttes | 3 |
+| P15 | Apron hummocks, knolls and slumps around a shape | 3 |
+| P2 | Rills in the bake, steered by the fall-line map | 3 |
+| P3 | Derivative-damped lumps, fractional octaves, tilted terraces | 3 |
+| P7 | Carried velocity and MacCormack sediment in the pipe model | 3 |
+| P8 | A coarse stream-power pass for map-scale ranges (waits, decision 26) | 3 |
+| P19 | Dunes by Werner's model as a deterministic gather (waits, decision 26) | 3 |
