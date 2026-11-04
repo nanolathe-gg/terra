@@ -105,11 +105,11 @@ fn lsMask(c: vec2f) -> LsMask {
     var cliffAbove = 0.0;
     if (slope > 1e-4) { cliffAbove = smoothstep(0.9, 1.6, length(broadGradient(c + g / slope * 14.0))); }
     let foot = max(talus, cliffAbove * (1.0 - smoothstep(0.5, 1.0, slope)));
-    let loose = smoothstep(0.15, 0.7, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
+    let loose = smoothstep(0.10, 0.5, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
     let channel = smoothstep(0.03, 0.22, tm.channel);
     let fan = smoothstep(0.05, 0.3, w.g) * (1.0 - smoothstep(0.2, 0.6, tm.slope));
     let carried = max(channel, fan);
-    var source = max(max(foot, 0.5 * loose), max(0.6 * fan, 0.5 * channel));
+    var source = max(max(foot, 0.8 * loose), max(0.6 * fan, 0.5 * channel));
     var supply = u.looseSupply;
     if (u.scatterOn != 0) {
         supply = scatterDensity(paint, u.looseSupply, SCATTER_BASE);
