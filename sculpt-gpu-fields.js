@@ -1,6 +1,6 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -414,7 +414,8 @@ export function prepareNode(n, geom, c) {
     Object.assign(main.u, {cgForm: q.crystalForm >= 1.5 ? 2 : q.crystalForm >= .5 ? 1 : 0, cgSize: Math.max(4, q.crystalSize), cgFacet: clamp(q.crystalFacet, 0, 1), cgSizeVar: clamp(q.crystalSizeVar, 0, 1), cgSmooth: clamp(q.crystalSmooth, 0, 1),
       cgTiers: q.crystalTiers ?? 0, cgStep: q.crystalStep ?? 0, cgVar: q.crystalVariation ?? 0, bgFace: q.bergFace, bgTilt: q.bergTilt, bgFlat: q.bergFlat, bgRough: q.bergRough, bgTx: Math.cos(bt), bgTy: Math.sin(bt), bgJit: clamp(q.bergJitter, 0, 1), bgTurn: turn});
   }
-  const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : kind === 'mountain' && q.iceFacets > 0 && q.amount >= 8 ? 2 : 0;
+  // Angular facets re-tile a raised result; a landform with shore features keeps its coast pass instead (shapeControlAvailable hides the row there).
+  const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : q.iceFacets > 0 && (kind === 'mountain' && q.amount >= 8 || kind === 'landform' && !landformShore(q)) ? 2 : 0;
   if ((shoreShape || (kind === 'offset' && q.shorePlates > 0) || facetMode) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, shoreShape, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.
   const cv = strokeCurve(kind, q, {shouldered});

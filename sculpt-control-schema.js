@@ -1,4 +1,4 @@
-import {isShouldered,strokeKnots,sampleKnots} from './sculpt-shape-presets.js';
+import {isShouldered,strokeKnots,sampleKnots,landformSteps,landformShore} from './sculpt-shape-presets.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -73,7 +73,9 @@ export function shapeControlAvailable(key,kind,p){
  }
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
- if(key==='iceFacetSize')return kind==='mountain'&&p.iceFacets>0;
+ // A landform's coast pass and its facets are one pass over its result; shore features take it.
+ if(kind==='landform'&&['iceFacets','iceFacetSize'].includes(key)&&landformShore(landformSteps(p)))return false;
+ if(key==='iceFacetSize')return ['mountain','landform'].includes(kind)&&p.iceFacets>0;
  if(['ledge','terraceJitter','breakup'].includes(key))return p.terraces>0;
  if(key==='lavaSpread')return p.shoreLayers>0&&p.layerStyle<.5;
  if(['layerCircle','lavaCircleVary'].includes(key))return p.shoreLayers>0&&p.layerStyle>=.5;

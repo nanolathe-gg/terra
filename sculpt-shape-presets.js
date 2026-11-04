@@ -174,6 +174,8 @@ export const landformElevation = (q, sea) => q.elevation + (Math.round(q.heightR
 
 // One authored step count/ledge/variation set; choose the coordinate system.
 // Resolve to the existing shared profile or coastline pass, never both.
+// Whether a resolved landform (landformSteps) runs the shared coast pass: fingers, shoreline steps or shore plates.
+export const landformShore = q => q.fingers > 0 || Math.round(q.shoreLayers) >= 1 || q.shorePlates > 0;
 export function landformSteps(q) {
   const reference=Math.round(clamp(q.stepReference||0,0,2)),shore=reference>0;
   const count=Math.round(clamp(q.terraces||0,0,shore?12:8));

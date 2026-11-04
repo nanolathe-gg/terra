@@ -240,8 +240,8 @@ const SHAPE_FIELDS=[
   ['plateVary','plate-vary','Rock slab variety (share of slabs broken into fine mesh)',['deep','shallow','offset','landform'],0,100,5,100,'Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole.'],
   ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['deep','shallow','offset','landform'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
   // G6 (Ice): angular facets that belong to the mountain.
-  ['iceFacets','ice-facets','Angular facets',['mountain'],0,100,5,100,'Ice: breaks part of the mountain into angular facets: tilted planes fitted to the mountain\'s own surface, a little steeper, stepped a few units off their neighbors and partly buried where the ground rises past them. They share the mountain\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth mountain.'],
-  ['iceFacetSize','ice-facet-size','Facet size (px)',['hill','mountain'],16,96,2,1,'Ice facets: the typical width of one facet.'],
+  ['iceFacets','ice-facets','Angular facets',['mountain','landform'],0,100,5,100,'Breaks part of the raised shape into angular facets: tilted planes fitted to the shape\'s own surface, a little steeper, stepped a few units off their neighbors and partly buried where the ground rises past them. They share the shape\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth surface. A landform with shore features keeps those instead.'],
+  ['iceFacetSize','ice-facet-size','Facet size (px)',['hill','mountain','landform'],16,96,2,1,'Ice facets: the typical width of one facet.'],
   // G8 (Moon): lumpy, folded outlines.
   ['moonLobes','moon-lobes','Outline lobes (share of radius)',['hill','mountain'],0,60,2,100,'How far the hill\'s whole outline, crest to foot, strays in and out in lobes of about half, a fifth and a fourteenth of its radius, so it folds like a retail lunar formation instead of an oval. 0 keeps the smooth outline.'],
   // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
@@ -815,7 +815,7 @@ function regionalReadApron(n) {
   if(BASE_KINDS.includes(n.kind))cells+=Math.ceil(Math.max(0,q.baseVary||0)/spacing);
   if(['hill','mountain'].includes(n.kind))cells+=Math.ceil(Math.max(0,q.moonLobes||0)*(q.radius||40)/spacing);
   // G6: a facet plane is fitted at its center, up to half a facet away and three cells either side of it, in the stroke's frame.
-  if(n.kind==='mountain'&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
+  if(['mountain','landform'].includes(n.kind)&&q.iceFacets>0){const f=n.frame??IDENTITY,L=clamp(q.iceFacetSize,16,96);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
   if(n.kind==='crater'&&q.craterFacets>0){const f=n.frame??IDENTITY,L=craterFacetWidth(q);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+3;}
   if (['deep','shallow','offset','landform'].includes(n.kind) && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
   return cells;
