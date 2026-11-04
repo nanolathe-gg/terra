@@ -792,10 +792,10 @@ fn rockCells(x: vec2f, sz: vec2f, jit: f32, salt: f32) -> RockCell {
 }
 // pf: the face's own coordinates; p: the world position (fine noise); bed: the bed cut here; gx: the ground's gradient in pf's axes.
 // Returns (height offset, crevice 0..1).
-fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f) -> vec2f {
+fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f, hill: f32) -> vec2f {
     let age = clamp(u.rockAge, 0.0, 1.0);
     let bs = fract(bed.index * 0.6180339) * 50.0;   // this bed's own salt and offset
-    let jsz = vec2f(u.rockSize * sqrt(u.rockAspect), u.rockSize / sqrt(u.rockAspect) * select(1.0, 0.866, u.rockJitter < 0.5));
+    let jsz = vec2f(u.rockSize * sqrt(u.rockAspect), u.rockSize / sqrt(u.rockAspect) * select(1.0, 0.866, u.rockJitter < 0.5)) * mix(vec2f(1.0), vec2f(HILL_WIDTH, HILL_LENGTH), hill);
     let cl = rockCells(pf + vec2f(bs * 1.94, 0.0), jsz, u.rockJitter, 17.0 + bs);
     let hc = cellHash(cl.id + 23.0 + bs);
     let hv = cellHash(cl.id + 41.0 + bs);
@@ -805,7 +805,7 @@ fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f) -> vec2f {
     let bedOpen = step(cellHash(vec2f(bed.index, 5.5)).x, u.rockBedOpen + 0.2 * age);
     let edge = min(select(1e9, cl.edge, pairOpen > 0.5), select(1e9, bedEdge, bedOpen > 0.5));
     let toPt = pf - cl.c1;
-    var dh = -u.rockTerr * dot(gx, toPt) + u.rockVary * (2.4 * (hc.y - 0.5) + dot(hv - 0.5, toPt));
+    var dh = -u.rockTerr * dot(gx, toPt) + u.rockVary * (2.4 * clamp(jsz.y / 12.0, 0.2, 1.5) * (hc.y - 0.5) + dot((hv - 0.5) * vec2f(1.0, FACET_SKEW), toPt));
     // Age: rounded shoulders.
     let roundR = age * 0.42 * min(min(jsz.x, jsz.y), bed.px);
     if (roundR > 0.3) {
@@ -819,7 +819,7 @@ fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f) -> vec2f {
     if (chipA > 0.01) {
         let ch = rockCells(pf + vec2f(5.0, 3.0), vec2f(u.rockChipSize, u.rockChipSize * 0.8), 1.0, 61.0 + bs);
         let k = cellHash(ch.id + 3.0);
-        dh += chipA * (0.8 * dot(k - 0.5, pf - ch.c1) + 0.9 * (k.y - 0.5));
+        dh += chipA * (0.8 * dot((k - 0.5) * vec2f(1.0, FACET_SKEW), pf - ch.c1) + 0.9 * (k.y - 0.5));
         dh -= chipA * 0.5 * (1.0 - smoothstep(0.0, 0.7, ch.edge));
     }
     dh += u.rockGrit * (cellHash(floor(p) + 13.0).x - 0.5) * 2.0;
@@ -1442,7 +1442,7 @@ fn bake(p: vec2f) -> vec4f {
         if (rocky) {
             // The rock model's own parting sets, in the face's axes (the ground's gradient there: along the fall line only on a patch frame).
             let gx = select(vec2f(0.0, -slope), g, !cliffOn);
-            let rk = rockModel(p, pf, bed, gx);
+            let rk = rockModel(p, pf, bed, gx, 0.0);
             height += gate * rk.x;
             blockCrevice = gate * rk.y;
         } else {
@@ -1466,7 +1466,10 @@ fn bake(p: vec2f) -> vec4f {
         let hill = u.hillBlocks * smoothstep(0.35, 0.65, slope) * patches * (1.0 - order * steep) * (1.0 - route) * (1.0 - buried);
         if (hill > 0.0) {
             let across = vec2f(-fall.y, fall.x);
-            let block = blockField(p, vec2f(dot(p, across), dot(p, fall)), h, 1.0);
+            let pfh = vec2f(dot(p, across), dot(p, fall));
+            var block: vec2f;
+            if (u.rockSize > 0.0) { block = rockModel(p, pfh, BedCut(0.0, 0.0, 0.0, 0.0, 0.5, 1e9), vec2f(0.0, -slope), 1.0); }
+            else { block = blockField(p, pfh, h, 1.0).xy; }
             height += hill * HILL_RELIEF * block.x;
             blockCrevice = max(blockCrevice, hill * block.y);
         }

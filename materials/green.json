@@ -1948,6 +1948,7 @@
   ],
   "materialWeathering": 0.0,
   "stoneSort": 0.5,
+  "rock": {"size": 4.6, "aspect": 2.6, "jitter": 0.9, "open": 0.5, "bedOpen": 0.4, "terr": 0, "vary": 0.4, "crev": 0.9, "crevW": 1.1, "chip": 0.35, "chipSize": 3.5, "grit": 0.08, "age": 0.1},
   "depositSpread": 0.65
  },
  "water": {
