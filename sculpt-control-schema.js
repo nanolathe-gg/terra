@@ -16,7 +16,7 @@ export const WORLD_GROUP_NAMES={
 };
 export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
 const LABELS={sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
- desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',shoreEdge:'Waterline rim and lip',
+ desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',wetSwath:'Moisture',lushness:'Lushness',shoreEdge:'Waterline rim and lip',
  bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
  lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
  moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
@@ -163,7 +163,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
- 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','slopeMarks','wrinkles',
+ 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','wetSwath','lushness','slopeMarks','wrinkles',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'boulders','boulderSize','debris','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','jointDepth',
