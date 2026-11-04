@@ -14,8 +14,11 @@ node docs/research/lab/run.mjs mountain-gullies --query "w=384&h=288&dither=1" -
 
 The runner serves the repository root on a free port, opens Chromium with
 WebGPU (SwiftShader when there is no GPU), and saves
-`<exp>--<variant>.png` for each variant, `<exp>--sheet.png` for all of them,
-and `timings.json`. It needs Playwright from the global install; set
+`<exp>--<variant>.png` for each variant (the canvas's own bytes, so two runs
+of the same scene give identical files), `<exp>--sheet.png` for all of them,
+and `timings.json`. `--heights` also writes `<exp>--<variant>.f32`, the
+heights as row-major f32; `--timeout` sets the seconds an experiment may
+take (default 1800). It needs Playwright from the global install; set
 `PLAYWRIGHT_MODULE` to its `index.js` otherwise. Timings on SwiftShader are a
 CPU rasterizer's: compare variants with each other, never with a real GPU.
 Knoll dithering costs about 2 s a 512 x 384 panel there; use `dither=1` while
@@ -88,8 +91,14 @@ A simulation (`sim`) runs after the heights, as three entry points, each
   likes).
 
 Each thread writes only its own pixel and nothing scatters, so the result is
-deterministic. `labIter()` is the iteration count; there is no per-iteration
-counter, so make a step depend only on the state.
+deterministic.
+
+- `labIter()` is the iteration count.
+- `labStep()` is this dispatch's iteration, from 0.
+- `simApply` must not read a neighbour's `H` while it writes `H`: that is a
+  race. Read the state instead.
+- The simulation runs over every output pixel; there is no coarse grid of its
+  own yet.
 
 The bindings every module can read: `lab` (the uniforms above), `prm` (the
 module's parameters), `H` (heights, `f32`), `M` (materials, `vec4f`), `SA`,
@@ -103,6 +112,19 @@ everything in `lib.wgsl`:
 - smooth min and max, box and segment distances;
 - tilted strata with bed hardness;
 - round 1's `gullies()`.
+
+A module without a default export (`lf-lib.js`, `rk-lib.js`, `ld-common.js`)
+is a helper that experiments import; it cannot be run on its own.
+
+## The experiments
+
+| Prefix | Topic | Modules |
+| --- | --- | --- |
+| (none) | round 1 | `mountain-gullies` |
+| `lf-` | landforms from the rock column | `lf-strata` (benches, cuestas, hogbacks, folds), `lf-joints` (slots, fins, pinnacles, beehives), `lf-age` (scarp retreat: mesa, buttes), `lf-dome` (hogback rings), `lf-apron` (hummocks, knolls, slumps) |
+| `rk-` | rock faces, weathering, light | `rk-types`, `rk-types2` (eight rock types as presets), `rk-weather` (age, stain, lichen, frost), `rk-light` (line-sweep horizons, cavity, warm and cool, wet), `rk-dither` (palette quantisers) |
+| `ld-` | loose material | `ld-shapes` (stone shapes, multi-class scatter), `ld-talus` (cones with fall sorting), `ld-field` (a sorted field), `ld-fan` (alluvial and debris fans), `ld-ripples` (ripples with defects, sand shadows), `ld-dunes` (Werner dunes as a gather simulation) |
+| `er-` | erosion, resolution, editing | `er-talus` (multi-scale thermal), `er-fans` (exact drainage by Euler tour, fans), `er-resolve` (one world window at four resolutions), `er-valleys` (V, U and terraced valleys, painted repose), `er-warm` (incremental erosion) |
 
 ## Rules
 

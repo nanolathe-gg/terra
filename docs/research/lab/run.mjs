@@ -1,5 +1,7 @@
 // Terrain lab runner: renders experiments headless and saves one PNG per variant, a sheet of all of them, and timings.
 //   node docs/research/lab/run.mjs <exp> [<exp> ...] [--out DIR] [--query "w=640&h=448&world=desert"] [--v a,b]
+//        [--timeout SECONDS] (per experiment page, default 1800) [--heights] (also <exp>--<variant>.f32: the heights, row-major f32)
+// Each variant's PNG is the canvas's own bytes (toDataURL), so two runs of the same scene give identical files.
 // Serves the repository root on a free local port, opens Chromium with WebGPU (SwiftShader when there is no GPU), and
 // waits for window.__lab. Exits 1 if a shader fails to compile. Playwright is resolved from the global install; set
 // PLAYWRIGHT_MODULE to its index.js if it lives elsewhere. SwiftShader timings are a CPU rasterizer's: compare
@@ -18,6 +20,8 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i
 const out = path.resolve(opt('--out', path.join(root, 'lab-out')));
 const query = opt('--query', '');
 const vsel = opt('--v', '');
+const timeout = Number(opt('--timeout', 1800)) * 1000;
+const saveHeights = (() => { const i = args.indexOf('--heights'); if (i >= 0) args.splice(i, 1); return i >= 0; })();
 const exps = args;
 if (!exps.length) { console.error('usage: node docs/research/lab/run.mjs <exp> [...] [--out DIR] [--query "..."] [--v a,b]'); process.exit(2); }
 
@@ -41,15 +45,19 @@ const summary = {};
 for (const exp of exps) {
   const page = await browser.newPage({viewport: {width: 1700, height: 1200}});
   page.on('pageerror', e => console.log(`[${exp}] pageerror`, e.message));
-  const q = `exp=${exp}${query ? '&' + query : ''}${vsel ? '&v=' + vsel : ''}`;
+  const q = `exp=${exp}${query ? '&' + query : ''}${vsel ? '&v=' + vsel : ''}${saveHeights ? '&readback=1' : ''}`;
   const t0 = Date.now();
   await page.goto(`http://127.0.0.1:${port}/docs/research/lab/index.html?${q}`);
-  await page.waitForFunction(() => window.__lab?.done, null, {timeout: 900000});
-  const lab = await page.evaluate(() => window.__lab);
+  await page.waitForFunction(() => window.__lab?.done, null, {timeout, polling: 500});
+  const lab = await page.evaluate(() => ({...window.__lab, heights: undefined}));
   if (lab.error) { console.log(`[${exp}] FAILED`, lab.error.join('\n')); console.log(await page.evaluate(() => document.getElementById('log').textContent)); failed = true; await page.close(); continue; }
+  const pngs = await page.evaluate(() => window.__labPng || {});
   for (const r of lab.results) {
-    const el = await page.$(`canvas[data-label="${r.label}"]`);
-    await el.screenshot({path: path.join(out, `${exp}--${r.label}.png`)});
+    await writeFile(path.join(out, `${exp}--${r.label}.png`), Buffer.from(pngs[r.label].split(',')[1], 'base64'));
+    if (saveHeights) {
+      const h = await page.evaluate(label => Array.from(window.__lab.heights[label] || []), r.label);
+      await writeFile(path.join(out, `${exp}--${r.label}.f32`), Buffer.from(new Float32Array(h).buffer));
+    }
   }
   await (await page.$('#grid')).screenshot({path: path.join(out, `${exp}--sheet.png`)});
   summary[exp] = lab.results.map(r => ({label: r.label, ms: r.ms}));

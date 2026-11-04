@@ -76,6 +76,8 @@ ${prmStruct}
 @group(0) @binding(5) var<storage, read_write> SB: array<vec4f>;
 @group(0) @binding(6) var<storage, read_write> OUT: array<u32>;
 @group(0) @binding(7) var<storage, read> PAL: array<vec4f>;
+@group(0) @binding(8) var<uniform> labIt: vec4u;   // x: this dispatch's iteration (simStep), 0 elsewhere
+fn labStep() -> u32 { return labIt.x; }
 `;
   const code = lib + bindings + user + '\n' + simWgsl + '\n' + light;
   const module = device.createShaderModule({code});
@@ -88,7 +90,8 @@ ${prmStruct}
   const bgl = device.createBindGroupLayout({entries: [
     {binding: 0, visibility: C, buffer: {type: 'uniform'}}, {binding: 1, visibility: C, buffer: {type: 'uniform'}},
     ...[2, 3, 4, 5, 6].map(b => ({binding: b, visibility: C, buffer: {type: 'storage'}})),
-    {binding: 7, visibility: C, buffer: {type: 'read-only-storage'}}]});
+    {binding: 7, visibility: C, buffer: {type: 'read-only-storage'}},
+    {binding: 8, visibility: C, buffer: {type: 'uniform', hasDynamicOffset: true, minBindingSize: 16}}]});
   const layout = device.createPipelineLayout({bindGroupLayouts: [bgl]});
   const pipe = entry => device.createComputePipelineAsync({layout, compute: {module, entryPoint: entry}});
   const [pHeight, pLight] = await Promise.all([pipe('heightMain'), pipe('lightMain')]);
@@ -106,9 +109,14 @@ ${prmStruct}
   device.queue.writeBuffer(bPal, 0, palData);
   const uLab = device.createBuffer({size: 13 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
   const uPrm = device.createBuffer({size: Math.max(16, Math.ceil((paramNames.length + 4) / 4) * 16), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+  // The iteration index: one 256-byte slot per simulation step, picked by a dynamic offset (slot 0 is 0 for the other passes).
+  const maxIt = Math.max(1, mod.sim ? Math.ceil(Number(qs.get('iters') ?? (mod.sim.iterations ?? 0)) * 1.0) + 1 : 1, (mod.lab?.iters ?? 0) + 1, ...(mod.variants || []).map(v => (v.lab?.iters ?? 0) + 1));
+  const itData = new Uint32Array(maxIt * 64); for (let i = 0; i < maxIt; i++) itData[i * 64] = i;
+  const bIt = device.createBuffer({size: maxIt * 256, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+  device.queue.writeBuffer(bIt, 0, itData);
   const group = (a, b) => device.createBindGroup({layout: bgl, entries: [
     {binding: 0, resource: {buffer: uLab}}, {binding: 1, resource: {buffer: uPrm}}, {binding: 2, resource: {buffer: bH}}, {binding: 3, resource: {buffer: bM}},
-    {binding: 4, resource: {buffer: a}}, {binding: 5, resource: {buffer: b}}, {binding: 6, resource: {buffer: bOut}}, {binding: 7, resource: {buffer: bPal}}]});
+    {binding: 4, resource: {buffer: a}}, {binding: 5, resource: {buffer: b}}, {binding: 6, resource: {buffer: bOut}}, {binding: 7, resource: {buffer: bPal}}, {binding: 8, resource: {buffer: bIt, size: 16}}]});
   const gAB = group(bA, bB), gBA = group(bB, bA);
   const qset = ts ? device.createQuerySet({type: 'timestamp', count: 6}) : null;
   const qres = ts ? device.createBuffer({size: 48, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC}) : null;
@@ -148,7 +156,7 @@ ${prmStruct}
     const pass = (p, q, groupFor, count = 1) => {
       const cp = enc.beginComputePass(ts && q >= 0 ? {timestampWrites: {querySet: qset, beginningOfPassWriteIndex: q, endOfPassWriteIndex: q + 1}} : {});
       cp.setPipeline(p);
-      for (let i = 0; i < count; i++) { cp.setBindGroup(0, groupFor(i)); cp.dispatchWorkgroups(...wg); }
+      for (let i = 0; i < count; i++) { cp.setBindGroup(0, groupFor(i), [0]); cp.dispatchWorkgroups(...wg); }
       cp.end();
     };
     pass(pHeight, 0, () => gAB);
@@ -159,7 +167,8 @@ ${prmStruct}
       // iteration count, constant over the run (use it for schedules); an even count leaves the result in buffer A.
       const sp = enc.beginComputePass(ts ? {timestampWrites: {querySet: qset, beginningOfPassWriteIndex: 2, endOfPassWriteIndex: 3}} : {});
       sp.setPipeline(pSim.simStep);
-      for (let i = 0; i < iters; i++) { sp.setBindGroup(0, i % 2 ? gBA : gAB); sp.dispatchWorkgroups(...wg); }
+      if (iters >= maxIt) throw new Error(`iters ${iters} exceeds the iteration slots (${maxIt}); pass it in the URL or the variant's lab`);
+      for (let i = 0; i < iters; i++) { sp.setBindGroup(0, i % 2 ? gBA : gAB, [i * 256]); sp.dispatchWorkgroups(...wg); }
       sp.end();
       pass(pSim.simApply, -1, () => (iters % 2 ? gBA : gAB));
     }
@@ -177,12 +186,14 @@ ${prmStruct}
       await qread.mapAsync(GPUMapMode.READ); const t = new BigUint64Array(qread.getMappedRange().slice(0)); qread.unmap();
       ms = {height: Number(t[1] - t[0]) / 1e6, sim: mod.sim ? Number(t[3] - t[2]) / 1e6 : 0, light: Number(t[5] - t[4]) / 1e6};
     }
+    window.__labPng = window.__labPng || {};
     const fig = document.createElement('figure');
     const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = Hh; canvas.dataset.label = v.label;
     canvas.getContext('2d').putImageData(new ImageData(px, W, Hh), 0, 0);
     const cap = document.createElement('figcaption');
     cap.textContent = `${v.label}${v.note ? ': ' + v.note : ''}  ·  ${ts ? `height ${ms.height.toFixed(1)} ms, ${mod.sim ? `sim ${ms.sim.toFixed(1)} ms (${iters} it), ` : ''}light ${ms.light.toFixed(1)} ms` : ''}`;
     fig.append(canvas, cap); grid.append(fig);
+    window.__labPng[v.label] = canvas.toDataURL('image/png');
     results.push({label: v.label, note: v.note || '', ms, params, lab: L, world});
   }
   window.__lab = {done: true, exp: expName, title: mod.title, size: [W, Hh], results, heights};
