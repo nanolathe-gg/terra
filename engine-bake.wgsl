@@ -513,8 +513,6 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 // gaps (GROOVE_GAPS) and deepest mid-stretch; they wander a little. The beds run
 // on across them. Returns the groove height offset (<= 0).
 fn jointGroove() -> Groove { return lines(u.grooveAngle, u.grooveSpacing, u.jointDepth, u.grooveRun, 2.2, 11.0); }
-// G2: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed).
-fn jointFieldAt(p: vec2f, off: f32) -> f32 { return -groove(p, jointGroove(), off).depth; }
 
 // H23: a bed with a riser has a lip of this height; one with none has none.
 const BED_LIP = 2.0;
@@ -538,16 +536,16 @@ fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
 // its own, its hardness scales how tall its ledge stands (columnContrast), and the
 // bed coordinate is columnCoord at the surface height, the one erosion reads.
 // Returns the same (offset, lip cover, bed index) as bedRelief.
-// A bed's cut: the tread's height offset, the lip and notch's (the old edge; the rock model cuts its own), the lip's rock cover, the bed's index,
+// A bed's cut: the tread's height offset, the lip and notch (the rock model sets their height), the bed's hardness punch, the bed's index,
 // how far through it the point lies (0 foot, 1 top) and its thickness along the ground (px).
-struct BedCut { off: f32, lipNotch: f32, lip: f32, index: f32, through: f32, px: f32 }
+struct BedCut { off: f32, lip: f32, notch: f32, punch: f32, index: f32, through: f32, px: f32 }
 fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
     let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
     let S = max(u.bedSpacing, 2.0);
     // H4 round 2: a bed's boundary wanders at 3-7 px (blockChip x 1.5 height units), so a ledge is a ragged line, not a smooth contour curve.
-    let rag = select(0.0, (valueNoise(p / 7.0 + 3.0) + 0.5 * valueNoise(p / 3.0 + 9.0)) * u.blockChip * 1.5, u.blocks > 0.0);
+    let rag = select(0.0, (valueNoise(p / 7.0 + 3.0) + 0.5 * valueNoise(p / 3.0 + 9.0)) * u.blockChip * 1.5, u.rockSize > 0.0);
     let bed = columnAt(columnCoord(p, h) + rag);
     let f = bed.through;
     let bedPx = bed.thick / G;
@@ -561,7 +559,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     // Hard beds (hardness 1) stand 1.7 times a hash bed's mean ledge, soft ones (0) 0.3 times: the hash's own range.
     let punch = mix(1.0, 0.3 + 1.4 * bed.hardness, u.columnContrast);
     off *= punch;
-    return BedCut(off, punch * bedLip() * (lip - 0.8 * notch), lip, bed.index, f, bedPx);
+    return BedCut(off, lip, notch, punch, bed.index, f, bedPx);
 }
 
 fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
@@ -598,7 +596,7 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     // and the eye can follow them (0: every bed alike, as before).
     let punch = mix(1.0, 0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y, u.bedPunch);
     off *= punch;
-    return BedCut(off, punch * bedLip() * (lip - 0.8 * notch), lip, k, f, bedPx);
+    return BedCut(off, lip, notch, punch, k, f, bedPx);
 }
 
 // H4b: a hill's pieces against a face's: width and length (down the fall line) as shares of blockWidth and blockRow.
@@ -606,43 +604,6 @@ const HILL_WIDTH = 0.6;
 const HILL_LENGTH = 2.2;
 const HILL_RELIEF = 1.8;   // a hill's piece heights against a face's (the hills' pieces are small, so their planes need more to light)
 const HILL_SEAM = 0.7;   // crevice half-width on a hill, px (a face's is 1.2): retail's hill cracks are 1-2 px
-const BLOCK_GRIT = 0.25;   // H23: per-pixel height grit on every block, height units, the same on every world
-// H4 item 4 (round 2): rock blocks. The face is cut into irregular pieces: a jittered cell grid, blockWidth by blockRow px, turned by a
-// slowly varying angle (up to about 40 degrees either way, so neighbouring regions are not aligned) and with its cells' own sizes
-// varying; each piece is a plane with a small tilt and a step against its neighbours, so it lights as one flat piece. The beds of the
-// column still decide how hard the rock is here: soft beds break into small pieces with steeper tilts, hard beds into larger, cleaner
-// ones (a share of the tilt, step and chipping, and none of their edges missing). The crevice is the edge between pieces, continuous
-// around every piece (in soft rock a few edges are missing), 1-2 px wide with a wandering edge, and is carved as well as darkened, so
-// it shades with the sun. Round 1 cut courses from the bed coordinate, whose boundaries ran as long contour curves; the pieces here
-// follow no contour.
-// pf: the face's own coordinates (x along the contour, y down the fall line), as the beds and joints use them.
-// Returns (height offset, crevice 0..1, bed hardness).
-fn blockField(p: vec2f, pf: vec2f, h: f32, hill: f32) -> vec4f {
-    let bed = columnAt(columnCoord(p, h));
-    let hard = bed.hardness;
-    // H4b: a hill's pieces are narrower and longer down the fall line than a face's, and the grid turns less, so most edges run down the slope.
-    let turn = (valueNoise(p / 70.0 + 5.0) + 0.5 * valueNoise(p / 23.0 + 17.0)) * mix(0.55, 0.2, hill);
-    let c = cos(turn);
-    let s = sin(turn);
-    let r = vec2f(c * pf.x + s * pf.y, -s * pf.x + c * pf.y);
-    let size = vec2f(u.blockWidth, u.blockRow) * mix(vec2f(1.0), vec2f(HILL_WIDTH, HILL_LENGTH), hill) * mix(0.7, 1.5, hard);
-    let chip = (valueNoise(p / 1.7 + 29.0) + 0.5 * valueNoise(p / 0.9 + 3.0)) * u.blockChip * mix(1.0, 0.4, hard);
-    let q = r / size;
-    let n = cells(q, size, 83.0, vec2f(0.15, 0.7));
-    let hc = cellHash(n.id + 37.0);
-    let hs = cellHash(n.id + 19.0);
-    let tilt = (hc - 0.5) * 2.0 * u.blockTilt * mix(1.3, 0.45, hard) * vec2f(1.0, 0.5);
-    var height = dot(tilt, (q - n.point) * size) + (hs.x - 0.5) * u.blockStep * mix(1.0, 0.4, hard);
-    // Half the gap between the nearest and second-nearest points: about the distance to the edge, in px.
-    let edge = 0.5 * (sqrt(n.second) - sqrt(n.best)) + chip;
-    let here = mix(step(0.25, hs.y), 1.0, hard);
-    let crevice = (1.0 - smoothstep(0.0, mix(1.2, HILL_SEAM, hill), edge)) * here;
-    height -= crevice * u.blockSeam * 0.8;
-    height += (cellHash(floor(p)).x - 0.5) * 2.0 * BLOCK_GRIT;
-    // .w: this piece's own draw, for the hills (which pieces are bare rock).
-    return vec4f(height, crevice, hard, hs.x);
-}
-
 // Rock face form (card E9). Retail's big green faces are carved: broad gullies
 // and ribs run down the face at a slight lean, tens of px apart, so whole
 // stripes read lit or shaded; the beds run on across them; and the fine detail is angular facets, not rounded cells.
@@ -729,43 +690,19 @@ fn cells(q: vec2f, metric: vec2f, salt: f32, jit: vec2f) -> CellPick {
     }
     return n;
 }
-// H23: facets' tilt in y as a share of their tilt in x, the same on every world (the picture squeezes steep y tilts).
-const FACET_SKEW = 0.25;
-// Angular facets: a jittered grid of cells F px tall and `stretch` times as wide
-// (the beds' direction), each a plane with its own random tilt (up to `tilt`,
-// height per px) and a step against its neighbours (up to `step_`), so each
-// lights as a flat facet and the seams between them are crisp creases, not
-// grooves. facetField adds a coarser level (facetCoarse times the fine one's
-// size 2.4 times larger, and that share of its tilt and step) so the facets
-// crumple at two scales, as retail's rock does.
-// Returns (height, seam): the seam is 1 on the crease between two facets and 0 over 1.2 px away from it.
-fn facetLevel(p: vec2f, F: f32, stretch: f32, tilt_: f32, step_: f32, salt: f32) -> vec2f {
-    let size = vec2f(F * max(stretch, 0.25), F);
-    let q = p / size;
-    let n = cells(q, vec2f(1.0), 71.0 + salt, vec2f(0.15, 0.7));
-    // The picture draws a point at row y - height / 2, so a facet tilted steeply in y is stretched or squeezed on the screen
-    // (flat at 2 units per px): the tilt across the beds (x) carries the contrast, the tilt in y is held to FACET_SKEW of it.
-    let tilt = (cellHash(n.id + 37.0 + salt) - 0.5) * 2.0 * tilt_ * vec2f(1.0, FACET_SKEW);
-    let step = (cellHash(n.id + 19.0 + salt).x - 0.5) * step_;
-    let seam = (1.0 - smoothstep(0.0, 1.2 / F, sqrt(n.second) - sqrt(n.best))) * (0.3 + 0.7 * cellHash(n.id + 5.0 + salt).y);
-    return vec2f(dot(tilt, (q - n.point) * size) + step, seam);
-}
-fn facetField(p: vec2f) -> vec2f {
-    // H23: the facets are cut at the rock blocks' size (blockRow tall, blockWidth wide), step (blockStep) and crease darkness (blockSeam).
-    let F = max(u.blockRow, 2.0);
-    let stretch = u.blockWidth / F;
-    var f = facetLevel(p, F, stretch, u.facetTilt, u.blockStep, 0.0);
-    if (u.facetCoarse > 0.0) { f.x += facetLevel(p + vec2f(31.0, 17.0), F * 2.4, stretch, u.facetTilt * u.facetCoarse, u.blockStep * u.facetCoarse, 133.0).x; }
-    // G2: a third level at 0.45 of the fine one's size, for the small bumps that retail's pieces carry.
-    if (u.cliffFine > 0.0) { f.x += facetLevel(p + vec2f(11.0, 47.0), F * 0.45, stretch, u.facetTilt * u.cliffFine, u.blockStep * u.cliffFine, 211.0).x; }
-    return f;
-}
-
 // Card P10: the one rock model. Three parting sets cut the rock: beds (the bed's planes, read from the column), and two joint sets
 // (staggered cells inside each bed, on a row-offset lattice: jitter 0 gives hexagons). Each parting is open (a crevice) or tight (a step
 // only), by a hash of the two cells it separates. Each block is flattened toward its own level (terr: basalt organ pipes, stepped blocks)
 // and tilted and stepped (vary); age rounds open edges and opens more partings; chips and grit are the fine facets. A rock type is the
-// numbers u.rock* (world material data), never a branch. It replaces blockField, facetField, jointFieldAt and the lip and notch of bedRelief.
+// numbers u.rock* (world material data), never a branch. It replaced blockField, facetField, jointFieldAt and the lip and notch of bedRelief.
+// H23: a tilt's y share against its x share, the same on every world (the picture squeezes steep y tilts).
+const FACET_SKEW = 0.25;
+// The three parting sets of the one rock model, each switched by the preset's numbers: cells (rockSize > 0: the blocks above), joint lines
+// (jointDepth > 0: long grooves close to the fall line, spaced grooveSpacing apart, each bed's own offset) and beds (the tread bedRelief
+// returns, and the lip on its riser's top edge with the notch at its foot: a bed with a riser has the lip, BED_LIP units, one with none has none).
+// The joint lines: `off` moves the whole lattice along the beds by that many px (the stagger from bed to bed). Returns the height offset (<= 0).
+fn rockLines(pf: vec2f, off: f32) -> f32 { return -groove(pf, jointGroove(), off).depth; }
+fn rockLip(bed: BedCut) -> f32 { return bed.punch * bedLip() * (bed.lip - 0.8 * bed.notch); }
 struct RockCell { c1: vec2f, id: vec2f, id2: vec2f, edge: f32 }
 // The two nearest points of a row-staggered jittered lattice of cells `sz` px, in px: the nearest point, the cells' ids and the distance
 // to the edge between the two nearest (the bisector's, exact there).
@@ -812,7 +749,7 @@ fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f, hill: f32) -> vec2f {
         let t = 1.0 - min(edge / roundR, 1.0);
         dh -= 1.1 * roundR * (1.0 - sqrt(max(1.0 - t * t, 0.0)));
     }
-    let crev = 1.0 - smoothstep(0.0, u.rockCrevW * (1.0 + 0.6 * age), edge + 0.6 * valueNoise(p / 2.1 + 19.0));
+    let crev = 1.0 - smoothstep(0.0, u.rockCrevW * mix(1.0, HILL_SEAM / 1.2, hill) * (1.0 + 0.6 * age), edge + 0.6 * valueNoise(p / 2.1 + 19.0));
     dh -= u.rockCrev * crev;
     // Angular chips: small facets, worn away with age.
     let chipA = u.rockChip * (1.0 - 0.7 * age);
@@ -1378,7 +1315,6 @@ fn bake(p: vec2f) -> vec4f {
     // (ribs, block steps, minor cracks) steps back; its relief is added below.
     var structureRock = 0.0;
     var gullyFloor = 0.0;
-    var facetSeam = 0.0;
     var blockCrevice = 0.0;
     var order = 0.0;
     var steep = 0.0;
@@ -1428,48 +1364,34 @@ fn bake(p: vec2f) -> vec4f {
         // G2: each bed's joints sit at their own offset (up to cliffStagger of a spacing either way), so a joint
         // kinks at every bed instead of running straight down the face as one ruled line: broken rock, not masonry
         // (the offset is keyed on the bed's index). A joint of no depth cuts nothing.
-        let rocky = u.rockSize > 0.0;
         var joint = 0.0;
-        if (u.jointDepth > 0.0 && !rocky) {
+        if (u.jointDepth > 0.0) {
             let stagger = select(0.0, u.cliffStagger * max(u.grooveSpacing, 6.0) * 2.0 * (cellHash(vec2f(bed.index, 71.0)).x - 0.5), cliffOn && u.cliffStagger > 0.0);
-            joint = jointFieldAt(pf, stagger);
+            joint = rockLines(pf, stagger);
         }
-        height += order * steep * (bed.off + select(bed.lipNotch, 0.0, rocky) + joint);
+        height += order * steep * (bed.off + rockLip(bed) + joint);
         // The form eases in over the painted edge (a smoothstep of the cover, not the cover itself), so the rim stays smooth.
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
-        if (rocky) {
-            // The rock model's own parting sets, in the face's axes (the ground's gradient there: along the fall line only on a patch frame).
+        if (u.rockSize > 0.0) {
+            // The cell set, in the face's axes (the ground's gradient there: along the fall line only on a patch frame).
             let gx = select(vec2f(0.0, -slope), g, !cliffOn);
             let rk = rockModel(p, pf, bed, gx, 0.0);
             height += gate * rk.x;
             blockCrevice = gate * rk.y;
-        } else {
-            if (u.blocks > 0.0) {
-                let block = blockField(p, pf, bedH + carved.x, 0.0);
-                height += gate * block.x;
-                blockCrevice = gate * block.y;
-            }
-            if (u.facetTilt > 0.0) {
-                let facet = facetField(pf);
-                height += gate * facet.x;
-                facetSeam = gate * facet.y;
-            }
         }
         structureRock = order * steep * bed.lip * step(0.01, bedLip());
     }
     // H4b: the hills' rock (slope from .35, full at .65; the rock class of measure/material_classes.py starts at .5) off the structured face takes small
     // pieces, in patches, with the pieces' edges mostly down the fall line.
-    if (u.hillBlocks > 0.0 && u.blocks > 0.0 && h > u.sea + 1.0) {
+    if (u.hillBlocks > 0.0 && u.rockSize > 0.0 && h > u.sea + 1.0) {
         let patches = smoothstep(-0.2, 0.3, valueNoise(p / 26.0 + 53.0));
         let hill = u.hillBlocks * smoothstep(0.35, 0.65, slope) * patches * (1.0 - order * steep) * (1.0 - route) * (1.0 - buried);
         if (hill > 0.0) {
             let across = vec2f(-fall.y, fall.x);
             let pfh = vec2f(dot(p, across), dot(p, fall));
-            var block: vec2f;
-            if (u.rockSize > 0.0) { block = rockModel(p, pfh, BedCut(0.0, 0.0, 0.0, 0.0, 0.5, 1e9), vec2f(0.0, -slope), 1.0); }
-            else { block = blockField(p, pfh, h, 1.0).xy; }
+            let block = rockModel(p, pfh, BedCut(0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1e9), vec2f(0.0, -slope), 1.0);
             height += hill * HILL_RELIEF * block.x;
             blockCrevice = max(blockCrevice, hill * block.y);
         }
@@ -1500,7 +1422,6 @@ fn bake(p: vec2f) -> vec4f {
     lineDark = max(lineDark, 0.5 * stepWorn * (1.0 - buried));
     lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
-    lineDark = max(lineDark, facetSeam * u.blockSeam * (1.0 - buried));
     lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));
     if (u.sandBanding > 0.0) {
         // Sand bars (sandCrown) are smooth rippled sand, not streaked dune slopes.
