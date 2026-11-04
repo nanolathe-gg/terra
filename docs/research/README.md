@@ -40,15 +40,53 @@ By eye:
 - A 2 x 2 normalised stripe sum with a folded profile (sharp crests, round
   floors) beats a cosine profile and a 3 x 3 sum.
 
+## Round 2: the lab
+
+`lab/` is a standalone WebGPU page for trying terrain ideas fast (see
+`lab/README.md`). It holds 22 experiments: round 1's mountain, and four
+families from round 2:
+
+- `lf-`: landforms from the rock column;
+- `rk-`: rock faces, weathering and light;
+- `ld-`: loose material;
+- `er-`: erosion, resolution independence and incremental editing.
+
+`palette-mix.py` measures the engine's palette pair against Knoll
+candidates. `lab/compare-heights.mjs` compares saved height fields.
+
 ## Cards
+
+The brief orders these as P1 to P23; "Start here" cards are marked first.
 
 | Card | What | Status |
 | --- | --- | --- |
-| P1 | Gullies: the filter on hill, mountain and landform strokes, steered by the fall line; one stroke row | prototype now |
-| P2 | Rills in the bake, steered by the Time pass's fall-line map, in place of fixed-angle gully grooves | experiment |
-| P3 | Derivative-damped lumps, fractional octaves and a smooth crease, tilted broken terraces (from ProceduralTerrains, MIT) | experiment |
-| P4 | The draw: evaluate the surface once per pixel instead of about 47 times (`surfaceHeight` taps in `engine-frag.wgsl`) | measure first |
-| P5 | The Time pass: several erosion iterations per dispatch in workgroup memory, byte-identical | measure first |
-| P6 | WGSL `override` constants for per-world gates in the bake and draw, measured with `perf.mjs` | measure first |
-| P7 | Carried velocity and MacCormack sediment in the pipe model (LanLou123/Webgl-Erosion, MIT) | experiment |
-| P8 | A coarse whole-map stream-power pass for map-scale ranges (H-Schott, MIT; GPU-Gang WGSL port, BSD-3) | later, needs a ruling |
+| P1 | Gullies: the stripe filter on hill, mountain and landform strokes | start here |
+| P16 | One loose-material scatter (Supply, Size, Sorting) in the bake; fix talus sorting, which runs backwards in `debrisStones()` | start here |
+| P13 | The column walk: differential erosion through the rock column (hogbacks, cuestas, fins, pinnacles) | start here |
+| P10 | One parametric rock model in the bake; rock types as presets; Age, Stain, Frost | start here |
+| P9 | Palette: eight Knoll candidates in the lookup cube | start here |
+| P12 | Multi-scale cavity and convexity on the cavity control | start here |
+| P18 | Ripples with defects and sand shadows | start here |
+| P22 | V, U and terraced valleys as landform presets; painted repose | start here |
+| P4 | The draw: the surface once per pixel, not about 47 times | measure first |
+| P11 | Exact sun and sky horizons by line sweep | measure first |
+| P23 | Prefix checkpoints for drags; warm-0 Time previews | measure first |
+| P14 | Scarp retreat on plateau strokes: mesas and buttes | measure first |
+| P5 | Several erosion iterations per dispatch in workgroup memory | measure first |
+| P6 | `override` constants for per-world gates | measure first |
+| P2 | Rills in the bake, steered by the fall-line map | experiment |
+| P3 | Derivative-damped lumps, fractional octaves, tilted terraces | experiment |
+| P15 | Apron hummocks, knolls and slumps around a shape | experiment |
+| P17 | Talus cones and fans as shapes, with sorting rules | experiment |
+| P20 | Multi-scale thermal in the Time pass | experiment |
+| P21 | An exact drainage plane by Euler tour, stored whole-map | experiment |
+| P7 | Carried velocity and MacCormack sediment in the pipe model | experiment |
+| P8 | A coarse stream-power pass for map-scale ranges | later, needs a ruling |
+| P19 | Dunes by Werner's model as a deterministic gather | later, needs a ruling |
+
+Decisions the brief asks the owner for:
+
+- **D1:** how a modern, realistic preset is judged beside a retail one.
+- **D2:** a stored whole-map drainage pass.
+- **D3:** the merges that remove controls.
+- **D4:** pipelines specialized by data.
