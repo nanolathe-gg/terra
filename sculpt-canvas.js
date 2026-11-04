@@ -43,7 +43,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const navigationDelay=180;
   const navigating=()=>Boolean(pan||navigationPointer!==null||navigationTimer!==null);
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let heldSince=null,pan=null,space=false,gesture=null,hover=null,optionsKey='',saveTimer=null,saving=false,documentLoading=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let heldSince=null,pan=null,space=false,gesture=null,hover=null,pointerTurn=true,optionsKey='',saveTimer=null,saving=false,documentLoading=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
   let hoveredNode=-1;
   let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(128,128),cg=coarse.getContext('2d');
@@ -262,9 +262,20 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         const size=overview?256*displayLevel():viewChunkSize(),v=state(),jobs=[],token=epoch,viewToken=viewEpoch,previewing=interacting();
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
         const dist=r=>Math.hypot(r.x+size/2-v.x-v.width/2,r.y+size/2-v.y-v.height/2);
-        // H7b: with levels on, the visible chunks come before the margin, each group nearest the view's centre first.
+        // H7b: with levels on, the visible chunks come before the margin, each group nearest the view's centre first (oldest first during a gesture).
         const levelsOn=levels&&api.gpuFeedActive?.();
         jobs.sort((a,b)=>{const visible=intersects(b,v)-intersects(a,v);if(visible)return visible;if(previewing){const age=(cache.get(cacheKey(a,size))?.bakedAt||0)-(cache.get(cacheKey(b,size))?.bakedAt||0);if(age)return age;}return dist(a)-dist(b);});
+        // During a canvas gesture the plan's head takes turns: the stale visible chunk nearest the pointer (the brush's own feedback), then the
+        // oldest stale one, which keeps every dirty chunk moving while pointer events cut each plan short (repro/interaction/REPORT.md item 6):
+        // with D dirty visible chunks, each one is baked within 2(D-1) bakes, the pointer's within 2. A turn passes once its head's image is
+        // kept; a plan that runs out of work, and each new gesture, start on the pointer's turn.
+        if(!previewing)pointerTurn=true;
+        let pointerHead=false,headBaked=false;
+        if(previewing&&gesture&&pointerTurn&&hover){
+          const gap=r=>Math.hypot(Math.max(0,r.x-hover[0],hover[0]-r.x-r.width),Math.max(0,r.y-hover[1],hover[1]-r.y-r.height));
+          let best=-1;for(let i=0;i<jobs.length;i++){const r=jobs[i],e=cache.get(cacheKey(r,size));if(intersects(r,v)&&(!e||e.dirty)&&(best<0||gap(r)<gap(jobs[best])))best=i;}
+          if(best>=0){jobs.unshift(...jobs.splice(best,1));pointerHead=true;}
+        }
         const near={x:v.x-size,y:v.y-size,width:v.width+size*2,height:v.height+size*2};for(const e of cache.values())if(!intersects(e,near))e.heightPatch=null;
         // H7b: the plan. `want` 2 is a quarter image, 1 final. During a gesture every chunk without an image gets a quarter one and nothing
         // is refined; once it ends, a quarter image is replaced by a final one (visible chunks first, then the margin), and a chunk
@@ -303,7 +314,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           }
           // The image it replaces (a quarter one) is dropped now that the final one is in hand.
           const prior=cache.get(key);if(prior){prior.bitmap.close?.();cacheBytes-=prior.bytes;cache.delete(key);}
-          e.bakedAt=performance.now();cache.set(key,e);cacheBytes+=e.bytes;}
+          e.bakedAt=performance.now();cache.set(key,e);cacheBytes+=e.bytes;if(previewing&&!headBaked){headBaked=true;pointerTurn=!pointerHead;}}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch&&!e.fed){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{},undefined,weatheredView);checkHeap(input);e.heightPatch=keepHeight(input);}}
           if(cache.get(key)!==e)break;
           if(!baked)continue;   // The retained tiles were painted together above; only fresh tiles need another presentation.
@@ -320,6 +331,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           // before presentation to keep the full-map gesture responsive.
           await (!overview||!levels?tick():undefined);
         }
+        if(!rerun&&token===epoch)pointerTurn=true;   // nothing newer arrived while this plan ran: the next move starts on the pointer's turn
       }
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name==='AbortError')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
@@ -387,7 +399,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(![0,1].includes(event.button)||busy||gesture||pan||api.gestureActive?.()||!api.ready())return;event.preventDefault();overlay.focus({preventScroll:true});overlay.setPointerCapture(event.pointerId);
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
     if(features?.active)return;
-    const p=localPoint(event),start=performance.now();
+    const p=localPoint(event),start=performance.now();hover=[p.x,p.y];
     if(api.pathAdding?.()){api.addPathPoint(p);schedule();return;}
     if(api.currentTool()==='move'&&api.drawMode?.()!=='add'){
       const screenPoint=screen(event),selected=api.selection(),handles=geometry(selected);
