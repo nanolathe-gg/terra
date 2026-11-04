@@ -651,7 +651,9 @@ WORLD_VARIANTS = {
         # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
         # its beds and joints, debris where gravity and water leave it, light that agrees from any sun. It starts as a
         # copy of Green's own preset; each look card sets its realistic numbers here (scenes green-modern-1..3).
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict()),
+        'modern': dict(label='Modern: realistic look (in progress)',
+                       # Card P32: terracettes on steep grass (Joined wrinkles on a grass world).
+                       knobs=dict(wrinkles=1)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro

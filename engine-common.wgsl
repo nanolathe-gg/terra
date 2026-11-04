@@ -72,6 +72,7 @@ struct Uniforms {
     beachHeight: f32,
     beachWidth: f32,
     slopeSand: i32,
+    grassSlopes: i32,     // 1 where the world's slopes are grass: Joined wrinkles (u.wrinkles) then draw terracettes in the bake, not Moon's dark lines in the draw
     shoreEdge: f32,   // lava coast rim, outline and lip (0: none)
     // Crystals: their own colour (world base colour 'crystal', else the world's).
     crystalColor: vec3f,

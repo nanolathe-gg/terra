@@ -311,6 +311,7 @@ export class TerrainRenderer {
     this.i('uSlopeOnLowBanks', material.slopeOnLowBanks !== false);
     this.f('uRampMaterial', material.rampMaterial ?? 0);
     this.i('uSlopeSand', Boolean(material.slopeSand));
+    this.i('uGrassSlopes', Boolean(material.grassSlopes));
     this.v('uCrystalColor', (material.crystalRGB || [110, 150, 225]).map(v => v / 255));
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
