@@ -7,21 +7,23 @@ import {LD_SCATTER, LD_ALBEDO} from './ld-common.js';
 
 export default {
   title: 'Loose material: stone shapes at 1x',
-  about: 'Rows: 2, 3, 5, 8, 13, 21 px. Columns: angular, angular half-buried, round, round half-buried, slab, slab half-buried, today boulders(), today debrisStones().',
+  about: 'Rows: 2, 3, 5, 8, 13, 21 px. Columns: angular, angular half-buried, round, round half-buried, slab, slab half-buried, today boulders(), today debrisStones(). Field variants: the scatter alone, for its cost and the effect of suppression.',
   world: 'moon',
-  params: {ldRmax: 8, ldJitter: 0.8, ldHeight: 0.8, ldSuppress: 2, ldContact: 0.5, todayShape: 1},
+  params: {ldRmax: 8, ldJitter: 0.8, ldHeight: 0.8, ldSuppress: 2, ldContact: 0.5, field: 0},
   variants: [
     {label: 'board', note: 'palette, Knoll dither'},
     {label: 'board-raw', note: 'no palette', lab: {pal: 0}},
-    {label: 'board-green', note: 'green colours', lab: {world: 'green'}},
     {label: 'board-low-sun', note: 'sun at 20 degrees', lab: {el: 20}},
     {label: 'board-2x', note: '2x, the four smallest rows', lab: {px: 0.5, ox: 0, oy: 0}},
+    {label: 'field-nosup', note: 'the scatter with a constant mask (supply 0.7, d50 5 px, sigma 1.6), no suppression', params: {field: 1, ldSuppress: 0}},
+    {label: 'field-sup2', note: 'the same, the two larger classes suppress each smaller one', params: {field: 1, ldSuppress: 2}},
   ],
   wgsl: /* wgsl */`
 ${LD_SCATTER}
 ${LD_ALBEDO}
-fn ldMask(q: vec2f) -> vec4f { return vec4f(0.0); }
-fn ldShapeAt(q: vec2f) -> vec2f { return vec2f(0.0); }
+// The field variants: one constant population, so the timing is the scatter's own (an engine mask is a texture tap).
+fn ldMask(q: vec2f) -> LdMask { var m: LdMask; m.a = vec4f(0.7, 5.0, 1.6, 0.3) * prm.field; return m; }
+fn ldShapeAt(q: vec2f) -> vec2f { return vec2f(0.3, 0.1); }
 
 const DIAM = array<f32, 6>(2.0, 3.0, 5.0, 8.0, 13.0, 21.0);
 var<private> bTone: f32;
@@ -30,7 +32,7 @@ var<private> bContact: f32;
 
 // One board stone: returns (height, sdf px).
 fn boardStone(q: vec2f, col: i32, r: f32, h0: u32) -> vec2f {
-  var st: LdCand; st.c = vec2f(0.0); st.r = r; st.ok = true; st.h0 = h0;
+  var st: LdCand; st.c = vec2f(0.0); st.r = r; st.ok = true; st.h0 = h0; st.fines = 0.0;
   if (col <= 5) {
     let shape = select(select(vec2f(0.0, 1.0), vec2f(1.0, 0.0), col < 4), vec2f(0.0, 0.0), col < 2);
     let fines = select(0.0, 0.55, (col & 1) == 1);
@@ -52,6 +54,11 @@ fn boardStone(q: vec2f, col: i32, r: f32, h0: u32) -> vec2f {
 
 fn heightAt(p: vec2f) -> f32 {
   let ground = 20.0 + 0.6 * fbmBL(p, 40.0, 3, 0.5, labPx(), 0x31u);
+  if (prm.field > 0.0) {
+    let h = ground + ldScatter(p);
+    bTone = ldOut.w; bCover = ldOut.y; bContact = ldOut.z;
+    return h;
+  }
   let col = i32(floor(p.x / 64.0)); let row = i32(floor(p.y / 64.0));
   bTone = 0.0; bCover = 0.0; bContact = 0.0;
   if (col < 0 || col > 7 || row < 0 || row > 5) { return ground; }

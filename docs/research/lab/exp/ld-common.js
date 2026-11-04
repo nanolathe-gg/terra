@@ -13,7 +13,8 @@
 //     above overlaps it (priority by size, as multi-class dart throwing does, but by lookup instead of by order).
 //   - Shapes: angular chips (a convex polygon whose facets meet at an off-centre apex, a flat cap), rounded
 //     superellipses with a wobbly outline, flat slabs; all partly buried by the mask's fines.
-// The experiment supplies `fn ldMask(q: vec2f) -> vec4f` (supply, d50 px, sigma, fines 0..1) and
+// The experiment supplies `fn ldMask(q: vec2f) -> LdMask`: two size populations, a (supply, d50 px, sigma, fines 0..1)
+// and b (supply, d50, sigma, unused), so a deposit can be bimodal (a talus matrix and its runout blocks), and
 // `fn ldShapeAt(q: vec2f) -> vec2f` (roundness 0 angular .. 1 round, slab share 0..1), and the params
 // ldRmax, ldJitter, ldHeight, ldSuppress, ldContact. Original code (the ideas: Wei 2010 multi-class sampling; Turcotte's
 // fragmentation power law; fall sorting from the talus literature).
@@ -26,7 +27,21 @@ var<private> ldInfo: vec4f;  // (class of the top stone, its roundness, sdf to t
 fn ldR(k: i32) -> f32 { return prm.ldRmax * exp2(-f32(k)); }
 fn ldU(h: u32) -> f32 { return f32(h >> 8u) / 16777216.0; }
 
-struct LdCand { c: vec2f, r: f32, ok: bool, h0: u32 };
+struct LdCand { c: vec2f, r: f32, ok: bool, h0: u32, fines: f32 };
+struct LdMask { a: vec4f, b: vec4f };
+
+// Class k's share of one population (S, d50, sigma): S * w_k / sum(w), w a Gaussian in log2 diameter.
+fn ldShare(k: i32, pop: vec4f) -> f32 {
+  if (pop.x <= 0.0) { return 0.0; }
+  let ls = log2(max(pop.y, 0.5));
+  var wsum = 0.0; var wk = 0.0;
+  for (var j = 0; j < LD_K; j++) {
+    let z = (log2(2.0 * ldR(j)) - ls) / max(pop.z, 0.15);
+    let w = exp(-0.5 * z * z);
+    wsum += w; if (j == k) { wk = w; }
+  }
+  return pop.x * wk / max(wsum, 1e-6);
+}
 
 // Class k's candidate in cell cc, without the suppression test.
 fn ldCand0(k: i32, cc: vec2i) -> LdCand {
@@ -40,34 +55,25 @@ fn ldCand0(k: i32, cc: vec2i) -> LdCand {
   o.r = R * exp2(ldU(h2) - 0.5);
   o.h0 = h0;
   let m = ldMask(o.c);
-  if (m.x <= 0.0) { o.ok = false; return o; }
-  // Class weights around the median diameter, in log2 units.
-  let ls = log2(max(m.y, 0.5));
-  var wsum = 0.0; var wk = 0.0;
-  for (var j = 0; j < LD_K; j++) {
-    let z = (log2(2.0 * ldR(j)) - ls) / max(m.z, 0.15);
-    let w = exp(-0.5 * z * z);
-    wsum += w; if (j == k) { wk = w; }
-  }
-  let P = clamp(m.x * wk / max(wsum, 1e-6) / LD_COVER, 0.0, 1.0);
+  o.fines = m.a.w;
+  if (m.a.x <= 0.0 && m.b.x <= 0.0) { o.ok = false; return o; }
+  let P = clamp((ldShare(k, m.a) + ldShare(k, m.b)) / LD_COVER, 0.0, 1.0);
   o.ok = ldU(pcg(h2 ^ 0x1b873593u)) < P;
   return o;
 }
 
-// With suppression: dropped where an accepted stone of one of the prm.ldSuppress larger classes overlaps it.
-fn ldCand(k: i32, cc: vec2i) -> LdCand {
-  var o = ldCand0(k, cc);
-  if (!o.ok) { return o; }
+// Suppression: true where an accepted stone of one of the prm.ldSuppress larger classes overlaps candidate o of class k.
+fn ldSuppressed(k: i32, o: LdCand) -> bool {
   let depth = i32(prm.ldSuppress);
   for (var j = max(0, k - depth); j < k; j++) {
     let cellJ = 3.2 * ldR(j);
     let b = vec2i(floor(o.c / cellJ - 0.5));
     for (var jj = 0; jj <= 1; jj++) { for (var ii = 0; ii <= 1; ii++) {
       let pc = ldCand0(j, b + vec2i(ii, jj));
-      if (pc.ok && distance(pc.c, o.c) < 0.85 * (pc.r + o.r)) { o.ok = false; return o; }
+      if (pc.ok && distance(pc.c, o.c) < 0.85 * (pc.r + o.r)) { return true; }
     } }
   }
-  return o;
+  return false;
 }
 
 // One stone's height (in units of its own height scale, 0..1) and signed distance (px, negative inside) at local q.
@@ -125,7 +131,7 @@ fn ldStone(q0: vec2f, st: LdCand, shape: vec2f, fines: f32) -> vec2f {
 
 // The scatter at p. Sets ldOut (height in TA units, cover, contact shade, tone) and ldInfo; returns the height.
 fn ldScatter(p: vec2f) -> f32 {
-  var best = 0.0; var cover = 0.0; var tone = 0.0; var edge = 1e9; var cls = -1.0; var rnd = 0.0; var bestR = 1.0;
+  var best = 0.0; var cover = 0.0; var tone = 0.0; var edge = 1e9; var cls = -1.0; var rnd = 0.0; var bestR = 1.0; var edgeF = 0.0;
   let shape = ldShapeAt(p);
   for (var k = 0; k < LD_K; k++) {
     let R = ldR(k);
@@ -133,12 +139,11 @@ fn ldScatter(p: vec2f) -> f32 {
     let cell = 3.2 * R;
     let b = vec2i(floor(p / cell - 0.5));
     for (var j = 0; j <= 1; j++) { for (var i = 0; i <= 1; i++) {
-      let st = ldCand(k, b + vec2i(i, j));
-      if (!st.ok) { continue; }
-      if (distance(p, st.c) > 1.6 * st.r) { edge = min(edge, distance(p, st.c) - 1.1 * st.r); continue; }
-      let m = ldMask(st.c);
-      let s = ldStone(p - st.c, st, shape, m.w);
-      edge = min(edge, s.y);
+      let st = ldCand0(k, b + vec2i(i, j));
+      if (!st.ok || distance(p, st.c) > 1.6 * st.r) { continue; }
+      if (ldSuppressed(k, st)) { continue; }
+      let s = ldStone(p - st.c, st, shape, st.fines);
+      if (s.y < edge) { edge = s.y; edgeF = st.fines; }
       // Height scale: about 0.8 of the radius (a little more for big blocks), in TA units.
       let H = st.r * prm.ldHeight * (0.75 + 0.5 * ldU(pcg(st.h0 ^ 0x51u)));
       let hh = s.x * H;
@@ -152,7 +157,8 @@ fn ldScatter(p: vec2f) -> f32 {
   }
   // Contact shade: a ring of shadowed fines round each stone, about a pixel plus a fifth of the radius wide.
   var contact = 0.0;
-  if (best <= 0.0 && edge < 1e8) { contact = prm.ldContact * (1.0 - smoothstep(0.0, max(0.9 * labPx(), 0.6) + 0.25 * min(bestR, 6.0), edge)); }
+  // A buried stone has no gap under it: the shade fades with the fines that bury it.
+  if (best <= 0.0 && edge < 1e8) { contact = prm.ldContact * (1.0 - edgeF) * (1.0 - smoothstep(0.0, max(0.9 * labPx(), 0.6) + 0.25 * min(bestR, 6.0), edge)); }
   ldOut = vec4f(best, cover, contact, tone);
   ldInfo = vec4f(cls, rnd, edge, 0.0);
   return best;

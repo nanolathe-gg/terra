@@ -3,10 +3,10 @@
 // below each chute a talus cone, concave in profile (steeper than repose near the apex, gentler at the toe), and a low talus
 // apron along the whole foot; the ground is the smooth maximum of the three. All pure functions of position.
 // Material: one multi-class scatter (ld-common.js) with masks from the cone field: supply (clast-supported on the cones),
-// d50 growing down the cone (fall sorting: larger blocks run further) and the largest blocks out past the toe (runout,
-// decaying over about a fifth of the cone length), fines filling the toe and the plain. Three artist numbers: supply,
-// size (largest d50, px) and sorting (0 none .. 1 strong fall sorting). Original code; the geomorphology (fall sorting,
-// concave talus profiles, runout beyond the toe) is from the talus literature (see the report).
+// d50 growing down the cone (fall sorting: larger blocks run further), and a second, coarse population, the runout blocks
+// past the toe (decaying over about a quarter of the cone length); fines fill the toe and the plain. Three artist numbers:
+// supply, size (largest d50, px) and sorting (0 none .. 1 strong fall sorting). Original code; the geomorphology (fall
+// sorting, concave talus profiles, bimodal talus, runout beyond the toe) is from the talus literature (see the report).
 import {LD_SCATTER, LD_ALBEDO} from './ld-common.js';
 
 export default {
@@ -21,7 +21,7 @@ export default {
     {label: 'unsorted', note: 'sorting 0: the same supply, sizes mixed everywhere', params: {sorting: 0}},
     {label: 'slabs', note: 'bedded rock: slab share 0.6', params: {slab: 0.6}},
     {label: 'green', note: 'green colours, supply 0.6', params: {supply: 0.6}, lab: {world: 'green'}},
-    {label: 'cones-2x', note: '2x on a cone (apex to toe)', lab: {px: 0.5, ox: 40, oy: 120}},
+    {label: 'cones-2x', note: '2x on a cone (apex to toe)', lab: {px: 0.5, ox: 150, oy: 110}},
   ],
   wgsl: /* wgsl */`
 ${LD_SCATTER}
@@ -30,129 +30,133 @@ const PLAIN = 20.0;
 const CLIFF = 110.0;
 const CDIR = vec2f(0.4472136, 0.8944272);     // along the cliff (down the screen, a little east)
 const CNRM = vec2f(0.8944272, -0.4472136);    // into the plateau
-const CORG = vec2f(250.0, 0.0);
-const CHUTE = 66.0;                            // chute spacing along the cliff (px)
+const CORG = vec2f(300.0, 0.0);
+const CHUTE = 58.0;                            // chute spacing along the cliff (px)
 
 fn cliffS(p: vec2f) -> f32 { return dot(p - CORG, CDIR); }
-fn cliffLine(s: f32) -> f32 { return 16.0 * vnoise(vec2f(s / 70.0, 1.3), 0x11u) + 7.0 * vnoise(vec2f(s / 23.0, 4.1), 0x12u); }
+fn cliffLine(s: f32) -> f32 { return 14.0 * vnoise(vec2f(s / 80.0, 1.3), 0x11u) + 5.0 * vnoise(vec2f(s / 27.0, 4.1), 0x12u); }
 
-struct Chute { s: f32, depth: f32, half: f32, apex: vec2f, ah: f32 };
+struct Chute { s: f32, depth: f32, half: f32, apex: vec2f, ah: f32, line: f32 };
 fn chute(i: i32) -> Chute {
   var c: Chute;
-  c.s = (f32(i) + 0.5 + 0.6 * (h1i(i, 0x21u) - 0.5)) * CHUTE;
-  c.depth = 18.0 + 22.0 * h1i(i, 0x22u);
-  c.half = 14.0 + 10.0 * h1i(i, 0x23u);
+  c.s = (f32(i) + 0.5 + 0.5 * (h1i(i, 0x21u) - 0.5)) * CHUTE;
+  c.depth = 8.0 + 14.0 * h1i(i, 0x22u);
+  c.half = 12.0 + 8.0 * h1i(i, 0x23u);
   c.ah = PLAIN + CLIFF * (0.30 + 0.25 * h1i(i, 0x24u)) * prm.cones;
-  let n = cliffLine(c.s) + c.depth - 16.0;
-  c.apex = CORG + CDIR * c.s + CNRM * n;
+  c.line = cliffLine(c.s);
+  c.apex = CORG + CDIR * c.s + CNRM * (c.line + 0.45 * c.depth - 14.0);
   return c;
 }
 
-// The bare escarpment: the face is a steep sigmoid about 30 px wide, notched back at each chute.
-fn bedrock(p: vec2f) -> f32 {
-  let s = cliffS(p);
+// Across-cliff coordinate with the chutes cut back into the plateau (a smooth notch each).
+fn cliffN(p: vec2f, s: f32) -> f32 {
   var n = dot(p - CORG, CNRM) - cliffLine(s);
   let i0 = i32(floor(s / CHUTE));
   for (var i = i0 - 1; i <= i0 + 1; i++) {
     let c = chute(i);
-    n -= c.depth * max(0.0, 1.0 - abs(s - c.s) / c.half) * sstep(-40.0, 0.0, n);
+    let u = clamp(abs(s - c.s) / c.half, 0.0, 1.0);
+    let w = (1.0 - u * u);
+    n -= c.depth * w * w * sstep(-30.0, 0.0, n);
   }
-  let face = sstep(-16.0, 16.0, n + 3.0 * vnoise(p / 9.0, 0x13u));
-  let lumps = 2.5 * fbmBL(p, 60.0, 4, 0.5, labPx(), 0x14u);
-  return PLAIN + CLIFF * face + lumps * (0.4 + face) + 1.5 * fbmBL(p, 25.0, 3, 0.5, labPx(), 0x15u) * face * (1.0 - face) * 4.0;
+  return n;
+}
+// The bare escarpment: the face is a steep sigmoid about 26 px wide. cheap = no fine lumps (for the masks).
+fn bedrockN(p: vec2f, n: f32, cheap: bool) -> f32 {
+  let face = sstep(-13.0, 13.0, n);
+  if (cheap) { return PLAIN + CLIFF * face; }
+  let fl = 3.0 * vnoise(p / 9.0, 0x13u);
+  let f2 = sstep(-13.0, 13.0, n + fl);
+  let lumps = 2.0 * fbmBL(p, 50.0, 4, 0.5, labPx(), 0x14u);
+  let h0 = PLAIN + CLIFF * f2 + lumps * (0.3 + f2) + 6.0 * fbmBL(p, 18.0, 3, 0.5, labPx(), 0x15u) * f2 * (1.0 - f2);
+  // The face's own gullies and buttresses (lib.wgsl gullies(), steered up the face).
+  let wall = 4.0 * f2 * (1.0 - f2);
+  return gullies(p, h0, CNRM, 1.6 * wall, 26.0, 0.5, 3, 3.0 * labPx(), 0x77u);
 }
 
 // A concave talus profile: f(0) = 0, f(1) = 1, slope 1.31 at the apex and 0.69 at the toe (in units of the mean slope).
 fn coneProfile(t: f32) -> f32 { let u = clamp(t, 0.0, 1.0); return (1.15 * u - 0.275 * u * u) / 0.875; }
 
 // The talus field at p: (height above the plain, run-down fraction t of the dominant cone 0..1 (beyond the toe > 1),
-// cone length L px). The apron counts as a cone of its own with apex on the cliff foot.
-fn talus(p: vec2f) -> vec3f {
+// cone length L px). The apron counts as a cone of its own with its apex on the cliff foot.
+fn talus(p: vec2f, s: f32) -> vec3f {
   if (prm.cones <= 0.0) { return vec3f(0.0, 9.0, 1.0); }
-  let s = cliffS(p);
   let i0 = i32(floor(s / CHUTE));
-  var best = 0.0; var tb = 9.0; var Lb = 1.0; var dmin = 1e9;
+  var best = 0.0; var tb = 9.0; var Lb = 1.0;
   for (var i = i0 - 1; i <= i0 + 1; i++) {
     let c = chute(i);
     let H = c.ah - PLAIN;
     let L = H / prm.repose;
-    let d = distance(p, c.apex);
-    let t = d / L;
+    let t = distance(p, c.apex) / L;
     let hc = H * (1.0 - coneProfile(t));
-    if (hc > best) { best = hc; tb = t; Lb = L; }
-    if (t < tb && best <= 0.0) { tb = t; Lb = L; }
+    if (hc > best || (best <= 0.0 && t < tb)) { best = max(hc, 0.0); tb = t; Lb = L; }
   }
-  // Apron: a low fillet along the foot, 8-18 units, at the same repose.
-  let nf = dot(p - CORG, CNRM) - cliffLine(s) + 16.0;
-  let aH = (8.0 + 10.0 * (vnoise(vec2f(s / 40.0, 7.0), 0x16u) * 0.5 + 0.5)) * prm.cones;
+  // Apron: a low fillet along the foot, 6-16 units, at the same repose.
+  let nf = dot(p - CORG, CNRM) - cliffLine(s) + 11.0;
+  let aH = (6.0 + 10.0 * (vnoise(vec2f(s / 40.0, 7.0), 0x16u) * 0.5 + 0.5)) * prm.cones;
   let aL = aH / prm.repose;
   let ta = -nf / aL;
-  let ha = select(aH * (1.0 - coneProfile(ta)), 0.0, ta < 0.0);
-  if (ha > best) { best = ha; tb = ta; Lb = aL; }
+  let ha = select(aH * (1.0 - coneProfile(ta)), aH, ta < 0.0);
+  if (ha > best) { best = ha; tb = max(ta, 0.0); Lb = aL; }
   return vec3f(best, tb, Lb);
 }
 
-fn baseGround(p: vec2f) -> f32 {
-  let b = bedrock(p);
-  let t = talus(p);
-  return smax(b, PLAIN + t.x + 1.0 * fbmBL(p, 30.0, 3, 0.5, labPx(), 0x17u) * sstep(0.0, 4.0, t.x), 5.0);
-}
-
-// The masks: (supply, d50 px, sigma log2, fines).
-fn ldMask(q: vec2f) -> vec4f {
-  let b = bedrock(q);
-  let t = talus(q);
-  let face = sstep(PLAIN + 0.25 * CLIFF, PLAIN + 0.5 * CLIFF, b) * (1.0 - sstep(PLAIN + 0.85 * CLIFF, PLAIN + 0.97 * CLIFF, b));
-  let onFace = face * sstep(0.0, 6.0, b - (PLAIN + t.x));     // the bare face above the talus
+// The masks: population a (supply, d50 px, sigma log2, fines) and b, the coarse runout blocks.
+fn ldMask(q: vec2f) -> LdMask {
+  var m: LdMask;
+  let s = cliffS(q);
+  let n = cliffN(q, s);
+  let b = bedrockN(q, n, true);
+  let t = talus(q, s);
+  let onTalus = sstep(-1.0, 2.0, PLAIN + t.x - b) * sstep(0.0, 1.5, t.x);
+  let plateau = sstep(PLAIN + 0.9 * CLIFF, PLAIN + 0.98 * CLIFF, b) * (1.0 - onTalus);
+  let face = sstep(PLAIN + 0.15 * CLIFF, PLAIN + 0.35 * CLIFF, b) * (1.0 - plateau) * (1.0 - onTalus);
   if (prm.sorting < 0.0) {
     // Today: one class of chips in a band at the foot, as debrisStones() admits them from arrivals.
-    let n = dot(q - CORG, CNRM) - cliffLine(cliffS(q));
-    let band = sstep(-80.0, -30.0, n) * (1.0 - sstep(-20.0, -12.0, n));
-    return vec4f(0.35 * band * prm.supply, prm.size, 0.2, 0.3);
+    let band = sstep(-80.0, -30.0, n) * (1.0 - sstep(-18.0, -12.0, n));
+    m.a = vec4f(0.35 * band * prm.supply, prm.size, 0.2, 0.3);
+    return m;
   }
-  let plateau = sstep(PLAIN + 0.9 * CLIFF, PLAIN + 0.98 * CLIFF, b);
-  var S = 0.0; var d50 = 2.0; var sig = 1.0; var fines = 0.6;
-  if (t.y <= 1.0) {
+  // The plain: sparse gravel. The plateau: residual chips of the caprock.
+  var a = vec4f(0.05, 2.5, 1.0, 0.6);
+  a = mix(a, vec4f(0.06, 3.0, 0.8, 0.45), plateau);
+  if (onTalus > 0.0 && t.y <= 1.0) {
     // On talus: clast-supported, fall sorted. d50 grows from a fifth of the size at the apex to all of it at the toe.
-    let sorted = mix(0.6, mix(0.18, 1.0, pow(t.y, 1.2)), prm.sorting);
-    S = 0.95 * sstep(0.0, 2.0, t.x);
-    d50 = prm.size * sorted;
-    sig = mix(1.8, 0.9, prm.sorting);
-    fines = mix(0.25, 0.08 + 0.35 * t.y * t.y, prm.sorting);
+    let sorted = mix(0.5, mix(0.12, 1.0, pow(t.y, 1.5)), prm.sorting);
+    let ta = vec4f(0.95, prm.size * sorted, mix(1.8, 0.9, prm.sorting), mix(0.25, 0.08 + 0.3 * t.y * t.y, prm.sorting));
+    a = mix(a, ta, onTalus);
   }
-  // Runout: beyond the toe the largest blocks, fewer with distance (about a fifth of the cone length).
-  let e = max(t.y - 1.0, 0.0);
-  let run = select(0.0, 0.55 * exp(-e / 0.2), t.y > 1.0 && t.y < 2.5);
-  if (run > S * 0.5) {
-    S = max(S, run);
-    d50 = prm.size * mix(0.6, 1.25, prm.sorting);
-    sig = mix(1.8, 0.6, prm.sorting);
-    fines = 0.5;
-  }
-  // Residual chips on the plateau (weathered caprock), sparse gravel on the plain, nothing on the bare face.
-  S = max(S, 0.12 * plateau);
-  if (plateau > 0.5) { d50 = 3.0; sig = 1.0; fines = 0.35; }
-  S = max(S, 0.05 * (1.0 - plateau));
-  S *= (1.0 - onFace) * prm.supply;
-  return vec4f(S, d50, sig, fines);
+  // Runout: beyond the toe the largest blocks, fewer with distance; unsorted talus spreads them over the cone instead.
+  let e = t.y - 1.0;
+  var run = select(0.0, 0.45 * exp(-e / 0.25), e > 0.0 && e < 1.2) * prm.sorting;
+  run = max(run, 0.08 * (1.0 - prm.sorting) * onTalus);
+  m.b = vec4f(run, prm.size * 1.3, 0.45, 0.0);
+  a.x *= (1.0 - face) * prm.supply;
+  m.b.x *= (1.0 - face) * prm.supply;
+  m.a = a;
+  return m;
 }
 fn ldShapeAt(q: vec2f) -> vec2f { return vec2f(prm.round, prm.slab); }
 
+var<private> gTal: f32;
 fn heightAt(p: vec2f) -> f32 {
-  let g = baseGround(p);
+  let s = cliffS(p);
+  let n = cliffN(p, s);
+  let b = bedrockN(p, n, false);
+  let t = talus(p, s);
+  let tl = PLAIN + t.x + 0.8 * fbmBL(p, 30.0, 3, 0.5, labPx(), 0x17u) * sstep(0.0, 4.0, t.x);
+  let g = smax(b, tl, 4.0);
+  gTal = sstep(-1.0, 1.5, tl - b) * sstep(0.5, 3.0, t.x) * (1.0 - sstep(0.9, 1.15, t.y));
   return g + ldScatter(p);
 }
 fn matAt(p: vec2f, h: f32) -> vec4f {
-  let t = talus(p);
-  let onTalus = sstep(0.5, 3.0, t.x) * (1.0 - sstep(0.95, 1.05, t.y));
-  if (ldOut.y > 0.0) { return vec4f(ldOut.y, onTalus, 0.0, ldOut.w); }
-  return vec4f(0.0, 0.7 * onTalus, 0.0, 2.0 + ldOut.z);
+  if (ldOut.y > 0.0) { return vec4f(ldOut.y, gTal, 0.0, ldOut.w); }
+  return vec4f(0.0, 0.75 * gTal, 0.0, 2.0 + ldOut.z);
 }
 fn albedoAt(p: vec2f, h: f32, n: vec3f, m: vec4f) -> vec3f {
   let slope = length(n.xy) / max(n.z, 1e-3);
   var g = lab.cGround.rgb;
-  g = mix(g, lab.cGrass.rgb, sstep(0.15, 0.4, slope) * (1.0 - sstep(0.8, 1.2, slope)) * (1.0 - m.y));
-  g = mix(g, lab.cRock.rgb, sstep(1.1, 1.9, slope) * (1.0 - m.y) * (1.0 - m.x));
+  g = mix(g, lab.cGrass.rgb, sstep(0.15, 0.4, slope) * (1.0 - sstep(0.8, 1.2, slope)) * (1.0 - m.y) * (1.0 - m.x));
+  g = mix(g, lab.cRock.rgb, sstep(1.0, 1.8, slope) * (1.0 - m.y) * (1.0 - m.x));
   return ldAlbedo(p, h, n, m, g);
 }
 `,
