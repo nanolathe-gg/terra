@@ -1,0 +1,344 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Stream power prototype</title>
+<body style="margin:0;background:#222">
+<canvas id="c"></canvas>
+<pre id="log" style="color:#ddd"></pre>
+<script type="module">
+// Prototype: a mountain built the way engine-shape.wgsl builds kind 4 (a swept curve times value-noise lumps), then
+// variants of a slope-aligned gully filter evaluated as a pure function of (position, base height, base gradient).
+// Height units and px follow the engine: the art pixel is the unit, slopes ~0.1 (gentle) to ~2.5 (cliff).
+const W = 640, H = 448;
+const params = new URLSearchParams(location.search);
+// Stream power: the gully harness plus a coarse stream-power pass (E = K A^m S, n = 1, multiple-flow-direction drainage area,
+// gather only, ping-pong) on an S-px grid before the filter; its carve is upsampled bilinearly (use bicubic in the engine).
+// Extra query: spe or sharp+spe in v=, it (iterations, even), K, m, S (grid px). Steer=2 steers the filter by a 40-px low-pass.
+// Variants: swept (today's construction, no filter), cells3 (3x3 summed stripes), soft (2x2 normalised stripes, cosine profile),
+// sharp (2x2 normalised stripes folded to sharp crests and round floors: the recommended one).
+// Query: v=a,b,..  f0 (first octave, cycles/px; .016 = 62 px)  amp (depth per wavelength per unit slope)  gain (per octave)
+//        oct (octaves)  steer (1: the stroke's own fall line, 0: the lumpy height's gradient)  crest (1: fade at the crest)
+const variants = (params.get('v') || 'swept,sharp').split(',');
+const log = s => { document.getElementById('log').textContent += s + '\n'; };
+
+const WGSL = /* wgsl */`
+struct P { w: u32, h: u32, variant: u32, octaves: u32, f0: f32, amp: f32, seed: u32, gain: f32, steer: u32, crestFade: f32, useSpe: u32, S: u32, speK: f32, speM: f32, cw: u32, ch: u32 };
+@group(0) @binding(0) var<uniform> P_: P;
+@group(0) @binding(1) var<storage, read_write> base: array<f32>;
+@group(0) @binding(2) var<storage, read_write> outH: array<f32>;
+@group(0) @binding(3) var<storage, read_write> rgba: array<u32>;
+@group(0) @binding(4) var<storage, read_write> smooth_: array<f32>;
+@group(0) @binding(5) var<storage, read_write> cIn: array<vec2f>;
+@group(0) @binding(6) var<storage, read_write> cOut: array<vec2f>;
+@group(0) @binding(7) var<storage, read_write> c0: array<f32>;
+
+const TAU = 6.2831853;
+fn hashu(x: i32, y: i32, s: u32) -> u32 {
+  var n = (bitcast<u32>(x) * 374761393u) ^ (bitcast<u32>(y) * 668265263u) ^ s;
+  n = (n ^ (n >> 13u)) * 1274126177u;
+  return n ^ (n >> 16u);
+}
+fn hashi(x: i32, y: i32, s: u32) -> f32 { return f32(hashu(x, y, s)) / 4294967295.0 * 2.0 - 1.0; }
+fn sm(a: f32, b: f32, v: f32) -> f32 { let t = clamp((v - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+// The engine's value noise (engine-shape.wgsl vnoise), unchanged.
+fn vnoise(x: f32, y: f32, s: u32) -> f32 {
+  let fx = floor(x); let fy = floor(y);
+  let ix = i32(fx); let iy = i32(fy);
+  let tx = sm(0.0, 1.0, x - fx); let ty = sm(0.0, 1.0, y - fy);
+  let a = hashi(ix, iy, s); let b = hashi(ix + 1, iy, s); let c = hashi(ix, iy + 1, s); let d = hashi(ix + 1, iy + 1, s);
+  return (a + (b - a) * tx) * (1.0 - ty) + (c + (d - c) * tx) * ty;
+}
+fn segDist(p: vec2f, a: vec2f, b: vec2f) -> f32 {
+  let ab = b - a; let t = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
+  return length(p - a - ab * t);
+}
+// A mountain like kind 4: a ridge path, a concave-flanked curve, lumps (1 + rough * (A nCW + B nDet)), a jagged crest.
+fn mountainSmooth(p: vec2f) -> f32 {
+  let pts = array<vec2f, 4>(vec2f(110.0, 300.0), vec2f(250.0, 190.0), vec2f(400.0, 230.0), vec2f(540.0, 140.0));
+  // A soft minimum over the segments (exponential, k px): the distance's gradient turns smoothly round a bend, so the fall
+  // line has no jump at the bisector. Only the steering reads this; the height keeps the hard minimum.
+  let k = 28.0; var acc = 0.0;
+  for (var j = 0; j < 3; j++) { acc += exp(-segDist(p, pts[j], pts[j + 1]) / k); }
+  let d = -k * log(max(acc, 1e-30));
+  let r = clamp(d / 150.0, 0.0, 1.0);
+  let t = 1.0 - r;
+  return 20.0 + 125.0 * t * t * (1.6 - 0.6 * t);
+}
+fn mountain(p: vec2f) -> f32 {
+  let pts = array<vec2f, 4>(vec2f(110.0, 300.0), vec2f(250.0, 190.0), vec2f(400.0, 230.0), vec2f(540.0, 140.0));
+  var d = 1e9;
+  for (var k = 0; k < 3; k++) { d = min(d, segDist(p, pts[k], pts[k + 1])); }
+  let wob = 18.0 * vnoise(p.x / 70.0, p.y / 70.0, 0x51u);
+  let reach = 150.0 * (1.0 + 0.25 * vnoise(p.x / 120.0, p.y / 120.0, 0x77u));
+  let r = clamp((d + wob) / reach, 0.0, 1.0);
+  let t = 1.0 - r;
+  let c = t * t * (1.6 - 0.6 * t);                  // concave foot, rounded crest
+  let nCW = vnoise(p.x / 55.0, p.y / 55.0, 0x1863u);
+  let nDet = vnoise(p.x / 22.0, p.y / 22.0, 0x32a7u);
+  let lumps = 1.0 + 0.45 * (0.65 * nCW + 0.35 * nDet);
+  let jag = 1.0 - 0.35 * (0.5 - 0.5 * (0.6 * vnoise(p.x / 42.0, p.y / 42.0, 0x6b1u) + 0.4 * vnoise(p.x / 16.0, p.y / 16.0, 0x1d7u)));
+  return 20.0 + 125.0 * c * lumps * mix(1.0, jag, sm(0.5, 0.9, c));
+}
+
+@compute @workgroup_size(8, 8)
+fn baseMain(@builtin(global_invocation_id) g: vec3u) {
+  if (g.x >= P_.w || g.y >= P_.h) { return; }
+  base[g.y * P_.w + g.x] = mountain(vec2f(f32(g.x), f32(g.y)));
+  smooth_[g.y * P_.w + g.x] = mountainSmooth(vec2f(f32(g.x), f32(g.y)));
+}
+fn Sm(x: i32, y: i32) -> f32 { return smooth_[u32(clamp(y, 0, i32(P_.h) - 1)) * P_.w + u32(clamp(x, 0, i32(P_.w) - 1))]; }
+@compute @workgroup_size(8, 8)
+fn blurMain(@builtin(global_invocation_id) g: vec3u) {
+  if (g.x >= P_.w || g.y >= P_.h || P_.steer != 2u) { return; }
+  // An 11 x 11 tent of the combined height at a 4-px stride: a low-pass about 40 px across (apron 20 px).
+  var acc = 0.0; var wsum = 0.0;
+  for (var j = -5; j <= 5; j++) { for (var i = -5; i <= 5; i++) {
+    let w = f32(6 - abs(i)) * f32(6 - abs(j));
+    acc += w * Bd(i32(g.x) + i * 4, i32(g.y) + j * 4); wsum += w;
+  } }
+  smooth_[g.y * P_.w + g.x] = acc / wsum;
+}
+fn cidx(x: i32, y: i32) -> u32 { return u32(clamp(y, 0, i32(P_.ch) - 1)) * P_.cw + u32(clamp(x, 0, i32(P_.cw) - 1)); }
+const NB = array<vec2i, 8>(vec2i(1, 0), vec2i(-1, 0), vec2i(0, 1), vec2i(0, -1), vec2i(1, 1), vec2i(-1, 1), vec2i(1, -1), vec2i(-1, -1));
+@compute @workgroup_size(8, 8)
+fn coarseInit(@builtin(global_invocation_id) g: vec3u) {
+  if (g.x >= P_.cw || g.y >= P_.ch) { return; }
+  let h = B(i32(g.x * P_.S), i32(g.y * P_.S));
+  let i = g.y * P_.cw + g.x;
+  c0[i] = h; cIn[i] = vec2f(h, 1.0); cOut[i] = vec2f(h, 1.0);
+}
+// One iteration, gather only (each thread writes its own cell; reads are of cIn): drainage area from the uphill neighbours' share
+// of their outflow (weights slope^1.3 over their downhill neighbours), then erosion by K A^m S toward the steepest receiver, never
+// below it. Map edges and the plain are outlets: they keep their height.
+@compute @workgroup_size(8, 8)
+fn speMain(@builtin(global_invocation_id) g: vec3u) {
+  if (g.x >= P_.cw || g.y >= P_.ch) { return; }
+  let x = i32(g.x); let y = i32(g.y);
+  let i = cidx(x, y);
+  let h = cIn[i].x;
+  let cell = f32(P_.S);
+  var incoming = 0.0;
+  for (var k = 0; k < 8; k++) {
+    let q = vec2i(x, y) + NB[k];
+    if (q.x < 0 || q.y < 0 || q.x >= i32(P_.cw) || q.y >= i32(P_.ch)) { continue; }
+    let hq = cIn[cidx(q.x, q.y)].x;
+    if (hq <= h) { continue; }
+    var den = 0.0;
+    for (var j = 0; j < 8; j++) {
+      let r = q + NB[j];
+      let hr = cIn[cidx(r.x, r.y)].x;
+      if (hr < hq) { den += pow((hq - hr) / (cell * length(vec2f(NB[j]))), 1.3); }
+    }
+    let sq = pow((hq - h) / (cell * length(vec2f(NB[k]))), 1.3);
+    incoming += cIn[cidx(q.x, q.y)].y * sq / max(den, 1e-9);
+  }
+  let A = 1.0 + incoming;
+  var S = 0.0; var hrec = h;
+  for (var k = 0; k < 8; k++) {
+    let hn = cIn[cidx(x + NB[k].x, y + NB[k].y)].x;
+    let s = (h - hn) / (cell * length(vec2f(NB[k])));
+    if (s > S) { S = s; hrec = hn; }
+  }
+  var hNew = h;
+  let edge = x == 0 || y == 0 || x == i32(P_.cw) - 1 || y == i32(P_.ch) - 1;
+  if (!edge && h > 21.0 && S > 0.0) { hNew = max(h - P_.speK * pow(A, P_.speM) * S, hrec); }
+  cOut[i] = vec2f(hNew, A);
+}
+fn delta(x: i32, y: i32) -> f32 {
+  if (P_.useSpe == 0u) { return 0.0; }
+  let q = vec2f(f32(x), f32(y)) / f32(P_.S);
+  let a = vec2i(floor(q)); let f = fract(q);
+  let d00 = cIn[cidx(a.x, a.y)].x - c0[cidx(a.x, a.y)]; let d10 = cIn[cidx(a.x + 1, a.y)].x - c0[cidx(a.x + 1, a.y)];
+  let d01 = cIn[cidx(a.x, a.y + 1)].x - c0[cidx(a.x, a.y + 1)]; let d11 = cIn[cidx(a.x + 1, a.y + 1)].x - c0[cidx(a.x + 1, a.y + 1)];
+  return mix(mix(d00, d10, f.x), mix(d01, d11, f.x), f.y);
+}
+fn Bd(x: i32, y: i32) -> f32 { return B(x, y) + delta(x, y); }
+fn B(x: i32, y: i32) -> f32 { return base[u32(clamp(y, 0, i32(P_.h) - 1)) * P_.w + u32(clamp(x, 0, i32(P_.w) - 1))]; }
+
+// One octave of slope-aligned stripes at frequency f (cycles per px). Returns (cos, sin) of a stripe phase that varies
+// across the slope direction dir, so its crests and troughs run downhill. Cells are jittered points on a 1/f lattice;
+// each contributes exp(-|o|^2 f^2 k) * (cos, sin)(TAU f dot(o, perp)).
+//   n = 3: a 3x3 neighbourhood, summed (amplitude varies: interference thins it where cells disagree).
+//   n = 2: the four nearest cells with a bilinear-style weight, and the sum normalised to unit length so the stripes keep
+//          one amplitude everywhere (the idea published as phase-continuous "Phacelle" noise; written here from the idea).
+fn stripes(p: vec2f, dir: vec2f, f: f32, n: i32, seed: u32) -> vec2f {
+  let perp = vec2f(-dir.y, dir.x);
+  let q = p * f;
+  var acc = vec2f(0.0);
+  if (n == 3) {
+    let c0 = floor(q);
+    for (var j = -1; j <= 1; j++) { for (var i = -1; i <= 1; i++) {
+      let cell = c0 + vec2f(f32(i), f32(j));
+      let jit = vec2f(hashi(i32(cell.x), i32(cell.y), seed), hashi(i32(cell.x), i32(cell.y), seed ^ 0x9e37u)) * 0.5;
+      let o = q - (cell + 0.5 + jit);
+      let w = exp(-dot(o, o) * 1.6);
+      let ph = TAU * dot(o, perp);
+      acc += w * vec2f(cos(ph), sin(ph));
+    } }
+    return acc;
+  }
+  let c0 = floor(q - 0.5);
+  let fr = q - 0.5 - c0;
+  for (var j = 0; j <= 1; j++) { for (var i = 0; i <= 1; i++) {
+    let cell = c0 + vec2f(f32(i), f32(j));
+    let jit = vec2f(hashi(i32(cell.x), i32(cell.y), seed), hashi(i32(cell.x), i32(cell.y), seed ^ 0x9e37u)) * 0.35;
+    let o = q - (cell + 0.5 + jit);
+    let wx = select(1.0 - fr.x, fr.x, i == 1); let wy = select(1.0 - fr.y, fr.y, j == 1);
+    let w = wx * wx * (3.0 - 2.0 * wx) * wy * wy * (3.0 - 2.0 * wy);
+    let ph = TAU * dot(o, perp);
+    acc += w * vec2f(cos(ph), sin(ph));
+  } }
+  let l = length(acc);
+  return select(vec2f(1.0, 0.0), acc / l, l > 1e-5);
+}
+
+// The gully filter: octaves of stripes aligned to the current gradient. Each octave's height change feeds its analytic
+// derivative back into the gradient, so the next (finer) octave's stripes follow the gullies already cut: they branch.
+// The depth of an octave is its wavelength times the local slope times amp (a gully as steep as the face it is cut in),
+// faded out on gentle ground and at crest and foot by the slope term alone (no extra mask fields).
+fn gullied(p: vec2f, h0: f32, g0: vec2f, steer: vec2f, qS: f32, variant: u32) -> f32 {
+  var h = h0; var g = select(g0, steer * max(length(g0), 1e-3) / max(length(steer), 1e-6), P_.steer != 0u && length(steer) > 1e-6);
+  var f = P_.f0;
+  let s0 = length(g0);
+  let onSlope = sm(0.06, 0.35, s0) * sm(22.0, 50.0, h0) * (1.0 - P_.crestFade * sm(0.80, 0.98, (qS - 20.0) / 125.0));
+  var depthK = P_.amp;
+  for (var k = 0u; k < P_.octaves; k++) {
+    let s = length(g);
+    if (s < 1e-4) { break; }
+    let dir = g / s;
+    let perp = vec2f(-dir.y, dir.x);
+    let n = select(2, 3, variant == 1u);
+    let cs = stripes(p, dir, f, n, P_.seed + k * 0x3c6ef35fu);
+    let wave = 1.0 / f;
+    let a = depthK * wave * min(s0, 1.6) * onSlope;
+    var dh = 0.0; var dg = vec2f(0.0);
+    if (variant == 3u) {
+      // Sharp crests between round gully floors: fold the cosine (|sin| style) so ridges are creases.
+      // value = 1 - 2|sin| in [-1, 1]; d/dphase = -2 sign(sin) cos.
+      dh = a * (0.5 - abs(cs.y));
+      dg = -a * sign(cs.y) * cs.x * TAU * f * perp;
+    } else {
+      dh = a * 0.5 * cs.x;
+      dg = -a * 0.5 * cs.y * TAU * f * perp;
+    }
+    h += dh;
+    g += dg;
+    f *= 2.0; depthK *= P_.gain;
+  }
+  return h;
+}
+
+@compute @workgroup_size(8, 8)
+fn filterMain(@builtin(global_invocation_id) gi: vec3u) {
+  if (gi.x >= P_.w || gi.y >= P_.h) { return; }
+  let x = i32(gi.x); let y = i32(gi.y);
+  let h0 = Bd(x, y);
+  // One-cell apron: the gradient is a central difference of the base field (the engine's fields hold the same).
+  let g0 = vec2f(Bd(x + 1, y) - Bd(x - 1, y), Bd(x, y + 1) - Bd(x, y - 1)) * 0.5;
+  var h = h0;
+  let st = vec2f(Sm(x + 1, y) - Sm(x - 1, y), Sm(x, y + 1) - Sm(x, y - 1)) * 0.5;
+  if (P_.variant != 0u) { h = gullied(vec2f(f32(x), f32(y)), h0, g0, st, Sm(x, y), P_.variant); }
+  outH[gi.y * P_.w + gi.x] = h;
+}
+
+fn O(x: i32, y: i32) -> f32 { return outH[u32(clamp(y, 0, i32(P_.h) - 1)) * P_.w + u32(clamp(x, 0, i32(P_.w) - 1))]; }
+@compute @workgroup_size(8, 8)
+fn shadeMain(@builtin(global_invocation_id) gi: vec3u) {
+  if (gi.x >= P_.w || gi.y >= P_.h) { return; }
+  let x = i32(gi.x); let y = i32(gi.y);
+  let h = O(x, y);
+  let gx = (O(x + 1, y) - O(x - 1, y)) * 0.5; let gy = (O(x, y + 1) - O(x, y - 1)) * 0.5;
+  let nrm = normalize(vec3f(-gx, -gy, 2.2));
+  let sun = normalize(vec3f(-0.55, -0.65, 0.55));   // from the upper left, as the review sun
+  // A cheap cast shadow: march toward the sun.
+  var lit = 1.0;
+  for (var k = 1; k <= 24; k++) {
+    let t = f32(k) * 2.0;
+    let sx = x + i32(round(-0.55 / 0.85 * t)); let sy = y + i32(round(-0.65 / 0.85 * t));
+    if (O(sx, sy) > h + t * 1.1) { lit = 0.6; break; }
+  }
+  let diff = max(dot(nrm, sun), 0.0) * lit;
+  let slope = length(vec2f(gx, gy));
+  let grass = vec3f(0.36, 0.45, 0.22); let rock = vec3f(0.55, 0.48, 0.40); let high = vec3f(0.68, 0.64, 0.58);
+  var col = mix(grass, rock, sm(0.35, 0.9, slope));
+  col = mix(col, high, sm(115.0, 150.0, h) * 0.5);
+  let c = clamp(col * (0.30 + 0.95 * diff), vec3f(0.0), vec3f(1.0));
+  let r = u32(c.x * 255.0); let gg = u32(c.y * 255.0); let b = u32(c.z * 255.0);
+  rgba[gi.y * P_.w + gi.x] = r | (gg << 8u) | (b << 16u) | (255u << 24u);
+}
+`;
+
+const adapter = await navigator.gpu.requestAdapter();
+const ts = adapter.features.has('timestamp-query');
+const device = await adapter.requestDevice({requiredFeatures: ts ? ['timestamp-query'] : []});
+const module = device.createShaderModule({code: WGSL});
+const info = await module.getCompilationInfo();
+for (const m of info.messages) log(`${m.type} ${m.lineNum}:${m.linePos} ${m.message}`);
+const C = GPUShaderStage.COMPUTE;
+const bgl = device.createBindGroupLayout({entries: [{binding: 0, visibility: C, buffer: {type: 'uniform'}}, ...[1, 2, 3, 4, 5, 6, 7].map(b => ({binding: b, visibility: C, buffer: {type: 'storage'}}))]});
+const playout = device.createPipelineLayout({bindGroupLayouts: [bgl]});
+const pipe = e => device.createComputePipeline({layout: playout, compute: {module, entryPoint: e}});
+const pInit = pipe('coarseInit'), pSpe = pipe('speMain'), pBase = pipe('baseMain'), pBlur = pipe('blurMain'), pFilter = pipe('filterMain'), pShade = pipe('shadeMain');
+const N = W * H;
+const ubuf = device.createBuffer({size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC;
+const SS = Number(params.get('S') || 4), CW = Math.ceil(W / SS), CH = Math.ceil(H / SS), NC = CW * CH;
+const cX = device.createBuffer({size: NC * 8, usage: S}), cY = device.createBuffer({size: NC * 8, usage: S}), c0B = device.createBuffer({size: NC * 4, usage: S});
+const smB = device.createBuffer({size: N * 4, usage: S}), baseB = device.createBuffer({size: N * 4, usage: S}), outB = device.createBuffer({size: N * 4, usage: S}), rgbaB = device.createBuffer({size: N * 4, usage: S});
+const read = device.createBuffer({size: N * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST});
+const readH = device.createBuffer({size: N * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST});
+window.__corners = {};
+const qs = ts ? device.createQuerySet({type: 'timestamp', count: 6}) : null;
+const qres = ts ? device.createBuffer({size: 48, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC}) : null;
+const qread = ts ? device.createBuffer({size: 48, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}) : null;
+const mk = (a, b) => device.createBindGroup({layout: bgl, entries: [{binding: 0, resource: {buffer: ubuf}}, {binding: 1, resource: {buffer: baseB}}, {binding: 2, resource: {buffer: outB}}, {binding: 3, resource: {buffer: rgbaB}}, {binding: 4, resource: {buffer: smB}}, {binding: 5, resource: {buffer: a}}, {binding: 6, resource: {buffer: b}}, {binding: 7, resource: {buffer: c0B}}]});
+const bgA = mk(cX, cY), bgB = mk(cY, cX);
+const bg = p => bgA;
+const VID = {swept: 0, cells3: 1, soft: 2, sharp: 3, spe: 0, 'sharp+spe': 3};
+const canvas = document.getElementById('c');
+const cols = 2, rows = Math.ceil(variants.length / cols);
+canvas.width = W * cols; canvas.height = H * rows;
+const ctx = canvas.getContext('2d');
+const results = {};
+for (let vi = 0; vi < variants.length; vi++) {
+  const v = variants[vi];
+  const octaves = Number(params.get('oct') || 5), f0 = Number(params.get('f0') || 0.016), amp = Number(params.get('amp') || 0.45);
+  const u = new ArrayBuffer(64), dv = new DataView(u);
+  dv.setUint32(0, W, true); dv.setUint32(4, H, true); dv.setUint32(8, VID[v], true); dv.setUint32(12, octaves, true);
+  dv.setFloat32(16, f0, true); dv.setFloat32(20, amp, true); dv.setUint32(24, 0x1234, true); dv.setFloat32(28, Number(params.get('gain') || 0.5), true);
+  dv.setUint32(32, Number(params.get('steer') ?? 1), true); dv.setUint32(40, v.includes('+spe') || v === 'spe' ? 1 : 0, true); dv.setUint32(44, SS, true); dv.setFloat32(48, Number(params.get('K') || 0.002), true); dv.setFloat32(52, Number(params.get('m') || 0.5), true); dv.setUint32(56, CW, true); dv.setUint32(60, CH, true); dv.setFloat32(36, Number(params.get('crest') ?? 0), true);
+  device.queue.writeBuffer(ubuf, 0, u);
+  const enc = device.createCommandEncoder();
+  const wg = [Math.ceil(W / 8), Math.ceil(H / 8)];
+  { const pass = enc.beginComputePass(); pass.setPipeline(pBase); pass.setBindGroup(0, bgA); pass.dispatchWorkgroups(...wg);
+    pass.setPipeline(pInit); pass.dispatchWorkgroups(Math.ceil(CW / 8), Math.ceil(CH / 8)); pass.end(); }
+  const iters = (v.includes('spe') ? Number(params.get('it') || 600) : 0) & ~1;
+  { const pass = enc.beginComputePass(ts ? {timestampWrites: {querySet: qs, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1}} : {});
+    pass.setPipeline(pSpe);
+    for (let it = 0; it < iters; it++) { pass.setBindGroup(0, it % 2 ? bgB : bgA); pass.dispatchWorkgroups(Math.ceil(CW / 8), Math.ceil(CH / 8)); }
+    pass.end(); }
+  [[pBlur, -1], [pFilter, 2], [pShade, 4]].forEach(([p, q]) => {
+    const pass = enc.beginComputePass(ts && q >= 0 ? {timestampWrites: {querySet: qs, beginningOfPassWriteIndex: q, endOfPassWriteIndex: q + 1}} : {});
+    pass.setPipeline(p); pass.setBindGroup(0, bg(p)); pass.dispatchWorkgroups(...wg); pass.end();
+  });
+  enc.copyBufferToBuffer(rgbaB, 0, read, 0, N * 4);
+  enc.copyBufferToBuffer(outB, 0, readH, 0, N * 4);
+  if (ts) { enc.resolveQuerySet(qs, 0, 6, qres, 0); enc.copyBufferToBuffer(qres, 0, qread, 0, 48); }
+  device.queue.submit([enc.finish()]);
+  await read.mapAsync(GPUMapMode.READ);
+  const px = new Uint8ClampedArray(read.getMappedRange().slice(0));
+  read.unmap();
+  await readH.mapAsync(GPUMapMode.READ);
+  { const hf = new Float32Array(readH.getMappedRange().slice(0)); readH.unmap();
+    const c = []; for (let y = 0; y < H; y += 16) for (let x = 0; x < W; x += 16) c.push(Math.max(0, Math.min(255, Math.round(hf[y * W + x]))));
+    window.__corners[v] = c; }
+  ctx.putImageData(new ImageData(px, W, H), (vi % cols) * W, Math.floor(vi / cols) * H);
+  ctx.fillStyle = '#fff'; ctx.font = '14px monospace'; ctx.fillText(v, (vi % cols) * W + 8, Math.floor(vi / cols) * H + 18);
+  if (ts) {
+    await qread.mapAsync(GPUMapMode.READ);
+    const t = new BigUint64Array(qread.getMappedRange().slice(0)); qread.unmap();
+    results[v] = {speMs: Number(t[1] - t[0]) / 1e6, filterMs: Number(t[3] - t[2]) / 1e6, shadeMs: Number(t[5] - t[4]) / 1e6};
+  }
+}
+log(JSON.stringify(results));
+window.__done = results;
+</script>
