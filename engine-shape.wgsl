@@ -705,16 +705,18 @@ fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx
   let down = lfEval(s0, s1, s2, wx + fall.x * hs, wy + fall.y * hs, base, nA, nB, nC, share, x, y, i, cells).x;
   let slope = abs(up - down) / (2.0 * hs);
   // gullies() starts from the uphill direction, as the lab's does, so each octave's own gradient, added to it, turns it the way the cut surface turns
-  // (a raised landform rises toward its path, a cut one away from it).
+  // (toward the path, except where a section dips on its way up).
   let uphill = fall * select(1.0, -1.0, up > down);
   var steer = uphill;
   if (u.framed != 0u) { steer = vec2f(u.inv0 * uphill.x + u.inv2 * uphill.y, u.inv1 * uphill.x + u.inv3 * uphill.y); }
   // On a long even face one wavelength cuts evenly spaced ribs, a comb; a broad warp across the fall line and a broad change of depth make them wander,
   // crowd, part and differ.
+  // The pattern runs in the shape's frame, whose px are fs world px: the slope and the finest wavelength go into frame px with it.
+  let fs = select(1.0, 1.0 / max(length(vec2f(u.inv0, u.inv1)), 1e-6), u.framed != 0u);
   let wv = u.gullySize; let sd = normalize(steer);
   let warp = 0.35 * wv * vnoise(lx / (1.5 * wv), ly / (1.5 * wv), u.seed ^ 0x7f4au);
   let deep = 1.0 + 0.35 * vnoise(lx / (2.0 * wv), ly / (2.0 * wv), u.seed ^ 0x2b91u);
-  return gullies(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, value, steer, slope * keep, wv, u.gully * deep, max(8.0, 3.0 * u.spacing), u.seed ^ 0x6a1u);
+  return gullies(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, value, steer, slope * keep * fs, wv, u.gully * deep, max(8.0, 3.0 * u.spacing) / fs, u.seed ^ 0x6a1u);
 }
 @compute @workgroup_size(8, 8)
 fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
