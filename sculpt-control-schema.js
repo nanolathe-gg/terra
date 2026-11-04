@@ -134,6 +134,8 @@ export function worldControlRequirement(key,v){
  if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'This world\'s faces are one material, not rock and moss interleaved, so there is nothing for this setting to place.';
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
+ // Water wets the ground only where the Time pass has rain; the worlds that run it with rain off have no wetness map to read.
+ if(key==='wetSwath'&&n('erosionRain')<=0)return 'This world\'s weathering has no rain, so no ground is wet. Moisture has nothing to move.';
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The sediment transition is built from the ground and replaces the slope cover's color outright at 100 percent Material weathering (worldPanelValues passes slopeReplaced); the texture then scales only the slope's share of the shine.
  if(key==='slopeTexture'&&n('slopeReplaced')>0&&!shiny&&!rough)return 'The sediment transition replaces the slope color at 100 percent Material weathering, so this scales only the slope\'s gloss. Lower Material weathering, or set a Gloss or Roughness above zero in one of the Shine groups, to use this setting.';
