@@ -704,7 +704,12 @@ fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx
   let slope = abs(up - down) / (2.0 * hs);
   var steer = fall;
   if (u.framed != 0u) { steer = vec2f(u.inv0 * fall.x + u.inv2 * fall.y, u.inv1 * fall.x + u.inv3 * fall.y); }
-  return gullies(vec2f(lx, ly), value, steer, slope * keep, u.gullySize, u.gully, max(8.0, 3.0 * u.spacing), u.seed ^ 0x6a1u);
+  // On a long even face one wavelength cuts evenly spaced ribs, a comb; a broad warp across the fall line and a broad change of depth make them wander,
+  // crowd, part and differ.
+  let wv = u.gullySize; let sd = normalize(steer);
+  let warp = 0.35 * wv * vnoise(lx / (1.5 * wv), ly / (1.5 * wv), u.seed ^ 0x7f4au);
+  let deep = 1.0 + 0.35 * vnoise(lx / (2.0 * wv), ly / (2.0 * wv), u.seed ^ 0x2b91u);
+  return gullies(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, value, steer, slope * keep, wv, u.gully * deep, max(8.0, 3.0 * u.spacing), u.seed ^ 0x6a1u);
 }
 @compute @workgroup_size(8, 8)
 fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
