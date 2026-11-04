@@ -65,7 +65,7 @@ KNOB_DEFAULTS = dict(
     facePx=0, terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (absolute, in height units) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
-    elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, varySize=140, varyFoot=1, varyMiddle=1,
+    heightReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, varySize=140, varyFoot=1, varyMiddle=1,
     # Painted masks (card C5): the Paint brush's first choice, and the landforms'
     # Paint inside option (channel 0 is off), with its strength.
     paintChannel=1, maskChannel=0, maskAmount=1,

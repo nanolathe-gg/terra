@@ -1,6 +1,6 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, isShouldered, hillWidths, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -426,7 +426,7 @@ export function prepareNode(n, geom, c) {
   if (kind === 'landform') {
     // H27: the elevation and how it combines, the two half widths, the along curve's table, and the variation (px in the shape's own frame: wander scales with it).
     const sd = landformSides({...q, radius});
-    Object.assign(main.u, {elev: q.elevation, combine: clamp(Math.round(q.combine || 0), 0, 2), lfFront: sd.front, lfBack: sd.back, alongBase: put(sampleKnots(alongKnots(q))),
+    Object.assign(main.u, {elev: landformElevation(q, c.sea), combine: clamp(Math.round(q.combine || 0), 0, 2), lfFront: sd.front, lfBack: sd.back, alongBase: put(sampleKnots(alongKnots(q))),
       lfWander: Math.max(0, q.wander || 0) * frameScale, lfWidth: Math.max(0, q.widthVary || 0), lfHeight: Math.max(0, q.heightVary || 0), lfSize: Math.max(8, q.varySize || 0),
       lfFoot: q.varyFoot ?? 1, lfMid: q.varyMiddle ?? 1, lfTaper: clamp(q.crestTaper || 0, 0, 1), lfRoute: clamp(q.routeSmooth || 0, 0, 1)});
   }

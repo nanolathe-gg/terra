@@ -167,3 +167,7 @@ export function sectionPreview(kind, q, shouldered, n = 160) {
   const k = strokeKnots(kind, q, shouldered), tab = sampleKnots(k.knots), back = shouldered ? sampleKnots(k.back ?? SMOOTH) : kind === 'landform' && k.back ? sampleKnots(k.back) : tab, at = tb => Float32Array.from({length: n + 1}, (_, i) => readTable(tb, i / n));
   return {water: isWater(kind), ys: at(tab), back: at(back), knots: k.knots};
 }
+
+// Resolve the authored height only at evaluation/preview time, so the same
+// sea-relative stroke follows the map's sea level without rewriting its recipe.
+export const landformElevation = (q, sea) => q.elevation + (Math.round(q.heightReference || 0) === 1 ? sea : 0);

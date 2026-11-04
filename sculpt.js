@@ -3,7 +3,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,SECTION_KINDS,FACING_CHOICES,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots} from './sculpt-shape-presets.js';
+import {sectionPreview,SECTION_KINDS,FACING_CHOICES,defaultForm,formChoices,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,isShouldered,landformReach,landformSides,landformBackSide,alongKnots,landformElevation} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -89,7 +89,7 @@ const ridgeOn=(kind,o) => (kind==='hill' || kind==='mountain') && (Math.round(o.
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
 const SECTION_KEYS=['facePx','terraces','ledge','terraceJitter','breakup'];
 // Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
-const LANDFORM_KEYS=['elevation','combine','routeSmooth','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
+const LANDFORM_KEYS=['heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -141,7 +141,8 @@ const SHAPE_FIELDS=[
   ['terraceJitter','sec-terrace-jitter','Terrace variation',SECTION_KINDS,0,100,5,100,'How much riser positions and step heights wander along the outline.'],
   ['breakup','sec-breakup','Terrace breakup',SECTION_KINDS,0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
   // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
-  ['elevation','lf-elevation','Elevation (height units)',['landform'],-80,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
+  ['heightReference','lf-height-reference','Height reference',['landform'],0,1,1,1,'Fixed elevation uses map height units. Sea level measures above or below the current sea; negative heights are below water.',[[0,'Fixed elevation'],[1,'Sea level']]],
+  ['elevation','lf-elevation','Elevation (height units)',['landform'],-335,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
   ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
   ['routeSmooth','lf-route-smooth','Smooth route',['landform'],0,100,5,100,'Keep the center of this landform clear of surface relief, cracks and debris, and protect its grade from weathering. The shoulders fade into the surrounding terrain.'],
   ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the outline moves in and out around the sides and ends, in waves as long as the Variation size. The drawn crest stays in place.'],
@@ -288,7 +289,17 @@ function buildShapeOptions() {
   $('curve-mirror').addEventListener('click',() => { mirrorSides(); if (selected>=0) { checkpoint(); queueWeather(); } });
   curveEditorEvents(); alongEditorEvents();
   for (const id of ['section-preview','along-preview']) new ResizeObserver(() => { if (!$('section-preview-control').hidden) drawSection(); }).observe($(id));
-  for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+  for (const [key,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => {
+    if(key==='heightReference'&&curveKind()==='landform'){
+      const previous=nodes[selected]?.params||toolSettings[tool]||{},next=shapeValue('heightReference');
+      const height=landformElevation({elevation:shapeValue('elevation'),heightReference:previous.heightReference},config.seaLevel);
+      heightControlRange({heightReference:next});$('lf-elevation').value=height-(next===1?config.seaLevel:0);
+    }
+    rememberTool(true); updateControls(); schedule(); persistLater();
+    // A reference switch changes the representation, not the other authored
+    // values (which may be between the inspector sliders' ticks).
+    if (selected>=0) editSelectedFromControls(key==='heightReference'?{...nodes[selected].params,heightReference:shapeValue('heightReference'),elevation:shapeValue('elevation')}:{});
+  });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
   // canceled. Without this the page stays "paused while editing" and Export
@@ -319,7 +330,12 @@ function rememberTool(custom=false) {
   if (custom) state.preset='custom';
   toolSettings[tool]=state;
 }
+function heightControlRange(p={}) {
+  const offset=Math.round(p.heightReference||0)===1?(config?.seaLevel||0):0;
+  $('lf-elevation').min=String(-80-offset);$('lf-elevation').max=String(300-offset);
+}
 function showTool(state={},kind=tool) {
+  heightControlRange(state);
   [$('amount').min,$('amount').max]=amountRange(kind).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
   $('shallow-mode').value=state.shallowMode==='passage'?'passage':'area';
@@ -379,6 +395,8 @@ function updateControls() {
   const activeTool=tool;
   if (tool==='move') tool=nodes[selected]?.params?nodes[selected].kind:'move';
   try {
+  heightControlRange({heightReference:shapeValue('heightReference')});
+  $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':'Elevation (height units) ';
   const fixed=['deep','shallow','ramp','erase','landform'].includes(tool);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=tool==='smooth' || isCover(tool)?'Strength':tool==='crystal'?'Height':tool==='lower'?'Lower by':tool==='crater' || tool==='fissure'?'Depth':tool==='offset'?'Height change':'Rise';
@@ -495,7 +513,7 @@ function mirrorSides() { const c=curveContext(),b=backKnots(c); if (!c.land || !
 function setLean(ratio) { const el=$('lean'); el.value=String(clamp(Math.round(ratio*20)*5,25,400)); el.dispatchEvent(new Event('input',{bubbles:true})); }
 // The height axis of a landform's canvases: the plain, the sea and the elevation, with room for an along curve up to 1.2.
 function heightAxis(c) {
-  const plain=config.baseHeight,sea=config.seaLevel,E=c.q.elevation,span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain,top=plain+span*1.2;
+  const plain=config.baseHeight,sea=config.seaLevel,E=landformElevation(c.q,sea),span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain,top=plain+span*1.2;
   let lo=Math.min(sea,plain,E,top),hi=Math.max(sea,plain,E,top); const pad=Math.max(5,(hi-lo)*.1); lo-=pad; hi+=pad;
   return {plain,sea,E,span,lo,hi};
 }
@@ -1128,6 +1146,7 @@ function selectNode(i) {
     if (tool!=='move') { rememberTool(); tool='move'; }
     mapFeatures?.deactivate();
     const p=n.params;
+    heightControlRange(p);
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
     $('diameter').value=clamp(p.radius*2,40,800); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('bank-width').value=Math.round(p.bankWidth*100); $('beach-flatness').value=Math.round(p.beachFlatness*100);

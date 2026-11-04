@@ -228,6 +228,16 @@ for (const world of worlds) {
       shore.strokes[0][2].card.shoreLayers = 0;
       await ev(`sculptDebug.scene(${JSON.stringify(shore.strokes)}, {ground:false})`); await ready(ev);
       await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
+      const fixedShoreHeights=await grid();
+      await setValue('lf-height-reference',1);await ready(ev);
+      const refHeights=await grid(),refError=Math.max(...refHeights.map((h,i)=>Math.abs(h-fixedShoreHeights[i])));
+      check('switching to sea reference preserves the shore', (await nodes())[0].params.elevation===-55 && refError<1e-3,{elevation:(await nodes())[0].params.elevation,refError});
+      check('sea reference labels the shared height input', await ev(`document.querySelector('label[for="lf-elevation"]').textContent.includes('Height above sea')`));
+      await setValue('lf-elevation',-30);await ready(ev);
+      check('relative height changes the bed depth', Math.abs((await ev('sculptDebug.corner(460,380).authored'))-((await ev('sculptDebug.sea'))-30))<.01);
+      await ev(`document.getElementById('undo').click(); true`);await ready(ev);
+      check('undo restores the relative depth', (await nodes())[0].params.heightReference===1 && (await nodes())[0].params.elevation===-55);
+      await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
       await setValue('fingers', 100); await setValue('finger-size', 65); await setValue('shore-layers', 5); await ready(ev);
       check('landform shore controls reach the selected node', (await nodes())[0].params.fingers === 1 && (await nodes())[0].params.fingerSize === .65 && (await nodes())[0].params.shoreLayers === 5);
       const shoreHeights = await grid();
