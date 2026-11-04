@@ -642,6 +642,70 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
   return vec2f(value, clamp(q, 0.0, 1.0));
 }
+// ---- P1 gullies: a slope-aligned stripe filter (ported from the research lab's gully filter, docs/research/lab/lib.wgsl on the research branch) ----
+// The four nearest jittered cells of a 1/f lattice, smoothstep weights, (cos, sin) of the phase across `dir` summed and normalised: stripes whose crests
+// run along dir.
+fn gullyStripes(p: vec2f, dir: vec2f, f: f32, seed: u32) -> vec2f {
+  let perp = vec2f(-dir.y, dir.x);
+  let q = p * f; let c0 = floor(q - 0.5); let fr = q - 0.5 - c0;
+  var acc = vec2f(0.0);
+  for (var j = 0; j <= 1; j++) { for (var i = 0; i <= 1; i++) {
+    let cx = i32(c0.x) + i; let cy = i32(c0.y) + j;
+    let o = q - (vec2f(f32(cx), f32(cy)) + 0.5 + 0.35 * vec2f(hashi(cx, cy, seed), hashi(cx, cy, seed ^ 0x68e31da4u)));
+    let wx = select(1.0 - fr.x, fr.x, i == 1); let wy = select(1.0 - fr.y, fr.y, j == 1);
+    let w = wx * wx * (3.0 - 2.0 * wx) * wy * wy * (3.0 - 2.0 * wy);
+    let ph = 6.2831853 * dot(o, perp);
+    acc += w * vec2f(cos(ph), sin(ph));
+  } }
+  let l = length(acc);
+  return select(vec2f(1.0, 0.0), acc / l, l > 1e-5);
+}
+// Branching gullies cut into a height h0 whose fall line is `steer` (any length) and slope `slope0`. Each octave folds its stripes (sharp crests, round
+// floors) and feeds its own gradient back into the steering, so the next octave branches. wave0: the first wavelength (px); depth: depth per wavelength
+// per unit slope, halved each octave; minWave: no octave finer than this.
+fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32, minWave: f32, seed: u32) -> f32 {
+  if (slope0 <= 0.0 || length(steer) < 1e-6) { return h0; }
+  var h = h0; var g = normalize(steer) * max(slope0, 1e-3);
+  var f = 1.0 / wave0; var dk = depth;
+  for (var k = 0; k < 8; k++) {
+    if (1.0 / f < minWave) { break; }
+    let s = length(g); if (s < 1e-5) { break; }
+    let dir = g / s; let perp = vec2f(-dir.y, dir.x);
+    let cs = gullyStripes(p, dir, f, seed + u32(k) * 0x3c6ef35fu);
+    let a = dk * (1.0 / f) * min(slope0, 1.6);
+    h += a * (0.5 - abs(cs.y));
+    g += -a * sign(cs.y) * cs.x * 6.2831853 * f * perp;
+    f *= 2.0; dk *= 0.5;
+  }
+  return h;
+}
+// A landform's gullies at a cell it raises: steered by the stroke's own fall line (a soft minimum, 28 px, over its segments' nearest points, so bends
+// blend), at the slope of the picked segment's own section across that line, faded over the foot (q 0 to 0.25) and off a smooth route. The pattern lives
+// in the shape's frame, so it moves with the shape and every tile and page computes the same value.
+fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx: f32, ly: f32, base: f32, nA: f32, nB: f32, nC: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
+  let keep = sm(0.0, 0.25, q) * (1.0 - u.lfRoute * sm(0.30, 0.92, q));
+  if (keep <= 0.0) { return value; }
+  let p = vec2f(wx, wy);
+  var acc = 0.0; var away = vec2f(0.0);
+  for (var k = 0u; k < u.nseg; k++) {
+    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
+    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
+    let s0 = Seg[(u.segBase + k) * 4u];
+    let d = s0.zw - s0.xy; let t = clamp(dot(p - s0.xy, d) / max(dot(d, d), 1e-8), 0.0, 1.0);
+    let o = p - (s0.xy + d * t); let dn = length(o);
+    if (dn < 1e-3) { continue; }
+    let w = exp(-dn / 28.0); acc += w; away += w * o / dn;
+  }
+  if (acc <= 0.0 || length(away) < 1e-5) { return value; }
+  let fall = normalize(away); let hs = max(u.spacing, 1.0);
+  let s0 = Seg[(u.segBase + pk) * 4u]; let s1 = Seg[(u.segBase + pk) * 4u + 1u]; let s2 = Seg[(u.segBase + pk) * 4u + 2u];
+  let up = lfEval(s0, s1, s2, wx - fall.x * hs, wy - fall.y * hs, base, nA, nB, nC, share, x, y, i, cells).x;
+  let down = lfEval(s0, s1, s2, wx + fall.x * hs, wy + fall.y * hs, base, nA, nB, nC, share, x, y, i, cells).x;
+  let slope = abs(up - down) / (2.0 * hs);
+  var steer = fall;
+  if (u.framed != 0u) { steer = vec2f(u.inv0 * fall.x + u.inv2 * fall.y, u.inv1 * fall.x + u.inv3 * fall.y); }
+  return gullies(vec2f(lx, ly), value, steer, slope * keep, u.gullySize, u.gully, max(8.0, 3.0 * u.spacing), u.seed ^ 0x6a1u);
+}
 @compute @workgroup_size(8, 8)
 fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -665,7 +729,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
   }
   var nearest = 3.0e38; var trunk = 0xffffffffu;
-  var pick = vec2f(base, 0.0); var seen = false;
+  var pick = vec2f(base, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
     if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
@@ -683,7 +747,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     if (seen) {
       if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
     }
-    if (better) { pick = cand; seen = true; }
+    if (better) { pick = cand; seen = true; pk = k; psh = 0.0; }
   }
   if (trunk != 0xffffffffu) {
     // The cell's place along the path. On the inside of a bend the nearest point jumps from one segment to the next, so the place is blended over the
@@ -714,13 +778,14 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
       if (seen) {
         if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
       }
-      if (better) { pick = cand; seen = true; }
+      if (better) { pick = cand; seen = true; pk = trunk; psh = ss / sw; }
     }
   }
   if (!seen) { return; }
   // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
   if (u.coPutW != 0u) { Sc[4u * cells + i] = pick.y; }
   var value = pick.x;
+  if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   // The influence: how much of the section the cell stands in, where the stroke moved the height (a unit or more is all of it). Masks, routes, protection and
