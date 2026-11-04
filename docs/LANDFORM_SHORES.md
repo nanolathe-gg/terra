@@ -1,12 +1,12 @@
-# Landform shore prototype — November 3, 2026
+# Landform shores — November 3, 2026
 
-Prototype branch: `prototype/landform-shores`, based on main `73ca2c3`. This is a visual/behavior experiment, not a tool retirement or an approved default change. No backward-compatibility work is required. Rendered images, retail references and height samples remain outside Git.
+The reviewed shore prototype lands from `landform-shores`, including the requested sea-relative height and consolidated Steps controls. Current main `78c0685` is merged. This adds shore capability to the existing landform tool; specialized tools remain available. No backward-compatibility work is required. Rendered images, retail references and height samples remain outside Git.
 
 ## Result
 
 **[By eye]** Shores work as inverted landforms. Smooth cuts already receive shallow/deep water shading from bed depth. A shelf in the section makes a genuinely flat shallow bed. For lava, the shared shoreline ledges and fingers preserve the recognizable layered apron substantially better than ordinary profile terraces alone. No new shape parameter was needed for these examples.
 
-**[Implementation]** Landform now supplies the existing coastal footprint, runs the same finger/contour/circular-layer passes as Deep/Shallow, and carries the existing per-stroke water appearance fields. Bounds and regional read dependencies include the coastal reach. Shore effects start off on ordinary landforms. The existing coast controls are exposed for the prototype; the eventual inspector still needs consolidation, especially profile terraces versus shore layers. No new renderer, tool, page, save format or world-name branch was added. Shore plates remain unexposed and unqualified on landform.
+**[Implementation]** Landform now supplies the existing coastal footprint, runs the same finger/contour/circular-layer passes as Deep/Shallow, and carries the existing per-stroke water appearance fields. Bounds and regional read dependencies include the coastal reach. Shore effects start off on ordinary landforms. The inspector now shares one step count, flat share and variation control across profile, shoreline and circular-shoreline references. No new renderer, tool, page, save format or world-name branch was added. Shore plates remain unexposed and unqualified on landform.
 
 | Intent | Existing landform settings |
 | --- | --- |
@@ -17,7 +17,19 @@ Prototype branch: `prototype/landform-shores`, based on main `73ca2c3`. This is 
 | Shallow passage that leaves higher ground intact | Raise to sea − 7 |
 | Lava bank | Smooth cut plus shared shoreline layers; Fingers as desired |
 
-Depths above are fixture choices, not new universal constants or new controls. The prototype uses absolute elevations; changing the map's sea level does not preserve these relative depths automatically.
+Depths above are fixture choices, not universal constants. Choose **Height reference → Sea level** and enter a negative height for the depth below water. The target then follows the map's sea level. Fixed elevation remains the default for ordinary landforms.
+
+## Completed: height reference and consolidated steps
+
+**[Implementation]** Height reference reuses the Elevation slider. Fixed elevation stores the absolute target; Sea level stores its offset from the current sea. Switching reference converts the number and preserves the existing target and other authored values. The GPU and section/along previews resolve the same target; save, undo and export use the existing stroke recipe.
+
+**[Measured]** A target of −55 relative to sea yields a center depth of **55.0 units** at sea **0, 75 and 255**. Across all 262,144 authored samples, the greatest discrepancy after subtracting sea level is **0.00001523 units**. Fixtures `08-sea-relative-*` exercise all three levels.
+
+**[Implementation]** Steps now has one **Steps follow** choice: Profile, Shoreline or Circular shoreline. One count, flat share and step-variation set drives the selected existing pass; a landform never runs both step systems. Profile permits 0–8 steps and 0–90% flat share; shoreline modes permit 0–12 and 40–95%. Switching mode clamps only incompatible values, as one undoable edit. Breakup appears for profile steps; shoreline width/riser and circular details appear only when applicable. The four duplicate landform shore count/ledge/variation/style rows are gone. Fingers remain independent.
+
+**[Measured]** All **13** reviewed landform shore renders remain pixel-identical after re-authoring their parameter representation. The **27** maintained scenes also remain pixel-identical. No visual retuning was needed for these two completions.
+
+**[Measured, 1x control impact]** **21 control/mode cases** qualify at ≥5% of a visible surface class, above the 2 px × 1 px translation floor. The measurements use `measure/impact.py`'s unchanged 16 px block thresholds. Green provides the profile/general cases; Lava provides the three weak shore cases. For opaque Lava, submerged pixels are excluded before choosing each block's majority class, since the bed slope is not visible through lava. Shared flat share changes **35.11% / 44.81%** of the dry-bank gentle-slope class in contour/circular modes (floors **1.58% / 0.39%**); circular step variation changes **5.31%** (floor **0.70%**). This qualifies useful ranges on representative settings, not a 5% guarantee on every scene: circular variation on the busier reviewed finger fixture is subtler, **4.32%** of the dry-bank slope class (floor **2.52%**). [Impact measurements](/private/tmp/nanolathe-map-editor/agent-landform-shores-land/impact-summary.json).
 
 ## Matched strokes
 
@@ -45,7 +57,21 @@ The nine authored variants under `retail-windows/` replace only Deep/Shallow str
 
 **[By eye]** Lava 1 keeps its layered coast and fingers; Lava 2 keeps the circular ledges; Lava 3 retains the broad channel silhouette. The unrelated hill/rock mismatch to retail remains in both builds. Green 1/3 retain the water treatment but shift the coastline; Green 2 has no water strokes and is a control. Archipelago 1 retains its lit shallows but changes the island silhouette and small notches; 2/3 need further outline/bank calibration. These sheets support shared coastal features, not a claim that every preset now matches retail or that the specialized tools can be removed today.
 
-## Validation
+## Landing checks and deferred checks
+
+**[Measured, after merging main `78c0685`]**
+
+- **27** maintained renders match the refreshed baseline pixel for pixel; world-name gate passes with an identical identifier list.
+- **46** regional cases (27 maintained, 13 shore, three sea levels, three transformed/disconnected paths): **zero mismatches across all 31 fields**.
+- **144** brush/undo cases, **8** exports and **9** 8x8 paging/undo cases pass. Zhon export remains disabled by design. No console errors.
+- **44** unit tests pass. The landform shape sweep has **24** probes, **18** applicable, and no dead applicable control. The affected control audit passes **567** stroke rows across all nine worlds, with no dead or hidden-moving rows and no console errors.
+- Before the main merge, the broader audit including water fields passed **648** rows, and Green/Lava/Desert passed **65** real-editor assertions each (**195** total). All 13 re-authored comparison images matched the reviewed prototype exactly.
+
+**[Deferred by explicit owner instruction]** The owner requested landing and skipping the remaining checks. The post-merge editor rerun and separate water-field rerun were stopped; final alternating performance runs were not completed. The post-merge comparison rerun stopped on the overlapping-contour fixture: its saved image and full replay match, but **65 pixels** differed between tile sizes while several GPU suites ran concurrently (guard limit **16**). An isolated rerun is still needed; concurrency is an unconfirmed explanation, not a diagnosis. The first eight saved comparison images match the pre-merge images exactly. The original prototype timing numbers below are historical and do not claim a completed final-build performance qualification.
+
+Final evidence root: `/private/tmp/nanolathe-map-editor/agent-landform-shores-land`; refreshed baseline: `/private/tmp/nanolathe-map-editor/agent-landform-shores-land-baseline`. Private probes and the exact impact analysis are retained under `scripts/`. No evidence pixels, heights, exports or retail-derived files are committed.
+
+## Original prototype validation
 
 **[Measured]**
 
@@ -64,8 +90,8 @@ Evidence root: `/private/tmp/nanolathe-map-editor/agent-landform-shores`. `scrip
 
 **[Proposal / unfinished]**
 
-1. Add sea-relative height to the planned shared height-reference model. Reuse Elevation/Depth rather than introduce separate shallow and deep sliders. The passage test does not justify a new composition mode: Raise to is sufficient here; Flatten to handles shallow areas.
-2. Consolidate steps around the intended reference: the section's profile versus the actual waterline. Keep the shared shoreline ledges/fingers behavior, while avoiding duplicate sets of terrace controls in the final inspector. Qualify the final control ranges at 1x, including class-based impact.
+Items 1 (sea-relative height) and 2 (step consolidation and impact qualification) are completed above. The remaining retirement work is:
+
 3. Tune presets and re-author maintained scenes against retail, with explicit shelf and bank widths where needed. This round has not matched the dedicated shelf-noise model exactly.
 4. Qualify shore plates for Crystal/Ice, route/protection and material fields after overlapping edits, sea-level edits, and exported height behavior on more terrain. Deep strokes clear protection while landform supplies its profile protection; the near-exact shallow passage does not prove all these fields agree.
-5. After review and full retirement checks, replace maintained tool use and delete the old paths together. No old-save migration or compatibility renderer is needed. This branch intentionally removes no tools and is not landed on main.
+5. After review and full retirement checks, replace maintained tool use and delete the old paths together. No old-save migration or compatibility renderer is needed. This landing removes no tools.
