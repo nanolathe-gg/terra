@@ -342,7 +342,7 @@ export function prepareNode(n, geom, c) {
       lfWander: Math.max(0, q.wander || 0) * frameScale, lfWidth: Math.max(0, q.widthVary || 0), lfHeight: Math.max(0, q.heightVary || 0), lfSize: Math.max(8, q.varySize || 0),
       lfFoot: q.varyFoot ?? 1, lfMid: q.varyMiddle ?? 1, lfTaper: clamp(q.crestTaper || 0, 0, 1), lfRoute: clamp(q.routeSmooth || 0, 0, 1),
       // P1 Gullies: 100% is the research lab's depth (.45 per wavelength per unit slope); the first wavelength is .41 of the wider side (the lab's 62 px on 150).
-      gully: .45 * clamp(q.gullies || 0, 0, 1.5), gullySize: clamp(.41 * Math.max(sd.front, sd.back) * frameScale, 24, 160)});
+      gully: .45 * clamp(q.gullies || 0, 0, 1.5), gullySize: clamp(clamp(q.gullySize ?? .4, .1, 1) * Math.max(sd.front, sd.back) * frameScale, 16, 480)});
   }
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
