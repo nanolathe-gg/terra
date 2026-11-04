@@ -48,6 +48,7 @@ const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.
 const KINDS = {crystalForm: ['crystal'], crystalTiers: ['crystal'], crystalSides: ['crystal'], crystalSize: ['crystal'], crystalStep: ['crystal'], crystalCount: ['crystal'], crystalTop: ['crystal'], crystalLean: ['crystal'], crystalVariation: ['crystal'],
   crystalAlign: ['crystal'], crystalFacet: ['crystal'], crystalSizeVar: ['crystal'], crystalSmooth: ['crystal'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
   crystalShoreSeam: ['landform'], frostNeedles: ['landform'], iceFacets: ['landform'], iceFacetSize: ['landform']};
+const isWater = st => st[0] === 'landform' && [st[2]?.curve?.form, st[2]?.card?.curve?.form].includes('lfShore');
 const BODY_SCALE = {crystalForm: 1, crystalTiers: 100, crystalSides: 1, crystalSize: 1, crystalStep: 1, crystalCount: 1, crystalTop: 100, crystalLean: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100, crystalSmooth: 100,
   crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value
@@ -74,10 +75,10 @@ const cardOf = (world, i, knob, fallback) => {
   const scale = bodies ? BODY_SCALE[knob] : CARD_SCALE[knob];
   if (!scale) return undefined;
   const strokes = JSON.parse(readFileSync(scenePath(world, i + 1), 'utf8')).strokes;
-  const kinds = bodies ? KINDS[knob] : ['deep', 'shallow'];
+  const kinds = bodies ? KINDS[knob] : ['landform'];
   const f = impactFields[knob];
   const value = impacts ? Math.min(f.hi, Math.max(f.lo, Math.round(Number(fallback) * scale))) / scale : fallback;
-  const values = [...new Set(strokes.filter(st => impacts ? impactStroke(knob, st) : kinds.includes(st[0])).map(st => impacts && knob in (st[2] || {}) ? st[2][knob]
+  const values = [...new Set(strokes.filter(st => impacts ? impactStroke(knob, st) : kinds.includes(st[0]) && (bodies || isWater(st))).map(st => impacts && knob in (st[2] || {}) ? st[2][knob]
     : st[2]?.card && knob in st[2].card ? st[2].card[knob] / scale : value))];
   return values.length ? values.join('|') : impacts ? null : undefined;
 };
@@ -125,7 +126,7 @@ function render(world, dir, query, edit) {
           st[2] = {...st[2], [edit.knob]: edit.value / CARD_SCALE[edit.knob]};
           continue;
         }
-        const mine = bodies ? KINDS[edit.knob]?.includes(st[0]) : shores && ['deep', 'shallow'].includes(st[0]);
+        const mine = bodies ? KINDS[edit.knob]?.includes(st[0]) : shores && isWater(st);
         if (mine && !st[2]?.card) st[2] = {...st[2], card: {}};
         if (!impacts && st[2]?.card && (edit.knob in st[2].card || mine)) st[2].card[edit.knob] = edit.value;
       }

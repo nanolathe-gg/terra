@@ -13,7 +13,7 @@ $('stop').onclick=()=>{stop=true;};
 $('scenes').onclick=()=>run('Reference scene capture',async()=>{const rows=[];const names=Object.keys(scenes).sort();$('progress').max=names.length;for(const [i,name] of names.entries()){if(i<Number($('start').value))continue;if(stop||i>=Number($('start').value)+Number($('limit').value))break;const s=scenes[name];line('Loading '+name);const api=await load(s.biome,s.query||'');const t=performance.now();api.scene(s.strokes,{ground:s.ground!==false});line('Rendering '+name);const result=await Promise.race([api.capture(),delay(90000).then(()=>{throw Error('Capture timeout '+name);})]);await png(`${$('label').value}/${name}/ours.png`,result.canvas);await save(`${$('label').value}/${name}/ours-heights.json`,await api.heights());rows.push({scene:name,ms:performance.now()-t,captureMs:result.ms,stats:api.stats()});await save(`${$('label').value}/${name}/stats.json`,rows.at(-1));await save(`${$('label').value}/scenes.json`,rows);line(`${i+1}/${names.length} ${name} ${(performance.now()-t).toFixed(0)} ms`);$('progress').value=i+1;}});
 function shapeContext(key,kind){
  const p={craterlets:0,shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,crestJag:0,crestVary:0,crestTaper:0,craterFacets:0,iceFacets:0,crystalCount:8,crystalSize:110,crystalForm:0};
- if(['facePx','terraces','ledge','terraceJitter','faceVariation'].includes(key))Object.assign(p,{curve:{form:'mesa'},lean:1,facePx:90,terraces:4,ledge:.55});
+ if(['terraces','ledge','terraceJitter','faceVariation'].includes(key))Object.assign(p,{curve:{form:'mesa'},lean:1,terraces:4,ledge:.55});
  if(key.startsWith('spur')||key.startsWith('crest'))p.spurCount=4;
  if(key.startsWith('rim'))Object.assign(p,{rimSectors:4,rimUnequal:.7,rimGaps:2});
  if(key.startsWith('fissureBranch'))p.fissureBranches=3;
@@ -133,7 +133,7 @@ $('regressions').onclick=()=>run('GPU regression and alternative suite',async()=
   const pre=['smooth','erase'].includes(kind)?[ground,hill]:kind==='grass'?[ground,{kind:'sand',seed:1,points:path,params:{amount:100}}]:[ground];
   const a=await run(pre),b=await run([...pre,{kind,seed:2701,points:path,params:{...shapeContext('',kind),paintChannel:1}}]);result.tools.push({kind,...fieldDelta(a.out,b.out),ms:b.ms});
  }
- const fields=[['radius',40,200],['amount',20,140],['rough',0,1],['softness',0,1],['bankWidth',0,1],['beachFlatness',0,1],['shelves',0,1],['cracks',0,1],['seed',11,29]];
+ const fields=[['radius',40,200],['amount',20,140],['rough',0,1],['softness',0,1],['cracks',0,1],['seed',11,29]];
  for(const kind of ['landform','smooth','crater','fissure','erase','crystal','sand','grass','paint'])for(const [key,lo,hi] of fields){
   const pre=['smooth','erase'].includes(kind)?[ground,hill]:kind==='grass'?[ground,{kind:'sand',seed:1,points:path,params:{amount:100}}]:[ground];
   const n={kind,seed:2701,points:path,params:{}};const a=await run([...pre,{...n,seed:key==='seed'?lo:2701,params:{[key]:lo}}]),b=await run([...pre,{...n,seed:key==='seed'?hi:2701,params:{[key]:hi}}]);result.basic.push({key,kind,lo,hi,...fieldDelta(a.out,b.out)});

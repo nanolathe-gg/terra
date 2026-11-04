@@ -68,7 +68,6 @@ try {
       if (s.amount !== undefined) await setRange('amount', s.amount);
       if (s.softness !== undefined) await setRange('softness', s.softness);
       if (s.roughness !== undefined) await setRange('roughness', s.roughness);
-      if (s.bank !== undefined) await setRange('bank-width', s.bank);
       const pts = s.points;
       await mouse('mousePressed', toScreen(pts[0]));
       for (let k = 1; k < pts.length; k++) {
