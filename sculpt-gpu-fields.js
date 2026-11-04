@@ -33,7 +33,7 @@ function shapeMaskWrites(kind, q, sat) {
   if (!MASK_SHAPES.includes(kind) || sat) return [];
   const gain = clamp(q.maskAmount, 0, 1), out = (MASK_WRITES[Math.round(q.maskChannel)] || []).map(([p, t]) => [p, t, gain, 0]);
   STYLE_KEYS.forEach((k, j) => { const v = clamp(q[k] || 0, -1, 1); if (Math.abs(v) >= .005) out.push([STYLE_PLANES[j], Math.round(127 * v), 1, 0]); });
-  if (kind === 'deep' || kind === 'shallow') WATER_KEYS.forEach((k, j) => {
+  if (['deep', 'shallow', 'landform'].includes(kind)) WATER_KEYS.forEach((k, j) => {
     const c = Math.round(q[k] || 0);
     if (c < 1 || c > (k === 'waterBed' ? 3 : 2)) return;
     out.push([9 + j, c === 2 ? -127 : 127, 1, 1]);
@@ -209,6 +209,7 @@ export function prepareNode(n, geom, c) {
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), allPoints = n.points, paths = shapePaths(n), radius = q.radius;
   const water = kind === 'deep' || kind === 'shallow', naturalWater = kind === 'deep';
+  const shoreShape = water || kind === 'landform';
   const naturalPlateau = ['erase', 'paint', 'plateau', 'offset', 'sand', 'grass'].includes(kind), shouldered = isShouldered(kind, q, ridgeOn(kind, q)), plainHill = kind === 'hill' && !shouldered;
   const bankScale = water ? 2 ** ((q.bankWidth - .5) * 1.3) : 1;
   const lean = leanSetup(kind, q), {face: faceWidth, back: backWidth} = hillWidths(q, lean.ratio);
@@ -414,7 +415,7 @@ export function prepareNode(n, geom, c) {
       cgTiers: q.crystalTiers ?? 0, cgStep: q.crystalStep ?? 0, cgVar: q.crystalVariation ?? 0, bgFace: q.bergFace, bgTilt: q.bergTilt, bgFlat: q.bergFlat, bgRough: q.bergRough, bgTx: Math.cos(bt), bgTy: Math.sin(bt), bgJit: clamp(q.bergJitter, 0, 1), bgTurn: turn});
   }
   const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : kind === 'mountain' && q.iceFacets > 0 && q.amount >= 8 ? 2 : 0;
-  if ((water || (kind === 'offset' && q.shorePlates > 0) || facetMode) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
+  if ((shoreShape || (kind === 'offset' && q.shorePlates > 0) || facetMode) && region) { const co = coastSetup(q, geom, region, bankScale, radius, inv, seed, shoreShape, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.
   const cv = strokeCurve(kind, q, {shouldered});
   const put = t => { const at = main.extra.length; for (let j = 0; j < t.length; j += 4) main.extra.push([t[j], t[j + 1] ?? 0, t[j + 2] ?? 0, t[j + 3] ?? 0]); return at; };
@@ -464,11 +465,11 @@ const coastLayerReach = q => {
   const spread = clamp(q.lavaSpread || 0, 0, 2), vary = clamp(q.layerVary, 0, 1), wide = Math.max(1 + .6 * vary, Math.exp(.5 * (vary + spread)));
   return (n + 1 + LAYER_MEANDER) * W * wide + 2 * W;
 };
-// The coast pass of a deep or shallow stroke, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
+// The shared coast pass of a shape with shore features, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
 // beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
 // size of the circular bites' lattice.
-function coastSetup(q, geom, region, bankScale, radius, inv, seed, water, c, facet = 0) {
-  const fingers = water && q.fingers > 0, layers = water && Math.round(q.shoreLayers) >= 1;
+function coastSetup(q, geom, region, bankScale, radius, inv, seed, shoreShape, c, facet = 0) {
+  const fingers = shoreShape && q.fingers > 0, layers = shoreShape && Math.round(q.shoreLayers) >= 1;
   const plWater = Math.max(0, q.plateWaterPx || 0), plLand = Math.max(0, q.plateLandPx || 0), plates = q.shorePlates > 0 && Math.max(plWater, plLand) > 0;
   if (!fingers && !layers && !plates && !facet) return null;
   const {grid, spacing, refSpacing = spacing} = geom;

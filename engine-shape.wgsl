@@ -837,6 +837,8 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     }
   }
   if (!seen) { return; }
+  // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
+  if (u.coPutW != 0u) { Sc[4u * cells + i] = pick.y; }
   var value = pick.x;
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);

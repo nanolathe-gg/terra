@@ -1,6 +1,6 @@
 // Smoke run: for each world, open the default editor (/sculpt with no map size, the 4x4 map), paint one stroke with every brush,
 // undo it, and export. With --page8 it also opens one 8x8 map per world in --worlds8 (default green; which pages), paints one stroke and undoes it.
-//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export]
+//   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export] [--shore]
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
 import {cdpPortFree} from './cdp-port.mjs';
@@ -11,7 +11,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out');
-const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export');
+const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), shore = flag('--shore');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TOOLS = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'smooth', 'offset', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];
@@ -52,6 +52,7 @@ const ready = async (ev, exportable) => {
 const strokeAt = async (send, ev, tool) => {
   await ev(`document.querySelector('[data-tool="${tool}"]').click(); true`);
   if (tool === 'landform') await ev(`for (const [id,v] of [['lf-route-smooth',80],['crest-taper',65]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
+  if (tool === 'landform' && shore) await ev(`for (const [id,v] of [['lf-combine',1],['lf-elevation',sculptDebug.sea-55],['fingers',100],['finger-size',65],['shore-layers',5]]) { const e=document.getElementById(id); e.value=v; e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); } true`);
   const x0 = 700, y0 = 650, pts = [[0, 0], [60, 20], [120, 30], [180, 10], [240, 0]];
   const m = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
   await send('Input.dispatchMouseEvent', {type: 'mouseMoved', x: x0, y: y0});
@@ -85,7 +86,8 @@ for (const world of worlds) {
           await strokeAt(send, ev, 'landform');
           r.landformParams = await ev(`sculptDebug.nodes().at(-1).params`);
           if (r.landformParams.routeSmooth !== .8 || r.landformParams.crestTaper !== .65) bad++;
-          r.landformParams = {routeSmooth:r.landformParams.routeSmooth,crestTaper:r.landformParams.crestTaper};
+          if (shore && (r.landformParams.combine !== 1 || r.landformParams.fingers !== 1 || r.landformParams.shoreLayers !== 5)) bad++;
+          r.landformParams = {routeSmooth:r.landformParams.routeSmooth,crestTaper:r.landformParams.crestTaper,...(shore?{combine:r.landformParams.combine,elevation:r.landformParams.elevation,fingers:r.landformParams.fingers,shoreLayers:r.landformParams.shoreLayers}:{})};
           for (let i = 0; i < 400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);   // the Time pass after the last undo
           const name = `Smoke${world}${Date.now() % 100000}`;
           await ev(`window.smokeExport={done:false};sculptMap.export(${JSON.stringify(name)}).then(x=>window.smokeExport={done:true,x},e=>window.smokeExport={done:true,error:e.message});true`);

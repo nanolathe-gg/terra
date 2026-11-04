@@ -312,7 +312,12 @@ try {
       return shapeControlAvailable(key, kind, {...ui, ...Object.fromEntries(Object.entries(scales).map(([k, scale]) => [k, ui[k] / scale]))});
     };
     // What a row's fixture needs whatever the panel shows: an offset has a shore only where it lowers the ground below the sea.
-    const fixtureFor = (key, kind) => kind === 'offset' && (key.startsWith('plate') || key === 'shorePlates' || key.startsWith('frost') || key.startsWith('crystalShore')) ? {amount: -60} : {};
+    const fixtureFor = (key, kind) => {
+      if(kind==='offset'&&(key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')))return {amount:-60};
+      // Shore controls need a sea crossing: the ordinary raised landform fixture has none.
+      if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key==='shoreLayers'||key.startsWith('water')))return {elevation:-55,combine:1,heightVary:0};
+      return {};
+    };
     const scaleOf = Object.fromEntries(st.fields.map(f => [f[0], f[7]]));
     const sresults = [];
     for (const r of shapeRows) {

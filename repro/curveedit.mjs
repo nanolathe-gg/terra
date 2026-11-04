@@ -77,7 +77,7 @@ for (const world of worlds) {
       await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       // The approved defaults must reach a new stroke and a selected stroke through the existing Style selector.
       const defaults = JSON.parse(readFileSync(new URL(`comparisons/landform/${world === 'desert' ? '07-mesa-improved' : '02-plateau-natural-refined'}.json`, import.meta.url), 'utf8')).strokes[0][2];
-      const baseH = await ev('sculptDebug.corner(10, 10).authored');
+      const baseH = await ev('sculptDebug.base');
       await stroke('landform');
       // Existing slider steps snap the reviewed 300 px diameter to 304, and 75 px wander to 76.
       const fresh = (await nodes()).at(-1).params;
@@ -222,6 +222,25 @@ for (const world of worlds) {
       const probe = async along => { await ev(`sculptDebug.scene(${JSON.stringify(flat(along))}, {ground: false})`); await ready(ev); return ev(`[[300, 300], [640, 300], [740, 300]].map(([x, y]) => sculptDebug.corner(x, y).authored)`); };
       const level = await probe([[0, 1], [1, 1]]), down = await probe([[0, 1], [1, 0]]);
       check('flatten to with the along curve at 0 at the end brings the hill down to the plain', level[1] > plainH + 80 && down[1] < plainH + 0.3 * 91 && down[2] < plainH + 12 && level[0] > plainH + 85, {plainH, level, down});
+      // 8. An isolated shore crosses sea level; the preceding knot tests need not.
+      const shore = JSON.parse(readFileSync(new URL('comparisons/landform-shores/03-lava-contours.json', import.meta.url), 'utf8'));
+      shore.strokes[0][2].card.elevation = (await ev('sculptDebug.sea')) - 55;
+      shore.strokes[0][2].card.shoreLayers = 0;
+      await ev(`sculptDebug.scene(${JSON.stringify(shore.strokes)}, {ground:false})`); await ready(ev);
+      await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
+      await setValue('fingers', 100); await setValue('finger-size', 65); await setValue('shore-layers', 5); await ready(ev);
+      check('landform shore controls reach the selected node', (await nodes())[0].params.fingers === 1 && (await nodes())[0].params.fingerSize === .65 && (await nodes())[0].params.shoreLayers === 5);
+      const shoreHeights = await grid();
+      await ev(`document.getElementById('undo').click(); true`); await ready(ev);
+      check('undo restores only the landform shore layers', (await nodes())[0].params.shoreLayers === 0 && (await nodes())[0].params.fingers === 1);
+      const noLayerHeights = await grid(), changed = shoreHeights.filter((h,i)=>Math.abs(h-noLayerHeights[i])>1).length;
+      check('shore layers change actual landform heights', changed > 5, {changed});
+      await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
+      await setValue('shore-layers', 5); await setValue('water-deep', 2, 'change'); await setValue('water-bed', 3, 'change'); await ready(ev);
+      const savedShore = (await nodes())[0].params, hsShore = await grid(); await sleep(1500);
+      await send('Page.navigate', {url}); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
+      check('shore parameters survive autosave and reload', same(savedShore, (await nodes())[0].params));
+      const hsReloaded = await grid(); check('shore heights survive reload', hsReloaded.every((h,i)=>Math.abs(h-hsShore[i])<1e-3));
     } catch (err) { res.error = err.message; bad++; }
     res.console = logs.filter(l => !/favicon/.test(l)); if (res.console.length) bad++;
     return res;
