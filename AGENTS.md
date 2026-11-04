@@ -88,6 +88,7 @@ landing.
 | Unit tests | `node --test repro/*.test.mjs` | all pass |
 | World names | `sh repro/gate.sh` | exit 0, and the list is no longer |
 | Controls | `node measure/world_controls.mjs` and `measure/shape_controls.mjs` | for any control added, moved or removed |
+| Realism | `repro/all.sh`, then `python measure/realism.py --scenes <out>/green-modern-1 <out>/green-modern-2 <out>/green-modern-3` | for any change that moves modern Green: the report gives, before and after, the mean count of statistics in the real range (of 15) and how many windows pass each of the six gates (closed basins, fabric, hilltop roundness, Hack's exponent, hollow and valley shares), and says which moved and why; a slope p90 above 1.62 is the owner's call |
 | Interaction | `node repro/perf.mjs`, alternating runs of the two builds | for anything on the drag or bake path |
 
 Use American English in all user-visible text.
