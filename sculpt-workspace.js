@@ -1,67 +1,42 @@
 // Artist workspace. Reuses the editor's controls, events and history.
 import {mountHelp} from './sculpt-help.js';
 const $=id=>document.getElementById(id);
-const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
 
 export function mountWorkspace(){
-  const app=document.querySelector('.app'),tabs=document.querySelector('.inspector-tabs'),content=document.querySelector('.inspector-content');
-  const pane=(name,label)=>{const tab=element('button','',label);tab.id='tab-'+name;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','pane-'+name);tab.setAttribute('aria-selected','false');tab.tabIndex=-1;tabs.append(tab);const p=element('section','');p.id='pane-'+name;p.setAttribute('role','tabpanel');p.setAttribute('aria-labelledby',tab.id);p.hidden=true;content.append(p);return p;};
-  const tools=pane('tool','Tool'),objects=pane('objects','Shapes');
-  tabs.prepend($('tab-tool'));tabs.append($('tab-objects'));
-  const palette=document.querySelector('.tool-palette');$('tools-sidebar').append(palette);tools.append($('editor'));
-  objects.append(document.querySelector('.layers-panel'));
-  const dock=element('section','curve-dock');dock.id='curve-dock';dock.setAttribute('aria-label','Navigator and shape curves');
-  dock.append(document.querySelector('.minimap-panel'));
-  const empty=element('div','curve-empty','<strong>Shape curves</strong><span>Select a landform tool or a landform on the map to edit its cross-section and height along the path.</span>');empty.id='curve-empty';dock.append(empty);app.insertBefore(dock,document.querySelector('footer'));
-  document.querySelector('.minimap-panel .panel-heading').innerHTML='<h2>Navigator</h2><span>Drag to pan</span>';
-  $('seed-randomize').textContent='↻ Reroll';$('seed-randomize').title='Reroll this shape’s seed. Curves and settings stay the same.';
-  const settings=$('pane-graphics');settings.querySelector('h2').textContent='Editor settings';
-  const preferences=element('section','editor-preferences','<h3>Drawing</h3>');settings.prepend(preferences);
-  preferences.append($('seed-vary-control'),$('simplify-strokes').closest('label'));
-  $('drawing-options').querySelectorAll('p.small').forEach(p=>{if(p.id!=='drawing-target')p.remove();});
-  preferences.append($('weathered-view-control'));$('weathered-view-control').lastChild.textContent=' Preview weathered detail';
-  const weather=element('label','view-toggle','');weather.append($('weather'),document.createTextNode('Weathering'));weather.title='Apply terrain weathering to this map, including export.';
-  const grid=element('label','view-toggle','<input id="tile-grid" type="checkbox">Tile grid');grid.title='16 px height-cell grid in map coordinates; heavier lines every 128 px.';
-  const view=document.querySelector('.view-tools');view.append(grid,weather);
-  const zoomOut=element('button','','−'),zoomIn=element('button','','+');zoomOut.id='zoom-out';zoomIn.id='zoom-in';zoomOut.setAttribute('aria-label','Zoom out');zoomIn.setAttribute('aria-label','Zoom in');
-  $('zoom').before(zoomOut);$('zoom').after(zoomIn);
+  const dock=$('curve-dock'),palette=document.querySelector('.tool-palette'),curves=$('section-preview-control');
   const zoomBy=factor=>{const camera=window.sculptCanvas;if(!camera)return;const s=camera.view().scale,levels=[.25,.5,1,2,4];camera.zoom(factor>1?(levels.find(v=>v>s+.001)??4):([...levels].reverse().find(v=>v<s-.001)??.25));};
-  zoomOut.onclick=()=>zoomBy(.5);zoomIn.onclick=()=>zoomBy(2);
-  $('view-rendered').textContent='Art';
-  for(const [name,label] of [['export','Export'],['graphics','Settings']]){const tab=$('tab-'+name);tab.hidden=true;const b=element('button','',label);b.id='open-'+name;b.onclick=()=>{if($('inspector-sidebar').hidden)$('toggle-inspector').click();tab.click();};document.querySelector('.top-actions').append(b);}
-  document.querySelector('.tool-palette').addEventListener('click',e=>{if(e.target.closest('button')){if($('inspector-sidebar').hidden)$('toggle-inspector').click();$('tab-tool').click();}});
+  $('zoom-out').onclick=()=>zoomBy(.5);$('zoom-in').onclick=()=>zoomBy(2);
+  for(const name of ['export','graphics'])$('open-'+name).onclick=()=>{if($('inspector-sidebar').hidden)$('toggle-inspector').click();$('tab-'+name).click();};
+  palette.addEventListener('click',e=>{if(e.target.closest('button')){if($('inspector-sidebar').hidden)$('toggle-inspector').click();$('tab-tool').click();}});
+  // The dock sits outside the #editor fieldset, so it follows the editor's lock here. At load only its canvases
+  // lock (by the class); its buttons start enabled and lock with the editor from then on.
   let lastLock;
-  const lock=()=>{const disabled=$('editor').disabled;if(lastLock===disabled)return;lastLock=disabled;dock.classList.toggle('is-disabled',disabled);dock.querySelectorAll('button,select').forEach(e=>{if(disabled){e.dataset.wasDisabled=String(e.disabled);e.disabled=true;}else if(e.dataset.wasDisabled!==undefined){e.disabled=e.dataset.wasDisabled==='true';delete e.dataset.wasDisabled;}});palette.querySelectorAll('button').forEach(b=>{b.disabled=disabled;});};
-  new MutationObserver(lock).observe($('editor'),{attributes:true,attributeFilter:['disabled']});lock();
+  const lock=(controls=true)=>{const disabled=$('editor').disabled;if(lastLock===disabled)return;lastLock=disabled;dock.classList.toggle('is-disabled',disabled);if(controls)dock.querySelectorAll('button,select').forEach(e=>{if(disabled){e.dataset.wasDisabled=String(e.disabled);e.disabled=true;}else if(e.dataset.wasDisabled!==undefined){e.disabled=e.dataset.wasDisabled==='true';delete e.dataset.wasDisabled;}});palette.querySelectorAll('button').forEach(b=>{b.disabled=disabled;});};
+  new MutationObserver(()=>lock()).observe($('editor'),{attributes:true,attributeFilter:['disabled']});lock(false);
+  // The curve editors replace the empty-state note whenever a landform is in hand.
+  const sync=()=>{$('curve-empty').hidden=!curves.hidden;};new MutationObserver(sync).observe(curves,{attributes:true,attributeFilter:['hidden']});sync();
   mountHelp();
-  const enhance=root=>{if(root instanceof Element){if(root.matches('.control'))compactControl(root);root.querySelectorAll('.control').forEach(compactControl);}};
-  enhance(document.body);
-  new MutationObserver(records=>{for(const r of records)for(const n of r.addedNodes)enhance(n);}).observe(app,{childList:true,subtree:true});
+  // The page's own sliders are written in the compact form; generated ones come from controlRow.
+  document.querySelectorAll('.control[data-compact]').forEach(attachScrub);
 }
 
-export function mountCurveDock(){
-  const root=$('section-preview-control'),section=element('section','curve-pane'),along=$('along-block');
-  $('curve-reset').textContent='Reset';$('along-reset').textContent='Reset';
-  const heading=element('div','curve-heading','<h2>Cross-section</h2>');heading.append($('curve-form'));
-  const actions=element('div','curve-actions');actions.append($('curve-link'),$('curve-mirror'),$('curve-reset'),$('curve-lean'));
-  section.append(heading,$('section-preview'),actions);
-  const alongHeading=element('div','curve-heading','<h2>Length vs. height</h2><span>Start → end of path</span>');
-  const alongActions=element('div','curve-actions');alongActions.append($('along-reset'));alongActions.append(element('span','','Double-click: add point · Shift-click: remove'));
-  const alongCanvas=$('along-preview');along.replaceChildren(alongHeading,alongCanvas,alongActions);along.className='curve-pane';
-  root.replaceChildren(section,along);root.className='curve-editors';$('curve-dock').append(root);
-  // Existing IDs retain all of the curve editor's pointer handlers.
-  $('section-preview').title='Drag points to shape the section. Click the line to add a point. Shift-click a point to remove it. Drag the diamond to lean.';
-  $('along-preview').title='Click or drag away from points to move the section marker. Drag points to change height. Double-click to add a point. Shift-click to remove it.';
-  const sync=()=>{$('curve-empty').hidden=!root.hidden;};new MutationObserver(sync).observe(root,{attributes:true,attributeFilter:['hidden']});sync();
-}
-
-function compactControl(row){
-  const source=row.querySelector(':scope > input[type=range]'),label=row.querySelector(':scope > label');
-  if(!source||!label||row.dataset.compact)return;
+// A generated control row. A slider takes the compact form the page's own sliders are written in: the label and a
+// typed-value field inside the .scrub bar, the native range beside it holding the value and emitting the events.
+// `label` is the label's HTML, `range` the range's attributes; `choices` ([value, text]) makes a select instead,
+// with `select` its extra attributes.
+export function controlRow({id,label,range='',choices=null,select='',help=null}){
+  const row=document.createElement('div');row.className='control';
+  const note=help===null?'':`<p class="small">${help}</p>`;
+  if(choices){row.innerHTML=`<label for="${id}">${label}</label><select id="${id}"${select}>${choices.map(([v,text])=>`<option value="${v}">${text}</option>`).join('')}</select>${note}`;return row;}
   row.dataset.compact='true';
-  const scrub=element('div','scrub');scrub.tabIndex=0;scrub.setAttribute('role','slider');scrub.dataset.source=source.id;
-  const input=element('input','scrub-entry');input.type='number';input.hidden=true;
-  row.insertBefore(scrub,label);scrub.append(label,input);source.classList.add('scrub-native');source.tabIndex=-1;source.setAttribute('aria-hidden','true');
+  row.innerHTML=`<div class="scrub" tabindex="0" role="slider" data-source="${id}"><label for="${id}">${label}</label><input class="scrub-entry" type="number" hidden></div><input id="${id}" class="scrub-native" type="range" ${range} tabindex="-1" aria-hidden="true">${note}`;
+  attachScrub(row);return row;
+}
+
+// Slider behavior for a compact row: drag, click to set (after the double-click delay), double-click or Enter to
+// type, arrow keys, Shift for fine drags, and the native range's disabled state.
+function attachScrub(row){
+  const scrub=row.querySelector(':scope > .scrub'),label=scrub.querySelector(':scope > label'),input=scrub.querySelector(':scope > .scrub-entry'),source=row.querySelector(':scope > input[type=range]');
   let pointer=null,editing=false,clickTimer=null,clickValue=null;
   const cancelClick=()=>{clearTimeout(clickTimer);clickTimer=null;clickValue=null;document.removeEventListener('pointerdown',nextPointer,true);};
   const disabled=()=>source.matches(':disabled');
