@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {migrateRiver, applyRiver, pointsSignature, riverSteps, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT} from '../sculpt-river.js';
+import {riverCurvature, migrateRiver, applyRiver, pointsSignature, riverSteps, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT} from '../sculpt-river.js';
 import {landformSides, landformReach} from '../sculpt-shape-presets.js';
 
 const wave = (n = 40, step = 20) => Array.from({length: n}, (_, i) => ({x: 100 + i * step, y: 400 + 30 * Math.sin(i * 0.5) + (i % 3)}));
@@ -13,12 +13,17 @@ test('the same line, width, steps and seed give the same path', () => {
   assert.ok(a.path.length > 20);
 });
 
-test('migration moves the line, zero steps keeps it, and a bend that closes leaves an oxbow', () => {
+test('migration moves the line, zero steps keeps it, and a bend that closes leaves an oxbow (pinned seed)', () => {
   const none = migrateRiver(wave(), {width: 40, steps: 0, seed: 7}), many = migrateRiver(wave(), {width: 40, steps: 300, seed: 7, bounds: {w: 1200, h: 800}});
   assert.ok(none.path.every(p => near(none.drawn, p) < 1e-6));
   assert.ok(many.path.some(p => near(many.drawn, p) > 20));
-  const ox = migrateRiver(wave(60, 16), {width: 32, steps: 300, seed: 3, bounds: {w: 1600, h: 800}});
-  assert.ok(ox.oxbows.length >= 0);
+  // Pinned: this line at 32 px and 300 steps cuts one neck off with this seed. The oxbow keeps a plug of silt at each end, so it never touches the river.
+  const long = Array.from({length: 7}, (_, i) => ({x: i * 1000 / 6, y: 1500 + (i % 2 ? 30 : -30)}));
+  const ox = migrateRiver(long, {width: 32, steps: 300, seed: 2 * 7919, bounds: {w: 4096, h: 4096}});
+  assert.equal(ox.oxbows.length, 1);
+  assert.ok(ox.oxbows[0].points.length >= 4 && ox.oxbows[0].age >= 0 && ox.oxbows[0].age <= 1);
+  // the loop is frozen when it is cut, two samples in from each end, so its ends stand clear of the neck (the river may move on and meet it later)
+  const o = ox.oxbows[0].points; assert.ok(Math.hypot(o[0].x - o.at(-1).x, o[0].y - o.at(-1).y) > 8);
 });
 
 test('a bend never outgrows the belt or the map', () => {
@@ -51,4 +56,12 @@ test('the stored path survives the save and is not computed again on load', () =
   assert.ok(applyRiver(edited, {w: 1400, h: 900})); assert.notDeepEqual(edited.points, saved.points);
   const hand = JSON.parse(JSON.stringify(saved)); hand.points[3].x += 5; hand.params.wander = 40;
   assert.equal(applyRiver(hand, {w: 1400, h: 900}), false);
+});
+
+test('the curvature the channel reads is the width over the radius, positive when the bend centre is on the shader\'s c > 0 side', () => {
+  const R = 200, W = 40, arc = sign => Array.from({length: 40}, (_, i) => { const a = i * 0.04; return {x: R * Math.sin(a), y: sign * R * (1 - Math.cos(a))}; });
+  const toward = riverCurvature(arc(1), W), away = riverCurvature(arc(-1), W);   // heading +x, the centre at +y then -y
+  assert.ok(Math.abs(toward[20] + W / R) < 0.01, 'got ' + toward[20]);
+  assert.ok(Math.abs(away[20] - W / R) < 0.01, 'got ' + away[20]);
+  assert.equal(toward.length, 40);
 });

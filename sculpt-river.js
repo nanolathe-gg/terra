@@ -11,7 +11,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const RIVER_MIN_WIDTH = 32;          // px: narrower and the channel is not orthogonally connected on the 16-px height grid (measured at 18 px: not connected)
 export const RIVER_STEPS_PER_WANDER = 4;    // Wander 0..120 is 0..480 migration steps
 export const RIVER_SPAN = 6;                // the section's half width over the channel's: the floodplain, levees and valley walls reach this far
-export const RIVER_BELT = 6;                // the most a bend can grow, in channel widths from the drawn line
+export const RIVER_BELT = 8;                // the most a bend can grow, in channel widths from the drawn line (it slows over the last third, and stops there)
 export const RIVER_MAX_POINTS = 600;        // a drawn line longer than this many half-widths is thinned by the width, not by the cap
 export const isRiver = q => q?.curve?.form === 'lfRiver';
 export const riverWidth = q => Math.max(RIVER_MIN_WIDTH, 2 * (q?.radius || 0));
@@ -75,14 +75,13 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
   let pts = drawn.map(p => p.slice());
   // A straight line has no curvature to grow from, and a river's bends have a wavelength of about eleven widths: a seeded wobble at that scale, off the line by
   // up to half a width, starts them (as the lab's drawn sine did). It fades to nothing over the first and last two widths, so the ends stay where they were put.
-  const phase = Math.floor(r() * 1024) + 7, h1 = k => { let x = Math.imul((k + phase) | 0, 0x27d4eb2d) ^ Math.imul(seed | 0, 0x165667b1); x = Math.imul(x ^ (x >>> 16), 0x85ebca6b); x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35); x ^= x >>> 16; return ((x >>> 0) / 4294967296) * 2 - 1; };
-  const vn = t => { const k = Math.floor(t), f = t - k, u = f * f * (3 - 2 * f); return h1(k) * (1 - u) + h1(k + 1) * u; };
+  const ph1 = r(), ph2 = r(), tri = t => { const x = t - Math.floor(t), y = x < 0.5 ? 2 * x : 2 - 2 * x; return 2 * y * y * (3 - 2 * y) - 1; };   // a smooth wave of period 1 from + - * only
   let arc = 0;
   const arcs = [0];
   for (let i = 1; i < pts.length; i++) { arc += len(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]); arcs.push(arc); }
   for (let i = 1; i < pts.length - 1; i++) {
     const a = pts[i - 1], b = pts[i + 1], tl = len(a[0], a[1], b[0], b[1]) || 1, e = Math.min(arcs[i], arc - arcs[i]) / (2 * W), fade = e >= 1 ? 1 : e * e * (3 - 2 * e);
-    const off = fade * W * (WOB * (vn(arcs[i] / (11 * W)) + 0.45 * vn(arcs[i] / (5 * W) + 100)));
+    const off = fade * W * (WOB * (tri(arcs[i] / (11 * W) + ph1) + 0.45 * tri(arcs[i] / (5 * W) + ph2)));
     pts[i][0] += -(b[1] - a[1]) / tl * off; pts[i][1] += (b[0] - a[0]) / tl * off;
   }
   const oxbows = [], belt2 = RIVER_BELT * W * RIVER_BELT * W, decay = (lag * W) / (lag * W + ds), scale = W / 18;
@@ -96,6 +95,8 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
     const n = pts.length, C = curvature(pts);
     let acc = 0, norm = 0;
     const next = pts.map(p => p.slice());
+    const along = [0];   // the ends stay where they were put: the bends fade in over the first and last five widths
+    for (let i = 1; i < n; i++) along.push(along[i - 1] + len(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
     for (let i = 0; i < n; i++) {
       const R0 = W * C[i];
       acc = acc * decay + R0 * ds; norm = norm * decay + ds;
@@ -103,9 +104,16 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
       const R1 = -R0 + 2.5 * acc / norm;
       const tx = pts[i + 1][0] - pts[i - 1][0], ty = pts[i + 1][1] - pts[i - 1][1], tl = Math.sqrt(tx * tx + ty * ty);
       if (tl < 1e-9) continue;
-      let mx = (ty / tl) * R1 * rate * scale, my = (-tx / tl) * R1 * rate * scale;   // toward the outer bank
+      const e = Math.min(along[i], along[n - 1] - along[i]) / (5 * W), anchor = e >= 1 ? 1 : e * e * (3 - 2 * e);
+      let mx = (ty / tl) * R1 * rate * scale * anchor, my = (-tx / tl) * R1 * rate * scale * anchor;   // toward the outer bank
       const ml = Math.sqrt(mx * mx + my * my), cap = 0.35 * ds;
       if (ml > cap) { mx *= cap / ml; my *= cap / ml; }
+      // A bend slows as it nears the belt, so it rounds off there instead of lying flat against a wall.
+      const [nx, ny, d2] = nearest(drawn, pts[i][0], pts[i][1]);
+      if (d2 > 0 && mx * (pts[i][0] - nx) + my * (pts[i][1] - ny) > 0) {
+        const f = Math.sqrt(d2) / (RIVER_BELT * W), g = f <= 0.6 ? 0 : f >= 0.97 ? 1 : (f - 0.6) / 0.37;
+        const slow = 1 - g * g * (3 - 2 * g); mx *= slow; my *= slow;
+      }
       next[i][0] += mx; next[i][1] += my;
     }
     for (let i = 1; i < n - 1; i++) {   // bank stiffness: no kinks
@@ -120,7 +128,7 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
       for (let j = pts.length - 1; j > i + 6; j--) {
         const dx = pts[i][0] - pts[j][0], dy = pts[i][1] - pts[j][1];
         if (dx * dx + dy * dy < cut) {
-          oxbows.push({pts: pts.slice(i + 2, j - 1), step: it});   // a plug of silt at each end: the oxbow does not touch the river
+          oxbows.push({pts: pts.slice(i + 2, j - 2), step: it});   // a plug of silt at each end: the oxbow does not touch the river
           pts = pts.slice(0, i + 1).concat(pts.slice(j));
           break;
         }
@@ -150,4 +158,25 @@ export function applyRiver(node, bounds) {
   node.paths = paths.length > 1 ? paths : undefined;
   node.params = {...q, river: {...rv, key, sig: pointsSignature(points), ages: m.oxbows.map(o => Math.round(o.age * 1000) / 1000)}};
   return true;
+}
+
+// The curvature of a stored path times the channel width, at each vertex: the section's asymmetry reads it (engine-shape.wgsl riverChannel). The turn is measured
+// between the points about half a width behind and ahead along the path (Menger curvature: 2 cross / (|ab| |bc| |ac|)), so a dense hand-drawn line and a sparse
+// migrated one give the same answer, then smoothed once. Positive when the bend's centre lies on the side c > 0 of the shader's frame (right of the way drawn in
+// the page's y-down frame, whichever way it is looked at: c = (wx - cx) uy - (wy - cy) ux). sqrt only.
+export function riverCurvature(path, width) {
+  const n = path.length, out = new Float64Array(n), cum = [0], h = width * 0.5;
+  for (let i = 1; i < n; i++) cum.push(cum[i - 1] + len(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y));
+  for (let i = 1; i < n - 1; i++) {
+    let a = i - 1, b = i + 1;
+    while (a > 0 && cum[i] - cum[a] < h) a--;
+    while (b < n - 1 && cum[b] - cum[i] < h) b++;
+    const p = path[i], q = path[a], r = path[b], ux = p.x - q.x, uy = p.y - q.y, vx = r.x - p.x, vy = r.y - p.y, wx = r.x - q.x, wy = r.y - q.y;
+    const den = len(0, 0, ux, uy) * len(0, 0, vx, vy) * len(0, 0, wx, wy);
+    out[i] = den > 1e-9 ? -2 * (ux * vy - uy * vx) / den * width : 0;
+  }
+  if (n > 2) { out[0] = out[1]; out[n - 1] = out[n - 2]; }
+  const c = Float64Array.from(out);
+  for (let i = 1; i < n - 1; i++) out[i] = 0.25 * c[i - 1] + 0.5 * c[i] + 0.25 * c[i + 1];
+  return out;
 }

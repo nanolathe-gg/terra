@@ -605,6 +605,34 @@ fn lfShare(c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
   if (r >= fw) { return 0.0; }
   return curveAt(u.curveBase, 1.0 - r / fw);
 }
+// P28 river: the channel cut into a valley's floodplain (the valley is the section curve; this is the part that needs the path's bend). c is the signed distance
+// across the path, e beyond its end (the channel closes round it); kw the path's curvature times the channel width u.lfRiver, positive when the bend's centre is
+// on the c > 0 side; silt the oxbow's remaining depth (1 the river). v runs across the channel, +1 at the inner bank, -1 at the outer. The deepest line sits toward
+// the outer bank by .55 of a bend's tightness, under a steep cut bank; the inner side runs on above the water as a gentle point bar; depth grows with the bend
+// (pools in bends, riffles in the crossings); a levee rims the channel (scroll bars, ridged on the inner floodplain at .3 to 1 height unit, did not read at 1x and are left out). Port of docs/research/lab/exp/ws-meander.js riverAt
+// (the research branch), with the banks as smooth runs and the depth scaled by the width.
+fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, wy: f32) -> f32 {
+  let W = u.lfRiver; let hw = 0.5 * W;
+  let k = clamp(1.4 * kw, -1.0, 1.0); let ak = abs(k);
+  let sg = select(1.0, sign(k), ak > 1e-4);
+  let d = sqrt(c * c + e * e);
+  let v = select(-1.0, 1.0, c >= 0.0) * sg * d / hw;
+  let v0 = -0.55 * ak;
+  var f = 0.0;
+  if (v < v0) { f = 1.0 - pow(clamp((v0 - v) / (1.0 + v0), 0.0, 1.0), mix(2.0, 5.0, ak)); }
+  else { f = 1.0 - pow(clamp((v - v0) / (1.0 - v0), 0.0, 1.0), mix(2.0, 1.25, ak)); }
+  let sea = u.sea;
+  let depth = 0.25 * W * (0.5 + 0.75 * ak) * (1.0 + 0.15 * vnoise(wx / 30.0, wy / 30.0, u.seed ^ 0x99u)) * silt;
+  let lev = 0.07 * W * exp(-max(d - hw, 0.0) / (0.8 * W)) * qq * qq * silt;
+  let fp = fl + lev;
+  let barW = 0.2 + 1.6 * ak;
+  let top = max(fp, sea + 0.4);
+  var h = 1.0e9;
+  if (v >= -1.0 && v <= 1.0) { h = sea + 0.25 - (depth + 0.25) * f; }
+  else if (v < -1.0) { h = sea + 0.25 + (top - sea - 0.25) * sm(0.0, 1.0, (-1.0 - v) * hw / mix(7.0, 3.5, ak)); }
+  else { let t = clamp((v - 1.0) / barW, 0.0, 1.0); h = sea + 0.3 + (top - sea - 0.3) * t * t; }
+  return min(fp, h);
+}
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
 fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec2f {
@@ -639,6 +667,7 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
   var value = base + (crest - base) * qt;
+  if (u.lfRiver > 0.0 && !spur) { value = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
   return vec2f(value, clamp(q, 0.0, 1.0));
 }
