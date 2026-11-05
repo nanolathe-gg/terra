@@ -822,6 +822,8 @@ export class TerrainRenderer {
         encoder.resolveQuerySet(slot.querySet, 0, 2, slot.resolve, 0);
         encoder.copyBufferToBuffer(slot.resolve, 0, slot.read, 0, 16);
       },
+      // An encoder that is never submitted (a SpecializationMiss retry) gives its slot back.
+      release: () => { slot.busy = false; },
       // After submit: resolves to the pass's GPU milliseconds.
       result: () => slot.read.mapAsync(GPUMapMode.READ).then(() => {
         const [begin, end] = new BigUint64Array(slot.read.getMappedRange());
@@ -874,8 +876,15 @@ export class TerrainRenderer {
     const sunKey = sun.join(',');
     if (this.sunKey !== sunKey) { this.sunKey = sunKey; this.sun = sun.map(v => v / length); this.fieldsDirty = true; }
     const encoder = device.createCommandEncoder({label: 'terrain'});
-    // Painting bakes a cheap preview; the first full draw after it re-bakes.
-    if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview', encoder);
+    // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
+    const baked = [this.fieldsDirty, this.bakedQuality];
+    let drawPipeline;
+    try {
+      // Painting bakes a cheap preview; the first full draw after it re-bakes.
+      if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview', encoder);
+      // Looked up after the bake, which sets some of the gates' uniforms.
+      drawPipeline = this.drawPipeline;
+    } catch (error) { [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
     if (this.depthTexture?.width !== this.canvas.width || this.depthTexture?.height !== this.canvas.height) {
       this.depthTexture?.destroy();
       this.depthTexture = device.createTexture({label: 'depth', size: [this.canvas.width, this.canvas.height], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT});
@@ -889,7 +898,7 @@ export class TerrainRenderer {
       colorAttachments: [{view: this.context.getCurrentTexture().createView(), clearValue: {r: clear[0], g: clear[1], b: clear[2], a: 1}, loadOp: 'clear', storeOp: 'store'}],
       depthStencilAttachment: {view: this.depthView, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard'},
       timestampWrites: timer?.timestampWrites});
-    pass.setPipeline(this.drawPipeline);
+    pass.setPipeline(drawPipeline);
     if (this.chunkViewport) pass.setViewport(...this.chunkViewport, 0, 1);
     pass.setBindGroup(0, this.commonBindGroup('draw'));
     pass.setBindGroup(1, this.materialBindGroup());
@@ -899,7 +908,7 @@ export class TerrainRenderer {
     pass.drawIndexed(mesh.count);
     pass.end();
     timer?.encode(encoder);
-    this.specCheck();
+    try { this.specCheck(); } catch (error) { timer?.release(); [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
     this.flushUniforms();
     device.queue.submit([encoder.finish()]);
     this.gpuResult = timer?.result().then(ms => { if (ms !== null) this.lastGPU = ms; return ms; });
@@ -1248,15 +1257,18 @@ export class TerrainRenderer {
   // the GPU idle before; lastBakeGPU holds the pass's own GPU time.
   async timeBake(quality = 'full') {
     await this.device.queue.onSubmittedWorkDone();
-    const timer = this.timer(), start = performance.now();
-    await this.withPipelines(() => {
-      const encoder = this.device.createCommandEncoder({label: 'relief bake'});
-      this.bakeFields(quality, encoder, timer);
-      timer?.encode(encoder);
-      this.specCheck();
-      this.flushUniforms();
-      this.device.queue.submit([encoder.finish()]);
-    });
+    const timer = this.timer(), start = performance.now(), baked = [this.fieldsDirty, this.bakedQuality];
+    // Each retry bakes again; if the last attempt still misses, its encoder is never submitted, so the fields go back to unbaked and the timer's slot is freed.
+    try {
+      await this.withPipelines(() => {
+        const encoder = this.device.createCommandEncoder({label: 'relief bake'});
+        this.bakeFields(quality, encoder, timer);
+        timer?.encode(encoder);
+        this.specCheck();
+        this.flushUniforms();
+        this.device.queue.submit([encoder.finish()]);
+      });
+    } catch (error) { timer?.release(); [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
     await this.device.queue.onSubmittedWorkDone();
     const ms = performance.now() - start;
     if (timer) this.lastBakeGPU = await timer.result();
