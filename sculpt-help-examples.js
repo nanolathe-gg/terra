@@ -10,6 +10,7 @@ export const HELP_CONTROLS={
   'lf-gullies':{key:'gullies',values:[0,100],step:5,unit:'%'},
   'lf-gully-size':{key:'gullySize',base:{gullies:100},values:[20,90],step:5,unit:'%'},
   'lf-talus':{key:'talus',base:{gullies:100,curve:{form:'cliff'}},values:[0,180],step:5,unit:' px'},
+  'water-surf':{key:'surf',base:{diameter:600,heightReference:1,elevation:-55,combine:1,lean:100,curve:{form:'lfShore'}},values:[0,100],step:5,unit:'%'},
   'sec-terraces':{key:'terraces',values:[0,6],step:1,unit:' steps'},
   'sec-ledge':{key:'ledge',base:{terraces:4},values:[10,85],step:5,unit:'% flat'},
   lean:{key:'lean',values:[60,300],step:5,divisor:100,unit:' : 1'},
@@ -18,7 +19,8 @@ export const HELP_CONTROLS={
 };
 export const HELP_CARD={diameter:300,elevation:200,combine:0,wander:0,widthVary:0,heightVary:0,gullies:0,terraces:0,cracks:0,curve:{form:'lfHill'}};
 export const HELP_PATH=[[430,520],[620,420],[800,510]];
-export const HELP_VERSION=2;
+// Bump when renderer or preset changes require fresh authored examples.
+export const HELP_VERSION=3;
 export const HELP_FRAME={width:260,height:190,ms:160};
 export function helpFrames(example){
   const [lo,hi]=example.values,step=example.step;
