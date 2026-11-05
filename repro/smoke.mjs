@@ -14,7 +14,7 @@ const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--po
 const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), shore = flag('--shore');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'valleyV', 'valleyU', 'valleyT', 'river', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first ten draw landforms
+const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'valleyV', 'valleyU', 'valleyT', 'river', 'braided', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first eleven draw landforms
 
 async function session(url, fn) {
   const logs = [];

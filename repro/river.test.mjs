@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {riverCurvature, migrateRiver, applyRiver, pointsSignature, riverSteps, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT} from '../sculpt-river.js';
+import {riverCurvature, isBraided, BRAIDED_SPAN, migrateRiver, applyRiver, pointsSignature, riverSteps, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT} from '../sculpt-river.js';
 import {landformSides, landformReach} from '../sculpt-shape-presets.js';
 
 const wave = (n = 40, step = 20) => Array.from({length: n}, (_, i) => ({x: 100 + i * step, y: 400 + 30 * Math.sin(i * 0.5) + (i % 3)}));
@@ -64,4 +64,13 @@ test('the curvature the channel reads is the width over the radius, positive whe
   assert.ok(Math.abs(toward[20] + W / R) < 0.01, 'got ' + toward[20]);
   assert.ok(Math.abs(away[20] - W / R) < 0.01, 'got ' + away[20]);
   assert.equal(toward.length, 40);
+});
+
+test('a braided river is a river preset with a wider valley, and migrates the same way', () => {
+  const b = {radius: 20, lean: 1, wander: 0, curve: {form: 'lfBraided'}};
+  assert.ok(isBraided(b) && isRiver(b) && !isBraided({curve: {form: 'lfRiver'}}));
+  assert.equal(landformSides(b).front, BRAIDED_SPAN * 20);
+  const node = {kind: 'landform', seed: 5, points: wave().map(p => ({...p})), params: {...b, river: {drawn: wave()}}};
+  assert.ok(applyRiver(node, {w: 1400, h: 900}));
+  assert.equal(node.points.length, migrateRiver(wave(), {width: 40, steps: 0, seed: 5}).path.length);   // Wander 0: the line as drawn
 });

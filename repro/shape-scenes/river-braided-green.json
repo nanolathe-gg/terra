@@ -1,0 +1,6 @@
+{"biome": "green",
+ "source": {"note": "P28: the Braided river preset on the Green window, a 40 px thread scale along a gentle line (Wander 0). On this 4x4 map the plain is 99 and the sea 75."},
+ "ground": true, "query": "",
+ "strokes": [
+  ["braided", [[0,500],[300,540],[600,470],[1020,510]], {"seed": 5, "card": {"diameter": 40}}]
+ ]}

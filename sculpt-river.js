@@ -10,10 +10,13 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export const RIVER_MIN_WIDTH = 32;          // px: narrower and the channel is not orthogonally connected on the 16-px height grid (measured at 18 px: not connected)
 export const RIVER_STEPS_PER_WANDER = 4;    // Wander 0..120 is 0..480 migration steps
-export const RIVER_SPAN = 6;                // the section's half width over the channel's: the floodplain, levees and valley walls reach this far
+export const RIVER_SPAN = 6;                // the section's half width over the channel's half width: the floodplain, levees and valley walls reach this far
+export const BRAIDED_SPAN = 22;             // and for a braided belt (half a belt is 4.8 widths = 9.6 channel half widths, over a level floor to 11)
 export const RIVER_BELT = 8;                // the most a bend can grow, in channel widths from the drawn line (it slows over the last third, and stops there)
 export const RIVER_MAX_POINTS = 600;        // a drawn line longer than this many half-widths is thinned by the width, not by the cap
-export const isRiver = q => q?.curve?.form === 'lfRiver';
+export const isBraided = q => q?.curve?.form === 'lfBraided';
+export const isRiver = q => q?.curve?.form === 'lfRiver' || isBraided(q);
+export const riverSpan = q => isBraided(q) ? BRAIDED_SPAN : RIVER_SPAN;
 export const riverWidth = q => Math.max(RIVER_MIN_WIDTH, 2 * (q?.radius || 0));
 export const riverSteps = wander => Math.round(clamp(Number(wander) || 0, 0, 120) * RIVER_STEPS_PER_WANDER);
 

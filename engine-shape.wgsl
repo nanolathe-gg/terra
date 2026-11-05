@@ -633,6 +633,25 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
   else { let t = clamp((v - 1.0) / barW, 0.0, 1.0); h = sea + 0.3 + (top - sea - 0.3) * t * t; }
   return min(fp, h);
 }
+// P28 braided belt: three threads of water that wander across the path (each a seeded noise offset along it, up to 1.2 widths either way) and so cross, merge and split,
+// with gravel bars a little above the sea between them, in a belt about five widths either side of the path. Each thread is a width across at its core (32 px
+// at the narrowest width, the least a river is orthogonally connected on the 16-px height grid). fl is the valley floor the belt lies on.
+fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> f32 {
+  let W = u.lfRiver; let B = 4.8 * W;
+  let d = sqrt(c * c + e * e);
+  if (d > B + 6.0) { return fl; }
+  let sea = u.sea;
+  let cc = select(-1.0, 1.0, c >= 0.0) * d;
+  var w = 0.0;
+  for (var j = 0; j < 3; j++) {
+    let o = (f32(j) - 1.0) * 2.4 * W + 1.2 * W * vnoise(sAlong / (7.0 * W) + f32(j) * 5.1, 0.37 * f32(j) + 0.11, u.seed ^ 0x95u);
+    w = max(w, 1.0 - sm(0.5 * W, 0.85 * W, abs(cc - o)));
+  }
+  let edge = sm(B - 6.0, B + 6.0, d + 3.0 * vnoise(wx / 14.0, wy / 14.0, u.seed ^ 0x94u));
+  let bar = sea + 1.8 + 0.5 * vnoise(wx / 5.0, wy / 5.0, u.seed ^ 0x98u);
+  let bed = bar - w * (bar - (sea - 0.18 * W));
+  return min(fl, mix(bed, fl, edge));
+}
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
 fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec2f {
@@ -667,7 +686,10 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
   var value = base + (crest - base) * qt;
-  if (u.lfRiver > 0.0 && !spur) { value = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); }
+  if (u.lfRiver > 0.0 && !spur) {
+    if (u.lfBraid > 0.0) { value = braidedBelt(value, c, e, share * s1.z, wx, wy); }
+    else { value = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); }
+  }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
   return vec2f(value, clamp(q, 0.0, 1.0));
 }

@@ -2,7 +2,7 @@
 // into a table of CV_N + 3 even steps, one before the foot to one past the top, by a monotone cubic (flat beyond both ends), and the shader
 // (engine-shape.wgsl curveAt) reads the table with Catmull-Rom interpolation. A stroke with no curve of its own draws its kind's form at its softness; a stroke
 // with its own stores `curve: {form, knots?, back?}`: the form alone stays live with softness, knots (edited, so they are what saves) replace it.
-import {isRiver, RIVER_SPAN, RIVER_MIN_WIDTH} from './sculpt-river.js';
+import {isRiver, riverSpan, RIVER_MIN_WIDTH} from './sculpt-river.js';
 export const CV_N = 64;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const sm = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
@@ -58,13 +58,15 @@ export const FORMS = {
   // P28: a river's valley, over RIVER_SPAN channel half widths: a level floodplain a little wider than the levees, then walls to the plain. The channel is cut in
   // on the GPU from the path's curvature (engine-shape.wgsl riverChannel).
   lfRiver: () => ({knots: [[0, 0], [.1, .04], [.25, .2], [.4, .6], [.55, .93], [.65, 1], [1, 1]]}),
+  // P28: a braided river's valley: the floodplain stays level to half the section (the belt of threads lies on it), then the walls.
+  lfBraided: () => ({knots: [[0, 0], [.15, .06], [.3, .3], [.42, .75], [.5, 1], [1, 1]]}),
   // A ramp's travel strip: a level center, rounded shoulders.
   lfRamp: () => ({knots: [[0, 0], [.2, .1], [.45, .7], [.6, 1], [1, 1]]}),
 };
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
-export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River']];
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river']];
 // The palette entry a landform's section form belongs to (the Tool preset menu restyles a selected landform as that entry); a shore is deep water when it cuts.
-export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river',
+export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided',
   lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).
 export const defaultForm = kind => kind === 'spurs' ? 'mountain' : kind === 'landform' ? 'lfPlateau' : 'plateau';
@@ -115,7 +117,7 @@ export function strokeCurve(kind, q) {
 }
 // H27: a landform's two half widths (px): the whole section is the diameter, and the back (the lean side) is Lean times the front.
 export function landformSides(q) {
-  const ratio = q.lean > 0 ? clamp(q.lean, .25, 4) : 1, front = 2 * (isRiver(q) ? RIVER_SPAN * Math.max(q.radius, RIVER_MIN_WIDTH / 2) : q.radius) / (1 + ratio);
+  const ratio = q.lean > 0 ? clamp(q.lean, .25, 4) : 1, front = 2 * (isRiver(q) ? riverSpan(q) * Math.max(q.radius, RIVER_MIN_WIDTH / 2) : q.radius) / (1 + ratio);
   return {front, back: front * ratio, ratio};
 }
 // H27: which side of the way a landform is drawn its back (the lean side) is on, +1 left and -1 right, decided once by the path's first segment (dx, dy): Left or

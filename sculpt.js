@@ -37,6 +37,7 @@ const HELP = {
   valleyV:'Draw a landform that starts as a V valley: the ground is cut down to a floor on the path, and the walls rise at one slope, as a river leaves them. Choose any setting below; the Time pass settles walls steeper than the ground can stand.',
   valleyU:'Draw a landform that starts as a U valley: the ground is cut down to a flat floor with steep upper walls, as a glacier leaves it.',
   river:'Draw a river: a valley landform whose path is migrated a seeded number of steps (Wander) by the curvature rule real rivers follow, so the line you draw becomes bends that grow and travel downstream, and a bend that closes on itself leaves an oxbow. Width is the channel (at least 32 px, so ships can use it). The bank is cut steep on the outside of each bend, a sand bar builds inside it, and pools and riffles follow the bends. Draw a long gentle line; Cut to sets the floodplain relative to the sea.',
+  braided:'Draw a braided river: a wide belt of gravel bars cut by threads of water that split and rejoin, on a level floodplain. Width is the scale of a thread (at least 32 px). Wander migrates the line you draw first, as for a river (0 keeps it as drawn).',
   valleyT:'Draw a landform that starts as a terraced valley: a V valley whose walls climb in flat treads, the levels a river left as it cut down.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   crystal:'Grow a cluster of faceted crystals along the stroke: their sides, size, count, how flat their tops are and how much they lean are brush options. Height sets the tallest.',
@@ -84,9 +85,11 @@ const LANDFORM_TOOLS={
   valleyU:valley('lfValleyU'),
   valleyT:valley('lfValleyV',{terraces:4,ledge:55,terraceJitter:30}),
   // A river: Width is the channel (the section reaches 6 channel half widths each side), Wander the migration steps in 4s; the floodplain sits 3 above the sea.
-  river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:75,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}}
+  river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:75,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}},
+  // A braided river: the same preset with a belt of threads (its form) and no migration unless Wander is raised.
+  braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}}
 };
-const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley',river:'River'};
+const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley',river:'River',braided:'Braided river'};
 // A palette entry's stroke kind: the shape buttons all draw landforms.
 const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
 const TOOL_PRESETS={
