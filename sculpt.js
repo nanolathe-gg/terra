@@ -974,7 +974,7 @@ function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retir
 function leaseGpuWeather(w) { w.leases=(w.leases||0)+1; let given=false; return () => { if (given) return; given=true; w.leases--; if (w.retired && w.leases<=0) destroyGpuWeather(w); }; }
 function retireGpuWeather(w) { w.retired=true; if (w.leases>0) retiredWeather.add(w); else destroyGpuWeather(w); }
 // What the Time pass holds only while it runs: its own working memory and the results it is replacing. It takes no budget check of its own, so a bake that overlaps it is not asked to make room for it.
-let drainageTransient=0;   // P21: the plane's working buffers while it is computed (a lattice cell: 40 bytes), and the stored plane (8 bytes a cell) is counted below
+let drainageTransient=0;   // P21: the plane's working buffers while it is computed (a lattice cell: 48 bytes), and the stored plane (8 bytes a cell) is counted below
 const gpuTransientBytes=() => [...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes+drainageTransient;
 const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+(drainage?.destroyed===false?drainage.bytes:0)+gpuTransientBytes();
 function dropGpuWeather() { if (gpuWeather) { retireGpuWeather(gpuWeather); gpuWeather=null; } }
@@ -1041,7 +1041,7 @@ async function queueDrainage() {
     const {computeDrainage}=await import('./sculpt-drainage.js');
     for (let tries=0;tries<8&&!stroke&&!moving&&!(drainage&&drainage.revision===fieldsRevision());tries++) {
       const source=await drainageSource(); if (!source) continue;
-      const cells=(source.input.width??Math.floor((source.input.grid-1)/8)+1)**2; drainageTransient=cells*40;
+      const cells=(source.input.width??Math.floor((source.input.grid-1)/8)+1)**2; drainageTransient=cells*48;
       let plane; try { plane=await computeDrainage(renderer.device,{...source.input,sea:config.seaLevel}); } finally { drainageTransient=0; }
       plane.revision=source.revision; const old=drainage; drainage=plane; old?.retire(); showDrainage();
     }
@@ -2021,7 +2021,7 @@ window.drainageRun=async ({heights,width,sea=-1e30}) => {
   const {computeDrainage}=await import('./sculpt-drainage.js'),h=Float32Array.from(heights),plane=await computeDrainage(renderer.device,{heights:h,width,sea});
   const raw=new Uint32Array(await readBuffer(renderer.device,plane.buffer,0,plane.bytes)),area=new Uint32Array(plane.cells),recv=new Uint32Array(plane.cells);
   for (let i=0;i<plane.cells;i++) { area[i]=raw[2*i]; recv[i]=raw[2*i+1]; }
-  const out={area:[...area],recv:[...recv],passes:plane.passes,milliseconds:plane.milliseconds,bytes:plane.bytes}; plane.retire(); return out;
+  const out={area:[...area],recv:[...recv],passes:plane.passes,fillPasses:plane.fillPasses,flatPasses:plane.flatPasses,milliseconds:plane.milliseconds,bytes:plane.bytes}; plane.retire(); return out;
 };
 window.drainageLive=async () => {
   const {DRAIN_STEP}=await import('./sculpt-drainage.js');
@@ -2031,7 +2031,7 @@ window.drainageLive=async () => {
   let heights;
   if (regionalFields.paged) heights=new Float32Array(regionalFields.coarseLattice().heights);
   else { const G=worldGrid,h=new Float32Array(await readBuffer(renderer.device,regionalFields.gpuBuffers().planes,0,G*G*4));heights=new Float32Array(d.cells);for (let j=0;j<d.width;j++) for (let i=0;i<d.width;i++) heights[j*d.width+i]=h[j*DRAIN_STEP*G+i*DRAIN_STEP]; }
-  return {width:d.width,cells:d.cells,sea:config.seaLevel,passes:d.passes,milliseconds:d.milliseconds,bytes:d.bytes,transientBytes:d.transientBytes,paged:Boolean(regionalFields.paged),heights:b64(heights),plane:b64(raw)};
+  return {width:d.width,cells:d.cells,sea:config.seaLevel,passes:d.passes,fillPasses:d.fillPasses,flatPasses:d.flatPasses,milliseconds:d.milliseconds,bytes:d.bytes,transientBytes:d.transientBytes,paged:Boolean(regionalFields.paged),heights:b64(heights),plane:b64(raw)};
 };
 window.sculptDebug = {curve:() => currentCurve(),along:() => currentAlong(),place:() => lfPlace,sectionPoint:(side,x,v) => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+sideX(L,side,x)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },leanPoint:() => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+L.xc*r.width/cv.width,y:r.top+L.yv(0)*r.height/cv.height}; },alongPoint:(t,v) => { const cv=$('along-preview'),r=cv.getBoundingClientRect(),L=alongLayout(curveContext()); return {x:r.left+L.X(t)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),

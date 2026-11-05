@@ -22,6 +22,7 @@ const server = opt('--server', 'http://127.0.0.1:8867'), port = Number(opt('--po
 const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out', 'perf-out'), label = opt('--label', '');
 const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : fallback; };
 const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
+const exactTs = flag('--exact-timestamps');   // P4: Chrome flag --disable-dawn-features=timestamp_quantization (Dawn rounds GPU timestamps to 65.5 us otherwise)
 const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
 const dragTool = opt('--tool', 'hill');   // H27: the shape button the drag draws with (hill: the Ridge preset; plateau, deep, ... the others)
 const [mode] = args;
@@ -166,7 +167,7 @@ P.frameStop = () => { P.frameOn = false; return P.frames.slice(); };
 
 // ---------------------------------------------------------------- Chrome and CDP
 await cdpPortFree(port);
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', '--enable-precise-memory-info',
+const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', '--enable-precise-memory-info', ...(exactTs ? ['--disable-dawn-features=timestamp_quantization'] : []),
   `--remote-debugging-port=${port}`, `--user-data-dir=${out}/profile-${mode}`, '--window-size=1600,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 let ws, id = 0; const wait = new Map(), logs = [];
 for (let i = 0; i < 100 && !ws; i++) { try { const p = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(p => p.type === 'page'); if (p) ws = new WebSocket(p.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(200); }
