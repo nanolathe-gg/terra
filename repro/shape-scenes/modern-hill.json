@@ -1,0 +1,5 @@
+{"biome": "green", "source": {"note": "the default Rounded ridge on modern Green: a gentle 400 px path, the hill preset's numbers pinned (240 px wide, rises 36 over the 99 plain, lean 100, rounded top, Gullies 0)"},
+ "ground": true, "query": "variant=modern",
+ "strokes": [
+  ["landform", [[300,300],[464,418],[700,500]], {"card": {"diameter": 240, "elevation": 135, "lean": 100, "cracks": 20, "gullies": 0, "wander": 10, "widthVary": 10, "heightVary": 6, "varySize": 100, "varyFoot": 100, "varyMiddle": 100}, "curve": {"form": "lfHill", "knots": [[0,0],[0.25,0.08],[0.5,0.4],[0.75,0.8],[0.9,0.95],[1,1]], "back": [[0,0],[0.25,0.08],[0.5,0.4],[0.75,0.8],[0.9,0.95],[1,1]]}}]
+ ]}

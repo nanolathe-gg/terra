@@ -940,7 +940,7 @@ export class TerrainRenderer {
       return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
     });
     // With no slope cover and faces of one material the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
-    const slopeShare = Number(variant.get('slopeTexture') ?? 0.3) > 0 || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
+    const slopeShare = (!this.config.material?.groundCover && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
     this.i('uShineOn', shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
