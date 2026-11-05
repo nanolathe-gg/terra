@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
-    'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
+    'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
     'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js',)}
 
@@ -895,7 +895,11 @@ def main():
                 map_export.reply(self, {'error': str(err)}, 400)
                 return
             content_type = 'text/plain; charset=utf-8'
-            if path == '/sculpt-config.json':
+            if path == '/ui-previews/manifest.json':
+                manifest = args.assets_root / 'ui-previews' / 'manifest.json'
+                body = manifest.read_bytes() if manifest.is_file() else b'{"version":0,"tools":[],"controls":{}}'
+                content_type = 'application/json'
+            elif path == '/sculpt-config.json':
                 # An unknown or unavailable world is an error, not a silent
                 # fallback to the first world: a labelled render must never
                 # be another world's terrain (review A3, 2026-10-27).

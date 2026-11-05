@@ -2,12 +2,12 @@
 // Images stay outside the checkout. No retail scene or crop is loaded.
 // node repro/ui-previews.mjs --server http://127.0.0.1:8921 --port 9927 --out <assets-root>/ui-previews
 import {spawn} from 'node:child_process';
-import {mkdirSync,writeFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync,renameSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {cdpPortFree} from './cdp-port.mjs';
-import {HELP_TOOLS,HELP_CONTROLS,HELP_CARD,HELP_PATH} from '../sculpt-help-examples.js';
+import {HELP_TOOLS,HELP_CONTROLS,HELP_CARD,HELP_PATH,HELP_FRAME,HELP_VERSION,helpFrames} from '../sculpt-help-examples.js';
 const args=process.argv.slice(2),opt=(key,fallback)=>{const i=args.indexOf(key);return i<0?fallback:args[i+1];};
 const server=opt('--server','http://127.0.0.1:8921'),port=Number(opt('--port',9927)),out=resolve(opt('--out',join(tmpdir(),'terraform-ui-previews'))),repo=fileURLToPath(new URL('..',import.meta.url));
 if(!relative(repo,out).startsWith('..'))throw Error('Preview images must be generated outside the repository.');
@@ -24,12 +24,21 @@ try{
   const ready=async()=>{for(let i=0;i<480;i++){if(await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')){await ev('sculptCanvas.idle()');return;}await sleep(150);}throw Error('Preview renderer did not become ready: '+errors.join('\n'));};
   await send('Runtime.enable');await send('Page.navigate',{url:`${server}/sculpt?biome=green&mapX=4&mapY=4&scratch=hover-previews&gpuMB=512&heapMB=1536`});await ready();
   // A fixed art-only crop. All variants keep the same seed, light and camera.
-  const capture=async(name,kind,card)=>{
+  const manifest={version:HELP_VERSION,frame:HELP_FRAME,tools:[],controls:{}};
+  const save=(name,bytes)=>{const file=join(out,name);writeFileSync(file+'.tmp',bytes);renameSync(file+'.tmp',file);};
+  const render=async(kind,card,index)=>{
     await ev(`sculptDebug.scene(${JSON.stringify([[kind,HELP_PATH,{card,seed:2701}]])},{ground:false})`);await ready();
-    const png=await ev(`(async()=>{const b=await sculptCanvas.debugBake({x:180,y:140,width:850,height:620},1),c=new OffscreenCanvas(425,310),g=c.getContext('2d');g.drawImage(b,0,0,425,310);const blob=await c.convertToBlob({type:'image/png'});return await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(blob);});})()`);
-    writeFileSync(join(out,name+'.png'),Buffer.from(png.split(',')[1],'base64'));console.log(name);
+    await ev(`(async()=>{const b=await sculptCanvas.debugBake({x:180,y:140,width:850,height:620},1);previewAtlas.getContext('2d').drawImage(b,${index*HELP_FRAME.width},0,${HELP_FRAME.width},${HELP_FRAME.height});b.close();})()`);
   };
-  for(const tool of HELP_TOOLS)await capture('tool-'+tool,tool,{});
-  for(const [id,c] of Object.entries(HELP_CONTROLS))for(const [i,value] of c.values.entries())await capture(id+'-'+i,'hill',{...HELP_CARD,...c.base,[c.key]:value});
-  if(errors.length)throw Error(errors.join('\n'));console.log(`Generated ${HELP_TOOLS.length+Object.keys(HELP_CONTROLS).length*2} previews in ${out}`);
+  const begin=count=>ev(`window.previewAtlas=new OffscreenCanvas(${count*HELP_FRAME.width},${HELP_FRAME.height});true`);
+  const finish=async name=>{const png=await ev(`(async()=>{const blob=await previewAtlas.convertToBlob({type:'image/png'});previewAtlas.width=1;return await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(blob);});})()`);save(name+'.png',Buffer.from(png.split(',')[1],'base64'));console.log(name);};
+  for(const tool of HELP_TOOLS){await begin(1);await render(tool,{},0);await finish('tool-'+tool);manifest.tools.push(tool);}
+  for(const [id,c] of Object.entries(HELP_CONTROLS)){
+    const frames=helpFrames(c);await begin(frames.length);
+    for(const [i,{value}] of frames.entries())await render('hill',{...HELP_CARD,...c.base,[c.key]:value},i);
+    await finish(`${id}-motion-v${HELP_VERSION}`);manifest.controls[id]=frames;
+  }
+  if(errors.length)throw Error(errors.join('\n'));
+  save('manifest.json',JSON.stringify(manifest,null,2));
+  console.log(`Generated ${manifest.tools.length} tools and ${Object.values(manifest.controls).reduce((n,f)=>n+f.length,0)} control frames in ${out}`);
 }finally{ws?.close();chrome.kill();}

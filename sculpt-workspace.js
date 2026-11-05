@@ -1,5 +1,5 @@
 // Artist workspace prototype. Reuses the editor's controls, events and history.
-import {HELP_TOOLS,HELP_CONTROLS} from './sculpt-help-examples.js';
+import {mountHelp} from './sculpt-help.js';
 const $=id=>document.getElementById(id);
 const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
 
@@ -78,54 +78,4 @@ function compactControl(row){
   input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(false);}if(e.key==='Escape'){e.preventDefault();finish(true);}});input.addEventListener('blur',()=>finish(false));
   source.addEventListener('input',sync);source.addEventListener('change',sync);
   new MutationObserver(sync).observe(label,{childList:true,subtree:true,characterData:true});new MutationObserver(sync).observe(source,{attributes:true,attributeFilter:['disabled','min','max','step']});sync();
-}
-
-const toolHelp={plateau:'A broad, level top with steep sides. Draw its footprint, then shape the section below.',hill:'A rounded ridge with a gentle crest. The section sets its silhouette.',mountain:'A narrow, pointed crest. Draw a path to make a mountain range.',ramp:'An incline along a path. Edit length vs. height to control the climb.',deep:'Cut below sea level to make deep water.',shallow:'Cut a shallow shelf beneath the water.',valleyV:'A narrow, V-shaped cut into the terrain.',valleyU:'A broad valley with a rounded floor.',valleyT:'A valley with steps along its sides.',river:'A water channel following the path you draw.',braided:'Several winding channels sharing one river corridor.',crater:'A bowl with a raised rim.',fissure:'A narrow fracture cut into the ground.',crystal:'Clusters of faceted crystals, columns or blocks.',smooth:'Soften changes in height beneath the brush.',erase:'Bring terrain back toward the base ground.',sand:'Paint sand coverage onto the terrain.',grass:'Restore ground cover beneath the brush.',paint:'Paint materials and local surface effects with a dedicated brush.',move:'Select a shape to edit its curves, settings, paths or transform.',features:'Place map features and player start positions.'};
-
-// Schematic illustrations stay available without downloaded preview assets.
-// They explain silhouettes; they do not simulate or replace the GPU renderer.
-function illustration(kind,high=false){
-  let h=[0,2,13,29,42,48,42,29,13,2,0];
-  if(['plateau','terraces','ledge'].includes(kind))h=[0,0,9,43,44,44,44,43,9,0,0];
-  if(kind==='mountain')h=[0,1,6,20,38,65,38,20,6,1,0];
-  if(kind==='ramp')h=[0,2,8,14,21,28,35,42,49,56,0];
-  if(['deep','shallow','valleyV','valleyU','valleyT','river','braided','fissure','crater'].includes(kind))h=kind==='crater'?[0,8,22,2,-12,-18,-12,2,22,8,0]:[0,-2,-10,-23,-30,-32,-30,-23,-10,-2,0];
-  if(kind==='crystal')h=[0,30,15,55,20,65,20,45,18,30,0];
-  if(kind==='erase')h=h.map(v=>v*.1);
-  if(['amount','lf-elevation','heightVary'].includes(kind))h=h.map(v=>v*(high?1.3:.35));
-  if(['roughness','lf-gullies','cracks','lf-wander'].includes(kind)&&high)h=h.map((v,i)=>v+(i%2?12:-6));
-  if(['terraces','ledge'].includes(kind)&&high)h=[0,8,8,20,20,40,40,20,8,8,0];
-  const width=kind==='diameter'?(high?1:.5):1;
-  const pts=h.map((v,i)=>[130+(i-5)*18*width,100-v]);
-  const back=pts.map(([x,y])=>[x+32,y-26]);
-  const poly=p=>p.map(v=>v.join(',')).join(' '),water=['deep','shallow','river','braided'].includes(kind);
-  return `<svg viewBox="0 0 300 160" aria-hidden="true"><path d="M12 132L220 132 282 78 74 78Z" fill="#1b302c" stroke="#38564a"/><polygon points="${poly([...pts,...back.slice().reverse()])}" fill="${water?'#487b98':'#739b79'}" stroke="#bdd6ae" stroke-width="1.5"/><polygon points="${poly([...pts,[pts.at(-1)[0],130],[pts[0][0],130]])}" fill="#334d40" stroke="#65846b"/><path d="M40 143h180" stroke="#577365" stroke-dasharray="3 5"/></svg>`;
-}
-function mountHelp(){
-  const tip=element('aside','visual-help');tip.id='visual-help';tip.hidden=true;tip.setAttribute('role','tooltip');document.body.append(tip);
-  let timer,owner;
-  const hide=()=>{clearTimeout(timer);if(owner)owner.removeAttribute('aria-describedby');owner=null;tip.hidden=true;};
-  const show=target=>{
-    owner=target;const tool=target.dataset.tool||target.dataset.icon,control=target.closest('.control');
-    const source=control?.querySelector('input[type=range],select'),key=source?.id;
-    const label=tool?target.getAttribute('aria-label'):control?.querySelector('label')?.cloneNode(true);if(label instanceof Element)label.querySelector('output')?.remove();
-    const name=typeof label==='string'?label:label?.textContent?.trim();if(!name)return;
-    tip.replaceChildren(element('strong','', ''));tip.firstChild.textContent=name;
-    const example=HELP_CONTROLS[key];
-    if(tool||example){
-      const picture=(id,alt)=>`<img src="/ui-previews/${id}.png" alt="${alt}">`;
-      const rendered=tool?HELP_TOOLS.includes(tool):Boolean(example);
-      const art=element('div','help-art',tool?(rendered?picture('tool-'+tool,tool+' terrain example'):illustration(tool)):`<div class="help-low">${picture(key+'-0','Low value terrain example')}<span>${example.labels[0]}</span></div><div class="help-high">${picture(key+'-1','High value terrain example')}<span>${example.labels[1]}</span></div>`);tip.append(art);
-      const caption=element('small','help-caption',rendered?(tool?'Rendered example · Green Planet':'Low → high · same seed · Green Planet'):'Illustrative silhouette');tip.append(caption);
-      for(const img of art.querySelectorAll('img'))img.onerror=()=>{art.innerHTML=illustration(tool||'hill');caption.textContent='Illustrative silhouette · terrain preview not generated';};
-    }
-    const help=element('p','');help.textContent=toolHelp[tool]||control?.querySelector('p.small')?.textContent||'Adjust this setting to change the terrain.';tip.append(help);
-    if(!tool)tip.append(element('small','','Drag to adjust · Shift: fine · Click: type'));
-    target.setAttribute('aria-describedby',tip.id);tip.hidden=false;const r=target.getBoundingClientRect();tip.style.left=`${Math.max(8,Math.min(innerWidth-tip.offsetWidth-8,r.left<innerWidth/2?r.right+10:r.left-tip.offsetWidth-10))}px`;tip.style.top=`${Math.max(8,Math.min(innerHeight-tip.offsetHeight-8,r.top))}px`;
-  };
-  const target=e=>e.target.closest('.tool-palette button,.scrub,.control > select');
-  document.addEventListener('pointerover',e=>{const t=target(e);if(!t||t.contains(e.relatedTarget))return;hide();timer=setTimeout(()=>show(t),500);});
-  document.addEventListener('pointerout',e=>{const t=target(e);if(t&&!t.contains(e.relatedTarget))hide();});
-  document.addEventListener('focusin',e=>{const t=target(e);if(t){hide();timer=setTimeout(()=>show(t),500);}});document.addEventListener('focusout',hide);
-  document.addEventListener('pointerdown',hide);document.addEventListener('keydown',e=>{if(e.key==='Escape')hide();});document.addEventListener('scroll',hide,true);
 }
