@@ -89,8 +89,8 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
   }
   const oxbows = [], belt2 = RIVER_BELT * W * RIVER_BELT * W, decay = (lag * W) / (lag * W + ds), scale = W / 18;
   const lo = bounds ? [0, 0] : null, hi = bounds ? [bounds.w - 1, bounds.h - 1] : null;
-  const keep = q => {   // the belt about the drawn line, and the map
-    const [nx, ny, d2] = nearest(drawn, q[0], q[1]);
+  const keep = (q, known = Infinity) => {   // the belt about the drawn line, and the map; `known`: how far it stood from the line before this step moved it (a step moves a point by less than half a sample)
+    const [nx, ny, d2] = known + 0.5 * ds < RIVER_BELT * W ? [0, 0, 0] : nearest(drawn, q[0], q[1]);
     if (d2 > belt2) { const k = RIVER_BELT * W / Math.sqrt(d2); q[0] = nx + (q[0] - nx) * k; q[1] = ny + (q[1] - ny) * k; }
     if (lo) { q[0] = clamp(q[0], lo[0], hi[0]); q[1] = clamp(q[1], lo[1], hi[1]); }
   };
@@ -98,6 +98,7 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
     const n = pts.length, C = curvature(pts);
     let acc = 0, norm = 0;
     const next = pts.map(p => p.slice());
+    const stood = new Float64Array(n).fill(Infinity);
     const along = [0];   // the ends stay where they were put: the bends fade in over the first and last five widths
     for (let i = 1; i < n; i++) along.push(along[i - 1] + len(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
     for (let i = 0; i < n; i++) {
@@ -113,6 +114,7 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
       if (ml > cap) { mx *= cap / ml; my *= cap / ml; }
       // A bend slows as it nears the belt, so it rounds off there instead of lying flat against a wall.
       const [nx, ny, d2] = nearest(drawn, pts[i][0], pts[i][1]);
+      stood[i] = Math.sqrt(d2);
       if (d2 > 0 && mx * (pts[i][0] - nx) + my * (pts[i][1] - ny) > 0) {
         const f = Math.sqrt(d2) / (RIVER_BELT * W), g = f <= 0.6 ? 0 : f >= 0.97 ? 1 : (f - 0.6) / 0.37;
         const slow = 1 - g * g * (3 - 2 * g); mx *= slow; my *= slow;
@@ -123,7 +125,7 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
       next[i][0] += smooth * (pts[i - 1][0] + pts[i + 1][0] - 2 * pts[i][0]);
       next[i][1] += smooth * (pts[i - 1][1] + pts[i + 1][1] - 2 * pts[i][1]);
     }
-    for (let i = 1; i < n - 1; i++) keep(next[i]);
+    for (let i = 1; i < n - 1; i++) keep(next[i], stood[i]);
     pts = resample(next, ds);
     // Neck cutoffs: two points more than six samples apart along the river and closer than 1.1 widths across it. The loop between them becomes an oxbow.
     const cut = 1.1 * W * 1.1 * W;
