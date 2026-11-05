@@ -42,6 +42,8 @@ export function shapeControlAvailable(key,kind,p){
   if(key==='surf')return landformMakesWater(p);
   // Gullies cut only into ground a landform raises, and Cut to never raises it.
   if(['gullies','gullySize'].includes(key))return Math.round(Number(p.combine||0))!==1;
+  // Talus rests on ground the stroke raises, so it works with the plain Raise choice only.
+  if(key==='talus')return Math.round(Number(p.combine||0))===0;
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
  }
 

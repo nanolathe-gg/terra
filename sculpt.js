@@ -110,7 +110,7 @@ const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper',
 const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
 const SECTION_KEYS=['terraces','ledge','terraceJitter','breakup'];
 // Landform (card H27): the elevation and how it combines, and the variation along and across the path. The along curve (a knot list) rides with the section curve.
-const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','gullies','gullySize','surf','varySize','varyFoot','varyMiddle'];
+const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','gullies','gullySize','talus','surf','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
@@ -162,6 +162,7 @@ const SHAPE_FIELDS=[
   ['heightVary','lf-height-vary','Height variation (units)',['landform'],0,40,1,1,'How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet.'],
   // P1: branching gullies on the raised faces, steered down the stroke's own fall line (engine-shape.wgsl landformGullies).
   ['gullies','lf-gullies','Gullies',['landform'],0,100,5,100,'Cut the raised faces into a divide, spurs off it and V-gullies that branch as they run down the fall line, deepest on steep faces and fading at the foot. 0: smooth faces.'],
+  ['talus','lf-talus','Talus reach (px)',['landform'],0,200,5,1,'How far talus cones run down from the foot of a raised face, below each of the widest gullies: a loose slope at the world\'s talus angle that buries the foot. 0: no talus. It needs Gullies, for the chutes, and shows only on faces steeper than the talus angle.'],
   ['gullySize','lf-gully-size','Gully size',['landform'],10,100,5,100,'How far apart the widest gullies run, as a share of the face from crest to foot; each finer set is half as far apart. Low: close rills; high: a few broad valleys between big spurs.'],
   // P27: the shore's wet sand, foam and beach by the coast distance (engine-frag.wgsl surfShore); written into mask plane 18 where the stroke makes water.
   ['surf','water-surf','Surf',['landform'],0,100,5,100,'How much the shore is worked by waves, where this stroke makes water. 0: the shore is drawn as before. Low (lakes): a dark wet line and a 1 px foam lace at the waterline. Higher: wet sand, wrack lines, a sand beach with cusps, and a broken breaker line over the shallows.'],
@@ -433,7 +434,7 @@ function updateControls() {
   $('cracks-control').hidden=!['crater','landform'].includes(kind);
   $('cracks-value').textContent=$('cracks').value+'%';
   // Spur, rim and gully details show once their switch (spurs, sectors, gaps, gullies) is on.
-  const gate={gullySize:'gullies',layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
+  const gate={gullySize:'gullies',talus:'gullies',layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
   if(kind==='landform')for(const key of Object.keys(gate))if(gate[key]==='shoreLayers')delete gate[key];
   // On a crater, the crest options only shape its spurs.
   if (kind==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
@@ -829,7 +830,7 @@ function regionalDirtyRect(from,rect) {
   return dirty;
 }
 // Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
-const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
+const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,repose:Math.tan((renderer?.variantNumber?.('talusAngle',40)??40)*Math.PI/180),sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
     frost:{gapSize:worldSetting('frostGapSize'),gapDepth:worldSetting('frostGapDepth'),gaps:worldSetting('frostGaps'),gapReach:worldSetting('frostGapReach')}});
 // H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
 const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
@@ -1870,7 +1871,7 @@ function setKnob(key, value) {
     else if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,seed:seed^0x9e37}); cancelWeather(); evaluate(0); checkpoint(); queueWeather(); }
     return;
   }
-  if (['frostGaps','frostGapReach','frostGapSize','frostGapDepth'].includes(key)) { cancelWeather();evaluate(0);queueWeather();return; }
+  if (['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle'].includes(key)) { cancelWeather();evaluate(0);queueWeather();return; }
   // Deposit supply changes the generated deposit field.
   if (['sand'].includes(key)) { cancelWeather(); queueWeather(); }
 }
