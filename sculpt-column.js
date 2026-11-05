@@ -50,3 +50,12 @@ export function copyColumn(value, template) {
   if (value.colors?.some(c => c.some(v => v < 0 || v > 255))) fail();
   return value;
 }
+
+// The column as a shape node reads it at a coast (P27 rock coasts): the world's beds and section starts, where its coordinate starts, and the
+// offsets the bake adds (the beds' tilt and the broad wander, columnOffset in engine-common.wgsl), or null where the Time pass reads no hardness (no
+// sections, or columnContrast 0: every bed alike).
+export function coastColumn(column, variant, {contrast, dip, dipDir, base, sea}) {
+  const {beds, starts} = columnRows(column, variant);
+  if (!starts.length || !(contrast > 0)) return null;
+  return {beds, starts, origin: column?.origin === 'plain' ? base - sea : 0, wander: column?.wander?.value ?? 0, dip, dipDir};
+}

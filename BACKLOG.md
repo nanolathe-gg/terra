@@ -8389,23 +8389,29 @@ Each item below is small enough to pick up alone. Follow CLAUDE.md: one
 control replaces or simplifies another, and retail scenes stay byte-identical
 unless judged on the retail sheets.
 
-- **P30 ground cover.** Replace `slopeProfile` with the cover table, rewire
-  rock moss onto it, and make Patchiness a control or drop it (its impact is
-  under 5% as a constant).
-- **P27 shores.** Beach height profile (berm and slope in the heights, not
-  only color) and rock coasts (they follow P10's hardness). Surf's beach
-  reads as a pale band with crack marks (by eye): judge it again.
+- **P30 ground cover.** Done for tabled worlds (e0ca0124, 75d11a03);
+  `slopeProfile` stays for worlds with no table. Sampled slope texture is 0
+  on modern Green, so its thin-soil slope cover does not show by default.
+- **P27 shores.** Beach berm and rock coasts landed (8427b273, bad593a8).
+  Open: the Dean shoreface, bars, dunes and wave-cut platforms; about half of
+  a Surf coast on modern Green is rock (its column has a hard bed at the sea).
 - **P16 stones.** Archipelago's chips stay in the draw, outside `looseStones`.
-- **P10 rock model.** Open joints, Ledges and Frost merges into the rock
-  model; Stain; lichen; the other seven rock types.
+- **P10 rock model.** The other seven rock types. Stain and lichen landed
+  (8937939d, 318f75df); Stain is tone only (no varnish color) and does not
+  show on viewer-facing walls.
 - **P17 fans.** Need a height and the transport-distance channel before they
   can show; the held branch has only placement.
-- **P28 rivers.** Point-bar sand, riffles and the water look; shape only now.
-- **P31 flowers.** Need a color channel (none exists in the scatter).
-- **P1 gullies.** A comb pattern shows on narrow ridges at high Gullies
-  (green-modern-2's cliff at 60); cap or damp it.
-- **Realism gates.** Modern Green passes all six on 0 of 17 windows. Open:
-  Hack's exponent and hilltop roundness.
+- **P28 rivers.** Riffles and the water look (with P26, on hold). Point-bar
+  sand and scroll bars landed (29816523, 3b62b152): inside each bend, from the
+  path's curvature, as heights and painted-sand cover. Braided rivers have none.
+- **P31 flowers.** Done on `prototype/flowers`: 1-2 px dots drawn in the draw from the pixel (no color channel through the bake), palette in the world's material (`groundCover.plants.flowers`). Open: the density and palette are a first pass judged by eye.
+- **P1 gullies.** The comb on narrow sections is held for the owner
+  (prototype/gully-comb): it appears where the widest wavelength nears one
+  per run. Gullies itself reads 4.02 on `shape_controls` (main).
+- **Realism gates.** Modern Green passes all six on 0 of 17 windows. Hilltop
+  roundness: a closing-steps creep fixes 16 of 17 at a cost to the 15
+  statistics (held, prototype/realism-gates). Hack's exponent mostly measures
+  roughness below a pixel, which rule 11 rules out; it may not suit TA's scale.
 - **`docs/audit/controls.json`** is a stale snapshot (13 stale keys after
   P16); regenerate it.
 

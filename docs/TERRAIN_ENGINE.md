@@ -798,6 +798,15 @@ byte-identical unless the table says otherwise.
 | P9 | Eight Knoll candidates per cube color, Bayer pick; Crystal `paletteMix` 1 | 0f041004, 3704cd9d | Desert Lab histogram .105/.031/.099 -> .076/.029/.074 (retail .033/.011/.056); Crystal chi-square .050/.113/.060 -> .028/.079/.047 |
 | P18 | Sand ripples (asymmetric crests, stone shadows) | e41ef931 | no scene paints sand, 30 scenes 0.00; relief bake +2.9% to ~+25% |
 | Sun/sky tint | Sun color and Sky color rows; modern Green #ffc880 / #80a0ff | b4da1dcb, 00c5bc26 | modern moves 27-35%; Sky color alone is under 5% on 2 of 3 windows |
+| P6 | Uniform gates as WGSL override bools; pipelines cached per gate set | 0ca0dc7a, 8ac6449f | green-2 terrain pass -24 to -29%, bake -17 to -19%; 1-12 px compiler drift in 7 scenes (byte-identical forced generic); about 0.9 s the first time a feature combination compiles |
+| Owner: Talus reach | Reach sets only how far the toe runs out; apex at the repose line, no 0.8-relief cap, lobes as smooth noise | 9bb789e3, c73abf5b, babe9926 | max raise at reach 200: ridge 99 -> 28, hill 65 -> 37; no plateau; 30 scenes 0.00; shape_controls talus 24.59 -> 5.16 units; shape passes +4.6% (noisy) only with Talus on |
+| Owner: hills vs mountains | Rounded ridge rises 40; Peaked ridge 110, 260 px wide (both 70, 200 before) | c30c293b | rise 47-50 / 111-113, slope p90 .81-.86 / 1.36-1.41 (retail: rise under 45 p90 .54, 80 and up p90 1.39); scenes untouched |
+| P10 Stain, Lichen; P30 rock moss | Stain row (`rockStain`) replaces Gully floor shade and adds ledge curtains; lichen rosettes in Vegetation tint in rock; rock moss takes the cover table's moss class | 8937939d, 318f75df | retail byte-identical; modern moves 0.2 / 3.5 / 0.2%; Stain 48.8 and rockMoss 70.4 rock blocks on modern-2 |
+| Owner: sand edges | Deposit runs out downhill onto flat ground; painted sand ripples fade inside the edge; feathered, broken edge with no outlines | 852e21cb, e1fefc6d, 66fe3f59, 54faa384, ef306222, 5cf33b5b | 27 of 30 scenes byte-identical; Zhon 0.32 / 0.30 / 0.08 mean (by eye neutral); relief bake +38%, terrain +15% only where sand lies |
+| P30 slope cover | A tabled world's slope cover is its thin soil, not the slope ramp; Patchiness a constant (0.8) | e0ca0124, 75d11a03 | retail 0.00; modern-2 1 px; Patchiness 0 to 1 moves 0.3-3.1% of blocks (under 5%); no perf cost |
+| P27 heights | Surf .2 and up cuts a beach face and berm (1-2.5 units, from a nine-map retail table); hard rock at the waterline makes a rock coast with pocket beaches | 8427b273, 1f4345f9, bad593a8 | 30 scenes byte-identical; shape pass +0.64 ms on a Surf water stroke |
+| P28 point bars | Sand and scroll bars on each inside bend, from the river path's curvature | 29816523, 3b62b152 | 30 scenes byte-identical; regional 0 on four river fixtures; shape pass 0.440 ms both |
+| P31 flowers | Sparse 1-2 px flower dots in the draw, from the material palette (`groundCover.plants.flowers`), on meadow, scrub, rush and turf in sun, more with Lushness | 15352219 | retail cmp-identical; modern moves 0.5 / 0.6 / 0.4%; terrain +2% (within noise) |
 | Tooling | `perf.mjs --exact-timestamps` (opt-in) | 774021b9 | from the P4 spike |
 
 ### Rejected, closed or held
@@ -817,7 +826,10 @@ byte-identical unless the table says otherwise.
 | P14 | Held | prototype/scarp | Retreat row costs nothing, but reads as a sea urchin (by eye) |
 | P15 | Held | prototype/slumps | Lobes read as small mounds, scars barely visible at 1x; shape_controls 2.24 units |
 | P17 fans | Held | prototype/talus-fans | Fans have no height and barely show |
-| P6 | Held for the owner | prototype/specialize | Terrain pass -24 to -29%, bake -17 to -19% on green-2; 1-5 px compiler drift in 7 scenes (byte-identical with the overrides forced generic); about 0.9 s hitch the first time a feature combination compiles; edit latency unchanged (Time-bound) |
+| P1 gully comb | Held for the owner | prototype/gully-comb | Damping narrow sections fixes the comb but drops Gully size 7.31 -> 4.28 (shape_controls) and cuts a Rounded ridge's front gullies by about 40%; per-side spacing made a denser comb |
+| Peaks B, C | Held | prototype/peaks | Spurs on Peaked ridge read as stubby fingers; mountain Gullies 70 departs from retail mountains (no dendritic gullies) |
+| Realism: saHill | Held for the owner | prototype/realism-gates | erosionCreep .05 on modern Green: saHill passes 6 -> 16 of 17, Hack 5 -> 3, mean in range 7.82 -> 7.06; Hack mostly measures sub-pixel roughness |
+| Sand bake trim | Closed | prototype/sand-perf | Two exact early-outs, no measurable gain (10 rounds, noise about 10%); the tap loop is about 5% of the relief bake |
 | P26 water | Held by the owner | prototype/water | Stage 2 stopped: retail water is flat tones with a hard step and grain, the model is a smooth gradient |
 | P8, P19 | Not started | | P19 (decision 26) |
 

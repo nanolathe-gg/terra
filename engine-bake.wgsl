@@ -678,8 +678,9 @@ fn bedLip() -> f32 { return select(0.0, BED_LIP * max(1.0, u.bedLedge), u.bedLed
 // bed coordinate is columnCoord at the surface height, the one erosion reads.
 // Returns the same (offset, lip cover, bed index) as bedRelief.
 // A bed's cut: the tread's height offset, the lip and notch (the rock model sets their height), the bed's hardness punch, the bed's index,
-// how far through it the point lies (0 foot, 1 top) and its thickness along the ground (px).
-struct BedCut { off: f32, lip: f32, notch: f32, punch: f32, index: f32, through: f32, px: f32 }
+// how far through it the point lies (0 foot, 1 top), its thickness along the ground (px), and, for a rock column's bed, the column coordinate and the
+// bed's thickness in height units (thick 0: the beds are the hash's, with no column to read the beds above from).
+struct BedCut { off: f32, lip: f32, notch: f32, punch: f32, index: f32, through: f32, px: f32, coord: f32, thick: f32 }
 fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
@@ -687,7 +688,8 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let S = max(u.bedSpacing, 2.0);
     // H4 round 2: a bed's boundary wanders at 3-7 px (blockChip x 1.5 height units), so a ledge is a ragged line, not a smooth contour curve.
     let rag = select(0.0, (valueNoise(p / 7.0 + 3.0) + 0.5 * valueNoise(p / 3.0 + 9.0)) * BED_RAG, u.rockSize > 0.0);
-    let bed = columnAt(columnCoord(p, h) + rag);
+    let coord = columnCoord(p, h) + rag;
+    let bed = columnAt(coord);
     let f = bed.through;
     let bedPx = bed.thick / G;
     let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), min(u.bedLedge, 1.0));
@@ -700,7 +702,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     // Hard beds (hardness 1) stand 1.7 times a hash bed's mean ledge, soft ones (0) 0.3 times: the hash's own range.
     let punch = mix(1.0, 0.3 + 1.4 * bed.hardness, u.columnContrast);
     off *= punch;
-    return BedCut(off, lip, notch, punch, bed.index, f, bedPx);
+    return BedCut(off, lip, notch, punch, bed.index, f, bedPx, coord, bed.thick);
 }
 
 fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
@@ -737,7 +739,7 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     // and the eye can follow them (0: every bed alike, as before).
     let punch = mix(1.0, 0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y, u.bedPunch);
     off *= punch;
-    return BedCut(off, lip, notch, punch, k, f, bedPx);
+    return BedCut(off, lip, notch, punch, k, f, bedPx, 0.0, 0.0);
 }
 
 // H4b: a hill's pieces against a face's: width and length (down the fall line) as shares of blockWidth and blockRow.
@@ -902,6 +904,62 @@ fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f, hill: f32) -> vec2f {
     }
     dh += u.rockGrit * (cellHash(floor(p) + 13.0).x - 0.5) * 2.0;
     return vec2f(dh, crev);
+}
+
+// Card P10, Stain: the marks of the water that runs down a face from each ledge, as curtains along the fall line (desert varnish on sandstone, grey
+// streaks on limestone). Two families of columns, 8 and 21 px apart (the lattice below: the four nearest jittered cells, smoothstep weights, the
+// phase's (cos, sin) summed and normalized, so the crests run along `dir`); each ledge's own columns start under its lip and fade with the px below it,
+// each bed with a strength and a length of its own, the harder ledges (bed.punch) staining more. Returns 0..1, a tone only: it goes into the
+// darkness the bake already carries (lineDark), so there is no fifth channel, and the world's Stain row says how dark.
+fn stainStripes(q0: vec2f, dir: vec2f, f: f32, salt: f32) -> vec2f {
+    let perp = vec2f(-dir.y, dir.x);
+    let q = q0 * f;
+    let c0 = floor(q - 0.5);
+    let fr = q - 0.5 - c0;
+    var acc = vec2f(0.0);
+    for (var j = 0; j <= 1; j++) {
+        for (var i = 0; i <= 1; i++) {
+            let c = c0 + vec2f(f32(i), f32(j));
+            let o = q - (c + 0.5 + 0.35 * cellHash(c + salt));
+            let wx = select(1.0 - fr.x, fr.x, i == 1);
+            let wy = select(1.0 - fr.y, fr.y, j == 1);
+            let w = wx * wx * (3.0 - 2.0 * wx) * wy * wy * (3.0 - 2.0 * wy);
+            let ph = 6.2831853 * dot(o, perp);
+            acc += w * vec2f(cos(ph), sin(ph));
+        }
+    }
+    let l = length(acc);
+    return select(vec2f(1.0, 0.0), acc / l, l > 1e-5);
+}
+const STAIN_LEAD = 1.5;   // px under the lip before the stain begins
+const STAIN_BEDS = 7;     // beds up the column a curtain may start from
+// A curtain starts at the top of a hard bed (a ledge: hardness .85 and over) and runs down over the softer beds under it until it fades; the nearest
+// ledge at or above this point is found up the column (a world with no column stains from each bed's own top). Returns the px below that ledge's lip.
+fn stainDepth(bed: BedCut) -> vec2f {
+    let own = (1.0 - bed.through) * bed.px;
+    if (bed.thick <= 0.0) { return vec2f(own, bed.index); }
+    let pxPerUnit = bed.px / bed.thick;
+    var up = (1.0 - bed.through) * bed.thick;
+    var at = bed.coord;
+    var b = columnAt(at);
+    for (var i = 0; i < STAIN_BEDS; i++) {
+        if (b.hardness >= 0.85) { return vec2f(up * pxPerUnit, b.index); }
+        at = bed.coord + up + 0.01;
+        b = columnAt(at);
+        up += b.thick;
+    }
+    return vec2f(1e4, bed.index);
+}
+fn rockStainCurtain(pos: vec2f, dir: vec2f, bed: BedCut) -> f32 {
+    let a = stainStripes(pos, dir, 1.0 / 8.0, 5.0);
+    let c = stainStripes(pos + vec2f(37.0, 11.0), dir, 1.0 / 21.0, 9.0);
+    let column = max(smoothstep(0.35, 0.8, a.x) * smoothstep(-0.6, 0.2, c.y), smoothstep(0.45, 0.85, c.x));
+    let since = stainDepth(bed);
+    let across = dot(pos, vec2f(-dir.y, dir.x));
+    let own = cellHash(vec2f(since.y, 29.0));
+    let reach = 26.0 * (0.3 + 0.7 * (valueNoise(vec2f(across / 6.0, since.y * 1.7 + 3.0)) * 0.5 + 0.5)) * (0.6 + 0.8 * own.y);
+    let run = exp(-max(since.x - STAIN_LEAD, 0.0) / reach) * smoothstep(0.0, STAIN_LEAD, since.x + 0.5);
+    return clamp(column * run * (0.35 + 0.65 * own.x) * 1.4, 0.0, 1.0);
 }
 
 // Rock structure that follows the ground (card G2). Retail's strata lie along the contours of the
@@ -1095,11 +1153,66 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
 // covers both. Steep faces shed it.
 fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     if (u.sand <= 0.0) { return 0.0; }
-    let field = weatherAt(p / (u.size - 1.0)).a * depositsAt(p);
+    // The Time pass lays sand where deposit gathers, which follows the foot of every shape as an even band. Let it run out onto the plain
+    // in lumps: taps round p (radius 10-120 px, direction wandering at 17 px) carry the sand of nearby cells to p only if the tap lies no
+    // lower than p (sand moves downhill and outward, never up a slope) and only onto ground that is flat at p, so nothing new lands on
+    // the flanks. Each tap fades over a reach that grows with how much deposit gathers there (low, concave ground runs out far, a
+    // spur's foot hardly). The cover's strength wanders at 61, 23 and 9 px, so the fringe is ragged.
+    let uv = p / (u.size - 1.0);
+    var raw = weatherAt(uv).a;
+    let reachN = valueNoise(p / 53.0 + 71.0) * 0.5 + 0.5;
+    let flatHere = 1.0 - smoothstep(0.05, 0.25, slope);
+    if (flatHere > 0.0) {
+        let hHere = baseHeight(p);
+        for (var k = 0; k < 8; k++) {
+            let a = f32(k) * 0.7853982 + valueNoise(p / 17.0 + f32(k) * 3.1) * 1.4;
+            let r = 10.0 + 110.0 * fract(f32(k) * 0.381966 + reachN * 0.8);
+            let q = p + vec2f(cos(a), sin(a)) * r;
+            let tap = weatherAt(q / (u.size - 1.0));
+            let reach = 150.0 * (0.2 + 0.8 * clamp(tap.g * 2.5, 0.0, 1.0)) * (0.35 + 1.1 * reachN);
+            let downhill = smoothstep(-3.0, 1.0, baseHeight(q) - hHere);
+            raw = max(raw, tap.a * (1.0 - smoothstep(0.1, 1.0, r / reach)) * downhill * flatHere);
+        }
+    }
+    let lump = clamp(0.25 + 1.5 * (0.5 + 0.5 * (0.55 * valueNoise(p / 61.0 + 5.0) + 0.3 * valueNoise(p / 23.0 + 29.0) + 0.15 * valueNoise(p / 9.0 + 3.0))), 0.0, 1.4);
+    // The lumps thin the sand anywhere but add to it only on flat ground; a flank keeps less of the Time pass's sand than the plain does.
+    let field = min(raw * min(lump, 1.0 + 0.4 * flatHere), 1.0) * (1.0 - 0.7 * smoothstep(0.1, 0.45, slope)) * depositsAt(p);
     if (field <= 0.0) { return 0.0; }
     let lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
     let thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
     return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
+}
+
+// The painted-cover texture (Sand, Ground cover and Paint strokes) at world point p.
+fn paintAt(p: vec2f) -> vec4f {
+#ifdef CHUNK
+    return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0);
+#else
+    return textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
+#endif
+}
+
+// Painted sand seen through a blur: (the share of a ring of taps 9 to 20 px out that lies inside the painted sand, which feathers the
+// edge over a band a few px wide; the same at 8 to 18 px, which says how deep inside the sand p lies). The radii wander at 31 and 23 px,
+// so the bands' widths are irregular. (0, 0) when no sand lies within 32 px.
+fn paintSandBlur(p: vec2f, centerDepth: f32) -> vec2f {
+    var near = centerDepth;
+    for (var k = 0; k < 4; k++) {
+        let a = f32(k) * 1.5707963 + 0.8;
+        near = max(near, paintAt(p + vec2f(cos(a), sin(a)) * 32.0).b * 2.0 - 1.0);
+    }
+    if (near < 0.3) { return vec2f(0.0); }
+    let rf = 9.0 + 11.0 * (valueNoise(p / 31.0 + 9.0) * 0.5 + 0.5);
+    let rd = 8.0 + 10.0 * (valueNoise(p / 23.0 + 101.0) * 0.5 + 0.5);
+    var edge = smoothstep(0.3, 0.7, centerDepth);
+    var deep = 0.0;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.7853982 + 0.4;
+        let d = vec2f(cos(a), sin(a));
+        edge += smoothstep(0.3, 0.7, paintAt(p + d * rf).b * 2.0 - 1.0);
+        deep += smoothstep(0.3, 0.7, paintAt(p + d * rd).b * 2.0 - 1.0);
+    }
+    return vec2f(edge / 9.0, deep / 8.0);
 }
 
 const RIPPLE_CREST = 0.22;   // the darkness of the coarse grains on a crest
@@ -1500,27 +1613,31 @@ fn bake(p: vec2f) -> vec4f {
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
     // Ground cover clears weathered and painted sand alike.
-#ifdef CHUNK
-    let paint = textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0);
-#else
-    let paint = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
-#endif
+    let paint = paintAt(p);
     let paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
     // Sand bars (sandCrown) keep their sand on steep flanks.
-    let paintSand = smoothstep(0.30, 0.70, paint.b * 2.0 - 1.0 + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
+    // Painted sand's edge is feathered over a band of several px and broken at 4 to 27 px, so the sand thins out into the ground (grass
+    // and soil show through it, the draw's Vegetation through sand) instead of stopping at a line.
+    let sandDepth = paint.b * 2.0 - 1.0;
+    let sandBlur = paintSandBlur(p, sandDepth);
+    let sandBreak = paintEdge + valueNoise(p / 6.0 + 83.0) * 0.10 + valueNoise(p / 27.0 + 57.0) * 0.12;
+    let paintSand = smoothstep(0.15, 0.85, sandBlur.x + sandBreak) * smoothstep(0.0, 0.08, sandBlur.x) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
     let paintGround = smoothstep(0.30, 0.70, 1.0 - paint.b * 2.0 + paintEdge);
+    let sandWeathered = sand * (1.0 - paintGround);
     if (u.hasBeach == 0) { sand = max(sand, paintSand); }
     sand *= 1.0 - paintGround;
     // Only sand deep enough to cover the ground buries relief and stones;
     // painted sand bars (sandCrown) bury theirs too.
-    let buried = max(smoothstep(0.35, 0.9, sand), paintSand * u.sandCrown);
+    let buried = max(smoothstep(0.10, 0.90, sand), paintSand * u.sandCrown);
     // Sand ripples (card P18): asymmetric crests with defects, coarse grains on the crests, and sand shadows behind the scatter's big stones.
     // They lie on the buried ground, so they go in after the sand buries relief. Height is lambda / 9 at the default Ripple height (1.4).
     var drift = 0.0;
     var crestTone = 0.0;
     if (sand > 0.0 && u.ripple > 0.0) {
         let rp = sandRipples(p, u.ripple);
-        let deep = smoothstep(0.5, 0.95, sand);
+        // Ripples need sand deep enough to hold them: thin sand at a painted edge stays flat, over a band several px wide whose width wanders.
+        let paintDeep = smoothstep(0.55, 0.98, sandBlur.y + 0.4 * sandBreak) * paintSand;
+        let deep = max(smoothstep(0.5, 0.95, sandWeathered), select(0.0, paintDeep * (1.0 - paintGround), u.hasBeach == 0));
         drift = (rp.x * u.rippleHeight * u.ripple / (9.0 * 1.4) + rp.z) * deep;
         crestTone = rp.y * deep;
     }
@@ -1543,6 +1660,7 @@ fn bake(p: vec2f) -> vec4f {
     // (ribs, block steps, minor cracks) steps back; its relief is added below.
     var structureRock = 0.0;
     var gullyFloor = 0.0;
+    var stainCurtain = 0.0;
     var blockCrevice = 0.0;
     var order = 0.0;
     var steep = 0.0;
@@ -1602,6 +1720,7 @@ fn bake(p: vec2f) -> vec4f {
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
+        if (u.rockCurtain > 0.0) { stainCurtain = gate * rockStainCurtain(pf, select(fall, vec2f(0.0, 1.0), cliffOn), bed); }
         if (u.rockSize > 0.0) {
             // The cell set, in the face's axes (the ground's gradient there: along the fall line only on a patch frame).
             let gx = select(vec2f(0.0, -slope), g, !cliffOn);
@@ -1619,7 +1738,7 @@ fn bake(p: vec2f) -> vec4f {
         if (hill > 0.0) {
             let across = vec2f(-fall.y, fall.x);
             let pfh = vec2f(dot(p, across), dot(p, fall));
-            let block = rockModel(p, pfh, BedCut(0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1e9), vec2f(0.0, -slope), 1.0);
+            let block = rockModel(p, pfh, BedCut(0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1e9, 0.0, 0.0), vec2f(0.0, -slope), 1.0);
             height += hill * HILL_RELIEF * block.x;
             blockCrevice = max(blockCrevice, hill * block.y);
         }
@@ -1644,23 +1763,28 @@ fn bake(p: vec2f) -> vec4f {
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
-    var lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
-    // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
-    lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
+    // Dark lines, crevices and tufts lie only on ground the sand has left bare: any real sand (not only deep sand) takes them away, so a
+    // clump of sand at a thinning edge carries no outline of its own.
+    let buriedLines = max(buried, smoothstep(0.02, 0.30, sand));
+    var lineDark = max(max(crackAt.y, bandDark * (1.0 - buriedLines)), wormDark * (1.0 - buriedLines));
+    // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line). Card P10: that shade is
+    // the Stain row's (water runs down the gullies and marks them), and the rock type's ledge curtains are stained by the same row.
+    lineDark = max(lineDark, gullyFloor * u.rockStain * (1.0 - buriedLines));
+    lineDark = max(lineDark, stainCurtain * u.rockStain * u.rockCurtain * (1.0 - buriedLines) * (1.0 - rock.y));
     lineDark = max(lineDark, crustDark);
     lineDark = max(lineDark, RIPPLE_CREST * crestTone);
-    lineDark = max(lineDark, loose.z * (1.0 - buried));
-    lineDark = max(lineDark, scatter.plant.z * (1.0 - buried));
-    lineDark = max(lineDark, 1.0 * stepWorn * (1.0 - buried));
-    lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
+    lineDark = max(lineDark, loose.z * (1.0 - buriedLines));
+    lineDark = max(lineDark, scatter.plant.z * (1.0 - buriedLines));
+    lineDark = max(lineDark, 1.0 * stepWorn * (1.0 - buriedLines));
+    lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buriedLines));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
-    lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));
+    lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buriedLines));
     if (u.sandBanding > 0.0) {
         // Sand bars (sandCrown) are smooth rippled sand, not streaked dune slopes.
         let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand * (1.0 - u.sandCrown), smoothstep(0.3, 0.8, sand)), route * 0.6));
         lineDark = max(lineDark, streak.x * (0.55 + 0.45 * smoothstep(-0.3, 0.4, -streak.y)));
     }
-    crackAt.z = max(max(crackAt.z, bandLit * (1.0 - buried)), scatter.plant.y * (1.0 - buried));
+    crackAt.z = max(max(crackAt.z, bandLit * (1.0 - buriedLines)), scatter.plant.y * (1.0 - buriedLines));
     var crackCode = rock.y;
     if (lineDark > 0.02) { crackCode = -lineDark; } else if (crackAt.z > 0.02) { crackCode = 1.0 + crackAt.z; }
     // Green holds route protection, or (negative) beach cover off routes.

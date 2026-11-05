@@ -244,7 +244,7 @@ struct Uniforms {
     rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
     gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
     gullyWidth: f32,      // gully width across, world px
-    gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
+    rockStain: f32,       // Stain: how dark the water's marks are (0: lit like the rest): a deep gully's floor, as occlusion following its depth, and the rock type's ledge curtains
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
@@ -329,7 +329,7 @@ struct Uniforms {
     columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 40 rows of a world's ground-cover table (card P30, and its plants' row, card P31; zeros: none)
+    materialTable: array<vec4f, 210>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
@@ -369,6 +369,8 @@ struct Uniforms {
     rockChipSize: f32,    // px
     rockGrit: f32,        // per-pixel height grit, units
     rockAge: f32,         // 0..1: rounds open edges, opens more partings, wears chips
+    rockCurtain: f32,     // share of a ledge's stain curtains the rock type draws (0: none; the Stain row's tone scales them)
+    rockLichen: f32,      // lichen cover the rock type grows on faces turned to the sun and sky (0: none; Age and the Vegetation tint row scale it)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
@@ -598,15 +600,28 @@ fn outcropAt(p: vec2f, slope: f32, wear: f32, hard: f32) -> f32 {
 const MM_COVER = 166u;
 fn cvr(i: u32) -> vec4f { return u.materialTable[MM_COVER + i]; }
 fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }
-// The seven classes' covers at a point (groundCover in engine-frag.wgsl draws from them; looseStones in engine-bake places plants by them).
-fn coverAt(slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32) -> array<f32, 7> {
-    let c0 = cvr(0u); let c1 = cvr(1u); let c2 = cvr(2u);
+// The two site values every class reads, moisture and light, at a point: wetness (with the wet swaths' control as its bias, and the sun's shade) and the
+// sun on the broad face (level ground 1). Rock moss (engine-frag.wgsl) reads them too, so it grows where the table's moss class does.
+fn coverSite(broad: vec2f, tm: TimeMaps) -> vec2f {
+    let c0 = cvr(0u); let c2 = cvr(2u);
     let wn = smoothstep(c0.y, c0.z, tm.wet);
     let nb = normalize(vec3f(-broad, 1.0));
     let light = max(dot(nb, u.light), 0.0) / max(u.light.z, 0.05);
     let shade = clamp(1.0 - light, -0.6, 1.0);
-    let moist = clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0);
-    let soil = clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
+    return vec2f(clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0), light);
+}
+// Soil depth at a point (0 bare, 1 deep): thin on steep and convex ground and where water wore the rock, deep in hollows and where water laid deposit.
+// The seven classes read it as a window, and a tabled world's slope cover reads it as the share of thin soil (engine-frag.wgsl).
+fn coverSoil(slope: f32, top: f32, tm: TimeMaps, moist: f32) -> f32 {
+    let c1 = cvr(1u);
+    return clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
+}
+// The seven classes' covers at a point (groundCover in engine-frag.wgsl draws from them; looseStones in engine-bake places plants by them).
+fn coverAt(slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32) -> array<f32, 7> {
+    let site = coverSite(broad, tm);
+    let moist = site.x;
+    let light = site.y;
+    let soil = coverSoil(slope, top, tm, moist);
     let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
     var cover: array<f32, 7>;
     for (var k = 0u; k < 7u; k++) {

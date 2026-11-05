@@ -609,9 +609,9 @@ fn lfShare(c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
 // across the path, e beyond its end (the channel closes round it); kw the path's curvature times the channel width u.lfRiver, positive when the bend's centre is
 // on the c > 0 side; silt the oxbow's remaining depth (1 the river). v runs across the channel, +1 at the inner bank, -1 at the outer. The deepest line sits toward
 // the outer bank by .55 of a bend's tightness, under a steep cut bank; the inner side runs on above the water as a gentle point bar; depth grows with the bend
-// (pools in bends, riffles in the crossings); a levee rims the channel (scroll bars, ridged on the inner floodplain at .3 to 1 height unit, did not read at 1x and are left out). Port of docs/research/lab/exp/ws-meander.js riverAt
+// (pools in bends, riffles in the crossings); a levee rims the channel (scroll bars across the point bar are below). Port of docs/research/lab/exp/ws-meander.js riverAt
 // (the research branch), with the banks as smooth runs and the depth scaled by the width.
-fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, wy: f32) -> f32 {
+fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, wy: f32) -> vec2f {
   let W = u.lfRiver; let hw = 0.5 * W;
   let k = clamp(1.4 * kw, -1.0, 1.0); let ak = abs(k);
   let sg = select(1.0, sign(k), ak > 1e-4);
@@ -625,13 +625,29 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
   let depth = 0.25 * W * (0.5 + 0.75 * ak) * (1.0 + 0.15 * vnoise(wx / 30.0, wy / 30.0, u.seed ^ 0x99u)) * silt;
   let lev = 0.07 * W * exp(-max(d - hw, 0.0) / (0.8 * W)) * qq * qq * silt;
   let fp = fl + lev;
-  let barW = 0.2 + 1.6 * ak;
+  // The point bar: on the inner side of a bend (v > 1), as wide as the bend is tight and the channel wide (0.65 + 1.3 x the tightness, in channel widths),
+  // widest at the apex and narrow in the crossings, where it changes banks. s is the distance in px from the channel's inner edge. Its surface climbs gently
+  // from the water, with scroll bars (low ridges where the channel stood) across it, and rises to the floodplain at its outer edge; the second result is the
+  // share of sand laid on it, which goes to the cover plane and draws through the painted sand.
   let top = max(fp, sea + 0.4);
+  let s = (v - 1.0) * hw;
+  let barBase = mix(0.1 * W, W * (0.65 + 1.3 * ak), sm(0.0, 0.2, ak));
   var h = 1.0e9;
+  var sand = 0.0;
   if (v >= -1.0 && v <= 1.0) { h = sea + 0.25 - (depth + 0.25) * f; }
   else if (v < -1.0) { h = sea + 0.25 + (top - sea - 0.25) * sm(0.0, 1.0, (-1.0 - v) * hw / mix(7.0, 3.5, ak)); }
-  else { let t = clamp((v - 1.0) / barW, 0.0, 1.0); h = sea + 0.3 + (top - sea - 0.3) * t * t; }
-  return min(fp, h);
+  else if (s >= 1.85 * barBase) { h = sea + 1.1 + max(top - sea - 1.1, 0.0); }   // past the bar (and its noise): the floodplain, with no noise to read
+  else {
+    let barPx = barBase * (1.0 + 0.3 * vnoise(wx / 41.0, wy / 41.0, u.seed ^ 0x9bu));
+    let ub = s / barPx;
+    let t = min(ub, 1.0);
+    let phase = s / (0.9 * W) + 0.7 * vnoise(wx / 53.0, wy / 53.0, u.seed ^ 0x9cu);
+    let scroll = pow(0.5 + 0.5 * cos(6.2831853 * phase), 1.5) * sm(0.0, 0.25, t) * (1.0 - sm(0.7, 1.0, t));
+    h = sea + 0.3 + 0.8 * t + max(top - sea - 1.1, 0.0) * sm(0.6, 1.0, t) + 0.5 * scroll * sm(0.04, 0.18, ak);
+    let gate = sm(0.04, 0.18, ak) * sm(0.85, 1.0, silt);
+    sand = gate * (1.0 - sm(0.7, 1.1, ub + 0.3 * vnoise(wx / 19.0, wy / 19.0, u.seed ^ 0x9du))) * (0.65 + 0.35 * scroll);
+  }
+  return vec2f(min(fp, h), sand);
 }
 // P28 braided belt: three threads of water that wander across the path (each a seeded noise offset along it, up to 1.2 widths either way) and so cross, merge and split,
 // with gravel bars a little above the sea between them, in a belt about five widths either side of the path. Each thread is a width across at its core (32 px
@@ -654,7 +670,7 @@ fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> f32 {
 }
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
-fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec2f {
+fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec3f {
   let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len = max(sqrt(dx * dx + dy * dy), 1e-4);
   let ux = dx / len; let uy = dy / len;
   let ahead = (wx - s0.x) * ux + (wy - s0.y) * uy;
@@ -686,12 +702,13 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
   var value = base + (crest - base) * qt;
+  var bar = 0.0;
   if (u.lfRiver > 0.0 && !spur) {
     if (u.lfBraid > 0.0) { value = braidedBelt(value, c, e, share * s1.z, wx, wy); }
-    else { value = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); }
+    else { let ch = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); value = ch.x; bar = ch.y; }
   }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
-  return vec2f(value, clamp(q, 0.0, 1.0));
+  return vec3f(value, clamp(q, 0.0, 1.0), bar);
 }
 // ---- P1 gullies: a slope-aligned stripe filter (ported from the research lab's gully filter, docs/research/lab/lib.wgsl on the research branch) ----
 // The four nearest jittered cells of a 1/f lattice, smoothstep weights, (cos, sin) of the phase across `dir` summed and normalised: stripes whose crests
@@ -811,7 +828,7 @@ fn coneProfile(t: f32) -> f32 { let v = clamp(t, 0.0, 1.0); return (1.15 * v - 0
 // The height of the talus above the ground at a cell, or 0 (the caller takes the higher of this and the face). Each chute (a valley of the Gullies' widest
 // stripes, which run on straight below the foot) lays a cone whose slope is the repose (talusAngle) and whose length is the reach, with a low apron between the
 // cones, and nothing on a face whose section is nowhere steeper than the repose; inside the footprint the cone climbs the face at the repose until the face rises through it.
-fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32) -> f32 {
+fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32, face: f32) -> f32 {
   let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u]; let s2 = Seg[(u.segBase + trunk) * 4u + 2u];
   let ro = lfRun(s0, s1, s2, wx, wy, nA, nB, share);
   if (ro.x <= -u.talusReach) { return 0.0; }
@@ -819,26 +836,31 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   if (relief <= 0.0) { return 0.0; }
   // The steepest the stroke's section gets (its curve table, on this side, over the relief and the run), against the repose.
   let table = select(u.curveBase, u.backBase, ro.z > 0.5);
-  var rise = 0.0;
-  for (var k = 1u; k < 12u; k++) { let t = f32(k) / 12.0; rise = max(rise, abs(curveAt(table, t + 0.04) - curveAt(table, t - 0.04)) / 0.08); }
-  let steep = sm(u.talusTan, 1.6 * u.talusTan, rise * relief / max(ro.y, 1.0));
+  // One march over the curve: its steepest slope (the gate) and where it first rises at the repose or steeper (the foot of the face, tf, interpolated).
+  var rise = 0.0; var tf = 1.0; var before = 0.0; var found = false; var prevV = curveAt(table, 0.0);
+  for (var j = 0u; j < 16u; j++) {
+    let v = curveAt(table, f32(j + 1u) / 16.0);
+    let g = abs(v - prevV) * 16.0 * relief / max(ro.y, 1.0);
+    if (!found && g >= u.talusTan) { tf = (f32(j) + 0.5 - clamp((g - u.talusTan) / max(g - before, 1e-4), 0.0, 1.0)) / 16.0; found = true; }
+    before = g; prevV = v; rise = max(rise, g);
+  }
+  let steep = sm(u.talusTan, 1.6 * u.talusTan, rise);
   if (steep <= 0.0) { return 0.0; }
   let fall = landformFall(vec2f(wx, wy), x, y);
   if (all(fall == vec2f(0.0))) { return 0.0; }
-  var steer = -fall;
-  if (u.framed != 0u) { steer = vec2f(u.inv0 * steer.x + u.inv2 * steer.y, u.inv1 * steer.x + u.inv3 * steer.y); }
-  let wv = u.gullySize; let sd = normalize(steer);
-  let warp = 0.35 * wv * vnoise(lx / (1.5 * wv), ly / (1.5 * wv), u.seed ^ 0x7f4au);
-  let cs = gullyStripes(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, sd, 1.0 / wv, u.seed ^ 0x6a1u);
-  // A broad apron along the whole foot, deeper and longer below each chute (smooth in the stripe's phase, so neighbors coalesce into one skirt), and a
-  // concave profile: the repose at the apex, level at the toe.
-  let chute = sm(0.1, 1.0, 1.0 - cs.y * cs.y);
-  let L = u.talusReach * steep * (0.85 + 0.15 * chute);
+  let wv = u.gullySize;
+  let chute = 0.5 + 0.5 * clamp(vnoise(lx / wv, ly / wv, u.seed ^ 0x6a1u), -1.0, 1.0);
+  let L = u.talusReach * steep;
   if (L < 1.0) { return 0.0; }
-  let H = 0.5 * u.talusTan * L;
-  var T = H + u.talusTan * min(ro.x, 2.0 * L);
-  if (ro.x < 0.0) { let t = 1.0 - clamp(-ro.x / L, 0.0, 1.0); T = H * t * t; }
-  return min(T, 0.8 * relief);
+  let along = ro.x - ro.y * max(tf, 0.0);
+  let cap = 0.3 * relief;
+  let apex = cap * tanh(0.5 * u.talusTan * L / cap);
+  let out = max(-along, 0.0);
+  let Hc = apex * (0.88 + 0.24 * mix(chute, 0.5, sm(0.0, 0.25, out / L)));
+  if (along < 0.0) { let t = 1.0 - clamp(out / L, 0.0, 1.0); return Hc * t * t; }
+  let line = Hc + 2.0 * Hc / L * along;
+  let cut = u.gully * u.gullySize;
+  return line * (1.0 - sm(cut, 2.0 * cut, face - line));
 }
 
 @compute @workgroup_size(8, 8)
@@ -864,7 +886,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
   }
   var nearest = 3.0e38; var trunk = 0xffffffffu;
-  var pick = vec2f(base, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
+  var pick = vec3f(base, 0.0, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
   var tShare = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -920,7 +942,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   }
   // P17: the talus cones, where Gullies cut the faces (the chutes are theirs) and the stroke raises. Beyond the footprint the cone is all there is.
   var talus = 0.0;
-  if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base); }
+  if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen)); }
   if (!seen) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); }
     return;
@@ -932,6 +954,8 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (talus > 0.0) { value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  // P28 point bar: its sand goes to the cover plane, as a Sand brush's does, and draws through the painted-sand path.
+  if (pick.z > 0.0) { let vb = F[PV * cells + i]; F[PV * cells + i] = vb + (1.0 - vb) * pick.z; }
   // The influence: how much of the section the cell stands in, where the stroke moved the height (a unit or more is all of it). Masks, routes, protection and
   // cracks follow as a plateau's do.
   let inf = pick.y * clamp(abs(value - base), 0.0, 1.0);
@@ -1503,6 +1527,112 @@ fn coastLayers(@builtin(global_invocation_id) g: vec3u) {
   let ff = Sc[CFF * cells + i];
   if (ff > 0.0) { level = min(level, ff); }
   F[PH * cells + i] = clamp(min(min(base, u.baseH), sea + level * sm(0.0, 5.0, d)) + max(0.0, base - u.baseH), u.minH, u.maxH);
+}
+
+// ---- P27: the beach profile and rock coasts (a water landform's Surf, from SURF_BEACH_FROM up), last of the coast pass ----
+// One thread per cell, from its own distance D to the stroke's waterline (the coast field of the heights the earlier passes left), its snapshot R, the footprint W
+// and position-only noise in the shape's frame. Land: a face up from the waterline to a berm crest (a cubic, level at the crest), a slight back-slope, then a rise
+// that gives way to the bank; the land is cut to that profile where it stands above it and left where it is lower. Water: a shoreface (depth with the 2/3 power of
+// the distance, Dean's), then a steeper slope, the bed lifted to it where it is deeper. Both blend into the stroke's own heights by the reach. Retail's coasts hold
+// the berm to a few units (Archipelago's land stands 1 above the sea, its p90 crest 5), so the crest is 1 to 2.5 units and 14 to 48 px from the water: the frag's
+// surfBerm. Hard rock (the column's hardness at the coast, as the bake reads it) gets no berm: a steeper face with a broken edge, and the rock mask is painted over its face, so the frag draws the world's rock and no beach there.
+// The beach reach (px) is BEACH_REACH in sculpt-gpu-fields.js.
+const BEACH_REACH = 140.0;
+fn colRow(at: u32) -> vec4f { return MW[u.mwBase + u.nwrites + at]; }
+// The column's mean hardness over the coordinates a to b (the integral of the beds' hardness, so the mean is continuous in a and b where a bed's edge is a step), in the
+// section whose start the middle has passed (columnSectionAt of engine-common.wgsl). A two-bed section's share is its table's (the bake varies it by cycle: a world
+// with contrast has none that matters here).
+fn colHardMean(a: f32, b: f32) -> f32 {
+  var s = 0u;
+  let mid = 0.5 * (a + b);
+  for (var k = 1u; k < u.coColN; k++) { if (mid >= colRow(u.coColSecs + k).x) { s = k; } }
+  let sec = colRow(u.coColSecs + s);
+  let first = u32(sec.y); let n = u32(sec.z); let period = sec.w;
+  var cycle = 0.0;
+  for (var i = 0u; i < n; i++) { let bed = colRow(u.coColBeds + first + i); cycle += bed.x * bed.y; }
+  // The integral from 0 to c: whole cycles, then the beds of the rest.
+  var ends = vec2f(a, b); var total = vec2f(0.0);
+  for (var e = 0; e < 2; e++) {
+    let c = ends[e]; let whole = floor(c / period); let r = c - whole * period;
+    var acc = whole * cycle; var lo = 0.0;
+    for (var i = 0u; i < n; i++) {
+      let bed = colRow(u.coColBeds + first + i);
+      acc += bed.y * clamp(r - lo, 0.0, bed.x);
+      lo += bed.x;
+    }
+    total[e] = acc;
+  }
+  return (total.y - total.x) / (b - a);
+}
+// engine-common.wgsl's valueNoise, and the broad part of its columnOffset (the beds' tilt and the 110-px wander: the finer octaves are narrower than a headland).
+fn colHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
+fn colNoise(q: vec2f) -> f32 {
+  let c = floor(q); let f = fract(q); let fade = f * f * (3.0 - 2.0 * f);
+  let a = colHash(c); let b = colHash(c + vec2f(1.0, 0.0)); let d = colHash(c + vec2f(0.0, 1.0)); let e = colHash(c + vec2f(1.0, 1.0));
+  return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+fn colOffset(p: vec2f) -> f32 {
+  let a = radians(u.coColDipDir);
+  return u.coColDip * dot(p, vec2f(cos(a), sin(a))) + colNoise(p / 110.0 + 3.1) * u.coColWander * 0.8;
+}
+// How rocky the coast is at world point p, 0..1: the hardness of the bed 1.5 units over the sea (the column counts from the sea; the frag reads the same).
+fn coastRock(p: vec2f) -> f32 {
+  if (u.coColN == 0u) { return 0.0; }
+  // The mean over 7 units of the column, so a bed's edge is a ramp of 100 px or more along the coast and not a wall.
+  let c = 1.5 - u.coColOrigin + colOffset(p);
+  let h = colHardMean(c - 3.5, c + 3.5);
+  return sm(0.35, 0.75, h);
+}
+@compute @workgroup_size(8, 8)
+fn coastBeach(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y); let sea = u.sea;
+  let raw = Sc[CRR * cells + i]; let d = Sc[CDD * cells + i]; let foot = Sc[CW * cells + i];
+  let strength = sm(0.2, 0.45, u.coSurf) * sm(0.0, 0.3, foot);
+  if (strength <= 0.0 || d >= BEACH_REACH) { return; }
+  // The berm's size is a function of the cross-shore distance and of the nearest point of the coast (its frame position), so it is one along the normal.
+  let sx = select(CPX, CQX, u.coSrc != 0u);
+  let cp = vec2f(Sc[sx * cells + i], Sc[(sx + 1u) * cells + i]);
+  if (cp.x < -1.0e8) { return; }
+  var lx = cp.x; var ly = cp.y;
+  if (u.framed != 0u) { lx = u.inv0 * cp.x + u.inv2 * cp.y + u.inv4; ly = u.inv1 * cp.x + u.inv3 * cp.y + u.inv5; }
+  let salt = u.seed;
+  // The berm's distance and height wander along the coast (cusps and embayments, 60 to 80 px apart).
+  let e = u.coSurf;
+  let xb = (14.0 + 34.0 * e) * (1.0 + 0.3 * vnoise(lx / 57.0, ly / 57.0, salt ^ 0x6b1u));
+  let hb = (1.0 + 1.5 * e) * (1.0 + 0.2 * vnoise(lx / 83.0, ly / 83.0, salt ^ 0x6b7u));
+  // The rock is the column's at the coast, so a stretch of coast is rock or sand from the water to the bank. The nearest crossing is one of a few per cell and
+  // jumps between them, so the coast point is found by going d down the gradient of the distance field (central differences over a cell each way) instead.
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  let dl = Sc[CDD * cells + cIdx(max(x - 1, u.rx0), y)]; let dr = Sc[CDD * cells + cIdx(min(x + 1, u.rx1), y)];
+  let du = Sc[CDD * cells + cIdx(x, max(y - 1, u.ry0))]; let dd = Sc[CDD * cells + cIdx(x, min(y + 1, u.ry1))];
+  var gr = vec2f(dr - dl, dd - du);
+  var shoreAt = cp;
+  if (max(max(dl, dr), max(du, dd)) < BEACH_REACH + 2.0 * u.spacing && dot(gr, gr) > 1.0e-6) { shoreAt = vec2f(wx, wy) - normalize(gr) * d; }
+  // The cell's own place in the frame, for the rock's broken edge.
+  var cx = wx; var cy = wy;
+  if (u.framed != 0u) { cx = u.inv0 * wx + u.inv2 * wy + u.inv4; cy = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  // Pockets: noise at 40 and 95 px (a cell is 16) moves the rock's threshold, so a hard stretch opens into small coves of sand and a soft one gets rocks in it.
+  let ragged = 0.6 * vnoise(cx / 40.0, cy / 40.0, salt ^ 0x6d1u) + 0.4 * vnoise(cx / 95.0, cy / 95.0, salt ^ 0x6d9u);
+  let rock = sm(0.4, 0.7, coastRock(shoreAt) + 0.3 * ragged);
+  var result = raw;
+  if (raw > sea) {
+    // A rock coast's Surf is the lake's: the plane the frag reads (flat Surf where the stroke changed the height, plane 18) drops to a wet line and a lace.
+    // A rock coast is painted rock (plane 0, the rock mask) over its face, so the frag draws the world's rock there, with the paint's ragged edge; the beach gives way to it.
+    let paint = rock * (1.0 - sm(40.0, 80.0, d));
+    if (paint > 0.02) { maskSet(i, 0u, max(maskGet(i, 0u), i32(floor(127.0 * paint + 0.5)))); }
+    let rel = raw - sea;
+    var ceil = 0.0;
+    if (d < xb) { let t = d / xb; ceil = hb * (1.5 * t - 0.5 * t * t * t); }
+    else { ceil = hb * (1.0 - 0.35 * sm(0.0, 1.0, (d - xb) / 24.0)) + 0.25 * max(0.0, d - xb - 24.0); }
+    let beach = mix(min(rel, ceil), rel, sm(xb + 24.0, xb + 56.0, d));
+    // Rock: the face is steeper near the water, with a broken edge (blocks about a cell and a half across, a unit high, on ground more than a unit over the sea).
+    let broken = vnoise(cx / 24.0, cy / 24.0, salt ^ 0x6c3u) * sm(1.0, 4.0, rel) * sm(3.0, 12.0, d) * (1.0 - sm(30.0, 70.0, d));
+    let rocky = rel * (1.0 + 0.5 * (1.0 - sm(0.0, 40.0, d))) + broken;
+    result = sea + max(mix(rel, mix(beach, rocky, rock), strength), min(rel, 0.05));
+  }
+  F[PH * cells + i] = clamp(result, u.minH, u.maxH);
 }
 
 // ---- H10: shore plates (materials 1 slabs and 2 frost), after the coast field (coMoved 0, so every crossing the footprint touches seeds it) ----

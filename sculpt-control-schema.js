@@ -98,7 +98,7 @@ export function worldControlRequirement(key,v){
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','grooveSpacing','grooveAngle','grooveRun','bedPunch','gullyDepth','gullyWidth','gullyShade','ribTilt','rockScale','rockAge','rockOpen'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','grooveSpacing','grooveAngle','grooveRun','bedPunch','gullyDepth','gullyWidth','rockStain','ribTilt','rockScale','rockAge','rockOpen'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  // The lines' places are cut by joints and gullies, and the ribs between gullies stand on the same lines; their length matters only to a cut.
  if(['grooveSpacing','grooveAngle'].includes(key))return joints()>0||n('gullyDepth')>0||n('ribTilt')>0?'':'Set Open joints, Gully depth or Rib tilt above zero (and use a rock type with joint lines) to use this setting.';
  if(key==='grooveRun')return joints()>0||n('gullyDepth')>0?'':'Set Open joints or Gully depth above zero (and use a rock type with joint lines) to use this setting.';
@@ -113,7 +113,8 @@ export function worldControlRequirement(key,v){
  if(key==='moonFoldSpacing')return needs('moonFolds','Contour folds');
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
- if(['gullyWidth','gullyShade'].includes(key))return needs('gullyDepth','Gully depth');
+ if(key==='gullyWidth')return needs('gullyDepth','Gully depth');
+ if(key==='rockStain'&&n('gullyDepth')<=0&&n('rockCurtains')<=0)return 'Enable Gully depth or use a rock type with ledge stains to use this setting.';
  // Beds and joints draw only in ordered rock, and the bed profile only where a ledge or lip gives it relief.
  if(['rockFrom','cliffFollow','cliffReach','cliffWide','cliffFlat','cliffRise','cliffBed','cliffStagger','cliffDomain'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['cliffReach','cliffWide','cliffFlat','cliffBed','cliffDomain'].includes(key)&&n('cliffFollow')<=0)return 'Choose Follow terrain in Structure orientation to use this setting.';
@@ -176,7 +177,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','rockOpen',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
- 'baseBand','desertCapFlat','rockMoss','rockDetail','faceRelief','gullyDepth','grooveSpacing','rockScale','cliffFollow',
+ 'baseBand','desertCapFlat','rockMoss','rockStain','rockDetail','faceRelief','gullyDepth','grooveSpacing','rockScale','cliffFollow',
  'shelfWander','bedFlat','bedDots','crackedStep','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',

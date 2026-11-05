@@ -400,27 +400,74 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
 // the sun's shade), soil depth (thin on steep and convex ground, deep in hollows and where water laid deposit) and light (the sun on the
 // broad face, level ground 1). A class is viable inside a window of each (Cordonnier et al. 2017; Gain et al. 2017); its cover is the
 // viability squared times a strength that follows Lushness (succession: grazed turf and bare ground below 1, meadow, scrub and rush above);
-// a pixel draws its class from the covers by a coherent uniform, which Patchiness moves from per-pixel noise to patches.
+// a pixel draws its class from the covers by a coherent uniform that mixes patches with per-pixel noise (COVER_PATCHINESS).
 // Table (MM_COVER rows): 0 x on, y wetness at which moisture starts to rise, z wetness at which it is full, w moisture of dry level ground;
 // 1 x slope where soil thins, y slope where it is gone, z convex ground's loss, w deposit's gain; 2 x patch px, y moisture per unit of
-// wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w Patchiness (0..1: how far the class draw clumps into patches);
+// wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w unused;
 // then per class five rows: colour (rgb) and its grain, strength and Lushness exponent, and the windows of moisture, soil and light; the last row (39) holds the plants
 // (card P31, engine-bake looseStones): x tuft height scale, y shrub height scale, z shrub density; zeros: no plants.
-fn coverZ(p: vec2f, scale: f32, patchiness: f32) -> f32 {
+// Patchiness is a constant: 0 to 1 moves under 4% of any class's blocks on modern Green (measure/impact.py, card P30), below what a control must move.
+const COVER_PATCHINESS = 0.8;
+fn coverZ(p: vec2f, scale: f32) -> f32 {
     let zp = (valueNoise(p / scale + 17.0) + 0.5 * valueNoise(p / (0.45 * scale) + 31.0) + 0.25 * valueNoise(p / (0.2 * scale) + 47.0)) / 0.46;
     let c = floor(p);
     let pixel = (cellHash(c).x + cellHash(c + 7.3).x + cellHash(c + 19.1).y - 1.5) * 2.0;
-    let pt = clamp(patchiness, 0.0, 1.0);
-    return sqrt(pt) * zp + sqrt(1.0 - pt) * pixel;
+    return sqrt(COVER_PATCHINESS) * zp + sqrt(1.0 - COVER_PATCHINESS) * pixel;
 }
 // The grass with the class this pixel draws: the class colour carries the grass art's light and dark, and keeps its chroma only within
 // +-30% of that (the art's blue and red grain would otherwise swing a tan or a dark green to pink or teal).
-fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f) -> vec3f {
+// Card P31, flowers: dots of colour on the meadow and scrub, 1 to 2 px, in clumps of one species, drawn from the position alone (no channel through the
+// bake: the draw already holds the covers, the sun and Lushness here, and a dot is a function of its pixel). The palette is the world's own: rows
+// MM_COVER + 40..43 (rgb, weight; weight 0 is unused), and the density is row 39's w; none, none drawn. A pixel pair block (2 x 2 px) holds at most one dot,
+// 1 px or 2 px wide; the chance of one is the density times the share of meadow and scrub here (more of both on lush ground, by their own Lushness
+// exponents, and again by Lushness here), the sun on the face, and a clump field of about 10 px. A clump is one palette colour (a cell of 22 px).
+// They fade out between 1 and 2 world px per pixel (chunk previews): finer than a pixel the dots would alias.
+// Returns (rgb, weight). The gate is the share of open ground (no path, above the water).
+fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation: f32, gate: f32) -> vec4f {
+    let dens = cvr(39u).w;
+    if (dens <= 0.0 || gate <= 0.0) { return vec4f(0.0); }
+#ifdef CHUNK
+    let fade = 1.0 - smoothstep(1.0, 2.0, u.chunkScale);
+#else
+    let fade = 1.0;
+#endif
+    let px = floor(p);
+    let blk = floor(px * 0.5);
+    let hb = cellHash(blk + vec2f(83.1, 17.7));
+    if (hb.x >= dens * 4.0) { return vec4f(0.0); }
+    let share = (cover[3] + 0.7 * cover[4] + 0.15 * cover[6] + 0.1 * cover[2]) / max(total, 1e-4);
+    let sun = mix(0.15, 1.0, smoothstep(0.6, 1.0, light));
+    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
+    let clump = smoothstep(0.35, 0.85, valueNoise(p / 9.0 + 7.0) * 0.5 + 0.5);
+    let chance = dens * 4.0 * clump * clump * clump * share * sun * lush * gate * fade;
+    if (hb.x >= chance) { return vec4f(0.0); }
+    // The dot: one pixel of the block, or two side by side.
+    let ho = cellHash(blk + vec2f(5.3, 61.9));
+    let o = floor(ho * 2.0);
+    let at = px - 2.0 * blk;
+    let wide = hb.y < 0.4;
+    if (!(all(at == o) || (wide && at.y == o.y))) { return vec4f(0.0); }
+    // Its colour: one species to a clump, by the palette's weights.
+    let pick = cellHash(floor(p / 22.0) + vec2f(41.3, 9.1)).x;
+    var wsum = 0.0;
+    for (var k = 0u; k < 4u; k++) { wsum += cvr(40u + k).w; }
+    var acc = 0.0;
+    var col = cvr(40u).rgb;
+    for (var k = 0u; k < 4u; k++) {
+        let c = cvr(40u + k);
+        if (c.w <= 0.0) { continue; }
+        acc += c.w / wsum;
+        col = c.rgb;
+        if (pick < acc) { break; }
+    }
+    return vec4f(col * (1.1 + 0.25 * ho.x), 1.0);
+}
+fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f, gate: f32) -> vec3f {
     let c2 = cvr(2u);
     let cover = coverAt(slope, broad, top, tm, vegetation);
     var total = 0.0;
     for (var k = 0u; k < 7u; k++) { total += cover[k]; }
-    let z = coverZ(p, c2.x, cvr(3u).w);
+    let z = coverZ(p, c2.x);
     let pick = 1.0 / (1.0 + exp(-1.702 * z)) * total;
     var acc = 0.0;
     var klass = 6u;
@@ -429,7 +476,9 @@ fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, veget
     let grain = (cellHash(floor(p) + 3.7).y - 0.5) * 2.0 * col.w;
     let ratio = grass / max(cvr(3u).rgb, vec3f(0.01));
     let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
-    return col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
+    let ground = col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
+    let flower = flowersAt(p, cover, total, coverSite(broad, tm).y, vegetation, gate);
+    return mix(ground, flower.rgb, flower.a);
 }
 
 // Moon slope marks, measured on the retail Lunar sections and the cc21
@@ -1331,12 +1380,12 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
 // distance in world px to the drawn waterline (onshore +; the drawn edge sits where the bed is 0.6 under the sea, so the bank's own run is added),
 // the nearest shore point q, a coordinate along the coast that value noise can use, and the bed's slope there (units per px). Beyond SURF_REACH, or where the height is more than a beach
 // above or a surf zone below the sea, x is 1e3. Every term is a function of position, so a chunk replays to the same bytes.
-const SURF_REACH = 56.0;
+const SURF_REACH = 86.0;
 fn surfShore(p: vec2f) -> vec4f {
     let h0 = baseHeight(p) - u.sea;
     let dry = h0 >= 0.0;
     if ((dry && h0 > 12.0) || (!dry && h0 < -16.0)) { return vec4f(1.0e3, 0.0, 0.0, 0.0); }
-    var radii = array<f32, 10>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0);
+    var radii = array<f32, 12>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0, 70.0, 86.0);
     var best = SURF_REACH;
     var q = p;
     for (var k = 0; k < 8; k++) {
@@ -1344,7 +1393,7 @@ fn surfShore(p: vec2f) -> vec4f {
         let dir = vec2f(cos(a), sin(a));
         var lastR = 0.0;
         var lastH = h0;
-        for (var i = 0; i < 10; i++) {
+        for (var i = 0; i < 12; i++) {
             let r = radii[i];
             if (lastR >= best) { break; }
             let hr = baseHeight(p + dir * r) - u.sea;
@@ -1361,10 +1410,10 @@ fn surfShore(p: vec2f) -> vec4f {
     let slope = max(bankGrad(p), 0.12);
     return vec4f(select(-best, best, dry) + 0.6 / slope, q, slope);
 }
-// The beach the surf builds: berm height 1.5 + 3 Surf units on a face that flattens from 0.30 to 0.12, so the berm stands 5 to 38 px from the water.
+// The beach the surf builds: the berm crest 14 + 34 Surf units px from the water (the heights' own, coastBeach in engine-shape.wgsl: 1 + 1.5 Surf units tall).
 // Below Surf .2 there is only the wet line and the lace (a lake): the sand, its cusps and the breakers fade in between .2 and .45.
 fn surfBeach(e: f32) -> f32 { return smoothstep(0.2, 0.45, e); }
-fn surfBerm(e: f32) -> f32 { return (1.5 + 3.0 * e) / mix(0.30, 0.12, e); }
+fn surfBerm(e: f32) -> f32 { return 14.0 + 34.0 * e; }
 // The cross-shore coordinate with the beach cusps: horns that push the swash seaward every ~26 px along the coast.
 fn surfCuspX(x: f32, q: vec2f, e: f32) -> f32 {
     return x + 3.5 * e * surfBeach(e) * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm(e) * 0.7, surfBerm(e) * 1.1, x));
@@ -1549,7 +1598,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
     var slopeBased = vec3f(0.0);
-    if (slope > u.slopeProfile.x || u.paintOn != 0 || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
+    // Card P30: a world with a ground-cover table has no slope ramp: its slope cover is the share of thin soil (the table's soil depth, which
+    // is what bares and dries the ground there), and the slope texture is read wherever the soil is not full.
+    let tabled = cvr(0u).x > 0.5;
+    var thinSoil = 0.0;
+    if (tabled) { thinSoil = 1.0 - smoothstep(0.1, 0.5, coverSoil(slope, place.top, timeMaps, coverSite(broad, timeMaps).x)); }
+    // A tabled world reads it wherever a consumer can be: the thin soil, the faces' moss, and the rock that shows (a face, wear's outcrops from slope .3).
+    let slopeTexWanted = select(slope > u.slopeProfile.x, thinSoil > 0.0 || place.face > 0.0 || place.exposed > 0.0 || (u.outcrop > 0.0 && slope > 0.3), tabled);
+    if (slopeTexWanted || u.paintOn != 0 || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
     var slopeShare = 0.0;
@@ -1558,8 +1614,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
         var slopeGrass = slopeBased;
-        var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope)
-                       * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
+        var slopeCover = select(smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h), thinSoil, tabled);
         drawMineralMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
@@ -1583,7 +1638,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         grass = mix(grass, slopeGrass, slopeCover);
     }
     // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
-    if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass); }
+    if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
     // Small mineral interiors supply pixel structure; the whole crown/face/
     // foot comes from this surface. Some native microshading remains baked.
     var rock = rockSource(pixel);
@@ -1628,6 +1683,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfX = shore.x;
         surfQ = shore.yz;
         surfSlope = shore.w;
+        // Painted rock (a rock coast's, from coastBeach, or the artist's) takes the beach away, by its ragged edge: Surf falls to a lake's wet line and lace.
+        if (u.paintOn != 0) { surfE = mix(surfE, 0.1, smoothstep(0.3, 0.7, painted.x) * surfBeach(surfE)); }
         if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, surfE)); }
     }
     var material = mix(grass, rock, exposed);
@@ -1684,12 +1741,40 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
         let ledge = smoothstep(0.1, 0.7, place.top);
         let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
-        let wetMoss = (0.25 + 1.6 * timeMaps.wet);   // H5 3a: moss grows where water runs
-        let want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+        // Card P30: with a ground-cover table the flecks are the table's moss class, in its colour and where its moisture and light windows are
+        // open (the table's own placement, so they follow Lushness, the wet swaths and the sun as the moss on the ground does); without one they
+        // keep the old rule, the vegetation plane and the wetness (H5 3a: moss grows where water runs).
+        let wetMoss = (0.25 + 1.6 * timeMaps.wet);
+        var want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+        var mossColour = saturate(slopeBased * vec3f(1.0, 1.25, 0.95));
+        if (cvr(0u).x > 0.5) {
+            let cs = coverSite(broad, timeMaps);
+            let moss = cvr(4u + 5u * 5u);
+            let mossSpot = (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+            want = u.rockMoss * place.vegetation * (0.3 + 1.5 * coverWin(cs.x, cvr(4u + 5u * 5u + 2u)) * coverWin(cs.y, cvr(4u + 5u * 5u + 4u))) * mossSpot;
+            let ratio = slopeBased / max(cvr(3u).rgb, vec3f(0.01));
+            mossColour = saturate(moss.rgb * clamp(dot(ratio, vec3f(0.299, 0.587, 0.114)), 0.7, 1.3));
+        }
         // A wall's flecks are drawn in screen pixels, or each dash would be stretched into a streak down it.
         let ticket = mix(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, cellHash(vec2f(floor(pixel.x * 0.5), floor(pixel.y)) + 311.0).x, faceRelief);
         let fleck = step(ticket, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
-        material = mix(material, saturate(slopeBased * vec3f(1.0, 1.25, 0.95)), fleck);
+        material = mix(material, mossColour, fleck);
+        // Card P10, lichen: rosettes of 1 to 4 px radius on the faces that look at the sun and at the sky (the lit normal, relief included), off the
+        // crevices. The rock type's cover (its `lichen`) grows with Age and is scaled by this row, as the flecks are; a wall's rosettes are drawn
+        // in screen pixels like its flecks.
+        let lichen = u.rockMoss * u.rockLichen * (0.4 + 0.6 * clamp(u.rockAge, 0.0, 1.0)) * clamp(place.vegetation, 0.0, 2.0);
+        if (lichen > 0.0) {
+            let lq = select(p, pixel, faceRelief > 0.5);
+            let rosette = markCells(lq / 8.0, vec2i(433, 71), 1.0);
+            let lit = smoothstep(0.25, 0.65, dot(normal, u.light)) * smoothstep(0.35, 0.75, normal.z);
+            let radius = (0.6 + 3.4 * rosette.id.x) * sqrt(min(lichen, 1.5)) * (1.0 + 0.3 * (cellHash(floor(lq) + 5.0).x - 0.5));
+            let onRosette = step(rosette.id.y, lichen * 1.2) * step(rosette.d1 * 8.0, radius) * lit * (1.0 - crevice) * exposed;
+            var tint = vec3f(150.0, 158.0, 120.0) / 255.0;   // grey-green
+            if (rosette.id.z > 0.4) { tint = vec3f(196.0, 192.0, 168.0) / 255.0; }   // pale crust
+            if (rosette.id.z > 0.7) { tint = vec3f(178.0, 176.0, 72.0) / 255.0; }   // yellow-green
+            if (rosette.id.z > 0.95) { tint = vec3f(206.0, 118.0, 38.0) / 255.0; }   // orange
+            material = mix(material, tint, 0.85 * onRosette);
+        }
     }
     if (u.rockCrown > 0.0) {
         // Some worlds' raised ground is bare rock to its crown (Zhon's
@@ -1755,12 +1840,21 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // sand covers the ground.
             material = mix(material, weathered, smoothstep(0.0, 0.6, sand) * u.sandDust * 0.6);
             let speck = terrainNoise(p * 6.0 + vec2f(17.0, 29.0)).b;
-            let cover = smoothstep(0.35, 0.95, sand + (speck - 0.5) * 0.55 * u.sandEdge);
+            // Over the thinning edge sand is a scatter of clumps 3 to 8 px across, more of them the thicker it is, not a line: each clump
+            // takes the sand where the sand's share beats the clump's own threshold; deep sand covers every clump, as before.
+            let clump = (valueNoise(p / 3.7 + 29.0) * 0.5 + 0.5) * 0.55 + (valueNoise(p / 8.3 + 61.0) * 0.5 + 0.5) * 0.45;
+            let threshold = 0.22 + 0.68 * smoothstep(0.25, 0.75, clump);
+            let scatter = smoothstep(threshold - 0.07, threshold + 0.07, sand);
+            let solid = smoothstep(0.35, 0.95, sand + (speck - 0.5) * 0.55 * u.sandEdge);
+            let cover = mix(scatter, solid, smoothstep(0.6, 0.95, sand));
             // Grass and moss travel with the sand and regrow over it in
             // patches, more where it is thin; tufts break the patch edges.
             let patchy = terrainNoise(p * 0.35 + vec2f(51.0, 7.0)).g * 0.65 + terrainNoise(p * 1.3 + vec2f(3.0, 91.0)).b * 0.35;
             let tuft = terrainNoise(p * 5.0 + vec2f(13.0, 47.0)).r;
-            let regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + (tuft - 0.5) * 0.3) * u.sandGrass;
+            // Where the sand thins toward its edge the ground shows through in tufts: the thinner, the more the tufts decide and the
+            // more of the patch's own regrowth pushes through (the edge is a scatter 3 to 8 px across, not a line).
+            let thin = 1.0 - smoothstep(0.35, 0.95, sand);
+            let regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + thin * 0.42 + (tuft - 0.5) * (0.3 + 0.7 * thin)) * u.sandGrass;
             material = mix(material, sandMaterial, cover * (1.0 - regrow));
         }
     }

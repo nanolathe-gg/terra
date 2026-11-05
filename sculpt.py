@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js',)}
+    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -114,7 +114,7 @@ KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander
 KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
-                     gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
+                     gullyDepth=0, gullyWidth=14, rockStain=0, ribTilt=0,
                      bedPunch=0,
                      rockScale=1, rockAge=.5, rockOpen=1)
 # E11 (shallow water round 2): every default is the earlier look. shelfWander (depth units) moves
@@ -263,7 +263,7 @@ WORLD_KNOBS = {
                   # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
                   # bedPunch 0, facetTilt 0, shineOutside 1 and bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
-                  gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
+                  gullyDepth=8, grooveRun=90, rockStain=1.2, ribTilt=.2,
                   bedPunch=1,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
@@ -657,8 +657,8 @@ WORLD_VARIANTS = {
         # (Realism check on green-modern-1..3: 8.41 of 15 statistics in range against 7.82 without, 24 gate failures against 25; 30 gives 8.53, 60 gives 8.76,
         # but from 30 the cones read as hard dark rays on hills that are soft in retail). Card P32: terracettes on steep grass (Joined
         # wrinkles on a grass world).
-        # Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass on top of the slope-only
-        # ramp, which still gates the slope texture (the table is read by engine-frag.wgsl groundCover). Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
+        # Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass (engine-frag.wgsl groundCover). The table also replaces the slope-only
+        # ramp: the slope texture's share is the table's thin soil. Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
         # dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the
         # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
@@ -669,12 +669,15 @@ WORLD_VARIANTS = {
                        material=dict(stoneSort=.7,
                        # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
                        rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
-                                 chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6),
+                                 chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6, curtain=.6, lichen=1.5),
                        groundCover=dict(
                            # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
                            # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
-                           plants=dict(tuft=4, shrub=2, shrubs=1.5),
-                           wet=[.25, .9], dry=.4, patch=22, patchiness=.8, ground=[55, 93, 27],
+                           plants=dict(tuft=4, shrub=2, shrubs=1.5,
+                                       # Card P31: flowers, 1-2 px dots in one-species clumps on meadow and scrub, in sun, more on lush ground (the draw's groundCover). Density is the
+                                       # chance of a dot per 2 x 2 px at the best of its ground; the palette is rgb and a weight (white and yellow common, violet and red rare).
+                                       flowers=dict(density=.15, palette=[[236, 232, 214, 4], [255, 214, 64, 3], [170, 120, 215, 1], [225, 80, 60, 1]])),
+                           wet=[.25, .9], dry=.4, patch=22, ground=[55, 93, 27],
                            soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
                            moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
                            classes=[
@@ -811,7 +814,7 @@ SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 def rock_flags(rock):
     """What the rock preset cuts, for the panel's reasons: rockCells (it cuts blocks: Size and Age need it) and rockJoint (its joint
     lines' depth, units; Open joints needs it or the blocks' crevices)."""
-    return dict(rockCells=int(rock.get('size', 0) > 0), rockJoint=rock.get('joint', 2))
+    return dict(rockCells=int(rock.get('size', 0) > 0), rockJoint=rock.get('joint', 2), rockCurtains=int(rock.get('curtain', 0) > 0))
 
 
 def world_knobs(biome, config):

@@ -6,6 +6,7 @@
 import {materialRows,tablePlacementRows,groundCoverRows,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
+import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
 
 // Layers of the masks texture array (4 planes each): the plane count divided by 4. Planes 0-17 are in use, 18-24 are unused (see MASK_KEYS in sculpt.js).
 const MASK_PLANE_COUNT = 25;
@@ -110,6 +111,8 @@ const MIP_SHADER = `
 // H4: the generated materials' level-0 size and level count (512 down to 8 px).
 const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
 
+class SpecializationMiss extends Error { constructor(state) { super('nanolathe: pipelines for these gates are not built yet'); this.state = state; } }
+
 export class TerrainRenderer {
   static async create(canvas, config) {
     const self = new TerrainRenderer(canvas, config);
@@ -194,10 +197,18 @@ export class TerrainRenderer {
         `${e.lineNum}:${e.linePos} ${e.message}\n    ${code.split('\n')[e.lineNum - 1]?.trim() ?? ''}`).join('\n'));
       return module;
     };
+    // P6: the draw's and the bake's uniform gates are override bools (sculpt-gates.js); the pipelines are built per set of values, see specialized().
+    const fragGates = extractGates(preprocess(frag, common, defines), this.layout.fields);
+    const bakeGates = extractGates(preprocess(bake, common, new Set([...defines, 'BAKE'])), this.layout.fields);
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
-      compile('engine-frag.wgsl', preprocess(frag, common, defines)),
-      compile('engine-bake.wgsl', preprocess(bake, common, new Set([...defines, 'BAKE'])))]);
+      compile('engine-frag.wgsl', fragGates.source),
+      compile('engine-bake.wgsl', bakeGates.source)]);
+    this.specParts = {vertModule, fragModule, bakeModule, frag: fragGates.gates, bake: bakeGates.gates, keyOrder: [...new Set([...fragGates.gates.keys(), ...bakeGates.gates.keys()])]};
+    this.specCache = new Map();
+    this.specBuilding = new Map();
+    this.specUsed = [];
+    this.specStats = {built: 0, ms: 0};
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
     // bake (binding 6 is the fields for the draw, the routes for the bake).
@@ -222,14 +233,9 @@ export class TerrainRenderer {
       {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}},
       {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: 'storage'}}]});
     const bakeLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, fieldsLayout]});
-    [this.drawPipeline, this.bakePipeline, this.loosePipeline] = await Promise.all([
-      device.createRenderPipelineAsync({label: 'terrain', layout: device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout]}),
-        vertex: {module: vertModule, entryPoint: 'vertexMain', buffers: [{arrayStride: 8, attributes: [{shaderLocation: 0, offset: 0, format: 'float32x2'}]}]},
-        fragment: {module: fragModule, entryPoint: 'fragmentMain', targets: [{format: this.format}]},
-        primitive: {topology: 'triangle-list', cullMode: 'none'},
-        depthStencil: {format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less'}}),
-      device.createComputePipelineAsync({label: 'relief bake', layout: bakeLayout, compute: {module: bakeModule, entryPoint: 'bakeMain'}}),
-      device.createComputePipelineAsync({label: 'loose mask', layout: bakeLayout, compute: {module: bakeModule, entryPoint: 'looseMain'}})]);
+    this.fieldsLayout = fieldsLayout;
+    this.bakePipelineLayout = bakeLayout;
+    this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout]});
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -492,6 +498,58 @@ export class TerrainRenderer {
   f(name, value) { this.set(name, value); }
   i(name, value) { this.set(name, Number(value)); }
   v(name, value) { this.set(name, value); }
+
+  // P6: the draw, bake and loose-mask pipelines for the gates' values now. A set of values not built yet throws SpecializationMiss; the async
+  // callers (renderChunk, timeBake, timeDraw) build it and run again. The check at the end of draw() catches a gate that changed between the
+  // bake's encode and the draw's: both run with the uniform buffer as it is at submit.
+  specKey() {
+    const parts = this.specParts, values = {...gateValues(parts.frag, this.uniformView), ...gateValues(parts.bake, this.uniformView)};
+    return {key: gateKey(values, parts.keyOrder), values};
+  }
+  specialized(kind) {
+    const state = this.specKey(), entry = this.specCache.get(state.key);
+    if (!entry) throw new SpecializationMiss(state);
+    this.specUsed.push(state.key);
+    return entry[kind];
+  }
+  specCheck() {
+    const state = this.specKey();
+    if (this.specUsed.some(k => k !== state.key)) throw new SpecializationMiss(state);
+  }
+  get drawPipeline() { return this.specialized('draw'); }
+  get bakePipeline() { return this.specialized('bake'); }
+  get loosePipeline() { return this.specialized('loose'); }
+  async specialize({key, values}) {
+    if (this.specCache.has(key)) return;
+    if (!this.specBuilding.has(key)) {
+      const {vertModule, fragModule, bakeModule, frag, bake} = this.specParts, device = this.device, start = performance.now();
+      const pick = gates => Object.fromEntries([...gates.keys()].map(id => [id, values[id]]));
+      const fragment = {module: fragModule, entryPoint: 'fragmentMain', targets: [{format: this.format}], constants: pick(frag)};
+      const compute = entryPoint => ({module: bakeModule, entryPoint, constants: pick(bake)});
+      this.specBuilding.set(key, Promise.all([
+        device.createRenderPipelineAsync({label: 'terrain', layout: this.drawPipelineLayout,
+          vertex: {module: vertModule, entryPoint: 'vertexMain', buffers: [{arrayStride: 8, attributes: [{shaderLocation: 0, offset: 0, format: 'float32x2'}]}]},
+          fragment, primitive: {topology: 'triangle-list', cullMode: 'none'}, depthStencil: {format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less'}}),
+        device.createComputePipelineAsync({label: 'relief bake', layout: this.bakePipelineLayout, compute: compute('bakeMain')}),
+        device.createComputePipelineAsync({label: 'loose mask', layout: this.bakePipelineLayout, compute: compute('looseMain')})]).then(([draw, bake, loose]) => {
+        if (this.specCache.size >= 24) this.specCache.delete(this.specCache.keys().next().value);
+        this.specCache.set(key, {draw, bake, loose});
+        this.specStats.built++; this.specStats.ms += performance.now() - start;
+      }).finally(() => this.specBuilding.delete(key)));
+    }
+    await this.specBuilding.get(key);
+  }
+  // Runs `work` (which encodes and submits with the pipelines above); a miss builds the pipelines and runs it again.
+  async withPipelines(work) {
+    for (let attempt = 0; ; attempt++) {
+      this.specUsed = [];
+      try { return work(); }
+      catch (error) {
+        if (!(error instanceof SpecializationMiss) || attempt >= 4) throw error;
+        await this.specialize(error.state);
+      }
+    }
+  }
 
   flushUniforms() {
     if (!this.uniformsDirty) return;
@@ -764,6 +822,8 @@ export class TerrainRenderer {
         encoder.resolveQuerySet(slot.querySet, 0, 2, slot.resolve, 0);
         encoder.copyBufferToBuffer(slot.resolve, 0, slot.read, 0, 16);
       },
+      // An encoder that is never submitted (a SpecializationMiss retry) gives its slot back.
+      release: () => { slot.busy = false; },
       // After submit: resolves to the pass's GPU milliseconds.
       result: () => slot.read.mapAsync(GPUMapMode.READ).then(() => {
         const [begin, end] = new BigUint64Array(slot.read.getMappedRange());
@@ -816,8 +876,15 @@ export class TerrainRenderer {
     const sunKey = sun.join(',');
     if (this.sunKey !== sunKey) { this.sunKey = sunKey; this.sun = sun.map(v => v / length); this.fieldsDirty = true; }
     const encoder = device.createCommandEncoder({label: 'terrain'});
-    // Painting bakes a cheap preview; the first full draw after it re-bakes.
-    if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview', encoder);
+    // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
+    const baked = [this.fieldsDirty, this.bakedQuality];
+    let drawPipeline;
+    try {
+      // Painting bakes a cheap preview; the first full draw after it re-bakes.
+      if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview', encoder);
+      // Looked up after the bake, which sets some of the gates' uniforms.
+      drawPipeline = this.drawPipeline;
+    } catch (error) { [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
     if (this.depthTexture?.width !== this.canvas.width || this.depthTexture?.height !== this.canvas.height) {
       this.depthTexture?.destroy();
       this.depthTexture = device.createTexture({label: 'depth', size: [this.canvas.width, this.canvas.height], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT});
@@ -831,7 +898,7 @@ export class TerrainRenderer {
       colorAttachments: [{view: this.context.getCurrentTexture().createView(), clearValue: {r: clear[0], g: clear[1], b: clear[2], a: 1}, loadOp: 'clear', storeOp: 'store'}],
       depthStencilAttachment: {view: this.depthView, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard'},
       timestampWrites: timer?.timestampWrites});
-    pass.setPipeline(this.drawPipeline);
+    pass.setPipeline(drawPipeline);
     if (this.chunkViewport) pass.setViewport(...this.chunkViewport, 0, 1);
     pass.setBindGroup(0, this.commonBindGroup('draw'));
     pass.setBindGroup(1, this.materialBindGroup());
@@ -841,6 +908,7 @@ export class TerrainRenderer {
     pass.drawIndexed(mesh.count);
     pass.end();
     timer?.encode(encoder);
+    try { this.specCheck(); } catch (error) { timer?.release(); [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
     this.flushUniforms();
     device.queue.submit([encoder.finish()]);
     this.gpuResult = timer?.result().then(ms => { if (ms !== null) this.lastGPU = ms; return ms; });
@@ -1037,7 +1105,7 @@ export class TerrainRenderer {
 
   // Encodes the bake into the given encoder, or submits it on its own.
   makeFieldsOut() {
-    return this.device.createBindGroup({label: 'fields out', layout: this.bakePipeline.getBindGroupLayout(1),
+    return this.device.createBindGroup({label: 'fields out', layout: this.fieldsLayout,
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}, {binding: 1, resource: {buffer: this.looseBuffer}}]});
   }
 
@@ -1136,6 +1204,7 @@ export class TerrainRenderer {
       set('uRockVary', rv('vary', 0.5)); set('uRockCrev', rv('crev', 2)); set('uRockCrevW', rv('crevW', 1.1));
       set('uRockChip', rv('chip', 0.25)); set('uRockChipSize', rv('chipSize', 5)); set('uRockGrit', rv('grit', 0.35));
       set('uRockAge', number('rockAge', 0.5));
+      set('uRockCurtain', rv('curtain', 0)); set('uRockLichen', rv('lichen', 0));
       // Open joints scales the preset's two openings: the joint lines' depth and the cell creases' darkness.
       set('uJointDepth', rv('joint', 2) * number('rockOpen', 1)); set('uBlockSeam', rv('seam', 0.5) * number('rockOpen', 1));
     }
@@ -1151,7 +1220,7 @@ export class TerrainRenderer {
     // E9 (Green rock faces).
     set('uGullyDepth', number('gullyDepth', 0));
     set('uGullyWidth', number('gullyWidth', 14));
-    set('uGullyShade', number('gullyShade', 0));
+    set('uRockStain', number('rockStain', 0));
     set('uRibTilt', number('ribTilt', 0));
     set('uBedPunch', number('bedPunch', 0));
     // G2 (rock faces follow the slope).
@@ -1189,12 +1258,18 @@ export class TerrainRenderer {
   // the GPU idle before; lastBakeGPU holds the pass's own GPU time.
   async timeBake(quality = 'full') {
     await this.device.queue.onSubmittedWorkDone();
-    const timer = this.timer(), start = performance.now();
-    const encoder = this.device.createCommandEncoder({label: 'relief bake'});
-    this.bakeFields(quality, encoder, timer);
-    timer?.encode(encoder);
-    this.flushUniforms();
-    this.device.queue.submit([encoder.finish()]);
+    const timer = this.timer(), start = performance.now(), baked = [this.fieldsDirty, this.bakedQuality];
+    // Each retry bakes again; if the last attempt still misses, its encoder is never submitted, so the fields go back to unbaked and the timer's slot is freed.
+    try {
+      await this.withPipelines(() => {
+        const encoder = this.device.createCommandEncoder({label: 'relief bake'});
+        this.bakeFields(quality, encoder, timer);
+        timer?.encode(encoder);
+        this.specCheck();
+        this.flushUniforms();
+        this.device.queue.submit([encoder.finish()]);
+      });
+    } catch (error) { timer?.release(); [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
     await this.device.queue.onSubmittedWorkDone();
     const ms = performance.now() - start;
     if (timer) this.lastBakeGPU = await timer.result();
@@ -1205,10 +1280,10 @@ export class TerrainRenderer {
   // so this times the terrain pass alone. Returns {ms, gpuMs}.
   async timeDraw(options = {}) {
     const full = options.quality === 'full';
-    if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview');
+    if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) await this.withPipelines(() => this.bakeFields(full ? 'full' : 'preview'));
     await this.device.queue.onSubmittedWorkDone();
     const start = performance.now();
-    this.draw(options);
+    await this.withPipelines(() => this.draw(options));
     await this.device.queue.onSubmittedWorkDone();
     const ms = performance.now() - start;
     return {ms, gpuMs: (await this.gpuResult) ?? null};

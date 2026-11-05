@@ -325,6 +325,7 @@ try {
     result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), shapeShareP50: q(share, .5), shapeShareP95: q(share, .95), shapeShareN: share.length};
   }
 
+  result.specStats = await ev('window.sculptDebug?.specStats ?? null');   // P6: pipelines built for the gates' values, and the milliseconds they took
   if (only === 'drag') throw new Error('stopped after drag (--only)');
   console.error('phase release'); flush();
   // ------------------------------------------------------------ release
