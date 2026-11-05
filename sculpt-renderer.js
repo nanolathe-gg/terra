@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,PLACEMENT_ROW} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 
@@ -1041,15 +1041,16 @@ export class TerrainRenderer {
   // Card P16: the loose-stone mask, computed once per cell of 4 px over the bake's window and the margin a stone reaches (see looseMain), so a
   // candidate reads one entry where the mask would take about 20 texture reads. Nothing runs while Supply is 0 and no scatter is painted.
   encodeLooseMask(encoder) {
-    const supply = this.uniformValue('uLooseSupply'), painted = this.uniformValue('uScatterOn');
-    if (!(supply > 0) && !painted) return;
+    const supply = this.uniformValue('uLooseSupply'), painted = this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
+    if (!(supply > 0) && !painted && !plants) return;
     const [x0, y0, w, h] = this.bakeWindow ?? [0, 0, this.bakeWidth ?? this.size, this.bakeHeight ?? this.size];
-    const margin = Math.ceil(3.6 * Math.min(16, 3.3 * this.uniformValue('uLooseSize'))) + 4;
+    // Card P31: a plant's candidate lies up to 23 px (a shrub's cell and jitter) from the pixels it covers, the mask reads heights 8 px past its cell, and the apron adds 15.
+    const margin = Math.max(Math.ceil(3.6 * Math.min(16, 3.3 * this.uniformValue('uLooseSize'))) + 4, plants ? PLANT_REACH : 0);
     const ox = Math.floor((x0 - margin) / 4), oy = Math.floor((y0 - margin) / 4);
     const nx = Math.ceil((w + 2 * margin) / 4) + 2, ny = Math.ceil((h + 2 * margin) / 4) + 2;
-    if (nx * ny * 16 > this.looseBuffer.size) {
+    if (nx * ny * 32 > this.looseBuffer.size) {
       this.looseBuffer.destroy();
-      this.looseBuffer = this.device.createBuffer({label: 'loose mask', size: nx * ny * 16, usage: GPUBufferUsage.STORAGE});
+      this.looseBuffer = this.device.createBuffer({label: 'loose mask', size: nx * ny * 32, usage: GPUBufferUsage.STORAGE});
       this.fieldsOut = this.makeFieldsOut();
     }
     this.v('uLooseGrid', [ox, oy, nx, ny]);
@@ -1120,6 +1121,7 @@ export class TerrainRenderer {
     set('uWorms', number('worms', 0));
     set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
     set('uLooseSize', number('looseSize', 6));
+    set('uPlantsOn', !preview && this.config.material?.groundCover?.plants ? 1 : 0);
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);

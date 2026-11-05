@@ -400,10 +400,8 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
 // Table (MM_COVER rows): 0 x on, y wetness at which moisture starts to rise, z wetness at which it is full, w moisture of dry level ground;
 // 1 x slope where soil thins, y slope where it is gone, z convex ground's loss, w deposit's gain; 2 x patch px, y moisture per unit of
 // wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w Patchiness (0..1: how far the class draw clumps into patches);
-// then per class five rows: colour (rgb) and its grain, strength and Lushness exponent, and the windows of moisture, soil and light.
-const MM_COVER = 166u;
-fn cvr(i: u32) -> vec4f { return matRow(MM_COVER + i); }
-fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }
+// then per class five rows: colour (rgb) and its grain, strength and Lushness exponent, and the windows of moisture, soil and light; the last row (39) holds the plants
+// (card P31, engine-bake looseStones): x tuft height scale, y shrub height scale, z shrub density; zeros: no plants.
 fn coverZ(p: vec2f, scale: f32, patchiness: f32) -> f32 {
     let zp = (valueNoise(p / scale + 17.0) + 0.5 * valueNoise(p / (0.45 * scale) + 31.0) + 0.25 * valueNoise(p / (0.2 * scale) + 47.0)) / 0.46;
     let c = floor(p);
@@ -414,27 +412,10 @@ fn coverZ(p: vec2f, scale: f32, patchiness: f32) -> f32 {
 // The grass with the class this pixel draws: the class colour carries the grass art's light and dark, and keeps its chroma only within
 // +-30% of that (the art's blue and red grain would otherwise swing a tan or a dark green to pink or teal).
 fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f) -> vec3f {
-    let c0 = cvr(0u); let c1 = cvr(1u); let c2 = cvr(2u);
-    let wn = smoothstep(c0.y, c0.z, tm.wet);
-    let nb = normalize(vec3f(-broad, 1.0));
-    let light = max(dot(nb, u.light), 0.0) / max(u.light.z, 0.05);
-    let shade = clamp(1.0 - light, -0.6, 1.0);
-    let moist = clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0);
-    let soil = clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
-    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
-    var cover: array<f32, 7>;
+    let c2 = cvr(2u);
+    let cover = coverAt(slope, broad, top, tm, vegetation);
     var total = 0.0;
-    for (var k = 0u; k < 7u; k++) {
-        let b = 4u + 5u * k;
-        let st = cvr(b + 1u);
-        var v = st.x * pow(lush, st.y);
-        if (k > 0u) {
-            v *= coverWin(moist, cvr(b + 2u)) * coverWin(soil, cvr(b + 3u)) * coverWin(light, cvr(b + 4u));
-            v *= v;
-        }
-        cover[k] = v;
-        total += v;
-    }
+    for (var k = 0u; k < 7u; k++) { total += cover[k]; }
     let z = coverZ(p, c2.x, cvr(3u).w);
     let pick = 1.0 / (1.0 + exp(-1.702 * z)) * total;
     var acc = 0.0;

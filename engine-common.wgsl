@@ -326,7 +326,7 @@ struct Uniforms {
     columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    materialTable: array<vec4f, 205>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 38 rows of a world's ground-cover table (card P30; zeros: none)
+    materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 40 rows of a world's ground-cover table (card P30, and its plants' row, card P31; zeros: none)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
@@ -348,6 +348,7 @@ struct Uniforms {
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
     stoneSlab: f32,       // world material data: share of flat slabs
+    plantsOn: f32,        // card P31: 1 when the world's ground-cover table has plants (its last row) and this bake is a full one: the plant families of looseStones, which share the loose mask
     stoneMoss: f32,       // world material data: share of stones with a mossy cap
     // H4b (Green): rock blocks on the hills' rock, outside the structured face (0: none).
     hillBlocks: f32,      // 0..1: how much of the hill rock (slope .5 and over, off the structured face) is cut into small pieces
@@ -591,6 +592,33 @@ fn outcropAt(p: vec2f, slope: f32, wear: f32, hard: f32) -> f32 {
     return u.outcrop * smoothstep(0.02, 0.22, wear) * smoothstep(0.30, 0.55, slope) * (1.0 - smoothstep(0.9, 1.4, slope)) * smoothstep(0.35, 0.7, hard) * clumps;
 }
 
+const MM_COVER = 166u;
+fn cvr(i: u32) -> vec4f { return u.materialTable[MM_COVER + i]; }
+fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }
+// The seven classes' covers at a point (groundCover in engine-frag.wgsl draws from them; looseStones in engine-bake places plants by them).
+fn coverAt(slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32) -> array<f32, 7> {
+    let c0 = cvr(0u); let c1 = cvr(1u); let c2 = cvr(2u);
+    let wn = smoothstep(c0.y, c0.z, tm.wet);
+    let nb = normalize(vec3f(-broad, 1.0));
+    let light = max(dot(nb, u.light), 0.0) / max(u.light.z, 0.05);
+    let shade = clamp(1.0 - light, -0.6, 1.0);
+    let moist = clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0);
+    let soil = clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
+    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
+    var cover: array<f32, 7>;
+    for (var k = 0u; k < 7u; k++) {
+        let b = 4u + 5u * k;
+        let st = cvr(b + 1u);
+        var v = st.x * pow(lush, st.y);
+        if (k > 0u) {
+            v *= coverWin(moist, cvr(b + 2u)) * coverWin(soil, cvr(b + 3u)) * coverWin(light, cvr(b + 4u));
+            v *= v;
+        }
+        cover[k] = v;
+    }
+    return cover;
+}
+
 #ifndef BAKE
 struct VertexOut {
     @builtin(position) position: vec4f,
@@ -600,6 +628,14 @@ struct VertexOut {
 #endif
 
 // GLSL mod(): x - y * floor(x / y). WGSL's % truncates instead.
+// World pixels per bake texel: 1 for the whole-map bake, the chunk's field scale otherwise (card P31 fades plants by it).
+fn fieldScale() -> f32 {
+#ifdef CHUNK
+    return max(u.chunkFieldScale, 1e-3);
+#else
+    return 1.0;
+#endif
+}
 fn glslMod(x: vec2f, y: f32) -> vec2f { return x - y * floor(x / y); }
 
 fn baseHeight(p: vec2f) -> f32 {

@@ -73,6 +73,7 @@ const LS_BASE = 0.50;        // the cover a Supply of 1 gives where the source i
 const LS_HEIGHT = 0.8;       // a stone's height as a share of its radius
 const LS_CONTACT = 0.35;     // darkness of the fines in contact with a stone
 
+struct LsOut { s: vec3f, plant: vec3f }   // looseStones: (stone height, rock cover, contact shade), (plant height, light tone, dark tone)
 struct LsCand { c: vec2f, r: f32, ok: bool, h0: u32, fines: f32 }
 struct LsMask { a: vec4f, b: vec4f }   // two populations (supply, median px, log2 spread, fines); b is the runout blocks
 
@@ -127,14 +128,34 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     return vec4f(min(share, 0.98), size, fines, 0.35 * sort * talus * smoothstep(0.5, 1.0, travelled) * supply * LS_BASE);
 }
 
+// Card P31: where plants grow, at c: the covers of the ground-cover classes that grow them (coverAt, the draw's own site maps and windows) as shares of
+// the ground: grass (turf and dry grass), meadow (and wet rush), scrub, moss. A path, water and what the draw reads as no ground give none.
+fn plantMask(c: vec2f) -> vec4f {
+    if (u.plantsOn < 0.5) { return vec4f(0.0); }
+    let h0 = baseHeight(c);
+    if (routeProtection(c) > 0.05 || h0 < u.sea + 1.0) { return vec4f(0.0); }
+    let tm = timeMapsAt(c);
+    let broad = broadGradient(c);
+    let around = 0.25 * (baseHeight(c - vec2f(3.0, 0.0)) + baseHeight(c + vec2f(3.0, 0.0)) + baseHeight(c - vec2f(0.0, 3.0)) + baseHeight(c + vec2f(0.0, 3.0)));
+    var vegetation = 1.0 + u.lushness;
+    if (u.overrideOn != 0) { vegetation += textureSampleLevel(masksTex, linearClamp, maskUv(c), 4, 0.0).r; }
+    let cover = coverAt(length(broad), broad, clamp((h0 - around) / 1.5, -1.0, 1.0), tm, vegetation);
+    var total = 0.0;
+    for (var k = 0u; k < 7u; k++) { total += cover[k]; }
+    return vec4f(cover[2] + 0.6 * cover[1], cover[3] + cover[6], cover[4] + 0.3 * cover[3] + 0.2 * cover[6], cover[5]) / max(total, 1e-4);
+}
+
 // The mask is computed once on a lattice of LS_CELL-px cells over the bake's window and its margin (looseMain, a pass before the bake) and read
 // here with one load: a candidate's centre reads the cell it lies in. Population a is (supply, median px, spread, fines); b the runout blocks.
 const LS_CELL = 4.0;
 @group(1) @binding(1) var<storage, read_write> looseMask: array<vec4f>;
-fn lsMask(c: vec2f) -> LsMask {
+fn lsCell(c: vec2f) -> u32 {
     let nx = u32(u.looseGrid.z);
     let cell = clamp(vec2i(floor(c / LS_CELL - u.looseGrid.xy)), vec2i(0), vec2i(i32(u.looseGrid.z) - 1, i32(u.looseGrid.w) - 1));
-    let v = looseMask[u32(cell.y) * nx + u32(cell.x)];
+    return 2u * (u32(cell.y) * nx + u32(cell.x));
+}
+fn lsMask(c: vec2f) -> LsMask {
+    let v = looseMask[lsCell(c)];
     var m: LsMask;
     m.a = vec4f(v.x, v.y, mix(2.0, 0.7, u.stoneSort), v.z);
     m.b = vec4f(v.w, u.looseSize * 2.2, 0.5, v.z);
@@ -144,7 +165,10 @@ fn lsMask(c: vec2f) -> LsMask {
 @compute @workgroup_size(8, 8)
 fn looseMain(@builtin(global_invocation_id) id: vec3u) {
     if (f32(id.x) >= u.looseGrid.z || f32(id.y) >= u.looseGrid.w) { return; }
-    looseMask[id.y * u32(u.looseGrid.z) + id.x] = lsMaskCompute((vec2f(id.xy) + u.looseGrid.xy + 0.5) * LS_CELL);
+    let c = (vec2f(id.xy) + u.looseGrid.xy + 0.5) * LS_CELL;
+    let at = 2u * (id.y * u32(u.looseGrid.z) + id.x);
+    looseMask[at] = lsMaskCompute(c);
+    looseMask[at + 1u] = plantMask(c);
 }
 
 
@@ -267,13 +291,109 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
     return vec2f(hv, dv * st.r);
 }
 
-// The scatter at p: (stone height, rock cover, contact shade of the fines beside a stone).
-fn looseStones(p: vec2f) -> vec3f {
-    if (u.looseSupply <= 0.0 && u.scatterOn == 0) { return vec3f(0.0); }
+
+// Card P31: plants as heights the draw lights, the shape families of the one scatter. Each is a jittered-grid scatter (2 x 2 candidates, a pure
+// function of position) admitted by its own hash against the share the plant mask gives at its centre:
+//  - fine tufts (turf and dry grass): star-shaped bumps 1-1.4 px in radius, on a 2.5-px grid;
+//  - coarse tufts on a 4.5-px grid: meadow clumps (2-2.5 px, leaning blades) and moss cushions (smooth domes packed edge to edge);
+//  - shrubs: a lumpy dome 2.4-4.8 px in radius with leaf clumps of a pixel or two, gathered into thickets by a clump field, only on scrub. Smaller than
+//    a tree sprite, so a shrub is ground, not a feature.
+// Tuft size follows Size (median stone px; 5 is the unit), tuft and shrub height their scale in the world's table (row 39). Tufts fade out between
+// 1 and 2 world px per pixel, shrubs between 2 and 4: finer than a pixel they would alias.
+fn plantTuft(p: vec2f, cell: f32, r0: f32, r1: f32, ht: f32, star: f32, dome: f32, salt: u32, which: i32) -> vec2f {
+    let b = vec2i(floor(p / cell - 0.5));
+    var best = 0.0; var tone = 0.0;
+    for (var j = 0; j <= 1; j++) {
+        for (var i = 0; i <= 1; i++) {
+            let cc = b + vec2i(i, j);
+            let h0 = lsHash(cc, salt);
+            let h1 = lsPcg(h0 ^ 0x68e31da4u); let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
+            let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.9) * cell;
+            let r = mix(r0, r1, lsU(h3));
+            let d = p - c;
+            let l = length(d);
+            if (l >= r) { continue; }
+            let m = looseMask[lsCell(c) + 1u];
+            var share = m.x * 0.85;
+            if (which == 1) { share = m.y * 0.92; } else if (which == 2) { share = m.w * 0.97; }
+            if (lsU(lsPcg(h2 ^ 0x2545f491u)) >= share) { continue; }
+            let t = 1.0 - l / r;
+            let blades = 5.0 + 3.0 * lsU(lsPcg(h1));
+            let bumpy = mix(1.0, 0.5 + 0.5 * cos(blades * atan2(d.y, d.x) + lsU(lsPcg(h3)) * TAU), star * smoothstep(0.8, 1.8, r));
+            let prof = mix(t, sqrt(max(0.0, 1.0 - (1.0 - t) * (1.0 - t))), dome);
+            let hv = ht * (0.7 + 0.6 * lsU(lsPcg(h2))) * prof * bumpy;
+            // The tuft's own tone: its own light or dark, lighter toward its top (-.5 .. 1).
+            if (hv > best) { best = hv; tone = 0.6 * lsU(lsPcg(h1 ^ 0x9e3779b9u)) - 0.1 + 0.5 * t; }
+        }
+    }
+    return vec2f(best, tone);
+}
+fn plantShrub(p: vec2f, scale: f32) -> vec2f {
+    let cell = 16.0;
+    let b = vec2i(floor(p / cell - 0.5));
+    var best = 0.0; var tone = 0.0;
+    for (var j = 0; j <= 1; j++) {
+        for (var i = 0; i <= 1; i++) {
+            let cc = b + vec2i(i, j);
+            let h0 = lsHash(cc, 0x5e7bu);
+            let h1 = lsPcg(h0 ^ 0x68e31da4u); let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
+            let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.85) * cell;
+            let d = p - c;
+            let l = length(d);
+            if (l > 5.4) { continue; }
+            let sc = looseMask[lsCell(c) + 1u].z;
+            if (sc <= 0.0) { continue; }
+            let clump = smoothstep(-0.35, 0.55, valueNoise(c / 75.0 + 11.0));
+            let lam = sc * mix(1.0, 2.6 * clump * clump, 0.8) * cvr(39u).z;
+            if (lsU(lsPcg(h2 ^ 0x2545f491u)) >= lam) { continue; }
+            let R = mix(2.4, 4.4, lsU(h3)) * (0.75 + 0.4 * sc);
+            let a = atan2(d.y, d.x);
+            let re = R * (1.0 + 0.16 * sin(3.0 * a + lsU(lsPcg(h1)) * TAU) + 0.1 * sin(5.0 * a + lsU(lsPcg(h2)) * TAU));
+            let q = l / re;
+            if (q >= 1.0) { continue; }
+            let leaf = 0.5 + 0.5 * valueNoise((p + vec2f(cc) * 37.0) / 1.4);
+            let hv = scale * re * sqrt(1.0 - q * q) * (0.78 + 0.4 * leaf);
+            // A canopy is dark inside, its leaf clumps lighter at the top.
+            if (hv > best) { best = hv; tone = (1.0 - q) * leaf * 1.4 - 0.7; }
+        }
+    }
+    return vec2f(best, tone);
+}
+fn plantsAt(p: vec2f) -> vec3f {
+    let t = cvr(39u);
+    let zoom = max(1.0, fieldScale());
+    let fadeTuft = 1.0 - smoothstep(1.0, 2.0, zoom);
+    let fadeShrub = 1.0 - smoothstep(2.0, 4.0, zoom);
+    let sz = clamp(u.looseSize / 5.0, 0.6, 1.6);
+    let m = looseMask[lsCell(p) + 1u];
+    var best = vec2f(0.0);
+    if (fadeTuft > 0.0 && t.x > 0.0) {
+        let k = t.x * sz * fadeTuft;
+        let a = plantTuft(p, 4.0 * sz, 1.5 * sz, 2.2 * sz, 0.6 * k, 1.0, 0.0, 0x7103u, 0);
+        let c = plantTuft(p, 5.0 * sz, 2.0 * sz, 2.8 * sz, 1.4 * k, 1.0, 0.0, 0x7104u, 1);
+        let d = plantTuft(p, 4.8 * sz, 1.9 * sz, 2.6 * sz, 0.9 * k, 0.0, 1.0, 0x7105u, 2);
+        if (a.x > best.x) { best = a; }
+        if (c.x > best.x) { best = c; }
+        if (d.x > best.x) { best = d; }
+        // Between tufts the ground lies in their shade.
+        if (best.x <= 0.0) { best.y = -0.12 * min(1.0, m.x + m.y + m.w); }
+        best.y = mix(0.0, best.y, fadeTuft);
+    }
+    if (fadeShrub > 0.0 && t.y > 0.0 && t.z > 0.0) {
+        let s = plantShrub(p, t.y * fadeShrub);
+        if (s.x > best.x) { best = s; }
+    }
+    return vec3f(best.x, clamp(best.y, 0.0, 1.0), clamp(-best.y, 0.0, 1.0));
+}
+
+// The scatter at p: (stone height, rock cover, contact shade of the fines beside a stone, plant height).
+fn looseStones(p: vec2f) -> LsOut {
+    let stones = u.looseSupply > 0.0 || u.scatterOn != 0;
+    if (!stones && u.plantsOn < 0.5) { return LsOut(vec3f(0.0), vec3f(0.0)); }
     var best = 0.0; var cover = 0.0; var edge = 1e9; var edgeFines = 0.0; var bestR = 1.0;
     for (var k = 0; k < LS_K; k++) {
         let R = lsR(k);
-        if (R < 0.45) { break; }
+        if (R < 0.45 || !stones) { break; }
         // A class the mask cannot give a stone to is skipped: the median runs from .3 to 1 of Size, the runout blocks lie at 2.2 times it, and a
         // class more than a spread away from both holds under 4% of a population.
         let x = log2(2.0 * R);
@@ -303,7 +423,14 @@ fn looseStones(p: vec2f) -> vec3f {
     }
     var contact = 0.0;
     if (best <= 0.0 && edge < 1e8) { contact = LS_CONTACT * (1.0 - edgeFines) * (1.0 - smoothstep(0.0, 1.0 + 0.25 * min(bestR, 6.0), edge)); }
-    return vec3f(best, cover, contact);
+    var plant = vec3f(0.0);
+    if (u.plantsOn > 0.5) {
+        plant = plantsAt(p);
+        // A stone lies on the plants; a plant taller than the stone hides it.
+        if (plant.x > best) { cover = 0.0; contact = 0.0; }
+        else { plant = vec3f(0.0); }
+    }
+    return LsOut(vec3f(best, cover, contact), plant);
 }
 
 // Cracks, as a fractured surface rather than lines drawn on it. Three
@@ -1407,9 +1534,11 @@ fn bake(p: vec2f) -> vec4f {
     // blob-shaped notches into the coast. Nor lifts the bed above it.
     if (h > u.sea) { height = max(height, u.sea + 0.5 - h); }
     else { height = min(height, u.sea - 0.5 - h); }
-    let loose = looseStones(p);
+    let scatter = looseStones(p);
+    let loose = scatter.s;
     var rock = vec2f(loose.x, loose.y);
     height += rock.x;
+    if (scatter.plant.x > 0.0) { height += max(scatter.plant.x * (1.0 - buried) - rock.x, 0.0); }
     rock.y *= 1.0 - buried;
     rock.y = max(rock.y, structureRock);
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
@@ -1420,6 +1549,7 @@ fn bake(p: vec2f) -> vec4f {
     lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
     lineDark = max(lineDark, crustDark);
     lineDark = max(lineDark, loose.z * (1.0 - buried));
+    lineDark = max(lineDark, scatter.plant.z * (1.0 - buried));
     lineDark = max(lineDark, 0.5 * stepWorn * (1.0 - buried));
     lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
@@ -1429,7 +1559,7 @@ fn bake(p: vec2f) -> vec4f {
         let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand * (1.0 - u.sandCrown), smoothstep(0.3, 0.8, sand)), route * 0.6));
         lineDark = max(lineDark, streak.x * (0.55 + 0.45 * smoothstep(-0.3, 0.4, -streak.y)));
     }
-    crackAt.z = max(crackAt.z, bandLit * (1.0 - buried));
+    crackAt.z = max(max(crackAt.z, bandLit * (1.0 - buried)), scatter.plant.y * (1.0 - buried));
     var crackCode = rock.y;
     if (lineDark > 0.02) { crackCode = -lineDark; } else if (crackAt.z > 0.02) { crackCode = 1.0 + crackAt.z; }
     // Green holds route protection, or (negative) beach cover off routes.

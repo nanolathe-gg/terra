@@ -4,7 +4,9 @@ export const MM_ROWS = 63;
 export const PLACEMENT_ROW = 156;
 // The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them. A table without `groundCover` gives zeros: the feature is off.
 export const COVER_ROW = PLACEMENT_ROW + 10;
-export const COVER_ROWS = 39;
+export const COVER_ROWS = 40;
+// Card P31: how far past the pixels it covers a plant's scatter reads: a shrub's candidate (cell 16, jitter .85) up to 23 px away, the mask's height taps 8 px past that, and 15 px of apron.
+export const PLANT_REACH = 46;
 // The rows engine-materials.wgsl makes the layers from: MM_ROWS per layer, in the table's order. A material named twice in the order
 // (a layer that shares its image with an earlier one) takes the same rows and its own layer's noise.
 export function materialRows(table) {
@@ -66,5 +68,7 @@ export function groundCoverRows(cover) {
     rows[b + 1] = [k.strength, k.lush, 0, 0];
     rows[b + 2] = k.moisture; rows[b + 3] = k.soil; rows[b + 4] = k.light;
   });
+  // Card P31: the plants (tufts, cushions, shrubs, flowers) the bake's loose scatter adds on the classes that grow them; no block, none.
+  if (cover.plants) rows[COVER_ROWS - 1] = [cover.plants.tuft, cover.plants.shrub, cover.plants.shrubs, 0];
   return rows;
 }

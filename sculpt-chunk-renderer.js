@@ -2,6 +2,7 @@
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
+import {PLANT_REACH} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','free19','fu','fv','s1','s2','s3'];
@@ -89,7 +90,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // patch's seed, up to 1.41 patches (cliffDomain) from the pixel (the nearest seed of a jittered lattice is within 1.13
     // cells, and the warp moves the pixel by up to .28): cliffFollow only.
     const cliff=n('cliffFollow',0)>0?1.45*Math.max(n('cliffDomain',90),24)+Math.max(n('cliffWide',56),n('cliffReach',20)*1.5,4)+2:0;
-    const bake=Math.max(19,stones,beach,cliff);
+    const bake=Math.max(19,stones,beach,cliff,this.config.material?.groundCover?.plants?PLANT_REACH:0);
     // G3: the fringe's copies read the material field up to ringShift px from the pixel, and a few px more for each copy's gradient.
     const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75),n('ringShift',0)>0?Math.abs(n('ringShift',0))+4:0);
     // A projection apron includes appearance displacement too. These are
