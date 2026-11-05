@@ -50,13 +50,18 @@ export const FORMS = {
   lfTerraced: () => ({knots: [[0, 0], [.08, 0], [.2, .3], [.34, .3], [.46, .62], [.6, .62], [.72, 1], [1, 1]]}),
   // The reviewed shore (landform-shores retail windows): a smoothstep over the outer 90% of the half width, level at the path.
   lfShore: () => ({knots: [...even(24).map(x => [Math.round(900 * x) / 1000, Math.round(1000 * sm(x)) / 1000]), [1, 1]]}),
+  // The valleys (cut-to landforms: the ground falls from the foot, 0, to the floor on the path, 1). V: the rise above the floor is linear in the distance (a river's
+  // walls stand at one slope); U: the rise is the distance squared (a glacier's trough: a flat floor and steep upper walls). A terraced valley is the V with steps.
+  lfValleyV: () => ({knots: [[0, 0], [1, 1]]}),
+  lfValleyU: () => ({knots: [...even(16).map(x => [x, Math.round(1000 * (1 - (1 - x) ** 2)) / 1000])]}),
   // A ramp's travel strip: a level center, rounded shoulders.
   lfRamp: () => ({knots: [[0, 0], [.2, .1], [.45, .7], [.6, 1], [1, 1]]}),
 };
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
-export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp']];
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U']];
 // The palette entry a landform's section form belongs to (the Tool preset menu restyles a selected landform as that entry); a shore is deep water when it cuts.
-export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow'})[p?.curve?.form] ?? 'plateau';
+export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU',
+  lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).
 export const defaultForm = kind => kind === 'spurs' ? 'mountain' : kind === 'landform' ? 'lfPlateau' : 'plateau';
 
