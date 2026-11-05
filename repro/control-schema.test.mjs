@@ -76,6 +76,11 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
  assert.match(requirement('rockScale',{rockOrder:0}),/Rock structure/);
  assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/no blocks/);
+ // Stain (card P10) darkens gully floors and the rock type's ledge curtains: it needs ordered rock and one of the two
+ assert.match(requirement('rockStain',{rockOrder:0,gullyDepth:4}),/Rock structure/);
+ assert.match(requirement('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0}),/Gully depth or use a rock type with ledge stains/);
+ shows('rockStain',{rockOrder:1,gullyDepth:4,rockCurtains:0});
+ shows('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:1});
  shows('rockScale',{rockOrder:1,rockCells:1});
  assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledges above zero/);
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledges above zero/);

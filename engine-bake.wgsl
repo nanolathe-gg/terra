@@ -678,8 +678,9 @@ fn bedLip() -> f32 { return select(0.0, BED_LIP * max(1.0, u.bedLedge), u.bedLed
 // bed coordinate is columnCoord at the surface height, the one erosion reads.
 // Returns the same (offset, lip cover, bed index) as bedRelief.
 // A bed's cut: the tread's height offset, the lip and notch (the rock model sets their height), the bed's hardness punch, the bed's index,
-// how far through it the point lies (0 foot, 1 top) and its thickness along the ground (px).
-struct BedCut { off: f32, lip: f32, notch: f32, punch: f32, index: f32, through: f32, px: f32 }
+// how far through it the point lies (0 foot, 1 top), its thickness along the ground (px), and, for a rock column's bed, the column coordinate and the
+// bed's thickness in height units (thick 0: the beds are the hash's, with no column to read the beds above from).
+struct BedCut { off: f32, lip: f32, notch: f32, punch: f32, index: f32, through: f32, px: f32, coord: f32, thick: f32 }
 fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let a = radians(u.bedDipDir);
     let dip = vec2f(cos(a), sin(a));
@@ -687,7 +688,8 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let S = max(u.bedSpacing, 2.0);
     // H4 round 2: a bed's boundary wanders at 3-7 px (blockChip x 1.5 height units), so a ledge is a ragged line, not a smooth contour curve.
     let rag = select(0.0, (valueNoise(p / 7.0 + 3.0) + 0.5 * valueNoise(p / 3.0 + 9.0)) * BED_RAG, u.rockSize > 0.0);
-    let bed = columnAt(columnCoord(p, h) + rag);
+    let coord = columnCoord(p, h) + rag;
+    let bed = columnAt(coord);
     let f = bed.through;
     let bedPx = bed.thick / G;
     let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), min(u.bedLedge, 1.0));
@@ -700,7 +702,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     // Hard beds (hardness 1) stand 1.7 times a hash bed's mean ledge, soft ones (0) 0.3 times: the hash's own range.
     let punch = mix(1.0, 0.3 + 1.4 * bed.hardness, u.columnContrast);
     off *= punch;
-    return BedCut(off, lip, notch, punch, bed.index, f, bedPx);
+    return BedCut(off, lip, notch, punch, bed.index, f, bedPx, coord, bed.thick);
 }
 
 fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
@@ -737,7 +739,7 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     // and the eye can follow them (0: every bed alike, as before).
     let punch = mix(1.0, 0.3 + 1.4 * cellHash(vec2f(k, 9.1)).y, u.bedPunch);
     off *= punch;
-    return BedCut(off, lip, notch, punch, k, f, bedPx);
+    return BedCut(off, lip, notch, punch, k, f, bedPx, 0.0, 0.0);
 }
 
 // H4b: a hill's pieces against a face's: width and length (down the fall line) as shares of blockWidth and blockRow.
@@ -902,6 +904,62 @@ fn rockModel(p: vec2f, pf: vec2f, bed: BedCut, gx: vec2f, hill: f32) -> vec2f {
     }
     dh += u.rockGrit * (cellHash(floor(p) + 13.0).x - 0.5) * 2.0;
     return vec2f(dh, crev);
+}
+
+// Card P10, Stain: the marks of the water that runs down a face from each ledge, as curtains along the fall line (desert varnish on sandstone, grey
+// streaks on limestone). Two families of columns, 8 and 21 px apart (the lattice below: the four nearest jittered cells, smoothstep weights, the
+// phase's (cos, sin) summed and normalized, so the crests run along `dir`); each ledge's own columns start under its lip and fade with the px below it,
+// each bed with a strength and a length of its own, the harder ledges (bed.punch) staining more. Returns 0..1, a tone only: it goes into the
+// darkness the bake already carries (lineDark), so there is no fifth channel, and the world's Stain row says how dark.
+fn stainStripes(q0: vec2f, dir: vec2f, f: f32, salt: f32) -> vec2f {
+    let perp = vec2f(-dir.y, dir.x);
+    let q = q0 * f;
+    let c0 = floor(q - 0.5);
+    let fr = q - 0.5 - c0;
+    var acc = vec2f(0.0);
+    for (var j = 0; j <= 1; j++) {
+        for (var i = 0; i <= 1; i++) {
+            let c = c0 + vec2f(f32(i), f32(j));
+            let o = q - (c + 0.5 + 0.35 * cellHash(c + salt));
+            let wx = select(1.0 - fr.x, fr.x, i == 1);
+            let wy = select(1.0 - fr.y, fr.y, j == 1);
+            let w = wx * wx * (3.0 - 2.0 * wx) * wy * wy * (3.0 - 2.0 * wy);
+            let ph = 6.2831853 * dot(o, perp);
+            acc += w * vec2f(cos(ph), sin(ph));
+        }
+    }
+    let l = length(acc);
+    return select(vec2f(1.0, 0.0), acc / l, l > 1e-5);
+}
+const STAIN_LEAD = 1.5;   // px under the lip before the stain begins
+const STAIN_BEDS = 7;     // beds up the column a curtain may start from
+// A curtain starts at the top of a hard bed (a ledge: hardness .85 and over) and runs down over the softer beds under it until it fades; the nearest
+// ledge at or above this point is found up the column (a world with no column stains from each bed's own top). Returns the px below that ledge's lip.
+fn stainDepth(bed: BedCut) -> vec2f {
+    let own = (1.0 - bed.through) * bed.px;
+    if (bed.thick <= 0.0) { return vec2f(own, bed.index); }
+    let pxPerUnit = bed.px / bed.thick;
+    var up = (1.0 - bed.through) * bed.thick;
+    var at = bed.coord;
+    var b = columnAt(at);
+    for (var i = 0; i < STAIN_BEDS; i++) {
+        if (b.hardness >= 0.85) { return vec2f(up * pxPerUnit, b.index); }
+        at = bed.coord + up + 0.01;
+        b = columnAt(at);
+        up += b.thick;
+    }
+    return vec2f(1e4, bed.index);
+}
+fn rockStainCurtain(pos: vec2f, dir: vec2f, bed: BedCut) -> f32 {
+    let a = stainStripes(pos, dir, 1.0 / 8.0, 5.0);
+    let c = stainStripes(pos + vec2f(37.0, 11.0), dir, 1.0 / 21.0, 9.0);
+    let column = max(smoothstep(0.35, 0.8, a.x) * smoothstep(-0.6, 0.2, c.y), smoothstep(0.45, 0.85, c.x));
+    let since = stainDepth(bed);
+    let across = dot(pos, vec2f(-dir.y, dir.x));
+    let own = cellHash(vec2f(since.y, 29.0));
+    let reach = 26.0 * (0.3 + 0.7 * (valueNoise(vec2f(across / 6.0, since.y * 1.7 + 3.0)) * 0.5 + 0.5)) * (0.6 + 0.8 * own.y);
+    let run = exp(-max(since.x - STAIN_LEAD, 0.0) / reach) * smoothstep(0.0, STAIN_LEAD, since.x + 0.5);
+    return clamp(column * run * (0.35 + 0.65 * own.x) * 1.4, 0.0, 1.0);
 }
 
 // Rock structure that follows the ground (card G2). Retail's strata lie along the contours of the
@@ -1543,6 +1601,7 @@ fn bake(p: vec2f) -> vec4f {
     // (ribs, block steps, minor cracks) steps back; its relief is added below.
     var structureRock = 0.0;
     var gullyFloor = 0.0;
+    var stainCurtain = 0.0;
     var blockCrevice = 0.0;
     var order = 0.0;
     var steep = 0.0;
@@ -1602,6 +1661,7 @@ fn bake(p: vec2f) -> vec4f {
         let gate = smoothstep(0.15, 0.85, order * steep);
         height += gate * carved.x;
         gullyFloor = gate * carved.y;
+        if (u.rockCurtain > 0.0) { stainCurtain = gate * rockStainCurtain(pf, select(fall, vec2f(0.0, 1.0), cliffOn), bed); }
         if (u.rockSize > 0.0) {
             // The cell set, in the face's axes (the ground's gradient there: along the fall line only on a patch frame).
             let gx = select(vec2f(0.0, -slope), g, !cliffOn);
@@ -1619,7 +1679,7 @@ fn bake(p: vec2f) -> vec4f {
         if (hill > 0.0) {
             let across = vec2f(-fall.y, fall.x);
             let pfh = vec2f(dot(p, across), dot(p, fall));
-            let block = rockModel(p, pfh, BedCut(0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1e9), vec2f(0.0, -slope), 1.0);
+            let block = rockModel(p, pfh, BedCut(0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1e9, 0.0, 0.0), vec2f(0.0, -slope), 1.0);
             height += hill * HILL_RELIEF * block.x;
             blockCrevice = max(blockCrevice, hill * block.y);
         }
@@ -1645,8 +1705,10 @@ fn bake(p: vec2f) -> vec4f {
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
     var lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
-    // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
-    lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
+    // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line). Card P10: that shade is
+    // the Stain row's (water runs down the gullies and marks them), and the rock type's ledge curtains are stained by the same row.
+    lineDark = max(lineDark, gullyFloor * u.rockStain * (1.0 - buried));
+    lineDark = max(lineDark, stainCurtain * u.rockStain * u.rockCurtain * (1.0 - buried) * (1.0 - rock.y));
     lineDark = max(lineDark, crustDark);
     lineDark = max(lineDark, RIPPLE_CREST * crestTone);
     lineDark = max(lineDark, loose.z * (1.0 - buried));

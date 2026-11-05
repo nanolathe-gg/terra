@@ -1687,7 +1687,7 @@ const KNOBS = [
   ['Rock face', [['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
     ['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],
-    ['gullyShade','Gully floor shade (occlusion)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
+    ['rockStain','Stain (darkness of gully floors and of ledge curtains)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
   // Card P10: the rock model's blocks (the rock type is the world's preset; Size and Age are its two rows).
   ['Rock face: blocks', [['rockScale','Block size (share of the rock type\'s)',.4,3,.05,1],['rockAge','Age (rounds edges, opens joints, wears chips)',0,1,.05,.5],['rockOpen','Open joints (joint depth and crevice darkness, share of the rock type\'s)',0,2,.05,1]]],
   // G2: rock faces follow the slope; every default is the earlier look.

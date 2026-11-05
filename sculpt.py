@@ -114,7 +114,7 @@ KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander
 KNOB_DEFAULTS.update(desertCapFlat=0)
 # E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
-                     gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
+                     gullyDepth=0, gullyWidth=14, rockStain=0, ribTilt=0,
                      bedPunch=0,
                      rockScale=1, rockAge=.5, rockOpen=1)
 # E11 (shallow water round 2): every default is the earlier look. shelfWander (depth units) moves
@@ -263,7 +263,7 @@ WORLD_KNOBS = {
                   # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
                   # bedPunch 0, facetTilt 0, shineOutside 1 and bedLedge .55.
                   rockMoss=.15, rockDetail=.5,
-                  gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
+                  gullyDepth=8, grooveRun=90, rockStain=1.2, ribTilt=.2,
                   bedPunch=1,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
@@ -669,7 +669,7 @@ WORLD_VARIANTS = {
                        material=dict(stoneSort=.7,
                        # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
                        rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
-                                 chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6),
+                                 chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6, curtain=.6),
                        groundCover=dict(
                            # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
                            # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
@@ -811,7 +811,7 @@ SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 def rock_flags(rock):
     """What the rock preset cuts, for the panel's reasons: rockCells (it cuts blocks: Size and Age need it) and rockJoint (its joint
     lines' depth, units; Open joints needs it or the blocks' crevices)."""
-    return dict(rockCells=int(rock.get('size', 0) > 0), rockJoint=rock.get('joint', 2))
+    return dict(rockCells=int(rock.get('size', 0) > 0), rockJoint=rock.get('joint', 2), rockCurtains=int(rock.get('curtain', 0) > 0))
 
 
 def world_knobs(biome, config):

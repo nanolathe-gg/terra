@@ -244,7 +244,7 @@ struct Uniforms {
     rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
     gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
     gullyWidth: f32,      // gully width across, world px
-    gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
+    rockStain: f32,       // Stain: how dark the water's marks are (0: lit like the rest): a deep gully's floor, as occlusion following its depth, and the rock type's ledge curtains
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
@@ -369,6 +369,7 @@ struct Uniforms {
     rockChipSize: f32,    // px
     rockGrit: f32,        // per-pixel height grit, units
     rockAge: f32,         // 0..1: rounds open edges, opens more partings, wears chips
+    rockCurtain: f32,     // share of a ledge's stain curtains the rock type draws (0: none; the Stain row's tone scales them)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
