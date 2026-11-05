@@ -213,6 +213,9 @@ struct Uniforms {
     ringFade: f32,        // how gradually the mineral ring fades out from the hill (0: as drawn; Archipelago)
     // Ice (card E5).
     shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
+    // Light colour (card P12b). White leaves the light grey, as before.
+    sunColor: vec3f,      // the direct light's colour: multiplies the sun's share of the light, and the glints that mirror it
+    skyColor: vec3f,      // the ambient light's colour: multiplies the sky's share (what the shade keeps)
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
     // E7 (Crystal).
     crystalShallow: f32,   // shallow water: how strongly it carries a mosaic of small crystal cells (0: as before)

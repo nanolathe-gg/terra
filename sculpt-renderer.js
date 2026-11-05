@@ -376,7 +376,7 @@ export class TerrainRenderer {
     return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
 
-  // The palette lookup (engine-palette.wgsl): the table's colours, or the ones its `palette.entries` pick, as a 1024 x 96 RGBA8 texture.
+  // The palette lookup (engine-palette.wgsl): the table's colours, or the ones its `palette.entries` pick, as a 1024 x 288 RGBA8 texture.
   async paletteTexture() {
     const device = this.device, start = performance.now();
     const colours = (this.materialData.palette?.entries ?? this.paletteColours.map((_, i) => i)).map(i => this.paletteColours[i]);
@@ -386,7 +386,7 @@ export class TerrainRenderer {
     device.queue.writeBuffer(buffer, 0, rows);
     const count = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
     device.queue.writeBuffer(count, 0, new Uint32Array([colours.length, 0, 0, 0]));
-    const texture = device.createTexture({label: 'palette lookup', size: [1024, 96], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
+    const texture = device.createTexture({label: 'palette lookup', size: [1024, 288], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
     if (!this.palettePipeline) {
       const module = device.createShaderModule({label: 'engine-palette.wgsl', code: this.paletteSource});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
@@ -466,6 +466,9 @@ export class TerrainRenderer {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }
+    // The light's colours (card P12b): white is the grey light every world had.
+    this.v('uSunColor', colors.sun || [1, 1, 1]);
+    this.v('uSkyColor', colors.sky || [1, 1, 1]);
     // The column's slot colours: the world's, else a painted-desert set.
     const strataDefaults = this.config.column?.colors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
