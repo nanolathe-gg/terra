@@ -8404,7 +8404,7 @@ unless judged on the retail sheets.
 - **P28 rivers.** Riffles and the water look (with P26, on hold). Point-bar
   sand and scroll bars landed (29816523, 3b62b152): inside each bend, from the
   path's curvature, as heights and painted-sand cover. Braided rivers have none.
-- **P31 flowers.** Need a color channel (none exists in the scatter).
+- **P31 flowers.** Done on `prototype/flowers`: 1-2 px dots drawn in the draw from the pixel (no color channel through the bake), palette in the world's material (`groundCover.plants.flowers`). Open: the density and palette are a first pass judged by eye.
 - **P1 gullies.** The comb on narrow sections is held for the owner
   (prototype/gully-comb): it appears where the widest wavelength nears one
   per run. Gullies itself reads 4.02 on `shape_controls` (main).
