@@ -8381,6 +8381,45 @@ trial limits. No perf rounds. Assets and command logs: `$R/agent-H21`, fresh
 - *Departures and open.* The card's contract was followed with these changes. **(1)** The tools column is 300 px wide (it was 240) so the whole-section canvas, 2 to 1, is legible; revert `--tools-width` if unwanted. **(2)** Ghost sections are drawn for a selected landform only; other kinds' canvases have none (heights have no scale there but the rise). **(3)** Mirror swaps the two lists and also turns Lean round (a true left-right flip). **(4)** `varyCrest` folded (above). **(5)** An unlinked back's crest knot sits under the front's and is not separately draggable (the front's wins the hit). **(6)** Protection follows the plateau's rule (flat tops protected) and the mask influence ramps over one unit of height change, both choices of mine; Raise to over higher ground paints nothing. **(7)** Defaults chosen here: wander 24, width 20%, height 3, size 140 px. **(8)** The along canvas picks a place on a click and adds a knot on a double-click (the section canvas adds on a click, as main). **(9)** An old hill's controls were not removed: plateau, hill and mountain are untouched (the owner's call). Open: elevation's default is the plain plus 70 in the page, so a scripted stroke needs its own elevation (the sea differs per map: 75 on Green's 4x4 map); the ghost sections lag a drag; the back table's seam against the front across a hard-sign corner of an asymmetric path is not looked at closely.
 - *Review (`e847009`).* The fixture's flattened ridge showed a line at a bend. Measured on authored heights (`sculptDebug.corner().authored`; the eroded ones carry gullies along a bend's crease, which hid the cause) on a three-segment path with 53 degree bends, two seams at the joints: inside a bend each cell read its place along the path from its nearest segment, which jumps where the nearest segment changes, so a falling along curve stepped there (1.0 units; 4 to 5 on the fixture); outside, the wander moved `c` alone, carrying the joint a different way for each segment (2.6 and 1.9 units across the wedge). The place along the path is now blended over the segments nearly as near (a band of half the distance, ending inside the reach so no segment box cuts a weight), and past an inner joint the wander moves the distance round the joint: 0.2 and 0.3, the level of a path with no variation. No variation and a flat along curve: unchanged (0.0). The along canvas's line takes the lowest height near the path for a landform below the plain, and Elevation's help no longer calls the sea 0. Rerun on the result: 27 scenes byte for byte; `regional.mjs` 0 on the fixture, both sheet scenes and the two bend scenes; smoke `--page8`, curveedit (45 checks on Green and Desert, console clean), 40 unit tests and the gate pass; drag perf, eight alternating rounds at load 10 to 21: shape passes 2.12 ms against a hill's 2.73 (2.09 before the review), frame p50 16.7 both, latency p50 15.4 against 15.6.
 
+## Open loose ends from the research cards (November 4-5, 2026)
+
+What landed and what did not is in
+[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md#research-cards-p1-p32-november-4-5-2026).
+Each item below is small enough to pick up alone. Follow CLAUDE.md: one
+control replaces or simplifies another, and retail scenes stay byte-identical
+unless judged on the retail sheets.
+
+- **P30 ground cover.** Replace `slopeProfile` with the cover table, rewire
+  rock moss onto it, and make Patchiness a control or drop it (its impact is
+  under 5% as a constant).
+- **P27 shores.** Beach height profile (berm and slope in the heights, not
+  only color) and rock coasts (they follow P10's hardness). Surf's beach
+  reads as a pale band with crack marks (by eye): judge it again.
+- **P16 stones.** Archipelago's chips stay in the draw, outside `looseStones`.
+- **P10 rock model.** Open joints, Ledges and Frost merges into the rock
+  model; Stain; lichen; the other seven rock types.
+- **P17 fans.** Need a height and the transport-distance channel before they
+  can show; the held branch has only placement.
+- **P28 rivers.** Point-bar sand, riffles and the water look; shape only now.
+- **P31 flowers.** Need a color channel (none exists in the scatter).
+- **P1 gullies.** A comb pattern shows on narrow ridges at high Gullies
+  (green-modern-2's cliff at 60); cap or damp it.
+- **Realism gates.** Modern Green passes all six on 0 of 17 windows. Open:
+  Hack's exponent and hilltop roundness.
+- **`docs/audit/controls.json`** is a stale snapshot (13 stale keys after
+  P16); regenerate it.
+
+### Held branches and what would make them landable
+
+| Branch | What would make it landable |
+| --- | --- |
+| prototype/column-walk (P13) | A setting that beats off in modern Green by realism and by eye, or retail-measured per-bed hardness for Desert |
+| prototype/scarp (P14) | A look of few wide canyons with broad spurs and visible benches, not radial spokes |
+| prototype/slumps (P15) | Lobes and scars that read at 1x |
+| prototype/talus-fans (P17 fans) | Fans with height and a placement and ordering rule that reads as debris |
+| prototype/water (P26) | The owner's call: a second data-gated water path, or retail rebuilt inside the model |
+| prototype/horizons (P11) | Horizon passes that cost less than the taps they remove |
+
 ## After the cards
 
 The owner reviews each branch: reads the diff, checks the gating, re-runs
