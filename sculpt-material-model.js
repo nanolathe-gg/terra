@@ -61,7 +61,7 @@ export function groundCoverRows(cover) {
   rows[0] = [1, cover.wet[0], cover.wet[1], cover.dry];
   rows[1] = [cover.soil.slope[0], cover.soil.slope[1], cover.soil.convex, cover.soil.deposit];
   rows[2] = [cover.patch, cover.moisture.perSwath, cover.moisture.swathRef, cover.moisture.shade];
-  rows[3] = [...rgb(cover.ground), cover.patchiness];
+  rows[3] = [...rgb(cover.ground), 0];
   cover.classes.forEach((k, i) => {
     const b = 4 + 5 * i;
     rows[b] = [...rgb(k.rgb), k.grain];

@@ -657,8 +657,8 @@ WORLD_VARIANTS = {
         # (Realism check on green-modern-1..3: 8.41 of 15 statistics in range against 7.82 without, 24 gate failures against 25; 30 gives 8.53, 60 gives 8.76,
         # but from 30 the cones read as hard dark rays on hills that are soft in retail). Card P32: terracettes on steep grass (Joined
         # wrinkles on a grass world).
-        # Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass on top of the slope-only
-        # ramp, which still gates the slope texture (the table is read by engine-frag.wgsl groundCover). Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
+        # Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass (engine-frag.wgsl groundCover). The table also replaces the slope-only
+        # ramp: the slope texture's share is the table's thin soil. Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
         # dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the
         # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
@@ -674,7 +674,7 @@ WORLD_VARIANTS = {
                            # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
                            # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
                            plants=dict(tuft=4, shrub=2, shrubs=1.5),
-                           wet=[.25, .9], dry=.4, patch=22, patchiness=.8, ground=[55, 93, 27],
+                           wet=[.25, .9], dry=.4, patch=22, ground=[55, 93, 27],
                            soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
                            moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
                            classes=[
