@@ -48,6 +48,7 @@ struct FU {
 @group(1) @binding(7) var<storage, read_write> tileArgs: array<u32>;
 @group(1) @binding(8) var<storage, read_write> refinedOut: array<f32>;      // the weather buffer: plane 0 the authored height, plane 1 (written here) the eroded height
 @group(1) @binding(9) var<storage, read> finalState: array<vec4f>;
+@group(1) @binding(10) var<storage, read_write> totals: array<vec4f>;      // the Time pass's totals: seedMain writes the painted repose share into z
 
 const SHORE_BUDGET = 0.35;
 const BUDGET = 3.0;
@@ -89,6 +90,8 @@ fn seedMain(@builtin(global_invocation_id) id: vec3u) {
     // The erosion override plane is a rate: 1 + v / 127 (no erosion at -1).
     let rate = 1.0 + f32(maskByte(i, fu.rateMask)) / 127.0;
     out.z = weight * max(0.0, rate);
+    // The same plane scales the thermal repose by the same rate (a share of 0 where nothing is painted), read by thermalMain through the pair's mean.
+    totals[i].z = max(0.0, rate) - 1.0;
     fixedField[i] = out;
 }
 
