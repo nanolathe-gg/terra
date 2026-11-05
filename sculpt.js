@@ -1,6 +1,6 @@
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
-import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
+import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {copyColumn, columnHasCapBed, coastColumn} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps,landformBeach} from './sculpt-shape-presets.js';
@@ -283,8 +283,9 @@ const shapeDefaults=() => ({...Object.fromEntries([...SHAPE_FIELDS.map(([key]) =
 const nodeShapeParams=n => {const q={...shapeDefaults(),...n.params};return n.kind==='landform'?landformSteps(q):q;};
 const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
 function buildShapeOptions() {
-  const root=$('shape-options');
-  root.replaceChildren(...SHAPE_FIELDS.map(([key,id,label,,lo,hi,step,,help,choices]) => {
+  // Each option row is built for its feature group (sculpt-ui.js groupToolControls). The section and along-path
+  // editors are the page's own (#section-preview-control, in the curve dock).
+  syncToolGroups=groupToolControls(SHAPE_FIELDS,([key,id,label,,lo,hi,step,,help,choices]) => {
     label=controlLabel(key,label);
     if(key==='crystalForm')choices=[[0,'Faceted shards'],[1,'Column mound'],[2,'Planar blocks']];
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
@@ -293,19 +294,7 @@ function buildShapeOptions() {
     const input=choices?`<select id="${id}" style="width:100%">${choices.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>`:`<input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}">`;
     wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"${choices?' hidden':''}></output></label>${input}<p class="small">${help}</p>`;
     return wrap;
-  }));
-  // The section editor sits above the face width (H15 part 2, step C; H27): a form to pick, the whole section across both sides to drag, the lean, and for a
-  // landform the sides' link and the second curve, the elevation along the path.
-  const preview=document.createElement('div'); preview.className='control'; preview.id='section-preview-control'; preview.hidden=true;
-  const cvStyle='width:100%;background:#172119;border:1px solid #465344;border-radius:4px;touch-action:none;display:block;margin-top:4px';
-  preview.innerHTML=`<label for="curve-form">Section</label><select id="curve-form" style="width:100%"></select>`+
-    `<canvas id="section-preview" width="480" height="240" style="${cvStyle};cursor:crosshair"></canvas>`+
-    `<div style="display:flex;gap:6px;margin-top:4px;align-items:center;flex-wrap:wrap"><button type="button" id="curve-link" style="flex:none" aria-pressed="true" title="Both sides share one curve">Link sides</button><button type="button" id="curve-mirror" style="flex:none" title="Flip the section left to right">Mirror</button><button type="button" id="curve-reset" style="flex:none">Reset to the form</button><span class="small" id="curve-lean" style="flex:1 1 100%"></span></div>`+
-    '<p class="small" id="curve-help">Height against distance across the shape, both sides. Drag a knot; click the line to add one; double-click a knot (or Shift-click) to remove it. Drag the diamond at the crest sideways to lean the shape. A knot above the top makes a lip (on water, below 0).</p>'+
-    `<div id="along-block" hidden><label for="along-preview">Height along the path</label><canvas id="along-preview" width="480" height="140" style="${cvStyle};cursor:crosshair"></canvas>`+
-    '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" id="along-reset" style="flex:none">Level along the path</button></div>'+
-    '<p class="small">The dashed line is the crest\'s height along the path you drew, as a share of the elevation above the plain; the solid line is read from the map. Click to pick the place the section shows (marked on the map); double-click the line to add a knot, drag a knot to move it, Shift-click a knot to remove it.</p></div>';
-  root.children[SHAPE_FIELDS.findIndex(f => f[0]==='lean')].before(preview);
+  });
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('along-reset').addEventListener('click',() => { setCurve(null,'along'); if (selected>=0) { checkpoint(); queueWeather(); } });
@@ -330,7 +319,6 @@ function buildShapeOptions() {
   // canceled. Without this the page stays "paused while editing" and Export
   // never re-enables (review A1, 2026-10-27).
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
-  syncToolGroups=groupToolControls(SHAPE_FIELDS);
 }
 let toolSettings={};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -1844,8 +1832,9 @@ const CRACK_STYLES={
 };
 function buildKnobs() {
   const root = $('knobs'), params = experiment;
-  const group = (title, open = false) => { const d = document.createElement('details'); d.className = 'knobs-group'; d.open = open; const t = document.createElement('summary'); t.textContent = title; d.append(t); root.append(d); return d; };
-  const render = group('Rendering',true);$('rendering-host').append(render);
+  // Rendering and Palette sit with the graphics settings; every other group is a block in a World section.
+  const group = (title, open = false) => { const d = document.createElement('details'); d.className = 'knobs-group'; d.open = open; const t = document.createElement('summary'); t.textContent = title; d.append(t); $('rendering-host').append(d); return d; };
+  const render = group('Rendering',true);
   const toggle = (key, label, on, off, isOn) => {
     const row = document.createElement('label'); row.className = 'small'; row.style.display = 'flex'; row.style.gap = '6px';
     const box = document.createElement('input'); box.type = 'checkbox'; box.checked = isOn;
@@ -1859,8 +1848,8 @@ function buildKnobs() {
   const groups=new Map();
   for (const [title, knobs] of KNOBS) {
     const name=WORLD_GROUP_NAMES[title]||title;
-    const box=groups.get(name)||group(name);groups.set(name,box);box.dataset.group=name;
-    if(title==='Palette')$('rendering-host').append(box);
+    if(!groups.has(name)){if(title==='Palette'){const box=group(name);box.dataset.group=name;groups.set(name,{block:box});}else groups.set(name,worldGroup(name));}
+    const {block:box,search}=groups.get(name);
     if (title === 'Cracks') {
       const wrap = document.createElement('div'); wrap.className = 'control';
       wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks slider (Shape panel).</p>`;
@@ -1877,7 +1866,7 @@ function buildKnobs() {
       if(PARKED_WORLD_CONTROLS.has(key))continue;
       const label=controlLabel(key,oldLabel);
       const wrap = document.createElement('div'); wrap.className = 'control';
-      wrap.dataset.knob=key;
+      wrap.dataset.knob=key;if(search)wrap.dataset.searchGroup=search;
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value;
       wrap.innerHTML = `<label for="${id}">${label} <output>${current}</output></label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${current}">`;
       let input = wrap.querySelector('input'); const out = wrap.querySelector('output');
