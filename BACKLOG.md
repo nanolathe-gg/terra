@@ -8390,11 +8390,22 @@ control replaces or simplifies another, and retail scenes stay byte-identical
 unless judged on the retail sheets.
 
 - **P30 ground cover.** Done for tabled worlds (e0ca0124, 75d11a03);
-  `slopeProfile` stays for worlds with no table. Sampled slope texture is 0
-  on modern Green, so its thin-soil slope cover does not show by default.
-- **P27 shores.** Beach berm and rock coasts landed (8427b273, bad593a8).
-  Open: the Dean shoreface, bars, dunes and wave-cut platforms; about half of
-  a Surf coast on modern Green is rock (its column has a hard bed at the sea).
+  `slopeProfile` stays for worlds with no table. Sampled slope texture is off
+  on tabled worlds (1f97728c).
+- **P27 shores.** Beach berm landed (8427b273); the owner's shore round
+  (0bf3757f) removed column rock coasts (rock on a shore is painted), graded
+  Surf from 0 and reworked the sand edge and foam. Open: the Dean shoreface,
+  bars, dunes and wave-cut platforms; beach ripples (the beach is drawn only
+  in the frag); on worlds whose ground is sand (Archipelago, Desert) the Surf
+  beach takes a grey from the rock's mean (`sandWeathered()`), not the
+  ground's sand. Whether a shore rockiness slider is still wanted is the
+  owner's call (painting reads well by eye).
+- **Hills and mountains.** Defaults landed (19d50808, 25982823). Open: modern
+  Green's terracettes (the variant's Joined wrinkles) still mark the default
+  hill and no per-stroke row reaches them; on Archipelago and Zhon hill and
+  mountain still look alike at a distance; mountain summits sit at fixed
+  shares of the path, so a long path spaces them widely; cliff bands and spurs
+  made rings and stubs and are not in the default.
 - **P16 stones.** Archipelago's chips stay in the draw, outside `looseStones`.
 - **P10 rock model.** The other seven rock types. Stain and lichen landed
   (8937939d, 318f75df); Stain is tone only (no varnish color) and does not
