@@ -1529,67 +1529,22 @@ fn coastLayers(@builtin(global_invocation_id) g: vec3u) {
   F[PH * cells + i] = clamp(min(min(base, u.baseH), sea + level * sm(0.0, 5.0, d)) + max(0.0, base - u.baseH), u.minH, u.maxH);
 }
 
-// ---- P27: the beach profile and rock coasts (a water landform's Surf, from SURF_BEACH_FROM up), last of the coast pass ----
+// ---- P27: the beach profile (a water landform's Surf, from 0 up), last of the coast pass ----
 // One thread per cell, from its own distance D to the stroke's waterline (the coast field of the heights the earlier passes left), its snapshot R, the footprint W
 // and position-only noise in the shape's frame. Land: a face up from the waterline to a berm crest (a cubic, level at the crest), a slight back-slope, then a rise
 // that gives way to the bank; the land is cut to that profile where it stands above it and left where it is lower. Water: a shoreface (depth with the 2/3 power of
 // the distance, Dean's), then a steeper slope, the bed lifted to it where it is deeper. Both blend into the stroke's own heights by the reach. Retail's coasts hold
-// the berm to a few units (Archipelago's land stands 1 above the sea, its p90 crest 5), so the crest is 1 to 2.5 units and 14 to 48 px from the water: the frag's
-// surfBerm. Hard rock (the column's hardness at the coast, as the bake reads it) gets no berm: a steeper face with a broken edge, and the rock mask is painted over its face, so the frag draws the world's rock and no beach there.
-// The beach reach (px) is BEACH_REACH in sculpt-gpu-fields.js.
+// the berm to a few units (Archipelago's land stands 1 above the sea, its p90 crest 5), so the crest is 0.3 to 2.5 units and 3 to 48 px from the water: the frag's
+// surfBerm (3 + 45 Surf px, 0.3 + 2.2 Surf units: a little Surf is a low, narrow berm, and none of the beach's size is held back below a threshold).
+// A rocky shore is the artist's: the Paint tool's rock, which the frag's beach gives way to. The beach reach (px) is BEACH_REACH in sculpt-gpu-fields.js.
 const BEACH_REACH = 140.0;
-fn colRow(at: u32) -> vec4f { return MW[u.mwBase + u.nwrites + at]; }
-// The column's mean hardness over the coordinates a to b (the integral of the beds' hardness, so the mean is continuous in a and b where a bed's edge is a step), in the
-// section whose start the middle has passed (columnSectionAt of engine-common.wgsl). A two-bed section's share is its table's (the bake varies it by cycle: a world
-// with contrast has none that matters here).
-fn colHardMean(a: f32, b: f32) -> f32 {
-  var s = 0u;
-  let mid = 0.5 * (a + b);
-  for (var k = 1u; k < u.coColN; k++) { if (mid >= colRow(u.coColSecs + k).x) { s = k; } }
-  let sec = colRow(u.coColSecs + s);
-  let first = u32(sec.y); let n = u32(sec.z); let period = sec.w;
-  var cycle = 0.0;
-  for (var i = 0u; i < n; i++) { let bed = colRow(u.coColBeds + first + i); cycle += bed.x * bed.y; }
-  // The integral from 0 to c: whole cycles, then the beds of the rest.
-  var ends = vec2f(a, b); var total = vec2f(0.0);
-  for (var e = 0; e < 2; e++) {
-    let c = ends[e]; let whole = floor(c / period); let r = c - whole * period;
-    var acc = whole * cycle; var lo = 0.0;
-    for (var i = 0u; i < n; i++) {
-      let bed = colRow(u.coColBeds + first + i);
-      acc += bed.y * clamp(r - lo, 0.0, bed.x);
-      lo += bed.x;
-    }
-    total[e] = acc;
-  }
-  return (total.y - total.x) / (b - a);
-}
-// engine-common.wgsl's valueNoise, and the broad part of its columnOffset (the beds' tilt and the 110-px wander: the finer octaves are narrower than a headland).
-fn colHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
-fn colNoise(q: vec2f) -> f32 {
-  let c = floor(q); let f = fract(q); let fade = f * f * (3.0 - 2.0 * f);
-  let a = colHash(c); let b = colHash(c + vec2f(1.0, 0.0)); let d = colHash(c + vec2f(0.0, 1.0)); let e = colHash(c + vec2f(1.0, 1.0));
-  return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
-}
-fn colOffset(p: vec2f) -> f32 {
-  let a = radians(u.coColDipDir);
-  return u.coColDip * dot(p, vec2f(cos(a), sin(a))) + colNoise(p / 110.0 + 3.1) * u.coColWander * 0.8;
-}
-// How rocky the coast is at world point p, 0..1: the hardness of the bed 1.5 units over the sea (the column counts from the sea; the frag reads the same).
-fn coastRock(p: vec2f) -> f32 {
-  if (u.coColN == 0u) { return 0.0; }
-  // The mean over 7 units of the column, so a bed's edge is a ramp of 100 px or more along the coast and not a wall.
-  let c = 1.5 - u.coColOrigin + colOffset(p);
-  let h = colHardMean(c - 3.5, c + 3.5);
-  return sm(0.35, 0.75, h);
-}
 @compute @workgroup_size(8, 8)
 fn coastBeach(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
   let cells = cCells(); let i = cIdx(x, y); let sea = u.sea;
   let raw = Sc[CRR * cells + i]; let d = Sc[CDD * cells + i]; let foot = Sc[CW * cells + i];
-  let strength = sm(0.2, 0.45, u.coSurf) * sm(0.0, 0.3, foot);
+  let strength = sm(0.0, 1.0, u.coSurf) * sm(0.0, 0.3, foot);
   if (strength <= 0.0 || d >= BEACH_REACH) { return; }
   // The berm's size is a function of the cross-shore distance and of the nearest point of the coast (its frame position), so it is one along the normal.
   let sx = select(CPX, CQX, u.coSrc != 0u);
@@ -1600,37 +1555,16 @@ fn coastBeach(@builtin(global_invocation_id) g: vec3u) {
   let salt = u.seed;
   // The berm's distance and height wander along the coast (cusps and embayments, 60 to 80 px apart).
   let e = u.coSurf;
-  let xb = (14.0 + 34.0 * e) * (1.0 + 0.3 * vnoise(lx / 57.0, ly / 57.0, salt ^ 0x6b1u));
-  let hb = (1.0 + 1.5 * e) * (1.0 + 0.2 * vnoise(lx / 83.0, ly / 83.0, salt ^ 0x6b7u));
-  // The rock is the column's at the coast, so a stretch of coast is rock or sand from the water to the bank. The nearest crossing is one of a few per cell and
-  // jumps between them, so the coast point is found by going d down the gradient of the distance field (central differences over a cell each way) instead.
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  let dl = Sc[CDD * cells + cIdx(max(x - 1, u.rx0), y)]; let dr = Sc[CDD * cells + cIdx(min(x + 1, u.rx1), y)];
-  let du = Sc[CDD * cells + cIdx(x, max(y - 1, u.ry0))]; let dd = Sc[CDD * cells + cIdx(x, min(y + 1, u.ry1))];
-  var gr = vec2f(dr - dl, dd - du);
-  var shoreAt = cp;
-  if (max(max(dl, dr), max(du, dd)) < BEACH_REACH + 2.0 * u.spacing && dot(gr, gr) > 1.0e-6) { shoreAt = vec2f(wx, wy) - normalize(gr) * d; }
-  // The cell's own place in the frame, for the rock's broken edge.
-  var cx = wx; var cy = wy;
-  if (u.framed != 0u) { cx = u.inv0 * wx + u.inv2 * wy + u.inv4; cy = u.inv1 * wx + u.inv3 * wy + u.inv5; }
-  // Pockets: noise at 40 and 95 px (a cell is 16) moves the rock's threshold, so a hard stretch opens into small coves of sand and a soft one gets rocks in it.
-  let ragged = 0.6 * vnoise(cx / 40.0, cy / 40.0, salt ^ 0x6d1u) + 0.4 * vnoise(cx / 95.0, cy / 95.0, salt ^ 0x6d9u);
-  let rock = sm(0.4, 0.7, coastRock(shoreAt) + 0.3 * ragged);
+  let xb = (3.0 + 45.0 * e) * (1.0 + 0.3 * vnoise(lx / 57.0, ly / 57.0, salt ^ 0x6b1u));
+  let hb = (0.3 + 2.2 * e) * (1.0 + 0.2 * vnoise(lx / 83.0, ly / 83.0, salt ^ 0x6b7u));
   var result = raw;
   if (raw > sea) {
-    // A rock coast's Surf is the lake's: the plane the frag reads (flat Surf where the stroke changed the height, plane 18) drops to a wet line and a lace.
-    // A rock coast is painted rock (plane 0, the rock mask) over its face, so the frag draws the world's rock there, with the paint's ragged edge; the beach gives way to it.
-    let paint = rock * (1.0 - sm(40.0, 80.0, d));
-    if (paint > 0.02) { maskSet(i, 0u, max(maskGet(i, 0u), i32(floor(127.0 * paint + 0.5)))); }
     let rel = raw - sea;
     var ceil = 0.0;
     if (d < xb) { let t = d / xb; ceil = hb * (1.5 * t - 0.5 * t * t * t); }
     else { ceil = hb * (1.0 - 0.35 * sm(0.0, 1.0, (d - xb) / 24.0)) + 0.25 * max(0.0, d - xb - 24.0); }
     let beach = mix(min(rel, ceil), rel, sm(xb + 24.0, xb + 56.0, d));
-    // Rock: the face is steeper near the water, with a broken edge (blocks about a cell and a half across, a unit high, on ground more than a unit over the sea).
-    let broken = vnoise(cx / 24.0, cy / 24.0, salt ^ 0x6c3u) * sm(1.0, 4.0, rel) * sm(3.0, 12.0, d) * (1.0 - sm(30.0, 70.0, d));
-    let rocky = rel * (1.0 + 0.5 * (1.0 - sm(0.0, 40.0, d))) + broken;
-    result = sea + max(mix(rel, mix(beach, rocky, rock), strength), min(rel, 0.05));
+    result = sea + max(mix(rel, beach, strength), min(rel, 0.05));
   }
   F[PH * cells + i] = clamp(result, u.minH, u.maxH);
 }

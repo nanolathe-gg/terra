@@ -38,7 +38,7 @@ const CONTROLS = {
   varySize: {base: {wander: 40, widthVary: 40, heightVary: 12}, set: {varySize: 360}},
   varyFoot: {base: {wander: 40, widthVary: 40, heightVary: 12, varyFoot: 0}, set: {varyFoot: 200}},
   varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},
-  surf: {base: {elevation: -55, combine: 1}, set: {surf: 100}},   // P27: a water stroke's beach profile (Surf from 20 up)
+  surf: {base: {elevation: -55, combine: 1}, set: {surf: 100}},   // P27: a water stroke's beach profile (Surf from 0 up)
 };
 // The panel's own test: the control is shown to this kind (sculpt.js SHAPE_FIELDS kinds, all landform here, then shapeControlAvailable).
 const shown = (key, kind, card) => kind === 'landform' && shapeControlAvailable(key, kind, {faceVariation: 80, ...card, lean: card.lean / 100, terraces: card.terraces || 0, ledge: .6, terraceJitter: .35});

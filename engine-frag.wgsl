@@ -1410,10 +1410,12 @@ fn surfShore(p: vec2f) -> vec4f {
     let slope = max(bankGrad(p), 0.12);
     return vec4f(select(-best, best, dry) + 0.6 / slope, q, slope);
 }
-// The beach the surf builds: the berm crest 14 + 34 Surf units px from the water (the heights' own, coastBeach in engine-shape.wgsl: 1 + 1.5 Surf units tall).
-// Below Surf .2 there is only the wet line and the lace (a lake): the sand, its cusps and the breakers fade in between .2 and .45.
-fn surfBeach(e: f32) -> f32 { return smoothstep(0.2, 0.45, e); }
-fn surfBerm(e: f32) -> f32 { return 14.0 + 34.0 * e; }
+// The beach the surf builds: the berm crest 3 + 45 Surf px from the water (the heights' own, coastBeach in engine-shape.wgsl: 0.3 + 2.2 Surf units tall).
+// Surf works from 0: surfBeach is how much of a beach there is (the square root, so a small Surf already shows: the sand's share, its cusps, the wet reach, the breakers).
+fn surfBeach(e: f32) -> f32 { return sqrt(clamp(e, 0.0, 1.0)); }
+fn surfBerm(e: f32) -> f32 { return 3.0 + 45.0 * e; }
+// How much of the beach is sand: none at a little Surf (a wet strip and foam, as a lake has), flecks from about .18, all of it from .6.
+fn surfSandAmt(e: f32) -> f32 { return clamp((e - 0.08) / 0.52, 0.0, 1.0); }
 // The cross-shore coordinate with the beach cusps: horns that push the swash seaward every ~26 px along the coast.
 fn surfCuspX(x: f32, q: vec2f, e: f32) -> f32 {
     return x + 3.5 * e * surfBeach(e) * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm(e) * 0.7, surfBerm(e) * 1.1, x));
@@ -1428,7 +1430,7 @@ fn surfSand(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
     let ragged = 9.0 * valueNoise(p / 14.0 + vec2f(5.0, 1.0)) + 4.0 * valueNoise(p / 6.0 + vec2f(2.0, 9.0));
     let end = min(surfBerm(e) + 26.0 + 28.0 * along + 8.0 * near + ragged, SURF_REACH - 6.0);
     let width = 12.0 + 20.0 * (valueNoise(q / 61.0 + vec2f(8.8, 2.2)) * 0.5 + 0.5);
-    return clamp((end - surfCuspX(x, q, e)) / width, 0.0, 1.0) * step(0.0, x) * surfBeach(e);
+    return clamp((end - surfCuspX(x, q, e)) / width, 0.0, 1.0) * step(0.0, x) * surfSandAmt(e);
 }
 // The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
 fn surfWet(x: f32, q: vec2f, e: f32) -> f32 {
@@ -1711,8 +1713,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfX = shore.x;
         surfQ = shore.yz;
         surfSlope = shore.w;
-        // Painted rock (a rock coast's, from coastBeach, or the artist's) takes the beach away, by its ragged edge: Surf falls to a lake's wet line and lace.
-        if (u.paintOn != 0) { surfE = mix(surfE, 0.1, smoothstep(0.3, 0.7, painted.x) * surfBeach(surfE)); }
+        // Painted rock (a rock coast's, from coastBeach, or the artist's) takes the beach away, by its ragged edge: Surf falls to almost nothing (a wet line and a lace).
+        if (u.paintOn != 0) { surfE = mix(surfE, 0.02, smoothstep(0.3, 0.7, painted.x)); }
         if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, surfE)); }
     }
     var material = mix(grass, rock, exposed);
