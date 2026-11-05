@@ -1718,7 +1718,9 @@ const KNOBS = [
 // can be adjusted; New world copies the current one under a new name. Kept in
 // this browser (localStorage) and exportable as JSON.
 const WORLD_STORE='nanolathe-map-editor-worlds';
-const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['crystal','Crystal'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
+// Card P12b: the light's two colors ride with the world's colors; white (off) is the grey light. Help for each row is shown under it.
+const LIGHT_COLOR_HELP={sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.'};
+const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['crystal','Crystal'],['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
@@ -1728,7 +1730,12 @@ const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).pad
 const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
 // A world's colors: the server's defaults for its base world, then the
 // world's own choices; null means explicitly off (the texture's own color).
-function mergedColors() { return {...(config.colors||{}),...(activeWorld().colors||{})}; }
+function mergedColors() {
+  const out={...(config.colors||{}),...(activeWorld().colors||{})};
+  // ?sunColor=ffd9a8&skyColor=8fb0ff try the light's colors on a page without changing the world (renders, review sheets).
+  for (const key of ['sun','sky']) { const q=experiment.get(key+'Color'); if (q && /^#?[0-9a-f]{6}$/i.test(q)) out[key]=q.startsWith('#')?q:'#'+q; }
+  return out;
+}
 function worldColors() { const out={}; for (const [k,v] of Object.entries(mergedColors())) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); columnOverride?.colors?.forEach((c,i)=>{out['strata'+(i+1)]=c.map(v=>v/255);});return out; }
 function columnForEdit(){const column=structuredClone(config.column);if(column?.colors){const colors=worldColors();column.colors=column.colors.map((c,i)=>colors['strata'+(i+1)]?.map(v=>v*255)||c);}return column;}
 function restoreColumn(column){
@@ -1746,7 +1753,7 @@ function defaultColor(key) {
   const rgb=v => v&&v.map(x => x/255);
   const strata=(config.column?.colors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
-    crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
+    crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
   if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
@@ -1783,6 +1790,7 @@ function buildWorldPanel() {
     const apply=() => { if (box.checked) world.colors[key]=pick.value; else if (config.colors?.[key]) world.colors[key]=null; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
     box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
     rows.append(row);
+    if (LIGHT_COLOR_HELP[key]) { const help=document.createElement('p'); help.className='small'; help.textContent=LIGHT_COLOR_HELP[key]; rows.append(help); }
   }
   // Ground pattern: this world's own, or another world's, recolored by
   // the Ground base color above.

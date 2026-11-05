@@ -1506,6 +1506,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.cavity > 0.0) { cav = mix(u.cavity * cavityDepth(p, h), u.cavity * faceCavity, faceRelief); }
     }
     var shading = lighting * ao * shadow;
+    var lightTint = vec3f(1.0);
+    // Open lit level ground keeps its brightness under any light colour (the tint is divided by its luma), so a colour changes hue and the
+    // light-to-shade balance and never the exposure; white on both is exactly 1.
+    let flatTintLuma = 1.0 + dot((u.ambient * (u.skyColor - 1.0) + 0.95 * u.light.z * (u.sunColor - 1.0)) / flatLight, vec3f(0.2126, 0.7152, 0.0722));
     if (u.separateLight != 0) {
         // Cast shadows attenuate the direct sun. The ambient term already
         // receives local occlusion, so shadowing it again buries dark faces.
@@ -1519,13 +1523,22 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let onSlope = smoothstep(0.08, 0.35, slope);
         let castShadow = mix(1.0, shadow, mix(u.flatShadow, 1.0, onSlope)) * closeVis;
         let occluded = mix(1.0, ao, mix(u.flatOcclusion, 1.0, onSlope));
-        shading = min((u.ambient * (1.0 - cav) + fill + 0.95 * direct * castShadow * (1.0 - 0.45 * cav)) / flatLight, u.lightCap) * occluded;
+        let skyShare = u.ambient * (1.0 - cav) + fill;
+        let sunShare = 0.95 * direct * castShadow * (1.0 - 0.45 * cav);
+        shading = min((skyShare + sunShare) / flatLight, u.lightCap) * occluded;
+        // The share of the light that is sky takes the sky's colour and the share that is sun the sun's; white on both is exactly 1.
+        lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
+    } else {
+        let skyShare = u.ambient;
+        let sunShare = 0.95 * max(0.0, dot(normal, u.light)) * shadow;
+        lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
     }
+    lightTint /= max(flatTintLuma, 0.05);
     // Retail Lava faces stay close to the ground's tone whichever way they
     // look (luma regressed on the height gradient: ~8 per unit slope east to
     // west against our 20; measured on four maps), so its world keeps only
     // part of the directional shading.
-    if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); }
+    if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); lightTint = mix(vec3f(1.0), lightTint, u.shadeDepth); }
     // G5 (Lava): rock turned from the sun, or in a cast shadow, goes darker than the diffuse term alone gives (retail's far sides are near black).
     // Retail's small hills keep nearly the plain's tone on their far sides; the dark masses are the tall hills', so it grows with height.
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
@@ -1897,6 +1910,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let fall = clamp(1.0 - shading, 0.0, 1.0) * u.shadeBlue;
         color = material * (shading + fall * vec3f(0.0, 0.35, 0.85));
     }
+    // The light's colour, on the lit material (after shadeBlue, which rebuilds the colour).
+    color *= lightTint;
     // Raised or sloped ground (card E6): the footprint of the shine gate and of Moon's pockmarks; level plain is 0.
     // Raised ground counts whole, tops included, where a crater's floor counts only where it slopes.
     var landform = 1.0;
@@ -1941,7 +1956,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }
         if (u.iceFall > 0.0) { shine = vec4f(shine.xyz * (1.0 - 0.75 * u.iceFall * iceFace), shine.w); }
-        color = color * shine.w + shine.xyz;
+        // A glint is the sun mirrored: it takes the sun's colour, not the sky's.
+        color = color * shine.w + shine.xyz * u.sunColor;
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
     if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
@@ -2061,7 +2077,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 let own = normalize(vec3f(-(g - broad), 1.0));
                 bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
             }
-            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / max(shading, 0.05) * bedShade, crackedBed), crackedBed), bedLit); }
+            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / (max(shading, 0.05) * max(lightTint, vec3f(0.02))) * bedShade, crackedBed), crackedBed), bedLit); }
             // The bumps' light moves red and green more than blue, so a shaded lump goes toward deep blue
             // and a lit one toward pale blue, where a plain multiply lands between the palette's blues (teal).
             // Only hard-step water takes them: Archipelago's lakes and channels stay smooth, as retail's.
@@ -2107,14 +2123,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             submerged = mix(submerged, crisp, shoreHard);
         }
         surfWater = submerged;
-        color = mix(color, water * (0.92 + 0.08 * shadow), submerged);
+        color = mix(color, water * lightTint * (0.92 + 0.08 * shadow), submerged);
         if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
         if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
     }
     if (surfE > 0.0 && surfX < 900.0) {
         // Card P27: static foam, white as lit as the water is. It marks the playable edge on both sides: the lace on the water, the swash on the sand.
         let foam = surfFoam(pixel, p, surfX, surfQ, max(0.0, u.sea - baseHeight(p)), surfSlope, surfE);
-        color = mix(color, vec3f(0.93, 0.96, 0.94) * (0.9 + 0.1 * shadow), foam * select(1.0 - surfWater, surfWater, surfX < 0.0));
+        color = mix(color, vec3f(0.93, 0.96, 0.94) * lightTint * (0.9 + 0.1 * shadow), foam * select(1.0 - surfWater, surfWater, surfX < 0.0));
     }
     if (u.shoreEdge > 0.0 && abs(h - u.sea) < 10.0) {
         // Lava coasts (retail, measure/lava_*.py): a 1 px dark-red rim just

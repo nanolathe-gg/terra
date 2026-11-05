@@ -122,6 +122,8 @@ try {
       },
       // The Colors panel's own row: a hex picks the color, nothing clears it.
       pickColor(label, hex) { const [box, pick] = [...document.querySelectorAll('#world-colors .color-row')].find(r => r.firstElementChild.textContent === label).querySelectorAll('input'); if (hex) { pick.value = hex; pick.dispatchEvent(new Event('input', {bubbles: true})); } else { box.checked = false; box.dispatchEvent(new Event('change', {bubbles: true})); } },
+      // A light color row (P12b): the picture with the color picked against the picture without it.
+      async colorPair(label, hex) { const a = await grab(); this.pickColor(label, hex); await A.idle(); const b = await grab(); this.pickColor(label); await A.idle(); return diff(a, b); },
       kinds() { return A.nodes.map(n => n.kind); },
       async putBack() { for (let i = 1; i < saved.length; i++) await A.edit(i, saved[i]); },
       // a row is off by its reason line, not its disabled flag: the audit page's busy map disables the rendering switches too
@@ -268,6 +270,12 @@ try {
     await ev(`__wc.pickColor('Shallow water')`);
     for (const r of colored.values()) { r.zero = r.max === 0; r.allowed = r.zero && reasonFor(r); add(r); }
     stage('picked color', ts); ts = Date.now();
+    // The light's colors (P12b): a warm sun and a cool sky, picked through the panel's own rows on the world's first scene. White (off) is the grey light.
+    await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`);
+    for (const [label, hex] of [['Sun color', '#ffc880'], ['Sky color', '#80a0ff']]) {
+      const m = await ev(`__wc.colorPair(${JSON.stringify(label)}, ${JSON.stringify(hex)})`);
+      add({world, type: 'knob', key: label === 'Sun color' ? 'sunColor' : 'skyColor', group: 'Colors', fixture: fixtures[0][0] + ' + ' + hex, lo: 'off', hi: hex, state: 'color', ...m, zero: m.max === 0, allowed: false});
+    }
     // Stroke options, on the stroke fixture.
     const shapeRows = [];
     for (const f of st.fields) {

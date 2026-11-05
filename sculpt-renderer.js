@@ -460,6 +460,9 @@ export class TerrainRenderer {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }
+    // The light's colours (card P12b): white is the grey light every world had.
+    this.v('uSunColor', colors.sun || [1, 1, 1]);
+    this.v('uSkyColor', colors.sky || [1, 1, 1]);
     // The column's slot colours: the world's, else a painted-desert set.
     const strataDefaults = this.config.column?.colors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
