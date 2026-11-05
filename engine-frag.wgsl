@@ -1443,12 +1443,22 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
     let cell = floor(grainPixel(pixel));
     if (x < 0.0) {
         let xs = -x;
-        let w = mix(1.2, 2.0, surfBeach(e));
-        let lace = (1.0 - smoothstep(0.4 * w, w, xs + 0.3 * (1.0 + valueNoise(p / 3.0)))) * step(shelfHash(cell + 47.0), mix(0.97, 0.75, surfBeach(e)));
+        // The lace is a broken fringe, not a line: along the coast it comes and goes in runs of about 6 to 25 px (value noise on the shore coordinate at 11 and 37 px),
+        // its width swells from 1 px to 2-4 px where the run is strong (more with Surf), its inner edge is ragged, and a few single bubbles stand off it. Hashed per art pixel.
+        let run = 0.5 + 0.5 * valueNoise(q / 11.0 + vec2f(2.3, 5.7));
+        let long = 0.5 + 0.5 * valueNoise(q / 37.0 + vec2f(6.1, 1.9));
+        let gate = smoothstep(0.30, 0.52, mix(run, long, 0.45) + 0.2 * surfBeach(e));
+        let w = (0.9 + (0.8 + 1.8 * surfBeach(e)) * smoothstep(0.35, 0.9, run)) * (0.75 + 0.5 * long);
+        let edge = xs + 0.5 * (1.0 + valueNoise(p / 3.0)) + 0.4 * valueNoise(p / 1.7 + 8.0);
+        let fringe = (1.0 - smoothstep(0.45 * w, w, edge)) * step(shelfHash(cell + 47.0), mix(0.92, 0.7, smoothstep(1.2, 3.5, w)));
+        let bubbles = step(shelfHash(cell + 48.0), 0.05 + 0.07 * surfBeach(e)) * smoothstep(0.8, 1.6, xs) * (1.0 - smoothstep(2.5, 3.0 + w, xs)) * smoothstep(0.35, 0.7, long);
+        let lace = max(fringe * gate, bubbles * gate);
         // The breakers stand on the isobath where the water is 1.5 + 3 Surf units deep (over a bar, on its crest), in px along the bed's slope.
         let ofBreak = (depth - (1.5 + 3.0 * e)) / slope + 0.5 * valueNoise(p / 6.0);
         let breaking = smoothstep(-0.15, 0.2, valueNoise(q / 40.0 + vec2f(0.5, 3.0)) + e - 0.8);
-        let crest = (1.0 - smoothstep(0.5, 1.8, abs(ofBreak))) * breaking * step(shelfHash(cell + 74.0), 0.85);
+        // The crest breaks into runs of 5 to 20 px that swell and thin (0.5 to 2.5 px), so the breakers are a chain of whitecaps and not one line.
+        let cap = 0.5 + 0.5 * valueNoise(q / 8.0 + vec2f(3.7, 9.1));
+        let crest = (1.0 - smoothstep(0.35, 0.6 + 1.9 * cap, abs(ofBreak))) * breaking * smoothstep(0.25, 0.5, cap + 0.2 * valueNoise(q / 29.0)) * step(shelfHash(cell + 74.0), 0.8);
         let spray = (1.0 - smoothstep(1.5, 4.0, -ofBreak)) * smoothstep(0.0, 1.5, -ofBreak) * breaking * step(shelfHash(cell + 75.0), 0.18);
         return clamp(max(lace, (crest + spray) * e * surfBeach(e)), 0.0, 1.0);
     }
