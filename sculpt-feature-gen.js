@@ -594,100 +594,151 @@ function scarFrame(P, seed, ctx) {
   return { body: cropSprite(sp, 0), translucent: true };
 }
 
-// ---- fire --------------------------------------------------------------------------------------------------------
-const HEAT_TABLES = [
-  [[195, 45], [209, 28], [196, 14], [197, 8], [210, 5]],                                  // core, heat > .66
-  [[210, 40], [209, 18], [197, 17], [198, 9], [195, 8], [196, 4], [200, 4]],              // body
-  [[200, 28], [211, 24], [205, 14], [203, 10], [204, 8], [199, 8], [198, 6], [210, 2]],   // edge
+// ---- fire (spec 16.2) --------------------------------------------------------------------------------------------
+// Retail's tree burn: a unique 9-frame lead-in (flame grows from the foot, crown still green), the crown cut to charred
+// gray at frame 9, a 14-frame flame cycle that repeats byte for byte, and a 16-frame burn-out tail that ends on the burnt
+// tree's exact size and anchor with glowing embers on it. The flame base is an arch (to the ground only near the trunk,
+// climbing the crown's flanks), tongues are redrawn around a stable core, sparks are isolated dark-red pixels, no smoke.
+const FLAME_GROUPS = {
+  wy: [[195, 48], [194, 25], [193, 14], [196, 13]], py: [[197, 45], [198, 30], [199, 25]], by: [[208, 72], [209, 14], [210, 10], [211, 4]],
+  or: [[200, 50], [201, 15], [202, 15], [203, 20]], dr: [[204, 35], [205, 45], [206, 20]], ot: [[192, 25], [207, 10], [212, 25], [213, 15], [214, 10], [215, 10], [216, 5]],
+};
+const FLAME_THIRDS = [   // base, middle, tip: [group, share]
+  [['wy', 38], ['py', 12], ['by', 18], ['or', 6], ['dr', 3], ['ot', 23]],
+  [['wy', 23], ['py', 8], ['by', 28], ['or', 7], ['dr', 4], ['ot', 29]],
+  [['wy', 7], ['py', 8], ['by', 43], ['or', 16], ['dr', 11], ['ot', 14]],
 ];
-function flamePixels(frameSeed, stage, o, canvas) {
-  // `canvas` gets flame pixels added. o: {cx, base, width, height, tongues}
-  const r = rng(frameSeed), n1 = (frameSeed >>> 3) | 0;
-  const { cx, base, width, height } = o;
-  const tongues = o.tongues;
-  const T = [];
-  for (let i = 0; i < tongues; i++) {
-    const f = tongues === 1 ? 0.5 : i / (tongues - 1);
-    const by = base - Math.round(Math.pow(r(), 1.3) * (o.rise ?? 0));   // tongues start at different heights: crown and trunk, no flat base line
-    T.push({ by, x: cx + (f - 0.5) * width * (0.9 + 0.25 * r()), h: height * stage * (0.45 + 0.55 * Math.pow(r(), 0.7)), w: width * (o.narrow ?? 1) * (0.17 + 0.12 * r()) });
-  }
-  for (let y = base; y > base - height - 4; y--) {
-    for (let x = Math.floor(cx - width); x <= cx + width; x++) {
-      let cover = 0, heat = 0;
-      for (const t of T) {
-        const up = t.by - y;
-        if (up > t.h || up < 2 * vnoise(x / 1.6, y / 1.6, n1 + 7) - 0.4) continue;
-        const f = up / t.h, hw = t.w * Math.pow(1 - f, 0.62) + 0.5;
-        const dx = Math.abs(x - t.x) + (vnoise(x / 2.3, y / 2.3, n1) - 0.5) * 3.4;
-        if (dx < hw) { cover = 1; heat = Math.max(heat, (1 - f) * 0.7 + (1 - dx / hw) * 0.4); }
-      }
-      if (!cover) continue;
-      heat += (r() - 0.5) * 0.45;
-      if (r() < (o.hole ?? 0.07)) continue;
-      const tab = heat > 0.66 ? HEAT_TABLES[0] : heat > 0.34 ? HEAT_TABLES[1] : HEAT_TABLES[2];
-      put(canvas, x, y, weighted(r, tab));
+const FLAME_EDGE = [[200, 30], [210, 22], [211, 20], [209, 10], [203, 10], [197, 5], [201, 3]];
+const SPARK_COLORS = [[205, 29], [208, 14], [200, 10], [210, 9], [203, 6], [209, 6], [211, 5], [204, 5], [194, 4], [197, 4], [195, 4], [196, 4]];
+const flameColor = (r, f) => weighted(r, FLAME_GROUPS[weighted(r, FLAME_THIRDS[f < 0.34 ? 0 : f < 0.67 ? 1 : 2])]);
+// One flame frame drawn into `cv`. o: ax, ay (trunk foot), half (flame half width), top (tallest tip above ay), nT (tongues),
+// coreH/coreHW (the stable core that every frame shares), deep (px below the anchor at the trunk), arch (flank reach up the crown), seeds.
+function drawFlame(cv, o, rr, rcore) {
+  const { ax, ay, half, top, nT, coreH, coreHW, deep } = o;
+  const fire = new Uint8Array(cv.w * cv.h), colTop = new Map();
+  const mark = (x, y) => { if (x >= 0 && y >= 0 && x < cv.w && y < cv.h) fire[y * cv.w + x] = 1; };
+  const baseY = dx => {           // lowest fire row at distance dx from the trunk: an arch, the crest is the ground
+    if (dx <= 7) return ay + deep;
+    if (dx <= 12) return ay + 1;
+    if (dx <= 18) return ay - Math.round(o.arch[0]);
+    return ay - Math.round(o.arch[1]);
+  };
+  // stable core: a tall column that reaches the ground at the trunk, narrower higher up (same every frame)
+  const nk = (x, y, s) => vnoise(x / 2.2, y / 2.2, s);
+  for (let y = ay + deep; y >= ay - coreH; y--) {
+    const up = ay - y, hw = coreHW * (1 - 0.55 * Math.pow(Math.max(0, up) / coreH, 1.2));
+    for (let x = Math.ceil(ax - hw - 1); x <= ax + hw + 1; x++) {
+      const dx = Math.abs(x - ax); if (y > baseY(dx)) continue;
+      if (dx <= hw + (nk(x, y, o.coreSeed) - 0.5) * 3) mark(x, y);
     }
   }
+  // tongues: tips 2-4 px wide, widening below, leaning slightly left, redrawn every frame
+  const tongues = [];
+  for (let t = 0; t < nT; t++) {
+    const off = clamp(Math.round(-3 + (rr() + rr() + rr() - 1.5) * 12), -half, half);
+    const reach = 1 - 0.45 * Math.abs(off) / Math.max(half, 1);
+    const ht = clamp(Math.round(top * (0.55 + 0.45 * rr()) * reach), 24, top);
+    tongues.push({ xc: ax + off, ht, sway: -2.5 + (rr() - 0.5) * 3 });
+  }
+  tongues.sort((a, b) => b.ht - a.ht)[0].ht = top;   // one tongue always reaches the frame's top
+  for (const tg of tongues) for (let up = -deep; up <= tg.ht; up++) {
+    const y = ay - up, rel = tg.ht - up;
+    const w = Math.min(o.tongueW[1], o.tongueW[0] + rel * 0.17) + (rr() - 0.5) * 1.6;
+    const cx = tg.xc + tg.sway * (up / tg.ht) + (rr() - 0.5) * 0.8;
+    for (let x = Math.round(cx - w / 2); x <= Math.round(cx + w / 2); x++) {
+      const dx = Math.abs(x - ax), b = baseY(dx);
+      if (y > b) continue;
+      if (dx > 18 && (hash2(x, up >> 3, o.coreSeed) < 0.58)) continue;     // most far-flank columns carry no fire
+      mark(x, y);
+    }
+  }
+  // islands of char inside the flame, ragged rim
+  for (let k = 0; k < fire.length; k++) if (fire[k] && rr() < o.hole) fire[k] = 0;
+  const g = (x, y) => (x >= 0 && y >= 0 && x < cv.w && y < cv.h) ? fire[y * cv.w + x] : 0;
+  for (let x = 0; x < cv.w; x++) { let tp = -1, bt = -1; for (let y = 0; y < cv.h; y++) if (g(x, y)) { if (tp < 0) tp = y; bt = y; } if (tp >= 0) colTop.set(x, [tp, bt]); }
+  for (let y = 0; y < cv.h; y++) for (let x = 0; x < cv.w; x++) {
+    if (!fire[y * cv.w + x]) continue;
+    const [tp, bt] = colTop.get(x), f = bt === tp ? 0.5 : (bt - y) / (bt - tp);
+    const edge = g(x - 1, y) + g(x + 1, y) + g(x, y - 1) + g(x, y + 1) < 4 && rr() < 0.3;
+    put(cv, x, y, edge ? weighted(rr, FLAME_EDGE) : flameColor(rr, f));
+  }
+  // sparks: about 7 isolated dark-red and yellow pixels around and above the tongues
+  const nSp = Math.round(o.sparks * (0.6 + 0.8 * rr()));
+  for (let i = 0; i < nSp; i++) {
+    const x = ax + Math.round((rr() - 0.5) * (half * 2 + 8)), y = ay - Math.round(rr() * (top + 6));
+    if (g(x, y) || g(x - 1, y) || g(x + 1, y) || g(x, y - 1) || g(x, y + 1)) continue;
+    put(cv, x, y, weighted(rr, SPARK_COLORS));
+  }
+  return fire;
 }
 function charColor(r) { return weighted(r, [[95, 28], [47, 24], [93, 17], [94, 14], [62, 6], [61, 5], [92, 3], [89, 2], [91, 1]]); }
-
-function burnSequence(tree, burnt, seed, nFrames = 96) {
-  const body = tree.body, b = burnt.body;
-  const r = rng(mix32(seed, 31));
-  // working canvas big enough for the flame above the crown
-  const padT = 34, padS = 8;
-  const w = body.w + padS * 2, h = body.h + padT + 2, ox = padS, oy = padT;
-  const ax = body.ax + ox, ay = body.ay + oy;
-  // per-pixel char and vanish thresholds
-  const keyOf = (x, y) => y * body.w + x;
-  const charT = new Float32Array(body.w * body.h), vanT = new Float32Array(body.w * body.h);
-  for (let y = 0; y < body.h; y++) for (let x = 0; x < body.w; x++) {
-    const hgt = (y) / body.h;
-    charT[keyOf(x, y)] = 0.04 + 0.4 * (0.5 * (1 - hgt) + 0.7 * r());
-    vanT[keyOf(x, y)] = 0.55 + 0.38 * r();
-  }
-  const frames = [];
-  const crownH = body.ay, crownW = body.w;
-  for (let i = 0; i < nFrames; i++) {
-    const cv = newSprite(w, h, ax, ay);
-    const p = i / (nFrames - 1);
-    if (i === 0) { for (let y = 0; y < body.h; y++) for (let x = 0; x < body.w; x++) if (body.a[keyOf(x, y)]) put(cv, x + ox, y + oy, body.idx[keyOf(x, y)]); frames.push(cropSprite(cv)); continue; }
-    if (i === nFrames - 1) { for (let y = 0; y < b.h; y++) for (let x = 0; x < b.w; x++) if (b.a[y * b.w + x]) put(cv, x - b.ax + ax, y - b.ay + ay, b.idx[y * b.w + x]); frames.push(cropSprite(cv)); continue; }
-    // skeleton underneath
-    for (let y = 0; y < b.h; y++) for (let x = 0; x < b.w; x++) if (b.a[y * b.w + x]) put(cv, x - b.ax + ax, y - b.ay + ay, b.idx[y * b.w + x]);
-    // crown: green -> char -> gone
-    const progress = Math.min(1, i / 36), vanP = clamp((p - 0.5) / 0.46, 0, 1.05);
-    for (let y = 0; y < body.h; y++) for (let x = 0; x < body.w; x++) {
-      const k = keyOf(x, y); if (!body.a[k]) continue;
-      if (vanT[k] < 0.55 + vanP * 0.43 && vanP > 0) continue;
-      const rr = rng(mix32(seed + i, k));
-      const charred = charT[k] < progress * 0.52;
-      if (charred) put(cv, x + ox, y + oy, charColor(rr));
-      else put(cv, x + ox, y + oy, body.idx[k]);
+const CHAR_CROWN = [[93, 22.9], [91, 14.8], [90, 11.1], [92, 7.4], [87, 2.8], [95, 3.4], [94, 2.1], [61, 1], [62, 1]];
+// Tree burn: frames 0-8 lead-in, 9-79 repeating 14-frame cycle, 80-95 tail ending on the burnt successor.
+function burnSequence(tree, burnt, seed, nFrames = 96, conifer = false) {
+  const body = tree.body, b = burnt.body, r = rng(mix32(seed, 31));
+  const padT = 38, padS = 14, w = body.w + padS * 2, h = body.h + padT + 6, ox = padS, oy = padT;
+  const ax = body.ax + ox, ay = body.ay + oy, cw = body.w;
+  const at2 = (x, y) => (x >= 0 && y >= 0 && x < body.w && y < body.h && body.a[y * body.w + x]) ? body.idx[y * body.w + x] : -1;
+  // charred crown: one cut at frame 9. The shape stays but loses about 3 columns each side; old shade stays as dark greens.
+  const charred = newSprite(w, h, ax, ay), rc = rng(mix32(seed, 77));
+  for (let y = 0; y < body.h; y++) {
+    let x0 = body.w, x1 = -1; for (let x = 0; x < body.w; x++) if (body.a[y * body.w + x]) { x0 = Math.min(x0, x); x1 = x; }
+    for (let x = 0; x < body.w; x++) {
+      const k = y * body.w + x; if (!body.a[k] || x < x0 + 3 || x > x1 - 3 || (y < body.h - 8 && rc() < 0.04)) continue;
+      const i = body.idx[k], dark = i >= 44 && i <= 47 || (i >= 90 && i <= 95) || (i >= 55 && i <= 62);
+      put(charred, x + ox, y + oy, dark && rc() < 0.45 ? weighted(rc, [[43, 3], [44, 4], [45, 5], [46, 3], [47, 2]]) : weighted(rc, CHAR_CROWN));
     }
-    // flame: grows for ~10 frames, steady and flickering, dies down at the end
-    const grow = clamp(i / 10, 0.1, 1), die = clamp((nFrames - 1 - i) / 12, 0, 1);
-    const stage = Math.min(grow, die) * (0.92 + 0.12 * Math.sin(i * 0.9) + (rng(mix32(seed, i))() - 0.5) * 0.15);
-    const fl = newSprite(w, h, ax, ay);
-    const mixed = Math.min(1, 0.4 + p * 2);
-    flamePixels(mix32(seed, i * 977 + 13), stage, { cx: ax - 1 + (rng(mix32(seed, i + 5))() - 0.5) * 2, base: ay - Math.round(crownH * 0.1), rise: Math.round(crownH * 0.5), width: crownW * 0.5, height: Math.round(78 * mixed * 0.95 + 4), tongues: 7, hole: 0.4, narrow: 0.72 }, fl);
+  }
+  const living = newSprite(w, h, ax, ay);
+  for (let y = 0; y < body.h; y++) for (let x = 0; x < body.w; x++) if (body.a[y * body.w + x]) put(living, x + ox, y + oy, body.idx[y * body.w + x]);
+  const skel = newSprite(w, h, ax, ay);
+  for (let y = 0; y < b.h; y++) for (let x = 0; x < b.w; x++) if (b.a[y * b.w + x]) put(skel, x - b.ax + ax, y - b.ay + ay, b.idx[y * b.w + x]);
+  const flameHalf = conifer ? Math.round(cw * 0.59) : Math.round(cw * 0.36), top0 = Math.min(padT + body.ay - 4, conifer ? 72 : 76);
+  const base = { ax, ay, half: flameHalf, top: top0, nT: 5, coreH: conifer ? 40 : 38, coreHW: conifer ? 9 : 10, deep: conifer ? 5 : 3, arch: conifer ? [5, 12] : [7, 16], tongueW: [2.4, 10], sparks: 10, hole: conifer ? 0.12 : 0.2, coreSeed: (seed * 7) | 0 };
+  const compose = (under, flameO, fseed, extra) => {
+    const cv = cloneSprite(under), fl = newSprite(w, h, ax, ay);
+    drawFlame(fl, flameO, rng(fseed), null);
     for (let k = 0; k < w * h; k++) if (fl.a[k]) { cv.idx[k] = fl.idx[k]; cv.a[k] = 1; }
-    frames.push(cropSprite(cv));
+    if (extra) extra(cv);
+    return cv;
+  };
+  const leadTop = [27, 40, 43, 51, 48, 76, 75, 76], leadN = [2, 3, 3, 4, 4, 5, 5, 5];
+  const cycleN = [5, 5, 4, 4, 2, 4, 6, 6, 5, 3, 7, 4, 4, 2];
+  const frames = new Array(nFrames), cycle = [];
+  frames[0] = cropSprite(living);
+  for (let f = 1; f <= 8; f++) frames[f] = cropSprite(compose(living, { ...base, top: Math.min(leadTop[f - 1], top0), nT: leadN[f - 1], coreH: Math.round(base.coreH * f / 8), hole: 0.12 }, mix32(seed, 500 + f)));
+  for (let c = 0; c < 14; c++) cycle.push(cropSprite(compose(charred, { ...base, top: top0 - 6 + Math.round(rng(mix32(seed, 900 + c))() * 12), nT: cycleN[c] }, mix32(seed, 700 + c))));
+  for (let f = 9; f <= 79; f++) frames[f] = cycle[(f - 9) % 14];                   // the same bytes every repeat
+  for (let f = 80; f < nFrames; f++) {
+    const t = (f - 80) / (nFrames - 80), die = f >= 91 ? (nFrames - 1 - f) / 5 : 1;
+    const crown = cloneSprite(charred), vr = rng(mix32(seed, 60 + f));
+    for (let k = 0; k < w * h; k++) if (crown.a[k] && (hash2(k % w, (k / w) | 0, seed) < t * 1.05 + 0.1)) crown.a[k] = 0;
+    for (let k = 0; k < w * h; k++) if (skel.a[k] && !crown.a[k]) { crown.idx[k] = skel.idx[k]; crown.a[k] = 1; }
+    const wide = 1 + 0.35 * (1 - Math.abs(t - 0.4));
+    if (f === nFrames - 1) {            // the burnt successor's exact size and anchor, with about 16% glowing embers
+      const last = cloneSprite(b), re = rng(mix32(seed, 4242));
+      for (let k = 0; k < last.w * last.h; k++) if (last.a[k] && re() < 0.16) last.idx[k] = weighted(re, [[205, 30], [200, 18], [203, 14], [204, 14], [211, 8], [210, 8], [206, 8]]);
+      frames[f] = last; continue;
+    }
+    frames[f] = cropSprite(compose(crown, { ...base, half: Math.round(flameHalf * wide), top: Math.max(14, Math.round(top0 * die)), nT: 5 + (f & 1), coreH: Math.max(12, Math.round(base.coreH * (0.9 + 0.7 * (1 - t)) * die)), coreHW: base.coreHW + 4, hole: 0.1 }, mix32(seed, 1100 + f)));
   }
   return frames;
 }
+// Shrub burn: 42 frames, flame only: 2 lead-in frames, a 14-frame cycle repeated through frame 41. Last frame ember.
 function shrubBurn(shrub, seed, nFrames = 42) {
-  const frames = [];
-  const W = 16, H = 32, w = W + 6, h = H + 6, ax = Math.round(w / 2), ay = h - 3;
-  for (let i = 0; i < nFrames; i++) {
-    const cv = newSprite(w, h, ax, ay), p = i / (nFrames - 1);
-    const stage = clamp(Math.min(i / 6, (nFrames - 1 - i) / 10), 0.05, 1) * (0.9 + 0.2 * rng(mix32(seed, i))());
-    if (i === nFrames - 1) { const rr = rng(mix32(seed, 99)); for (let k = 0; k < 260; k++) put(cv, ax + Math.round((rr() - 0.5) * 11), ay - Math.round(rr() * 8), weighted(rr, [[208, 26], [195, 14], [194, 11], [209, 9], [210, 8], [193, 6], [196, 5], [192, 3], [205, 3]])); frames.push(cropSprite(cv)); continue; }
-    flamePixels(mix32(seed, i * 313 + 7), stage, { cx: ax, base: ay, rise: 5, width: 7, height: 34, tongues: 3, hole: 0.34 }, cv);
-    const rc = rng(mix32(seed, i * 17 + 3)); // charred twigs and embers at the foot
-    for (let k = 0; k < 40 + 40 * (1 - Math.abs(p - 0.4)); k++) { const x = ax + Math.round((rc() - 0.5) * 12), y = ay - Math.round(rc() * rc() * 9); if (!cv.a[y * w + x]) put(cv, x, y, charColor(rc)); }
-    frames.push(cropSprite(cv));
-  }
+  const W = 30, H = 42, ax = 15, ay = H - 4, mk = (c) => {
+    const cv = newSprite(W, H, ax, ay);
+    drawFlame(cv, { ax, ay, half: 8, top: 22 + Math.round(rng(mix32(seed, 300 + c))() * 11), nT: 3, coreH: 12, coreHW: 4.5, deep: 1, arch: [6, 12], tongueW: [2.2, 8], sparks: 1, hole: 0.03, coreSeed: seed & 1023 }, rng(mix32(seed, 40 + c)));
+    const rch = rng(mix32(seed, 800 + c)); for (let k = 0; k < 3; k++) { const x = ax + Math.round((rch() - 0.5) * 12), y = ay - Math.round(rch() * 4); if (!cv.a[y * W + x]) put(cv, x, y, charColor(rch)); }
+    return cropSprite(cv);
+  };
+  const frames = [], cycle = []; for (let c = 0; c < 14; c++) cycle.push(mk(c));
+  frames.push(mk(100), mk(101));
+  for (let f = 2; f < nFrames - 1; f++) frames.push(cycle[(f - 2) % 14]);
+  const last = newSprite(16, 14, 8, 11), rr = rng(mix32(seed, 99));      // a dying pale-yellow ember (spec 15)
+  for (let k = 0; k < 260; k++) put(last, 8 + Math.round((rr() - 0.5) * 11), 11 - Math.round(rr() * 8), weighted(rr, [[208, 26], [195, 14], [194, 11], [209, 9], [210, 8], [193, 6], [196, 5], [192, 3], [205, 6]]));
+  for (let k = 0; k < 7; k++) put(last, 8 + Math.round((rr() - 0.5) * 8), 11 - Math.round(rr() * 3), charColor(rr));
+  frames.push(cropSprite(last));
   return frames;
 }
 
@@ -726,7 +777,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     shadow = makeShadow(body, { side: L.shadowSide, shx: conifer ? 0.62 : 0.5, up: conifer ? 0.7 : 0.66, colors: TREE_SHADOW_COLORS, soften: 2 }, rng(mix32(seed, 41)));
     const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.84)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
     burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
-    burn = burnSequence({ body }, burnt.body ? { body: burnt.body } : burnt, seed);
+    burn = burnSequence({ body }, { body: burnt.body }, seed, 96, conifer);
     const sizeFrac = clamp((P.height - 55) / 17, 0, 1);
     gameplay = { energy: pickValue(P.energy, sizeFrac, rr), metal: 0, blocking: true, reclaimable: true, flamable: true, burnTicks: 192, spreadChance: conifer ? 30 : 90 };
   } else if (kind === 'burnt') {
