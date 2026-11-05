@@ -3,7 +3,7 @@
 // end to their high end on a fixture that holds the features, and the two captures are compared: the most any pixel channel moves, and how many
 // pixels change at all. A direction (`wind`, `*Dir`) moves a half turn, because the two ends of a full turn are one value. Each control is put
 // back after its pair, and at the end of a world the first fixture is drawn again and must match its first capture, so no row leaks into the next.
-//   node measure/world_controls.mjs [--find key,key] [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--worlds green,lava] [--only key,key] [--set key=v,key=v] [--jobs 3]
+//   node measure/world_controls.mjs [--find key,key] [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--worlds green,lava] [--variant modern] [--only key,key] [--set key=v,key=v] [--jobs 3]
 // --jobs splits the worlds over that many browsers (CDP ports --port, then --port+2, +3, ...): a world takes about four minutes alone.
 // --find key,key: instead of the sweep, set each other enabled row to its high end in turn and print which of the named rows then move (the search for a row's parent).
 // Without --server the tool starts repro/audit/server.py itself (--audit-port, default 8885; --assets DIR is that host's assets root: it needs map-catalog.json and features/, as a card's own root has): terraformAudit exists only on that host's ?audit pages.
@@ -24,6 +24,7 @@ const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n);
 const JOBS = Number(opt('--jobs', 3)), CHILD = args.includes('--child');
 const assets = opt('--assets', ''), port = Number(opt('--port', 9685)), out = resolve(opt('--out', 'world-controls')), auditPort = Number(opt('--audit-port', 8885));
 const WORLDS = opt('--worlds', 'green,archipelago,crystal,desert,ice,lava,moon,red,zhon').split(',');
+const VARIANT = opt('--variant', '');
 const FIND = opt('--find', '') ? opt('--find', '').split(',') : null;
 const ONLY = opt('--only', '') ? opt('--only', '').split(',') : null;
 const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map(s => s.split('=')).map(([k, v]) => [k, Number(v)]));
@@ -66,7 +67,7 @@ if (!server) {
 }
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   // A pool of browsers, one child per world, the dearest worlds first; rows are merged into the same file and the same exit code.
-  const pass = []; for (const f of ['--only', '--set']) if (opt(f, '')) pass.push(f, opt(f, ''));
+  const pass = []; for (const f of ['--only', '--set', '--variant']) if (opt(f, '')) pass.push(f, opt(f, ''));
   const cost = {green: 3, zhon: 2, red: 2}, order = [...WORLDS].sort((a, b) => (cost[b] || 1) - (cost[a] || 1)), queue = [...order], codes = [], tries = {};
   const slots = Array.from({length: Math.min(JOBS, WORLDS.length)}, (_, k) => new Promise(async done => {
     for (let w; (w = queue.shift());) {
@@ -82,7 +83,7 @@ if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   await Promise.all(slots); audit?.kill();
   const merged = WORLDS.map(w => JSON.parse(readFileSync(join(out, w, 'world-controls.json'), 'utf8')));
   const all = merged.flatMap(m => m.rows), bad = judge(all), con = merged.flatMap(m => m.console);
-  writeFileSync(join(out, 'world-controls.json'), JSON.stringify({server, seconds: (Date.now() - t0) / 1000, rows: all, unexplained: bad, console: con}));
+  writeFileSync(join(out, 'world-controls.json'), JSON.stringify({server, variant:VARIANT||null, seconds: (Date.now() - t0) / 1000, rows: all, unexplained: bad, console: con}));
   console.log(`\n${all.filter(r => r.type === 'knob' && r.state === 'enabled').length} enabled world rows, ${all.filter(r => r.type === 'knob' && r.state === 'gated').length} gated, ${all.filter(r => r.type === 'shape').length} stroke rows, ${all.filter(r => r.type === 'surface').length} sliders; ${all.filter(r => r.zero).length} read 0 (${all.filter(r => r.allowed).length} allowed), ${all.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
   if (con.length) console.log('console:', con.slice(0, 5));
   process.exit(codes.some(c => c > 1) || con.length || bad.length ? 1 : 0);
@@ -91,7 +92,12 @@ await cdpPortFree(port);
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
   `--user-data-dir=${out}/.profile-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const scenes = {};
-for (const w of WORLDS) for (const n of [1, 2, 3]) scenes[`${w}-${n}`] = JSON.parse(readFileSync(join(repo, `repro/scenes/${w}-${n}.json`), 'utf8'));
+for (const w of WORLDS) for (const n of [1, 2, 3]) {
+  for(const name of [`${w}-${n}`,...(VARIANT?[`${w}-${VARIANT}-${n}`]:[])]){
+    const file=join(repo,`repro/scenes/${name}.json`);
+    if(existsSync(file))scenes[name]=JSON.parse(readFileSync(file,'utf8'));
+  }
+}
 let ws, id = 0; const wait = new Map();
 const finish = code => { try { ws?.close(); } catch {} chrome.kill(); audit?.kill(); process.exit(code); };
 try {
@@ -123,7 +129,7 @@ try {
       // The Colors panel's own row: a hex picks the color, nothing clears it.
       pickColor(label, hex) { const [box, pick] = [...document.querySelectorAll('#world-colors .color-row')].find(r => r.firstElementChild.textContent === label).querySelectorAll('input'); if (hex) { pick.value = hex; pick.dispatchEvent(new Event('input', {bubbles: true})); } else { box.checked = false; box.dispatchEvent(new Event('change', {bubbles: true})); } },
       // A light color row (P12b): the picture with the color picked against the picture without it.
-      async colorPair(label, hex) { const a = await grab(); this.pickColor(label, hex); await A.idle(); const b = await grab(); this.pickColor(label); await A.idle(); return diff(a, b); },
+      async colorPair(label, hex) { this.pickColor(label); await A.idle(); const a = await grab(); this.pickColor(label, hex); await A.idle(); const b = await grab(); this.pickColor(label); await A.idle(); return diff(a, b); },
       kinds() { return A.nodes.map(n => n.kind); },
       async putBack() { for (let i = 1; i < saved.length; i++) await A.edit(i, saved[i]); },
       // a row is off by its reason line, not its disabled flag: the audit page's busy map disables the rendering switches too
@@ -132,11 +138,13 @@ try {
     };
   })()`;
   const load = async (world, query) => {
+    if(VARIANT){const params=new URLSearchParams(query);params.set('variant',VARIANT);query=params.toString();}
     await send('Page.navigate', {url: `${server}/sculpt?biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`});
     for (let i = 0; i < 400; i++) { await sleep(150); try { if (await ev('!!window.terraformAudit&&document.readyState==="complete"')) break; } catch {} }
     await ev('terraformAudit.ready()'); await ev(HELPERS.replace('KINDS', JSON.stringify(Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]))))); await ev('terraformAudit.idle()');
   };
-  const strokes = world => scenes[`${world}-1`];
+  const fixtureName=(world,i)=>VARIANT&&scenes[`${world}-${VARIANT}-${i}`]?`${world}-${VARIANT}-${i}`:`${world}-${i}`;
+  const strokes = world => scenes[fixtureName(world,1)];
   // A fixture is a stroke list. The diagnostic one is runner.js's: a plateau, a ridge, deep water with shore plates, sand and paint.
   const diagnostic = world => [PLATEAU([[270, 300], [550, 300]], 110, {diameter: 400, cracks: 100}), RIDGE([[800, 150], [860, 430]], 130, {diameter: 320, cracks: 100}),
     WATER([[0, 850], [1024, 850]], {diameter: 600, shorePlates: 1, plateMaterial: world === 'ice' ? 2 : 1}, {waterShore: 0, waterDeep: 0, waterBed: 0}), ['sand', [[350, 470], [650, 470]], {card: {diameter: 280, amount: 100}}], ['paint', [[350, 100], [500, 270]], {card: {diameter: 220, amount: 100, paintChannel: 1}}]];
@@ -159,7 +167,7 @@ try {
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? '  !' : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
   const add = r => { rows.push(r); if (process.stdout.isTTY || !process.env.QUIET) console.log(fmt(r)); };
   for (const world of WORLDS) {
-    const tw = Date.now(), fixtures = [[`${world}-1`, strokes(world).strokes, strokes(world).ground !== false, strokes(world).query], [`${world}-2`, scenes[`${world}-2`].strokes, scenes[`${world}-2`].ground !== false, scenes[`${world}-2`].query], [`${world}-3`, scenes[`${world}-3`].strokes, scenes[`${world}-3`].ground !== false, scenes[`${world}-3`].query], [`${world}-diagnostic`, diagnostic(world), true, strokes(world).query], [`${world}-painted`, painted(), true, strokes(world).query], [`${world}-water`, waterPicks(), true, strokes(world).query]];
+    const tw = Date.now(), fixtures = [...[1,2,3].map(i=>{const name=fixtureName(world,i),s=scenes[name];return [name,s.strokes,s.ground!==false,s.query];}), [`${world}-diagnostic`, diagnostic(world), true, strokes(world).query], [`${world}-painted`, painted(), true, strokes(world).query], [`${world}-water`, waterPicks(), true, strokes(world).query]];
     const setUp = async () => { await ev(`(async () => { for (const [k, v] of Object.entries(${JSON.stringify(SET)})) await terraformAudit.knob(k, v); })()`); return ev('__wc.state()'); };
     await load(world, fixtures[0][3] || '');
     const st = await setUp(); let base = st.variant;
@@ -272,9 +280,10 @@ try {
     stage('picked color', ts); ts = Date.now();
     // The light's colors (P12b): a warm sun and a cool sky, picked through the panel's own rows on the world's first scene. White (off) is the grey light.
     await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`);
-    for (const [label, hex] of [['Sun color', '#ffc880'], ['Sky color', '#80a0ff']]) {
+    for (const [label, hex, key] of [['Sun color', '#ffc880', 'sunColor'], ['Sky color', '#80a0ff', 'skyColor'], ...[1,2,3,4].map(i=>['Flower '+i,'#30b0ff','flower'+i])]) {
+      if(key.startsWith('flower')&&(ONLY&&!ONLY.includes(key)||!await ev(`[...document.querySelectorAll('#world-colors .color-row')].some(r=>r.firstElementChild.textContent===${JSON.stringify(label)})`)))continue;
       const m = await ev(`__wc.colorPair(${JSON.stringify(label)}, ${JSON.stringify(hex)})`);
-      add({world, type: 'knob', key: label === 'Sun color' ? 'sunColor' : 'skyColor', group: 'Colors', fixture: fixtures[0][0] + ' + ' + hex, lo: 'off', hi: hex, state: 'color', ...m, zero: m.max === 0, allowed: false});
+      add({world, type: 'knob', key, group: 'Colors', fixture: fixtures[0][0] + ' + ' + hex, lo: 'off', hi: hex, state: 'color', ...m, zero: m.max === 0, allowed: false});
     }
     // Stroke options, on the stroke fixture.
     const shapeRows = [];
@@ -371,7 +380,7 @@ try {
     console.log(`-- ${world}: ${((Date.now() - tw) / 1000).toFixed(0)} s`);
   }
   const bad = rows.filter(failed);
-  writeFileSync(`${out}/world-controls.json`, JSON.stringify({server, seconds: (Date.now() - t0) / 1000, rows, unexplained: bad.map(named), console: logs.slice(0, 20)}));
+  writeFileSync(`${out}/world-controls.json`, JSON.stringify({server, variant:VARIANT||null, seconds: (Date.now() - t0) / 1000, rows, unexplained: bad.map(named), console: logs.slice(0, 20)}));
   const count = (t, p) => rows.filter(r => r.type === t && p(r)).length;
   console.log(`\n${count('knob', r => r.state === 'enabled')} enabled world rows, ${count('knob', r => r.state === 'gated')} gated, ${count('shape', () => true)} stroke rows, ${count('surface', () => true)} sliders; ${rows.filter(r => r.zero).length} read 0, ${rows.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
   if (logs.length) console.log('console:', logs.slice(0, 5));
