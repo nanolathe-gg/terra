@@ -777,6 +777,8 @@ def apply_variant(config, biome, variant):
         return None
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
+    if v.get('material', {}).get('rock'):
+        out['defaults']['rockCells'] = str(int(v['material']['rock'].get('size', 0) > 0))
     # A variant's own knobs beat the world's engine preset (modern Green's rockAge over Green's).
     out['engineDefaults'] = {k: x for k, x in out.get('engineDefaults', {}).items() if k not in v.get('knobs', {})}
     if v.get('river'):
@@ -805,6 +807,7 @@ def world_knobs(biome, config):
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
+    knobs['rockCells'] = int(config['material'].get('rock', {}).get('size', 0) > 0)   # whether the rock preset cuts blocks (Size and Age need it)
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)

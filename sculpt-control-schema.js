@@ -100,6 +100,7 @@ export function worldControlRequirement(key,v){
  // The lines' places are cut by joints and gullies, and the ribs between gullies stand on the same lines; their length matters only to a cut.
  if(['grooveSpacing','grooveAngle'].includes(key))return n('jointDepth')>0||n('gullyDepth')>0||n('ribTilt')>0?'':'Set Joint depth, Gully depth or Rib tilt above zero to use this setting.';
  if(key==='grooveRun')return n('jointDepth')>0||n('gullyDepth')>0?'':'Set Joint depth or Gully depth above zero to use this setting.';
+ if(['rockScale','rockAge'].includes(key)&&n('rockCells')<=0)return 'This rock type has no blocks; Size and Age shape them.';
  if(key==='cliffStagger')return n('rockOrder')<=0?'Enable ordered Rock structure to use this setting.':n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':needs('jointDepth','Joint depth');
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');

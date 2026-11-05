@@ -75,7 +75,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
  assert.match(requirement('rockScale',{rockOrder:0}),/Rock structure/);
- shows('rockScale',{rockOrder:1});
+ assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/no blocks/);
+ shows('rockScale',{rockOrder:1,rockCells:1});
  assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  shows('bedSpacing',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
