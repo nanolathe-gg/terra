@@ -1099,6 +1099,88 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
 }
 
+const RIPPLE_CREST = 0.22;   // the darkness of the coarse grains on a crest
+// Card P18: sand ripples as a pure function of position. The phase is p.w / lambda (lambda the Ripple length) plus crest sinuosity from noise
+// and dislocation pairs: on a jittered lattice of 8 lambda, each pair of cores (+1, -1) adds atan2(cross(a, b), dot(a, b)) / 2pi to the phase,
+// whose 2pi jump lies only between the cores and so shows nowhere modulo a cycle; each core is a Y-junction where a crest ends. The profile is
+// asymmetric (a gentle stoss, a lee 0.3 lambda wide). Coarse grains ride the crests (a darker tone). Stones of the scatter's largest classes
+// shed a sand shadow downwind (a tail about 6 radii long that holds the ripples flat) and scour the sand upwind.
+// Returns (ripple profile -1..1, crest tone 0..1, drift height from the shadows and scours, in height units).
+fn sandRipples(p: vec2f, lambda: f32) -> vec3f {
+    let a = radians(u.windAngle);
+    let w = vec2f(cos(a), sin(a));
+    let perp = vec2f(-w.y, w.x);
+    var tail = 0.0; var scour = 0.0; var fade = 0.0;
+    if (u.looseSupply > 0.0 || u.scatterOn != 0) {
+        for (var k = 0; k < 3; k++) {
+            let R = lsR(k);
+            let x = log2(2.0 * R);
+            let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize)));
+            let spread = mix(2.0, 0.7, u.stoneSort);
+            let runout = x - log2(2.2 * u.looseSize);
+            // A class holding under a fifth of the population's stones casts too few shadows to be worth the search.
+            if (max(exp(-0.5 * off * off / (spread * spread)), 0.35 * u.stoneSort * exp(-2.0 * runout * runout)) < 0.2) { continue; }
+            let cell = 3.2 * R;
+            let rmax = R * 1.4143;
+            // A stone's centre lies up to 5 radii upwind of p and 2.5 radii downwind of it, and 1.6 radii to either side.
+            let e0 = p - w * 5.0 * rmax; let e1 = p + w * 2.5 * rmax;
+            let lo = vec2i(floor((min(e0, e1) - 1.6 * rmax) / cell));
+            let hi = vec2i(floor((max(e0, e1) + 1.6 * rmax) / cell));
+            for (var j = lo.y; j <= min(hi.y, lo.y + 5); j++) {
+                for (var i = lo.x; i <= min(hi.x, lo.x + 5); i++) {
+                    // Where a stone is cannot touch p is known from the cell's own hash, before the mask is read.
+                    var st = lsGeo(k, vec2i(i, j));
+                    let d = p - st.c;
+                    let du = dot(d, w); let dv = dot(d, perp);
+                    if (du < -2.5 * st.r || du > 5.0 * st.r || abs(dv) > 1.6 * st.r) { continue; }
+                    st = lsAdmit(k, st);
+                    if (!st.ok || lsSuppressed(k, st)) { continue; }
+                    let L = 5.0 * st.r;
+                    if (du > -st.r && du < L) {
+                        let t = max(du, 0.0) / L;
+                        let half = st.r * 0.95 * (1.0 - t * 0.85);
+                        let xx = dv / half;
+                        tail = max(tail, 0.55 * st.r * LS_HEIGHT * (1.0 - t) * sqrt(smoothstep(0.0, 0.25, t)) * exp(-xx * xx));
+                        fade = max(fade, (1.0 - t) * smoothstep(-st.r, 0.0, du) * exp(-0.5 * xx * xx));
+                    }
+                    let us = (du + 1.3 * st.r) / (1.1 * st.r); let vs = dv / (1.6 * st.r);
+                    scour = max(scour, exp(-(us * us + vs * vs)) * 0.25 * st.r);
+                    fade = max(fade, exp(-(us * us + vs * vs)));
+                }
+            }
+        }
+    }
+    // Phase in cycles: along the wind, a slow turn of the crests over about 200 px, sinuosity over about 6 lambda, and the defects.
+    var ph = dot(p, w) / lambda;
+    ph += 0.12 * valueNoise(p / 220.0 + 5.0) * dot(p, perp) / lambda;
+    ph += 0.35 * valueNoise(p / (5.0 * lambda) + 2.0) + 0.15 * valueNoise(p / (2.3 * lambda) + 9.0);
+    // A pair's window reaches 5.2 lambda, 0.65 of a cell, from a centre placed 0.1 to 0.9 into its cell: the own cell and the nearer one on each axis.
+    let dcell = 8.0 * lambda;
+    let b = vec2i(floor(p / dcell));
+    let side = select(vec2i(1), vec2i(-1), fract(p / dcell) < vec2f(0.5));
+    for (var j = 0; j <= 1; j++) {
+        for (var i = 0; i <= 1; i++) {
+            let c = b + vec2i(i, j) * side;
+            let h = lsHash(c, 0x6d3fu);
+            if (lsU(h) > 0.7) { continue; }
+            let m = (vec2f(c) + 0.5 + (vec2f(lsU(lsPcg(h)), lsU(lsPcg(h ^ 1u))) - 0.5) * 0.8) * dcell;
+            let sep = lambda * (1.5 + 2.5 * lsU(lsPcg(h ^ 2u)));
+            let tilt = 0.5 * (lsU(lsPcg(h ^ 3u)) - 0.5);
+            let dir = perp * cos(tilt) + w * sin(tilt);
+            let ra = p - (m - 0.5 * sep * dir); let rb = p - (m + 0.5 * sep * dir);
+            let ang = atan2(ra.x * rb.y - ra.y * rb.x, dot(ra, rb));
+            let win = 1.0 - smoothstep(0.55 * sep, 0.55 * sep + 3.0 * lambda, distance(p, m));
+            ph += select(1.0, -1.0, lsU(lsPcg(h ^ 4u)) < 0.5) * win * ang / TAU;
+        }
+    }
+    let t = fract(ph);
+    let lee = 0.3;
+    let prof = select(0.5 + 0.5 * cos(0.5 * TAU * (t - (1.0 - lee)) / lee), 0.5 - 0.5 * cos(0.5 * TAU * t / (1.0 - lee)), t < 1.0 - lee);
+    // Ripples finer than a few output pixels would alias; the shadows hold them flat.
+    let band = 1.0 - smoothstep(0.25, 0.5, max(1.0, fieldScale()) / lambda);
+    return vec3f((prof - 0.5) * 2.0 * band * (1.0 - 0.9 * fade), smoothstep(0.55, 0.9, prof) * band * (1.0 - fade), tail - scour);
+}
+
 // G5 (Lava): the hill rock. Retail's Lava hills are crust: a pile of rounded pillows 25-60 px across, each tilted, with a
 // dark crease where it meets the next and a dark wedge where three meet; every pillow's surface is chipped into 4-8 px
 // facets, olive toward the sun and brown away from it, split by hairline cracks; and thin dark veins hang down the fall
@@ -1429,14 +1511,19 @@ fn bake(p: vec2f) -> vec4f {
     // Only sand deep enough to cover the ground buries relief and stones;
     // painted sand bars (sandCrown) bury theirs too.
     let buried = max(smoothstep(0.35, 0.9, sand), paintSand * u.sandCrown);
+    // Sand ripples (card P18): asymmetric crests with defects, coarse grains on the crests, and sand shadows behind the scatter's big stones.
+    // They lie on the buried ground, so they go in after the sand buries relief. Height is lambda / 9 at the default Ripple height (1.4).
+    var drift = 0.0;
+    var crestTone = 0.0;
     if (sand > 0.0 && u.ripple > 0.0) {
-        let a = radians(u.windAngle);
-        let wind = vec2f(cos(a), sin(a));
-        let wobble = valueNoise(p / 30.0 + 2.0) * 2.0;
-        height += sin(dot(p, wind) * 6.2831 / u.ripple + wobble) * u.rippleHeight * smoothstep(0.5, 0.95, sand);
+        let rp = sandRipples(p, u.ripple);
+        let deep = smoothstep(0.5, 0.95, sand);
+        drift = (rp.x * u.rippleHeight * u.ripple / (9.0 * 1.4) + rp.z) * deep;
+        crestTone = rp.y * deep;
     }
     // Sand buries relief beneath it.
     height *= 1.0 - 0.8 * buried;
+    height += drift;
     // Cracks, carved into the relief; sand fills them.
     // A cracked shallow bed (card E1, Red's first shallow mode): a stroke that
     // sets it carves the crack network into the bed under its shallows, as if
@@ -1558,6 +1645,7 @@ fn bake(p: vec2f) -> vec4f {
     // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
     lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
     lineDark = max(lineDark, crustDark);
+    lineDark = max(lineDark, RIPPLE_CREST * crestTone);
     lineDark = max(lineDark, loose.z * (1.0 - buried));
     lineDark = max(lineDark, scatter.plant.z * (1.0 - buried));
     lineDark = max(lineDark, 0.5 * stepWorn * (1.0 - buried));
