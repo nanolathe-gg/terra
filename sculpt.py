@@ -116,7 +116,7 @@ KNOB_DEFAULTS.update(desertCapFlat=0)
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
                      bedPunch=0,
-                     facetTilt=0, facetCoarse=0)
+                     rockScale=1, rockAge=.5)
 # E11 (shallow water round 2): every default is the earlier look. shelfWander (depth units) moves
 # the hard step's depth with broad noise so the band's width and outline vary along the shore;
 # bedFlat lights the lit bed by its own relief only (no slope shading across the shelf).
@@ -189,14 +189,14 @@ KNOB_DEFAULTS.update(ringTone=0)
 # contours of the ground and joints, gullies and facets down its fall line. The reaches are the
 # height smoothing radii (px) of the local and of the wide fall line, cliffFlat the wide slope under which
 # the structure fades into plain broken rock, cliffDomain the patch size of the joint lattice.
-KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffFine=0, cliffDomain=90)
+KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffDomain=90)
 # H1 (lit relief): shade the ground behind a 1-6 px ledge, and darken crevices and crack floors (0: off).
 KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # H2, H16 (rock column): a world with a `column` block in its table reads each bed's thickness and hardness from it (sections of
 # beds that repeat upward, materials/<world>.json) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
-KNOB_DEFAULTS.update(blocks=0, blockRow=4, blockWidth=7, blockTilt=.5, blockStep=.8, blockSeam=.5, blockChip=1.2)
+KNOB_DEFAULTS.update(blockSeam=.5)
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
 KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
@@ -214,8 +214,7 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 # lightens and thins those lines toward retail's soft dashes.
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
-    'green': dict(blocks=1, blockRow=3.2, blockWidth=5.76, blockTilt=.8, blockStep=1.5, blockSeam=1.6, blockChip=1.2,
-                  facetTilt=.3, facetCoarse=0, cliffFine=.2, jointDepth=0, gullyDepth=4,
+    'green': dict(blockSeam=1.6, rockAge=.1, jointDepth=0, gullyDepth=4,
                   rockMoss=.4, hillBlocks=.5,
                   terraceBreak=0, terraceCalm=0, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
@@ -267,7 +266,6 @@ WORLD_KNOBS = {
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, grooveRun=90, gullyShade=1.2, ribTilt=.2,
                   bedPunch=1,
-                  facetTilt=1, facetCoarse=.5, cliffFine=.7,
                   shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
@@ -662,10 +660,14 @@ WORLD_VARIANTS = {
         # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
-                       material=dict(stoneSort=.7, groundCover=dict(
+                       material=dict(stoneSort=.7,
+                       # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
+                       rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
+                                 chip=.12, chipSize=4, grit=.3),
+                       groundCover=dict(
                            wet=[.25, .9], dry=.4, patch=22, patchiness=.8, ground=[55, 93, 27],
                            soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
                            moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
@@ -775,6 +777,10 @@ def apply_variant(config, biome, variant):
         return None
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
+    if v.get('material', {}).get('rock'):
+        out['defaults']['rockCells'] = str(int(v['material']['rock'].get('size', 0) > 0))
+    # A variant's own knobs beat the world's engine preset (modern Green's rockAge over Green's).
+    out['engineDefaults'] = {k: x for k, x in out.get('engineDefaults', {}).items() if k not in v.get('knobs', {})}
     if v.get('river'):
         # Swap in the world's river water (its material and water numbers, which name the river's two water materials).
         for key, value in copy.deepcopy(config['river']).items():
@@ -801,6 +807,7 @@ def world_knobs(biome, config):
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
+    knobs['rockCells'] = int(config['material'].get('rock', {}).get('size', 0) > 0)   # whether the rock preset cuts blocks (Size and Age need it)
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)

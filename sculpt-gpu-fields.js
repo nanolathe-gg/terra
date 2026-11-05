@@ -1192,6 +1192,9 @@ export function createPagedFields(opts) {
   function encodeGather(enc, passes, rect, dst, wantWeather) {
     const d = device(), gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, tmp = [];
     for (const pg of overlapping(rect)) {
+      // The lease pins the page, but a ring change or a whole-map change during the lease's awaits (weather, feed passes) drops its target.
+      // The gather re-acquires it here, on the current ring, ahead of this encoder on the queue.
+      ensureShape(pg);
       const dispatch = (entry, src, box, res) => {
         const o = {x0: Math.max(rect.x0, box.x0), y0: Math.max(rect.y0, box.y0), x1: Math.min(rect.x1, box.x1), y1: Math.min(rect.y1, box.y1)};
         if (o.x1 < o.x0 || o.y1 < o.y0) return;
