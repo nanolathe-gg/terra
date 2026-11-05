@@ -150,8 +150,11 @@ try {
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
   // The water picks: six water strokes, each with one combination of a stroke's edge and bed choices (hard, lit, faded, cracked, and the pairs the water rows' gates read),
   // for the rows a stroke's own choice keeps alive where the world's setting leaves them idle.
-  const waterPicks = () => [[60, 200, {waterDeep: 1}], [60, 480, {waterBed: 1}], [60, 760, {waterDeep: 2}], [560, 200, {waterBed: 1, waterDeep: 2}], [560, 480, {waterBed: 3}], [560, 760, {waterBed: 1, waterDeep: 1}]]
-    .map(([x, y, picks]) => WATER([[x, y], [x + 400, y]], {diameter: 150}, picks));
+  // A seventh is a cracked bed under a hard step, edged with slab plates: where the water has a third color and the palette mixes pairs (no dither), the
+  // step's deep share is drawn only by the crystal shallows beside slabs (engine-frag.wgsl crystalShallowWater), so only there does Cracked-bed transition depth show.
+  const waterPicks = () => [[60, 200, {waterDeep: 1}], [60, 480, {waterBed: 1}], [60, 760, {waterDeep: 2}], [560, 200, {waterBed: 1, waterDeep: 2}], [560, 480, {waterBed: 3}], [560, 760, {waterBed: 1, waterDeep: 1}],
+    [560, 960, {waterBed: 3, waterDeep: 1}, {diameter: 200, shorePlates: 1, plateMaterial: 1}]]
+    .map(([x, y, picks, card]) => WATER([[x, y], [x + 400, y]], {diameter: 150, ...card}, picks));
   // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau.
   const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
