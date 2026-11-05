@@ -1099,7 +1099,7 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
 }
 
-const RIPPLE_CREST = 0.3;   // the darkness of the coarse grains on a crest
+const RIPPLE_CREST = 0.22;   // the darkness of the coarse grains on a crest
 // Card P18: sand ripples as a pure function of position. The phase is p.w / lambda (lambda the Ripple length) plus crest sinuosity from noise
 // and dislocation pairs: on a jittered lattice of 8 lambda, each pair of cores (+1, -1) adds atan2(cross(a, b), dot(a, b)) / 2pi to the phase,
 // whose 2pi jump lies only between the cores and so shows nowhere modulo a cycle; each core is a Y-junction where a crest ends. The profile is
