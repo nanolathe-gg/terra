@@ -1,7 +1,7 @@
 {"biome": "green", "source": {"note": "The Peaked ridge's default stroke (preset of the Peaked ridge tool, numbers pinned) on modern Green: 400 px gentle path on a 4x4 map, plain 99. Elevation is absolute (plain 99 + 160)."},
  "ground": true, "query": "variant=modern",
  "strokes": [
-  ["landform", [[300,700],[482,836],[700,900]], {"card": {"diameter": 200, "elevation": 259, "combine": 0, "lean": 100, "facing": 3, "cracks": 60, "wander": 8, "widthVary": 0, "heightVary": 10, "varySize": 80, "varyFoot": 100, "varyMiddle": 100, "gullies": 40, "gullySize": 50, "talus": 60, "styleVegetation": -70, "styleExposure": 50},
+  ["landform", [[300,700],[482,836],[700,900]], {"card": {"diameter": 200, "elevation": 259, "combine": 0, "lean": 100, "facing": 3, "cracks": 60, "wander": 8, "widthVary": 0, "heightVary": 10, "varySize": 80, "varyFoot": 100, "varyMiddle": 100, "gullies": 40, "gullySize": 50, "talus": 60, "styleVegetation": -70},
     "curve": {"form": "lfMountain", "knots": [[0,0],[0.12,0.01],[0.25,0.05],[0.4,0.2],[0.55,0.45],[0.7,0.68],[0.85,0.88],[1,1]]},
     "along": [[0,0.6],[0.1,1],[0.22,0.74],[0.36,1],[0.5,0.76],[0.64,0.95],[0.76,0.72],[0.88,0.9],[1,0.6]]}]
  ]}

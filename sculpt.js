@@ -79,7 +79,7 @@ const LANDFORM_TOOLS={
   hill:{diameter:200,elevation:40,lean:205,wander:24,widthVary:20,heightVary:15,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:[[0,0],[.333,.02],[.667,.34],[1,1]],back:smoothKnots(12)}},
   // Peaked ridge: high (150 over the plain), a steep rock face all round (cells over 24 units on 16 px, steeper than retail Green's hills), a chain of five
   // summits with shallow saddles along the path, and divides with scree below them (Gullies, Talus). A hill is its opposite: low, round, walkable.
-  mountain:{diameter:200,elevation:160,lean:100,cracks:60,wander:8,widthVary:0,heightVary:10,varySize:80,varyFoot:100,varyMiddle:100,gullies:40,gullySize:50,talus:60,styleVegetation:-70,styleExposure:50,
+  mountain:{diameter:200,elevation:160,lean:100,cracks:60,wander:8,widthVary:0,heightVary:10,varySize:80,varyFoot:100,varyMiddle:100,gullies:40,gullySize:50,talus:60,styleVegetation:-70,
     along:[[0,.6],[.1,1],[.22,.74],[.36,1],[.5,.76],[.64,.95],[.76,.72],[.88,.9],[1,.6]],
     curve:{form:'lfMountain',knots:[[0,0],[.12,.01],[.25,.05],[.4,.2],[.55,.45],[.7,.68],[.85,.88],[1,1]]}},
   ramp:{diameter:200,lean:100,combine:2,routeSmooth:100,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:160,varyFoot:100,varyMiddle:100,along:[[0,0],[1,1]],curve:{form:'lfRamp',knots:FORMS.lfRamp().knots}},
