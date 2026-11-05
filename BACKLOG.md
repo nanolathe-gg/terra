@@ -8392,18 +8392,18 @@ unless judged on the retail sheets.
 - **P30 ground cover.** Done for tabled worlds (e0ca0124, 75d11a03);
   `slopeProfile` stays for worlds with no table. Sampled slope texture is 0
   on modern Green, so its thin-soil slope cover does not show by default.
-- **P27 shores.** Beach height profile (berm and slope in the heights, not
-  only color) and rock coasts (they follow P10's hardness). Surf's beach
-  reads as a pale band with crack marks (by eye): judge it again.
+- **P27 shores.** Beach berm and rock coasts landed (8427b273, bad593a8).
+  Open: the Dean shoreface, bars, dunes and wave-cut platforms; about half of
+  a Surf coast on modern Green is rock (its column has a hard bed at the sea).
 - **P16 stones.** Archipelago's chips stay in the draw, outside `looseStones`.
 - **P10 rock model.** The other seven rock types. Stain and lichen landed
   (8937939d, 318f75df); Stain is tone only (no varnish color) and does not
   show on viewer-facing walls.
 - **P17 fans.** Need a height and the transport-distance channel before they
   can show; the held branch has only placement.
-- **P28 rivers.** Riffles and the water look; shape only now. Point-bar sand and scroll bars
-  are done (prototype/point-bars): inside each bend, from the path's curvature, as heights
-  and painted-sand cover. Braided rivers have none.
+- **P28 rivers.** Riffles and the water look (with P26, on hold). Point-bar
+  sand and scroll bars landed (29816523, 3b62b152): inside each bend, from the
+  path's curvature, as heights and painted-sand cover. Braided rivers have none.
 - **P31 flowers.** Need a color channel (none exists in the scatter).
 - **P1 gullies.** The comb on narrow sections is held for the owner
   (prototype/gully-comb): it appears where the widest wavelength nears one

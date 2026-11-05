@@ -804,6 +804,8 @@ byte-identical unless the table says otherwise.
 | P10 Stain, Lichen; P30 rock moss | Stain row (`rockStain`) replaces Gully floor shade and adds ledge curtains; lichen rosettes in Vegetation tint in rock; rock moss takes the cover table's moss class | 8937939d, 318f75df | retail byte-identical; modern moves 0.2 / 3.5 / 0.2%; Stain 48.8 and rockMoss 70.4 rock blocks on modern-2 |
 | Owner: sand edges | Deposit runs out downhill onto flat ground; painted sand ripples fade inside the edge; feathered, broken edge with no outlines | 852e21cb, e1fefc6d, 66fe3f59, 54faa384, ef306222, 5cf33b5b | 27 of 30 scenes byte-identical; Zhon 0.32 / 0.30 / 0.08 mean (by eye neutral); relief bake +38%, terrain +15% only where sand lies |
 | P30 slope cover | A tabled world's slope cover is its thin soil, not the slope ramp; Patchiness a constant (0.8) | e0ca0124, 75d11a03 | retail 0.00; modern-2 1 px; Patchiness 0 to 1 moves 0.3-3.1% of blocks (under 5%); no perf cost |
+| P27 heights | Surf .2 and up cuts a beach face and berm (1-2.5 units, from a nine-map retail table); hard rock at the waterline makes a rock coast with pocket beaches | 8427b273, 1f4345f9, bad593a8 | 30 scenes byte-identical; shape pass +0.64 ms on a Surf water stroke |
+| P28 point bars | Sand and scroll bars on each inside bend, from the river path's curvature | 29816523, 3b62b152 | 30 scenes byte-identical; regional 0 on four river fixtures; shape pass 0.440 ms both |
 | Tooling | `perf.mjs --exact-timestamps` (opt-in) | 774021b9 | from the P4 spike |
 
 ### Rejected, closed or held
