@@ -1430,7 +1430,18 @@ fn surfSand(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
     let ragged = 9.0 * valueNoise(p / 14.0 + vec2f(5.0, 1.0)) + 4.0 * valueNoise(p / 6.0 + vec2f(2.0, 9.0));
     let end = min(surfBerm(e) + 8.0 + 24.0 * along + 8.0 * near + ragged, SURF_REACH - 6.0);
     let width = 14.0 + 24.0 * (valueNoise(q / 61.0 + vec2f(8.8, 2.2)) * 0.5 + 0.5);
-    return clamp((end - surfCuspX(x, q, e)) / width, 0.0, 1.0) * step(0.0, x) * surfSandAmt(e);
+    let xc = surfCuspX(x, q, e);
+    let ramp = clamp((end - xc) / width, 0.0, 1.0);
+    // At a little Surf the sand is a narrow strip, mostly continuous along the water (with breaks about every 25 px), that breaks landward into patches and then flecks of
+    // varied size: sparseness grows with the distance from the water (the strip's width, then 28 px of thinning), and the patch noise (21 and 8.5 px) is weighted by how little
+    // Surf there is. From Surf .6 (amt 1) none of this applies: the sand is the full beach.
+    let amt = surfSandAmt(e);
+    let strip = 3.0 + 12.0 * amt;
+    let far = smoothstep(strip, strip + 28.0, xc);
+    let patchy = 0.5 + 0.5 * (0.6 * valueNoise(p / 21.0 + vec2f(12.3, 4.1)) + 0.4 * valueNoise(p / 8.5 + vec2f(2.9, 15.7)));
+    let scatter = mix(1.0, amt * (0.25 + 1.6 * patchy), (1.0 - amt) * far);
+    let gate = mix(1.0, smoothstep(-0.75, -0.3, valueNoise(q / 23.0 + vec2f(4.2, 9.9))), 1.0 - amt);
+    return clamp(ramp * scatter * gate, 0.0, 1.0) * step(0.0, x) * smoothstep(0.0, 0.2, amt);
 }
 // The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
 fn surfWet(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
