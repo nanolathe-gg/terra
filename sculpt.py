@@ -524,7 +524,7 @@ WORLD_KNOBS = {
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
     # Its Crystals brush makes column mounds: Voronoi columns with ~15 px
     # tops stepped ~16 units (measure/crystal_geometry.py).
-    'crystal': dict(undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
+    'crystal': dict(paletteMix=1, undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
