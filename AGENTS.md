@@ -26,7 +26,10 @@ page and an older card disagree, this page wins.
    number) or by eye, and say what is unfinished.
 6. **Never commit retail-derived files**: pictures, heights, crops, renders
    or maps. Never write into `~/TotalAnnihilation`. No `rm -rf`, and no new
-   dependencies.
+   dependencies. Our own renders of authored fixtures are not retail-derived:
+   the hover examples in `ui-previews/` are committed, and
+   `repro/ui-previews.mjs` regenerates them when a preset or the renderer
+   changes.
 
 ## What the editor is
 
