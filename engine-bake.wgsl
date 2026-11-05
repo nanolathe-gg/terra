@@ -300,31 +300,41 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
 //    a tree sprite, so a shrub is ground, not a feature.
 // Tuft size follows Size (median stone px; 5 is the unit), tuft and shrub height their scale in the world's table (row 39). Tufts fade out between
 // 1 and 2 world px per pixel, shrubs between 2 and 4: finer than a pixel they would alias.
-fn plantTuft(p: vec2f, cell: f32, r0: f32, r1: f32, ht: f32, star: f32, dome: f32, salt: u32, which: i32) -> vec2f {
+// One lattice per tuft size (cell, radius range). `which` 0 is the fine lattice (turf and dry grass); 1 the coarse one, where a candidate is a meadow clump
+// or a moss cushion by the shares at its centre.
+fn plantTuft(p: vec2f, cell: f32, r0: f32, r1: f32, ht: f32, which: i32, salt: u32) -> vec2f {
     let b = vec2i(floor(p / cell - 0.5));
     var best = 0.0; var tone = 0.0;
     for (var j = 0; j <= 1; j++) {
         for (var i = 0; i <= 1; i++) {
             let cc = b + vec2i(i, j);
             let h0 = lsHash(cc, salt);
-            let h1 = lsPcg(h0 ^ 0x68e31da4u); let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
+            let h1 = lsPcg(h0 ^ 0x68e31da4u);
             let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.9) * cell;
-            let r = mix(r0, r1, lsU(h3));
             let d = p - c;
             let l = length(d);
+            if (l >= r1) { continue; }
+            let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
+            let r = mix(r0, r1, lsU(h3));
             if (l >= r) { continue; }
             let m = looseMask[lsCell(c) + 1u];
             var share = m.x * 0.85;
-            if (which == 1) { share = m.y * 0.92; } else if (which == 2) { share = m.w * 0.97; }
+            var dome = 0.0; var star = 1.0; var hs = 1.0;
+            if (which == 1) {
+                let wm = m.y * 0.92; let wc = m.w * 0.97;
+                share = wm + wc;
+                if (lsU(lsPcg(h3 ^ 0x7f4a7c15u)) * share >= wm) { dome = 1.0; star = 0.0; hs = 0.65; }
+            }
             // Tufts gather in patches of about 14 px: the thinner ground between lets the soil's own colour through.
             share *= mix(0.55, 1.0, smoothstep(-0.3, 0.5, valueNoise(c / 14.0 + 3.0 * f32(which))));
             if (lsU(lsPcg(h2 ^ 0x2545f491u)) >= share) { continue; }
             let t = 1.0 - l / r;
             let blades = 5.0 + 3.0 * lsU(lsPcg(h1));
-            let bumpy = mix(1.0, 0.5 + 0.5 * cos(blades * atan2(d.y, d.x) + lsU(lsPcg(h3)) * TAU), star * smoothstep(0.8, 1.8, r));
+            var bumpy = 1.0;
+            if (star > 0.0) { bumpy = mix(1.0, 0.5 + 0.5 * cos(blades * atan2(d.y, d.x) + lsU(lsPcg(h3)) * TAU), smoothstep(0.8, 1.8, r)); }
             let prof = mix(t, sqrt(max(0.0, 1.0 - (1.0 - t) * (1.0 - t))), dome);
-            let hv = ht * (0.7 + 0.6 * lsU(lsPcg(h2))) * prof * bumpy;
-            // The tuft's own tone: its own light or dark, lighter toward its top (-.5 .. 1).
+            let hv = ht * hs * (0.7 + 0.6 * lsU(lsPcg(h2))) * prof * bumpy;
+            // The tuft's own tone: its own light or dark, lighter toward its top.
             if (hv > best) { best = hv; tone = 0.6 * lsU(lsPcg(h1 ^ 0x9e3779b9u)) - 0.1 + 0.5 * t; }
         }
     }
@@ -371,12 +381,10 @@ fn plantsAt(p: vec2f) -> vec3f {
     var best = vec2f(0.0);
     if (fadeTuft > 0.0 && t.x > 0.0) {
         let k = t.x * sz * fadeTuft;
-        let a = plantTuft(p, 4.0 * sz, 1.5 * sz, 2.2 * sz, 0.6 * k, 1.0, 0.0, 0x7103u, 0);
-        let c = plantTuft(p, 5.0 * sz, 2.0 * sz, 2.8 * sz, 1.4 * k, 1.0, 0.0, 0x7104u, 1);
-        let d = plantTuft(p, 4.8 * sz, 1.9 * sz, 2.6 * sz, 0.9 * k, 0.0, 1.0, 0x7105u, 2);
+        let a = plantTuft(p, 4.0 * sz, 1.5 * sz, 2.2 * sz, 0.6 * k, 0, 0x7103u);
+        let c = plantTuft(p, 5.0 * sz, 1.9 * sz, 2.8 * sz, 1.4 * k, 1, 0x7104u);
         if (a.x > best.x) { best = a; }
         if (c.x > best.x) { best = c; }
-        if (d.x > best.x) { best = d; }
         // Between tufts the ground lies in their shade.
         if (best.x <= 0.0) { best.y = -0.12 * min(1.0, m.x + m.y + m.w); }
         best.y = mix(0.0, best.y, fadeTuft);
