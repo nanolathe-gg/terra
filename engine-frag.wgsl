@@ -1453,6 +1453,27 @@ fn sandWeathered() -> vec3f {
     let weathered = mix(vec3f(mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25)), vec3f(1.0), u.sandLight * 0.55);
     return select(weathered, u.sandBase.rgb, u.sandBase.a > 0.5);
 }
+// How much of a pixel the sand covers, from the sand's share there (0..1): over the thinning edge a scatter of clumps 3 to 8 px across,
+// with the ground's grass and moss regrowing through it in tufts. The deposits' sand and the surf's beach draw through it.
+fn sandCoverAt(sand: f32, p: vec2f) -> f32 {
+    let speck = terrainNoise(p * 6.0 + vec2f(17.0, 29.0)).b;
+    // Over the thinning edge sand is a scatter of clumps 3 to 8 px across, more of them the thicker it is, not a line: each clump
+    // takes the sand where the sand's share beats the clump's own threshold; deep sand covers every clump, as before.
+    let clump = (valueNoise(p / 3.7 + 29.0) * 0.5 + 0.5) * 0.55 + (valueNoise(p / 8.3 + 61.0) * 0.5 + 0.5) * 0.45;
+    let threshold = 0.22 + 0.68 * smoothstep(0.25, 0.75, clump);
+    let scatter = smoothstep(threshold - 0.07, threshold + 0.07, sand);
+    let solid = smoothstep(0.35, 0.95, sand + (speck - 0.5) * 0.55 * u.sandEdge);
+    let cover = mix(scatter, solid, smoothstep(0.6, 0.95, sand));
+    // Grass and moss travel with the sand and regrow over it in
+    // patches, more where it is thin; tufts break the patch edges.
+    let patchy = terrainNoise(p * 0.35 + vec2f(51.0, 7.0)).g * 0.65 + terrainNoise(p * 1.3 + vec2f(3.0, 91.0)).b * 0.35;
+    let tuft = terrainNoise(p * 5.0 + vec2f(13.0, 47.0)).r;
+    // Where the sand thins toward its edge the ground shows through in tufts: the thinner, the more the tufts decide and the
+    // more of the patch's own regrowth pushes through (the edge is a scatter 3 to 8 px across, not a line).
+    let thin = 1.0 - smoothstep(0.35, 0.95, sand);
+    let regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + thin * 0.42 + (tuft - 0.5) * (0.3 + 0.7 * thin)) * u.sandGrass;
+    return cover * (1.0 - regrow);
+}
 fn sandMaterialAt(scatter: vec2f) -> vec3f {
     let rockLevel = u.rockTexMean;
     let weathered = sandWeathered();
@@ -1839,23 +1860,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // grass blades (a per-pixel threshold against fine noise), then
             // sand covers the ground.
             material = mix(material, weathered, smoothstep(0.0, 0.6, sand) * u.sandDust * 0.6);
-            let speck = terrainNoise(p * 6.0 + vec2f(17.0, 29.0)).b;
-            // Over the thinning edge sand is a scatter of clumps 3 to 8 px across, more of them the thicker it is, not a line: each clump
-            // takes the sand where the sand's share beats the clump's own threshold; deep sand covers every clump, as before.
-            let clump = (valueNoise(p / 3.7 + 29.0) * 0.5 + 0.5) * 0.55 + (valueNoise(p / 8.3 + 61.0) * 0.5 + 0.5) * 0.45;
-            let threshold = 0.22 + 0.68 * smoothstep(0.25, 0.75, clump);
-            let scatter = smoothstep(threshold - 0.07, threshold + 0.07, sand);
-            let solid = smoothstep(0.35, 0.95, sand + (speck - 0.5) * 0.55 * u.sandEdge);
-            let cover = mix(scatter, solid, smoothstep(0.6, 0.95, sand));
-            // Grass and moss travel with the sand and regrow over it in
-            // patches, more where it is thin; tufts break the patch edges.
-            let patchy = terrainNoise(p * 0.35 + vec2f(51.0, 7.0)).g * 0.65 + terrainNoise(p * 1.3 + vec2f(3.0, 91.0)).b * 0.35;
-            let tuft = terrainNoise(p * 5.0 + vec2f(13.0, 47.0)).r;
-            // Where the sand thins toward its edge the ground shows through in tufts: the thinner, the more the tufts decide and the
-            // more of the patch's own regrowth pushes through (the edge is a scatter 3 to 8 px across, not a line).
-            let thin = 1.0 - smoothstep(0.35, 0.95, sand);
-            let regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + thin * 0.42 + (tuft - 0.5) * (0.3 + 0.7 * thin)) * u.sandGrass;
-            material = mix(material, sandMaterial, cover * (1.0 - regrow));
+            material = mix(material, sandMaterial, sandCoverAt(sand, p));
         }
     }
     // Baked boulders take rock material, lit by the same surface.
