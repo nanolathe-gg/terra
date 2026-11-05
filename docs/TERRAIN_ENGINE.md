@@ -803,6 +803,7 @@ byte-identical unless the table says otherwise.
 | Owner: hills vs mountains | Rounded ridge rises 40; Peaked ridge 110, 260 px wide (both 70, 200 before) | c30c293b | rise 47-50 / 111-113, slope p90 .81-.86 / 1.36-1.41 (retail: rise under 45 p90 .54, 80 and up p90 1.39); scenes untouched |
 | P10 Stain, Lichen; P30 rock moss | Stain row (`rockStain`) replaces Gully floor shade and adds ledge curtains; lichen rosettes in Vegetation tint in rock; rock moss takes the cover table's moss class | 8937939d, 318f75df | retail byte-identical; modern moves 0.2 / 3.5 / 0.2%; Stain 48.8 and rockMoss 70.4 rock blocks on modern-2 |
 | Owner: sand edges | Deposit runs out downhill onto flat ground; painted sand ripples fade inside the edge; feathered, broken edge with no outlines | 852e21cb, e1fefc6d, 66fe3f59, 54faa384, ef306222, 5cf33b5b | 27 of 30 scenes byte-identical; Zhon 0.32 / 0.30 / 0.08 mean (by eye neutral); relief bake +38%, terrain +15% only where sand lies |
+| P30 slope cover | A tabled world's slope cover is its thin soil, not the slope ramp; Patchiness a constant (0.8) | e0ca0124, 75d11a03 | retail 0.00; modern-2 1 px; Patchiness 0 to 1 moves 0.3-3.1% of blocks (under 5%); no perf cost |
 | Tooling | `perf.mjs --exact-timestamps` (opt-in) | 774021b9 | from the P4 spike |
 
 ### Rejected, closed or held
@@ -824,6 +825,7 @@ byte-identical unless the table says otherwise.
 | P17 fans | Held | prototype/talus-fans | Fans have no height and barely show |
 | P1 gully comb | Held for the owner | prototype/gully-comb | Damping narrow sections fixes the comb but drops Gully size 7.31 -> 4.28 (shape_controls) and cuts a Rounded ridge's front gullies by about 40%; per-side spacing made a denser comb |
 | Peaks B, C | Held | prototype/peaks | Spurs on Peaked ridge read as stubby fingers; mountain Gullies 70 departs from retail mountains (no dendritic gullies) |
+| Realism: saHill | Held for the owner | prototype/realism-gates | erosionCreep .05 on modern Green: saHill passes 6 -> 16 of 17, Hack 5 -> 3, mean in range 7.82 -> 7.06; Hack mostly measures sub-pixel roughness |
 | P26 water | Held by the owner | prototype/water | Stage 2 stopped: retail water is flat tones with a hard step and grain, the model is a smooth gradient |
 | P8, P19 | Not started | | P19 (decision 26) |
 

@@ -8389,9 +8389,9 @@ Each item below is small enough to pick up alone. Follow CLAUDE.md: one
 control replaces or simplifies another, and retail scenes stay byte-identical
 unless judged on the retail sheets.
 
-- **P30 ground cover.** Replace `slopeProfile` with the cover table, and make
-  Patchiness a control or drop it (its impact is under 5% as a constant).
-  Rock moss is on the table (318f75df).
+- **P30 ground cover.** Done for tabled worlds (e0ca0124, 75d11a03);
+  `slopeProfile` stays for worlds with no table. Sampled slope texture is 0
+  on modern Green, so its thin-soil slope cover does not show by default.
 - **P27 shores.** Beach height profile (berm and slope in the heights, not
   only color) and rock coasts (they follow P10's hardness). Surf's beach
   reads as a pale band with crack marks (by eye): judge it again.
@@ -8406,8 +8406,10 @@ unless judged on the retail sheets.
 - **P1 gullies.** The comb on narrow sections is held for the owner
   (prototype/gully-comb): it appears where the widest wavelength nears one
   per run. Gullies itself reads 4.02 on `shape_controls` (main).
-- **Realism gates.** Modern Green passes all six on 0 of 17 windows. Open:
-  Hack's exponent and hilltop roundness.
+- **Realism gates.** Modern Green passes all six on 0 of 17 windows. Hilltop
+  roundness: a closing-steps creep fixes 16 of 17 at a cost to the 15
+  statistics (held, prototype/realism-gates). Hack's exponent mostly measures
+  roughness below a pixel, which rule 11 rules out; it may not suit TA's scale.
 - **`docs/audit/controls.json`** is a stale snapshot (13 stale keys after
   P16); regenerate it.
 
