@@ -400,18 +400,19 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
 // the sun's shade), soil depth (thin on steep and convex ground, deep in hollows and where water laid deposit) and light (the sun on the
 // broad face, level ground 1). A class is viable inside a window of each (Cordonnier et al. 2017; Gain et al. 2017); its cover is the
 // viability squared times a strength that follows Lushness (succession: grazed turf and bare ground below 1, meadow, scrub and rush above);
-// a pixel draws its class from the covers by a coherent uniform, which Patchiness moves from per-pixel noise to patches.
+// a pixel draws its class from the covers by a coherent uniform that mixes patches with per-pixel noise (COVER_PATCHINESS).
 // Table (MM_COVER rows): 0 x on, y wetness at which moisture starts to rise, z wetness at which it is full, w moisture of dry level ground;
 // 1 x slope where soil thins, y slope where it is gone, z convex ground's loss, w deposit's gain; 2 x patch px, y moisture per unit of
-// wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w Patchiness (0..1: how far the class draw clumps into patches);
+// wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w unused;
 // then per class five rows: colour (rgb) and its grain, strength and Lushness exponent, and the windows of moisture, soil and light; the last row (39) holds the plants
 // (card P31, engine-bake looseStones): x tuft height scale, y shrub height scale, z shrub density; zeros: no plants.
-fn coverZ(p: vec2f, scale: f32, patchiness: f32) -> f32 {
+// Patchiness is a constant: 0 to 1 moves under 4% of any class's blocks on modern Green (measure/impact.py, card P30), below what a control must move.
+const COVER_PATCHINESS = 0.8;
+fn coverZ(p: vec2f, scale: f32) -> f32 {
     let zp = (valueNoise(p / scale + 17.0) + 0.5 * valueNoise(p / (0.45 * scale) + 31.0) + 0.25 * valueNoise(p / (0.2 * scale) + 47.0)) / 0.46;
     let c = floor(p);
     let pixel = (cellHash(c).x + cellHash(c + 7.3).x + cellHash(c + 19.1).y - 1.5) * 2.0;
-    let pt = clamp(patchiness, 0.0, 1.0);
-    return sqrt(pt) * zp + sqrt(1.0 - pt) * pixel;
+    return sqrt(COVER_PATCHINESS) * zp + sqrt(1.0 - COVER_PATCHINESS) * pixel;
 }
 // The grass with the class this pixel draws: the class colour carries the grass art's light and dark, and keeps its chroma only within
 // +-30% of that (the art's blue and red grain would otherwise swing a tan or a dark green to pink or teal).
@@ -420,7 +421,7 @@ fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, veget
     let cover = coverAt(slope, broad, top, tm, vegetation);
     var total = 0.0;
     for (var k = 0u; k < 7u; k++) { total += cover[k]; }
-    let z = coverZ(p, c2.x, cvr(3u).w);
+    let z = coverZ(p, c2.x);
     let pick = 1.0 / (1.0 + exp(-1.702 * z)) * total;
     var acc = 0.0;
     var klass = 6u;
@@ -1549,7 +1550,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
     var slopeBased = vec3f(0.0);
-    if (slope > u.slopeProfile.x || u.paintOn != 0 || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
+    // Card P30: a world with a ground-cover table has no slope ramp: its slope cover is the share of thin soil (the table's soil depth, which
+    // is what bares and dries the ground there), and the slope texture is read wherever the soil is not full.
+    let tabled = cvr(0u).x > 0.5;
+    var thinSoil = 0.0;
+    if (tabled) { thinSoil = 1.0 - smoothstep(0.1, 0.5, coverSoil(slope, place.top, timeMaps, coverSite(broad, timeMaps).x)); }
+    // A tabled world reads it wherever a consumer can be: the thin soil, the faces' moss, and the rock that shows (a face, wear's outcrops from slope .3).
+    let slopeTexWanted = select(slope > u.slopeProfile.x, thinSoil > 0.0 || place.face > 0.0 || place.exposed > 0.0 || (u.outcrop > 0.0 && slope > 0.3), tabled);
+    if (slopeTexWanted || u.paintOn != 0 || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
     var slopeShare = 0.0;
@@ -1558,8 +1566,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
         var slopeGrass = slopeBased;
-        var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope)
-                       * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
+        var slopeCover = select(smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h), thinSoil, tabled);
         drawMineralMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
