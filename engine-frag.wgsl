@@ -144,22 +144,24 @@ fn cavityDepth(p: vec2f, h: f32) -> f32 {
     return smoothstep(0.08, 0.8, k) - CAVITY_CONVEX * smoothstep(0.08, 0.8, -k);
 }
 
-// Two-entry mixes: retail art shows colours the palette lacks as pixel
-// mixes of two entries (Painted Desert's tans are 50/50 pairs). The lookup's
-// rows 32-63 and 64-95 hold the colour's best pair (engine-palette.wgsl); the
-// mix along A-B is measured per pixel and a per-pixel threshold picks one.
-fn palettePair(rgb: vec3f, threshold: f32) -> vec3f {
+// Pattern mixes (card P9): retail art shows colours the palette lacks as pixel
+// mixes of palette entries (Painted Desert's tans are 50/50 pairs). The lookup's
+// rows 32-287 hold eight candidates per colour, sorted dark to light, whose
+// mean is the colour (Knoll, engine-palette.wgsl); a per-pixel ordered
+// threshold picks one.
+fn palettePattern(rgb: vec3f, threshold: f32) -> vec3f {
     let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
     let at = vec2i(c.r + 32 * c.b, c.g);
-    let a = textureLoad(paletteTex, at + vec2i(0, 32), 0).rgb;
-    let b = textureLoad(paletteTex, at + vec2i(0, 64), 0).rgb;
-    let d = b - a;
-    let t = clamp(dot(rgb - a, d) / max(dot(d, d), 1e-5), 0.0, 1.0);
 #ifdef CHUNK
-    // Subpixel palette checkerboards converge to their mixture when zoomed out.
-    if(u.chunkScale>1.0){return mix(a,b,t);}
+    // Subpixel palette patterns converge to their mixture when zoomed out.
+    if(u.chunkScale>1.0){
+        var sum = vec3f(0.0);
+        for (var k = 0; k < 8; k++) { sum += textureLoad(paletteTex, at + vec2i(0, 32 + 32 * k), 0).rgb; }
+        return sum * 0.125;
+    }
 #endif
-    return select(a, b, threshold < t);
+    let k = min(i32(threshold * 8.0), 7);
+    return textureLoad(paletteTex, at + vec2i(0, 32 + 32 * k), 0).rgb;
 }
 fn paletteColor(rgb: vec3f) -> vec3f {
     let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
@@ -2163,7 +2165,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // clumped them into speckles.
         let bq = vec2i(fc) & vec2i(3);
         var bayer = array<i32, 16>(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-        if (u.paletteMix != 0) { color = palettePair(color, (f32(bayer[bq.y * 4 + bq.x]) + 0.5) / 16.0); }
+        if (u.paletteMix != 0) { color = palettePattern(color, (f32(bayer[bq.y * 4 + bq.x]) + 0.5) / 16.0); }
         else {
             color = saturate(color + (ign - 0.5) * ditherStrength / 31.0);
             color = paletteColor(color);
