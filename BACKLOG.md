@@ -8389,21 +8389,23 @@ Each item below is small enough to pick up alone. Follow CLAUDE.md: one
 control replaces or simplifies another, and retail scenes stay byte-identical
 unless judged on the retail sheets.
 
-- **P30 ground cover.** Replace `slopeProfile` with the cover table, rewire
-  rock moss onto it, and make Patchiness a control or drop it (its impact is
-  under 5% as a constant).
+- **P30 ground cover.** Replace `slopeProfile` with the cover table, and make
+  Patchiness a control or drop it (its impact is under 5% as a constant).
+  Rock moss is on the table (318f75df).
 - **P27 shores.** Beach height profile (berm and slope in the heights, not
   only color) and rock coasts (they follow P10's hardness). Surf's beach
   reads as a pale band with crack marks (by eye): judge it again.
 - **P16 stones.** Archipelago's chips stay in the draw, outside `looseStones`.
-- **P10 rock model.** Open joints, Ledges and Frost merges into the rock
-  model; Stain; lichen; the other seven rock types.
+- **P10 rock model.** The other seven rock types. Stain and lichen landed
+  (8937939d, 318f75df); Stain is tone only (no varnish color) and does not
+  show on viewer-facing walls.
 - **P17 fans.** Need a height and the transport-distance channel before they
   can show; the held branch has only placement.
 - **P28 rivers.** Point-bar sand, riffles and the water look; shape only now.
 - **P31 flowers.** Need a color channel (none exists in the scatter).
-- **P1 gullies.** A comb pattern shows on narrow ridges at high Gullies
-  (green-modern-2's cliff at 60); cap or damp it.
+- **P1 gullies.** The comb on narrow sections is held for the owner
+  (prototype/gully-comb): it appears where the widest wavelength nears one
+  per run. Gullies itself reads 4.02 on `shape_controls` (main).
 - **Realism gates.** Modern Green passes all six on 0 of 17 windows. Open:
   Hack's exponent and hilltop roundness.
 - **`docs/audit/controls.json`** is a stale snapshot (13 stale keys after
