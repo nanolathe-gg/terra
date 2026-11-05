@@ -1204,7 +1204,7 @@ export class TerrainRenderer {
       set('uRockVary', rv('vary', 0.5)); set('uRockCrev', rv('crev', 2)); set('uRockCrevW', rv('crevW', 1.1));
       set('uRockChip', rv('chip', 0.25)); set('uRockChipSize', rv('chipSize', 5)); set('uRockGrit', rv('grit', 0.35));
       set('uRockAge', number('rockAge', 0.5));
-      set('uRockCurtain', rv('curtain', 0));
+      set('uRockCurtain', rv('curtain', 0)); set('uRockLichen', rv('lichen', 0));
       // Open joints scales the preset's two openings: the joint lines' depth and the cell creases' darkness.
       set('uJointDepth', rv('joint', 2) * number('rockOpen', 1)); set('uBlockSeam', rv('seam', 0.5) * number('rockOpen', 1));
     }
