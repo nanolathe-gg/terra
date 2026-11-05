@@ -360,32 +360,39 @@ function burntFrame(P, seed, ctx) {
   const wob = y => (fbm(y / 9, 3, s1, 2) - 0.5) * 4.2;
   const stamp = (x, y, wd) => { const rad = Math.max(0.5, wd / 2); for (let dy = -Math.ceil(rad); dy <= Math.ceil(rad); dy++) for (let dx = -Math.ceil(rad); dx <= Math.ceil(rad); dx++) if (dx * dx + dy * dy <= rad * rad + 0.25) { const px = Math.round(x + dx), py = Math.round(y + dy); if (px >= 0 && py >= 0 && px < w && py < h) mask[py * w + px] = 1; } };
   // trunk from the base to the fork: flare 10-14 at the base, 8-13 above, widest at the fork
-  const yFork = ay - Math.round(H * 0.44);
+  const yFork = ay - Math.round(H * 0.52);
   for (let y = ay; y >= yFork; y--) {
     const t = (ay - y) / (ay - yFork), flare = y >= ay - 3 ? (y === ay ? 3 : 12 - (ay - y) * 0.7) : 0;
-    const wd = Math.max(flare, lerp(8.5, 12, t) * (0.9 + 0.2 * vnoise(y / 4, 1, s1 + 4)) + (y > ay - 6 ? 1.5 : 0));
+    const wd = Math.max(flare, lerp(7.5, 10.5, t) * (0.9 + 0.2 * vnoise(y / 4, 1, s1 + 4)) + (y > ay - 6 ? 1.5 : 0));
     const xc = ax + wob(y) * (1 - 0.4 * (1 - t));
     for (let x = Math.floor(xc - wd / 2 - 1); x <= Math.ceil(xc + wd / 2 + 1); x++) { const edge = Math.abs(x - xc) - wd / 2 + (vnoise(x / 1.8, y / 1.8, s1 + 9) - 0.5) * 2.2; if (edge <= 0) mask[y * w + x] = 1; }
   }
   const xFork = ax + wob(yFork);
+  // Round 4 (compared with Tree1-3Dead): few thick limbs that kink and splay sideways before turning up, one heavier side, no even crown of
+  // upright twigs. A main limb continues the trunk; 2-3 side limbs leave nearly horizontally; short stubs; forks only near the ends.
   const nL = clamp(Math.round(P.forks), 2, 4), tips = [];
   const limb = (x, y, ang, len, wd, depth) => {
-    const segs = Math.max(1, Math.min(Math.round(len / 6), depth === 0 ? 2 : 1));
-    for (let i = 0; i < segs; i++) {
-      const sl = 4.5 + r() * 3.5, nx = x + Math.sin(ang) * sl, ny = y - Math.cos(ang) * sl;
-      const n = Math.ceil(sl * 2);
-      for (let k = 0; k <= n; k++) { const f = k / n; stamp(lerp(x, nx, f), lerp(y, ny, f), lerp(wd, Math.max(1, wd * 0.82), f)); }
-      x = nx; y = ny; ang *= 0.6; wd = Math.max(1, wd * 0.82);
-      if (r() < 0.3 && depth < 3) stamp(x + (r() < 0.5 ? -1 : 1) * 2, y - 1, 1);      // 1 px twig
+    let left = len;
+    while (left > 0) {
+      const sl = Math.min(left, 4 + r() * 3.5), nx = x + Math.sin(ang) * sl, ny = y - Math.cos(ang) * sl, n = Math.ceil(sl * 2);
+      for (let k = 0; k <= n; k++) { const f = k / n; stamp(lerp(x, nx, f), lerp(y, ny, f), lerp(wd, Math.max(1.3, wd * 0.88), f)); }
+      x = nx; y = ny; left -= sl; wd = Math.max(1.3, wd * 0.88);
+      ang = ang * 0.8 + (r() - 0.5) * 0.9;                       // kinked, drifting back toward vertical
+      if (r() < 0.6) { const sd = r() < 0.5 ? -1 : 1, tl = 2 + Math.floor(r() * 3); for (let t = 1; t <= tl; t++) stamp(x + sd * t, y - t * 0.8, 1); }   // 1 px twigs
+      if (depth < 3 && left > 5 && r() < 0.5) limb(x, y, ang + (r() < 0.5 ? -1 : 1) * (0.6 + r() * 0.6), left * 0.7, Math.max(1.3, wd * 0.75), depth + 1);
+      if (y < y0 + 2) break;
     }
-    if (y < y0 + 3 || depth >= 3 || len < 6) { tips.push([x, y]); return; }
-    const nf = 2;
-    for (let k = 0; k < nf; k++) limb(x, y, ang + (k ? 1 : -1) * (0.25 + r() * 0.35) + (r() - 0.5) * 0.2, len * (0.72 + r() * 0.15) - segs * 3, Math.max(1, wd * 0.8), depth + 1);
+    tips.push([x, y]);
+    stamp(x, y - 1, 1);
   };
+  const lean = (r() - 0.5) * 0.7;
+  limb(xFork, yFork + 1, lean, (yFork - y0) * 1.02, 3.8, 0);                           // the main limb carries on up
+  const side = r() < 0.5 ? -1 : 1;
   for (let i = 0; i < nL; i++) {
-    const f = nL === 1 ? 0 : (i / (nL - 1) - 0.5) * 2, ang = f * (0.85 + 0.35 * r()) + (r() - 0.5) * 0.2;     // 20-60 degrees from vertical
-    limb(xFork + f * 3, yFork + 1, ang, (yFork - y0) * (0.9 + 0.15 * r()), 7 - nL * 0.8 + r(), 0);
+    const sd = i % 2 ? -side : side, yS = yFork + 3 - Math.round(r() * 6) - i * 3;
+    limb(xFork + sd * 2, yS, sd * (1.0 + r() * 0.5), 12 + r() * 12 + (sd === side ? 4 : 0), 2.8 + r() * 1.0, 1);
   }
+  for (let k = 0; k < 2 + Math.round(r() * 2); k++) { const yy = ay - 8 - Math.round(r() * (ay - yFork)), sd = r() < 0.5 ? -1 : 1; for (let t = 0; t < 4; t++) stamp(xFork + sd * (5 + t), yy - Math.floor(t / 2), 1.5); }   // stubs on the trunk
   for (let k = 0; k < Math.round(4 + 6 * P.ash); k++) {          // broken twig bits near the tips
     const t = tips[(r() * tips.length) | 0]; if (t) { const x = Math.round(t[0] + (r() - 0.5) * 6), y = Math.round(t[1] + (r() - 0.5) * 5); if (x >= 0 && y >= 0 && x < w && y < h) mask[y * w + x] = 1; }
   }
@@ -401,7 +408,7 @@ function burntFrame(P, seed, ctx) {
     let v = 0.4 * vnoise(x / 2.2, y / 2.2, s1 + 21) + 0.6 * rn() + 0.17 * lit + (dist[k] <= 1 ? -0.05 : 0.04);
     let c = byQuantile(BROAD_DEAD, v);
     if (base && rn() < 0.38) c = weighted(rn, [[62, 4], [61, 3], [60, 2], [71, 1.5], [72, 1.5]]);
-    if (rn() < P.ash * 0.02) c = pick(rn, [89, 90, 67, 68]);
+    if (rn() < P.ash * 0.006) c = pick(rn, [89, 90, 88]);
     put(sp, x, y, c);
   }
   return { body: cropSprite(sp, 0) };
