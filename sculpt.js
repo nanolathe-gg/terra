@@ -4,7 +4,7 @@ import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountC
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps,landformBeach} from './sculpt-shape-presets.js';
+import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -836,7 +836,6 @@ function regionalDirtyRect(from,rect) {
 }
 // Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
 const shapeKnob=(key) => renderer?.variantNumber?.(key,worldSetting(key))??worldSetting(key);
-const hasSurfBeach=() => nodes.some(n=>!n.hidden&&n.kind==='landform'&&landformBeach(nodeShapeParams(n)));
 const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,repose:Math.tan((renderer?.variantNumber?.('talusAngle',40)??40)*Math.PI/180),sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
     frost:{gapSize:worldSetting('frostGapSize'),gapDepth:worldSetting('frostGapDepth'),gaps:worldSetting('frostGaps'),gapReach:worldSetting('frostGapReach')}});
 // H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
@@ -1732,10 +1731,7 @@ function restoreColumn(column){
 function editColumn(value){
   const column=copyColumn(value,defaultColumn),next=JSON.stringify(column)===JSON.stringify(defaultColumn)?null:column;
   if(JSON.stringify(next)===JSON.stringify(columnOverride))return;
-  restoreColumn(next);
-  // Surf reads the column's hardness in the shape pass, before weathering.
-  if(hasSurfBeach())evaluate(0);
-  columnEditing=true;schedule();queueWeather();persistLater();
+  restoreColumn(next);columnEditing=true;schedule();queueWeather();persistLater();
 }
 function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();mapCanvas.saveDocument().catch(()=>{});}
 function defaultColor(key) {
@@ -1901,7 +1897,6 @@ function setKnob(key, value) {
   // Textures are chosen when the renderer starts, so this switch reloads.
   if (key === 'ground' || key === 'groundPattern') { location.reload(); return; }
   renderer.variant.set(key, value); renderer.applyKnobs(); syncWorldControls(); markViewChanged(); schedule();
-  if (['bedDip','bedDipDir','columnContrast'].includes(key)&&hasSurfBeach()) { cancelWeather();evaluate(0);queueWeather();return; }
   if (key==='undulation' || key==='undulationScale' || key==='undulationCover') {
     const i=nodes.findIndex(n => n.kind==='ground');
     if (i>=0) { nodes[i][{undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage'}[key]]=Number(value); cancelWeather(); evaluate(i); checkpoint(); queueWeather(); }
