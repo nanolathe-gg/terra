@@ -55,7 +55,7 @@ const NODE_FIELDS = [
     'crackAmt', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 
     'gAmp', 'gWave', 'gCover', 'qx', 'qy', 'cOffX', 'cOffY', 'rimH', 'ejecta', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'olAmp', 'olLo', 'olHi', 'olW0', 'olL0', 'olW1', 'olL1', 'olW2', 'olL2', 'bpAmp', 'hx', 'hy', 'hR', 'hRough', 'gapHw', 'sFlat', 'sJit', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs',
     'sBreak', 'elev', 'lfRiver', 'lfBraid', 'lfFront', 'lfBack', 'lfWander', 'lfWidth', 'lfHeight', 'lfSize', 'lfFoot', 'lfMid', 'lfTaper', 'lfRoute', 'gully', 'gullySize', 'talusReach', 'talusTan',
-    'coSurf', 'coColOrigin', 'coColWander', 'coColDip', 'coColDipDir'].map(k => [k, 'f']), ...['coBeach', 'coColBeds', 'coColSecs', 'coColN'].map(k => [k, 'u'])];
+    'coSurf'].map(k => [k, 'f']), ...['coBeach'].map(k => [k, 'u'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -417,9 +417,6 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
     let cum = 0;
     for (let k = 0; k < n; k++) { const wn = w[k] * n / total; extra.push([wn, cum, 0, 0]); cum += wn; }
   }
-  // P27 beach: the world's rock column after the layers' weights (the beds one row each, then the section starts), for the hardness of the coast.
-  const col = beach ? c.column : null, colBeds = extra.length;
-  if (col) { for (const b of col.beds) extra.push(b); for (const t of col.starts) extra.push(t); }
   let sites = {i0: 0, j0: 0, ni: 0, nj: 0};
   if (scal) {
     const cs = [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]].map(([x, y]) => { const wx = x * spacing, wy = y * spacing; return inv ? [inv[0] * wx + inv[2] * wy + inv[4], inv[1] * wx + inv[3] * wy + inv[5]] : [wx, wy]; });
@@ -436,8 +433,6 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
       coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: LAYER_MEANDER,
       coLReach: lReach, coRiser: q.layerRiser > 0 ? q.layerRiser : 0, coScal: scal ? 1 : 0, coRc: Rc, coCV: cv, coRs: 1.4 * Rc + cv * .1 * Rc + n * W * (1 + .45 * cv) + spacing,
       coBeach: beach ? 1 : 0, coSurf: beach ? clamp(q.surf, 0, 1) : 0,
-      coColN: col ? col.starts.length : 0, coColBeds: colBeds, coColSecs: colBeds + (col ? col.beds.length : 0),
-      coColOrigin: col?.origin ?? 0, coColWander: col?.wander ?? 0, coColDip: col?.dip ?? 0, coColDipDir: col?.dipDir ?? 0,
       coSI0: sites.i0, coSJ0: sites.j0, coSNI: sites.ni, coSNJ: sites.nj, coBx0: box.x0, coBy0: box.y0, coBx1: box.x1, coBy1: box.y1,
     },
   };
