@@ -74,10 +74,16 @@ const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,
 const smoothKnots=n=>Array.from({length:n+1},(_,i)=>{const t=i/n;return [Math.round(1000*t)/1000,Math.round(1000*t*t*(3-2*t))/1000];});
 // The valleys cut to a floor below the plain (Cut to) along one curve: V and U differ only in the curve, the terraced one is the V with the Steps control.
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
+const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];
 const LANDFORM_TOOLS={
   plateau:{},
-  hill:{diameter:200,elevation:40,lean:205,wander:24,widthVary:20,heightVary:15,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:[[0,0],[.333,.02],[.667,.34],[1,1]],back:smoothKnots(12)}},
-  mountain:{diameter:260,elevation:110,lean:100,cracks:60,wander:8,widthVary:0,heightVary:3,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfMountain',knots:thinKnots(FORMS.mountain(.5).knots,17)}},
+  // A hill is low and wide (240 px, rises 36), the same on both sides (lean 100), with a rounded top and shoulders (the section reaches .95 of the rise at .9 of the way up, and climbs at most .4 of it per quarter) and a smooth outline: its steepest 16 px cell steps 16 units or less against 25 at the 99th percentile of retail Green hills (measure/hill_band.py), so units cross it, and it stays off the rock slope score. Gullies 0 keeps modern Green's gully ribs off it (the other worlds have none).
+  hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
+  // Peaked ridge: high (150 over the plain), a steep rock face all round (cells over 24 units on 16 px, steeper than retail Green's hills), a chain of five
+  // summits with shallow saddles along the path, and divides with scree below them (Gullies, Talus). A hill is its opposite: low, round, walkable.
+  mountain:{diameter:200,elevation:160,lean:100,cracks:60,wander:8,widthVary:0,heightVary:10,varySize:80,varyFoot:100,varyMiddle:100,gullies:40,gullySize:50,talus:60,styleVegetation:-70,
+    along:[[0,.6],[.1,1],[.22,.74],[.36,1],[.5,.76],[.64,.95],[.76,.72],[.88,.9],[1,.6]],
+    curve:{form:'lfMountain',knots:[[0,0],[.12,.01],[.25,.05],[.4,.2],[.55,.45],[.7,.68],[.85,.88],[1,1]]}},
   ramp:{diameter:200,lean:100,combine:2,routeSmooth:100,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:160,varyFoot:100,varyMiddle:100,along:[[0,0],[1,1]],curve:{form:'lfRamp',knots:FORMS.lfRamp().knots}},
   deep:{diameter:200,lean:100,heightReference:1,elevation:-55,combine:1,cracks:0,wander:30,widthVary:30,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
   shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
@@ -94,18 +100,18 @@ const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge'
 const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
 const TOOL_PRESETS={
   green:{crater:{roughness:60}},
-  red:{crater:{roughness:65,softness:40},hill:{wander:34,widthVary:30,heightVary:21,lean:250},mountain:{wander:8,heightVary:4},deep:{diameter:176,wander:34,widthVary:35},shallow:{wander:4}},
+  red:{crater:{roughness:65,softness:40},hill:{wander:34,widthVary:30,heightVary:10},mountain:{wander:8},deep:{diameter:176,wander:34,widthVary:35},shallow:{wander:4}},
   // The reviewed mesa; ragged feet and foot bumps on the ridges (the retired baseVary and baseBump, as wander and height variation).
-  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},hill:{wander:46,widthVary:25,heightVary:23,lean:160,cracks:10},mountain:{wander:24,heightVary:8,cracks:10},deep:{wander:34,widthVary:35}},
+  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
   // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
-  moon:{crater:{roughness:65,softness:45},hill:{wander:42,widthVary:30,heightVary:17,varySize:60,varyMiddle:150,lean:185},mountain:{wander:24,widthVary:5,heightVary:4,varySize:60,varyMiddle:150},deep:{wander:34,widthVary:35}},
-  crystal:{crystal:{amount:140,diameter:480,roughness:40},mountain:{wander:6,heightVary:2},deep:{wander:24,widthVary:25},shallow:{wander:6}},
-  ice:{crystal:{amount:155,diameter:120,roughness:20},mountain:{wander:6,heightVary:2},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
+  moon:{crater:{roughness:65,softness:45},hill:{wander:42,widthVary:30,heightVary:9,varySize:60,varyMiddle:150},mountain:{wander:24,widthVary:5},deep:{wander:34,widthVary:35}},
+  crystal:{crystal:{amount:140,diameter:480,roughness:40},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
+  ice:{crystal:{amount:155,diameter:120,roughness:20},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks, as shoreline steps and lobes.
-  lava:{mountain:{wander:6,heightVary:2},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70}},
-  zhon:{crater:{roughness:55,softness:60},hill:{wander:20,widthVary:15,heightVary:13,lean:280},deep:{diameter:240,wander:48,widthVary:40},shallow:{diameter:240,wander:6}},
-  archipelago:{crater:{roughness:60,softness:65},hill:{lean:120},deep:{diameter:256,wander:52,widthVary:40},shallow:{diameter:248,wander:6}}
+  lava:{mountain:{wander:6},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70}},
+  zhon:{crater:{roughness:55,softness:60},hill:{wander:20,widthVary:15,heightVary:7},deep:{diameter:240,wander:48,widthVary:40},shallow:{diameter:240,wander:6}},
+  archipelago:{crater:{roughness:60,softness:65},deep:{diameter:256,wander:52,widthVary:40},shallow:{diameter:248,wander:6}}
 };
 const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],softness:['softness',0,100]};
 // Shape options: per-shape settings, shown for the tools they apply to and
