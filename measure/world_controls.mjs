@@ -228,8 +228,8 @@ try {
       results.set('~' + k.key, best);
     }
     await idle(fixtures[0][0]);
-    // The page sliders.
-    for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`!!document.getElementById(${JSON.stringify(sid)}).closest('[hidden]')`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
+    // Inactive inspector tabs do not make their controls inapplicable.
+    for (const [sid, lo, hi] of SURFACE) { if (ONLY && !ONLY.includes(sid)) continue; if (await ev(`!!document.getElementById(${JSON.stringify(sid)}).closest('[hidden]:not([role=tabpanel])')`)) continue; const m = await ev(`__wc.controlPair(${JSON.stringify(sid)}, ${lo}, ${hi})`); results.set('#' + sid, {world, type: 'surface', key: sid, fixture: fixtures[0][0], state: 'enabled', lo, hi, ...m}); }
     stage('rows', ts); ts = Date.now();
     // Leak check: the first fixture drawn again must match its first capture, so no row left a value behind.
     await restoreAll(); await ev(`__wc.scene(${JSON.stringify(fixtures[0][1])}, ${fixtures[0][2]})`);
