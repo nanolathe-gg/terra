@@ -76,8 +76,8 @@ const smoothKnots=n=>Array.from({length:n+1},(_,i)=>{const t=i/n;return [Math.ro
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const LANDFORM_TOOLS={
   plateau:{},
-  hill:{diameter:200,lean:205,wander:24,widthVary:20,heightVary:15,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:[[0,0],[.333,.02],[.667,.34],[1,1]],back:smoothKnots(12)}},
-  mountain:{diameter:200,lean:100,cracks:60,wander:8,widthVary:0,heightVary:3,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfMountain',knots:thinKnots(FORMS.mountain(.5).knots,17)}},
+  hill:{diameter:200,elevation:40,lean:205,wander:24,widthVary:20,heightVary:15,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:[[0,0],[.333,.02],[.667,.34],[1,1]],back:smoothKnots(12)}},
+  mountain:{diameter:260,elevation:110,lean:100,cracks:60,wander:8,widthVary:0,heightVary:3,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfMountain',knots:thinKnots(FORMS.mountain(.5).knots,17)}},
   ramp:{diameter:200,lean:100,combine:2,routeSmooth:100,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:160,varyFoot:100,varyMiddle:100,along:[[0,0],[1,1]],curve:{form:'lfRamp',knots:FORMS.lfRamp().knots}},
   deep:{diameter:200,lean:100,heightReference:1,elevation:-55,combine:1,cracks:0,wander:30,widthVary:30,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
   shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
