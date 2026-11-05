@@ -461,7 +461,7 @@ function shrubFrame(P, seed, ctx) {
 }
 
 // ---- rocks -----------------------------------------------------------------------------------------------------
-const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.6, lean: 0, metal: null };
+const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.4, lean: 0, metal: null };
 const ROCK_CELLS = { '1x1': [1, 1], '2x2': [2, 2], '3x2': [3, 2], '3x3': [3, 3], '4x3': [4, 3] };
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9));
@@ -489,54 +489,44 @@ function rockFrame(P, seed, ctx) {
     if (rr < radial(th) * (1 + 0.04 * (fbm(x / 4, y / 4, seed) - 0.5)) && (rr > 0 || true)) mask[y * w + x] = 1;
   }
   const dist = edgeDist(w, h, mask);
-  // Tonal planes (spec 15 B1): 1-4 large highlight planes up-left, mid planes, a shade plane at the lower right.
-  const cellsN = fw * fh, nHi = clamp(1 + (cellsN >= 12 ? 3 : cellsN >= 9 ? 2 : cellsN >= 4 ? 1 : 0) + (P.angular > 0.7 && cellsN >= 4 ? 1 : 0), 1, 4);
-  const planes = [], dirAt = (x, y) => L.x * ((x - cx) / Wh) + L.y * ((y - cy) / Hh);
-  const addPlane = (sx, sy, bias) => planes.push({ x: cx + sx * Wh, y: cy + sy * Hh, t: 0.5 + 0.42 * bias + (r() - 0.5) * 0.16 });
-  for (let i = 0; i < nHi; i++) addPlane(L.x * (0.1 + 0.6 * r()), L.y * (0.1 + 0.55 * r()), 0.8 + r() * 0.2);   // toward the sun
-  for (let i = 0; i < 2 + Math.round(P.angular * 2 + r()); i++) addPlane((r() - 0.5) * 1.4, (r() - 0.5) * 1.2, (r() - 0.5) * 0.7);
-  addPlane(-L.x * (0.3 + r() * 0.4), -L.y * (0.15 + r() * 0.4), -0.9);          // the shade plane hugs the side away from the sun
-  const flat = 0.35 + 0.55 * P.angular;             // 0 smooth dome shading .. 1 flat tonal planes
-  const tone = new Float32Array(w * h), hasPx = [];
+  // One smoothly shaded, slightly lumpy, tilted oblong (spec 15 B1, round 3): light falls off continuously from the sun side to a dark
+  // far side; cream, pink and white appear as soft mottling and broad highlight areas inside the shading, never as flat patches.
+  const tilt = (r() - 0.5) * 0.5, ct = Math.cos(tilt), st = Math.sin(tilt), hasPx = [];
+  const zf = (x, y) => {
+    const dx = (x - cx) / Wh, dy = (y - cy) / Hh, ex = dx * ct + dy * st, ey = -dx * st + dy * ct;
+    const dome = Math.sqrt(Math.max(0.02, 1 - (ex * ex + ey * ey) * 0.9));
+    return (dome + (fbm(x / 7, y / 7, seed + 3, 3) - 0.5) * (0.2 + 0.3 * P.angular) + (fbm(x / 3.2, y / 3.2, seed + 5, 2) - 0.5) * 0.04) * Hh * 1.15;
+  };
+  const tone = new Float32Array(w * h), lowerRight = k => { const x = k % w, y = (k / w) | 0; return (x - cx) * -L.x + (y - cy) * -L.y > 0; };
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const k = y * w + x; if (!mask[k]) continue;
-    let bi = 0, bd = 1e9; planes.forEach((pl, i) => { const d = Math.hypot(pl.x - x, pl.y - y) + (vnoise(x / 3, y / 3, seed + i) - 0.5) * 3.2; if (d < bd) { bd = d; bi = i; } });
-    const pl = planes[bi], d0 = dirAt(x, y);
-    let t = lerp(0.5 + 0.34 * d0, pl.t + 0.12 * (d0 - dirAt(pl.x, pl.y)), flat);
-    const rr = Math.hypot((x - cx) / Wh, (y - cy) / Hh);
-    t -= 0.22 * Math.max(0, rr - 0.65) * (d0 < 0.05 ? 1.7 : 0.6);     // falls off to the shaded edge
-    if (y > h * 0.72) t -= ((y / h - 0.72) / 0.28) * 0.34;            // dark base
-    t += (rn() - 0.5) * 0.07 + (vnoise(x / 1.6, y / 1.6, seed + 17) - 0.5) * 0.08;
-    tone[k] = t; hasPx.push(k);
+    const zx = zf(x + 1, y) - zf(x - 1, y), zy = zf(x, y + 1) - zf(x, y - 1), nn = Math.hypot(zx, zy, 2);
+    let t = (-zx / nn) * L.v[0] + (-zy / nn) * L.v[1] + (2 / nn) * L.v[2];
+    t += 0.18 * (L.x * (x - cx) / Wh + L.y * (y - cy) / Hh);                       // broad fall-off from the sun side
+    if (y > h * 0.72) t -= ((y / h - 0.72) / 0.28) * 0.3;                             // dark base
+    if (dist[k] <= 1 && lowerRight(k)) t -= 0.35;                                     // a dark edge on the shadow side only
+    tone[k] = t + (rn() - 0.5) * 0.02; hasPx.push(k);
   }
-  // rank the non-rim pixels so the band shares match the spec: highlight 48%, lit gray 23%, mid and shade the rest
-  const interior = hasPx.filter(k => dist[k] > 1).sort((a, b) => tone[b] - tone[a]), N = interior.length;
-  const lowerRight = k => { const x = k % w, y = (k / w) | 0; return (x - cx) * -L.x + (y - cy) * -L.y > 0; };
-  const hiN = Math.round(N * 0.45), litN = Math.round(N * 0.23), shadeN = Math.round(N * 0.12);
+  const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.045;
   const bright = (list, u) => list[clamp(Math.floor((1 - u) * list.length), 0, list.length - 1)];
   const CREAM = [64, 65, 66, 67, 68, 69, 70], PINKS = [16, 17, 18, 19, 20, 21, 22], WHITES = [255, 81, 82, 83, 84];
-  const hiIdx = interior.slice(0, hiN), hiField = hiIdx.map(k => vnoise((k % w) / 8, ((k / w) | 0) / 8, seed + 77) + 0.02 * (rn() - 0.5));
-  const order = hiField.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]), kind = new Array(hiN);
-  order.forEach(([, i], rank) => { kind[i] = rank < hiN * 0.45 ? 0 : rank < hiN * 0.74 ? 1 : 2; });
-  const col = new Map();
-  interior.forEach((k, rank) => {
+  const hiEnd = 0.383, litEnd = hiEnd + 0.18, midEnd = litEnd + 0.245;
+  // the mottling field: pink where a soft noise is high (about 39% of the non-white highlight)
+  const mott = k => vnoise((k % w) / 6, ((k / w) | 0) / 6, seed + 77) + fbm((k % w) / 12, ((k / w) | 0) / 12, seed + 78, 2) * 0.6;
+  const hiList = ranked.slice(0, Math.round(N * hiEnd)).filter((k, i) => i >= Math.round(N * hiEnd * 0.27)).map(k => mott(k)).sort((a, b) => a - b);
+  const pinkCut = hiList[Math.floor(hiList.length * 0.39)] ?? 0.5;
+  ranked.forEach((k, i) => {
+    const u = clamp(i / N + soft(), 0, 0.9999);
     let c;
-    if (rank < hiN) {
-      const u = 1 - rank / hiN * 0.85 - 0.05 + (rn() - 0.5) * 0.12;
-      c = kind[rank] === 0 ? bright(CREAM, 1 - u) : kind[rank] === 1 ? bright(PINKS, 1 - u) : bright(WHITES, 1 - u);
-    } else if (rank < hiN + litN) c = bright([85, 86, 87, 88, 89], 1 - (rank - hiN) / litN + (rn() - 0.5) * 0.3);
-    else if (rank < N - shadeN) c = weighted(rn, [[90, 8], [91, 8.8], [92, 5.3]]);
-    else c = weighted(rn, [[93, 4.5], [94, 3.4], [95, 4.2], [127, 1.9], [125, 0.8]]);
-    col.set(k, c);
-  });
-  for (const k of hasPx) {
-    let c;
-    if (dist[k] <= 1) {                                 // the dark rim: thinner on the lit side
-      if (!lowerRight(k) && rn() < 0.4) { c = col.size ? bright([88, 89, 90, 91], rn()) : 90; }
-      else c = weighted(rn, [[91, 23], [90, 14], [92, 9], [95, 8], [94, 7], [93, 7], [127, 5.5], [125, 5]]);
-    } else c = col.get(k);
+    if (u < hiEnd) {
+      const v = u / hiEnd;
+      if (v < 0.27) c = bright(WHITES, 1 - v / 0.27 * 0.8 - 0.1 + (rn() - 0.5) * 0.2);                                      // the broad highlight
+      else { const f = (v - 0.27) / 0.73, pinkish = mott(k) + (rn() - 0.5) * 0.1 < pinkCut; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12); }
+    } else if (u < litEnd) c = bright([85, 86, 87, 88, 89], 1 - (u - hiEnd) / (litEnd - hiEnd) + (rn() - 0.5) * 0.3);
+    else if (u < midEnd) c = bright([92, 91, 90], (u - litEnd) / (midEnd - litEnd) + (rn() - 0.5) * 0.4);
+    else { const f = (u - midEnd) / (1 - midEnd); c = rn() < 0.1 ? weighted(rn, [[127, 3], [125, 1]]) : bright([93, 94, 95], 1 - f + (rn() - 0.5) * 0.3); }
     put(sp, k % w, (k / w) | 0, c);
-  }
+  });
   const body = sp;
   return { body, W, H };
 }
