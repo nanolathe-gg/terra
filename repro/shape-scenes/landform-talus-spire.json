@@ -1,0 +1,48 @@
+{
+ "biome": "red",
+ "ground": true,
+ "query": "sea=0",
+ "strokes": [
+  [
+   "landform",
+   [
+    [
+     150,
+     520
+    ],
+    [
+     400,
+     470
+    ],
+    [
+     650,
+     540
+    ],
+    [
+     880,
+     490
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 200,
+     "heightReference": 1,
+     "elevation": 150,
+     "wander": 24,
+     "widthVary": 0.2,
+     "heightVary": 3,
+     "varySize": 140,
+     "gullies": 40,
+     "gullySize": 40,
+     "talus": 100
+    },
+    "curve": {
+     "form": "lfMountain"
+    }
+   }
+  ]
+ ],
+ "source": {
+  "note": "Card talus-reach: a peaked ridge with Gullies .4 on Red with Talus reach 100 (sweep 0, 50, 100, 200). Sea 0."
+ }
+}

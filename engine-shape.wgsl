@@ -811,7 +811,7 @@ fn coneProfile(t: f32) -> f32 { let v = clamp(t, 0.0, 1.0); return (1.15 * v - 0
 // The height of the talus above the ground at a cell, or 0 (the caller takes the higher of this and the face). Each chute (a valley of the Gullies' widest
 // stripes, which run on straight below the foot) lays a cone whose slope is the repose (talusAngle) and whose length is the reach, with a low apron between the
 // cones, and nothing on a face whose section is nowhere steeper than the repose; inside the footprint the cone climbs the face at the repose until the face rises through it.
-fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32) -> f32 {
+fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32, face: f32) -> f32 {
   let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u]; let s2 = Seg[(u.segBase + trunk) * 4u + 2u];
   let ro = lfRun(s0, s1, s2, wx, wy, nA, nB, share);
   if (ro.x <= -u.talusReach) { return 0.0; }
@@ -819,26 +819,31 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   if (relief <= 0.0) { return 0.0; }
   // The steepest the stroke's section gets (its curve table, on this side, over the relief and the run), against the repose.
   let table = select(u.curveBase, u.backBase, ro.z > 0.5);
-  var rise = 0.0;
-  for (var k = 1u; k < 12u; k++) { let t = f32(k) / 12.0; rise = max(rise, abs(curveAt(table, t + 0.04) - curveAt(table, t - 0.04)) / 0.08); }
-  let steep = sm(u.talusTan, 1.6 * u.talusTan, rise * relief / max(ro.y, 1.0));
+  // One march over the curve: its steepest slope (the gate) and where it first rises at the repose or steeper (the foot of the face, tf, interpolated).
+  var rise = 0.0; var tf = 1.0; var before = 0.0; var found = false; var prevV = curveAt(table, 0.0);
+  for (var j = 0u; j < 16u; j++) {
+    let v = curveAt(table, f32(j + 1u) / 16.0);
+    let g = abs(v - prevV) * 16.0 * relief / max(ro.y, 1.0);
+    if (!found && g >= u.talusTan) { tf = (f32(j) + 0.5 - clamp((g - u.talusTan) / max(g - before, 1e-4), 0.0, 1.0)) / 16.0; found = true; }
+    before = g; prevV = v; rise = max(rise, g);
+  }
+  let steep = sm(u.talusTan, 1.6 * u.talusTan, rise);
   if (steep <= 0.0) { return 0.0; }
   let fall = landformFall(vec2f(wx, wy), x, y);
   if (all(fall == vec2f(0.0))) { return 0.0; }
-  var steer = -fall;
-  if (u.framed != 0u) { steer = vec2f(u.inv0 * steer.x + u.inv2 * steer.y, u.inv1 * steer.x + u.inv3 * steer.y); }
-  let wv = u.gullySize; let sd = normalize(steer);
-  let warp = 0.35 * wv * vnoise(lx / (1.5 * wv), ly / (1.5 * wv), u.seed ^ 0x7f4au);
-  let cs = gullyStripes(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, sd, 1.0 / wv, u.seed ^ 0x6a1u);
-  // A broad apron along the whole foot, deeper and longer below each chute (smooth in the stripe's phase, so neighbors coalesce into one skirt), and a
-  // concave profile: the repose at the apex, level at the toe.
-  let chute = sm(0.1, 1.0, 1.0 - cs.y * cs.y);
-  let L = u.talusReach * steep * (0.85 + 0.15 * chute);
+  let wv = u.gullySize;
+  let chute = 0.5 + 0.5 * clamp(vnoise(lx / wv, ly / wv, u.seed ^ 0x6a1u), -1.0, 1.0);
+  let L = u.talusReach * steep;
   if (L < 1.0) { return 0.0; }
-  let H = 0.5 * u.talusTan * L;
-  var T = H + u.talusTan * min(ro.x, 2.0 * L);
-  if (ro.x < 0.0) { let t = 1.0 - clamp(-ro.x / L, 0.0, 1.0); T = H * t * t; }
-  return min(T, 0.8 * relief);
+  let along = ro.x - ro.y * max(tf, 0.0);
+  let cap = 0.3 * relief;
+  let apex = cap * tanh(0.5 * u.talusTan * L / cap);
+  let out = max(-along, 0.0);
+  let Hc = apex * (0.88 + 0.24 * mix(chute, 0.5, sm(0.0, 0.25, out / L)));
+  if (along < 0.0) { let t = 1.0 - clamp(out / L, 0.0, 1.0); return Hc * t * t; }
+  let line = Hc + 2.0 * Hc / L * along;
+  let cut = u.gully * u.gullySize;
+  return line * (1.0 - sm(cut, 2.0 * cut, face - line));
 }
 
 @compute @workgroup_size(8, 8)
@@ -920,7 +925,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   }
   // P17: the talus cones, where Gullies cut the faces (the chutes are theirs) and the stroke raises. Beyond the footprint the cone is all there is.
   var talus = 0.0;
-  if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base); }
+  if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen)); }
   if (!seen) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); }
     return;

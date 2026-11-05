@@ -1,0 +1,45 @@
+{
+ "biome": "green",
+ "ground": true,
+ "query": "variant=modern&sea=0&talusAngle=30",
+ "strokes": [
+  [
+   "landform",
+   [
+    [
+     200,
+     500
+    ],
+    [
+     500,
+     480
+    ],
+    [
+     800,
+     500
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 240,
+     "heightReference": 1,
+     "elevation": 170,
+     "lean": 100,
+     "wander": 10,
+     "widthVary": 0.1,
+     "heightVary": 3,
+     "varySize": 100,
+     "gullies": 40,
+     "gullySize": 40,
+     "talus": 100
+    },
+    "curve": {
+     "form": "lfHill"
+    }
+   }
+  ]
+ ],
+ "source": {
+  "note": "Card talus-reach: a Gullies .4 hill on modern Green with Talus reach 100 (sweep 0, 50, 100, 200). Sea 0."
+ }
+}
