@@ -316,6 +316,8 @@ fn plantTuft(p: vec2f, cell: f32, r0: f32, r1: f32, ht: f32, star: f32, dome: f3
             let m = looseMask[lsCell(c) + 1u];
             var share = m.x * 0.85;
             if (which == 1) { share = m.y * 0.92; } else if (which == 2) { share = m.w * 0.97; }
+            // Tufts gather in patches of about 14 px: the thinner ground between lets the soil's own colour through.
+            share *= mix(0.55, 1.0, smoothstep(-0.3, 0.5, valueNoise(c / 14.0 + 3.0 * f32(which))));
             if (lsU(lsPcg(h2 ^ 0x2545f491u)) >= share) { continue; }
             let t = 1.0 - l / r;
             let blades = 5.0 + 3.0 * lsU(lsPcg(h1));
