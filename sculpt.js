@@ -1769,8 +1769,10 @@ function goToWorld(base,id,extra) {
   if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
   if (config.map) for (const [key,value] of Object.entries({mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel})) url.searchParams.set(key,value);
-  // Staying in the same world keeps its variant.
-  if (base===config.biomeId && config.variant && !(extra && 'variant' in extra)) url.searchParams.set('variant',config.variant);
+  // A saved world carries the material variant its controls were authored for.
+  const savedVariant=id&&worlds[id]?.variant;
+  if(typeof savedVariant==='string')url.searchParams.set('variant',savedVariant);
+  else if (base===config.biomeId && config.variant) url.searchParams.set('variant',config.variant);
   for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) url.searchParams.set(key,value); else url.searchParams.delete(key);
   location.href=url.toString();
 }
@@ -1788,7 +1790,7 @@ function buildWorldPanel() {
   $('variant-control').hidden=!variants.length;
   variantSelect.replaceChildren(new Option("The world's own",''),...variants.map(([id,label]) => new Option(label,id)));
   variantSelect.value=config.variant||'';
-  variantSelect.onchange=() => goToWorld(config.biomeId,worldId===config.biomeId?null:worldId,{variant:variantSelect.value});
+  variantSelect.onchange=() => { if(worldId!==config.biomeId){world.variant=variantSelect.value;saveWorlds();}goToWorld(config.biomeId,worldId===config.biomeId?null:worldId,{variant:variantSelect.value}); };
   const rows=$('world-colors'); rows.replaceChildren();
   for (const [key,label] of COLOR_KEYS) {
     if (key==='beach' && !config.layers.includes('beach')) continue;
@@ -1818,16 +1820,16 @@ function buildWorldPanel() {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
     const knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
-    worlds[id]={name,base:config.biomeId,colors:{...world.colors},knobs}; saveWorlds(); goToWorld(config.biomeId,id);
+    worlds[id]={name,base:config.biomeId,variant:config.variant||'',colors:{...world.colors},knobs}; saveWorlds(); goToWorld(config.biomeId,id);
   };
-  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,knobs:{...world.knobs}}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
+  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,variant:config.variant||'',knobs:{...world.knobs}}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
   $('world-import').onclick=() => $('world-file').click();
   $('world-file').onchange=async () => {
     try {
       const data=JSON.parse(await $('world-file').files[0].text()),w=data?.world;
       if (data?.format!=='nanolathe-map-world' || !w || typeof w.name!=='string' || !(w.base in (config.biomes||{}))) throw new Error('Not a world file for a world this server has.');
       const id=w.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
-      worlds[id]={name:w.name,base:w.base,colors:Object.fromEntries(Object.entries(w.colors||{}).filter(([,v]) => v===null || /^#[0-9a-f]{6}$/i.test(v))),knobs:Object.fromEntries(Object.entries(w.knobs||{}).map(([k,v]) => [k,String(v)]))};
+      worlds[id]={name:w.name,base:w.base,...(typeof w.variant==='string'?{variant:w.variant}:{}),colors:Object.fromEntries(Object.entries(w.colors||{}).filter(([,v]) => v===null || /^#[0-9a-f]{6}$/i.test(v))),knobs:Object.fromEntries(Object.entries(w.knobs||{}).map(([k,v]) => [k,String(v)]))};
       saveWorlds(); goToWorld(w.base,id);
     } catch (err) { error(err.message); }
   };
