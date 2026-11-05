@@ -5,7 +5,7 @@ import {generateFeature, paintDeposit, paintVent, IDX} from '../sculpt-feature-g
 const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 const sig = s => s ? `${s.w}x${s.h}@${s.ax},${s.ay}:` + Buffer.from(s.idx).toString('hex') + Buffer.from(s.a).toString('hex') : '';
 test('palette has 256 indexed colors', () => assert.equal(palette.length, 256));
-for (const [kind, params] of [['tree', {}], ['tree', {species: 'conifer', height: 61, width: 0.5}], ['burnt', {}], ['shrub', {}], ['rock', {cells: '3x3'}], ['scar', {type: 'smudge'}], ['scar', {type: 'stain'}]]) {
+for (const [kind, params] of [['tree', {}], ['tree', {species: 'conifer', height: 61, width: 0.5}], ['burnt', {}], ['burnt', {species: 'conifer', height: 56, width: 0.5}], ['shrub', {}], ['rock', {cells: '3x3'}], ['scar', {type: 'smudge'}], ['scar', {type: 'stain'}]]) {
   test(`${kind} ${params.species || params.cells || params.type || ''} is deterministic and palette-only`, () => {
     const a = generateFeature(kind, params, 77), b = generateFeature(kind, params, 77), c = generateFeature(kind, params, 78);
     assert.equal(sig(a.body), sig(b.body)); assert.equal(sig(a.shadow), sig(b.shadow));
