@@ -52,7 +52,7 @@ export function mountCurveDock(){
   root.replaceChildren(section,along);root.className='curve-editors';$('curve-dock').append(root);
   // Existing IDs retain all of the curve editor's pointer handlers.
   $('section-preview').title='Drag points to shape the section. Click the line to add a point. Shift-click a point to remove it. Drag the diamond to lean.';
-  $('along-preview').title='Drag points to change height along the path. Double-click the line to add a point. Shift-click to remove it.';
+  $('along-preview').title='Click or drag away from points to move the section marker. Drag points to change height. Double-click to add a point. Shift-click to remove it.';
   const sync=()=>{$('curve-empty').hidden=!root.hidden;};new MutationObserver(sync).observe(root,{attributes:true,attributeFilter:['hidden']});sync();
 }
 

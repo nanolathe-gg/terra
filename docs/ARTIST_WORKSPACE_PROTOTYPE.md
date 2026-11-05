@@ -117,6 +117,11 @@ Numeric controls combine label, fill, value and text entry:
   tests pass after this refinement.
 
 The curve editors retain mouse editing and omit per-point numeric fields.
+Click or drag away from knots in Length vs. height to move the selected
+section marker continuously. Knot dragging still edits heights. Measured with
+pointer input: inspection follows the pointer to 80% of the path, clamps to
+the endpoint outside the canvas, stops on release, and leaves all shape data
+unchanged (`interaction-handoff/workspace.json`).
 The top bar exposes map weathering, tile grid, zoom in/out, 1x and Fit. The
 grid marks 16 px height cells, with heavier 128 px lines; it is a flat
 coordinate overlay and never enters exported art. Focus mode hides the dock

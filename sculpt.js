@@ -678,28 +678,31 @@ function curveEditorEvents() {
   cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
   cv.addEventListener('dblclick',e => { const c=curveContext(),h=hit(c,sectionLayout(c),at(e)); if (h && remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } });
 }
-// The along-the-path canvas: drag a knot, double-click the line to add one, Shift-click or double-click a knot to remove it (the ends stay); a click elsewhere picks the
-// place whose section the canvas above shows.
+// Drag a knot to edit height. Click or drag elsewhere to inspect the section
+// along the path; double-click adds a knot and Shift-click removes one.
 function alongEditorEvents() {
-  const cv=$('along-preview'); let drag=-1,moved=false;
+  const cv=$('along-preview'); let pointer=null,drag=-1,moved=false;
   const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
   const hit=(c,L,knots,p) => { let best=-1,d=8; knots.forEach(([x,v],i) => { const dd=Math.hypot(L.X(x)-p.px,L.yv(v)-p.py); if (dd<d) { d=dd; best=i; } }); return best; };
   const store=ks => setCurve(roundKnots(ks),'along');
-  const finish=() => { if (drag>=0) { const edited=moved; drag=-1; if (edited && selected>=0) { checkpoint(); queueWeather(); } } };
+  const inspect=(L,p) => { lfPlace=L.T(p.px); drawSection(); schedule(); };
+  const finish=e => { if(pointer!==e.pointerId)return;const edited=drag>=0&&moved;pointer=null;drag=-1;if(cv.hasPointerCapture(e.pointerId))cv.releasePointerCapture(e.pointerId);if(edited&&selected>=0){checkpoint();queueWeather();} };
   cv.addEventListener('pointerdown',e => {
-    if (e.button!==0) return;
+    if (e.button!==0||pointer!==null) return;
     const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),i=hit(c,L,knots,p); moved=false;
     if (i>=0 && e.shiftKey) { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(knots); if (selected>=0) { checkpoint(); queueWeather(); } } return; }
-    if (i>=0) { drag=i; cv.setPointerCapture(e.pointerId); return; }
-    lfPlace=L.T(p.px); drawSection(); schedule();
+    pointer=e.pointerId;drag=i;cv.setPointerCapture(e.pointerId);
+    if(i<0)inspect(L,p);
   });
   cv.addEventListener('pointermove',e => {
-    if (drag<0) return;
-    const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),k=knots[drag]; if (!k) return;
+    if(pointer!==e.pointerId)return;
+    const p=at(e),c=curveContext(),L=alongLayout(c);
+    if(drag<0){inspect(L,p);return;}
+    const knots=alongKnots(c.q).map(k => [...k]),k=knots[drag]; if (!k) return;
     if (drag>0 && drag<knots.length-1) k[0]=clamp(L.T(p.px),knots[drag-1][0]+.01,knots[drag+1][0]-.01);
     k[1]=clamp(L.vy(p.py),0,ALONG_HI); moved=true; store(knots);
   });
-  cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
+  cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);cv.addEventListener('lostpointercapture',finish);
   cv.addEventListener('dblclick',e => {
     const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),i=hit(c,L,knots,p);
     if (i>=0) { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(knots); } }
