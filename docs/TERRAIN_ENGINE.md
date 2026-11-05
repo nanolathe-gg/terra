@@ -806,6 +806,7 @@ byte-identical unless the table says otherwise.
 | P30 slope cover | A tabled world's slope cover is its thin soil, not the slope ramp; Patchiness a constant (0.8) | e0ca0124, 75d11a03 | retail 0.00; modern-2 1 px; Patchiness 0 to 1 moves 0.3-3.1% of blocks (under 5%); no perf cost |
 | P27 heights | Surf .2 and up cuts a beach face and berm (1-2.5 units, from a nine-map retail table); hard rock at the waterline makes a rock coast with pocket beaches | 8427b273, 1f4345f9, bad593a8 | 30 scenes byte-identical; shape pass +0.64 ms on a Surf water stroke |
 | P28 point bars | Sand and scroll bars on each inside bend, from the river path's curvature | 29816523, 3b62b152 | 30 scenes byte-identical; regional 0 on four river fixtures; shape pass 0.440 ms both |
+| P31 flowers | Sparse 1-2 px flower dots in the draw, from the material palette (`groundCover.plants.flowers`), on meadow, scrub, rush and turf in sun, more with Lushness | 15352219 | retail cmp-identical; modern moves 0.5 / 0.6 / 0.4%; terrain +2% (within noise) |
 | Tooling | `perf.mjs --exact-timestamps` (opt-in) | 774021b9 | from the P4 spike |
 
 ### Rejected, closed or held
@@ -828,6 +829,7 @@ byte-identical unless the table says otherwise.
 | P1 gully comb | Held for the owner | prototype/gully-comb | Damping narrow sections fixes the comb but drops Gully size 7.31 -> 4.28 (shape_controls) and cuts a Rounded ridge's front gullies by about 40%; per-side spacing made a denser comb |
 | Peaks B, C | Held | prototype/peaks | Spurs on Peaked ridge read as stubby fingers; mountain Gullies 70 departs from retail mountains (no dendritic gullies) |
 | Realism: saHill | Held for the owner | prototype/realism-gates | erosionCreep .05 on modern Green: saHill passes 6 -> 16 of 17, Hack 5 -> 3, mean in range 7.82 -> 7.06; Hack mostly measures sub-pixel roughness |
+| Sand bake trim | Closed | prototype/sand-perf | Two exact early-outs, no measurable gain (10 rounds, noise about 10%); the tap loop is about 5% of the relief bake |
 | P26 water | Held by the owner | prototype/water | Stage 2 stopped: retail water is flat tones with a hard step and grain, the model is a smooth gradient |
 | P8, P19 | Not started | | P19 (decision 26) |
 
