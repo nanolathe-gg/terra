@@ -1533,7 +1533,6 @@ function deserializeNodes(list) {
   });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
-editorUI.onMode(entry=>{if(selected>=0&&nodes[selected]?.params&&strokeKind(entry)===entry){changeSelected(n=>{n.kind=entry;});}else document.querySelector(`[data-tool="${entry}"]`)?.click();});
 for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click',() => {
   if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
   if(tool==='move'&&selected>=0)selectNode(selected);

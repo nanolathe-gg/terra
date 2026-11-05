@@ -39,9 +39,7 @@ export function mountEditorUI(){
  }
  for(const [kind,label] of [['hill','Hill'],['deep','Deep water'],['crystal','Faceted forms'],['paint','Surface paint'],['erase','Reset ground']]){const b=grouped.querySelector(`[data-tool="${kind}"]`);b.title=label;b.setAttribute('aria-label',label);b.querySelector('.tool-label').textContent=label;}
  palette.replaceWith(grouped);
- const mode=document.createElement('div');mode.className='control';mode.id='tool-mode-control';mode.innerHTML='<label for="tool-mode">Drawing mode</label><select id="tool-mode"></select>';$('tool-style').closest('.control').after(mode);
- let changeMode=()=>{};$('tool-mode').onchange=()=>changeMode($('tool-mode').value);
- const syncTools=(active,selected,locked,features)=>{mode.hidden=true;
+ const syncTools=(active,selected,locked,features)=>{
   for(const b of grouped.querySelectorAll('button')){b.disabled=locked;b.setAttribute('aria-pressed',String(features?b.id==='feature-tool':b.dataset.tool===active));}
  };
 
@@ -61,7 +59,7 @@ export function mountEditorUI(){
  for(const t of tabs){t.onclick=()=>activate(t);t.onkeydown=e=>{const i=visibleTabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%visibleTabs.length;if(e.key==='ArrowLeft')j=(i+visibleTabs.length-1)%visibleTabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=visibleTabs.length-1;if(j!==undefined){e.preventDefault();activate(visibleTabs[j]);visibleTabs[j].focus();}};}
  activate($('tab-tool'));
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
- return {toggleFocus,exitFocus,syncTools,onMode:callback=>{changeMode=callback;}};
+ return {toggleFocus,exitFocus,syncTools};
 }
 // Each effect owns its controlling value and its dependent parameters. Zero
 // means off; switching back on restores the last value for this tool/selection.
@@ -93,7 +91,7 @@ export function groupToolControls(fields){
   if(master){box=document.createElement('input');box.type='checkbox';box.setAttribute('aria-label',`Enable ${title}`);summary.append(box);box.addEventListener('click',e=>e.stopPropagation());box.addEventListener('change',()=>{const key=d.dataset.context,previous=Number(master.value);if(!box.checked&&previous!==0)memory.set(key,previous);master.value=box.checked?(memory.get(key)||(master.tagName==='SELECT'?[...master.options].find(o=>Number(o.value)!==0)?.value:Math.max(Number(master.step)||1,Math.min(Number(master.max),Number(master.max)*.5)))):0;master.dispatchEvent(new Event('input',{bubbles:true}));master.dispatchEvent(new Event('change',{bubbles:true}));if(box.checked)d.open=true;});}
   groups.push({d,controls,master,box,memory,lastContext:null});return d;
  }
- const basicIds=['tool-style','tool-mode','diameter','amount','roughness','softness'];
+ const basicIds=['tool-style','diameter','amount','roughness','softness'];
  const basics=make('Brush settings',basicIds.map(id=>$(id).closest('.control')));basics.open=true;basics.classList.add('brush-basics');root.before(basics);
  basics.before($('seed').closest('.control'));
  mountCurveDock();
