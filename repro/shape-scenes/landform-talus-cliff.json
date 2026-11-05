@@ -1,0 +1,45 @@
+{
+ "biome": "green",
+ "source": {
+  "note": "Card P17: a steep cliff landform with Gullies on, for the talus cones at its foot (Talus reach 0 and 60). Sea 0."
+ },
+ "ground": true,
+ "query": "sea=0&talusAngle=30",
+ "strokes": [
+  [
+   "landform",
+   [
+    [
+     100,
+     400
+    ],
+    [
+     500,
+     420
+    ],
+    [
+     900,
+     400
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 240,
+     "heightReference": 1,
+     "elevation": 170,
+     "lean": 100,
+     "wander": 10,
+     "widthVary": 0.1,
+     "heightVary": 3,
+     "varySize": 100,
+     "gullies": 60,
+     "gullySize": 40,
+     "talus": 60
+    },
+    "curve": {
+     "form": "cliff"
+    }
+   }
+  ]
+ ]
+}

@@ -34,6 +34,7 @@ const CONTROLS = {
   heightVary: {set: {heightVary: 20}},
   gullies: {set: {gullies: 100}},   // P1
   gullySize: {base: {gullies: 100}, set: {gullySize: 100}},
+  talus: {base: {gullies: 100, curve: {form: 'cliff'}}, set: {talus: 100}},   // P17: cones need Gullies for chutes and a face steeper than the talus angle
   varySize: {base: {wander: 40, widthVary: 40, heightVary: 12}, set: {varySize: 360}},
   varyFoot: {base: {wander: 40, widthVary: 40, heightVary: 12, varyFoot: 0}, set: {varyFoot: 200}},
   varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},

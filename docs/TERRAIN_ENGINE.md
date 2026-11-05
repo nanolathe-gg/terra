@@ -259,6 +259,16 @@ This is the stroke graph as it is: sections, ridges, fissures, shore
 bands, craters, rivers. It makes the authored height, which is the only
 height TNT sees.
 
+**Talus cones (P17)** are part of a landform stroke's height, so units path
+over them and the export carries them. Where Gullies cut a raised face and the
+section is steeper than the repose, each of the gullies' widest valleys lays a
+cone at the repose (`talusAngle`, the same number the Time pass uses) and as
+long as the stroke's Talus reach, in one broad skirt along the foot (a concave
+profile: the repose at the apex, level at the toe); the cone climbs the face
+until the face rises through it. A pure function of the stroke
+(`landformTalus` in `engine-shape.wgsl`): no pass, no map, the same on every
+tile and page. The Time pass then finds the cones' slopes in its own talus map.
+
 ### Ground: bodies of material
 
 **A material is data:**

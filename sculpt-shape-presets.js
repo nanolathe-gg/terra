@@ -130,8 +130,10 @@ export function landformBackSide(lean, turn, dx, dy) {
 // variation at its largest weight, the wander, and the spurs. The segment boxes and nodeBounds both use it.
 export function landformReach(q, scale = 1, widthMul = 1) {
   const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1);
-  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2;
+  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0);
 }
+// P17: a landform lays talus cones where it raises ground and Gullies cut its faces (the cones' chutes are the gullies' widest valleys).
+export const talusOn = q => (q.talus || 0) > 0 && (q.gullies || 0) > 0 && !(q.combine > 0);
 // The along-the-path knots a landform carries (the elevation's share along the path, 0 to 1.2), flat at 1 until edited.
 export const ALONG_FLAT = [[0, 1], [1, 1]];
 export const alongKnots = q => q.along?.length >= 2 ? q.along : ALONG_FLAT;
