@@ -611,7 +611,7 @@ fn lfShare(c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
 // the outer bank by .55 of a bend's tightness, under a steep cut bank; the inner side runs on above the water as a gentle point bar; depth grows with the bend
 // (pools in bends, riffles in the crossings); a levee rims the channel (scroll bars, ridged on the inner floodplain at .3 to 1 height unit, did not read at 1x and are left out). Port of docs/research/lab/exp/ws-meander.js riverAt
 // (the research branch), with the banks as smooth runs and the depth scaled by the width.
-fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, wy: f32) -> f32 {
+fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, wy: f32) -> vec2f {
   let W = u.lfRiver; let hw = 0.5 * W;
   let k = clamp(1.4 * kw, -1.0, 1.0); let ak = abs(k);
   let sg = select(1.0, sign(k), ak > 1e-4);
@@ -625,13 +625,25 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
   let depth = 0.25 * W * (0.5 + 0.75 * ak) * (1.0 + 0.15 * vnoise(wx / 30.0, wy / 30.0, u.seed ^ 0x99u)) * silt;
   let lev = 0.07 * W * exp(-max(d - hw, 0.0) / (0.8 * W)) * qq * qq * silt;
   let fp = fl + lev;
-  let barW = 0.2 + 1.6 * ak;
+  // The point bar: on the inner side of a bend (v > 1), as wide as the bend is tight and the channel wide (RIVER_BAR_* in sculpt-river.js), widest at the
+  // apex and gone in the crossings. s is the distance in px from the channel's inner edge. Its surface climbs gently from the water to the floodplain, with
+  // scroll bars (low ridges where the channel stood) across it; the second result is the share of sand laid on it (the painted sand's cover plane).
   let top = max(fp, sea + 0.4);
+  let s = (v - 1.0) * hw;
+  let barPx = mix(0.1 * W, W * (0.65 + 1.3 * ak), sm(0.0, 0.2, ak)) * (1.0 + 0.3 * vnoise(wx / 41.0, wy / 41.0, u.seed ^ 0x9bu));   // 0.1 W in a crossing: the bar changes banks there
   var h = 1.0e9;
+  var sand = 0.0;
   if (v >= -1.0 && v <= 1.0) { h = sea + 0.25 - (depth + 0.25) * f; }
   else if (v < -1.0) { h = sea + 0.25 + (top - sea - 0.25) * sm(0.0, 1.0, (-1.0 - v) * hw / mix(7.0, 3.5, ak)); }
-  else { let t = clamp((v - 1.0) / barW, 0.0, 1.0); h = sea + 0.3 + (top - sea - 0.3) * t * t; }
-  return min(fp, h);
+  else {
+    let t = clamp(s / barPx, 0.0, 1.0);
+    let phase = s / (0.9 * W) + 0.7 * vnoise(wx / 53.0, wy / 53.0, u.seed ^ 0x9cu);
+    let scroll = pow(0.5 + 0.5 * cos(6.2831853 * phase), 1.5) * sm(0.0, 0.25, t) * (1.0 - sm(0.7, 1.0, t));
+    h = sea + 0.3 + 0.8 * t + max(top - sea - 1.1, 0.0) * sm(0.6, 1.0, t) + 0.5 * scroll * sm(0.04, 0.18, ak);
+    let gate = sm(0.04, 0.18, ak) * sm(0.85, 1.0, silt);
+    sand = gate * (1.0 - sm(0.7, 1.1, t + 0.3 * vnoise(wx / 19.0, wy / 19.0, u.seed ^ 0x9du))) * (0.65 + 0.35 * scroll);
+  }
+  return vec2f(min(fp, h), sand);
 }
 // P28 braided belt: three threads of water that wander across the path (each a seeded noise offset along it, up to 1.2 widths either way) and so cross, merge and split,
 // with gravel bars a little above the sea between them, in a belt about five widths either side of the path. Each thread is a width across at its core (32 px
@@ -654,7 +666,7 @@ fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> f32 {
 }
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
-fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec2f {
+fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec3f {
   let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len = max(sqrt(dx * dx + dy * dy), 1e-4);
   let ux = dx / len; let uy = dy / len;
   let ahead = (wx - s0.x) * ux + (wy - s0.y) * uy;
@@ -686,12 +698,13 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
   var value = base + (crest - base) * qt;
+  var bar = 0.0;
   if (u.lfRiver > 0.0 && !spur) {
     if (u.lfBraid > 0.0) { value = braidedBelt(value, c, e, share * s1.z, wx, wy); }
-    else { value = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); }
+    else { let ch = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); value = ch.x; bar = ch.y; }
   }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
-  return vec2f(value, clamp(q, 0.0, 1.0));
+  return vec3f(value, clamp(q, 0.0, 1.0), bar);
 }
 // ---- P1 gullies: a slope-aligned stripe filter (ported from the research lab's gully filter, docs/research/lab/lib.wgsl on the research branch) ----
 // The four nearest jittered cells of a 1/f lattice, smoothstep weights, (cos, sin) of the phase across `dir` summed and normalised: stripes whose crests
@@ -869,7 +882,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
   }
   var nearest = 3.0e38; var trunk = 0xffffffffu;
-  var pick = vec2f(base, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
+  var pick = vec3f(base, 0.0, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
   var tShare = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -937,6 +950,8 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (talus > 0.0) { value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  // P28 point bar: its sand goes to the cover plane, as a Sand brush's does, and draws through the painted-sand path.
+  if (pick.z > 0.0) { let vb = F[PV * cells + i]; F[PV * cells + i] = vb + (1.0 - vb) * pick.z; }
   // The influence: how much of the section the cell stands in, where the stroke moved the height (a unit or more is all of it). Masks, routes, protection and
   // cracks follow as a plateau's do.
   let inf = pick.y * clamp(abs(value - base), 0.0, 1.0);
