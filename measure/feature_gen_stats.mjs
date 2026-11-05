@@ -18,7 +18,7 @@ const save = (dir, name, f, extra = {}) => {
 };
 const sets = {
   'tree-broadleaf': ['tree', {species: 'broadleaf'}], 'tree-conifer': ['tree', {species: 'conifer', height: 61, width: 0.5}],
-  shrub: ['shrub', {}], rock: ['rock', {cells: '2x2'}], smudge: ['scar', {type: 'smudge'}], stain: ['scar', {type: 'stain'}],
+  shrub: ['shrub', {}], 'burnt-conifer': ['burnt', {species: 'conifer', height: 56, width: 0.5}], rock: ['rock', {cells: '2x2'}], smudge: ['scar', {type: 'smudge'}], stain: ['scar', {type: 'stain'}],
 };
 for (const [dir, [kind, params]] of Object.entries(sets)) {
   for (let i = 0; i < N; i++) {

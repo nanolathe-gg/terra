@@ -313,8 +313,44 @@ function byQuantile(table, v) { // table of [value, weight], ordered; v in 0..1 
 }
 const BURNT_TABLE = [[245, 1.5], [63, 1.5], [79, 1], [47, 12.5], [46, 6.7], [45, 6.8], [95, 14.7], [94, 9.1], [62, 6], [61, 4], [172, 3], [173, 2.5], [175, 1], [60, 2], [93, 9.3], [92, 3.5], [59, 2], [91, 3], [90, 2.2], [89, 1.2], [88, 0.6], [87, 0.4], [57, 0.6], [55, 0.4], [44, 1], [43, 0.5]];
 // ---- burnt trees (skeletons) ------------------------------------------------------------------------------------
-const BURNT_DEFAULTS = { height: 58, width: 0.55, forks: 3, ash: 0.5, energy: [50, 50] };
+const BURNT_DEFAULTS = { species: 'broadleaf', height: 58, width: 0.55, forks: 3, ash: 0.5, energy: [50, 50] };
+const CONIFER_DEAD = [[245, 1], [63, 1], [47, 14], [46, 14], [45, 11], [172, 2], [173, 2], [175, 1.5], [44, 3], [62, 7], [61, 1], [93, 12], [94, 5], [92, 2.5], [43, 1], [91, 1.5], [89, 1.5]];
+// A sparse, narrow, tapering needle skeleton (spec 15 B3): dark trunk, short twigs, needle tufts, gaps; near-black greens and grays.
+function burntConiferFrame(P, seed) {
+  const r = rng(seed), rn = rng(mix32(seed, 5));
+  const H = Math.round(P.height), W = Math.round(H * P.width), w = W + 8, h = H + 4, cx = w / 2 + (r() - 0.5), ax = Math.round(cx), ay = h - 3;
+  const sp = newSprite(w, h, ax, ay), s1 = (r() * 1e6) | 0, Wh = W / 2, y0 = ay - H + 1;
+  const target = Math.round(0.365 * W * H * (0.94 + 0.12 * r()));
+  const hw = t => Wh * (0.1 + 0.9 * Math.pow(clamp(t / 0.62, 0, 1), 0.85)) * (t > 0.62 ? 1 - 0.22 * (t - 0.62) / 0.38 : 1);
+  const forced = new Set(), cand = [];
+  for (let y = y0; y <= ay; y++) {              // trunk
+    const t = (y - y0) / H;
+    if (t > 0.04) { forced.add(y * w + ax); if (t > 0.3) forced.add(y * w + ax + 1); }
+  }
+  for (let y = y0 + 4; y < ay - 2; y += 2 + (r() < 0.4 ? 1 : 0)) {          // short twigs, alternating sides
+    const t = (y - y0) / H, side = (y & 1) ? 1 : -1, len = Math.max(1, Math.round(hw(t) * (0.45 + 0.4 * r())));
+    for (let i = 1; i <= len; i++) forced.add((y + (i > 2 && r() < 0.3 ? 1 : 0)) * w + ax + side * i + (side > 0 ? 1 : 0));
+  }
+  for (let y = y0; y <= ay - 1; y++) {
+    const t = (y - y0) / H, half = hw(t);
+    for (let x = Math.floor(cx - half) - 1; x <= Math.ceil(cx + half) + 1; x++) {
+      const k = y * w + x, edge = Math.abs(x - cx) / Math.max(half, 1);
+      if (forced.has(k) || edge > 1.05) continue;
+      cand.push([0.55 * vnoise(x / 2.4, y / 1.2, s1) + 0.35 * rn() + 0.25 * edge * edge, k]);
+    }
+  }
+  cand.sort((a, b) => a[0] - b[0]);
+  const chosen = new Set(forced); for (let i = 0; chosen.size < target && i < cand.length; i++) chosen.add(cand[i][1]);
+  for (const k of chosen) {
+    const x = k % w, y = (k / w) | 0; if (y < 0 || y >= h) continue;
+    const trunk = x === ax || x === ax + 1;
+    const v = 0.35 * vnoise(x / 2, y / 2, s1 + 9) + 0.65 * rn();
+    put(sp, x, y, trunk && rn() < 0.55 ? weighted(rn, [[62, 4], [95, 3], [47, 3], [46, 2]]) : byQuantile(CONIFER_DEAD, v));
+  }
+  return { body: cropSprite(sp, 0) };
+}
 function burntFrame(P, seed, ctx) {
+  if (P.species === 'conifer') return burntConiferFrame(P, seed);
   const r = rng(seed), rn = rng(mix32(seed, 5));
   const H = Math.round(P.height), W = Math.round(H * P.width);
   const w = W + 14, h = H + 4, ax = Math.round(w / 2 + (r() - 0.5) * 2), ay = h - 3;
@@ -672,7 +708,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     const T = treeFrame(P, seed, ctx);
     body = T.body;
     shadow = makeShadow(body, { side: L.shadowSide, shx: conifer ? 0.62 : 0.5, up: conifer ? 0.7 : 0.66, colors: TREE_SHADOW_COLORS, soften: 2 }, rng(mix32(seed, 41)));
-    const bp = { height: Math.round(P.height * 0.84), width: conifer ? 0.5 : 0.62, forks: conifer ? 3 : 3, ash: 0.5 };
+    const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.84)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
     burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
     burn = burnSequence({ body }, burnt.body ? { body: burnt.body } : burnt, seed);
     const sizeFrac = clamp((P.height - 55) / 17, 0, 1);
