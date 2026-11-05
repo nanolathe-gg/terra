@@ -779,14 +779,14 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   let wv = u.gullySize; let sd = normalize(steer);
   let warp = 0.35 * wv * vnoise(lx / (1.5 * wv), ly / (1.5 * wv), u.seed ^ 0x7f4au);
   let cs = gullyStripes(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, sd, 1.0 / wv, u.seed ^ 0x6a1u);
-  // A low apron along the whole foot and, below each chute, a cone that is longest on its axis and fans out as it runs down.
-  let spread = clamp(-ro.x / max(u.talusReach * steep, 1.0), 0.0, 1.0);
-  let chute = sm(0.55 - 0.3 * spread, 0.95, 1.0 - abs(cs.y));
-  let L = u.talusReach * steep * (0.3 + 0.7 * chute);
+  // A broad apron along the whole foot, deeper and longer below each chute (smooth in the stripe's phase, so neighbors coalesce into one skirt), and a
+  // concave profile: the repose at the apex, level at the toe.
+  let chute = sm(0.1, 1.0, 1.0 - cs.y * cs.y);
+  let L = u.talusReach * steep * (0.85 + 0.15 * chute);
   if (L < 1.0) { return 0.0; }
-  let H = u.talusTan * L;
+  let H = 0.5 * u.talusTan * L;
   var T = H + u.talusTan * min(ro.x, 2.0 * L);
-  if (ro.x < 0.0) { T = H * (1.0 - coneProfile(-ro.x / L)); }
+  if (ro.x < 0.0) { let t = 1.0 - clamp(-ro.x / L, 0.0, 1.0); T = H * t * t; }
   return min(T, 0.8 * relief);
 }
 
