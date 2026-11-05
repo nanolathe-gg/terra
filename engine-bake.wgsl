@@ -1550,10 +1550,12 @@ fn bake(p: vec2f) -> vec4f {
     let paint = paintAt(p);
     let paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
     // Sand bars (sandCrown) keep their sand on steep flanks.
+    // Painted sand's edge is feathered over a band of several px and broken at 4 to 27 px, so the sand thins out into the ground (grass
+    // and soil show through it, the draw's Vegetation through sand) instead of stopping at a line.
     let sandDepth = paint.b * 2.0 - 1.0;
     let sandBlur = paintSandBlur(p, sandDepth);
-    let sandBreak = paintEdge;
-    let paintSand = smoothstep(0.30, 0.70, paint.b * 2.0 - 1.0 + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
+    let sandBreak = paintEdge + valueNoise(p / 6.0 + 83.0) * 0.10 + valueNoise(p / 27.0 + 57.0) * 0.12;
+    let paintSand = smoothstep(0.15, 0.85, sandBlur.x + sandBreak) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
     let paintGround = smoothstep(0.30, 0.70, 1.0 - paint.b * 2.0 + paintEdge);
     let sandWeathered = sand * (1.0 - paintGround);
     if (u.hasBeach == 0) { sand = max(sand, paintSand); }
