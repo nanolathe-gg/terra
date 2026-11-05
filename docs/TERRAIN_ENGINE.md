@@ -791,9 +791,9 @@ byte-identical unless the table says otherwise.
 | P10 partial | One `rockModel` (cells, joint lines, beds); rows Size and Age | ffb6e708 | only green and modern move (green-2 14.7%); relief bake x0.95-0.98 |
 | Page-eviction fix | `encodeGather` re-acquires a page dropped mid-lease | 859b9c86 | regional crashed 5 of 80 runs on main, 0 of 80 on the branch |
 | P22 | Valley V/U/T presets under the Plateau button's Landform form | 7c9366db | 30 scenes 0.00; not set in modern Green (realism 14 -> 10 on a three-valley ridge) |
-| P17 talus cones | Concave skirt below gully chutes; row Talus reach | after 7c9366db | two fixtures regional 0; modern Talus 0; grassy apron by eye |
+| P17 talus cones | Concave skirt below gully chutes; row Talus reach | 0368c82f | two fixtures regional 0; modern Talus 0; grassy apron by eye |
 | P28 | River and Braided river presets (stored migrated path, oxbows) | 122673a9 | 30 scenes 0.00; realism 14 -> 9 of 15 on a window a river crosses |
-| P12 | Multi-scale cavity (rings at 1, 2, 4 px) | 17caecb5 | green-2 face share under 30: .270 -> .245 (retail .245); terrain pass +3 to +7% |
+| P12 | Multi-scale cavity (rings at 1, 2, 4 px) | 4fc072d1 | green-2 face share under 30: .270 -> .245 (retail .245); terrain pass +3 to +7% |
 | P31 | Plant families (turf, clumps, cushions, shrubs), modern Green only | 2c7d04bb | modern moves 39-43% of pixels; bake +8.7% |
 | P9 | Eight Knoll candidates per cube color, Bayer pick; Crystal `paletteMix` 1 | 0f041004, 3704cd9d | Desert Lab histogram .105/.031/.099 -> .076/.029/.074 (retail .033/.011/.056); Crystal chi-square .050/.113/.060 -> .028/.079/.047 |
 | P18 | Sand ripples (asymmetric crests, stone shadows) | e41ef931 | no scene paints sand, 30 scenes 0.00; relief bake +2.9% to ~+25% |
@@ -817,6 +817,7 @@ byte-identical unless the table says otherwise.
 | P14 | Held | prototype/scarp | Retreat row costs nothing, but reads as a sea urchin (by eye) |
 | P15 | Held | prototype/slumps | Lobes read as small mounds, scars barely visible at 1x; shape_controls 2.24 units |
 | P17 fans | Held | prototype/talus-fans | Fans have no height and barely show |
+| P6 | Held for the owner | prototype/specialize | Terrain pass -24 to -29%, bake -17 to -19% on green-2; 1-5 px compiler drift in 7 scenes (byte-identical with the overrides forced generic); about 0.9 s hitch the first time a feature combination compiles; edit latency unchanged (Time-bound) |
 | P26 water | Held by the owner | prototype/water | Stage 2 stopped: retail water is flat tones with a hard step and grain, the model is a smooth gradient |
 | P8, P19 | Not started | | P19 (decision 26) |
 
