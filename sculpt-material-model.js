@@ -54,9 +54,10 @@ export function tablePlacementRows(table, overrides = null) {
 
 // Card P30: the rows of a `groundCover` block (the layout is engine-frag.wgsl's, above MM_COVER). Colours are sRGB 0..255, windows are
 // [from, full, full until, gone by] on moisture, soil depth and light; strength and lush are a class's weight and its exponent on Lushness.
-export function groundCoverRows(cover) {
+export function groundCoverRows(cover, overrides = null, colors = {}) {
   const rows = Array.from({length: COVER_ROWS}, () => [0, 0, 0, 0]);
   if (!cover) return rows;
+  const scale=key=>{const n=Number(overrides?.get(key));return overrides?.has(key)&&Number.isFinite(n)?Math.max(0,n):1;};
   const rgb = c => c.map(v => v / 255);
   rows[0] = [1, cover.wet[0], cover.wet[1], cover.dry];
   rows[1] = [cover.soil.slope[0], cover.soil.slope[1], cover.soil.convex, cover.soil.deposit];
@@ -65,12 +66,12 @@ export function groundCoverRows(cover) {
   cover.classes.forEach((k, i) => {
     const b = 4 + 5 * i;
     rows[b] = [...rgb(k.rgb), k.grain];
-    rows[b + 1] = [k.strength, k.lush, 0, 0];
+    rows[b + 1] = [k.strength * (i ? scale('vegetationCover') : 1), k.lush, 0, 0];
     rows[b + 2] = k.moisture; rows[b + 3] = k.soil; rows[b + 4] = k.light;
   });
   // Card P31: the plants (tufts, cushions, shrubs, flowers) the bake's loose scatter adds on the classes that grow them; no block, none.
   // Row 39's w is the flowers' density (dots per 2 x 2 px block at the best of their ground); rows 40 to 43 their palette (rgb, weight; at most four).
-  if (cover.plants) rows[39] = [cover.plants.tuft, cover.plants.shrub, cover.plants.shrubs, cover.plants.flowers?.density ?? 0];
-  (cover.plants?.flowers?.palette ?? []).slice(0, 4).forEach((k, i) => { rows[40 + i] = [k[0] / 255, k[1] / 255, k[2] / 255, k[3]]; });
+  if (cover.plants) rows[39] = [cover.plants.tuft * scale('plantRelief'), cover.plants.shrub * scale('plantRelief'), cover.plants.shrubs * scale('vegetationCover'), (cover.plants.flowers?.density ?? 0) * scale('flowerDensity')];
+  (cover.plants?.flowers?.palette ?? []).slice(0, 4).forEach((k, i) => { rows[40 + i] = [...(colors['flower'+(i+1)] ?? rgb(k.slice(0,3))), k[3]]; });
   return rows;
 }

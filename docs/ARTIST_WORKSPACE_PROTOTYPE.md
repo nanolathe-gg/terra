@@ -6,15 +6,89 @@ No push, pull request, or merge to main is part of this handoff.
 - Branch: `prototype/artist-workspace`
 - Worktree: `/Users/daniel/src/terraform-wt-artist-workspace`
 - Preview: **http://127.0.0.1:8921/sculpt** in Chrome on this Mac
-- Current captured main: `1325313b`, merged as `80e33325`
+- Current captured main: `1f97728c`, merged as `fc77abf8`
 - Integration fixes: `bb372d6b` (live Surf updates), `ffd241a1` (hover help)
 - Implementation commits: `392d2fc6` (workspace), `d16fd68` (animation),
   `9ef300e` (interaction fixes)
 - Validation helpers: `6e3184a` (inactive-tab coverage), `e82d79f`
-  (equal-viewport benchmark)
-- Review the UI-only change with
-  `git diff 1325313b...prototype/artist-workspace`.
+  (equal-viewport benchmark), `1b8c5301` (variant and color audits)
+- Saved-world variant fix: `b8b0f7a7`
+- Review the prototype change with
+  `git diff 1f97728c...prototype/artist-workspace`.
   Comparisons refer to the captured commits below; main may advance again.
+
+## November 5 World controls and interaction follow-up
+
+The branch also includes main's ground-cover slope-texture correction. World
+settings are flat and open by default, with Colors & base pattern first. The
+length-curve inspection line now follows a captured pointer drag. Compact
+sliders set a value on single click and enter numeric editing on double click;
+a pending click commits before Undo or a different control takes focus.
+
+Ground & vegetation now holds Ground detail (including **Ground bumps**, the
+existing `plainRelief`) and Vegetation & flowers. The latter keeps Lushness
+and Moisture together with three new material-scale controls: Vegetation
+cover, Vegetation relief, and Flower density. Cover also scales shrub density.
+All three default to 1, the current material preset. Unsupported materials
+explain why their controls are disabled. Zero values leave sections open.
+
+Colors & base pattern exposes Flower 1–4 only when the material supplies those
+palette entries. The swatches preserve species weights and use the existing
+world-color save path. World presets now retain their material variant: importing
+a Modern preset while viewing original Green restores Modern and its vegetation.
+Older world files without a variant keep their previous loading behavior.
+There are 196 world knob IDs (193 preserved plus 3), and four conditional swatches.
+
+Measured:
+
+- All 30 default scene PNGs match the pre-control build `fc77abf8` byte for byte;
+  pixel comparison reports zero changes. No new realism claim follows from
+  exposing controls at unchanged defaults.
+- All 64 unit tests pass, including material-table isolation, neutral defaults,
+  color weights, and feature dependencies. The world-name gate passes with no
+  new engine identifiers.
+- The focused Modern audit covers 11 new/relocated world rows, four flower
+  swatches, both light colors and the existing water-color case: no unexplained
+  zeros, hidden live effects, leaked settings or console errors. Separate
+  vegetation-off and unsupported-material sweeps also pass.
+- The workspace pointer regression passes, including click/double-click,
+  immediate Undo, captured curve-marker drag, hover ping-pong and tablet layout.
+  `repro/ground-cover.mjs` verifies live material rows, dependency restoration,
+  zero without collapse, color retention after unrelated edits and reload,
+  import from original Green, and color reset. No console errors.
+- Modern regional replay reports zero mismatches across all 32 fields.
+- All 19 drawing tools add and undo in all nine worlds; all eight exportable
+  worlds export. The 8×8 Green check uses five pages and restores its initial
+  shape count. All 22 shape-control cases pass.
+- A final repeat of all three Modern defaults after folding shrub density
+  into Cover also matches the original PNG hashes.
+- Two alternating 1000×800 performance pairs against `fc77abf8`: drag-frame
+  p95 is 16.7 ms before and 16.7–16.8 ms after; pointer-to-picture p95 is
+  67.6–71.3 ms before and 71.0–80.1 ms after; release-to-final is 488.9–993.3 ms
+  before and 575.1–653.7 ms after. No censored samples or console errors.
+  These noisy pairs do not establish a speedup or equivalence for all workflows.
+
+Nonzero usable-range impact on Modern's three reference windows, measured by
+`measure/impact.py` in 16 px blocks of level ground at 1×:
+
+| Control / comparison | Window 1 | Window 2 | Window 3 | Shift noise floor |
+| --- | ---: | ---: | ---: | ---: |
+| Vegetation cover, 0.25 → 2 | 47.4% | 43.5% | 44.0% | 4.1–5.6% |
+| Vegetation relief, 0.25 → 2 | 56.6% | 53.8% | 59.8% | 4.5–5.5% |
+| Flower density, 0.25 → 4 | 53.7% | 50.0% | 52.9% | 1.3–3.1% |
+| All flower colors, preset → blue | 21.0% | 17.3% | 19.9% | 3.5–4.9% |
+
+Each swatch independently changes 554–2,534 pixels in the first scene. The color
+block percentages above are for all four together, not each swatch individually.
+A trial separate Shrub density slider changed only 1.2–4.4% of grass-slope blocks,
+below its 4.6–8.1% shift floor. It was removed and folded into Vegetation cover.
+By eye, the kept controls alter the grass/soil balance, plant surface relief and
+flower patches at 1×; the additional swatches fit the existing color rows.
+
+Evidence under the assets root: `out/cover-controls-before`,
+`out/cover-controls-after`, `cover-controls-complete`, `cover-controls-gated`,
+`cover-controls-unsupported`, `cover-ui-final`, `cover-workspace`, `cover-impact`, `cover-impact-final`, `cover-shape-controls`, `cover-smoke`, and `cover-perf`. Logs are `/private/tmp/artist-cover-*.log`.
+The review and landing limitations below still apply.
 
 ## November 5 integration with main
 
@@ -90,7 +164,7 @@ manually. Related settings stay together; there is no separate Common section.
 Resetting strokes lives with preset management. Short labels retain their
 explanations in hover help.
 
-Measured: all 193 knob IDs remain, and the nine formerly Common settings are
+Measured in the layout pass, before adding vegetation controls: all 193 knob IDs remained, and the nine formerly Common settings are
 back in their topic sections. All nine visible World sections start open. At
 1024x768 the ground-pattern picker is visible at y=276–307 px. Its selection
 survives the existing reload behavior, and manual collapse survives search.
@@ -284,8 +358,10 @@ Evidence root:
   samples cover canvas dragging, not every inspector interaction.
 - **Touch and stylus:** tablet-width layout was tested in desktop Chrome.
   Physical tablet pointer and pen behavior still need hands-on review.
-- **Help coverage:** extend the representative examples and improve the
-  non-terrain illustrations before calling the help library complete.
+- **Help coverage:** the new vegetation controls have descriptive text help;
+  their rendered animations are not yet in the representative library. Extend
+  those examples and improve the non-terrain illustrations before calling the
+  help library complete.
 - **Integration:** merge the then-current main into this branch and repeat all
   required landing checks after review fixes. The branch is intentionally local.
 
@@ -306,6 +382,8 @@ node --test repro/*.test.mjs
 sh repro/gate.sh
 node repro/workspace.mjs --server http://127.0.0.1:8921 --port 9927 \
   --out /private/tmp/nanolathe-map-editor/agent-artist-workspace/review-ui
+node repro/ground-cover.mjs --server http://127.0.0.1:8921 --port 9927 \
+  --out /private/tmp/nanolathe-map-editor/agent-artist-workspace/cover-repeat
 node repro/surf-column.mjs --server http://127.0.0.1:8921 --port 9926 \
   --out /private/tmp/nanolathe-map-editor/agent-artist-workspace/surf-repeat
 node repro/perf.mjs map4 --scene repro/scenes/green-modern-1.json \

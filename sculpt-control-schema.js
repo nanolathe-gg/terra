@@ -6,7 +6,7 @@ import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater} 
 // crevices. Preserve recipes, but require fresh visual evidence before exposure.
 export const PARKED_WORLD_CONTROLS=new Set(['crevice']);
 export const WORLD_GROUP_NAMES={
- 'Light':'Lighting','Faces':'Material coverage','Desert foot band':'Foot color band','Desert caps':'Cap color',
+ 'Light':'Lighting','Relief':'Ground detail','Faces':'Material coverage','Desert foot band':'Foot color band','Desert caps':'Cap color',
  'Shallow water, round 2':'Water detail','Shallow water, round 3':'Water detail',
  'Fringe lines (Archipelago)':'Contour fringe','Fringe copies (Archipelago)':'Contour fringe',
  'Lava hill rock':'Pillow crust','Lava banks':'Terrace creases','Pockmarks (Moon)':'Surface pits',
@@ -15,7 +15,7 @@ export const WORLD_GROUP_NAMES={
  'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: facets':'Microfacets'
 };
 export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
-const LABELS={rockOrder:'Rock structure',rockStain:'Stain',sunTilt:'Light from the south',ambient:'Ambient light',sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
+const LABELS={plainRelief:'Ground bumps',lumpRelief:'Painted ground bumps',rockOrder:'Rock structure',rockStain:'Stain',sunTilt:'Light from the south',ambient:'Ambient light',sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
  desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',wetSwath:'Moisture',lushness:'Lushness',shoreEdge:'Waterline rim and lip',
  bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
  lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
@@ -94,6 +94,13 @@ const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look)
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),joints=()=>n('rockJoint')*n('rockOpen'),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ if(['vegetationCover','plantRelief','flowerDensity'].includes(key)){
+  if(!n('groundCover'))return 'This world has no ground-cover material.';
+  if(key==='vegetationCover')return '';
+  if(Number(v.vegetationCover??1)<=0)return 'Raise Vegetation cover to use this setting.';
+  if(key==='flowerDensity')return n('flowers')?'':'This ground-cover material has no flowers.';
+  if(!n('plants'))return 'This ground-cover material has no plant relief.';
+ }
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
@@ -169,6 +176,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
+ 'vegetationCover','plantRelief','flowerDensity',
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',

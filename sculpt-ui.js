@@ -115,7 +115,7 @@ export function mountWorldControlIndex(root,values=()=>({})){
  for(const name of ['Ground & vegetation','Rock & cliffs','Water & shores','Materials & texture','Lighting']){
   const section=document.createElement('details'),summary=document.createElement('summary');section.className='knobs-group world-section';section.dataset.group=name;section.open=true;summary.textContent=name;section.append(summary);root.append(section);sections.set(name,section);
  }
- const category=name=>/Light|Shine/.test(name)?'Lighting':/Ground|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Gullies|Structure orientation|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
+ const category=name=>/Light|Shine/.test(name)?'Lighting':/Ground|Vegetation|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Gullies|Structure orientation|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
  for(const group of originals){
   const name=group.dataset.group||group.querySelector('summary').textContent,block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);
   for(const row of group.querySelectorAll('[data-knob]'))row.dataset.searchGroup=`${name} ${category(name)}`;

@@ -34,6 +34,20 @@ test('the parked control is only crevice',()=>{
  assert.equal(controlLabel('iceSoft','Ice lighting'),'Rounded lighting');
 });
 
+test('vegetation dependencies follow material capabilities and keep flowers independent of relief',async()=>{
+ const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
+ const supported={groundCover:1,plants:1,flowers:1};
+ for(const key of ['vegetationCover','plantRelief','flowerDensity']){
+  assert.match(requirement(key,{}),/no ground-cover material/);
+  assert.equal(requirement(key,supported),'');
+ }
+ for(const key of ['plantRelief','flowerDensity'])assert.match(requirement(key,{...supported,vegetationCover:0}),/Vegetation cover/);
+ assert.equal(requirement('vegetationCover',{...supported,vegetationCover:0}),'');
+ assert.match(requirement('plantRelief',{groundCover:1}),/no plant relief/);
+ assert.equal(requirement('flowerDensity',{...supported,plantRelief:0}),'');
+ assert.match(requirement('flowerDensity',{...supported,flowers:0}),/no flowers/);
+});
+
 test('world dependencies explain bypasses without biome gates',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
  assert.match(requirement('bedVary',{column:1,rockOrder:1}),/authored bed profile/);

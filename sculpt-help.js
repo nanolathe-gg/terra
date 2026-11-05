@@ -1,6 +1,10 @@
 import {HELP_TOOLS,HELP_CONTROLS,HELP_VERSION,HELP_FRAME,helpFrames,helpTimeline} from './sculpt-help-examples.js';
 const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
 const controlHelp={
+  'knob-plainRelief':'Fine bumps across level ground. These change the rendered surface, not the map heights used by units.',
+  'knob-vegetationCover':'Scales vegetation against bare soil, including the density of shrubs. Lushness and Moisture still determine which kinds of vegetation grow.',
+  'knob-plantRelief':'Scales the height of grass tufts, moss cushions and shrubs in the art. One uses the material preset; zero removes their relief without removing flowers.',
+  'knob-flowerDensity':'Scales flower coverage where the ground supports it. One uses the material preset; zero removes flowers. Set flower colors in Colors & base pattern.',
   'knob-rockOrder':'Blends scattered rock marks into ordered beds, joints and cracks. Set it above zero to use the rock structure settings.',
   'knob-rockStain':'Darkens gully floors and stains below rock ledges. Ledge stains need a supporting rock material.',
   'knob-sunTilt':'Moves the light north or south of due west. Zero is west; positive values move it south.',
