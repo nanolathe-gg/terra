@@ -812,7 +812,9 @@ const STONE_CLASSES = [
   { w: 0.22, ramp: [[115, 8], [131, 3], [147, 3], [217, 3], [148, 3], [87, 3]] }, // light and mid
   { w: 0.49, ramp: [[116, 17], [117, 5], [89, 9], [88, 8], [219, 4], [87, 2]] },  // steel blue and gray
 ];
-const MOSS_WEIGHTS = [[170, 20], [168, 8.3], [61, 7.8], [169, 7.5], [238, 7.2], [60, 5.3], [73, 4.7], [172, 4], [62, 3.2], [90, 3], [167, 2.6]];
+const MOSS_WEIGHTS = [[170, 18], [168, 7], [61, 8.5], [169, 6.5], [238, 6.5], [60, 6], [73, 4.7], [172, 4], [62, 4.5], [175, 4], [173, 3], [90, 3], [167, 2.2]];
+// Retail stone is fine grain, not flat facets: dark to light ramp, each pixel drawn from a tone with a +-1.6 index jitter (34-37 colors per chunk)
+const STONE_RAMP = [219, 117, 89, 116, 88, 87, 148, 115, 147, 131, 217, 114, 130, 145, 224, 216, 255];
 // Stone pixels track metal as retail's four deposits do (spec 16.1): 86 -> 198, 127 -> 564, 187 -> 806, 223 -> 886, linear between.
 const STONE_BY_METAL = [[86, 198], [127, 564], [187, 806], [223, 886]];
 export function stonePixelsFor(metal) {
@@ -851,7 +853,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const union = lists => { const seen = new Set(), out = []; for (const l of lists) for (const p of l) { const k = p[1] * 4096 + p[0]; if (!seen.has(k)) { seen.add(k); out.push(p); } } return out; };
   const chunks = [], layout = [[0, 0]];
   const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
-  for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = rDom * (look === 'cluster' ? 1.05 : 0.8) + 10 + r() * 7; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
+  for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = rDom * (look === 'cluster' ? 0.95 : 0.7) + 7 + r() * 6; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
   for (let ci = 0; ci < 4; ci++) {
     const px = cx + layout[ci][0], py = cy + layout[ci][1];
     let pts;
@@ -869,6 +871,10 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       }
       pts = union([pts, arms]);
     } else pts = sized(px, py, areas[ci], 4 + Math.floor(r() * 2), 1 + r() * (ci === 0 ? 0.5 : 0.9), r() * TAU);
+    { const set = new Set(pts.map(p => p[1] * 4096 + p[0])), out = [];
+      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if ((nb === 4 && !(look === 'cluster' && r() < 0.1)) || (nb < 4 && r() > 0.3)) out.push(p); }
+      for (const p of pts) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (p[1] + dy) * 4096 + p[0] + dx; if (!set.has(k) && r() < 0.07) { set.add(k); out.push([p[0] + dx, p[1] + dy]); } }
+      pts = out; }
     chunks.push(pts);
     const nf = ci === 0 ? 2 + Math.floor(r() * 3) : 2, seeds = [];
     const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length, my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
@@ -876,9 +882,9 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     for (const [x, y] of pts) {
       const bx = x - ox, by = y - oy; if (bx < 0 || by < 0 || bx >= bw || by >= bh) continue;
       let b = 0, bd = 1e9; seeds.forEach((sd, i) => { const d = Math.hypot(sd.x - x, sd.y - y) + (vnoise(x / 2.5, y / 2.5, seed + ci * 7 + i) - 0.5) * 3; if (d < bd) { bd = d; b = i; } });
-      const cls = rn() < 0.12 ? weighted(rn, [[0, 0.29], [1, 0.22], [2, 0.49]]) : seeds[b].cls;
       chunkId[by * bw + bx] = ci;
-      setGround(ground, x, y, palette[cls === seeds[b].cls && rn() < 0.82 ? seeds[b].fav[rn() < 0.6 ? 0 : 1] : weighted(rn, STONE_CLASSES[cls].ramp)]);
+      const base = [0.73, 0.46, 0.16][seeds[b].cls] + (vnoise(x / 2.2, y / 2.2, seed + 40 + ci) - 0.5) * 0.45, tone = clamp(base + (rn() - 0.5) * 0.3, 0, 1);
+      setGround(ground, x, y, palette[STONE_RAMP[clamp(Math.round(tone * (STONE_RAMP.length - 1) + (rn() + rn() - 1) * 1.6), 0, STONE_RAMP.length - 1)]]);
     }
   }
   // moss: one merged patch. The patch covers about stone / 0.15 pixels (retail: stone is 9-18% of the painted pixels), found by growing
@@ -890,15 +896,14 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     for (const p of stonePts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 40) { const e = Math.hypot(p[0] - X, p[1] - Y); if (e < d) d = e; } }
     dmap[y * bw + x] = d + (fbm(X / 5, Y / 5, s1, 2) - 0.5) * 5;
   }
-  const targetPainted = Math.min(stonePts.length / 0.15, 4400), dsorted = Array.from(dmap).filter(v => v < 60).sort((a, b) => a - b);
-  const T = dsorted[Math.min(dsorted.length - 1, Math.round(targetPainted))] ?? 8;
+  const T = 4.6;   // a tight 3-6 px speckled rim that merges between neighbors (retail: median 2.8-3.6 px from a chunk, 90% within 6-8)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     const k = y * bw + x; if (chunkId[k] >= 0) continue;
     const d = dmap[k]; if (d > T + 1) continue;
-    const pr = d <= T - 3.5 ? 0.97 : clamp((T - d) / 3.5, 0, 1) * 0.95 + 0.03;
+    const pr = d <= 1.6 ? 0.97 : clamp((T + 1.4 - d) / 3.6, 0, 1) * 0.93;
     if (rn() > pr) continue;
-    const X = x + ox, Y = y + oy, base = getGround(ground, X, Y), m = palette[weighted(rn, MOSS_WEIGHTS)], tint = 0.18 + 0.12 * rn();
-    setGround(ground, X, Y, palette[q(lerp(m[0], base[0] * 0.62, tint), lerp(m[1], base[1] * 0.62, tint), lerp(m[2], base[2] * 0.62, tint))]);
+    const X = x + ox, Y = y + oy, base = getGround(ground, X, Y), m = palette[weighted(rn, MOSS_WEIGHTS)], tint = 0.12 + 0.12 * rn();
+    setGround(ground, X, Y, palette[q(lerp(m[0], base[0] * 0.5, tint), lerp(m[1], base[1] * 0.5, tint), lerp(m[2], base[2] * 0.5, tint))]);
   }
   return { cx, cy, metal: P.metal, look, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
 }
