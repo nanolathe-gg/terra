@@ -313,7 +313,7 @@ function byQuantile(table, v) { // table of [value, weight], ordered; v in 0..1 
 }
 const BURNT_TABLE = [[245, 1.5], [63, 1.5], [79, 1], [47, 12.5], [46, 6.7], [45, 6.8], [95, 14.7], [94, 9.1], [62, 6], [61, 4], [172, 3], [173, 2.5], [175, 1], [60, 2], [93, 9.3], [92, 3.5], [59, 2], [91, 3], [90, 2.2], [89, 1.2], [88, 0.6], [87, 0.4], [57, 0.6], [55, 0.4], [44, 1], [43, 0.5]];
 // ---- burnt trees (skeletons) ------------------------------------------------------------------------------------
-const BURNT_DEFAULTS = { species: 'broadleaf', height: 58, width: 0.55, forks: 3, ash: 0.5, energy: [50, 50] };
+const BURNT_DEFAULTS = { species: 'broadleaf', height: 53, width: 0.62, forks: 3, ash: 0.5, energy: [50, 50] };
 const CONIFER_DEAD = [[245, 1], [63, 1], [47, 14], [46, 14], [45, 11], [172, 2], [173, 2], [175, 1.5], [44, 3], [62, 7], [61, 1], [93, 12], [94, 5], [92, 2.5], [43, 1], [91, 1.5], [89, 1.5]];
 // A sparse, narrow, tapering needle skeleton (spec 15 B3): dark trunk, short twigs, needle tufts, gaps; near-black greens and grays.
 function burntConiferFrame(P, seed) {
@@ -349,73 +349,60 @@ function burntConiferFrame(P, seed) {
   }
   return { body: cropSprite(sp, 0) };
 }
+const BROAD_DEAD = [[245, 3], [127, 2], [95, 24], [47, 13], [62, 8], [94, 14], [61, 4], [45, 2.5], [43, 2], [93, 6], [60, 2.5], [92, 2.5], [90, 1], [89, 1], [71, 1], [72, 1], [67, 0.6]];
+// Spec 16.3: a heavy gnarled dead trunk (flared base, 8-13 px, widest 10-17 px where 2-4 limbs fork at 20-60 degrees), short
+// segments, 1 px twigs, 10-12 tips mostly in the top third; grays and near-black, warm browns at the base, lit on the left.
 function burntFrame(P, seed, ctx) {
   if (P.species === 'conifer') return burntConiferFrame(P, seed);
   const r = rng(seed), rn = rng(mix32(seed, 5));
-  const H = Math.round(P.height), W = Math.round(H * P.width);
-  const w = W + 14, h = H + 4, ax = Math.round(w / 2 + (r() - 0.5) * 2), ay = h - 3;
-  const sp = newSprite(w, h, ax, ay);
-  const cells = new Map();   // key -> [x,y,thickness class, depth]
-  const segs = [];
-  function line(x0, y0, x1, y1, t0, t1, depth) {
-    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
-    for (let i = 0; i <= n; i++) {
-      const f = i / n, x = lerp(x0, x1, f), y = lerp(y0, y1, f), t = lerp(t0, t1, f);
-      const rad = Math.max(0.5, t / 2);
-      for (let dy = -Math.ceil(rad); dy <= Math.ceil(rad); dy++) for (let dx = -Math.ceil(rad); dx <= Math.ceil(rad); dx++) {
-        if (dx * dx + dy * dy <= rad * rad + 0.3) { const px = Math.round(x + dx), py = Math.round(y + dy), key = py * w + px; if (!cells.has(key) || cells.get(key)[3] > depth) cells.set(key, [px, py, t, depth]); }
-      }
-    }
+  const H = Math.round(P.height), W = Math.round(H * P.width), w = W + 12, h = H + 4, ax = Math.round(w / 2), ay = h - 3, y0 = ay - H + 1;
+  const sp = newSprite(w, h, ax, ay), mask = new Uint8Array(w * h), s1 = (r() * 1e6) | 0;
+  const wob = y => (fbm(y / 9, 3, s1, 2) - 0.5) * 4.2;
+  const stamp = (x, y, wd) => { const rad = Math.max(0.5, wd / 2); for (let dy = -Math.ceil(rad); dy <= Math.ceil(rad); dy++) for (let dx = -Math.ceil(rad); dx <= Math.ceil(rad); dx++) if (dx * dx + dy * dy <= rad * rad + 0.25) { const px = Math.round(x + dx), py = Math.round(y + dy); if (px >= 0 && py >= 0 && px < w && py < h) mask[py * w + px] = 1; } };
+  // trunk from the base to the fork: flare 10-14 at the base, 8-13 above, widest at the fork
+  const yFork = ay - Math.round(H * 0.44);
+  for (let y = ay; y >= yFork; y--) {
+    const t = (ay - y) / (ay - yFork), flare = y >= ay - 3 ? (y === ay ? 3 : 12 - (ay - y) * 0.7) : 0;
+    const wd = Math.max(flare, lerp(8.5, 12, t) * (0.9 + 0.2 * vnoise(y / 4, 1, s1 + 4)) + (y > ay - 6 ? 1.5 : 0));
+    const xc = ax + wob(y) * (1 - 0.4 * (1 - t));
+    for (let x = Math.floor(xc - wd / 2 - 1); x <= Math.ceil(xc + wd / 2 + 1); x++) { const edge = Math.abs(x - xc) - wd / 2 + (vnoise(x / 1.8, y / 1.8, s1 + 9) - 0.5) * 2.2; if (edge <= 0) mask[y * w + x] = 1; }
   }
-  const maxDepth = 5;
-  function branch(x, y, ang, len, th, depth) {
-    // ang: radians from straight up; sway as it goes
-    let px = x, py = y, a = ang;
-    const steps = Math.max(2, Math.round(len / 5));
-    for (let i = 0; i < steps; i++) {
-      a += (r() - 0.5) * 0.35;
-      const nx = px + Math.sin(a) * len / steps, ny = py - Math.cos(a) * len / steps;
-      line(px, py, nx, ny, th * (1 - i / (steps * 1.6)), th * (1 - (i + 1) / (steps * 1.6)), depth);
-      px = nx; py = ny;
-      if (depth < maxDepth && i > 0 && i < steps - 1 && r() < 0.28 * (P.forks / 3)) {   // side twig
-        const side = r() < 0.5 ? -1 : 1;
-        branch(px, py, a + side * (0.5 + r() * 0.5), len * (0.35 + r() * 0.3), Math.max(1, th * 0.5), depth + 1);
-      }
+  const xFork = ax + wob(yFork);
+  const nL = clamp(Math.round(P.forks), 2, 4), tips = [];
+  const limb = (x, y, ang, len, wd, depth) => {
+    const segs = Math.max(1, Math.min(Math.round(len / 6), depth === 0 ? 2 : 1));
+    for (let i = 0; i < segs; i++) {
+      const sl = 4.5 + r() * 3.5, nx = x + Math.sin(ang) * sl, ny = y - Math.cos(ang) * sl;
+      const n = Math.ceil(sl * 2);
+      for (let k = 0; k <= n; k++) { const f = k / n; stamp(lerp(x, nx, f), lerp(y, ny, f), lerp(wd, Math.max(1, wd * 0.82), f)); }
+      x = nx; y = ny; ang *= 0.6; wd = Math.max(1, wd * 0.82);
+      if (r() < 0.3 && depth < 3) stamp(x + (r() < 0.5 ? -1 : 1) * 2, y - 1, 1);      // 1 px twig
     }
-    if (depth >= maxDepth || len < 5) return;
-    const nf = depth === 0 ? Math.max(2, Math.round(P.forks)) : (r() < 0.7 ? 2 : 3);
-    for (let k = 0; k < nf; k++) {
-      const spread = 0.35 + r() * 0.45;
-      const aa = a + (k - (nf - 1) / 2) * spread * (0.8 + r() * 0.4) + (r() - 0.5) * 0.2;
-      branch(px, py, aa, len * (0.62 + r() * 0.2), Math.max(1.4, th * (depth < 1 ? 0.7 : 0.78)), depth + 1);
-    }
+    if (y < y0 + 3 || depth >= 3 || len < 6) { tips.push([x, y]); return; }
+    const nf = 2;
+    for (let k = 0; k < nf; k++) limb(x, y, ang + (k ? 1 : -1) * (0.25 + r() * 0.35) + (r() - 0.5) * 0.2, len * (0.72 + r() * 0.15) - segs * 3, Math.max(1, wd * 0.8), depth + 1);
+  };
+  for (let i = 0; i < nL; i++) {
+    const f = nL === 1 ? 0 : (i / (nL - 1) - 0.5) * 2, ang = f * (0.85 + 0.35 * r()) + (r() - 0.5) * 0.2;     // 20-60 degrees from vertical
+    limb(xFork + f * 3, yFork + 1, ang, (yFork - y0) * (0.9 + 0.15 * r()), 7 - nL * 0.8 + r(), 0);
   }
-  const trunkLen = H * 0.27;
-  branch(ax, ay, (r() - 0.5) * 0.15, trunkLen, 5.6 + r() * 1.5, 0);
-  // base flare
-  for (let dx = -3; dx <= 3; dx++) for (let dy = 0; dy < 3; dy++) if (Math.abs(dx) <= 3 - dy * 0.5 + (r() < 0.3 ? 1 : 0)) cells.set((ay - dy + 1) * w + ax + dx, [ax + dx, ay - dy + 1, 5, 0]);
-  let half = 1; for (const [, c] of cells) half = Math.max(half, Math.abs(c[0] - ax));
-  const sq = Math.min(1, (W / 2) / half), cells2 = new Map();
-  for (const [, c] of cells) { const x = Math.round(ax + (c[0] - ax) * sq); cells2.set(c[1] * w + x, [x, c[1], c[2], c[3]]); }
-  cells.clear(); for (const [k, c] of cells2) cells.set(k, c);
-  const mask = new Uint8Array(w * h);
-  for (const [, c] of cells) if (inb(sp, c[0], c[1])) mask[c[1] * w + c[0]] = 1;
-  const strays = Math.round(8 + 10 * r());
-  for (let i = 0; i < strays; i++) {            // broken twig bits and leftover flecks
-    const keys = [...cells.keys()], kk = keys[(r() * keys.length) | 0], c = cells.get(kk);
-    if (c[3] >= 2) { const x = c[0] + Math.round((r() - 0.5) * 6), y = c[1] + Math.round((r() - 0.5) * 6); if (inb(sp, x, y)) mask[y * w + x] = 1; }
+  for (let k = 0; k < Math.round(4 + 6 * P.ash); k++) {          // broken twig bits near the tips
+    const t = tips[(r() * tips.length) | 0]; if (t) { const x = Math.round(t[0] + (r() - 0.5) * 6), y = Math.round(t[1] + (r() - 0.5) * 5); if (x >= 0 && y >= 0 && x < w && y < h) mask[y * w + x] = 1; }
   }
+  { // squeeze the limbs in so the tree is the asked width (retail 27-40)
+    let half = 1; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x]) half = Math.max(half, Math.abs(x - ax));
+    const k2 = Math.min(1, (W / 2) / half);
+    if (k2 < 1) { const m2 = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x]) { const kk = lerp(1, k2, clamp(((ay - y) / H) * 1.6 - 0.3, 0, 1)); m2[y * w + Math.round(ax + (x - ax) * kk)] = 1; } mask.set(m2); }
+  }
+  const dist = edgeDist(w, h, mask);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const k = y * w + x; if (!mask[k]) continue;
-    const c = cells.get(k), depth = c ? c[3] : 4, thick = c ? c[2] : 1;
-    const baseT = clamp((y - (ay - 12)) / 12, 0, 1);       // pale stump base
-    const v = 0.3 * vnoise(x / 2.4, y / 2.4, 77) + 0.7 * rn();
-    let col;
-    const ashP = P.ash * 0.06 + baseT * 0.08;
-    if (rn() < ashP) col = pick(rn, [89, 91, 90, 88]);
-    else col = byQuantile(BURNT_TABLE, v);
-    if (thick >= 3 && rn() < 0.35) col = pick(rn, [61, 62, 95]);
-    put(sp, x, y, col);
+    const xc = ax + wob(y), lit = clamp(-(x - xc) / 8, -1, 1), base = y >= ay - 6;
+    let v = 0.4 * vnoise(x / 2.2, y / 2.2, s1 + 21) + 0.6 * rn() + 0.17 * lit + (dist[k] <= 1 ? -0.05 : 0.04);
+    let c = byQuantile(BROAD_DEAD, v);
+    if (base && rn() < 0.38) c = weighted(rn, [[62, 4], [61, 3], [60, 2], [71, 1.5], [72, 1.5]]);
+    if (rn() < P.ash * 0.02) c = pick(rn, [89, 90, 67, 68]);
+    put(sp, x, y, c);
   }
   return { body: cropSprite(sp, 0) };
 }
@@ -775,7 +762,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     const T = treeFrame(P, seed, ctx);
     body = T.body;
     shadow = makeShadow(body, { side: L.shadowSide, shx: conifer ? 0.62 : 0.5, up: conifer ? 0.7 : 0.66, colors: TREE_SHADOW_COLORS, soften: 2 }, rng(mix32(seed, 41)));
-    const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.84)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
+    const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.78)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
     burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
     burn = burnSequence({ body }, { body: burnt.body }, seed, 96, conifer);
     const sizeFrac = clamp((P.height - 55) / 17, 0, 1);
