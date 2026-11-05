@@ -372,7 +372,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const dimensions=this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;
-      const result=super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)});
+      const result=await this.withPipelines(()=>super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)}));
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
       const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';
