@@ -1,7 +1,7 @@
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,mountColumnPanel} from './sculpt-ui.js';
-import {copyColumn, columnHasCapBed} from './sculpt-column.js';
+import {copyColumn, columnHasCapBed, coastColumn} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
@@ -180,7 +180,7 @@ const SHAPE_FIELDS=[
   ['talus','lf-talus','Talus reach (px)',['landform'],0,200,5,1,'How far loose material runs out from the foot of a raised face: a concave apron that rests at the world\'s talus angle against the face and comes down level at its toe this far out, fanning from the widest gullies into one skirt. A longer reach makes a longer, gentler apron, not a taller one. 0: no talus. It needs Gullies, for the chutes, and shows only on faces steeper than the talus angle.'],
   ['gullySize','lf-gully-size','Gully size',['landform'],10,100,5,100,'How far apart the widest gullies run, as a share of the face from crest to foot; each finer set is half as far apart. Low: close rills; high: a few broad valleys between big spurs.'],
   // P27: the shore's wet sand, foam and beach by the coast distance (engine-frag.wgsl surfShore); written into mask plane 18 where the stroke makes water.
-  ['surf','water-surf','Surf',['landform'],0,100,5,100,'How much the shore is worked by waves, where this stroke makes water. 0: the shore is drawn as before. Low (lakes): a dark wet line and a 1 px foam lace at the waterline. Higher: wet sand, wrack lines, a sand beach with cusps, and a broken breaker line over the shallows.'],
+  ['surf','water-surf','Surf',['landform'],0,100,5,100,'How much the shore is worked by waves, where this stroke makes water. 0: the shore is drawn as before. Low (lakes): a dark wet line and a 1 px foam lace at the waterline. From 20: wet sand, wrack lines, a sand beach with cusps (the land is shaped to a gentle face, a berm and a slight back-slope, a few units tall), and a broken breaker line over the shallows. Where the world\'s rock is hard at the sea the beach gives way to a rocky shore.'],
   ['varySize','lf-vary-size','Variation size (px)',['landform'],20,400,10,1,'The wavelength of the wander and of the width and height variation.'],
   ['varyFoot','lf-vary-foot','Variation at the foot',['landform'],0,200,5,100,'How much of the variation acts at the foot of the section (100: all of it, 0: none, 200: twice). It blends into the next one up to the middle of the section.'],
   ['varyMiddle','lf-vary-middle','Variation up the section',['landform'],0,200,5,100,'How much of the variation acts from the middle of the section to its crest. Set the foot to 0 and this to 200 for variation that grows toward the crest.'],
@@ -850,8 +850,11 @@ function regionalDirtyRect(from,rect) {
   return dirty;
 }
 // Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
+const shapeKnob=(key) => renderer?.variantNumber?.(key,worldSetting(key))??worldSetting(key);
 const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,repose:Math.tan((renderer?.variantNumber?.('talusAngle',40)??40)*Math.PI/180),sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
-    frost:{gapSize:worldSetting('frostGapSize'),gapDepth:worldSetting('frostGapDepth'),gaps:worldSetting('frostGaps'),gapReach:worldSetting('frostGapReach')}});
+    frost:{gapSize:worldSetting('frostGapSize'),gapDepth:worldSetting('frostGapDepth'),gaps:worldSetting('frostGaps'),gapReach:worldSetting('frostGapReach')},
+    // P27: the rock column's hardness at a coast (the Time pass reads the same table and offsets).
+    column:coastColumn(config.column,config.variant,{contrast:shapeKnob('columnContrast'),dip:shapeKnob('bedDip'),dipDir:shapeKnob('bedDipDir'),base:config.baseHeight,sea:config.seaLevel})});
 // H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
 const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
 const pagedWanted=() => worldGrid>1168 || gpuPagesForced();

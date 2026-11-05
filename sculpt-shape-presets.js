@@ -164,7 +164,10 @@ export const landformElevation = (q, sea) => q.elevation + (Math.round(q.heightR
 // Whether a resolved landform (landformSteps) runs the shared coast pass: fingers, shoreline steps or shore plates.
 // A landform makes water when it cuts or flattens, or raises to a height at or under the sea (sea-relative): Surf has a shore to work only then.
 export const landformMakesWater = q => Math.round(q.combine || 0) >= 1 || (Math.round(q.heightReference || 0) === 1 && q.elevation <= 0);
-export const landformShore = q => q.fingers > 0 || Math.round(q.shoreLayers) >= 1 || q.shorePlates > 0;
+// P27: Surf builds a beach (in the heights too) from this strength up; below it a water stroke has only the wet line and the lace (a lake).
+export const SURF_BEACH_FROM = .2;
+export const landformBeach = q => (q.surf || 0) >= SURF_BEACH_FROM && landformMakesWater(q);
+export const landformShore = q => q.fingers > 0 || Math.round(q.shoreLayers) >= 1 || q.shorePlates > 0 || landformBeach(q);
 export function landformSteps(q) {
   const reference=Math.round(clamp(q.stepReference||0,0,2)),shore=reference>0;
   const count=Math.round(clamp(q.terraces||0,0,shore?12:8));

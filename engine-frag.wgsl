@@ -1332,12 +1332,12 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
 // distance in world px to the drawn waterline (onshore +; the drawn edge sits where the bed is 0.6 under the sea, so the bank's own run is added),
 // the nearest shore point q, a coordinate along the coast that value noise can use, and the bed's slope there (units per px). Beyond SURF_REACH, or where the height is more than a beach
 // above or a surf zone below the sea, x is 1e3. Every term is a function of position, so a chunk replays to the same bytes.
-const SURF_REACH = 56.0;
+const SURF_REACH = 86.0;
 fn surfShore(p: vec2f) -> vec4f {
     let h0 = baseHeight(p) - u.sea;
     let dry = h0 >= 0.0;
     if ((dry && h0 > 12.0) || (!dry && h0 < -16.0)) { return vec4f(1.0e3, 0.0, 0.0, 0.0); }
-    var radii = array<f32, 10>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0);
+    var radii = array<f32, 12>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0, 70.0, 86.0);
     var best = SURF_REACH;
     var q = p;
     for (var k = 0; k < 8; k++) {
@@ -1345,7 +1345,7 @@ fn surfShore(p: vec2f) -> vec4f {
         let dir = vec2f(cos(a), sin(a));
         var lastR = 0.0;
         var lastH = h0;
-        for (var i = 0; i < 10; i++) {
+        for (var i = 0; i < 12; i++) {
             let r = radii[i];
             if (lastR >= best) { break; }
             let hr = baseHeight(p + dir * r) - u.sea;
@@ -1362,10 +1362,10 @@ fn surfShore(p: vec2f) -> vec4f {
     let slope = max(bankGrad(p), 0.12);
     return vec4f(select(-best, best, dry) + 0.6 / slope, q, slope);
 }
-// The beach the surf builds: berm height 1.5 + 3 Surf units on a face that flattens from 0.30 to 0.12, so the berm stands 5 to 38 px from the water.
+// The beach the surf builds: the berm crest 14 + 34 Surf units px from the water (the heights' own, coastBeach in engine-shape.wgsl: 1 + 1.5 Surf units tall).
 // Below Surf .2 there is only the wet line and the lace (a lake): the sand, its cusps and the breakers fade in between .2 and .45.
 fn surfBeach(e: f32) -> f32 { return smoothstep(0.2, 0.45, e); }
-fn surfBerm(e: f32) -> f32 { return (1.5 + 3.0 * e) / mix(0.30, 0.12, e); }
+fn surfBerm(e: f32) -> f32 { return 14.0 + 34.0 * e; }
 // The cross-shore coordinate with the beach cusps: horns that push the swash seaward every ~26 px along the coast.
 fn surfCuspX(x: f32, q: vec2f, e: f32) -> f32 {
     return x + 3.5 * e * surfBeach(e) * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm(e) * 0.7, surfBerm(e) * 1.1, x));
@@ -1635,6 +1635,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfX = shore.x;
         surfQ = shore.yz;
         surfSlope = shore.w;
+        // Painted rock (a rock coast's, from coastBeach, or the artist's) takes the beach away, by its ragged edge: Surf falls to a lake's wet line and lace.
+        if (u.paintOn != 0) { surfE = mix(surfE, 0.1, smoothstep(0.3, 0.7, painted.x) * surfBeach(surfE)); }
         if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, surfE)); }
     }
     var material = mix(grass, rock, exposed);
