@@ -1,4 +1,4 @@
-import {HELP_TOOLS,HELP_CONTROLS,HELP_VERSION,HELP_FRAME,helpFrames,helpTimeline} from './sculpt-help-examples.js';
+import {HELP_TOOLS,HELP_CONTROLS,HELP_FRAME,helpFrames,helpTimeline,helpImage} from './sculpt-help-examples.js';
 const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
 const controlHelp={
   'knob-plainRelief':'Fine bumps across level ground. These change the rendered surface, not the map heights used by units.',
@@ -54,10 +54,10 @@ export function mountHelp(){
       previews.then(index=>{
         if(!valid())return;
         const frames=example?helpFrames(example):null;
-        const available=index?.version===HELP_VERSION&&(tool?HELP_TOOLS.includes(tool)&&index.tools?.includes(tool):frames?.every((f,i)=>index.controls?.[key]?.[i]?.value===f.value)&&index.controls[key].length===frames.length);
+        const available=Boolean(index)&&(tool?HELP_TOOLS.includes(tool)&&index.tools?.includes(tool):frames?.every((f,i)=>index.controls?.[key]?.[i]?.value===f.value)&&index.controls[key].length===frames.length);
         const fallback=()=>{if(!valid())return;if(tool){art.innerHTML=illustration(tool);caption.textContent='Illustration';}else{art.remove();caption.remove();}position(target);};
         if(!available){fallback();return;}
-        const url='/ui-previews/'+(tool?'tool-'+tool:key+'-motion-v'+HELP_VERSION)+'.png',image=new Image();
+        const url='/ui-previews/'+helpImage(tool?{tool}:{control:key}),image=new Image();
         image.alt=tool?name+' terrain example':'';
         image.onload=()=>{
           if(!valid())return;

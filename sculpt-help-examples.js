@@ -1,5 +1,6 @@
-// Authored fixtures for offline hover previews. Only source data is committed;
-// repro/ui-previews.mjs renders the images into the server's own assets root.
+// Authored fixtures for the hover previews. repro/ui-previews.mjs renders them through the editor's
+// own pipeline into ui-previews/ (committed, served with the editor); run it again when an example,
+// a tool preset or the renderer changes.
 export const HELP_TOOLS=['plateau','hill','mountain','ramp','deep','shallow','valleyV','valleyU','valleyT','river','braided','crater','fissure','crystal'];
 export const HELP_CONTROLS={
   diameter:{key:'diameter',values:[160,440],step:8,unit:' px'},
@@ -19,9 +20,9 @@ export const HELP_CONTROLS={
 };
 export const HELP_CARD={diameter:300,elevation:200,combine:0,wander:0,widthVary:0,heightVary:0,gullies:0,terraces:0,cracks:0,curve:{form:'lfHill'}};
 export const HELP_PATH=[[430,520],[620,420],[800,510]];
-// Bump when renderer or preset changes require fresh authored examples.
-export const HELP_VERSION=3;
 export const HELP_FRAME={width:260,height:190,ms:160};
+// The image a tool's or a control's example is stored in, under ui-previews/.
+export const helpImage=({tool,control})=>tool?`tool-${tool}.png`:`${control}.png`;
 export function helpFrames(example){
   const [lo,hi]=example.values,step=example.step;
   const values=[...new Set(Array.from({length:11},(_,i)=>Math.max(lo,Math.min(hi,Math.round((lo+(hi-lo)*i/10)/step)*step))))];

@@ -1,0 +1,641 @@
+{
+ "frame": {
+  "width": 260,
+  "height": 190,
+  "ms": 160
+ },
+ "tools": [
+  "plateau",
+  "hill",
+  "mountain",
+  "ramp",
+  "deep",
+  "shallow",
+  "valleyV",
+  "valleyU",
+  "valleyT",
+  "river",
+  "braided",
+  "crater",
+  "fissure",
+  "crystal"
+ ],
+ "controls": {
+  "diameter": [
+   {
+    "value": 160,
+    "label": "160 px"
+   },
+   {
+    "value": 192,
+    "label": "192 px"
+   },
+   {
+    "value": 216,
+    "label": "216 px"
+   },
+   {
+    "value": 248,
+    "label": "248 px"
+   },
+   {
+    "value": 272,
+    "label": "272 px"
+   },
+   {
+    "value": 304,
+    "label": "304 px"
+   },
+   {
+    "value": 328,
+    "label": "328 px"
+   },
+   {
+    "value": 360,
+    "label": "360 px"
+   },
+   {
+    "value": 384,
+    "label": "384 px"
+   },
+   {
+    "value": 416,
+    "label": "416 px"
+   },
+   {
+    "value": 440,
+    "label": "440 px"
+   }
+  ],
+  "lf-elevation": [
+   {
+    "value": 135,
+    "label": "135 units"
+   },
+   {
+    "value": 145,
+    "label": "145 units"
+   },
+   {
+    "value": 155,
+    "label": "155 units"
+   },
+   {
+    "value": 165,
+    "label": "165 units"
+   },
+   {
+    "value": 175,
+    "label": "175 units"
+   },
+   {
+    "value": 185,
+    "label": "185 units"
+   },
+   {
+    "value": 195,
+    "label": "195 units"
+   },
+   {
+    "value": 205,
+    "label": "205 units"
+   },
+   {
+    "value": 215,
+    "label": "215 units"
+   },
+   {
+    "value": 225,
+    "label": "225 units"
+   },
+   {
+    "value": 235,
+    "label": "235 units"
+   }
+  ],
+  "lf-wander": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 16,
+    "label": "16 px"
+   },
+   {
+    "value": 24,
+    "label": "24 px"
+   },
+   {
+    "value": 32,
+    "label": "32 px"
+   },
+   {
+    "value": 40,
+    "label": "40 px"
+   },
+   {
+    "value": 48,
+    "label": "48 px"
+   },
+   {
+    "value": 56,
+    "label": "56 px"
+   },
+   {
+    "value": 64,
+    "label": "64 px"
+   },
+   {
+    "value": 72,
+    "label": "72 px"
+   },
+   {
+    "value": 80,
+    "label": "80 px"
+   }
+  ],
+  "lf-width-vary": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 10,
+    "label": "10%"
+   },
+   {
+    "value": 20,
+    "label": "20%"
+   },
+   {
+    "value": 30,
+    "label": "30%"
+   },
+   {
+    "value": 40,
+    "label": "40%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 60,
+    "label": "60%"
+   },
+   {
+    "value": 70,
+    "label": "70%"
+   },
+   {
+    "value": 80,
+    "label": "80%"
+   },
+   {
+    "value": 90,
+    "label": "90%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "lf-height-vary": [
+   {
+    "value": 0,
+    "label": "0 units"
+   },
+   {
+    "value": 4,
+    "label": "4 units"
+   },
+   {
+    "value": 8,
+    "label": "8 units"
+   },
+   {
+    "value": 12,
+    "label": "12 units"
+   },
+   {
+    "value": 16,
+    "label": "16 units"
+   },
+   {
+    "value": 20,
+    "label": "20 units"
+   },
+   {
+    "value": 24,
+    "label": "24 units"
+   },
+   {
+    "value": 28,
+    "label": "28 units"
+   },
+   {
+    "value": 32,
+    "label": "32 units"
+   },
+   {
+    "value": 36,
+    "label": "36 units"
+   },
+   {
+    "value": 40,
+    "label": "40 units"
+   }
+  ],
+  "lf-gullies": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 10,
+    "label": "10%"
+   },
+   {
+    "value": 20,
+    "label": "20%"
+   },
+   {
+    "value": 30,
+    "label": "30%"
+   },
+   {
+    "value": 40,
+    "label": "40%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 60,
+    "label": "60%"
+   },
+   {
+    "value": 70,
+    "label": "70%"
+   },
+   {
+    "value": 80,
+    "label": "80%"
+   },
+   {
+    "value": 90,
+    "label": "90%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "lf-gully-size": [
+   {
+    "value": 20,
+    "label": "20%"
+   },
+   {
+    "value": 25,
+    "label": "25%"
+   },
+   {
+    "value": 35,
+    "label": "35%"
+   },
+   {
+    "value": 40,
+    "label": "40%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 55,
+    "label": "55%"
+   },
+   {
+    "value": 60,
+    "label": "60%"
+   },
+   {
+    "value": 70,
+    "label": "70%"
+   },
+   {
+    "value": 75,
+    "label": "75%"
+   },
+   {
+    "value": 85,
+    "label": "85%"
+   },
+   {
+    "value": 90,
+    "label": "90%"
+   }
+  ],
+  "lf-talus": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 20,
+    "label": "20 px"
+   },
+   {
+    "value": 35,
+    "label": "35 px"
+   },
+   {
+    "value": 55,
+    "label": "55 px"
+   },
+   {
+    "value": 70,
+    "label": "70 px"
+   },
+   {
+    "value": 90,
+    "label": "90 px"
+   },
+   {
+    "value": 110,
+    "label": "110 px"
+   },
+   {
+    "value": 125,
+    "label": "125 px"
+   },
+   {
+    "value": 145,
+    "label": "145 px"
+   },
+   {
+    "value": 160,
+    "label": "160 px"
+   },
+   {
+    "value": 180,
+    "label": "180 px"
+   }
+  ],
+  "water-surf": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 10,
+    "label": "10%"
+   },
+   {
+    "value": 20,
+    "label": "20%"
+   },
+   {
+    "value": 30,
+    "label": "30%"
+   },
+   {
+    "value": 40,
+    "label": "40%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 60,
+    "label": "60%"
+   },
+   {
+    "value": 70,
+    "label": "70%"
+   },
+   {
+    "value": 80,
+    "label": "80%"
+   },
+   {
+    "value": 90,
+    "label": "90%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "sec-terraces": [
+   {
+    "value": 0,
+    "label": "0 steps"
+   },
+   {
+    "value": 1,
+    "label": "1 steps"
+   },
+   {
+    "value": 2,
+    "label": "2 steps"
+   },
+   {
+    "value": 3,
+    "label": "3 steps"
+   },
+   {
+    "value": 4,
+    "label": "4 steps"
+   },
+   {
+    "value": 5,
+    "label": "5 steps"
+   },
+   {
+    "value": 6,
+    "label": "6 steps"
+   }
+  ],
+  "sec-ledge": [
+   {
+    "value": 10,
+    "label": "10% flat"
+   },
+   {
+    "value": 20,
+    "label": "20% flat"
+   },
+   {
+    "value": 25,
+    "label": "25% flat"
+   },
+   {
+    "value": 35,
+    "label": "35% flat"
+   },
+   {
+    "value": 40,
+    "label": "40% flat"
+   },
+   {
+    "value": 50,
+    "label": "50% flat"
+   },
+   {
+    "value": 55,
+    "label": "55% flat"
+   },
+   {
+    "value": 65,
+    "label": "65% flat"
+   },
+   {
+    "value": 70,
+    "label": "70% flat"
+   },
+   {
+    "value": 80,
+    "label": "80% flat"
+   },
+   {
+    "value": 85,
+    "label": "85% flat"
+   }
+  ],
+  "lean": [
+   {
+    "value": 60,
+    "label": "0.6 : 1"
+   },
+   {
+    "value": 85,
+    "label": "0.85 : 1"
+   },
+   {
+    "value": 110,
+    "label": "1.1 : 1"
+   },
+   {
+    "value": 130,
+    "label": "1.3 : 1"
+   },
+   {
+    "value": 155,
+    "label": "1.55 : 1"
+   },
+   {
+    "value": 180,
+    "label": "1.8 : 1"
+   },
+   {
+    "value": 205,
+    "label": "2.05 : 1"
+   },
+   {
+    "value": 230,
+    "label": "2.3 : 1"
+   },
+   {
+    "value": 250,
+    "label": "2.5 : 1"
+   },
+   {
+    "value": 275,
+    "label": "2.75 : 1"
+   },
+   {
+    "value": 300,
+    "label": "3 : 1"
+   }
+  ],
+  "spur-count": [
+   {
+    "value": 0,
+    "label": "0 spurs"
+   },
+   {
+    "value": 1,
+    "label": "1 spurs"
+   },
+   {
+    "value": 2,
+    "label": "2 spurs"
+   },
+   {
+    "value": 3,
+    "label": "3 spurs"
+   },
+   {
+    "value": 4,
+    "label": "4 spurs"
+   },
+   {
+    "value": 5,
+    "label": "5 spurs"
+   },
+   {
+    "value": 6,
+    "label": "6 spurs"
+   },
+   {
+    "value": 7,
+    "label": "7 spurs"
+   }
+  ],
+  "lf-vary-size": [
+   {
+    "value": 40,
+    "label": "40 px"
+   },
+   {
+    "value": 70,
+    "label": "70 px"
+   },
+   {
+    "value": 100,
+    "label": "100 px"
+   },
+   {
+    "value": 130,
+    "label": "130 px"
+   },
+   {
+    "value": 160,
+    "label": "160 px"
+   },
+   {
+    "value": 200,
+    "label": "200 px"
+   },
+   {
+    "value": 230,
+    "label": "230 px"
+   },
+   {
+    "value": 260,
+    "label": "260 px"
+   },
+   {
+    "value": 290,
+    "label": "290 px"
+   },
+   {
+    "value": 320,
+    "label": "320 px"
+   },
+   {
+    "value": 350,
+    "label": "350 px"
+   }
+  ]
+ }
+}

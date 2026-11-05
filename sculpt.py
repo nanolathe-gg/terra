@@ -898,11 +898,7 @@ def main():
                 map_export.reply(self, {'error': str(err)}, 400)
                 return
             content_type = 'text/plain; charset=utf-8'
-            if path == '/ui-previews/manifest.json':
-                manifest = args.assets_root / 'ui-previews' / 'manifest.json'
-                body = manifest.read_bytes() if manifest.is_file() else b'{"version":0,"tools":[],"controls":{}}'
-                content_type = 'application/json'
-            elif path == '/sculpt-config.json':
+            if path == '/sculpt-config.json':
                 # An unknown or unavailable world is an error, not a silent
                 # fallback to the first world: a labelled render must never
                 # be another world's terrain (review A3, 2026-10-27).
@@ -927,9 +923,10 @@ def main():
                     name = 'sculpt.html'
                 file = SOURCES.get(name)
                 if name.startswith('ui-previews/'):
+                    # The committed hover examples (repro/ui-previews.mjs writes them).
                     leaf = name.removeprefix('ui-previews/')
-                    if '/' not in leaf and leaf.endswith('.png') and all(c.isalnum() or c in '-_.' for c in leaf):
-                        file = args.assets_root / 'ui-previews' / leaf
+                    if '/' not in leaf and (leaf.endswith('.png') or leaf == 'manifest.json') and all(c.isalnum() or c in '-_.' for c in leaf):
+                        file = HERE / 'ui-previews' / leaf
                 if file is None or not file.is_file():
                     self.send_error(404)
                     return
@@ -938,6 +935,7 @@ def main():
                 if file.suffix == '.js': content_type = 'text/javascript; charset=utf-8'
                 if file.suffix == '.css': content_type = 'text/css; charset=utf-8'
                 if file.suffix == '.png': content_type = 'image/png'
+                if file.suffix == '.json': content_type = 'application/json'
             self.send_response(200)
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(body)))
