@@ -1095,22 +1095,30 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
 // covers both. Steep faces shed it.
 fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     if (u.sand <= 0.0) { return 0.0; }
-    // The Time pass lays sand where deposit gathers, which follows the foot of every shape as an even band. Spread it by a
-    // lumpy run-out: taps around p (radius and direction wandering at 41 and 13 px) carry the sand of nearby cells, fading
-    // over a reach that grows with how much deposit gathers there (low, concave ground runs out far, a spur's foot hardly),
-    // and the cover's strength itself wanders at 37 and 11 px, so the band's edge is neither even nor a copy of the shape.
+    // The Time pass lays sand where deposit gathers, which follows the foot of every shape as an even band. Let it run out onto the plain
+    // in lumps: taps round p (radius 10-120 px, direction wandering at 17 px) carry the sand of nearby cells to p only if the tap lies no
+    // lower than p (sand moves downhill and outward, never up a slope) and only onto ground that is flat at p, so nothing new lands on
+    // the flanks. Each tap fades over a reach that grows with how much deposit gathers there (low, concave ground runs out far, a
+    // spur's foot hardly). The cover's strength wanders at 61, 23 and 9 px, so the fringe is ragged.
     let uv = p / (u.size - 1.0);
     var raw = weatherAt(uv).a;
     let reachN = valueNoise(p / 53.0 + 71.0) * 0.5 + 0.5;
-    for (var k = 0; k < 8; k++) {
-        let a = f32(k) * 0.7853982 + valueNoise(p / 17.0 + f32(k) * 3.1) * 1.4;
-        let r = 10.0 + 70.0 * fract(f32(k) * 0.381966 + reachN * 0.8);
-        let tap = weatherAt((p + vec2f(cos(a), sin(a)) * r) / (u.size - 1.0));
-        let reach = 90.0 * (0.1 + 0.9 * clamp(tap.g * 1.6, 0.0, 1.0)) * (0.35 + 1.1 * reachN);
-        raw = max(raw, tap.a * (1.0 - smoothstep(0.1, 1.0, r / reach)));
+    let flatHere = 1.0 - smoothstep(0.05, 0.25, slope);
+    if (flatHere > 0.0) {
+        let hHere = baseHeight(p);
+        for (var k = 0; k < 8; k++) {
+            let a = f32(k) * 0.7853982 + valueNoise(p / 17.0 + f32(k) * 3.1) * 1.4;
+            let r = 10.0 + 110.0 * fract(f32(k) * 0.381966 + reachN * 0.8);
+            let q = p + vec2f(cos(a), sin(a)) * r;
+            let tap = weatherAt(q / (u.size - 1.0));
+            let reach = 150.0 * (0.2 + 0.8 * clamp(tap.g * 2.5, 0.0, 1.0)) * (0.35 + 1.1 * reachN);
+            let downhill = smoothstep(-3.0, 1.0, baseHeight(q) - hHere);
+            raw = max(raw, tap.a * (1.0 - smoothstep(0.1, 1.0, r / reach)) * downhill * flatHere);
+        }
     }
     let lump = clamp(0.25 + 1.5 * (0.5 + 0.5 * (0.55 * valueNoise(p / 61.0 + 5.0) + 0.3 * valueNoise(p / 23.0 + 29.0) + 0.15 * valueNoise(p / 9.0 + 3.0))), 0.0, 1.4);
-    let field = min(raw * lump, 1.0) * depositsAt(p);
+    // The lumps thin the sand anywhere but add to it only on flat ground; a flank keeps less of the Time pass's sand than the plain does.
+    let field = min(raw * min(lump, 1.0 + 0.4 * flatHere), 1.0) * (1.0 - 0.7 * smoothstep(0.1, 0.45, slope)) * depositsAt(p);
     if (field <= 0.0) { return 0.0; }
     let lie = clamp(-relief * 0.07, -0.35, 0.35) + valueNoise(p / 24.0 + 13.0) * 0.12;
     let thin = smoothstep(0.0, 0.25, field) * (1.0 - field);
