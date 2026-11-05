@@ -1213,12 +1213,12 @@ fn outcropCracks(p: vec2f, slope: f32) -> f32 {
 
 // Terracettes (card P32): the steps grazing and creep wear into steep grass, a riser and a level tread along the contours (the lab's vg-bands).
 // The phase is the height itself, so the steps follow the contours; a phase noise braids them. The sawtooth is reshaped to a riser over a
-// third of the cycle and a level tread, about 0.7 of a step high (2.8 for a 4-unit step), art only: the 16-px height bytes never see them.
-// They wear on straight slopes of 15 to 35 degrees: round hills and hollows (a contour of small radius) would close them into rings, so the
+// third of the cycle and a level tread, about 0.7 of a step high (5.6 for an 8-unit step), art only: the 16-px height bytes never see them.
+// They wear on straight slopes of about 6 to 35 degrees: round hills and hollows (a contour of small radius) would close them into rings, so the
 // amount fades as the radius of the contour falls. Returns (height added, worn-path darkness).
-const TERRACE_STEP = 4.0;
+const TERRACE_STEP = 8.0;
 fn terracettes(p: vec2f, h: f32, slope: f32) -> vec2f {
-    let w = smoothstep(0.22, 0.34, slope) * (1.0 - smoothstep(0.62, 0.84, slope));
+    let w = smoothstep(0.10, 0.20, slope) * (1.0 - smoothstep(0.62, 0.84, slope));
     if (w <= 0.0) { return vec2f(0.0); }
     // 1 / radius of the contour (px): the ring of heights 14 px out against the middle, over the slope.
     let d = 14.0;
@@ -1560,7 +1560,7 @@ fn bake(p: vec2f) -> vec4f {
     lineDark = max(lineDark, crustDark);
     lineDark = max(lineDark, loose.z * (1.0 - buried));
     lineDark = max(lineDark, scatter.plant.z * (1.0 - buried));
-    lineDark = max(lineDark, 0.5 * stepWorn * (1.0 - buried));
+    lineDark = max(lineDark, 1.0 * stepWorn * (1.0 - buried));
     lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
     lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));
