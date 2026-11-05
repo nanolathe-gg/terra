@@ -451,41 +451,53 @@ function rockFrame(P, seed, ctx) {
     if (rr < radial(th) * (1 + 0.04 * (fbm(x / 4, y / 4, seed) - 0.5)) && (rr > 0 || true)) mask[y * w + x] = 1;
   }
   const dist = edgeDist(w, h, mask);
-  // facets: Voronoi cells with their own tilt
-  const nf = 3 + Math.round(P.angular * 2 + r()), seeds = [];
-  for (let i = 0; i < nf; i++) {
-    const sx = (r() - 0.5) * 1.3, sy = (r() - 0.5) * 1.1;
-    seeds.push({ x: cx + sx * Wh * 0.7, y: cy + sy * Hh * 0.7, tx: sx * 0.9 + (r() - 0.5) * 0.9, ty: sy * 0.9 + (r() - 0.5) * 0.9 });
-  }
-  const sf = P.angular;
+  // Tonal planes (spec 15 B1): 1-4 large highlight planes up-left, mid planes, a shade plane at the lower right.
+  const cellsN = fw * fh, nHi = clamp(1 + (cellsN >= 12 ? 3 : cellsN >= 9 ? 2 : cellsN >= 4 ? 1 : 0) + (P.angular > 0.7 && cellsN >= 4 ? 1 : 0), 1, 4);
+  const planes = [], dirAt = (x, y) => L.x * ((x - cx) / Wh) + L.y * ((y - cy) / Hh);
+  const addPlane = (sx, sy, bias) => planes.push({ x: cx + sx * Wh, y: cy + sy * Hh, t: 0.5 + 0.42 * bias + (r() - 0.5) * 0.16 });
+  for (let i = 0; i < nHi; i++) addPlane(L.x * (0.1 + 0.6 * r()), L.y * (0.1 + 0.55 * r()), 0.8 + r() * 0.2);   // toward the sun
+  for (let i = 0; i < 2 + Math.round(P.angular * 2 + r()); i++) addPlane((r() - 0.5) * 1.4, (r() - 0.5) * 1.2, (r() - 0.5) * 0.7);
+  addPlane(-L.x * (0.3 + r() * 0.4), -L.y * (0.15 + r() * 0.4), -0.9);          // the shade plane hugs the side away from the sun
+  const flat = 0.35 + 0.55 * P.angular;             // 0 smooth dome shading .. 1 flat tonal planes
+  const tone = new Float32Array(w * h), hasPx = [];
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const k = y * w + x; if (!mask[k]) continue;
-    let b = -1, bd = 1e9, b2 = 1e9;
-    for (let i = 0; i < nf; i++) { const d = Math.hypot(seeds[i].x - x, seeds[i].y - y) + (vnoise(x / 3, y / 3, seed + i) - 0.5) * 3; if (d < bd) { b2 = bd; bd = d; b = i; } else if (d < b2) b2 = d; }
-    const f = seeds[b];
-    const ex = (x - cx) / Wh, ey = (y - cy) / Hh, dz = Math.sqrt(Math.max(0.04, 1 - ex * ex * 0.8 - ey * ey * 0.8));
-    // normal: dome blended with the facet's flat tilt
-    let nx = lerp(ex * 0.9, f.tx * 1.1, 0.5 + 0.4 * sf), ny = lerp(ey * 0.9, f.ty * 1.1, 0.5 + 0.45 * sf), nz = lerp(dz, 0.75, 0.5 * sf);
-    const nn = Math.hypot(nx, ny, nz); nx /= nn; ny /= nn; nz /= nn;
-    const lam = nx * L.v[0] + ny * L.v[1] + nz * L.v[2];
-    const tt = y / h;
-    let lev = 4.5 + 7.5 * (lam - 0.45) * L.ambient;
-    lev += (-ex * -L.x - ey * -L.y) * 0;     // (lamp term already holds the direction)
-    const dd = dist[k];
-    if (dd <= 1) lev -= 3.0; else if (dd === 2) lev -= 1.1; // dark rim
-    if (b2 - bd < 1.4) lev -= 2.2;           // crack between facets
-    if (tt > 0.66) lev -= ((tt - 0.66) / 0.34) * 4.6;     // dark base
-    lev += ((rn() - 0.5) * 2.0) * 1.5 + (vnoise(x / 1.5, y / 1.5, seed + 17) - 0.5) * 2.6;
-    // color
-    let col;
-    const li = Math.round(lev);
-    if (li >= 11) {
-      const ti = clamp(li - 11, 0, 4); col = IDX.TAN[ti] === undefined ? 64 : IDX.TAN[ti];
-      if (li >= 14 && rn() < 0.2) col = IDX.WHITE;
-    } else col = GR[clamp(li, 0, 10)];
-    if (lev > 6.5 && rn() < 0.035) col = IDX.PINK[clamp(Math.round((lev - 6) * 0.9 + (rn() - 0.5) * 2), 0, 4)];
-    else if (lev > 3.5 && lev < 8 && rn() < 0.012) col = IDX.PINK[clamp(Math.round(rn() * 2), 0, 2)];
-    put(sp, x, y, col);
+    let bi = 0, bd = 1e9; planes.forEach((pl, i) => { const d = Math.hypot(pl.x - x, pl.y - y) + (vnoise(x / 3, y / 3, seed + i) - 0.5) * 3.2; if (d < bd) { bd = d; bi = i; } });
+    const pl = planes[bi], d0 = dirAt(x, y);
+    let t = lerp(0.5 + 0.34 * d0, pl.t + 0.12 * (d0 - dirAt(pl.x, pl.y)), flat);
+    const rr = Math.hypot((x - cx) / Wh, (y - cy) / Hh);
+    t -= 0.22 * Math.max(0, rr - 0.65) * (d0 < 0.05 ? 1.7 : 0.6);     // falls off to the shaded edge
+    if (y > h * 0.72) t -= ((y / h - 0.72) / 0.28) * 0.34;            // dark base
+    t += (rn() - 0.5) * 0.07 + (vnoise(x / 1.6, y / 1.6, seed + 17) - 0.5) * 0.08;
+    tone[k] = t; hasPx.push(k);
+  }
+  // rank the non-rim pixels so the band shares match the spec: highlight 48%, lit gray 23%, mid and shade the rest
+  const interior = hasPx.filter(k => dist[k] > 1).sort((a, b) => tone[b] - tone[a]), N = interior.length;
+  const lowerRight = k => { const x = k % w, y = (k / w) | 0; return (x - cx) * -L.x + (y - cy) * -L.y > 0; };
+  const hiN = Math.round(N * 0.45), litN = Math.round(N * 0.23), shadeN = Math.round(N * 0.12);
+  const bright = (list, u) => list[clamp(Math.floor((1 - u) * list.length), 0, list.length - 1)];
+  const CREAM = [64, 65, 66, 67, 68, 69, 70], PINKS = [16, 17, 18, 19, 20, 21, 22], WHITES = [255, 81, 82, 83, 84];
+  const hiIdx = interior.slice(0, hiN), hiField = hiIdx.map(k => vnoise((k % w) / 8, ((k / w) | 0) / 8, seed + 77) + 0.02 * (rn() - 0.5));
+  const order = hiField.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]), kind = new Array(hiN);
+  order.forEach(([, i], rank) => { kind[i] = rank < hiN * 0.45 ? 0 : rank < hiN * 0.74 ? 1 : 2; });
+  const col = new Map();
+  interior.forEach((k, rank) => {
+    let c;
+    if (rank < hiN) {
+      const u = 1 - rank / hiN * 0.85 - 0.05 + (rn() - 0.5) * 0.12;
+      c = kind[rank] === 0 ? bright(CREAM, 1 - u) : kind[rank] === 1 ? bright(PINKS, 1 - u) : bright(WHITES, 1 - u);
+    } else if (rank < hiN + litN) c = bright([85, 86, 87, 88, 89], 1 - (rank - hiN) / litN + (rn() - 0.5) * 0.3);
+    else if (rank < N - shadeN) c = weighted(rn, [[90, 8], [91, 8.8], [92, 5.3]]);
+    else c = weighted(rn, [[93, 4.5], [94, 3.4], [95, 4.2], [127, 1.9], [125, 0.8]]);
+    col.set(k, c);
+  });
+  for (const k of hasPx) {
+    let c;
+    if (dist[k] <= 1) {                                 // the dark rim: thinner on the lit side
+      if (!lowerRight(k) && rn() < 0.4) { c = col.size ? bright([88, 89, 90, 91], rn()) : 90; }
+      else c = weighted(rn, [[91, 23], [90, 14], [92, 9], [95, 8], [94, 7], [93, 7], [127, 5.5], [125, 5]]);
+    } else c = col.get(k);
+    put(sp, k % w, (k / w) | 0, c);
   }
   const body = sp;
   return { body, W, H };
