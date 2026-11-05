@@ -88,6 +88,11 @@ Numeric controls combine label, fill, value and text entry:
 - Arrow keys, Page Up/Down, Home and End adjust without nudging a selected shape.
 - Disabled controls stay disabled and show the prerequisite that enables them.
 - Confirming an unchanged value leaves weathering and export ready.
+- Setting an effect to zero or switching it off keeps its section open;
+  the section header controls manual collapse. Enabling an effect opens its
+  settings. Measured in the browser: zero and off both preserve `open=true`,
+  manual collapse sets `open=false`, and the workspace checks and all 60 unit
+  tests pass after this refinement.
 
 The curve editors retain mouse editing and omit per-point numeric fields.
 The top bar exposes map weathering, tile grid, zoom in/out, 1x and Fit. The
