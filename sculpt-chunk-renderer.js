@@ -104,8 +104,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+(n('bedLedge',.5)>0?3.6:0))*Math.abs(n('rockOrder',0));
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),F=Math.max(n('blockRow',2),2),coarse=Math.max(n('facetCoarse',0),0);
-    const facetRise=1.85*F*Math.abs(n('facetTilt',0))*(Math.max(n('blockWidth',.5)/F,.25)+0.25)*(1+2.4*coarse)+.5*Math.abs(n('blockStep',0))*(1+coarse);   // the facets are cut at the blocks' size and step; the .25 is FACET_SKEW (engine-bake.wgsl)
+    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),rock=this.config.material?.rock||{};
+    const facetRise=rock.size>0?2*(Math.abs(rock.crev??2)+1.8*Math.abs(rock.vary??.5)+1.7*Math.abs(rock.chip??.25)+Math.abs(rock.grit??.35)):0;   // the rock model's cells: crevice, tilt and step, chips and grit (engine-bake.wgsl rockModel), doubled for the margin
     const extra=gullyRise+facetRise+relief+blocks+beds+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4));
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
     return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};

@@ -1123,6 +1123,16 @@ export class TerrainRenderer {
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
+    // Card P10: the rock model's preset (numbers in the material's `rock`); no `rock`, no model.
+    {
+      const rock = this.config.material?.rock || {};
+      const rv = (key, fallback) => Number.isFinite(Number(rock[key])) ? Number(rock[key]) : fallback;
+      set('uRockSize', rv('size', 0) * number('rockScale', 1)); set('uRockAspect', rv('aspect', 1)); set('uRockJitter', rv('jitter', 0.9));
+      set('uRockOpen', rv('open', 0.5)); set('uRockBedOpen', rv('bedOpen', 0.2)); set('uRockTerr', rv('terr', 0));
+      set('uRockVary', rv('vary', 0.5)); set('uRockCrev', rv('crev', 2)); set('uRockCrevW', rv('crevW', 1.1));
+      set('uRockChip', rv('chip', 0.25)); set('uRockChipSize', rv('chipSize', 5)); set('uRockGrit', rv('grit', 0.35));
+      set('uRockAge', number('rockAge', 0.5));
+    }
     set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandJag', number('bandJag', 0));
@@ -1138,8 +1148,6 @@ export class TerrainRenderer {
     set('uGullyShade', number('gullyShade', 0));
     set('uRibTilt', number('ribTilt', 0));
     set('uBedPunch', number('bedPunch', 0));
-    set('uFacetTilt', number('facetTilt', 0));
-    set('uFacetCoarse', number('facetCoarse', 0));
     // G2 (rock faces follow the slope).
     set('uCliffFollow', number('cliffFollow', 0));
     set('uCliffReach', number('cliffReach', 20));
@@ -1148,11 +1156,9 @@ export class TerrainRenderer {
     set('uCliffRise', number('cliffRise', 0));
     set('uCliffBed', number('cliffBed', .5));
     set('uCliffStagger', number('cliffStagger', 0));
-    set('uCliffFine', number('cliffFine', 0));
     set('uCliffDomain', number('cliffDomain', 90));
     {
-      set('uBlocks', number('blocks', 0)); set('uBlockRow', number('blockRow', 4.5)); set('uBlockWidth', number('blockWidth', 9)); set('uBlockTilt', number('blockTilt', .5));
-      set('uBlockStep', number('blockStep', .8)); set('uBlockSeam', number('blockSeam', .5)); set('uBlockChip', number('blockChip', 1.2));
+      set('uBlockSeam', number('blockSeam', .5));
       set('uHillBlocks', number('hillBlocks', 0));
     }
     this.setColumn();
