@@ -798,6 +798,7 @@ byte-identical unless the table says otherwise.
 | P9 | Eight Knoll candidates per cube color, Bayer pick; Crystal `paletteMix` 1 | 0f041004, 3704cd9d | Desert Lab histogram .105/.031/.099 -> .076/.029/.074 (retail .033/.011/.056); Crystal chi-square .050/.113/.060 -> .028/.079/.047 |
 | P18 | Sand ripples (asymmetric crests, stone shadows) | e41ef931 | no scene paints sand, 30 scenes 0.00; relief bake +2.9% to ~+25% |
 | Sun/sky tint | Sun color and Sky color rows; modern Green #ffc880 / #80a0ff | b4da1dcb, 00c5bc26 | modern moves 27-35%; Sky color alone is under 5% on 2 of 3 windows |
+| P6 | Uniform gates as WGSL override bools; pipelines cached per gate set | 0ca0dc7a, 8ac6449f | green-2 terrain pass -24 to -29%, bake -17 to -19%; 1-12 px compiler drift in 7 scenes (byte-identical forced generic); about 0.9 s the first time a feature combination compiles |
 | Tooling | `perf.mjs --exact-timestamps` (opt-in) | 774021b9 | from the P4 spike |
 
 ### Rejected, closed or held
@@ -817,7 +818,6 @@ byte-identical unless the table says otherwise.
 | P14 | Held | prototype/scarp | Retreat row costs nothing, but reads as a sea urchin (by eye) |
 | P15 | Held | prototype/slumps | Lobes read as small mounds, scars barely visible at 1x; shape_controls 2.24 units |
 | P17 fans | Held | prototype/talus-fans | Fans have no height and barely show |
-| P6 | Held for the owner | prototype/specialize | Terrain pass -24 to -29%, bake -17 to -19% on green-2; 1-5 px compiler drift in 7 scenes (byte-identical with the overrides forced generic); about 0.9 s hitch the first time a feature combination compiles; edit latency unchanged (Time-bound) |
 | P26 water | Held by the owner | prototype/water | Stage 2 stopped: retail water is flat tones with a hard step and grain, the model is a smooth gradient |
 | P8, P19 | Not started | | P19 (decision 26) |
 
