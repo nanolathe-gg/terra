@@ -218,7 +218,6 @@ kbd{font:9px system-ui;color:var(--muted);margin-left:4px}
 /* Control audit: process families, readable modes and a searchable world. */
 #tool-mode{width:100%}.control-search{position:sticky;top:-12px;z-index:2;padding:10px 0 8px;background:var(--panel,#20292d)}
 .control-search label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}.control-search input{width:100%;min-width:0}.control-search p{margin:5px 0 0}
-.pipeline-group{border-top:1px solid var(--line);padding:12px 0}.pipeline-group>summary{font-size:12px;font-weight:600;color:#d4e5dd;cursor:pointer}.pipeline-group .knobs-group{margin:9px 0 0;padding:8px 0 0 8px;border-left:2px solid #3e5349;border-top:0}
 .tool-group .tools{grid-template-columns:repeat(4,minmax(0,1fr))}
 .control-inactive > label { color:var(--muted); }
 .control-requirement { margin-top:4px; font-size:11px; line-height:1.35; color:#b6adb5; }

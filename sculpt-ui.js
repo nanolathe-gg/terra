@@ -51,10 +51,10 @@ export function mountEditorUI(){
  document.querySelector('#world-editor > .eyebrow').textContent='Materials & processes · whole map';
  $('variant-control').querySelector('p').hidden=true;
  const presets=document.createElement('details');presets.className='panel';presets.innerHTML='<summary>Manage presets</summary>';
- for(const id of ['world-new-name','world-export','world-delete'])presets.append($(id).closest('.row'));
+ for(const id of ['reset-strokes','world-new-name','world-export','world-delete'])presets.append($(id).closest('.row,.control'));
  $('world-file').before(presets);
- const surface=document.createElement('details');surface.className='panel';surface.innerHTML='<summary>Surface detail</summary>';
- for(const id of ['relief','transition-detail'])surface.append($(id).closest('.control'));surface.append($('ring-controls'));$('knobs').before(surface);
+ const surface=document.createElement('details');surface.id='world-surface-detail';surface.className='panel';surface.innerHTML='<summary>Surface detail</summary>';
+ for(const id of ['relief','transition-detail'])surface.append($(id).closest('.control'));surface.append($('ring-controls'));$('knobs').after(surface,$('world-colors').closest('details'));
  mountWorkspace();
  const tabs=[...document.querySelectorAll('[role="tab"]')],visibleTabs=tabs.filter(t=>!t.hidden);
  function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}}
@@ -107,27 +107,37 @@ export function groupToolControls(fields){
  return context=>{for(const g of groups){g.d.hidden=g.controls.every(c=>c.hidden);g.d.dataset.context=context;if(!g.master){if(g.lastContext!==context&&!g.d.classList.contains('brush-basics'))g.d.open=g.controls.some(c=>c.id==='crystal-form-control'||c.id==='paint-channel-control'||(!$('lf-elevation-control').hidden&&['lf-elevation-control','section-preview-control','lf-wander-control'].includes(c.id)));g.lastContext=context;continue;}const on=Number(g.master.value)!==0;if(on)g.memory.set(context,Number(g.master.value));g.box.checked=on;g.d.classList.toggle('is-off',!on);if(g.lastContext!==context)g.d.open=on;g.lastContext=context;}};
 }
 
-// Search traverses every exposed setting, including collapsed feature groups.
+// One level of sections; common controls move here rather than being duplicated.
 export function mountWorldControlIndex(root,values=()=>({})){
  const old=document.getElementById('world-control-search');old?.remove();
- const search=document.createElement('div');search.id='world-control-search';search.className='control-search';search.innerHTML='<label for="world-search">Find a setting</label><input id="world-search" type="search" placeholder="e.g. shore, ridge, color"><label class="fine-controls"><input id="world-fine" type="checkbox"> Show fine controls</label><p class="small" id="world-control-count"></p>';root.before(search);
- const stages=new Map(),groups=[...root.children].filter(e=>e.matches('details'));
- const category=name=>/Ground/.test(name)?'Ground & variation':/Water|Shore|Needle|Contour fringe/.test(name)?'Water & shores':/Light|Shine/.test(name)?'Lighting & finish':/Boulders|Debris|Sand|Material coverage|Cap|Surface pits|Cups|Mineral/.test(name)?'Materials & surface':'Relief & rock';
- for(const group of groups){const name=group.dataset.group||group.querySelector('summary').textContent,stageName=category(name);let stage=stages.get(stageName);if(!stage){stage=document.createElement('details');stage.className='pipeline-group';stage.innerHTML=`<summary>${stageName}</summary>`;stages.set(stageName,stage);root.append(stage);}stage.append(group);}
- const input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');let previous=null;
- const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),rows=[...root.querySelectorAll('[data-knob]'),...document.querySelectorAll('#rendering-host [data-knob]')];let visible=0;if(query&&!previous)previous=new Map([...root.querySelectorAll('details')].map(d=>[d,d.open]));
-  for(const row of rows){const reason=worldControlRequirement(row.dataset.knob,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;const group=row.closest('.knobs-group'),text=(row.textContent+' '+group.dataset.group).toLowerCase();if(!root.contains(row))continue;   // the Palette rows live with the rendering switches: disabled with a reason, never filtered
+ const search=document.createElement('div');search.id='world-control-search';search.className='control-search';search.innerHTML='<label for="world-search">Find a setting</label><input id="world-search" type="search" placeholder="Search settings…"><label class="fine-controls"><input id="world-fine" type="checkbox"> Show fine controls</label><p class="small" id="world-control-count"></p>';root.before(search);
+ const originals=[...root.children].filter(e=>e.matches('details')),sections=new Map(),blocks=[];
+ for(const name of ['Common','Ground & vegetation','Rock & cliffs','Water & shores','Materials & texture','Lighting']){
+  const section=document.createElement('details'),summary=document.createElement('summary');section.className='knobs-group world-section';section.dataset.group=name;section.open=name==='Common';summary.textContent=name;section.append(summary);root.append(section);sections.set(name,section);
+ }
+ const common=['undulation','groundContrast','lushness','wetSwath','sand','rockOrder','rockStain','sunTilt','ambient'];
+ const category=name=>/Light|Shine/.test(name)?'Lighting':/Ground|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Gullies|Structure orientation|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
+ for(const group of originals){
+  const name=group.dataset.group||group.querySelector('summary').textContent,block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);
+  for(const row of group.querySelectorAll('[data-knob]'))row.dataset.searchGroup=`${name} ${category(name)}`;
+  for(const child of [...group.children])if(child.tagName!=='SUMMARY')block.append(child);
+  sections.get(category(name)).append(block);blocks.push(block);group.remove();
+ }
+ for(const key of common){const row=root.querySelector(`[data-knob="${key}"]`);if(row)sections.get('Common').append(row);}
+ const groups=[...sections.values()],input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');let previous=null,lastQuery='';
+ const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),worldRows=[...root.querySelectorAll('[data-knob]')],rows=[...worldRows,...document.querySelectorAll('#rendering-host [data-knob]')];let visible=0;if(query&&!previous)previous=new Map(groups.map(d=>[d,d.open]));
+  for(const row of rows){const reason=worldControlRequirement(row.dataset.knob,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;const group=row.closest('.knobs-group'),text=(row.textContent+' '+row.dataset.searchGroup+' '+group.dataset.group).toLowerCase();if(!root.contains(row))continue;   // the Palette rows live with the rendering switches: disabled with a reason, never filtered
   row.hidden=query?!text.includes(query):!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(row.dataset.knob);if(!row.hidden)visible++;}
-  for(const group of groups){group.hidden=![...group.querySelectorAll('[data-knob]')].some(r=>!r.hidden);if(query&&!group.hidden)group.open=true;}
-  for(const stage of stages.values()){stage.hidden=![...stage.children].some(c=>c.matches('.knobs-group')&&!c.hidden);if(query&&!stage.hidden)stage.open=true;}
+  for(const block of blocks)block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
+  for(const group of groups){group.hidden=![...group.querySelectorAll('[data-knob]')].some(r=>!r.hidden);if(query&&query!==lastQuery&&!group.hidden)group.open=true;}
   if(!query&&previous){for(const [d,open] of previous)d.open=open;previous=null;}
-  $('world-control-count').textContent=query?`${visible} matching settings`:fine.checked?`${rows.length} settings · including fine controls`:`${visible} primary settings · ${rows.length} total`;
+  lastQuery=query;$('world-control-count').textContent=query?`${visible} matching settings`:fine.checked?`${worldRows.length} settings · including fine controls`:`${visible} primary settings · ${worldRows.length} total`;
  };input.addEventListener('input',sync);fine.addEventListener('change',sync);sync();return sync;
 }
 
 export function mountColumnPanel(read,change,commit,reset){
  const panel=document.createElement('details');panel.id='column-panel';panel.className='panel';panel.innerHTML='<summary>Rock column</summary><p class="small">Beds repeat upward within each section. Changes belong to this map.</p><div class="column-body"></div><p class="small" role="status"></p><button type="button">Restore world column</button>';
- $('variant-control').after(panel);const body=panel.querySelector('.column-body'),note=panel.querySelector('[role="status"]'),restore=panel.querySelector('button');
+ $('world-colors').closest('details').after(panel);const body=panel.querySelector('.column-body'),note=panel.querySelector('[role="status"]'),restore=panel.querySelector('button');
  const at=(column,path)=>path.reduce((v,k)=>v[k],column);
  function field(parent,label,path,{min,max,step='any',choices,color=false}={}){
   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement(choices?'select':'input');input.dataset.columnPath=path.join('.');input.setAttribute('aria-label',label);

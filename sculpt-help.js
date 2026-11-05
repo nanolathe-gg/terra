@@ -1,7 +1,10 @@
 import {HELP_TOOLS,HELP_CONTROLS,HELP_VERSION,HELP_FRAME,helpFrames,helpTimeline} from './sculpt-help-examples.js';
 const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
 const controlHelp={
+  'knob-rockOrder':'Blends scattered rock marks into ordered beds, joints and cracks. Set it above zero to use the rock structure settings.',
   'knob-rockStain':'Darkens gully floors and stains below rock ledges. Ledge stains need a supporting rock material.',
+  'knob-sunTilt':'Moves the light north or south of due west. Zero is west; positive values move it south.',
+  'knob-ambient':'Sets the share of light that reaches faces pointing away from the sun.',
   'knob-rockMoss':'Keeps vegetation color in rock, including moss and, on supporting materials, lichen on faces exposed to sun and sky.',
   'knob-lushness':'Changes how much vegetation the ground supports. On materials with flowers, richer ground can grow more flower patches.',
 };

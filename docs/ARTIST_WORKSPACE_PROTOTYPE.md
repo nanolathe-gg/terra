@@ -81,6 +81,32 @@ Tool, World, Map and Shapes tabs reuse the existing inspector. Export and
 Settings open their existing panels from the top bar. Seed and reroll share
 one row; per-shape seed variation defaults to on and lives in Settings.
 
+The World tab now has six flat knob sections: Common, Ground & vegetation,
+Rock & cliffs, Water & shores, Materials & texture, and Lighting. Common opens
+by default with nine existing controls for undulation, pattern contrast,
+Lushness, Moisture, deposits, rock structure, Stain, light direction and ambient
+light. The other sections use plain subheadings instead of nested disclosures.
+Surface detail, colors, the rock column and preset management follow the knobs;
+resetting strokes now lives with preset management. Short labels keep the
+Common controls compact, with explanations in hover help.
+
+Measured after flattening: 39 collapsible knob groups (34 nested) become six
+single-level sections. All 193 knob IDs, starting values and disabled states
+match the previous layout; all nine worlds retain every setting without
+duplicates. Search reaches fine controls and restores the previous open
+sections when cleared. At 1024x768, all nine Common rows fit above the fold;
+the inspector is 279 px wide with no horizontal overflow. The existing
+workspace interaction checks and all 60 unit tests pass. Green's full impact
+sweep passes 333 reported rows with no unexplained zero-effect controls,
+disabled controls changing terrain, or console errors. The focused shape
+audit also passes all 22 cases. The other eight worlds received UI inventory
+checks in this pass; their earlier impact findings remain open below.
+By eye, the desktop
+and tablet-width captures keep common settings readable and the other
+categories easy to scan. Evidence is in `world-flat-before`, `world-flat-after`,
+`world-flat-final`, `world-flat-reviewed`, `world-flat-workspace`,
+`world-flat-controls` and `world-flat-shape-controls` under the assets root.
+
 Numeric controls combine label, fill, value and text entry:
 
 - Drag to adjust; Shift makes subsequent movement finer without a value jump.
