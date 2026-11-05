@@ -39,10 +39,7 @@
      "varySize": 170,
      "varyFoot": 120,
      "varyMiddle": 100,
-     "cracks": 50,
-     "maskChannel": 1,
-     "maskAmount": 100
-    },
+     "cracks": 50},
     "curve": {
      "form": "lfHill",
      "knots": [
