@@ -772,6 +772,22 @@ byte-identical unless the table says otherwise.
 - Water (P26) is on hold.
 - Delete finished agents' folders and worktrees once their work lands or
   closes; keep the notes.
+- **Hills and mountains look quite different by default** (November 5). *"hills
+  by default are lower, smoother with a flatter top, have little to no exposed
+  rock, some cracks, and can be walked/driven over by most units. Mountains by
+  default are high, may have cliffs, large exposed rock, peaked top, prevent
+  movement by most units. These should look quite different, though an artist
+  can adjust after placing."* Hills should *"more closely match retail hills
+  from green planet."* This design for the defaults stands even where retail
+  Green shows no more rock on high ground than on low.
+- **Shores** (November 5). Rock coasts are off by default on Green; rock on a
+  shore may be painted rather than set by a slider. The sand-to-grass
+  transition must vary and blend at TA's scale, the sand must be less even, and
+  the outermost foam must not be a 1 px jagged line. Surf must respond across
+  its whole range, so small changes show.
+- Sampled slope texture is off on worlds with a cover table (November 5).
+- The gully comb fix and the hilltop creep are dropped: neither made a visible
+  difference to the owner (November 5).
 
 ### Landed
 
@@ -826,9 +842,9 @@ byte-identical unless the table says otherwise.
 | P14 | Held | prototype/scarp | Retreat row costs nothing, but reads as a sea urchin (by eye) |
 | P15 | Held | prototype/slumps | Lobes read as small mounds, scars barely visible at 1x; shape_controls 2.24 units |
 | P17 fans | Held | prototype/talus-fans | Fans have no height and barely show |
-| P1 gully comb | Held for the owner | prototype/gully-comb | Damping narrow sections fixes the comb but drops Gully size 7.31 -> 4.28 (shape_controls) and cuts a Rounded ridge's front gullies by about 40%; per-side spacing made a denser comb |
+| P1 gully comb | Dropped by the owner | 0f1e0426 (branch deleted) | No visible difference to the owner. Damping narrow sections fixed the comb but dropped Gully size 7.31 -> 4.28 (shape_controls) and cut a Rounded ridge's front gullies by about 40%; per-side spacing made a denser comb |
 | Peaks B, C | Held | prototype/peaks | Spurs on Peaked ridge read as stubby fingers; mountain Gullies 70 departs from retail mountains (no dendritic gullies) |
-| Realism: saHill | Held for the owner | prototype/realism-gates | erosionCreep .05 on modern Green: saHill passes 6 -> 16 of 17, Hack 5 -> 3, mean in range 7.82 -> 7.06; Hack mostly measures sub-pixel roughness |
+| Realism: saHill | Dropped by the owner | 0ea53959, 77bb2619 (branch deleted) | No visible difference to the owner; rounder hills go to the hill preset instead. erosionCreep .05 on modern Green: saHill passes 6 -> 16 of 17, Hack 5 -> 3, mean in range 7.82 -> 7.06; Hack mostly measures sub-pixel roughness |
 | Sand bake trim | Closed | prototype/sand-perf | Two exact early-outs, no measurable gain (10 rounds, noise about 10%); the tap loop is about 5% of the relief bake |
 | P26 water | Held by the owner | prototype/water | Stage 2 stopped: retail water is flat tones with a hard step and grain, the model is a smooth gradient |
 | P8, P19 | Not started | | P19 (decision 26) |
