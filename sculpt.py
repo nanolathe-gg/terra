@@ -650,6 +650,9 @@ WORLD_VARIANTS = {
         # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
         # its beds and joints, debris where gravity and water leave it, light that agrees from any sun. It starts as a
         # copy of Green's own preset; each look card sets its realistic numbers here (scenes green-modern-1..3).
+        # Card P12: Cavity 1.0 (Green's .6; the multi-scale ring reads concave floors dark and convex lips bright under any sun), Shade blue .25 (the
+        # engine's light is one grey: the existing shadeBlue row keeps shaded ground cool against lit ground, the nearest thing to a cool sky under a warm sun
+        # without a colour on the light), Shine rock .36 (Green's .32: wet-looking rock glints; .5 overshoots retail's face, mean luma 51 against 45.8).
         # Card P1: landforms cut by branching gullies at 40 (by eye on green-modern-1..3 at 30, 40, 60 and 100: at 40 the
         # round hills carry branching spurs and the long cliff of green-modern-2 broad, uneven valleys; from 60 they also
         # cut the grass slope above the cliff; 30 barely reads at 1x). Card P17: talus cones at 15 px below the gully chutes of the steepest faces
@@ -662,7 +665,7 @@ WORLD_VARIANTS = {
         # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36, shadeBlue=.25),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7,
