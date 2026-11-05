@@ -1758,7 +1758,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // Over the thinning edge sand is a scatter of clumps 3 to 8 px across, more of them the thicker it is, not a line: each clump
             // takes the sand where the sand's share beats the clump's own threshold; deep sand covers every clump, as before.
             let clump = (valueNoise(p / 3.7 + 29.0) * 0.5 + 0.5) * 0.55 + (valueNoise(p / 8.3 + 61.0) * 0.5 + 0.5) * 0.45;
-            let threshold = 0.08 + 0.8 * smoothstep(0.25, 0.75, clump);
+            let threshold = 0.22 + 0.68 * smoothstep(0.25, 0.75, clump);
             let scatter = smoothstep(threshold - 0.07, threshold + 0.07, sand);
             let solid = smoothstep(0.35, 0.95, sand + (speck - 0.5) * 0.55 * u.sandEdge);
             let cover = mix(scatter, solid, smoothstep(0.6, 0.95, sand));

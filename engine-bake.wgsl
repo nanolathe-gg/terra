@@ -1563,7 +1563,7 @@ fn bake(p: vec2f) -> vec4f {
     let sandDepth = paint.b * 2.0 - 1.0;
     let sandBlur = paintSandBlur(p, sandDepth);
     let sandBreak = paintEdge + valueNoise(p / 6.0 + 83.0) * 0.10 + valueNoise(p / 27.0 + 57.0) * 0.12;
-    let paintSand = smoothstep(0.15, 0.85, sandBlur.x + sandBreak) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
+    let paintSand = smoothstep(0.15, 0.85, sandBlur.x + sandBreak) * smoothstep(0.0, 0.08, sandBlur.x) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
     let paintGround = smoothstep(0.30, 0.70, 1.0 - paint.b * 2.0 + paintEdge);
     let sandWeathered = sand * (1.0 - paintGround);
     if (u.hasBeach == 0) { sand = max(sand, paintSand); }
@@ -1703,23 +1703,26 @@ fn bake(p: vec2f) -> vec4f {
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit
     // crack wall (1 + light).
     // Band lines share the crack darkness code.
-    var lineDark = max(max(crackAt.y, bandDark * (1.0 - buried)), wormDark * (1.0 - buried));
+    // Dark lines, crevices and tufts lie only on ground the sand has left bare: any real sand (not only deep sand) takes them away, so a
+    // clump of sand at a thinning edge carries no outline of its own.
+    let buriedLines = max(buried, smoothstep(0.02, 0.30, sand));
+    var lineDark = max(max(crackAt.y, bandDark * (1.0 - buriedLines)), wormDark * (1.0 - buriedLines));
     // E9: a deep gully's floor lies in its own shade (occlusion baked as tone; it follows the carved depth, not a drawn line).
-    lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buried));
+    lineDark = max(lineDark, gullyFloor * u.gullyShade * (1.0 - buriedLines));
     lineDark = max(lineDark, crustDark);
     lineDark = max(lineDark, RIPPLE_CREST * crestTone);
-    lineDark = max(lineDark, loose.z * (1.0 - buried));
-    lineDark = max(lineDark, scatter.plant.z * (1.0 - buried));
-    lineDark = max(lineDark, 1.0 * stepWorn * (1.0 - buried));
-    lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buried));
+    lineDark = max(lineDark, loose.z * (1.0 - buriedLines));
+    lineDark = max(lineDark, scatter.plant.z * (1.0 - buriedLines));
+    lineDark = max(lineDark, 1.0 * stepWorn * (1.0 - buriedLines));
+    lineDark = max(lineDark, max(notch, rill.y * 0.5 * u.rillDepth) * (1.0 - buriedLines));
     // E9: the creases between facets lie in shade too (a fraction of a pixel to a pixel wide, never a drawn outline: it follows the facet cells).
-    lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buried));
+    lineDark = max(lineDark, blockCrevice * u.blockSeam * (1.0 - buriedLines));
     if (u.sandBanding > 0.0) {
         // Sand bars (sandCrown) are smooth rippled sand, not streaked dune slopes.
         let streak = sandStreaks(p, h, slope, fall, u.sandBanding * max(max(paintSand * (1.0 - u.sandCrown), smoothstep(0.3, 0.8, sand)), route * 0.6));
         lineDark = max(lineDark, streak.x * (0.55 + 0.45 * smoothstep(-0.3, 0.4, -streak.y)));
     }
-    crackAt.z = max(max(crackAt.z, bandLit * (1.0 - buried)), scatter.plant.y * (1.0 - buried));
+    crackAt.z = max(max(crackAt.z, bandLit * (1.0 - buriedLines)), scatter.plant.y * (1.0 - buriedLines));
     var crackCode = rock.y;
     if (lineDark > 0.02) { crackCode = -lineDark; } else if (crackAt.z > 0.02) { crackCode = 1.0 + crackAt.z; }
     // Green holds route protection, or (negative) beach cover off routes.
