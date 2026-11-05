@@ -1,4 +1,4 @@
-/* Prototype layout: compact rail, contextual inspector, shallow curve dock. */
+/* Workspace layout: compact rail, contextual inspector, shallow curve dock. */
 .app{--tools-width:88px;--inspector-width:304px;grid-template-columns:var(--tools-width) minmax(240px,1fr) var(--inspector-width);grid-template-rows:48px minmax(0,1fr) 168px 24px}
 .app.tools-collapsed{--tools-width:0px}.app.inspector-collapsed{--inspector-width:0px}
 .app:has(#focus-canvas[aria-pressed=true]){grid-template-rows:48px minmax(0,1fr) 0 24px}.app:has(#focus-canvas[aria-pressed=true]) .curve-dock{display:none}

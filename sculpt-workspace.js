@@ -1,4 +1,4 @@
-// Artist workspace prototype. Reuses the editor's controls, events and history.
+// Artist workspace. Reuses the editor's controls, events and history.
 import {mountHelp} from './sculpt-help.js';
 const $=id=>document.getElementById(id);
 const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
@@ -29,7 +29,6 @@ export function mountWorkspace(){
   zoomOut.onclick=()=>zoomBy(.5);zoomIn.onclick=()=>zoomBy(2);
   $('view-rendered').textContent='Art';
   for(const [name,label] of [['export','Export'],['graphics','Settings']]){const tab=$('tab-'+name);tab.hidden=true;const b=element('button','',label);b.id='open-'+name;b.onclick=()=>{if($('inspector-sidebar').hidden)$('toggle-inspector').click();tab.click();};document.querySelector('.top-actions').append(b);}
-  document.querySelector('.version').textContent='PROTOTYPE';
   document.querySelector('.tool-palette').addEventListener('click',e=>{if(e.target.closest('button')){if($('inspector-sidebar').hidden)$('toggle-inspector').click();$('tab-tool').click();}});
   let lastLock;
   const lock=()=>{const disabled=$('editor').disabled;if(lastLock===disabled)return;lastLock=disabled;dock.classList.toggle('is-disabled',disabled);dock.querySelectorAll('button,select').forEach(e=>{if(disabled){e.dataset.wasDisabled=String(e.disabled);e.disabled=true;}else if(e.dataset.wasDisabled!==undefined){e.disabled=e.dataset.wasDisabled==='true';delete e.dataset.wasDisabled;}});palette.querySelectorAll('button').forEach(b=>{b.disabled=disabled;});};
