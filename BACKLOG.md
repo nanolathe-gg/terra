@@ -8401,7 +8401,9 @@ unless judged on the retail sheets.
   show on viewer-facing walls.
 - **P17 fans.** Need a height and the transport-distance channel before they
   can show; the held branch has only placement.
-- **P28 rivers.** Point-bar sand, riffles and the water look; shape only now.
+- **P28 rivers.** Riffles and the water look; shape only now. Point-bar sand and scroll bars
+  are done (prototype/point-bars): inside each bend, from the path's curvature, as heights
+  and painted-sand cover. Braided rivers have none.
 - **P31 flowers.** Need a color channel (none exists in the scatter).
 - **P1 gullies.** The comb on narrow sections is held for the owner
   (prototype/gully-comb): it appears where the widest wavelength nears one
