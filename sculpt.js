@@ -239,7 +239,7 @@ const SHAPE_FIELDS=[
   ['styleCracks','style-cracks','Style: cracks',MASK_SHAPES,-100,100,5,100,'Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none).'],
   ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
   ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
-  ['styleErosion','style-erosion','Override: erosion',MASK_SHAPES,-100,100,5,100,'Erosion rate inside the shape (the GPU pass), times 1 + this: below 0 less, above 0 more, -100% none.'],
+  ['styleErosion','style-erosion','Override: erosion',MASK_SHAPES,-100,100,5,100,'Erosion rate inside the shape (the GPU pass), times 1 + this: below 0 less, above 0 more, -100% none. It also scales how steep loose slopes stand there, so more erosion cuts steeper walls.'],
   ['styleDeposits','style-deposits','Override: loose deposits',MASK_SHAPES,-100,100,5,100,'Sand and scree inside the shape, times 1 + this: below 0 less, above 0 more.'],
   ['styleVegetation','style-vegetation','Override: vegetation',MASK_SHAPES,-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
   ['styleExposure','style-exposure','Override: rock exposure',MASK_SHAPES,-100,100,5,100,'Where rock shows inside the shape, times 1 + this: below 0 less, above 0 more.'],
