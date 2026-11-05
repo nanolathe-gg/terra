@@ -8405,13 +8405,12 @@ unless judged on the retail sheets.
   sand and scroll bars landed (29816523, 3b62b152): inside each bend, from the
   path's curvature, as heights and painted-sand cover. Braided rivers have none.
 - **P31 flowers.** Done on `prototype/flowers`: 1-2 px dots drawn in the draw from the pixel (no color channel through the bake), palette in the world's material (`groundCover.plants.flowers`). Open: the density and palette are a first pass judged by eye.
-- **P1 gullies.** The comb on narrow sections is held for the owner
-  (prototype/gully-comb): it appears where the widest wavelength nears one
-  per run. Gullies itself reads 4.02 on `shape_controls` (main).
-- **Realism gates.** Modern Green passes all six on 0 of 17 windows. Hilltop
-  roundness: a closing-steps creep fixes 16 of 17 at a cost to the 15
-  statistics (held, prototype/realism-gates). Hack's exponent mostly measures
-  roughness below a pixel, which rule 11 rules out; it may not suit TA's scale.
+- **P1 gullies.** The comb fix is dropped (owner, November 5). Gullies itself
+  reads 4.02 on `shape_controls` (main).
+- **Realism gates.** Modern Green passes all six on 0 of 17 windows. The
+  closing-steps creep is dropped (owner: no visible difference). Hack's
+  exponent mostly measures roughness below a pixel, which rule 11 rules out;
+  measure it on 16-px cell heights before trusting it.
 - **`docs/audit/controls.json`** is a stale snapshot (13 stale keys after
   P16); regenerate it.
 
