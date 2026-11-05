@@ -8,6 +8,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
+import {applyRiver,isRiver,pointsSignature,RIVER_MIN_WIDTH} from './sculpt-river.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
@@ -35,6 +36,7 @@ const HELP = {
   shallow:'Draw a landform that starts as shallow water: the ground is flattened to 7 below sea level. Choose Raise to in Combine for a passage that leaves higher ground as it is.',
   valleyV:'Draw a landform that starts as a V valley: the ground is cut down to a floor on the path, and the walls rise at one slope, as a river leaves them. Choose any setting below; the Time pass settles walls steeper than the ground can stand.',
   valleyU:'Draw a landform that starts as a U valley: the ground is cut down to a flat floor with steep upper walls, as a glacier leaves it.',
+  river:'Draw a river: a valley landform whose path is migrated a seeded number of steps (Wander) by the curvature rule real rivers follow, so the line you draw becomes bends that grow and travel downstream, and a bend that closes on itself leaves an oxbow. Width is the channel (at least 32 px, so ships can use it). The bank is cut steep on the outside of each bend, a sand bar builds inside it, and pools and riffles follow the bends. Draw a long gentle line; Cut to sets the floodplain relative to the sea.',
   valleyT:'Draw a landform that starts as a terraced valley: a V valley whose walls climb in flat treads, the levels a river left as it cut down.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   crystal:'Grow a cluster of faceted crystals along the stroke: their sides, size, count, how flat their tops are and how much they lean are brush options. Height sets the tallest.',
@@ -80,9 +82,11 @@ const LANDFORM_TOOLS={
   shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
   valleyV:valley('lfValleyV'),
   valleyU:valley('lfValleyU'),
-  valleyT:valley('lfValleyV',{terraces:4,ledge:55,terraceJitter:30})
+  valleyT:valley('lfValleyV',{terraces:4,ledge:55,terraceJitter:30}),
+  // A river: Width is the channel (the section reaches 6 channel half widths each side), Wander the migration steps in 4s; the floodplain sits 3 above the sea.
+  river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:75,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}}
 };
-const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley'};
+const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley',river:'River'};
 // A palette entry's stroke kind: the shape buttons all draw landforms.
 const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
 const TOOL_PRESETS={
@@ -454,6 +458,11 @@ function updateControls() {
   const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
   const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
+  // P28: on a river, Wander is the migration (how many steps the drawn line is carried), not an outline noise in px; once the path is edited by hand it cannot be migrated again.
+  { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
+    $('lf-wander-control').querySelector('label').firstChild.nodeValue=riv?'Wander (bends) ':'Wander (px) ';
+    $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far the line you drew is carried by the river\'s own rule, as migration steps (4 a unit): 0 keeps it as drawn, more grows meander bends that travel downstream and leave oxbow lakes where a neck closes. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
+    $('lf-wander').disabled=stale;$('lf-wander').title=stale?why:''; }
   $('section-preview-control').hidden=kind!=='landform';
   if (!$('section-preview-control').hidden) drawSection();
   $('softness-value').textContent=$('softness').value+'%';
@@ -889,6 +898,7 @@ function previewRegionalStroke(points) {
   }else node.points=next;
   evaluate(stroke.index,unionRect(before,nodeBounds(node)));schedule();return stroke.index;
 }
+const migrateRiverNode=node => applyRiver(node,{w:config.map?.width??size,h:config.map?.height??size});
 function endRegionalStroke(commit=true,simplify=false) {
   if(!stroke?.regional)return false;
   if(commit&&simplify){
@@ -897,6 +907,12 @@ function endRegionalStroke(commit=true,simplify=false) {
     // Reusing preview preserves shared branch roots and invalidates both bounds.
     const points=shapePaths(stroke.node)[stroke.pathIndex].map(i=>stroke.node.points[i]),reduced=simplifyPath(points,3);
     if(reduced.length<points.length)previewRegionalStroke(reduced);
+  }
+  // P28: a river's drawn line is migrated once, as the stroke ends; the migrated path (and any oxbows) is what the node stores from then on.
+  if(commit&&!stroke.original&&isRiver(stroke.node.params)){
+    const node=stroke.node,before=nodeBounds(node);
+    node.params={...node.params,river:{drawn:node.points.map(p=>({x:p.x,y:p.y}))}};
+    migrateRiverNode(node);evaluate(stroke.index,unionRect(before,nodeBounds(node)));
   }
   const gesture=stroke,rect=nodeBounds(gesture.node);stroke=null;
   const emptyBranch=gesture.original&&gesture.attachment>=0&&gesture.node.paths[gesture.pathIndex].length===1;
@@ -1162,10 +1178,12 @@ function nodeDistance(n,p) {
 }
 // Moving, rotating and scaling a shape: the gesture's transform applies to
 // the shape as it was when the gesture began, path and frame together.
-function nodeState(n) { return {points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
+function nodeState(n) { return {drawn:n.params?.river?.drawn,points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
 function transformNode(n,start,m) {
   n.points=start.points.map(q => { const r=applyFrame(m,q.x,q.y); return {x:clamp(r.x,0,(config.map?.width??size)-1),y:clamp(r.y,0,(config.map?.height??size)-1)}; });
   n.frame=compose(m,start.frame);
+  // A river's drawn line moves with it, so Wander can still migrate it from where it now lies.
+  if (start.drawn&&n.params?.river) n.params={...n.params,river:{...n.params.river,drawn:start.drawn.map(q => { const r=applyFrame(m,q.x,q.y); return {x:r.x,y:r.y}; }),sig:pointsSignature(n.points)}};
   if (n.params && start.radius) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
 }
 function nodePivot(n) {
@@ -1208,6 +1226,7 @@ function editSelectedFromControls(overrides={}) {
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
     softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,
     ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)])),...overrides};
+  migrateRiverNode(n);
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
@@ -1247,7 +1266,7 @@ function nodeAction(kind) {
   cancelWeather();
   if (kind==='delete') { nodes.splice(i,1); selected=-1; evaluate(i); }
   else if (kind==='hide') { nodes[i].hidden=!nodes[i].hidden; evaluate(i); }
-  else if (kind==='seed') { if (nodes[i].seed===undefined) return; nodes[i].seed=randomSeed(nodes[i].seed); evaluate(i); }
+  else if (kind==='seed') { if (nodes[i].seed===undefined) return; nodes[i].seed=randomSeed(nodes[i].seed); migrateRiverNode(nodes[i]); evaluate(i); }
   checkpoint(); selectNode(selected); schedule(); queueWeather();
 }
 // Apply a pending node edit now, so history and refinement see it.
@@ -1359,7 +1378,9 @@ function scriptedScene(list,{ground=true}={}) {
     const kind=strokeKind(entry),{card:override,...rest}=options,d={...toolDefaults(entry),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={...strokeCard(d),seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
-    addNode({kind,points:pts,params:strokeParams(probe),seed:probe.seed});
+    const node={kind,points:pts,params:strokeParams(probe),seed:probe.seed};
+    if(isRiver(node.params)){node.params.river={drawn:pts.map(p => ({...p}))};migrateRiverNode(node);}   // a scripted river is migrated as a drawn one is
+    addNode(node);
   });
   regionalFields.changed();
   markChanged(); checkpoint();
@@ -1413,7 +1434,7 @@ const resettable=() => nodes.some(n => n.points && nodeDefaults(n));
 $('reset-strokes').onclick=() => {
   if (stroke || moving || loading || !ready || !resettable()) return;
   cancelWeather();
-  nodes=nodes.map(n => { const base=n.points?nodeDefaults(n):null; return base?{...n,params:{...base}}:n; });
+  nodes=nodes.map(n => { const base=n.points?nodeDefaults(n):null; if(!base)return n; const m={...n,params:{...base,...(n.params.river?{river:n.params.river}:{})}}; migrateRiverNode(m); return m; });
   selected=-1; pathPoint=-1; pathAdding=false; evaluate(0); regionalFields.changed(); checkpoint(); queueWeather(); schedule();
   status('Reset every stroke to this world\'s defaults.');
 };
@@ -1561,7 +1582,7 @@ function applySeedControl() {
 $('seed').addEventListener('change',() => {
   if(stroke||moving||loading)return;
   const next=applySeedControl();
-  if(nodes[selected]?.seed!==undefined&&nodes[selected].seed!==next)changeSelected(n=>{n.seed=next;});
+  if(nodes[selected]?.seed!==undefined&&nodes[selected].seed!==next)changeSelected(n=>{n.seed=next;migrateRiverNode(n);});
   updateControls();schedule();persistLater();
 });
 $('seed-randomize').onclick=()=>{

@@ -1,0 +1,6 @@
+{"biome": "green",
+ "source": {"note": "P28: a drawn line across the Green window, migrated 250 steps (Wander 100) with oxbows; River preset, 48 px channel. The plain is 99 and the sea 75 on this 4x4 map."},
+ "ground": true, "query": "",
+ "strokes": [
+  ["river", [[-60,300],[120,330],[300,280],[480,330],[660,290],[840,340],[1100,300]], {"card": {"diameter": 48, "wander": 75}}]
+ ]}
