@@ -74,14 +74,12 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('rockFrom',{rockOrder:1});
  assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
- assert.match(requirement('facetCoarse',{rockOrder:1,facetTilt:0}),/Facet tilt/);
- shows('facetCoarse',{rockOrder:1,facetTilt:.5});
- assert.match(requirement('cliffFine',{rockOrder:1,cliffFollow:1,facetTilt:0}),/Facet tilt/);
+ assert.match(requirement('rockScale',{rockOrder:0}),/Rock structure/);
+ shows('rockScale',{rockOrder:1});
  assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  shows('bedSpacing',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
  assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge above zero/,'the rise is relief only');
- shows('cliffBed',{rockOrder:1,cliffFollow:1,blocks:.5});   // blocks read the bed height
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  // strata: bands and caps need a column and the strata switch
  assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);

@@ -516,6 +516,7 @@ fn jointGroove() -> Groove { return lines(u.grooveAngle, u.grooveSpacing, u.join
 
 // H23: a bed with a riser has a lip of this height; one with none has none.
 const BED_LIP = 2.0;
+const BED_RAG = 1.8;   // a bed's boundary wanders at 3-7 px by this many height units (was blockChip 1.2 x 1.5 on the one world that cut blocks)
 fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
 
 // Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
@@ -545,7 +546,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let G = max(select(length(broadGradient(p) + u.bedDip * dip), gOver, gOver >= 0.0), 0.15);
     let S = max(u.bedSpacing, 2.0);
     // H4 round 2: a bed's boundary wanders at 3-7 px (blockChip x 1.5 height units), so a ledge is a ragged line, not a smooth contour curve.
-    let rag = select(0.0, (valueNoise(p / 7.0 + 3.0) + 0.5 * valueNoise(p / 3.0 + 9.0)) * u.blockChip * 1.5, u.rockSize > 0.0);
+    let rag = select(0.0, (valueNoise(p / 7.0 + 3.0) + 0.5 * valueNoise(p / 3.0 + 9.0)) * BED_RAG, u.rockSize > 0.0);
     let bed = columnAt(columnCoord(p, h) + rag);
     let f = bed.through;
     let bedPx = bed.thick / G;

@@ -244,8 +244,6 @@ struct Uniforms {
     gullyShade: f32,      // how dark a deep gully's floor is, as occlusion following its depth (0: lit like the rest)
     ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
     bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
-    facetTilt: f32,       // angular facets: each tilted up to this, height units per px (0: none)
-    facetCoarse: f32,     // a second, coarser level of facets (2.4 times the size) at this share of the tilt and step (0: none)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
     crackedStep: f32,     // Red: depth of the shallow-to-deep step under a cracked-bed stroke (0: the world's own step)
@@ -316,7 +314,6 @@ struct Uniforms {
     cliffRise: f32,       // height of a bed's riser, height units, when beds are spaced in px (0: the bed's own height, as before)
     cliffBed: f32,        // how far the beds follow the smoothed ground (cliffReach) instead of the grid's own bumps (0: the grid's heights; 1: the smoothed ones)
     cliffStagger: f32,    // each bed's joints sit at their own offset, up to this share of the joint spacing either way (0: one lattice for every bed, as before)
-    cliffFine: f32,       // a third, finer level of facets at this share of the fine level's tilt and step, 0.45 of its size (0: none)
     cliffDomain: f32,     // size of the patches that each keep their own lattice of joints, gullies and facets, world px
     // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
@@ -332,13 +329,7 @@ struct Uniforms {
     materialTable: array<vec4f, 205>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 38 rows of a world's ground-cover table (card P30; zeros: none)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
-    blocks: f32,          // 1: blocks on faces (with a reduced facet and gully set, ENGINE_KNOBS); 0: none (also leaves the beds' boundaries unragged)
-    blockRow: f32,        // px: height of a piece before the hardness scale (soft rock 0.7 of it, hard 1.5)
-    blockWidth: f32,      // px: width of a piece (the grid is turned by a slowly varying angle)
-    blockTilt: f32,       // largest tilt of a block's plane, height per px (soft beds 1.3 of it, hard ones 0.45)
-    blockStep: f32,       // largest step of a block against the next, height units (hard beds 0.4 of it)
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
-    blockChip: f32,       // px an edge wanders, chipping the block outline (hard beds 0.4 of it)
     weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet
