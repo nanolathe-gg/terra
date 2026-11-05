@@ -609,7 +609,7 @@ fn lfShare(c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
 // across the path, e beyond its end (the channel closes round it); kw the path's curvature times the channel width u.lfRiver, positive when the bend's centre is
 // on the c > 0 side; silt the oxbow's remaining depth (1 the river). v runs across the channel, +1 at the inner bank, -1 at the outer. The deepest line sits toward
 // the outer bank by .55 of a bend's tightness, under a steep cut bank; the inner side runs on above the water as a gentle point bar; depth grows with the bend
-// (pools in bends, riffles in the crossings); a levee rims the channel (scroll bars, ridged on the inner floodplain at .3 to 1 height unit, did not read at 1x and are left out). Port of docs/research/lab/exp/ws-meander.js riverAt
+// (pools in bends, riffles in the crossings); a levee rims the channel (scroll bars across the point bar are below). Port of docs/research/lab/exp/ws-meander.js riverAt
 // (the research branch), with the banks as smooth runs and the depth scaled by the width.
 fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, wy: f32) -> vec2f {
   let W = u.lfRiver; let hw = 0.5 * W;
@@ -625,23 +625,27 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
   let depth = 0.25 * W * (0.5 + 0.75 * ak) * (1.0 + 0.15 * vnoise(wx / 30.0, wy / 30.0, u.seed ^ 0x99u)) * silt;
   let lev = 0.07 * W * exp(-max(d - hw, 0.0) / (0.8 * W)) * qq * qq * silt;
   let fp = fl + lev;
-  // The point bar: on the inner side of a bend (v > 1), as wide as the bend is tight and the channel wide (RIVER_BAR_* in sculpt-river.js), widest at the
-  // apex and gone in the crossings. s is the distance in px from the channel's inner edge. Its surface climbs gently from the water to the floodplain, with
-  // scroll bars (low ridges where the channel stood) across it; the second result is the share of sand laid on it (the painted sand's cover plane).
+  // The point bar: on the inner side of a bend (v > 1), as wide as the bend is tight and the channel wide (0.65 + 1.3 x the tightness, in channel widths),
+  // widest at the apex and narrow in the crossings, where it changes banks. s is the distance in px from the channel's inner edge. Its surface climbs gently
+  // from the water, with scroll bars (low ridges where the channel stood) across it, and rises to the floodplain at its outer edge; the second result is the
+  // share of sand laid on it, which goes to the cover plane and draws through the painted sand.
   let top = max(fp, sea + 0.4);
   let s = (v - 1.0) * hw;
-  let barPx = mix(0.1 * W, W * (0.65 + 1.3 * ak), sm(0.0, 0.2, ak)) * (1.0 + 0.3 * vnoise(wx / 41.0, wy / 41.0, u.seed ^ 0x9bu));   // 0.1 W in a crossing: the bar changes banks there
+  let barBase = mix(0.1 * W, W * (0.65 + 1.3 * ak), sm(0.0, 0.2, ak));
   var h = 1.0e9;
   var sand = 0.0;
   if (v >= -1.0 && v <= 1.0) { h = sea + 0.25 - (depth + 0.25) * f; }
   else if (v < -1.0) { h = sea + 0.25 + (top - sea - 0.25) * sm(0.0, 1.0, (-1.0 - v) * hw / mix(7.0, 3.5, ak)); }
+  else if (s >= 1.85 * barBase) { h = sea + 1.1 + max(top - sea - 1.1, 0.0); }   // past the bar (and its noise): the floodplain, with no noise to read
   else {
-    let t = clamp(s / barPx, 0.0, 1.0);
+    let barPx = barBase * (1.0 + 0.3 * vnoise(wx / 41.0, wy / 41.0, u.seed ^ 0x9bu));
+    let ub = s / barPx;
+    let t = min(ub, 1.0);
     let phase = s / (0.9 * W) + 0.7 * vnoise(wx / 53.0, wy / 53.0, u.seed ^ 0x9cu);
     let scroll = pow(0.5 + 0.5 * cos(6.2831853 * phase), 1.5) * sm(0.0, 0.25, t) * (1.0 - sm(0.7, 1.0, t));
     h = sea + 0.3 + 0.8 * t + max(top - sea - 1.1, 0.0) * sm(0.6, 1.0, t) + 0.5 * scroll * sm(0.04, 0.18, ak);
     let gate = sm(0.04, 0.18, ak) * sm(0.85, 1.0, silt);
-    sand = gate * (1.0 - sm(0.7, 1.1, t + 0.3 * vnoise(wx / 19.0, wy / 19.0, u.seed ^ 0x9du))) * (0.65 + 0.35 * scroll);
+    sand = gate * (1.0 - sm(0.7, 1.1, ub + 0.3 * vnoise(wx / 19.0, wy / 19.0, u.seed ^ 0x9du))) * (0.65 + 0.35 * scroll);
   }
   return vec2f(min(fp, h), sand);
 }
