@@ -116,7 +116,7 @@ function broadColor(lev, r, lean, zone) {
   if (lean < 0 && zone < -lean * 0.9) ramp = IDX.YELLOW_GREEN;
   const x = r();
   if (x < 0.1) return nearestExtra(lumaOfLevel(L) + (r() - 0.5) * 40);
-  if (x < 0.105) return pick(r, [68, 67, 17, 18, 21, 22]);
+  if (x < 0.105) return pick(r, [233, 234, 35, 53, 52]);   // saturated or gray-green flecks, never white, gray or pink
   if (x < 0.12 && L < 7) return IDX.OLIVE[clamp(Math.round(L * 0.6), 0, 6)];
   if (lean > 0 && L > 7 && r() < lean * 0.5) return pick(r, [36, 35, 34]);
   return ramp[li];
@@ -126,8 +126,8 @@ function coniferColor(lev, r, lean, zone, brownP) {
   if (r() < brownP) return weighted(r, [[62, 3], [61, 4], [60, 3], [59, 3], [58, 2], [57, 1]]);
   const x = r();
   if (x < 0.035 + (lean < 0 ? -lean * 0.2 : 0)) return IDX.OLIVE[clamp(Math.round(L * 0.8 + (r() - 0.5) * 3), 0, 6)];
-  if (x < 0.05) return pick(r, [68, 67, 17, 22, 21, 85, 86, 87, 88]);
-  if (x < 0.14 && L < 4.5) return GR[clamp(Math.round(L + (r() - 0.5) * 4), 0, 8)];
+  if (x < 0.05) return pick(r, [53, 54, 171, 237]);   // gray-green flecks; conifers have no pixel brighter than luma 123
+  if (x < 0.14 && L < 4.5) return GR[clamp(Math.round(L + (r() - 0.5) * 4), 0, 6)];
   if (x < 0.25) return nearestExtra(lumaOfLevel(L) + (r() - 0.5) * 50);
   if (lean > 0 && L > 6 && r() < lean * 0.4) return pick(r, [36, 35]);
   return G[li];
