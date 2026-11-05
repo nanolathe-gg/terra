@@ -44,8 +44,6 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 .tools button:hover{background:#2e3a40}
 .tools button[aria-pressed=true]{background:#36453f;border-color:#739681}
 .tool-icon{width:23px;height:23px;color:var(--tool-color,#bad9c6);flex-shrink:0}
-.tools .tool-label{position:absolute;pointer-events:none;top:calc(100% + 5px);left:50%;transform:translateX(-50%);padding:5px 8px;white-space:nowrap;background:#080e12;color:#fff;border:1px solid #52636b;border-radius:4px;font-size:11px;z-index:30;opacity:0}
-.tools button:hover .tool-label,.tools button:focus-visible .tool-label{opacity:1}
 .tool-settings{overflow:auto;min-height:0;padding:12px;scrollbar-width:thin;scrollbar-color:#475850 transparent}
 .panel-title{font-size:13px;margin:0 0 4px}
 .scope,.small{color:var(--muted);font-size:11px;line-height:1.55}
@@ -172,11 +170,9 @@ footer{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 12px;
 .brush-basics .control{margin-top:10px}
 .feature-group summary{gap:8px}
 .feature-group summary input{margin-left:auto}
-.tools button:has(.tool-label){isolation:auto}
 .tool-groups{display:flex;flex-direction:column;gap:5px}
 .primary-tools{grid-template-columns:1fr 1fr;padding-bottom:5px;border-bottom:1px solid var(--line)}
 .primary-tools button{gap:6px;border-color:var(--line);background:#20292d}
-.primary-tools .tool-label{position:static;transform:none;opacity:1;background:none;border:0;padding:0;color:inherit;font-size:11px}
 .tool-group{display:grid;grid-template-columns:42px minmax(0,1fr);gap:3px;align-items:start}
 .tool-group-label{padding-top:9px;font-size:9px;color:var(--muted)}
 .tool-group .tools{gap:2px}

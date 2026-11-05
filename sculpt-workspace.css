@@ -11,18 +11,18 @@
 .tool-groups{gap:9px}.tool-group{display:block;margin-top:4px}.tool-group-label{display:block;font-size:8px;letter-spacing:1px;color:#81968e;padding:0 4px 4px;text-transform:uppercase}
 .tool-groups .tools,.tool-group .tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}
 .tool-groups .tools button{height:36px;padding:5px;border-radius:5px;display:flex;align-items:center;justify-content:center;min-width:0}
-.tool-groups .tool-label{display:none}.tool-groups .tool-icon{width:23px;height:23px}
+.tool-groups .tool-icon{width:23px;height:23px}
 .tool-groups .tools button[aria-pressed=true]{background:#354d40;border-color:#82b597;box-shadow:inset 2px 0 #b0e2bc}
 .workspace{grid-row:2;grid-column:2}.canvas-caption{min-height:32px;height:32px;padding:3px 8px}.canvas-caption h2{font-size:11px}.canvas-caption button{padding:3px 5px}
 .world-panel{display:flex;grid-column:3;grid-row:2/4;overflow:hidden}.inspector{width:100%;height:100%}.inspector-content{padding:10px}.inspector-tabs{flex-shrink:0}.inspector-tabs button{padding:9px 2px}
 #editor,.tool-settings{display:block;padding:0;overflow:visible}.tool-settings .scope{font-size:10px}.tool-settings>.panel{border:0}
-#drawing-options{margin:0 0 7px;padding:0 0 7px}#drawing-options .eyebrow,#drawing-target{display:none}#drawing-options .selection-modes{margin:0}#drawing-options .selection-modes button{padding:4px;font-size:10px}
+#drawing-options{margin:0 0 7px;padding:0 0 7px}#drawing-target{display:none}#drawing-options .selection-modes{margin:0}#drawing-options .selection-modes button{padding:4px;font-size:10px}
 #brush-title{font-size:12px;margin-bottom:6px}#brush-scope{display:none}#seed-control{display:grid;grid-template-columns:35px minmax(0,1fr);align-items:center;gap:5px;margin:5px 0 8px;padding:0;border:0;background:none}
 #seed-control>label{color:#a5b9ac;font-size:11px;margin:0}#seed-control input{padding:4px 6px}#seed-randomize{background:#496d52;border-color:#769d7c;color:#f1ffe9;min-height:25px;padding:3px 8px;white-space:nowrap}
 #seed-help{display:none}.editor-preferences{margin-bottom:18px}.editor-preferences label{display:flex;align-items:center;gap:7px;margin:12px 0;font-size:11px}
 .feature-group{margin-top:6px;background:#1e282b}.feature-group>summary{padding:5px 6px}.feature-body{padding:0 6px 6px}.feature-body .control{margin-top:5px}.control>p.small:not(.control-requirement){display:none}.control-requirement{display:block}
 .tool-settings .control:has(>select){display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;gap:6px}.tool-settings .control:has(>select)>label{margin:0;font-size:10px}.tool-settings .control>select{padding:4px 5px;font-size:11px}
-#world-editor>.eyebrow{display:none}#world-editor>.control:has(>select){display:grid;grid-template-columns:48px minmax(0,1fr);align-items:center;gap:6px;margin-top:6px}#world-editor>.control>label{margin:0;font-size:11px}#world-editor>.control>select{padding:4px 6px;font-size:11px}
+#world-editor>.control:has(>select){display:grid;grid-template-columns:48px minmax(0,1fr);align-items:center;gap:6px;margin-top:6px}#world-editor>.control>label{margin:0;font-size:11px}#world-editor>.control>select{padding:4px 6px;font-size:11px}
 #world-control-search{top:-10px;padding:9px 0 7px}#world-control-search>label:first-child{display:none}#world-search{padding:5px 7px;font-size:11px}#world-control-search .fine-controls{font-size:11px;margin:6px 0 0}#world-control-count{font-size:10px}
 #knobs>.world-section{margin:0;padding:0;border-top:1px solid var(--line)}.world-section>summary{padding:7px 0;font-size:12px;font-weight:600;cursor:pointer}.world-section>.control,.world-subsection>.control{margin:5px 0}.world-section[open]{padding-bottom:8px}.world-subsection h3{font-size:10px;font-weight:500;color:#96ada2;margin:10px 0 5px}.world-subsection:first-of-type h3{margin-top:2px}
 .brush-basics{border:0;background:none;margin:0}.brush-basics>summary{display:none}.brush-basics .feature-body{padding:0;border:0}.brush-basics .control{margin-top:5px}#tool-style{font-size:11px}.layers-panel{border:0;padding:0;background:none;min-height:200px}#layers{max-height:none}
