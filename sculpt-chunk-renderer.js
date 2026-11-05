@@ -80,8 +80,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // Only height/mask/weather support extends the bake's field input apron.
   reaches(quality='full',heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),full=quality==='full';
-    // H1: the close shadow march (6 px) and the cavity ring (3 px) plus the gradient's 1.4 sit inside the far taps' reach.
-    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?3+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
+    // H1: the close shadow march (6 px) and the cavity rings (4 px, 6 at the corners) plus the gradient's 1.4 sit inside the far taps' reach.
+    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?6+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads 14 px up the slope plus its gradient (5).
     const stones=3.6*Math.min(16,3.3*n('looseSize',6))+24;
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
