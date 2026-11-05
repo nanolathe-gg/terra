@@ -1117,6 +1117,38 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     return clamp(field + lie * thin, 0.0, 1.0) * (1.0 - smoothstep(0.95, 1.6, slope));
 }
 
+// The painted-cover texture (Sand, Ground cover and Paint strokes) at world point p.
+fn paintAt(p: vec2f) -> vec4f {
+#ifdef CHUNK
+    return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0);
+#else
+    return textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
+#endif
+}
+
+// Painted sand seen through a blur: (the share of a ring of taps 9 to 20 px out that lies inside the painted sand, which feathers the
+// edge over a band a few px wide; the same at 8 to 18 px, which says how deep inside the sand p lies). The radii wander at 31 and 23 px,
+// so the bands' widths are irregular. (0, 0) when no sand lies within 32 px.
+fn paintSandBlur(p: vec2f, centerDepth: f32) -> vec2f {
+    var near = centerDepth;
+    for (var k = 0; k < 4; k++) {
+        let a = f32(k) * 1.5707963 + 0.8;
+        near = max(near, paintAt(p + vec2f(cos(a), sin(a)) * 32.0).b * 2.0 - 1.0);
+    }
+    if (near < 0.3) { return vec2f(0.0); }
+    let rf = 9.0 + 11.0 * (valueNoise(p / 31.0 + 9.0) * 0.5 + 0.5);
+    let rd = 8.0 + 10.0 * (valueNoise(p / 23.0 + 101.0) * 0.5 + 0.5);
+    var edge = smoothstep(0.3, 0.7, centerDepth);
+    var deep = 0.0;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.7853982 + 0.4;
+        let d = vec2f(cos(a), sin(a));
+        edge += smoothstep(0.3, 0.7, paintAt(p + d * rf).b * 2.0 - 1.0);
+        deep += smoothstep(0.3, 0.7, paintAt(p + d * rd).b * 2.0 - 1.0);
+    }
+    return vec2f(edge / 9.0, deep / 8.0);
+}
+
 const RIPPLE_CREST = 0.22;   // the darkness of the coarse grains on a crest
 // Card P18: sand ripples as a pure function of position. The phase is p.w / lambda (lambda the Ripple length) plus crest sinuosity from noise
 // and dislocation pairs: on a jittered lattice of 8 lambda, each pair of cores (+1, -1) adds atan2(cross(a, b), dot(a, b)) / 2pi to the phase,
@@ -1515,15 +1547,15 @@ fn bake(p: vec2f) -> vec4f {
     // Painted cover (Sand / Ground cover brushes): sand lies on slopes too,
     // so a hill set in sand has sandy feet; steep faces still shed it.
     // Ground cover clears weathered and painted sand alike.
-#ifdef CHUNK
-    let paint = textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0);
-#else
-    let paint = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
-#endif
+    let paint = paintAt(p);
     let paintEdge = valueNoise(p / 13.0 + 41.0) * 0.20 + valueNoise(p / 4.0 + 7.0) * 0.08;
     // Sand bars (sandCrown) keep their sand on steep flanks.
+    let sandDepth = paint.b * 2.0 - 1.0;
+    let sandBlur = paintSandBlur(p, sandDepth);
+    let sandBreak = paintEdge;
     let paintSand = smoothstep(0.30, 0.70, paint.b * 2.0 - 1.0 + paintEdge) * (1.0 - smoothstep(1.0, 1.8, slope) * (1.0 - u.sandCrown)) * (1.0 - route);
     let paintGround = smoothstep(0.30, 0.70, 1.0 - paint.b * 2.0 + paintEdge);
+    let sandWeathered = sand * (1.0 - paintGround);
     if (u.hasBeach == 0) { sand = max(sand, paintSand); }
     sand *= 1.0 - paintGround;
     // Only sand deep enough to cover the ground buries relief and stones;
@@ -1535,7 +1567,9 @@ fn bake(p: vec2f) -> vec4f {
     var crestTone = 0.0;
     if (sand > 0.0 && u.ripple > 0.0) {
         let rp = sandRipples(p, u.ripple);
-        let deep = smoothstep(0.5, 0.95, sand);
+        // Ripples need sand deep enough to hold them: thin sand at a painted edge stays flat, over a band several px wide whose width wanders.
+        let paintDeep = smoothstep(0.55, 0.98, sandBlur.y + 0.4 * sandBreak) * paintSand;
+        let deep = max(smoothstep(0.5, 0.95, sandWeathered), select(0.0, paintDeep * (1.0 - paintGround), u.hasBeach == 0));
         drift = (rp.x * u.rippleHeight * u.ripple / (9.0 * 1.4) + rp.z) * deep;
         crestTone = rp.y * deep;
     }
