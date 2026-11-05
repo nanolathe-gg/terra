@@ -559,8 +559,10 @@ fn crackShadeRelief(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
 fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> vec4f {
     let severity = max(u.crackSeverity, 0.6 * boost);
     let majorShare = max(u.crackMajor, 0.8 * boost);
-    let minorShare = max(u.crackMinor, 0.75 * boost);
-    let hairShare = max(u.crackHairline, 0.6 * boost);
+    // Frost: above 1 the finer levels fill in (full shares at 1.5), the cracks widen to double and the blocks step twice as far; the carve keeps growing with the depth.
+    let frost = clamp(2.0 * (severity - 1.0), 0.0, 1.0);
+    let minorShare = max(max(u.crackMinor, 0.75 * boost), frost);
+    let hairShare = max(max(u.crackHairline, 0.6 * boost), frost);
     let blockShare = max(u.crackBlocks, 0.6 * boost);
     if (u.cracksOn == 0 || mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
     let start = mix(0.95, 0.10, CRACK_REACH);
@@ -600,7 +602,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     var c2 = fractureLevel(q2, r1 * r0 * fall, hairCell, 1.0, m * mix(0.4, 1.0, rocky) * gentle * hairShare, 1.0, 21.7);
     c2.normal = transpose(r1 * r0) * c2.normal;
     // Shading: majors widest, hairlines a single soft dark pixel.
-    let width = u.crackWidth;
+    let width = u.crackWidth * (1.0 + frost);
     let s0 = crackShade(c0, width * 1.25 * mix(0.6, 1.0, rocky), sun, 1.0);
     let s1 = crackShade(c1, width * 0.9 * mix(0.8, 1.0, rocky), sun, 0.8);
     let s2 = crackShade(c2, width * 0.55, sun, 0.0) * vec2f(0.6, 0.0);
@@ -636,7 +638,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     var blocks = b0.x * mix(1.0, 3.0, severity) + dot(t0, w - c0.point) * 0.25
                + (b1.x * mix(0.6, 1.6, severity) + dot(t1, q1 - c1.point) * 0.9) * step(0.01, minorShare);
     // Like the relief, block steps grow with the slope.
-    blocks *= blockShare * rocky * m;
+    blocks *= blockShare * (1.0 + frost) * rocky * m;
     return vec4f(carve, dark, lit, blocks);
 }
 
@@ -654,7 +656,8 @@ fn jointGroove() -> Groove { return lines(u.grooveAngle, u.grooveSpacing, u.join
 // H23: a bed with a riser has a lip of this height; one with none has none.
 const BED_LIP = 2.0;
 const BED_RAG = 1.8;   // a bed's boundary wanders at 3-7 px by this many height units (was blockChip 1.2 x 1.5 on the one world that cut blocks)
-fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
+// Ledges above 1 (the row runs to 2) keep the riser as it is at 1 and lift the lip, the notch and the tread's step with the row.
+fn bedLip() -> f32 { return select(0.0, BED_LIP * max(1.0, u.bedLedge), u.bedLedge > 0.0); }
 
 // Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
 // wander broadly and wobble finely but stay continuous between joints, so the
@@ -687,7 +690,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let bed = columnAt(columnCoord(p, h) + rag);
     let f = bed.through;
     let bedPx = bed.thick / G;
-    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), min(u.bedLedge, 1.0));
     let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
     var off = step_ * (bed.thick / S) * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;
     let dTop = (1.0 - f) * bedPx;
@@ -721,7 +724,7 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let f = clamp((L - lo) / thick, 0.0, 1.0);
     // Bed thickness along the ground (px), the riser a few px wide whatever the bed.
     let bedPx = thick * S / G;
-    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), min(u.bedLedge, 1.0));
     let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
     // G2: cliffRise gives the riser a height of its own; spaced in px the bed's height unit follows the slope and fine beds on a gentle face would carry no relief (0: the bed's own height).
     var off = step_ * thick * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;

@@ -182,7 +182,7 @@ $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtur
  const tasks=inventory.knobs.flatMap(([group,list])=>list.map(f=>({group,f}))).filter(t=>keys.includes(t.f[0]));
  for(const {group,f:[key,,lo,hi,step]} of tasks){
   if(stop)break;const gates={...worldGates(group,key),undulation:10};
-  if(group.startsWith('Rock')||['faceEdge','gullyRock'].includes(key))Object.assign(gates,{rockOrder:1,bedLedge:.7,jointDepth:4,bedDip:.7,cliffFollow:key==='cliffStagger'||key==='cliffDomain'?1:0,cliffStagger:.5,blocks:0});
+  if(group.startsWith('Rock')||['faceEdge','gullyRock'].includes(key))Object.assign(gates,{rockOrder:1,bedLedge:.7,rockOpen:2,bedDip:.7,cliffFollow:key==='cliffStagger'||key==='cliffDomain'?1:0,cliffStagger:.5,blocks:0});
   if(group==='Contour bands')Object.assign(gates,{banding:.8,sandBanding:.8});
   if(['shallowDepth','deepDepth','waterSoft','bandWater'].includes(key))Object.assign(gates,{deepEdge:0});
   if(key.startsWith('ring'))Object.assign(gates,{ringContrast:1,ringShift:20});
@@ -213,12 +213,12 @@ $('features').onclick=()=>run('Feature placement and metadata sensitivity',async
 $('internal').onclick=()=>run('Preset/internal sensitivity',async()=>{
  const world=$('world-filter').value,api=await load(world),all=await(await fetch('/audit/defaults.json')).json(),known=new Set([...inventory.shapes.map(f=>f[0]),...inventory.knobs.flatMap(([,l])=>l.map(f=>f[0]))]),rows=[];
  const fixture=[['landform',[[280,270],[550,300]],{card:{diameter:420,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,120],[880,400]],{card:{diameter:320,heightReference:1,elevation:174,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,830],[1000,830]],{card:{diameter:620,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterBed:0,waterDeep:0,waterShore:0}],['crater',[[760,600]],{card:{diameter:300,amount:65,craterFacets:100,crystalCraterSkin:100}}]];
- const ranges={rockScale:[.4,3],rockAge:[0,1],columnContrast:[0,2],crystalCraterWebPx:[6,30],crystalCraterLight:[0,2],crystalShallowPx:[4,30],crystalSeamEnd:[.55,.95],crystalFace:[0,2],crystalTone:[0,2],crystalSeam:[0,2],erosionAge:[16,200],erosionRain:[0,1],talusAngle:[25,65],faceStreakFrom:[.1,1.5],rillDepth:[0,4],rillSpacing:[4,24],stoneSize:[2,16],outcrop:[0,2],cavity:[0,2],closeShadow:[0,2],microRock:[0,2]};
+ const ranges={rockScale:[.4,3],rockOpen:[0,2],rockAge:[0,1],columnContrast:[0,2],crystalCraterWebPx:[6,30],crystalCraterLight:[0,2],crystalShallowPx:[4,30],crystalSeamEnd:[.55,.95],crystalFace:[0,2],crystalTone:[0,2],crystalSeam:[0,2],erosionAge:[16,200],erosionRain:[0,1],talusAngle:[25,65],faceStreakFrom:[.1,1.5],rillDepth:[0,4],rillSpacing:[4,24],stoneSize:[2,16],outcrop:[0,2],cavity:[0,2],closeShadow:[0,2],microRock:[0,2]};
  const assignment=k=>k.startsWith('crystal')?'crystal':['shadeBlue','frostWet'].includes(k)?'ice':'green';
  const keys=Object.keys(all.defaults).filter(k=>!known.has(k)&&!['groundPattern'].includes(k)&&assignment(k)===world);
  const original=new Map(api.renderer.variant);
  for(const key of keys){
-  if(stop)break;const gates={};if(key==='blockSeam'||key==='hillBlocks'||key.startsWith('rock')&&key!=='rockOrder'&&key!=='rockMoss'&&key!=='rockFrom')Object.assign(gates,{rockOrder:1,hillBlocks:1});if(key.startsWith('crystalCrater'))Object.assign(gates,{crystalCraterWeb:1});if(key.startsWith('crystalShallow'))gates.crystalShallow=1;if(key.startsWith('rill'))gates.rillDepth=3;if(key.startsWith('stone'))gates.stoneDensity=1;
+  if(stop)break;const gates={};if(key==='rockOpen'||key==='hillBlocks'||key.startsWith('rock')&&key!=='rockOrder'&&key!=='rockMoss'&&key!=='rockFrom')Object.assign(gates,{rockOrder:1,hillBlocks:1});if(key.startsWith('crystalCrater'))Object.assign(gates,{crystalCraterWeb:1});if(key.startsWith('crystalShallow'))gates.crystalShallow=1;if(key.startsWith('rill'))gates.rillDepth=3;if(key.startsWith('stone'))gates.stoneDensity=1;
   const saved={};for(const [k,v] of Object.entries(gates)){saved[k]=api.renderer.variant.get(k);await api.knob(k,v);}
   const [lo,hi]=ranges[key]||[0,1];const outputs=[];for(const value of [lo,hi]){await api.knob(key,value);api.scene(fixture,{ground:true});outputs.push(await api.capture());}
   const row={key,world,lo,hi,gates,...summarize(outputs[0].canvas,outputs[1].canvas)};rows.push(row);await save(`${$('label').value}/internal-${world}.json`,rows);line(`${key}: ${(row.changedBlocks*100).toFixed(1)}% blocks, max RGB ${row.maxRGB}`);
