@@ -1570,7 +1570,7 @@ fn bake(p: vec2f) -> vec4f {
     sand *= 1.0 - paintGround;
     // Only sand deep enough to cover the ground buries relief and stones;
     // painted sand bars (sandCrown) bury theirs too.
-    let buried = max(smoothstep(0.35, 0.9, sand), paintSand * u.sandCrown);
+    let buried = max(smoothstep(0.10, 0.90, sand), paintSand * u.sandCrown);
     // Sand ripples (card P18): asymmetric crests with defects, coarse grains on the crests, and sand shadows behind the scatter's big stones.
     // They lie on the buried ground, so they go in after the sand buries relief. Height is lambda / 9 at the default Ripple height (1.4).
     var drift = 0.0;
