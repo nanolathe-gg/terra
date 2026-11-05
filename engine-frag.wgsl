@@ -1635,6 +1635,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfX = shore.x;
         surfQ = shore.yz;
         surfSlope = shore.w;
+        // Painted rock (a rock coast's, from coastBeach, or the artist's) takes the beach away, by its ragged edge: Surf falls to a lake's wet line and lace.
+        if (u.paintOn != 0) { surfE = mix(surfE, 0.1, smoothstep(0.3, 0.7, painted.x) * surfBeach(surfE)); }
         if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, surfE)); }
     }
     var material = mix(grass, rock, exposed);

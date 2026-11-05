@@ -1516,7 +1516,7 @@ fn coastLayers(@builtin(global_invocation_id) g: vec3u) {
 // that gives way to the bank; the land is cut to that profile where it stands above it and left where it is lower. Water: a shoreface (depth with the 2/3 power of
 // the distance, Dean's), then a steeper slope, the bed lifted to it where it is deeper. Both blend into the stroke's own heights by the reach. Retail's coasts hold
 // the berm to a few units (Archipelago's land stands 1 above the sea, its p90 crest 5), so the crest is 1 to 2.5 units and 14 to 48 px from the water: the frag's
-// surfBerm. Hard rock (the column's hardness at the coast, as the bake reads it) gets no berm: a steeper face with a broken edge, and its Surf plane drops to a lake's, so the frag draws no beach there.
+// surfBerm. Hard rock (the column's hardness at the coast, as the bake reads it) gets no berm: a steeper face with a broken edge, and the rock mask is painted over its face, so the frag draws the world's rock and no beach there.
 // The beach reach (px) is BEACH_REACH in sculpt-gpu-fields.js.
 const BEACH_REACH = 140.0;
 fn colRow(at: u32) -> vec4f { return MW[u.mwBase + u.nwrites + at]; }
@@ -1591,14 +1591,18 @@ fn coastBeach(@builtin(global_invocation_id) g: vec3u) {
   var gr = vec2f(dr - dl, dd - du);
   var shoreAt = cp;
   if (max(max(dl, dr), max(du, dd)) < BEACH_REACH + 2.0 * u.spacing && dot(gr, gr) > 1.0e-6) { shoreAt = vec2f(wx, wy) - normalize(gr) * d; }
-  let rock = coastRock(shoreAt);
   // The cell's own place in the frame, for the rock's broken edge.
   var cx = wx; var cy = wy;
   if (u.framed != 0u) { cx = u.inv0 * wx + u.inv2 * wy + u.inv4; cy = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  // Pockets: noise at 40 and 95 px (a cell is 16) moves the rock's threshold, so a hard stretch opens into small coves of sand and a soft one gets rocks in it.
+  let ragged = 0.6 * vnoise(cx / 40.0, cy / 40.0, salt ^ 0x6d1u) + 0.4 * vnoise(cx / 95.0, cy / 95.0, salt ^ 0x6d9u);
+  let rock = sm(0.4, 0.7, coastRock(shoreAt) + 0.3 * ragged);
   var result = raw;
   if (raw > sea) {
     // A rock coast's Surf is the lake's: the plane the frag reads (flat Surf where the stroke changed the height, plane 18) drops to a wet line and a lace.
-    if (rock > 0.0 && maskGet(i, 18u) > 0) { maskSet(i, 18u, i32(floor(127.0 * mix(e, 0.1, rock * sm(0.2, 0.45, e)) + 0.5))); }
+    // A rock coast is painted rock (plane 0, the rock mask) over its face, so the frag draws the world's rock there, with the paint's ragged edge; the beach gives way to it.
+    let paint = rock * (1.0 - sm(40.0, 80.0, d));
+    if (paint > 0.02) { maskSet(i, 0u, max(maskGet(i, 0u), i32(floor(127.0 * paint + 0.5)))); }
     let rel = raw - sea;
     var ceil = 0.0;
     if (d < xb) { let t = d / xb; ceil = hb * (1.5 * t - 0.5 * t * t * t); }
