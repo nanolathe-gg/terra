@@ -77,10 +77,10 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('rockScale',{rockOrder:0}),/Rock structure/);
  assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/no blocks/);
  shows('rockScale',{rockOrder:1,rockCells:1});
- assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
- assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
+ assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledges above zero/);
+ assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledges above zero/);
  shows('bedSpacing',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
- assert.match(requirement('cliffRise',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5}),/Ledge above zero/,'the rise is relief only');
+ assert.match(requirement('cliffRise',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5}),/Ledges above zero/,'the rise is relief only');
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  // strata: bands and caps need a column and the strata switch
  assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);

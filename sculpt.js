@@ -1673,7 +1673,7 @@ const KNOBS = [
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackNetwork','Majors: rills to plates',0,1,.05,.35],
     ['crackDark','Floor darkness',0,1,.05,.75]]],
   ['Rock structure', [['rockOrder','Order (0 scattered, ink cracks; 1 beds, joints, lit relief cracks)',0,1,.05,0],['rockFrom','Beds and joints from slope (painted rock always)',.3,2,.05,.6],['bedSpacing','Bed thickness (px along the ground, or height units)',3,80,1,12],['bedHeight','Beds spaced by height (0 px along the ground)',0,1,.05,0],['bedVary','Bed thickness variation',0,1,.05,.5],
-    ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledge step strength',0,1,.05,.5],
+    ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledges (step strength; above 1 taller lips and notches)',0,2,.05,.5],
     ['grooveSpacing','Joint and gully spacing (px)',12,120,2,36],['grooveAngle','Joint and gully lean from north-south (deg)',-60,60,1,0],['grooveRun','Joint and gully length (px)',30,400,10,120]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],

@@ -119,7 +119,7 @@ export function worldControlRequirement(key,v){
  if(['cliffReach','cliffWide','cliffFlat','cliffBed','cliffDomain'].includes(key)&&n('cliffFollow')<=0)return 'Choose Follow terrain in Structure orientation to use this setting.';
  // A joint's stagger is keyed on its bed and blocks read the bed height, so the beds' shape outlives their relief there.
  const bedsMoveJoints=joints()>0&&n('cliffFollow')>0&&n('cliffStagger')>0&&['bedSpacing','bedHeight','bedVary','bedDip','cliffBed'].includes(key);
- if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&!bedsMoveJoints)return 'Set Ledge above zero in Rock structure to give the beds relief.';
+ if(['bedSpacing','bedHeight','bedVary','bedDip','bedPunch','cliffRise','cliffBed'].includes(key)&&n('bedLedge')<=0&&!bedsMoveJoints)return 'Set Ledges above zero in Rock structure to give the beds relief.';
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
  // Cap color holds level ground to one bed only in a section of two beds where one fills over 88 percent of the cycle (worldPanelValues passes capBed in).

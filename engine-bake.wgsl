@@ -654,7 +654,8 @@ fn jointGroove() -> Groove { return lines(u.grooveAngle, u.grooveSpacing, u.join
 // H23: a bed with a riser has a lip of this height; one with none has none.
 const BED_LIP = 2.0;
 const BED_RAG = 1.8;   // a bed's boundary wanders at 3-7 px by this many height units (was blockChip 1.2 x 1.5 on the one world that cut blocks)
-fn bedLip() -> f32 { return select(0.0, BED_LIP, u.bedLedge > 0.0); }
+// Ledges above 1 (the row runs to 2) keep the riser as it is at 1 and lift the lip, the notch and the tread's step with the row.
+fn bedLip() -> f32 { return select(0.0, BED_LIP * max(1.0, u.bedLedge), u.bedLedge > 0.0); }
 
 // Beds: planes (tilted by bedDip toward bedDipDir) cut the face in lines that
 // wander broadly and wobble finely but stay continuous between joints, so the
@@ -687,7 +688,7 @@ fn columnBedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let bed = columnAt(columnCoord(p, h) + rag);
     let f = bed.through;
     let bedPx = bed.thick / G;
-    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), min(u.bedLedge, 1.0));
     let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
     var off = step_ * (bed.thick / S) * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;
     let dTop = (1.0 - f) * bedPx;
@@ -721,7 +722,7 @@ fn bedRelief(p: vec2f, h: f32, gOver: f32) -> BedCut {
     let f = clamp((L - lo) / thick, 0.0, 1.0);
     // Bed thickness along the ground (px), the riser a few px wide whatever the bed.
     let bedPx = thick * S / G;
-    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), u.bedLedge);
+    let riser = mix(1.0, clamp(3.5 / bedPx, 0.12, 1.0), min(u.bedLedge, 1.0));
     let step_ = smoothstep(1.0 - riser, 1.0, f) - f - (0.5 * riser - 0.5);
     // G2: cliffRise gives the riser a height of its own; spaced in px the bed's height unit follows the slope and fine beds on a gentle face would carry no relief (0: the bed's own height).
     var off = step_ * thick * select(S, u.cliffRise, u.cliffRise > 0.0) * u.bedLedge;
