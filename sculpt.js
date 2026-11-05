@@ -1803,7 +1803,7 @@ function buildWorldPanel() {
   // the Ground base color above.
   const patterns=config.groundPatterns||{},patternRow=document.createElement('div'); patternRow.className='control';
   patternRow.innerHTML=`<label for="ground-pattern">Ground pattern</label><select id="ground-pattern" style="width:100%"><option value="">This world's own</option>${Object.entries(patterns).filter(([id]) => id!==config.biomeId).map(([id,p]) => `<option value="${id}">${p.name}</option>`).join('')}</select><p class="small">Another world's ground grain, moved to this world's Ground color. Contrast is under Ground below.</p>`;
-  rows.append(patternRow);
+  rows.prepend(patternRow);
   $('ground-pattern').value=patterns[experiment.get('groundPattern')]?experiment.get('groundPattern'):'';
   $('ground-pattern').onchange=() => {
     // Keep this world's ground color when only the grain changes.

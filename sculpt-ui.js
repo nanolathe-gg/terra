@@ -45,16 +45,16 @@ export function mountEditorUI(){
   for(const b of grouped.querySelectorAll('button')){b.disabled=locked;b.setAttribute('aria-pressed',String(features?b.id==='feature-tool':b.dataset.tool===active));}
  };
 
- $('world-colors').closest('details').open=false;
+ const colorPanel=$('world-colors').closest('details');colorPanel.open=true;colorPanel.querySelector('summary').textContent='Colors & base pattern';
  $('world-name').classList.add('sr-only');
  document.querySelector('#world-editor > .scope').hidden=true;
  document.querySelector('#world-editor > .eyebrow').textContent='Materials & processes · whole map';
  $('variant-control').querySelector('p').hidden=true;
- const presets=document.createElement('details');presets.className='panel';presets.innerHTML='<summary>Manage presets</summary>';
+ const presets=document.createElement('details');presets.className='panel';presets.open=true;presets.innerHTML='<summary>Manage presets</summary>';
  for(const id of ['reset-strokes','world-new-name','world-export','world-delete'])presets.append($(id).closest('.row,.control'));
  $('world-file').before(presets);
- const surface=document.createElement('details');surface.id='world-surface-detail';surface.className='panel';surface.innerHTML='<summary>Surface detail</summary>';
- for(const id of ['relief','transition-detail'])surface.append($(id).closest('.control'));surface.append($('ring-controls'));$('knobs').after(surface,$('world-colors').closest('details'));
+ const surface=document.createElement('details');surface.id='world-surface-detail';surface.className='panel';surface.open=true;surface.innerHTML='<summary>Surface detail</summary>';
+ for(const id of ['relief','transition-detail'])surface.append($(id).closest('.control'));surface.append($('ring-controls'));$('knobs').after(surface);$('variant-control').after(colorPanel);
  mountWorkspace();
  const tabs=[...document.querySelectorAll('[role="tab"]')],visibleTabs=tabs.filter(t=>!t.hidden);
  function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}}
@@ -107,15 +107,14 @@ export function groupToolControls(fields){
  return context=>{for(const g of groups){g.d.hidden=g.controls.every(c=>c.hidden);g.d.dataset.context=context;if(!g.master){if(g.lastContext!==context&&!g.d.classList.contains('brush-basics'))g.d.open=g.controls.some(c=>c.id==='crystal-form-control'||c.id==='paint-channel-control'||(!$('lf-elevation-control').hidden&&['lf-elevation-control','section-preview-control','lf-wander-control'].includes(c.id)));g.lastContext=context;continue;}const on=Number(g.master.value)!==0;if(on)g.memory.set(context,Number(g.master.value));g.box.checked=on;g.d.classList.toggle('is-off',!on);if(g.lastContext!==context)g.d.open=on;g.lastContext=context;}};
 }
 
-// One level of sections; common controls move here rather than being duplicated.
+// One level of open sections keeps related controls together for scrolling.
 export function mountWorldControlIndex(root,values=()=>({})){
  const old=document.getElementById('world-control-search');old?.remove();
  const search=document.createElement('div');search.id='world-control-search';search.className='control-search';search.innerHTML='<label for="world-search">Find a setting</label><input id="world-search" type="search" placeholder="Search settings…"><label class="fine-controls"><input id="world-fine" type="checkbox"> Show fine controls</label><p class="small" id="world-control-count"></p>';root.before(search);
  const originals=[...root.children].filter(e=>e.matches('details')),sections=new Map(),blocks=[];
- for(const name of ['Common','Ground & vegetation','Rock & cliffs','Water & shores','Materials & texture','Lighting']){
-  const section=document.createElement('details'),summary=document.createElement('summary');section.className='knobs-group world-section';section.dataset.group=name;section.open=name==='Common';summary.textContent=name;section.append(summary);root.append(section);sections.set(name,section);
+ for(const name of ['Ground & vegetation','Rock & cliffs','Water & shores','Materials & texture','Lighting']){
+  const section=document.createElement('details'),summary=document.createElement('summary');section.className='knobs-group world-section';section.dataset.group=name;section.open=true;summary.textContent=name;section.append(summary);root.append(section);sections.set(name,section);
  }
- const common=['undulation','groundContrast','lushness','wetSwath','sand','rockOrder','rockStain','sunTilt','ambient'];
  const category=name=>/Light|Shine/.test(name)?'Lighting':/Ground|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Gullies|Structure orientation|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
  for(const group of originals){
   const name=group.dataset.group||group.querySelector('summary').textContent,block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);
@@ -123,7 +122,6 @@ export function mountWorldControlIndex(root,values=()=>({})){
   for(const child of [...group.children])if(child.tagName!=='SUMMARY')block.append(child);
   sections.get(category(name)).append(block);blocks.push(block);group.remove();
  }
- for(const key of common){const row=root.querySelector(`[data-knob="${key}"]`);if(row)sections.get('Common').append(row);}
  const groups=[...sections.values()],input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');let previous=null,lastQuery='';
  const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),worldRows=[...root.querySelectorAll('[data-knob]')],rows=[...worldRows,...document.querySelectorAll('#rendering-host [data-knob]')];let visible=0;if(query&&!previous)previous=new Map(groups.map(d=>[d,d.open]));
   for(const row of rows){const reason=worldControlRequirement(row.dataset.knob,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;const group=row.closest('.knobs-group'),text=(row.textContent+' '+row.dataset.searchGroup+' '+group.dataset.group).toLowerCase();if(!root.contains(row))continue;   // the Palette rows live with the rendering switches: disabled with a reason, never filtered
@@ -136,8 +134,8 @@ export function mountWorldControlIndex(root,values=()=>({})){
 }
 
 export function mountColumnPanel(read,change,commit,reset){
- const panel=document.createElement('details');panel.id='column-panel';panel.className='panel';panel.innerHTML='<summary>Rock column</summary><p class="small">Beds repeat upward within each section. Changes belong to this map.</p><div class="column-body"></div><p class="small" role="status"></p><button type="button">Restore world column</button>';
- $('world-colors').closest('details').after(panel);const body=panel.querySelector('.column-body'),note=panel.querySelector('[role="status"]'),restore=panel.querySelector('button');
+ const panel=document.createElement('details');panel.id='column-panel';panel.className='panel';panel.open=true;panel.innerHTML='<summary>Rock column</summary><p class="small">Beds repeat upward within each section. Changes belong to this map.</p><div class="column-body"></div><p class="small" role="status"></p><button type="button">Restore world column</button>';
+ $('world-surface-detail').after(panel);const body=panel.querySelector('.column-body'),note=panel.querySelector('[role="status"]'),restore=panel.querySelector('button');
  const at=(column,path)=>path.reduce((v,k)=>v[k],column);
  function field(parent,label,path,{min,max,step='any',choices,color=false}={}){
   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement(choices?'select':'input');input.dataset.columnPath=path.join('.');input.setAttribute('aria-label',label);
@@ -162,7 +160,7 @@ export function mountColumnPanel(read,change,commit,reset){
   if(column.origin!==undefined)field(options,'Count height from',['origin'],{choices:[['plain','Dry plain'],['sea','Sea level']]});
   if(column.wander?.value!==undefined)field(options,'Bed wander',['wander','value']);
   column.wander?.terrain?.forEach((_,i)=>field(options,['Broad wander','Medium wander','Fine wander'][i],['wander','terrain',i]));
-  if(column.colors){const colors=document.createElement('details');colors.className='feature-group';colors.innerHTML='<summary>Material slot colors</summary>';const fields=document.createElement('div');fields.className='column-options';colors.append(fields);column.colors.forEach((_,i)=>field(fields,`Slot ${i+1}`,['colors',i],{color:true}));body.append(colors);}
+  if(column.colors){const colors=document.createElement('details');colors.className='feature-group';colors.open=true;colors.innerHTML='<summary>Material slot colors</summary>';const fields=document.createElement('div');fields.className='column-options';colors.append(fields);column.colors.forEach((_,i)=>field(fields,`Slot ${i+1}`,['colors',i],{color:true}));body.append(colors);}
  }
  restore.onclick=()=>{reset();sync();};sync();return sync;
 }
