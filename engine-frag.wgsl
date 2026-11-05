@@ -1428,8 +1428,8 @@ fn surfSand(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
     let along = valueNoise(q / 41.0 + vec2f(3.3, 8.1)) * 0.5 + 0.5;
     let near = valueNoise(q / 17.0 + vec2f(1.7, 6.2)) * 0.5 + 0.5;
     let ragged = 9.0 * valueNoise(p / 14.0 + vec2f(5.0, 1.0)) + 4.0 * valueNoise(p / 6.0 + vec2f(2.0, 9.0));
-    let end = min(surfBerm(e) + 26.0 + 28.0 * along + 8.0 * near + ragged, SURF_REACH - 6.0);
-    let width = 12.0 + 20.0 * (valueNoise(q / 61.0 + vec2f(8.8, 2.2)) * 0.5 + 0.5);
+    let end = min(surfBerm(e) + 8.0 + 24.0 * along + 8.0 * near + ragged, SURF_REACH - 6.0);
+    let width = 14.0 + 24.0 * (valueNoise(q / 61.0 + vec2f(8.8, 2.2)) * 0.5 + 0.5);
     return clamp((end - surfCuspX(x, q, e)) / width, 0.0, 1.0) * step(0.0, x) * surfSandAmt(e);
 }
 // The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
@@ -2011,7 +2011,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Card P27: the surf's beach is drawn last over the material, so the bake's cracks, chips and stones do not mark it: sand with its own fine
     // grain (colour the world's Sand), the shading eased toward level, then the wet sand to the last uprush and the wrack lines.
     if (surfE > 0.0 && surfX < 900.0 && surfX >= 0.0) {
-        let cover = sandCoverAt(surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope + 0.2 * valueNoise(p / 5.0 + 17.0) + 0.15 * valueNoise(p / 13.0 + 43.0))) * (1.0 - exposed * 0.7), p, smoothstep(surfBerm(surfE) * 0.5, surfBerm(surfE) * 1.6, surfX));
+        let cover = sandCoverAt(surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope + 0.2 * valueNoise(p / 5.0 + 17.0) + 0.15 * valueNoise(p / 13.0 + 43.0))) * (1.0 - smoothstep(6.0, 12.0, h - u.sea + 2.5 * valueNoise(p / 8.0 + vec2f(6.6, 2.2)))) * (1.0 - exposed * 0.7), p, smoothstep(surfBerm(surfE) * 0.5, surfBerm(surfE) * 1.6, surfX));
         let cell = floor(grainPixel(pixel));
         // Dry sand varies in tone: patches of 20 and 7 px lighter and darker, and a slow drift between a warmer and a cooler sand.
         let toneBlot = 0.11 * valueNoise(p / 21.0 + vec2f(9.2, 3.1)) + 0.07 * valueNoise(p / 7.0 + vec2f(1.4, 7.7));
