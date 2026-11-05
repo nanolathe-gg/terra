@@ -106,7 +106,10 @@ the earlier impact findings in other worlds remain open below.
 Numeric controls combine label, fill, value and text entry:
 
 - Drag to adjust; Shift makes subsequent movement finer without a value jump.
-- Click to type; Enter commits, Escape cancels, and Tab commits and advances.
+- Click a position on the bar to set its value; double-click to type.
+  Enter commits, Escape cancels, and Tab commits and advances. A 300 ms
+  single-click delay distinguishes text entry; clicking elsewhere flushes the
+  pending change before selection or undo can change its target.
 - Arrow keys, Page Up/Down, Home and End adjust without nudging a selected shape.
 - Disabled controls stay disabled and show the prerequisite that enables them.
 - Confirming an unchanged value leaves weathering and export ready.
@@ -115,6 +118,12 @@ Numeric controls combine label, fill, value and text entry:
   settings. Measured in the browser: zero and off both preserve `open=true`,
   manual collapse sets `open=false`, and the workspace checks and all 60 unit
   tests pass after this refinement.
+
+Measured in `interaction-handoff/workspace.json`: a click sets the indicated
+value and one undo restores it; double-click opens text entry without changing
+the value first. Immediate Undo consumes a pending click with no later edit.
+Drag, Shift, keyboard adjustment, typed commit/cancel, no-op and Tab checks pass
+with no browser console errors.
 
 The curve editors retain mouse editing and omit per-point numeric fields.
 Click or drag away from knots in Length vs. height to move the selected

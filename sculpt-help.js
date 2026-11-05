@@ -77,7 +77,7 @@ export function mountHelp(){
     const help=element('p','');
     help.textContent=toolHelp[tool]||(source?.disabled&&(control?.querySelector('.control-requirement')?.textContent||source.title))||controlHelp[key]||control?.querySelector('p.small')?.textContent||'Adjust this setting to change the terrain.';
     tip.append(help);
-    if(!tool&&!source?.disabled)tip.append(element('small','','Drag to adjust · Shift: fine · Click: type'));
+    if(!tool&&!source?.disabled)tip.append(element('small','','Click: set · Double-click: type · Drag: adjust · Shift: fine'));
     target.setAttribute('aria-describedby',tip.id);tip.hidden=false;position(target);
   };
   const target=e=>e.target instanceof Element&&!e.target.matches('.scrub-entry')?e.target.closest('.tool-palette button,.scrub,.control > select'):null;
