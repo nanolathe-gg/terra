@@ -1684,12 +1684,40 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
         let ledge = smoothstep(0.1, 0.7, place.top);
         let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
-        let wetMoss = (0.25 + 1.6 * timeMaps.wet);   // H5 3a: moss grows where water runs
-        let want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+        // Card P30: with a ground-cover table the flecks are the table's moss class, in its colour and where its moisture and light windows are
+        // open (the table's own placement, so they follow Lushness, the wet swaths and the sun as the moss on the ground does); without one they
+        // keep the old rule, the vegetation plane and the wetness (H5 3a: moss grows where water runs).
+        let wetMoss = (0.25 + 1.6 * timeMaps.wet);
+        var want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+        var mossColour = saturate(slopeBased * vec3f(1.0, 1.25, 0.95));
+        if (cvr(0u).x > 0.5) {
+            let cs = coverSite(broad, timeMaps);
+            let moss = cvr(4u + 5u * 5u);
+            let mossSpot = (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
+            want = u.rockMoss * place.vegetation * (0.3 + 1.5 * coverWin(cs.x, cvr(4u + 5u * 5u + 2u)) * coverWin(cs.y, cvr(4u + 5u * 5u + 4u))) * mossSpot;
+            let ratio = slopeBased / max(cvr(3u).rgb, vec3f(0.01));
+            mossColour = saturate(moss.rgb * clamp(dot(ratio, vec3f(0.299, 0.587, 0.114)), 0.7, 1.3));
+        }
         // A wall's flecks are drawn in screen pixels, or each dash would be stretched into a streak down it.
         let ticket = mix(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, cellHash(vec2f(floor(pixel.x * 0.5), floor(pixel.y)) + 311.0).x, faceRelief);
         let fleck = step(ticket, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
-        material = mix(material, saturate(slopeBased * vec3f(1.0, 1.25, 0.95)), fleck);
+        material = mix(material, mossColour, fleck);
+        // Card P10, lichen: rosettes of 1 to 4 px radius on the faces that look at the sun and at the sky (the lit normal, relief included), off the
+        // crevices. The rock type's cover (its `lichen`) grows with Age and is scaled by this row, as the flecks are; a wall's rosettes are drawn
+        // in screen pixels like its flecks.
+        let lichen = u.rockMoss * u.rockLichen * (0.4 + 0.6 * clamp(u.rockAge, 0.0, 1.0)) * clamp(place.vegetation, 0.0, 2.0);
+        if (lichen > 0.0) {
+            let lq = select(p, pixel, faceRelief > 0.5);
+            let rosette = markCells(lq / 8.0, vec2i(433, 71), 1.0);
+            let lit = smoothstep(0.25, 0.65, dot(normal, u.light)) * smoothstep(0.35, 0.75, normal.z);
+            let radius = (0.6 + 3.4 * rosette.id.x) * sqrt(min(lichen, 1.5)) * (1.0 + 0.3 * (cellHash(floor(lq) + 5.0).x - 0.5));
+            let onRosette = step(rosette.id.y, lichen * 1.2) * step(rosette.d1 * 8.0, radius) * lit * (1.0 - crevice) * exposed;
+            var tint = vec3f(150.0, 158.0, 120.0) / 255.0;   // grey-green
+            if (rosette.id.z > 0.4) { tint = vec3f(196.0, 192.0, 168.0) / 255.0; }   // pale crust
+            if (rosette.id.z > 0.7) { tint = vec3f(178.0, 176.0, 72.0) / 255.0; }   // yellow-green
+            if (rosette.id.z > 0.95) { tint = vec3f(206.0, 118.0, 38.0) / 255.0; }   // orange
+            material = mix(material, tint, 0.85 * onRosette);
+        }
     }
     if (u.rockCrown > 0.0) {
         // Some worlds' raised ground is bare rock to its crown (Zhon's

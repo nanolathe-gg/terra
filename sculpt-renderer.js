@@ -1204,6 +1204,7 @@ export class TerrainRenderer {
       set('uRockVary', rv('vary', 0.5)); set('uRockCrev', rv('crev', 2)); set('uRockCrevW', rv('crevW', 1.1));
       set('uRockChip', rv('chip', 0.25)); set('uRockChipSize', rv('chipSize', 5)); set('uRockGrit', rv('grit', 0.35));
       set('uRockAge', number('rockAge', 0.5));
+      set('uRockCurtain', rv('curtain', 0)); set('uRockLichen', rv('lichen', 0));
       // Open joints scales the preset's two openings: the joint lines' depth and the cell creases' darkness.
       set('uJointDepth', rv('joint', 2) * number('rockOpen', 1)); set('uBlockSeam', rv('seam', 0.5) * number('rockOpen', 1));
     }
@@ -1219,7 +1220,7 @@ export class TerrainRenderer {
     // E9 (Green rock faces).
     set('uGullyDepth', number('gullyDepth', 0));
     set('uGullyWidth', number('gullyWidth', 14));
-    set('uGullyShade', number('gullyShade', 0));
+    set('uRockStain', number('rockStain', 0));
     set('uRibTilt', number('ribTilt', 0));
     set('uBedPunch', number('bedPunch', 0));
     // G2 (rock faces follow the slope).

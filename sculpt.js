@@ -177,7 +177,7 @@ const SHAPE_FIELDS=[
   ['heightVary','lf-height-vary','Height variation (units)',['landform'],0,40,1,1,'How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet.'],
   // P1: branching gullies on the raised faces, steered down the stroke's own fall line (engine-shape.wgsl landformGullies).
   ['gullies','lf-gullies','Gullies',['landform'],0,100,5,100,'Cut the raised faces into a divide, spurs off it and V-gullies that branch as they run down the fall line, deepest on steep faces and fading at the foot. 0: smooth faces.'],
-  ['talus','lf-talus','Talus reach (px)',['landform'],0,200,5,1,'How far talus cones run down from the foot of a raised face, below each of the widest gullies: a loose slope at the world\'s talus angle that buries the foot. 0: no talus. It needs Gullies, for the chutes, and shows only on faces steeper than the talus angle.'],
+  ['talus','lf-talus','Talus reach (px)',['landform'],0,200,5,1,'How far loose material runs out from the foot of a raised face: a concave apron that rests at the world\'s talus angle against the face and comes down level at its toe this far out, fanning from the widest gullies into one skirt. A longer reach makes a longer, gentler apron, not a taller one. 0: no talus. It needs Gullies, for the chutes, and shows only on faces steeper than the talus angle.'],
   ['gullySize','lf-gully-size','Gully size',['landform'],10,100,5,100,'How far apart the widest gullies run, as a share of the face from crest to foot; each finer set is half as far apart. Low: close rills; high: a few broad valleys between big spurs.'],
   // P27: the shore's wet sand, foam and beach by the coast distance (engine-frag.wgsl surfShore); written into mask plane 18 where the stroke makes water.
   ['surf','water-surf','Surf',['landform'],0,100,5,100,'How much the shore is worked by waves, where this stroke makes water. 0: the shore is drawn as before. Low (lakes): a dark wet line and a 1 px foam lace at the waterline. Higher: wet sand, wrack lines, a sand beach with cusps, and a broken breaker line over the shallows.'],
@@ -1687,7 +1687,7 @@ const KNOBS = [
   ['Rock face', [['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
     ['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],
-    ['gullyShade','Gully floor shade (occlusion)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
+    ['rockStain','Stain (darkness of gully floors and of ledge curtains)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
   // Card P10: the rock model's blocks (the rock type is the world's preset; Size and Age are its two rows).
   ['Rock face: blocks', [['rockScale','Block size (share of the rock type\'s)',.4,3,.05,1],['rockAge','Age (rounds edges, opens joints, wears chips)',0,1,.05,.5],['rockOpen','Open joints (joint depth and crevice darkness, share of the rock type\'s)',0,2,.05,1]]],
   // G2: rock faces follow the slope; every default is the earlier look.
