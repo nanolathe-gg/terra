@@ -243,3 +243,29 @@ Round 3 also changed P1: `realism.py` scored the round 1 gully fold (sharp
 crests) as less real than no gullies. With fold -1 (round crests, V-cut
 floors), 10 of 15 statistics fall in the real range, against 8 of 15. See
 `lab/lib.wgsl` `gulliesF`.
+
+### The tile budget (P33)
+
+`lab/exp/tb-ground.js` draws one plain three ways: world-space detail,
+tile-local detail with K variants per tile, and corner-coloured patch tiles.
+`tile-budget.py` counts unique 32 x 32 tiles and merges near-duplicates under
+an edge-weighted, blurred OKLab error, keeping real tiles as representatives.
+
+Measured over 768 slots:
+
+| Ground | Merge threshold | Unique tiles |
+| --- | --- | --- |
+| World space (today) | none | 768 |
+| World space | 3.0 | 178 |
+| Corner tiles | 0.5 (mean error 0.37) | 239 |
+| Corner tiles, level-ground light off | none | 218 |
+
+Relief tiles barely merge below 2.0. P33 adds these specifics to BACKLOG's
+Phase 4:
+
+- key detail to tile-local coordinates plus a variant;
+- draw low-frequency patterns as corner tiles with stochastic content (the
+  lab's lattice textures show a plaid);
+- keep long-range light off level ground, or let the merge absorb it;
+- merge to the budget in order of increasing error;
+- move big decorative stones into features where gameplay allows.
