@@ -193,13 +193,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('dither',{paletteMix:0});
  assert.equal(available('facing','landform',{lean:0}),false,'equal sides have no side to lean toward');
  assert.equal(available('facing','landform',{lean:2}),true);
- assert.equal(available('styleFace','landform',{world:{microRock:0}}),false,'faces of one material have no rock share to set');
- assert.equal(available('styleFace','landform',{world:{microRock:1}}),true);
- assert.equal(available('styleFace','landform',{}),true);
- assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:0}}),false,'a beach keeps the Sand brush for its bars');
- assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:.5}}),true);
- assert.equal(available('styleDeposits','landform',{world:{beachLayer:1,sand:0,looseSupply:.2}}),true);
- assert.equal(available('styleDeposits','landform',{world:{beachLayer:0,sand:0}}),true);
 });
 
 // A symmetric mesa cannot change by turning its identical sides; an unlinked plateau can, even at equal widths.

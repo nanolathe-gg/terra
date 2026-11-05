@@ -147,12 +147,12 @@ try {
   const strokes = world => scenes[fixtureName(world,1)];
   // A fixture is a stroke list. The diagnostic one is runner.js's: a plateau, a ridge, deep water with shore plates, sand and paint.
   const diagnostic = world => [PLATEAU([[270, 300], [550, 300]], 110, {diameter: 400, cracks: 100}), RIDGE([[800, 150], [860, 430]], 130, {diameter: 320, cracks: 100}),
-    WATER([[0, 850], [1024, 850]], {diameter: 600, shorePlates: 1, plateMaterial: world === 'ice' ? 2 : 1}, {waterShore: 0, waterDeep: 0, waterBed: 0}), ['sand', [[350, 470], [650, 470]], {card: {diameter: 280, amount: 100}}], ['paint', [[350, 100], [500, 270]], {card: {diameter: 220, amount: 100, paintChannel: 1}}]];
+    WATER([[0, 850], [1024, 850]], {diameter: 600, shorePlates: 1, plateMaterial: world === 'ice' ? 2 : 1}, {waterDeep: 0, waterBed: 0}), ['sand', [[350, 470], [650, 470]], {card: {diameter: 280, amount: 100}}], ['paint', [[350, 100], [500, 270]], {card: {diameter: 220, amount: 100, paintChannel: 1}}]];
   // The painted fixture: a ridge and a plateau with every paint channel laid on them, for the rows a painted or per-stroke path keeps alive at a world value of 0
   // (the stones of Denser scatter, the lines of Style: banding).
   const painted = () => [RIDGE([[300, 220], [700, 220]], 130, {diameter: 420, cracks: 100}), PLATEAU([[300, 760], [700, 760]], 100, {diameter: 420, cracks: 100}),
-    // two water strokes with the choices the panel cannot show on the world: frost-needle shore plates (Melt pockets), and a cracked bed under a hard shore and step
-    WATER([[60, 960], [460, 960]], {diameter: 200, shorePlates: 1, plateMaterial: 2}), WATER([[560, 960], [960, 960]], {diameter: 200}, {waterShore: 1, waterDeep: 1, waterBed: 3}),
+    // two water strokes with the choices the panel cannot show on the world: frost-needle shore plates (Melt pockets), and a cracked bed under a hard step
+    WATER([[60, 960], [460, 960]], {diameter: 200, shorePlates: 1, plateMaterial: 2}), WATER([[560, 960], [960, 960]], {diameter: 200}, {waterDeep: 1, waterBed: 3}),
     // a partial Denser scatter over the ridge's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
     ['paint', [[240, 220], [760, 220]], {card: {diameter: 460, amount: 35, paintChannel: 5}}],
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
@@ -311,7 +311,6 @@ try {
       if (key.startsWith('berg') || key === 'crystalAlign') Object.assign(p, {crystalForm: 2, crystalSize: 200, crystalCount: 3, bergTilt: .3});
       if (key.startsWith('crystalCrater') || key === 'craterFacets') p.craterFacets = .7;
       if (key === 'iceFacetSize' || key === 'iceFacets') p.iceFacets = .7;
-      if (key === 'maskAmount') p.maskChannel = 1;
       if (key === 'facing') p.lean = 3;
       if (key === 'gullySize' || key === 'talus') p.gullies = 1;
       if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
@@ -327,7 +326,6 @@ try {
       if (key === 'frostNeedles' && Number(ui.plateMaterial) < 2) return false;
       if (GATE[key] && !(kind==='landform'&&GATE[key]==='shoreLayers') && !(Number(ui[GATE[key]]) > 0)) return false;
       if (kind === 'crater' && ['crestJag', 'crestVary'].includes(key) && !(Number(ui.spurCount) > 0)) return false;   // on a crater the crest options only shape its spurs
-      if (key === 'maskAmount' && !(Number(ui.maskChannel) >= 1)) return false;
       if (kind!=='landform' && key === 'layerCircle' && Number(ui.layerStyle) !== 1) return false;
       // The shared applicability rule receives engine units, just as updateControls does.
       return shapeControlAvailable(key, kind, {...ui, ...Object.fromEntries(Object.entries(scales).map(([k, scale]) => [k, ui[k] / scale]))});

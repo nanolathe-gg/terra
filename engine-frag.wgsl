@@ -2136,17 +2136,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // masks: +1 hard / lit bed, -1 faded / noise water, 0 the world's own.
         // The plane is bilinear, so a half threshold keeps a stroke's footprint
         // to within a pixel of where it was painted.
-        var shoreHard = u.crispShore;
-        var shoreOwn = true;   // G1: the stroke leaves the shore edge to the world's own
+        let shoreHard = u.crispShore;
         var edgeHard = u.deepEdge;
         var bedLit = u.bedLit;
         var crackedBed = false;
         if (u.waterOn != 0) {
             crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5;
-            let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).gba;
-            if (pick.x > 0.5) { shoreHard = 1.0; shoreOwn = false; } else if (pick.x < -0.5) { shoreHard = 0.0; shoreOwn = false; }
-            if (pick.y > 0.5) { edgeHard = 1.0; } else if (pick.y < -0.5) { edgeHard = 0.0; }
-            if (pick.z > 0.5) { bedLit = 1.0; } else if (pick.z < -0.5) { bedLit = 0.0; }
+            let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).ba;
+            if (pick.x > 0.5) { edgeHard = 1.0; } else if (pick.x < -0.5) { edgeHard = 0.0; }
+            if (pick.y > 0.5) { bedLit = 1.0; } else if (pick.y < -0.5) { bedLit = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
@@ -2204,7 +2202,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 let off = ((vec2f(shelfNoise(p / 3.0 + 5.3), shelfNoise(p / 3.0 + 37.9)) - 0.5) * 1.0 + (vec2f(shelfNoise(p / 7.0 + 9.1), shelfNoise(p / 7.0 + 77.3)) - 0.5) * 1.6) * u.shoalStairs;
                 crisp = step(0.6, depth + baseHeight(p) - baseHeight(p + off));
             }
-            if (u.shoalShoreSoft > 0.0 && shoreOwn) {
+            if (u.shoalShoreSoft > 0.0) {
                 // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
                 // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
                 // banks) and each pixel is cut against its own hash.

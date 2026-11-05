@@ -514,9 +514,9 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 // scatter density (-1 none .. +1 densest; 0 leaves the world's own), then the
 // local style settings g relief, b cracks, a banding (-1 less .. +1 more than
 // the world's own; 0 leaves it). Layer 2: r face rock share (same scale), then
-// the water choices of a deep or shallow stroke (card E1): g shore edge, b
-// shallow-to-deep edge (+1 hard, -1 faded), a bed (+1 lit bed, -1 noise
-// water); 0 leaves the world's own. Layer 3: r painted ground lumps (+1 more,
+// the water choices of a deep or shallow stroke (card E1): g unused (it was a
+// stroke's shore edge), b shallow-to-deep edge (+1 hard, -1 faded), a bed (+1
+// lit bed, -1 noise water); 0 leaves the world's own. Layer 3: r painted ground lumps (+1 more,
 // -1 fewer than the world's own), g cracked bed (+1: the bed under this
 // stroke's shallows is cracked rock-like ground).
 @group(0) @binding(9) var masksTex: texture_2d_array<f32>;

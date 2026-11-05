@@ -136,15 +136,15 @@ const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','ro
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and four local style settings (stage 2: relief strength, cracks,
 // banding and face rock share, each -127..127 about the world's own value).
-// 'paint' is the brush; the landforms below can also paint inside their own
-// footprint (maskChannel, and styleRelief .. styleFace).
-// Card E1 adds five more: the water choices of a deep or shallow stroke (shore
-// edge, shallow-to-deep edge, bed; +127 hard / lit bed, -127 faded / noise
-// water), painted ground lumps (+127 more, -127 fewer) and the cracked-bed flag.
+// 'paint' is the brush; a landform or crater writes only its Local vegetation
+// (plane 16) into its own footprint.
+// Card E1 adds five more: the water choices of a deep or shallow stroke (plane 9,
+// the shore edge, is no longer written; shallow-to-deep edge, bed; +127 hard /
+// lit bed, -127 faded / noise water), painted ground lumps (+127 more, -127
+// fewer) and the cracked-bed flag.
 // Planes 0-18 are in use (14-17 are the override planes, 18 a water stroke's Surf, 0..127 of 1); 19-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','free19','fu','fv','s1','s2','s3'];
-const WATER_KEYS=['waterShore','waterDeep','waterBed'];
 const MASK_SHAPES=['crater','landform'];
 const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
@@ -152,7 +152,6 @@ const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // loose deposits (sand and scree), vegetation (grass and moss cover), rock exposure. Paint choices 18-25 write them.
 const OVERRIDE_CHOICES=[[18,'Relaxation: more'],[19,'Relaxation: less'],[20,'Deposits: more'],[21,'Deposits: less'],[22,'Vegetation: more'],[23,'Vegetation: less'],[24,'Rock exposure: more'],[25,'Rock exposure: less']];
 const STYLE_CHOICES=[...OVERRIDE_CHOICES,[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
-const STYLE_KEYS=['styleRelief','styleCracks','styleBanding','styleFace','styleErosion','styleDeposits','styleVegetation','styleExposure'];
 const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
   // E10: finger size; layer width variation; the circles of scalloped layers.
   'fingerSize','layerVary','layerCircle',
@@ -234,7 +233,6 @@ const SHAPE_FIELDS=[
   ['crystalLean','crystal-lean','Lean',['crystal'],0,100,5,100,'How far each apex leans off its base center.'],
   ['crystalVariation','crystal-variation','Variation',['crystal'],0,100,5,100,'Spread of sizes, heights and side counts.'],
   // Water looks (card E1): each stroke may keep the world's choice (0) or set its own.
-  ['waterShore','water-shore','Shore edge (shore to shallow)',['landform'],0,2,1,1,'World default keeps the World panel\'s Crisp waterline. Hard: the water starts at the shoreline with ragged stairs, as retail draws it. Faded: the water fades in over a few pixels.',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
   ['waterDeep','water-deep','Shallow-to-deep edge',['landform'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
   ['waterBed','water-bed','Shallow water look',['landform'],0,3,1,1,'World default keeps the World panel\'s Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture. Cracked bed: lit bed over cracked rock-like ground, tinted (Red\'s shelf shallows).',[[0,'World default'],[1,'Lit bed'],[2,'Noise water'],[3,'Cracked bed']]],
   ['crystalAlign','crystal-align','Align faces to the frame (berg)',['crystal'],0,100,5,100,'Berg: 0 turns each block at random, 100 sets its faces square to the shape\'s frame (four sides then make an axis-aligned box).'],
@@ -246,17 +244,8 @@ const SHAPE_FIELDS=[
   ['bergFlat','berg-flat','Level top toward the tilt (berg, share of radius)',['crystal'],-80,80,5,100,'Berg: how far from the center, toward the tilt direction, the top stays level before it ramps down (negative: the ramp starts on the far side of the center).'],
   ['bergTiltDir','berg-tilt-dir','Tilt direction (berg, degrees, 90 = south)',['crystal'],0,359,1,1,'Berg: the direction the top rises toward, turning with the shape\'s frame.'],
   ['paintChannel','paint-channel','Paint',['paint'],1,25,1,1,'What the brush paints. Denser scatter supplies its own stones where the World panel\'s Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world\'s own value; Strength is how far. Erase clears every mask and style under the brush.',[...MASK_CHOICES,...LUMP_CHOICES,...STYLE_CHOICES,[7,'Erase all masks and style']]],
-  ['maskChannel','mask-channel','Paint inside the shape',MASK_SHAPES,0,6,1,1,'Also paint a mask over the shape\'s own footprint, strongest where the shape is (a rocky mesa, a mossy hill).',[[0,'Off'],...MASK_CHOICES]],
-  ['maskAmount','mask-amount','Shape paint strength',MASK_SHAPES,5,100,5,100,'How fully the shape paints its mask.'],
-  // Local style inside the shape (card C5 stage 2): each is a change about the world's own value, 0 none.
-  ['styleRelief','style-relief','Style: relief strength',MASK_SHAPES,-100,100,5,100,'Relief (ribs, lumps) inside the shape: below 0 smoother, above 0 stronger, up to 4x.'],
-  ['styleCracks','style-cracks','Style: cracks',MASK_SHAPES,-100,100,5,100,'Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none).'],
-  ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
-  ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
-  ['styleErosion','style-erosion','Override: erosion',MASK_SHAPES,-100,100,5,100,'Erosion rate inside the shape (the GPU pass), times 1 + this: below 0 less, above 0 more, -100% none. It also scales how steep loose slopes stand there, so more erosion cuts steeper walls.'],
-  ['styleDeposits','style-deposits','Override: loose deposits',MASK_SHAPES,-100,100,5,100,'Sand and scree inside the shape, times 1 + this: below 0 less, above 0 more.'],
+  // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Override: vegetation',MASK_SHAPES,-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
-  ['styleExposure','style-exposure','Override: rock exposure',MASK_SHAPES,-100,100,5,100,'Where rock shows inside the shape, times 1 + this: below 0 less, above 0 more.'],
   // E7
   ['crystalFacet','crystal-facet','Facet tilt (column mound)',['crystal'],0,100,5,100,'Column mound: tilts each column\'s top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops.'],
   ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal'],0,100,5,100,'Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width.'],
@@ -467,7 +456,7 @@ function updateControls() {
   const bergOff=key => kind==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
   const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
   const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
-  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) || (key==='maskAmount' && Number($('mask-channel').value)<1); $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
+  for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) ; $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   // P28: on a river, Wander is the migration (how many steps the drawn line is carried), not an outline noise in px; once the path is edited by hand it cannot be migrated again.
   { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
     $('lf-wander-control').querySelector('label').firstChild.nodeValue=riv?'Wander (bends) ':'Wander (px) ';
@@ -752,7 +741,7 @@ function markChanged() { markViewChanged(false); error(); }
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 const NODE_NAMES={landform:'Landform',crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',smooth:'Smooth',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
-function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,...SPUR_OUTLINE_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,softness:s.softness,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,fingers:s.fingers,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,maskChannel:s.maskChannel,maskAmount:s.maskAmount,...Object.fromEntries(STYLE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(WATER_KEYS.map(k => [k,s[k]])),crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,...SPUR_OUTLINE_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,softness:s.softness,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,fingers:s.fingers,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,styleVegetation:s.styleVegetation,waterDeep:s.waterDeep,waterBed:s.waterBed,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
 const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);

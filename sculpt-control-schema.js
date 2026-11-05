@@ -26,7 +26,7 @@ const LABELS={plainRelief:'Ground bumps',lumpRelief:'Painted ground bumps',rockO
  craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
  iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
  fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerSize:'Lobe size',
- styleErosion:'Local relaxation',styleDeposits:'Local deposits',styleVegetation:'Local vegetation',styleExposure:'Local rock exposure',
+ styleVegetation:'Local vegetation',
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
 export function shapeControlAvailable(key,kind,p){
@@ -50,12 +50,10 @@ export function shapeControlAvailable(key,kind,p){
  const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
  // The face wanders on the shoulder of Reset ground and the cover brushes.
  if(key==='faceVariation')return ['erase','paint','sand','grass'].includes(kind);
- // p.world is what worldControlRequirement reads. A face share needs faces of rock and moss; deposits need sand or stones that a world can lay down, and a beach keeps the Sand brush for its bars.
+ // p.world is what worldControlRequirement reads.
  const world=p.world||{};
- if(key==='styleFace'&&Number(world.microRock??1)<=0)return false;
  // A stroke's edge choice moves the step only where the step's deep share is drawn; its own Lit bed draws it.
  if(key==='waterDeep'&&!deepShows(world,[1,3].includes(Math.round(p.waterBed||0))))return false;
- if(key==='styleDeposits'&&world.beachLayer>0&&!(Number(world.sand)>0)&&!(Number(world.looseSupply)>0))return false;
  // A side to lean toward means something once the two sides differ: a Lean other than 1, or different front and back sections.
  if(key==='facing'&&kind==='landform'){
   if(p.lean>0&&p.lean!==1)return true;

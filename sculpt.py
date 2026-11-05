@@ -65,19 +65,18 @@ KNOB_DEFAULTS = dict(
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
     heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
-    # Painted masks (card C5): the Paint brush's first choice, and the landforms'
-    # Paint inside option (channel 0 is off), with its strength.
-    paintChannel=1, maskChannel=0, maskAmount=1,
-    # Water looks (card E1). The three stroke options are 0 (the world's own),
-    # 1 or 2; the world knobs default to the earlier noise water, a ramp from
+    # Painted masks (card C5): the Paint brush's first choice.
+    paintChannel=1,
+    # Water looks (card E1). The two stroke options are 0 (the world's own),
+    # 1 or 2 (the bed also 3); the world knobs default to the earlier noise water, a ramp from
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
-    waterShore=0, waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
+    waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
     rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
-    # Local style (card C5 stage 2): change about the world's own value, 0 none.
-    styleRelief=0, styleCracks=0, styleBanding=0, styleFace=0, styleErosion=0, styleDeposits=0, styleVegetation=0, styleExposure=0,
+    # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
+    styleVegetation=0,
     # Crater rim height as a share of its depth (card C4); .34 is the rim every crater had.
     rimHeight=.34,
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.

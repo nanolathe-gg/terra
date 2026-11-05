@@ -5,7 +5,7 @@
 <script type="module">
 import {createShapeEngine} from '../sculpt-gpu-fields.js';
 const output=document.querySelector('#results'),button=document.querySelector('#run');
-const defaults={radius:12,amount:30,rough:0,softness:.5,elevation:129,combine:0,wander:0,widthVary:0,heightVary:0,varySize:140,varyFoot:1,varyMiddle:1,lean:1,faceVariation:0,rimHeight:.3,paintChannel:3,maskChannel:4,maskAmount:.4,fissureWidth:6,fissureCell:60,crystalCount:3,crystalSize:16,crystalSides:5,bergFace:.8};
+const defaults={radius:12,amount:30,rough:0,softness:.5,elevation:129,combine:0,wander:0,widthVary:0,heightVary:0,varySize:140,varyFoot:1,varyMiddle:1,lean:1,faceVariation:0,rimHeight:.3,paintChannel:3,fissureWidth:6,fissureCell:60,crystalCount:3,crystalSize:16,crystalSides:5,bergFace:.8};
 const ctx={seed:3,baseHeight:99,sea:75,params:n=>new Proxy({...defaults,...n.params},{get:(o,k)=>o[k]??0})};
 const shape=(kind,params={})=>({kind,seed:3,points:[{x:28,y:64},{x:64,y:64},{x:100,y:64}],params});
 const assert=(v,msg)=>{if(!v)throw new Error(msg);};

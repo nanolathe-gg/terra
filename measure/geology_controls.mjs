@@ -24,14 +24,14 @@ const scenePath = (world, n) => existsSync(`${sceneRoot}/${world}-${n}.json`) ? 
 const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Height|Punch)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Spread|CircleVary)|baseBand\w*|desertCapFlat|cliff\w*|joint\w*|column\w*|mineralDetail)$/;
 // The class each family acts on (measure/geology_diff.py).
 const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge|bed(Lit|Tint|Flat|Dots|DotCell|Relief|Contrast|Bright)|crackedStep|flatBank|bankPx|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Shore|Deep|Bed))$/;
-const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|waterShore|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease)$/.test(k) ? 'bank'
+const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease)$/.test(k) ? 'bank'
   : /^(bankPx|bankWidth|beachFlatness|fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
 const IMPACTS = /^(moon\w*|crater\w*|pock\w*|crystalCrater\w*|rim(Sectors|Unequal|Gaps|GapWidth|Height)|worms|wrinkles|slopeMarks)$/;
 const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDark|Cups|CupSize|CupDepth))$/.test(k) ? 'slope' : /^moonFold/.test(k) ? 'fold' : 'impact';
 const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
 // Card units of the stroke options (sculpt.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
 const CARD_SCALE = {fingers: 100, fingerSize: 100, bankPx: 1, shorePlates: 1, plateWaterPx: 1, plateLandPx: 1, plateSize: 1, plateGap: 10, plateHeight: 10, plateMaterial: 1,
-  crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterShore: 1, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaSpread: 100, lavaCircleVary: 100};
+  crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaSpread: 100, lavaCircleVary: 100};
 // Shape options that no world sets: red-2's own stroke carries terraces 7, ledge 40, jitter 60 (card units). Moved on that scene's card.
 const CARD_ONLY = [{world: 'red', knob: 'terraces', from: 7, to: 0}, {world: 'red', knob: 'ledge', from: 40, to: 90}, {world: 'red', knob: 'terraceJitter', from: 60, to: 0}];
 // H21: read card limits/scales from the same declarations as toolDefaults. Top-level scriptedScene options use engine units and win over the card.

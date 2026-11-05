@@ -82,10 +82,10 @@ export function groupToolControls(fields){
  [null,'Faceted form',['crystalForm','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation']],
  [null,'Column structure',['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth']],
  [null,'Planar block',['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat']],
- [null,'Water appearance',['waterShore','waterDeep','waterBed']],
+ [null,'Water appearance',['waterDeep','waterBed']],
  [null,'Surf',['surf']],
  [null,'Crest variation',['crestJag','crestVary','crestTaper']],
- ['maskChannel','Paint inside shape',['maskChannel','maskAmount']],['craterFacets','Bowl facets',['craterFacets','crystalCraterPx','crystalCraterStep','crystalCraterSkin']],['iceFacets','Angular facets',['iceFacets','iceFacetSize']]
+ ['craterFacets','Bowl facets',['craterFacets','crystalCraterPx','crystalCraterStep','crystalCraterSkin']],['iceFacets','Angular facets',['iceFacets','iceFacetSize']]
  ];
  function make(title,controls,master=null){
   const d=document.createElement('details');d.className='feature-group';const summary=document.createElement('summary');summary.textContent=title;d.append(summary);const body=document.createElement('div');body.className='feature-body';d.append(body);for(const c of controls)body.append(c);
@@ -100,9 +100,6 @@ export function groupToolControls(fields){
  for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));const controls=present.map(f=>$(f[1]+'-control'));root.append(make(label,controls,key?$(present.find(f=>f[0]===key)[1]):null));}
  for(const [key,id,label,,lo] of fields){if(claimed.has(key))continue;root.append(make(controlLabel(key,label).replace(/ \(.*$/,''),[$(id+'-control')],lo<=0&&!['crystalForm','bergTiltDir'].includes(key)?$(id):null));}
  for(const [id,label] of [['cracks','Cracks']])root.append(make(label,[$(id).closest('.control')],$(id)));
- // Hide per-shape appearance overrides in this UI prototype. Legacy recipe
- // data stays readable until the separate save migration is reviewed.
- for(const [key,id] of fields)if(key.startsWith('style')||['maskChannel','maskAmount','waterShore','waterDeep','waterBed'].includes(key))$(id+'-control').closest('.feature-group').classList.add('legacy-shape-override');
  // Choose initial openness on tool/selection changes; value edits never collapse a section.
  return context=>{for(const g of groups){g.d.hidden=g.controls.every(c=>c.hidden);g.d.dataset.context=context;if(!g.master){if(g.lastContext!==context&&!g.d.classList.contains('brush-basics'))g.d.open=g.controls.some(c=>c.id==='crystal-form-control'||c.id==='paint-channel-control'||(!$('lf-elevation-control').hidden&&['lf-elevation-control','section-preview-control','lf-wander-control'].includes(c.id)));g.lastContext=context;continue;}const on=Number(g.master.value)!==0;if(on)g.memory.set(context,Number(g.master.value));g.box.checked=on;g.d.classList.toggle('is-off',!on);if(g.lastContext!==context)g.d.open=on;g.lastContext=context;}};
 }
