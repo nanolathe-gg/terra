@@ -6,15 +6,69 @@ No push, pull request, or merge to main is part of this handoff.
 - Branch: `prototype/artist-workspace`
 - Worktree: `/Users/daniel/src/terraform-wt-artist-workspace`
 - Preview: **http://127.0.0.1:8921/sculpt** in Chrome on this Mac
-- Captured main baseline: `e3985e68`, merged into this branch as `9cf89d6e`
+- Current captured main: `1325313b`, merged as `80e33325`
+- Integration fixes: `bb372d6b` (live Surf updates), `ffd241a1` (hover help)
 - Implementation commits: `392d2fc6` (workspace), `d16fd68` (animation),
   `9ef300e` (interaction fixes)
 - Validation helpers: `6e3184a` (inactive-tab coverage), `e82d79f`
   (equal-viewport benchmark)
 - Review the UI-only change with
-  `git diff e3985e68...prototype/artist-workspace`.
-  Main advanced during this review; this brief's comparisons refer to the
-  captured baseline, not an assertion that the branch tracks the latest main.
+  `git diff 1325313b...prototype/artist-workspace`.
+  Comparisons refer to the captured commits below; main may advance again.
+
+## November 5 integration with main
+
+The branch includes main's revised hill and mountain defaults, Talus runout,
+Surf beaches, Stain, rock lichen, river point bars, flowers and GPU pipeline
+specialization. These use the existing tools and world controls.
+
+One missing connection was fixed: changing the rock column, bed tilt or tilt
+direction left existing Surf beach heights stale until a fresh replay. These
+edits now replay the shape pass when a visible beach uses the column. Column
+contrast follows the same dependency. Undo and the recipe format are unchanged.
+
+Measured against `1325313b`:
+
+- All 30 scene PNGs match SHA-256; pixel comparison reports zero changes.
+  All scene replays report mismatch 0 and no console errors.
+- All 60 unit tests and the world-name gate pass.
+- The new `repro/surf-column.mjs` samples 59,175 authored heights. Hardness,
+  tilt and direction edits change the live beach by maxima of 6.91, 6.88 and
+  6.84 height units, respectively, and match a fresh replay exactly. Column
+  undo, redo and recipe reload also match exactly. Before the fix, hardness
+  and tilt edits had no live effect and left differences up to 6.91 units.
+  Repeating the same regression with weathering enabled also passes.
+- Surf regional replay has zero mismatches across all 32 fields.
+- All 19 drawing tools add and undo in all nine worlds; all eight supported
+  worlds export. The 8x8 Green test uses five pages and returns to its original
+  shape count after undo.
+- The workspace interaction regression passes, including hover reversal,
+  reduced motion, control gating and 1024x768 layout. A focused browser check
+  confirms the new hill/mountain heights, Surf access, Stain gating, and compact
+  editing/help for Stain, vegetation tint and Lushness. No console errors.
+- The shape audit exercises all 22 cases, including Surf; mean height changes
+  range from 0.18 to 27.68 units. These are not percentages or proof of the 5%
+  artistic-impact target. The full world-control audit was not repeated after
+  this merge; the older findings below remain review items.
+- Two alternating equal-viewport (1000x800) performance pairs on
+  `green-modern-1`: drag-frame p95 is 16.7–16.8 ms on both builds;
+  pointer-to-picture p95 is 67.6–68.3 ms on main and 69.1–69.2 ms here;
+  release-to-final is 487.0–520.1 ms on main and 481.8–530.2 ms here.
+  All runs exit 0 with no console errors. One of 70 pointer samples is censored
+  in the second prototype run. The earlier large release slowdown did not recur;
+  two pairs do not establish performance equivalence across workflows.
+
+By eye: refreshed hill and mountain examples show their different silhouettes;
+the 11-frame Surf sequence progresses through the new beach behavior. The
+tablet-width layout keeps the navigator at the far left and curves clear of
+the inspector. The render guard is unchanged relative to main, so this merge
+makes no additional terrain-realism claim.
+
+Current evidence under the assets root: `out/integration-main`,
+`out/integration-after`, `integration-ui`, `integration-surf-column-fixed`,
+`integration-surf-weather`, `integration-controls-open`, `integration-smoke`,
+`integration-shape-controls`, and `integration-perf`. Detailed logs are
+`/private/tmp/artist-integration-*.log`.
 
 ## Problem and resulting behavior
 
@@ -46,13 +100,13 @@ and export. There is no alternate terrain renderer or new dependency.
 
 ## Hover examples
 
-There are rendered examples for 14 terrain tools and 13 shape controls.
+There are rendered examples for 14 terrain tools and 14 shape controls.
 Controls animate through intermediate values at approximately 10% intervals,
 then reverse through those frames. Integer controls use every valid count.
 Each frame lasts 160 ms, with 480 ms pauses at the endpoints. Reduced-motion
 mode shows a static endpoint pair.
 
-Measured: 136 control frames, stored as 13 PNG sprite atlases, plus 14 tool
+Measured: 147 control frames, stored as 14 PNG sprite atlases, plus 14 tool
 PNGs. Every sequence uses one authored shape and seed in Green Planet.
 Playback uses these images only while help is visible; it does not render
 terrain during hover. A manifest prevents missing-asset requests in a fresh
@@ -91,9 +145,13 @@ Review attention should go to compact-control event handling in
 control selector in `sculpt-ui.js`, and curve/grid integration in
 `sculpt.js` and `sculpt-canvas.js`.
 
-## Validation
+## Earlier review evidence (`e3985e68`)
 
-Measured against the captured baseline:
+The following records the original review before the November 5 merge.
+Current integration measurements are above; the older full control audit is
+retained to make its outstanding findings visible.
+
+Measured against `e3985e68`:
 
 - All 30 scene PNGs match byte for byte (SHA-256).
   `repro/compare.py --worlds none`: zero changed pixels in every scene.
@@ -180,8 +238,9 @@ Evidence root:
 - **Control-impact findings:** resolve the no-effect controls and audit-context
   discrepancy above before treating the control gate as green. This UI pass
   preserves terrain behavior; it does not strengthen or remove those controls.
-- **Release performance:** profile the slower release-to-final samples above
-  and resolve or explain the difference before landing.
+- **Release performance:** the older slowdown did not recur in the post-merge
+  pairs above. Recheck the final reviewed build before landing; the current
+  samples cover canvas dragging, not every inspector interaction.
 - **Touch and stylus:** tablet-width layout was tested in desktop Chrome.
   Physical tablet pointer and pen behavior still need hands-on review.
 - **Help coverage:** extend the representative examples and improve the
@@ -206,6 +265,8 @@ node --test repro/*.test.mjs
 sh repro/gate.sh
 node repro/workspace.mjs --server http://127.0.0.1:8921 --port 9927 \
   --out /private/tmp/nanolathe-map-editor/agent-artist-workspace/review-ui
+node repro/surf-column.mjs --server http://127.0.0.1:8921 --port 9926 \
+  --out /private/tmp/nanolathe-map-editor/agent-artist-workspace/surf-repeat
 node repro/perf.mjs map4 --scene repro/scenes/green-modern-1.json \
   --server http://127.0.0.1:8921 --port 9921 --no-export --viewport 1000x800 \
   --out /private/tmp/nanolathe-map-editor/agent-artist-workspace/perf-repeat
