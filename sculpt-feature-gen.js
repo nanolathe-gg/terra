@@ -252,7 +252,7 @@ function treeFrame(P, seed, ctx) {
   };
   const body = newSprite(w, h, ax, ay);
   const amb = L.ambient;
-  const mid = conifer ? 3.4 : 5.7, lamGain = conifer ? 3.0 : 4.0, gxGain = conifer ? 2.6 : 1.3, gyGain = conifer ? 0.3 : 0.9;
+  const mid = conifer ? 3.4 : 5.35, lamGain = conifer ? 3.0 : 4.0, gxGain = conifer ? 2.6 : 1.3, gyGain = conifer ? 0.3 : 0.9;
   const sigma = conifer ? 1.9 : 4.3;
   // bright leaf bunches (spec 15 B6): about 34 rounded 3-6 px clumps that lean to the upper-left lobes
   const clumpList = [];
@@ -260,11 +260,11 @@ function treeFrame(P, seed, ctx) {
     const inside = [];
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x] === 1 && dist[y * w + x] >= 2) inside.push([x, y]);
     const quad = () => weighted(r, [[0, 0.56], [1, 0.2], [2, 0.21], [3, 0.03]]);
-    for (let tries = 0; clumpList.length < Math.round(P.clumps ?? 40) && tries < 20000 && inside.length; tries++) {
+    for (let tries = 0; clumpList.length < Math.round(P.clumps ?? 72) && tries < 20000 && inside.length; tries++) {
       const [x, y] = inside[(r() * inside.length) | 0], q = quad();
       if ((x < cx ? 0 : 1) + (y < ycen ? 0 : 2) !== q) continue;
-      if (clumpList.some(c => Math.hypot(c.x - x, c.y - y) < 4.6)) continue;
-      clumpList.push({ x, y, rad: 1.3 + r() * 1.6, str: 4 + r() * 2.5 });
+      if (clumpList.some(c => Math.hypot(c.x - x, c.y - y) < 3.5)) continue;
+      clumpList.push({ x, y, rad: 1.2 + r() * 1.3, str: 4 + r() * 2.5 });
     }
   }
   const clumpBoost = (x, y) => { let b = 0; for (const c of clumpList) { const d2 = ((x - c.x) ** 2 + (y - c.y) ** 2) / (c.rad * c.rad); if (d2 < 1.6) b = Math.max(b, c.str * (1 - d2 / 1.6)); } return b; };
