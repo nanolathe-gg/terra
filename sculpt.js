@@ -403,10 +403,10 @@ function updateControls() {
   if(config?.map){$('selection-x').max=config.map.width-1;$('selection-y').max=config.map.height-1;}
   const paths=hasSelection?shapePaths(selectedNode):[],activePath=paths[pathIndex]||[],pointAt=activePath.indexOf(pathPoint),locked=loading||Boolean(stroke||moving);
   const editingSeed=selectedNode?.seed!==undefined;
-  $('seed-label').textContent=editingSeed?'Shape seed':'Brush seed';
+  $('seed-label').textContent='Seed';
   if(document.activeElement!==$('seed'))$('seed').value=editingSeed?selectedNode.seed:seed;
   $('seed').disabled=$('seed-randomize').disabled=$('seed-vary').disabled=locked;
-  $('seed-vary').checked=varySeed;$('seed-vary-control').hidden=editingSeed;
+  $('seed-vary').checked=varySeed;$('seed-vary-control').hidden=false;
   $('seed-help').textContent=editingSeed?'Controls this shape’s outline and generated details. All its paths share this seed.':varySeed?'Used for the next shape, then a fresh seed is chosen.':'Reuses this seed for each new shape. Randomize chooses another variation.';
   $('draw-new').disabled=locked||!ready;
   $('simplify-strokes').disabled=locked;
@@ -467,7 +467,7 @@ function updateControls() {
     $('lf-wander-control').querySelector('label').firstChild.nodeValue=riv?'Wander (bends) ':'Wander (px) ';
     $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far the line you drew is carried by the river\'s own rule, as migration steps (4 a unit): 0 keeps it as drawn, more grows meander bends that travel downstream and leave oxbow lakes where a neck closes. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
     $('lf-wander').disabled=stale;$('lf-wander').title=stale?why:''; }
-  $('section-preview-control').hidden=kind!=='landform';
+  $('section-preview-control').hidden=featureActive||kind!=='landform';
   if (!$('section-preview-control').hidden) drawSection();
   $('softness-value').textContent=$('softness').value+'%';
   $('relief-value').textContent=$('relief').value+'%';
@@ -586,10 +586,10 @@ function sectionMark() {
   const n=tool==='move'?selectedLandform():null; if (!n || !regionalFields) return null;
   const lp=landformPath(n),p=landformAt(lp,lfPlace); return {a:{x:p.x+p.bx*lp.back,y:p.y+p.by*lp.back},b:{x:p.x-p.bx*lp.front,y:p.y-p.by*lp.front}};
 }
-// A canvas is drawn at the pixels it is shown in (as wide as its panel, 2 to 1), so its text stays small and sharp.
-function fitCanvas(cv,ratio) { const w=Math.round(cv.clientWidth); if (w>=120 && cv.width!==w) { cv.width=w; cv.height=Math.round(w*ratio); } }
+// Match the dock's actual dimensions so curve text and handles stay sharp.
+function fitCanvas(cv) { const w=Math.round(cv.clientWidth),h=Math.round(cv.clientHeight); if (w>=120 && (cv.width!==w||cv.height!==h)) { cv.width=w; cv.height=h; } }
 function drawSection() {
-  fitCanvas($('section-preview'),.5); fitCanvas($('along-preview'),.3);
+  fitCanvas($('section-preview')); fitCanvas($('along-preview'));
   const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{ys,back}=sectionPreview(c.kind,c.q),n=ys.length-1;
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
   const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); if (label) { g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); } };

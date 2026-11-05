@@ -1,4 +1,5 @@
 import {controlLabel,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
+import {mountWorkspace,mountCurveDock} from './sculpt-workspace.js';
 // Presentation helpers; terrain state and history stay in sculpt.js.
 const $=id=>document.getElementById(id);
 const paths={
@@ -30,21 +31,18 @@ export function mountEditorUI(){
  const grouped=document.createElement('div');grouped.className='tool-groups';
  const primary=document.createElement('div');primary.className='tools primary-tools';primary.setAttribute('role','group');primary.setAttribute('aria-label','Select and place');
  for(const kind of ['move','features']){const b=palette.querySelector(`[data-tool="${kind}"], [data-icon="${kind}"]`);b.querySelector('.tool-label').textContent=kind==='move'?'Select':'Features';if(kind==='move')b.title='Select · V';primary.append(b);}grouped.append(primary);
- for(const [label,kinds] of [['Shape',['plateau','hill','deep','ramp','crater','fissure','crystal']],['Finish',['smooth','erase','paint']]]){
+ for(const [label,kinds] of [['Shape',['plateau','hill','mountain','ramp','valleyV','valleyU','valleyT','crater','fissure','crystal']],['Water',['deep','shallow','river','braided']],['Paint',['smooth','erase','paint','sand','grass']]]){
   const section=document.createElement('div');section.className='tool-group';section.setAttribute('role','group');section.setAttribute('aria-label',label+' tools');
   const heading=document.createElement('span');heading.className='tool-group-label';heading.textContent=label;
   const buttons=document.createElement('div');buttons.className='tools';for(const kind of kinds)buttons.append(palette.querySelector(`[data-tool="${kind}"]`));
   section.append(heading,buttons);grouped.append(section);
  }
- const variants=document.createElement('div');variants.hidden=true;
- for(const kind of ['mountain','shallow','valleyV','valleyU','valleyT','river','braided','sand','grass'])variants.append(palette.querySelector(`[data-tool="${kind}"]`));grouped.append(variants);
- for(const [kind,label] of [['hill','Ridge'],['deep','Water'],['crystal','Faceted forms'],['paint','Surface paint'],['erase','Reset ground']]){const b=grouped.querySelector(`[data-tool="${kind}"]`);b.title=label;b.setAttribute('aria-label',label);b.querySelector('.tool-label').textContent=label;}
+ for(const [kind,label] of [['hill','Hill'],['deep','Deep water'],['crystal','Faceted forms'],['paint','Surface paint'],['erase','Reset ground']]){const b=grouped.querySelector(`[data-tool="${kind}"]`);b.title=label;b.setAttribute('aria-label',label);b.querySelector('.tool-label').textContent=label;}
  palette.replaceWith(grouped);
  const mode=document.createElement('div');mode.className='control';mode.id='tool-mode-control';mode.innerHTML='<label for="tool-mode">Drawing mode</label><select id="tool-mode"></select>';$('tool-style').closest('.control').after(mode);
- const families=[{root:'plateau',label:'Landform form',items:[['plateau','Plateau'],['valleyV','V valley'],['valleyU','U valley'],['valleyT','Terraced valley'],['river','River'],['braided','Braided river']]},{root:'hill',label:'Ridge form',items:[['hill','Rounded ridge'],['mountain','Peaked ridge']]},{root:'deep',label:'Water action',items:[['deep','Deep water'],['shallow','Shallow water']]},{root:'paint',label:'Surface action',items:[['paint','Material & local style'],['sand','Sand cover'],['grass','Restore ground cover']]}];
  let changeMode=()=>{};$('tool-mode').onchange=()=>changeMode($('tool-mode').value);
- const syncTools=(active,selected,locked,features)=>{const kind=selected||active,family=families.find(f=>f.items.some(([k])=>k===kind));mode.hidden=!family||features;if(family){const select=$('tool-mode');if(mode.dataset.family!==family.root){select.replaceChildren(...family.items.map(([k,label])=>new Option(label,k)));mode.dataset.family=family.root;}select.value=kind;select.disabled=locked;mode.querySelector('label').textContent=family.label;}
-  for(const f of families)grouped.querySelector(`[data-tool="${f.root}"]`).setAttribute('aria-pressed',String(!features&&active!=='move'&&f.items.some(([k])=>k===active)));
+ const syncTools=(active,selected,locked,features)=>{mode.hidden=true;
+  for(const b of grouped.querySelectorAll('button')){b.disabled=locked;b.setAttribute('aria-pressed',String(features?b.id==='feature-tool':b.dataset.tool===active));}
  };
 
  $('world-colors').closest('details').open=false;
@@ -57,9 +55,11 @@ export function mountEditorUI(){
  $('world-file').before(presets);
  const surface=document.createElement('details');surface.className='panel';surface.innerHTML='<summary>Surface detail</summary>';
  for(const id of ['relief','transition-detail'])surface.append($(id).closest('.control'));surface.append($('ring-controls'));$('knobs').before(surface);
- const tabs=[...document.querySelectorAll('[role="tab"]')];
+ mountWorkspace();
+ const tabs=[...document.querySelectorAll('[role="tab"]')],visibleTabs=tabs.filter(t=>!t.hidden);
  function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}}
- for(const [i,t] of tabs.entries()){t.onclick=()=>activate(t);t.onkeydown=e=>{let j;if(e.key==='ArrowRight')j=(i+1)%tabs.length;if(e.key==='ArrowLeft')j=(i+tabs.length-1)%tabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=tabs.length-1;if(j!==undefined){e.preventDefault();activate(tabs[j]);tabs[j].focus();}};}
+ for(const t of tabs){t.onclick=()=>activate(t);t.onkeydown=e=>{const i=visibleTabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%visibleTabs.length;if(e.key==='ArrowLeft')j=(i+visibleTabs.length-1)%visibleTabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=visibleTabs.length-1;if(j!==undefined){e.preventDefault();activate(visibleTabs[j]);visibleTabs[j].focus();}};}
+ activate($('tab-tool'));
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  return {toggleFocus,exitFocus,syncTools,onMode:callback=>{changeMode=callback;}};
 }
@@ -82,7 +82,8 @@ export function groupToolControls(fields){
  [null,'Faceted form',['crystalForm','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation']],
  [null,'Column structure',['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth']],
  [null,'Planar block',['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat']],
- [null,'Water appearance',['waterShore','waterDeep','waterBed','surf']],
+ [null,'Water appearance',['waterShore','waterDeep','waterBed']],
+ [null,'Surf',['surf']],
  [null,'Crest variation',['crestJag','crestVary','crestTaper']],
  ['maskChannel','Paint inside shape',['maskChannel','maskAmount']],['craterFacets','Bowl facets',['craterFacets','crystalCraterPx','crystalCraterStep','crystalCraterSkin']],['iceFacets','Angular facets',['iceFacets','iceFacetSize']]
  ];
@@ -94,10 +95,14 @@ export function groupToolControls(fields){
  }
  const basicIds=['tool-style','tool-mode','diameter','amount','roughness','softness'];
  const basics=make('Brush settings',basicIds.map(id=>$(id).closest('.control')));basics.open=true;basics.classList.add('brush-basics');root.before(basics);
- basics.after(make('Seed',[$('seed').closest('.control')]));
- for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));const controls=present.map(f=>$(f[1]+'-control'));if(label==='Cross-section')controls.push($('section-preview-control'));root.append(make(label,controls,key?$(present.find(f=>f[0]===key)[1]):null));}
+ basics.before($('seed').closest('.control'));
+ mountCurveDock();
+ for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));const controls=present.map(f=>$(f[1]+'-control'));root.append(make(label,controls,key?$(present.find(f=>f[0]===key)[1]):null));}
  for(const [key,id,label,,lo] of fields){if(claimed.has(key))continue;root.append(make(controlLabel(key,label).replace(/ \(.*$/,''),[$(id+'-control')],lo<=0&&!['crystalForm','bergTiltDir'].includes(key)?$(id):null));}
- for(const [id,label] of [['cracks','Cracks']])root.prepend(make(label,[$(id).closest('.control')],$(id)));
+ for(const [id,label] of [['cracks','Cracks']])root.append(make(label,[$(id).closest('.control')],$(id)));
+ // Hide per-shape appearance overrides in this UI prototype. Legacy recipe
+ // data stays readable until the separate save migration is reviewed.
+ for(const [key,id] of fields)if(key.startsWith('style')||['maskChannel','maskAmount','waterShore','waterDeep','waterBed'].includes(key))$(id+'-control').closest('.feature-group').classList.add('legacy-shape-override');
  return context=>{for(const g of groups){g.d.hidden=g.controls.every(c=>c.hidden);g.d.dataset.context=context;if(!g.master){if(g.lastContext!==context&&!g.d.classList.contains('brush-basics'))g.d.open=g.controls.some(c=>c.id==='crystal-form-control'||c.id==='paint-channel-control'||(!$('lf-elevation-control').hidden&&['lf-elevation-control','section-preview-control','lf-wander-control'].includes(c.id)));g.lastContext=context;continue;}const on=Number(g.master.value)!==0;if(on)g.memory.set(context,Number(g.master.value));g.box.checked=on;g.d.classList.toggle('is-off',!on);if(g.lastContext!==context||g.lastOn!==on)g.d.open=on;g.lastContext=context;g.lastOn=on;}};
 }
 

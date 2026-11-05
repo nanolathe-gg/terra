@@ -210,6 +210,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function overlays() {
     const v=state(); ink.setTransform(1,0,0,1,0,0); ink.clearRect(0,0,overlay.width,overlay.height); ink.save(); ink.scale(scale,scale); ink.translate(-v.x,-v.y);
+    // Map-coordinate height cells; this guide is only an overlay, never art.
+    if($('tile-grid').checked){
+      const step=scale>=.5?16:128,x0=Math.max(0,Math.floor(v.x/step)*step),x1=Math.min(map.width,v.x+v.width),y0=Math.max(0,Math.floor(v.y/step)*step),y1=Math.min(map.height,v.y+v.height);
+      ink.lineWidth=1/scale;
+      for(let x=x0;x<=x1;x+=step){ink.strokeStyle=x%128===0?'#d4ebd45c':'#c1dfcd24';ink.beginPath();ink.moveTo(x,y0);ink.lineTo(x,y1);ink.stroke();}
+      for(let y=y0;y<=y1;y+=step){ink.strokeStyle=y%128===0?'#d4ebd45c':'#c1dfcd24';ink.beginPath();ink.moveTo(x0,y);ink.lineTo(x1,y);ink.stroke();}
+    }
     drawMapBounds(ink,map,config,navigating()?coarseSample:api.sampleAuthored??sourceSample); features?.draw(ink,v);
     if(!navigating()&&api.currentTool()==='move'&&!features?.active){
       if(hoveredNode>=0&&hoveredNode!==api.selection())drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
@@ -364,6 +371,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     resize();viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2);viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2);position();schedule();
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
+  $('tile-grid').onchange=()=>schedule();
   $('weathered-view').onchange=()=>{
     weatheredView=$('weathered-view').checked;
     try{localStorage.setItem('terraform-weathered-view',String(weatheredView));}catch{}
