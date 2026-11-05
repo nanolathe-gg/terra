@@ -71,6 +71,12 @@ test('world dependencies explain bypasses without biome gates',async()=>{
 test('H22b: rows that act only once another is on say so, and come back when it is',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
  const shows=(key,on)=>assert.equal(requirement(key,on),'',key);
+ // the waterline: stairs and blur need a crisp waterline, and a blur replaces the stairs
+ assert.match(requirement('shoalStairs',{crispShore:0}),/Crisp waterline/);
+ assert.match(requirement('shoalStairs',{crispShore:1,shoalShoreSoft:4}),/Waterline blur replaces the stairs/);
+ shows('shoalStairs',{crispShore:1,shoalShoreSoft:0});
+ assert.match(requirement('shoalShoreSoft',{crispShore:0}),/Crisp waterline/);
+ shows('shoalShoreSoft',{crispShore:.5});
  // shine: a lobe needs its material's gloss, a grain its roughness, the shared rows any shining material
  assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss in Shine: rock/);
  shows('shineRockSharp',{shineRock:.5});
