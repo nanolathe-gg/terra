@@ -751,6 +751,75 @@ Each is written in full when the one before it lands.
   - visible tiles first;
   - the fast path while dragging.
 
+## Research cards P1-P32 (November 4-5, 2026)
+
+The reviewer's log (`agent-gullies-NOTES.md`, kept with the agents' notes
+outside the repo) is the record. "Measured" marks a number from a run; "by
+eye" marks a judgment from sheets. Commits are on `main` unless a branch is
+named. Each landed card passed regional replay (0 mismatches), `smoke.mjs
+--page8`, the unit tests and the world-name gate, and left the retail scenes
+byte-identical unless the table says otherwise.
+
+### Owner decisions (2026-11-04 and 2026-11-05)
+
+- Keep the spur and crest rows (decision 27's removals). Gullies does not give
+  visually similar output (by eye), so nothing is removed.
+- Modern Green is a copy of retail Green with the new cards added; keep it
+  simple and iterate as cards land. Retail Green stays the gold standard.
+- The working map (one map restored on refresh, carried across world and
+  variant switches) is a development convenience.
+- Sun color and Sky color tint the light (white = off).
+- Water (P26) is on hold.
+- Delete finished agents' folders and worktrees once their work lands or
+  closes; keep the notes.
+
+### Landed
+
+| Card | What | Commit | Measured |
+| --- | --- | --- | --- |
+| P24 | Modern Green variant, scenes `green-modern-1..3` | f9080cf | 27 retail scenes byte-identical |
+| P25 | Realism gates (`measure/realism.py`, `--scenes`) | 5d58409, b4baf69, 6cda631 | modern Green at Gullies 40 passes all six gates on 0 of 17 windows |
+| P1 | Gullies, Gully size; fold -1 | 32edda7 | Gullies 0 byte-identical; at 40 mean in-range 7.82 of 15 (no gullies 6.76); corner moves median 1, p90 3-6; shape_controls 4.02 |
+| P32 | Terracettes; then stronger (step 8, slope floor smoothstep(.10,.20), worn path 1.0) | 846b598, 5ad6c6cd | modern 1-3 move 8.3 / 15.3 / 6.5% of pixels, retail 0% |
+| P29 part 1 | Dot-diffusion dither in `makeDither` | 9639686 | red 13, crystal 8-10 mean abs diff, other scenes 0.00; indistinguishable at 1x by eye |
+| P30 partial | Ground-cover table; Moisture and Lushness rows | 956e5c6, 59fb39a | modern moves 17 / 21 / 13%, retail 0.00; Lushness moves 25k-997k px per world |
+| P27 colour | Surf per stroke on water landforms (wet line, lace, beach) | 50a2c5c | modern-1/-3 move 0.2 / 0.1%, retail 0.00 |
+| Working map | One key `terraform-working-map-v1`, restore, carry across worlds, Reset button | 55c326c | e2e 32/32; 30 scenes 0.00 |
+| P16 | `looseStones` (Supply, Size; Sorting is material data) replaces boulders, debris, stones, scree | 7a55c4c | bake x1.08 retail, x1.16-1.17 modern; green 1.3-2.9%, moon 2.7-4.0%, modern 6.6-15.3% move |
+| P21 | Drainage plane: exact D8 area on a 16-px lattice | 6430edec | CPU reference 0 mismatches; 40x40: 12.9 MiB stored, 18-55 ms |
+| P17 flat routing | Flats and depressions routed in the drainage plane | 37ef1592 | no pixel change; before, 55-99% of roots on retail were flats or pits |
+| P10 partial | One `rockModel` (cells, joint lines, beds); rows Size and Age | ffb6e708 | only green and modern move (green-2 14.7%); relief bake x0.95-0.98 |
+| Page-eviction fix | `encodeGather` re-acquires a page dropped mid-lease | 859b9c86 | regional crashed 5 of 80 runs on main, 0 of 80 on the branch |
+| P22 | Valley V/U/T presets under the Plateau button's Landform form | 7c9366db | 30 scenes 0.00; not set in modern Green (realism 14 -> 10 on a three-valley ridge) |
+| P17 talus cones | Concave skirt below gully chutes; row Talus reach | after 7c9366db | two fixtures regional 0; modern Talus 0; grassy apron by eye |
+| P28 | River and Braided river presets (stored migrated path, oxbows) | 122673a9 | 30 scenes 0.00; realism 14 -> 9 of 15 on a window a river crosses |
+| P12 | Multi-scale cavity (rings at 1, 2, 4 px) | 17caecb5 | green-2 face share under 30: .270 -> .245 (retail .245); terrain pass +3 to +7% |
+| P31 | Plant families (turf, clumps, cushions, shrubs), modern Green only | 2c7d04bb | modern moves 39-43% of pixels; bake +8.7% |
+| P9 | Eight Knoll candidates per cube color, Bayer pick; Crystal `paletteMix` 1 | 0f041004, 3704cd9d | Desert Lab histogram .105/.031/.099 -> .076/.029/.074 (retail .033/.011/.056); Crystal chi-square .050/.113/.060 -> .028/.079/.047 |
+| P18 | Sand ripples (asymmetric crests, stone shadows) | e41ef931 | no scene paints sand, 30 scenes 0.00; relief bake +2.9% to ~+25% |
+| Sun/sky tint | Sun color and Sky color rows; modern Green #ffc880 / #80a0ff | b4da1dcb, 00c5bc26 | modern moves 27-35%; Sky color alone is under 5% on 2 of 3 windows |
+| Tooling | `perf.mjs --exact-timestamps` (opt-in) | 774021b9 | from the P4 spike |
+
+### Rejected, closed or held
+
+| Card | Outcome | Branch | Why |
+| --- | --- | --- | --- |
+| P29 parts 2-3 | Rejected | | Phasor grain: no retail gain. Grass strokes: no direction data, no retail basis |
+| P4 | Spike only | prototype/draw-surface | Terrain pass is 38-45% of chunk GPU on a drag; a one-read tap nets about 6% (green-2) to 13% (desert-1) |
+| P11 | Closed | prototype/horizons | Horizon passes cost about what the removed taps saved |
+| P13 | Held | prototype/column-walk | Modern Green moved 15-47% but scarps read as cracks (by eye); no setting beat off; Desert hand-fit did not move toward retail |
+| P20 | Closed | patch only | Current schedule is within mean RMS 0.068 of a 10000-step reference; talusAngle stays under 5% even converged |
+| P23 | Closed | | Premise fails: drag p95 17-26 ms with nothing under the drag; the cost is chunk rebakes (~3.5 ms each) |
+| P2 | Rejected | prototype/rills | Pixel rills: dark share .36 -> .37-.40 (retail .28), v/h .20 -> .17-.19 (retail .29) |
+| P5 | Rejected | prototype/time-blocking | Fused thermal byte-identical but not faster (green-2 no change, 4 steps +35%) |
+| P7 | Rejected | prototype/channels | 0.2-1.4% of samples move; Age/Rain reach unchanged; Time pass +25% |
+| P3 | Rejected | prototype/math-ideas | Damped lumps and tilted terraces dropped; crest crease moves only moon-2 (3.6%), no clear gain |
+| P14 | Held | prototype/scarp | Retreat row costs nothing, but reads as a sea urchin (by eye) |
+| P15 | Held | prototype/slumps | Lobes read as small mounds, scars barely visible at 1x; shape_controls 2.24 units |
+| P17 fans | Held | prototype/talus-fans | Fans have no height and barely show |
+| P26 water | Held by the owner | prototype/water | Stage 2 stopped: retail water is flat tones with a hard step and grain, the model is a smooth gradient |
+| P8, P19 | Not started | | P19 (decision 26) |
+
 ## Constraints
 
 - **Palette.** TA acceptance is judged on the indexed export, not the RGB
