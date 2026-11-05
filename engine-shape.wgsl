@@ -825,17 +825,8 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   if (steep <= 0.0) { return 0.0; }
   let fall = landformFall(vec2f(wx, wy), x, y);
   if (all(fall == vec2f(0.0))) { return 0.0; }
-  var steer = -fall;
-  if (u.framed != 0u) { steer = vec2f(u.inv0 * steer.x + u.inv2 * steer.y, u.inv1 * steer.x + u.inv3 * steer.y); }
-  let wv = u.gullySize; let sd = normalize(steer);
-  let warp = 0.35 * wv * vnoise(lx / (1.5 * wv), ly / (1.5 * wv), u.seed ^ 0x7f4au);
-  let cs = gullyStripes(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, sd, 1.0 / wv, u.seed ^ 0x6a1u);
-  // The reach is how far the toe runs out from the foot of the face (where the section first rises at the repose or steeper, found on its curve: past a
-  // gentle shoulder that is inside the footprint). The cone's height there is what the face can bury: the repose line from a toe L out, half of tan * L,
-  // which saturates at a share of the face's relief, so a longer reach lengthens and gentles the apron instead of piling it up the face. Below the apex the
-  // profile is concave and level at the toe. Up the face the apron's slope goes on, filling the chutes where the face stands within the gullies' cut of it,
-  // and never building a shelf. The chutes' lobes (a valley of the Gullies' widest stripes) fade out along the run, so the cones spread into one skirt.
-  let chute = sm(0.1, 1.0, 1.0 - cs.y * cs.y);
+  let wv = u.gullySize;
+  let chute = 0.5 + 0.5 * clamp(vnoise(lx / wv, ly / wv, u.seed ^ 0x6a1u), -1.0, 1.0);
   let L = u.talusReach * steep;
   if (L < 1.0) { return 0.0; }
   var tf = 1.0; var before = 0.0;
@@ -848,7 +839,7 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   let cap = 0.3 * relief;
   let apex = cap * tanh(0.5 * u.talusTan * L / cap);
   let out = max(-along, 0.0);
-  let Hc = apex * (0.85 + 0.3 * mix(chute, 0.5, sm(0.0, 0.25, out / L)));
+  let Hc = apex * (0.88 + 0.24 * mix(chute, 0.5, sm(0.0, 0.25, out / L)));
   if (along < 0.0) { let t = 1.0 - clamp(out / L, 0.0, 1.0); return Hc * t * t; }
   let line = Hc + 2.0 * Hc / L * along;
   let cut = u.gully * u.gullySize;
