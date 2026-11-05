@@ -17,6 +17,7 @@ for (const [kind, params] of [['tree', {}], ['tree', {species: 'conifer', height
 test('deposits and vents paint the same bytes twice', () => {
   const mk = () => ({w: 100, h: 100, rgba: new Uint8ClampedArray(100 * 100 * 4).map((_, i) => i % 4 === 3 ? 255 : [70, 110, 40][i % 4])});
   const a = mk(), b = mk(); paintDeposit(a, 50, 50, {metal: 150}, 3, {palette}); paintDeposit(b, 50, 50, {metal: 150}, 3, {palette});
+  for (const style of ['pebbles']) { const e = mk(), f = mk(); paintDeposit(e, 50, 50, {metal: 150, style}, 3, {palette}); paintDeposit(f, 50, 50, {metal: 150, style}, 3, {palette}); assert.deepEqual(e.rgba, f.rgba); }
   assert.deepEqual(a.rgba, b.rgba);
   const c = mk(), d = mk(); paintVent(c, 50, 50, {}, 3, {palette}); paintVent(d, 50, 50, {}, 3, {palette});
   assert.deepEqual(c.rgba, d.rgba);
