@@ -1,6 +1,6 @@
 // Card H7 item 1: where the time goes between an edit or a load and the final picture.
 //   node repro/perf.mjs <map4|map8|map16|map40> --scene repro/scenes/green-2.json --out <dir>
-//        [--server http://127.0.0.1:8867] [--port 9667] [--no-export] [--label name]
+//        [--server http://127.0.0.1:8867] [--port 9667] [--no-export] [--label name] [--viewport 1000x800]
 // Opens a fresh headless Chrome, installs timing hooks before the page runs (no page source is edited), then scripts:
 //   load      scene applied, zoomed to 1x: first picture, weather ready, every visible chunk at final
 //   drag      a stroke drag with real mouse events: rAF frame intervals
@@ -20,6 +20,9 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8867'), port = Number(opt('--port', 9667));
 const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out', 'perf-out'), label = opt('--label', '');
+// Compare layout changes with equal visible map area when requested.
+const viewport = opt('--viewport', '');
+if (viewport && !/^[1-9]\d{1,3}x[1-9]\d{1,3}$/.test(viewport)) throw new Error('--viewport expects WIDTHxHEIGHT in CSS pixels');
 const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : fallback; };
 const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
 const exactTs = flag('--exact-timestamps');   // P4: Chrome flag --disable-dawn-features=timestamp_quantization (Dawn rounds GPU timestamps to 65.5 us otherwise)
@@ -237,6 +240,10 @@ try {
   }
   result.bootMs = Date.now() - bootStart; console.error('booted', result.bootMs);
   result.patchError = await ev('__perf.patchError||null');
+  if (viewport) {
+    const [width, height] = viewport.split('x').map(Number);
+    result.viewport = await ev(`(() => { const v=document.getElementById('viewport');v.style.width='${width}px';v.style.height='${height}px';v.style.flex='none';sculptCanvas.resize();return {width:v.clientWidth,height:v.clientHeight}; })()`);
+  }
   await reset();
 
   console.error('phase load'); flush();
