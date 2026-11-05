@@ -66,12 +66,12 @@ function parse(args) {
 }
 const b64 = text => { const b = Buffer.from(text, 'base64'); return new Uint32Array(b.buffer, b.byteOffset, b.length / 4); };
 const f32 = text => { const b = Buffer.from(text, 'base64'); return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.length)); };
-function compare(label, heights, width, sea, area, recv, ms, passes) {
+function compare(label, heights, width, sea, area, recv, ms, passes, relax = {}) {
   const ref = drainageReference(heights, width, sea);
   let bad = 0, first = null;
   for (let i = 0; i < width * width; i++) if (area[i] !== ref.area[i] || recv[i] !== ref.recv[i]) { bad++; first ??= {cell: i, gpu: [area[i], recv[i]], cpu: [ref.area[i], ref.recv[i]]}; }
   let roots = 0, top = 0; for (let i = 0; i < ref.recv.length; i++) { if (ref.recv[i] === NONE) roots++; top = Math.max(top, ref.area[i]); }
-  const line = {check: label, cells: width * width, mismatches: bad, roots, largestArea: top, passes, ms: Math.round(ms * 10) / 10};
+  const line = {check: label, cells: width * width, mismatches: bad, roots, largestArea: top, passes, ...relax, ms: Math.round(ms * 10) / 10};
   if (first) line.first = first;
   console.log(JSON.stringify(line));
   return bad;
@@ -136,7 +136,7 @@ async function main() {
     { const w = 2, h = new Float32Array([4, 3, 2, 1]); synth.push(['two by two', h, w, -1e30]); }
     for (const [label, h, w, sea] of synth) {
       const out = await evaluate(`drainageRun({heights:${JSON.stringify([...h])},width:${w},sea:${sea}})`);
-      failures += compare(label, h, w, sea, out.area, out.recv, out.milliseconds, out.passes);
+      failures += compare(label, h, w, sea, out.area, out.recv, out.milliseconds, out.passes, {fillPasses: out.fillPasses, flatPasses: out.flatPasses});
     }
     // 2. The live map: its plane against the reference over the lattice it came from, and twice for determinism.
     await evaluate(`sculptDebug.scene(${JSON.stringify(scene.strokes)}, {ground:${scene.ground !== false}})`);
@@ -145,7 +145,7 @@ async function main() {
     if (live.error) throw new Error('drainageLive: ' + JSON.stringify(live));
     const raw = b64(live.plane), area = new Uint32Array(live.cells), recv = new Uint32Array(live.cells);
     for (let i = 0; i < live.cells; i++) { area[i] = raw[2 * i]; recv[i] = raw[2 * i + 1]; }
-    failures += compare(`live ${options.map}x${options.map} map${live.paged ? ' (paged)' : ''}`, f32(live.heights), live.width, live.sea, area, recv, live.milliseconds, live.passes);
+    failures += compare(`live ${options.map}x${options.map} map${live.paged ? ' (paged)' : ''}`, f32(live.heights), live.width, live.sea, area, recv, live.milliseconds, live.passes, {fillPasses: live.fillPasses, flatPasses: live.flatPasses});
     const again = await evaluate(`drainageRun({heights:${JSON.stringify([...f32(live.heights)])},width:${live.width},sea:${live.sea}})`);
     const same = again.area.every((v, i) => v === area[i]) && again.recv.every((v, i) => v === recv[i]);
     console.log(JSON.stringify({check: 'second run is byte-identical', identical: same, bytes: live.bytes, transientBytes: live.transientBytes, width: live.width}));

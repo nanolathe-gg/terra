@@ -320,8 +320,15 @@ its Euler tour and ceil(log2 2N) pointer-jumping passes turn the tour into
 subtree sums, in u32 (`engine-drainage.wgsl`, `sculpt-drainage.js`). The plane
 (area, receiver) is stored on the GPU after an edit settles and read by the
 Time pass's maps pass (`drainageAt`). It is stale from the edit until the new
-plane is computed. Cells at or under sea level and cells with no strictly
-lower neighbor (flats, pits) are outlets: there is no depression filling yet.
+plane is computed. Outlets are cells at or under sea level and cells on the
+lattice's edge. Before the receivers, two relaxations to their one fixed point
+(atomic min, repeated until a pass changes nothing, so the order of threads
+cannot matter) route flow across flats and out of pits: F, the filled height
+(the lowest climb from a cell to an outlet), and D, the steps from a cell to a
+way out through neighbors of the same F. A receiver is the steepest descent on
+F, or across a flat or a filled depression the same-F neighbor with the least
+D. The reference (`repro/drainage-reference.mjs`) computes the same F by
+priority flood and D by breadth first search.
 
 **Agents write data maps:** flow, wear, deposit, talus, wetness, snow, soil
 depth and exposure. The existing workers (droplet weathering, sand, flow)
