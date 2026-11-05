@@ -172,6 +172,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
  shows('groundTiles',{groundTiled:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
+ assert.match(requirement('slopeTexture',{groundCover:1}),/ground-cover table decides its slope cover/);
+ shows('slopeTexture',{groundCover:0});
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
  shows('dither',{paletteMix:0});
