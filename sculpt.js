@@ -33,6 +33,9 @@ const HELP = {
   ramp:'Draw a landform that starts as a ramp: the ground is flattened to a grade that climbs from the plain at the start of the path to the elevation at its end (shape the climb in the along curve), and its center is kept smooth.',
   deep:'Draw a landform that starts as deep water: the ground is cut to 55 below sea level behind a smooth bank. Shore lobes, steps and plates are in their own groups.',
   shallow:'Draw a landform that starts as shallow water: the ground is flattened to 7 below sea level. Choose Raise to in Combine for a passage that leaves higher ground as it is.',
+  valleyV:'Draw a landform that starts as a V valley: the ground is cut down to a floor on the path, and the walls rise at one slope, as a river leaves them. Choose any setting below; the Time pass settles walls steeper than the ground can stand.',
+  valleyU:'Draw a landform that starts as a U valley: the ground is cut down to a flat floor with steep upper walls, as a glacier leaves it.',
+  valleyT:'Draw a landform that starts as a terraced valley: a V valley whose walls climb in flat treads, the levels a river left as it cut down.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   crystal:'Grow a cluster of faceted crystals along the stroke: their sides, size, count, how flat their tops are and how much they lean are brush options. Height sets the tallest.',
   sand:'Paint sand cover: the ground under the brush becomes sand (on slopes too, so a hill set in sand has sandy feet). Heights do not change.',
@@ -66,15 +69,20 @@ const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,
 // The palette's landform presets over LANDFORM_DEFAULTS (Plateau is the defaults themselves): numbers for Landform's own controls, each the fit of the
 // retired tool's default stroke that re-authored the fixtures. Elevation is a rise above the map plain, or with Height reference: Sea level, above the sea.
 const smoothKnots=n=>Array.from({length:n+1},(_,i)=>{const t=i/n;return [Math.round(1000*t)/1000,Math.round(1000*t*t*(3-2*t))/1000];});
+// The valleys cut to a floor below the plain (Cut to) along one curve: V and U differ only in the curve, the terraced one is the V with the Steps control.
+const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const LANDFORM_TOOLS={
   plateau:{},
   hill:{diameter:200,lean:205,wander:24,widthVary:20,heightVary:15,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:[[0,0],[.333,.02],[.667,.34],[1,1]],back:smoothKnots(12)}},
   mountain:{diameter:200,lean:100,cracks:60,wander:8,widthVary:0,heightVary:3,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfMountain',knots:thinKnots(FORMS.mountain(.5).knots,17)}},
   ramp:{diameter:200,lean:100,combine:2,routeSmooth:100,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:160,varyFoot:100,varyMiddle:100,along:[[0,0],[1,1]],curve:{form:'lfRamp',knots:FORMS.lfRamp().knots}},
   deep:{diameter:200,lean:100,heightReference:1,elevation:-55,combine:1,cracks:0,wander:30,widthVary:30,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
-  shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}}
+  shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
+  valleyV:valley('lfValleyV'),
+  valleyU:valley('lfValleyU'),
+  valleyT:valley('lfValleyV',{terraces:4,ledge:55,terraceJitter:30})
 };
-const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water'};
+const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley'};
 // A palette entry's stroke kind: the shape buttons all draw landforms.
 const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
 const TOOL_PRESETS={
@@ -232,7 +240,7 @@ const SHAPE_FIELDS=[
   ['styleCracks','style-cracks','Style: cracks',MASK_SHAPES,-100,100,5,100,'Cracks inside the shape: below 0 fewer, above 0 more (also where the world has none).'],
   ['styleBanding','style-banding','Style: banding',MASK_SHAPES,-100,100,5,100,'Contour banding inside the shape: below 0 fainter, above 0 stronger (also where the world has none).'],
   ['styleFace','style-face','Style: face rock',MASK_SHAPES,-100,100,5,100,'Share of rock on steep faces inside the shape: below 0 more grass and moss, above 0 more rock.'],
-  ['styleErosion','style-erosion','Override: erosion',MASK_SHAPES,-100,100,5,100,'Erosion rate inside the shape (the GPU pass), times 1 + this: below 0 less, above 0 more, -100% none.'],
+  ['styleErosion','style-erosion','Override: erosion',MASK_SHAPES,-100,100,5,100,'Erosion rate inside the shape (the GPU pass), times 1 + this: below 0 less, above 0 more, -100% none. It also scales how steep loose slopes stand there, so more erosion cuts steeper walls.'],
   ['styleDeposits','style-deposits','Override: loose deposits',MASK_SHAPES,-100,100,5,100,'Sand and scree inside the shape, times 1 + this: below 0 less, above 0 more.'],
   ['styleVegetation','style-vegetation','Override: vegetation',MASK_SHAPES,-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
   ['styleExposure','style-exposure','Override: rock exposure',MASK_SHAPES,-100,100,5,100,'Where rock shows inside the shape, times 1 + this: below 0 less, above 0 more.'],

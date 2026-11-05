@@ -1,0 +1,320 @@
+{
+ "biome": "green",
+ "source": {
+  "note": "P22 valley presets on the Green ridge of landform-green-ridge: V, U and a terraced V cut across its face (Cut to, floor 20 below the plain 99, sea 75). Valleys cut to the ridge; the Time pass settles their walls."
+ },
+ "ground": true,
+ "query": "",
+ "strokes": [
+  [
+   "landform",
+   [
+    [
+     -150,
+     690
+    ],
+    [
+     250,
+     702
+    ],
+    [
+     640,
+     740
+    ],
+    [
+     1000,
+     775
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 820,
+     "elevation": 199,
+     "combine": 0,
+     "lean": 250,
+     "facing": 3,
+     "wander": 40,
+     "widthVary": 25,
+     "heightVary": 6,
+     "varySize": 170,
+     "varyFoot": 120,
+     "varyMiddle": 100,
+     "cracks": 50,
+     "maskChannel": 1,
+     "maskAmount": 100
+    },
+    "curve": {
+     "form": "lfHill",
+     "knots": [
+      [
+       0,
+       0
+      ],
+      [
+       0.18,
+       0.04
+      ],
+      [
+       0.5,
+       0.45
+      ],
+      [
+       0.8,
+       0.93
+      ],
+      [
+       1,
+       1
+      ]
+     ],
+     "back": [
+      [
+       0,
+       0
+      ],
+      [
+       0.35,
+       0.1
+      ],
+      [
+       0.65,
+       0.4
+      ],
+      [
+       0.88,
+       0.8
+      ],
+      [
+       1,
+       1
+      ]
+     ]
+    },
+    "along": [
+     [
+      0,
+      1
+     ],
+     [
+      0.5,
+      0.95
+     ],
+     [
+      1,
+      0.5
+     ]
+    ]
+   }
+  ],
+  [
+   "landform",
+   [
+    [
+     200,
+     380
+    ],
+    [
+     240,
+     600
+    ],
+    [
+     170,
+     820
+    ],
+    [
+     210,
+     1100
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 240,
+     "lean": 100,
+     "combine": 1,
+     "elevation": 79,
+     "cracks": 0,
+     "wander": 20,
+     "widthVary": 20,
+     "heightVary": 0,
+     "varySize": 120,
+     "varyFoot": 100,
+     "varyMiddle": 100
+    },
+    "curve": {
+     "form": "lfValleyV",
+     "knots": [
+      [
+       0,
+       0
+      ],
+      [
+       1,
+       1
+      ]
+     ]
+    }
+   }
+  ],
+  [
+   "landform",
+   [
+    [
+     520,
+     380
+    ],
+    [
+     560,
+     600
+    ],
+    [
+     490,
+     820
+    ],
+    [
+     530,
+     1100
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 240,
+     "lean": 100,
+     "combine": 1,
+     "elevation": 79,
+     "cracks": 0,
+     "wander": 20,
+     "widthVary": 20,
+     "heightVary": 0,
+     "varySize": 120,
+     "varyFoot": 100,
+     "varyMiddle": 100
+    },
+    "curve": {
+     "form": "lfValleyU",
+     "knots": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0625,
+       0.121
+      ],
+      [
+       0.125,
+       0.234
+      ],
+      [
+       0.1875,
+       0.34
+      ],
+      [
+       0.25,
+       0.438
+      ],
+      [
+       0.3125,
+       0.527
+      ],
+      [
+       0.375,
+       0.609
+      ],
+      [
+       0.4375,
+       0.684
+      ],
+      [
+       0.5,
+       0.75
+      ],
+      [
+       0.5625,
+       0.809
+      ],
+      [
+       0.625,
+       0.859
+      ],
+      [
+       0.6875,
+       0.902
+      ],
+      [
+       0.75,
+       0.938
+      ],
+      [
+       0.8125,
+       0.965
+      ],
+      [
+       0.875,
+       0.984
+      ],
+      [
+       0.9375,
+       0.996
+      ],
+      [
+       1.0,
+       1.0
+      ]
+     ]
+    }
+   }
+  ],
+  [
+   "landform",
+   [
+    [
+     840,
+     380
+    ],
+    [
+     880,
+     600
+    ],
+    [
+     810,
+     820
+    ],
+    [
+     850,
+     1100
+    ]
+   ],
+   {
+    "card": {
+     "diameter": 240,
+     "lean": 100,
+     "combine": 1,
+     "elevation": 79,
+     "cracks": 0,
+     "wander": 20,
+     "widthVary": 20,
+     "heightVary": 0,
+     "varySize": 120,
+     "varyFoot": 100,
+     "varyMiddle": 100,
+     "terraces": 4,
+     "ledge": 55,
+     "terraceJitter": 30
+    },
+    "curve": {
+     "form": "lfValleyV",
+     "knots": [
+      [
+       0,
+       0
+      ],
+      [
+       1,
+       1
+      ]
+     ]
+    }
+   }
+  ]
+ ]
+}

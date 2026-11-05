@@ -210,9 +210,11 @@ fn rockTan(s: vec4f, offset: f32) -> f32 {
 
 // What the higher sample hands to the lower: debris first, then rock, never past the
 // higher one's lower bound or the lower one's upper bound (an eighth each, for its eight pairs).
-fn slide(hi: vec4f, hf: vec4f, lo: vec4f, lf: vec4f, length_: f32) -> f32 {
+// The painted repose: the erosion override plane scales both reposes (seedMain stores its share in a sample's totals, z). A pair uses the mean of its
+// two samples' shares, so both ends of a pair compute the same scale and the exchange stays symmetric. Nothing painted: a scale of exactly 1.
+fn slide(hi: vec4f, hf: vec4f, lo: vec4f, lf: vec4f, length_: f32, painted: f32) -> f32 {
     let drop = ground(hi) - ground(lo);
-    let run = length_ * ep.spacing;
+    let run = length_ * ep.spacing * (1.0 + painted);
     let debris = select(0.0, max(0.0, drop - ep.talusTan * run), hi.y > 0.0);
     let rock = max(0.0, drop - rockTan(hi, hf.w) * run);
     let share = min(max(0.0, ground(hi) - hf.x), max(0.0, lf.y - ground(lo))) / 8.0;
@@ -237,8 +239,9 @@ fn thermalMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) l
                 let j = at(nx, ny);
                 let n = src[j];
                 let len = select(1.0, 1.41421356, dx != 0 && dy != 0);
-                if (ground(c) > ground(n)) { out += slide(c, f, n, fixedField[j], len); }
-                else if (ground(n) > ground(c)) { gain += slide(n, fixedField[j], c, f, len); }
+                let painted = 0.5 * (acc[i].z + acc[j].z);
+                if (ground(c) > ground(n)) { out += slide(c, f, n, fixedField[j], len, painted); }
+                else if (ground(n) > ground(c)) { gain += slide(n, fixedField[j], c, f, len, painted); }
             }
         }
     }
