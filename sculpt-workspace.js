@@ -1,10 +1,9 @@
 // Artist workspace. Reuses the editor's controls, events and history.
 import {mountHelp} from './sculpt-help.js';
 const $=id=>document.getElementById(id);
-const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
 
 export function mountWorkspace(){
-  const app=document.querySelector('.app'),dock=$('curve-dock'),palette=document.querySelector('.tool-palette'),curves=$('section-preview-control');
+  const dock=$('curve-dock'),palette=document.querySelector('.tool-palette'),curves=$('section-preview-control');
   const zoomBy=factor=>{const camera=window.sculptCanvas;if(!camera)return;const s=camera.view().scale,levels=[.25,.5,1,2,4];camera.zoom(factor>1?(levels.find(v=>v>s+.001)??4):([...levels].reverse().find(v=>v<s-.001)??.25));};
   $('zoom-out').onclick=()=>zoomBy(.5);$('zoom-in').onclick=()=>zoomBy(2);
   for(const name of ['export','graphics'])$('open-'+name).onclick=()=>{if($('inspector-sidebar').hidden)$('toggle-inspector').click();$('tab-'+name).click();};
@@ -17,18 +16,27 @@ export function mountWorkspace(){
   // The curve editors replace the empty-state note whenever a landform is in hand.
   const sync=()=>{$('curve-empty').hidden=!curves.hidden;};new MutationObserver(sync).observe(curves,{attributes:true,attributeFilter:['hidden']});sync();
   mountHelp();
-  const enhance=root=>{if(root instanceof Element){if(root.matches('.control'))compactControl(root);root.querySelectorAll('.control').forEach(compactControl);}};
-  enhance(document.body);
-  new MutationObserver(records=>{for(const r of records)for(const n of r.addedNodes)enhance(n);}).observe(app,{childList:true,subtree:true});
+  // The page's own sliders are written in the compact form; generated ones come from controlRow.
+  document.querySelectorAll('.control[data-compact]').forEach(attachScrub);
 }
 
-function compactControl(row){
-  const source=row.querySelector(':scope > input[type=range]'),label=row.querySelector(':scope > label');
-  if(!source||!label||row.dataset.compact)return;
+// A generated control row. A slider takes the compact form the page's own sliders are written in: the label and a
+// typed-value field inside the .scrub bar, the native range beside it holding the value and emitting the events.
+// `label` is the label's HTML, `range` the range's attributes; `choices` ([value, text]) makes a select instead,
+// with `select` its extra attributes.
+export function controlRow({id,label,range='',choices=null,select='',help=null}){
+  const row=document.createElement('div');row.className='control';
+  const note=help===null?'':`<p class="small">${help}</p>`;
+  if(choices){row.innerHTML=`<label for="${id}">${label}</label><select id="${id}"${select}>${choices.map(([v,text])=>`<option value="${v}">${text}</option>`).join('')}</select>${note}`;return row;}
   row.dataset.compact='true';
-  const scrub=element('div','scrub');scrub.tabIndex=0;scrub.setAttribute('role','slider');scrub.dataset.source=source.id;
-  const input=element('input','scrub-entry');input.type='number';input.hidden=true;
-  row.insertBefore(scrub,label);scrub.append(label,input);source.classList.add('scrub-native');source.tabIndex=-1;source.setAttribute('aria-hidden','true');
+  row.innerHTML=`<div class="scrub" tabindex="0" role="slider" data-source="${id}"><label for="${id}">${label}</label><input class="scrub-entry" type="number" hidden></div><input id="${id}" class="scrub-native" type="range" ${range} tabindex="-1" aria-hidden="true">${note}`;
+  attachScrub(row);return row;
+}
+
+// Slider behavior for a compact row: drag, click to set (after the double-click delay), double-click or Enter to
+// type, arrow keys, Shift for fine drags, and the native range's disabled state.
+function attachScrub(row){
+  const scrub=row.querySelector(':scope > .scrub'),label=scrub.querySelector(':scope > label'),input=scrub.querySelector(':scope > .scrub-entry'),source=row.querySelector(':scope > input[type=range]');
   let pointer=null,editing=false,clickTimer=null,clickValue=null;
   const cancelClick=()=>{clearTimeout(clickTimer);clickTimer=null;clickValue=null;document.removeEventListener('pointerdown',nextPointer,true);};
   const disabled=()=>source.matches(':disabled');

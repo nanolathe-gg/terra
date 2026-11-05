@@ -1,6 +1,7 @@
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
+import {controlRow} from './sculpt-workspace.js';
 import {copyColumn, columnHasCapBed, coastColumn} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,FORMS,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps,landformBeach} from './sculpt-shape-presets.js';
@@ -290,10 +291,8 @@ function buildShapeOptions() {
     if(key==='crystalForm')choices=[[0,'Faceted shards'],[1,'Column mound'],[2,'Planar blocks']];
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
     if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
-    const wrap=document.createElement('div'); wrap.className='control'; wrap.id=id+'-control';
-    const input=choices?`<select id="${id}" style="width:100%">${choices.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>`:`<input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}">`;
-    wrap.innerHTML=`<label for="${id}">${label} <output id="${id}-value"${choices?' hidden':''}></output></label>${input}<p class="small">${help}</p>`;
-    return wrap;
+    const wrap=controlRow({id,label:`${label} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
+    wrap.id=id+'-control'; return wrap;
   });
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
@@ -1865,12 +1864,11 @@ function buildKnobs() {
     for (const [key, oldLabel, min, max, step, value] of knobs) {
       if(PARKED_WORLD_CONTROLS.has(key))continue;
       const label=controlLabel(key,oldLabel);
-      const wrap = document.createElement('div'); wrap.className = 'control';
+      const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
+      const wrap = controlRow({id,label:`${label} <output${choices?' hidden':''}>${current}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
       wrap.dataset.knob=key;if(search)wrap.dataset.searchGroup=search;
-      const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value;
-      wrap.innerHTML = `<label for="${id}">${label} <output>${current}</output></label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${current}">`;
-      let input = wrap.querySelector('input'); const out = wrap.querySelector('output');
-      if(WORLD_CHOICES[key]){const select=document.createElement('select');select.id=id;select.replaceChildren(...WORLD_CHOICES[key].map(([value,label])=>new Option(label,String(value))));select.value=String(current);input.replaceWith(select);input=select;out.hidden=true;}
+      const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
+      if(choices)input.value=String(current);
       input.addEventListener('input', () => { out.textContent = input.value; setKnob(key, input.value); });
       box.append(wrap);
     }
