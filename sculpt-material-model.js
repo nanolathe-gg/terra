@@ -2,9 +2,9 @@
 export const MM_ROWS = 63;
 // The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): ten rows after it.
 export const PLACEMENT_ROW = 156;
-// The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them. A table without `groundCover` gives zeros: the feature is off.
+// The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them, the plants' row and the four flower palette rows. A table without `groundCover` gives zeros: the feature is off.
 export const COVER_ROW = PLACEMENT_ROW + 10;
-export const COVER_ROWS = 40;
+export const COVER_ROWS = 44;
 // Card P31: how far past the pixels it covers a plant's scatter reads: a shrub's candidate (cell 16, jitter .85) up to 23 px away, the mask's height taps 8 px past that, and 15 px of apron.
 export const PLANT_REACH = 46;
 // The rows engine-materials.wgsl makes the layers from: MM_ROWS per layer, in the table's order. A material named twice in the order
@@ -69,6 +69,8 @@ export function groundCoverRows(cover) {
     rows[b + 2] = k.moisture; rows[b + 3] = k.soil; rows[b + 4] = k.light;
   });
   // Card P31: the plants (tufts, cushions, shrubs, flowers) the bake's loose scatter adds on the classes that grow them; no block, none.
-  if (cover.plants) rows[COVER_ROWS - 1] = [cover.plants.tuft, cover.plants.shrub, cover.plants.shrubs, 0];
+  // Row 39's w is the flowers' density (dots per 2 x 2 px block at the best of their ground); rows 40 to 43 their palette (rgb, weight; at most four).
+  if (cover.plants) rows[39] = [cover.plants.tuft, cover.plants.shrub, cover.plants.shrubs, cover.plants.flowers?.density ?? 0];
+  (cover.plants?.flowers?.palette ?? []).slice(0, 4).forEach((k, i) => { rows[40 + i] = [k[0] / 255, k[1] / 255, k[2] / 255, k[3]]; });
   return rows;
 }

@@ -416,7 +416,53 @@ fn coverZ(p: vec2f, scale: f32) -> f32 {
 }
 // The grass with the class this pixel draws: the class colour carries the grass art's light and dark, and keeps its chroma only within
 // +-30% of that (the art's blue and red grain would otherwise swing a tan or a dark green to pink or teal).
-fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f) -> vec3f {
+// Card P31, flowers: dots of colour on the meadow and scrub, 1 to 2 px, in clumps of one species, drawn from the position alone (no channel through the
+// bake: the draw already holds the covers, the sun and Lushness here, and a dot is a function of its pixel). The palette is the world's own: rows
+// MM_COVER + 40..43 (rgb, weight; weight 0 is unused), and the density is row 39's w; none, none drawn. A pixel pair block (2 x 2 px) holds at most one dot,
+// 1 px or 2 px wide; the chance of one is the density times the share of meadow and scrub here (more of both on lush ground, by their own Lushness
+// exponents, and again by Lushness here), the sun on the face, and a clump field of about 10 px. A clump is one palette colour (a cell of 22 px).
+// They fade out between 1 and 2 world px per pixel (chunk previews): finer than a pixel the dots would alias.
+// Returns (rgb, weight). The gate is the share of open ground (no path, above the water).
+fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation: f32, gate: f32) -> vec4f {
+    let dens = cvr(39u).w;
+    if (dens <= 0.0 || gate <= 0.0) { return vec4f(0.0); }
+#ifdef CHUNK
+    let fade = 1.0 - smoothstep(1.0, 2.0, u.chunkScale);
+#else
+    let fade = 1.0;
+#endif
+    let px = floor(p);
+    let blk = floor(px * 0.5);
+    let hb = cellHash(blk + vec2f(83.1, 17.7));
+    if (hb.x >= dens * 4.0) { return vec4f(0.0); }
+    let share = (cover[3] + 0.7 * cover[4] + 0.15 * cover[6] + 0.1 * cover[2]) / max(total, 1e-4);
+    let sun = mix(0.15, 1.0, smoothstep(0.6, 1.0, light));
+    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
+    let clump = smoothstep(0.35, 0.85, valueNoise(p / 9.0 + 7.0) * 0.5 + 0.5);
+    let chance = dens * 4.0 * clump * clump * clump * share * sun * lush * gate * fade;
+    if (hb.x >= chance) { return vec4f(0.0); }
+    // The dot: one pixel of the block, or two side by side.
+    let ho = cellHash(blk + vec2f(5.3, 61.9));
+    let o = floor(ho * 2.0);
+    let at = px - 2.0 * blk;
+    let wide = hb.y < 0.4;
+    if (!(all(at == o) || (wide && at.y == o.y))) { return vec4f(0.0); }
+    // Its colour: one species to a clump, by the palette's weights.
+    let pick = cellHash(floor(p / 22.0) + vec2f(41.3, 9.1)).x;
+    var wsum = 0.0;
+    for (var k = 0u; k < 4u; k++) { wsum += cvr(40u + k).w; }
+    var acc = 0.0;
+    var col = cvr(40u).rgb;
+    for (var k = 0u; k < 4u; k++) {
+        let c = cvr(40u + k);
+        if (c.w <= 0.0) { continue; }
+        acc += c.w / wsum;
+        col = c.rgb;
+        if (pick < acc) { break; }
+    }
+    return vec4f(col * (1.1 + 0.25 * ho.x), 1.0);
+}
+fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f, gate: f32) -> vec3f {
     let c2 = cvr(2u);
     let cover = coverAt(slope, broad, top, tm, vegetation);
     var total = 0.0;
@@ -430,7 +476,9 @@ fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, veget
     let grain = (cellHash(floor(p) + 3.7).y - 0.5) * 2.0 * col.w;
     let ratio = grass / max(cvr(3u).rgb, vec3f(0.01));
     let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
-    return col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
+    let ground = col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
+    let flower = flowersAt(p, cover, total, coverSite(broad, tm).y, vegetation, gate);
+    return mix(ground, flower.rgb, flower.a);
 }
 
 // Moon slope marks, measured on the retail Lunar sections and the cc21
@@ -1590,7 +1638,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         grass = mix(grass, slopeGrass, slopeCover);
     }
     // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
-    if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass); }
+    if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
     // Small mineral interiors supply pixel structure; the whole crown/face/
     // foot comes from this surface. Some native microshading remains baked.
     var rock = rockSource(pixel);

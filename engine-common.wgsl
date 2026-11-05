@@ -329,7 +329,7 @@ struct Uniforms {
     columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 40 rows of a world's ground-cover table (card P30, and its plants' row, card P31; zeros: none)
+    materialTable: array<vec4f, 210>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
     blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)

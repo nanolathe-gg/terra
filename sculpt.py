@@ -673,7 +673,10 @@ WORLD_VARIANTS = {
                        groundCover=dict(
                            # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
                            # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
-                           plants=dict(tuft=4, shrub=2, shrubs=1.5),
+                           plants=dict(tuft=4, shrub=2, shrubs=1.5,
+                                       # Card P31: flowers, 1-2 px dots in one-species clumps on meadow and scrub, in sun, more on lush ground (the draw's groundCover). Density is the
+                                       # chance of a dot per 2 x 2 px at the best of its ground; the palette is rgb and a weight (white and yellow common, violet and red rare).
+                                       flowers=dict(density=.15, palette=[[236, 232, 214, 4], [255, 214, 64, 3], [170, 120, 215, 1], [225, 80, 60, 1]])),
                            wet=[.25, .9], dry=.4, patch=22, ground=[55, 93, 27],
                            soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
                            moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
