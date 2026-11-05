@@ -1113,8 +1113,10 @@ export class TerrainRenderer {
 
   // Card P16: the loose-stone mask, computed once per cell of 4 px over the bake's window and the margin a stone reaches (see looseMain), so a
   // candidate reads one entry where the mask would take about 20 texture reads. Nothing runs while Supply is 0 and no scatter is painted.
+  // A fed chunk's painted flags are written into the uniform buffer by the GPU (ChunkTerrainRenderer.flagPass), so the CPU copy of uScatterOn
+  // is stale there: the pass runs, and looseMain's own test of u.scatterOn leaves every cell empty where nothing is painted.
   encodeLooseMask(encoder) {
-    const supply = this.uniformValue('uLooseSupply'), painted = this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
+    const supply = this.uniformValue('uLooseSupply'), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
     if (!(supply > 0) && !painted && !plants) return;
     const [x0, y0, w, h] = this.bakeWindow ?? [0, 0, this.bakeWidth ?? this.size, this.bakeHeight ?? this.size];
     // Card P31: a plant's candidate lies up to 23 px (a shrub's cell and jitter) from the pixels it covers, the mask reads heights 8 px past its cell, and the apron adds 15.
