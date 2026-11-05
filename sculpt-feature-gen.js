@@ -314,18 +314,18 @@ function byQuantile(table, v) { // table of [value, weight], ordered; v in 0..1 
 const BURNT_TABLE = [[245, 1.5], [63, 1.5], [79, 1], [47, 12.5], [46, 6.7], [45, 6.8], [95, 14.7], [94, 9.1], [62, 6], [61, 4], [172, 3], [173, 2.5], [175, 1], [60, 2], [93, 9.3], [92, 3.5], [59, 2], [91, 3], [90, 2.2], [89, 1.2], [88, 0.6], [87, 0.4], [57, 0.6], [55, 0.4], [44, 1], [43, 0.5]];
 // ---- burnt trees (skeletons) ------------------------------------------------------------------------------------
 const BURNT_DEFAULTS = { species: 'broadleaf', height: 53, width: 0.62, forks: 3, ash: 0.5, energy: [50, 50] };
-const CONIFER_DEAD = [[245, 1], [63, 1], [47, 14], [46, 14], [45, 11], [172, 2], [173, 2], [175, 1.5], [44, 3], [62, 7], [61, 1], [93, 12], [94, 5], [92, 2.5], [43, 1], [91, 1.5], [89, 1.5]];
+const CONIFER_DEAD = [[245, 1], [63, 1], [47, 13], [46, 13], [45, 10], [172, 2], [173, 2], [175, 1.5], [44, 2], [62, 6], [61, 1], [93, 12], [94, 4], [92, 2.5], [43, 1], [91, 2], [89, 1.5]];
 // A sparse, narrow, tapering needle skeleton (spec 15 B3): dark trunk, short twigs, needle tufts, gaps; near-black greens and grays.
 function burntConiferFrame(P, seed) {
   const r = rng(seed), rn = rng(mix32(seed, 5));
   const H = Math.round(P.height), W = Math.round(H * P.width), w = W + 8, h = H + 4, cx = w / 2 + (r() - 0.5), ax = Math.round(cx), ay = h - 3;
   const sp = newSprite(w, h, ax, ay), s1 = (r() * 1e6) | 0, Wh = W / 2, y0 = ay - H + 1;
-  const target = Math.round(0.365 * W * H * (0.94 + 0.12 * r()));
+  const target = Math.round(0.352 * W * H * (0.94 + 0.12 * r()));
   const hw = t => Wh * (0.1 + 0.9 * Math.pow(clamp(t / 0.62, 0, 1), 0.85)) * (t > 0.62 ? 1 - 0.22 * (t - 0.62) / 0.38 : 1);
   const forced = new Set(), cand = [];
   for (let y = y0; y <= ay; y++) {              // trunk
     const t = (y - y0) / H;
-    if (t > 0.04) { forced.add(y * w + ax); if (t > 0.3) forced.add(y * w + ax + 1); }
+    if (t > 0.04 && (t > 0.85 || r() < 0.82)) forced.add(y * w + ax);   // a thin trunk, visible through the needles
   }
   for (let y = y0 + 4; y < ay - 2; y += 2 + (r() < 0.4 ? 1 : 0)) {          // short twigs, alternating sides
     const t = (y - y0) / H, side = (y & 1) ? 1 : -1, len = Math.max(1, Math.round(hw(t) * (0.45 + 0.4 * r())));
@@ -336,7 +336,7 @@ function burntConiferFrame(P, seed) {
     for (let x = Math.floor(cx - half) - 1; x <= Math.ceil(cx + half) + 1; x++) {
       const k = y * w + x, edge = Math.abs(x - cx) / Math.max(half, 1);
       if (forced.has(k) || edge > 1.05) continue;
-      cand.push([0.55 * vnoise(x / 2.4, y / 1.2, s1) + 0.35 * rn() + 0.25 * edge * edge, k]);
+      cand.push([0.5 * vnoise(x / 2.4, y / 1.2, s1) + 0.5 * rn() + 0.25 * edge * edge, k]);
     }
   }
   cand.sort((a, b) => a[0] - b[0]);
@@ -419,43 +419,36 @@ function shrubFrame(P, seed, ctx) {
   const sp = newSprite(w, h, ax, ay), occ = new Uint8Array(w * h);
   const dd = clamp(P.density / 0.5, 0, 1), fill = lerp(0.135, 0.4, dd), N = Math.round(fill * W * H);
   const s1 = (r() * 1e6) | 0;
-  const env = (x, y) => { const e = ((x - cx) / (W / 2)) ** 2 + ((y - cy) / (H / 2)) ** 2; return e * 0.88 + (vnoise(x / 3, y / 3, s1) - 0.5) * 0.35 <= 1; };
-  const spread = true;
-  const grow = (sx, sy, n) => {
-    const cells = [[sx, sy]]; occ[sy * w + sx] = 1; let front = [];
-    const addFront = (x, y) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if ((dx || dy) && nx >= 0 && ny >= 0 && nx < w && ny < h && !occ[ny * w + nx] && env(nx, ny)) front.push([nx, ny]); } };
-    addFront(sx, sy);
-    while (cells.length < n && front.length) {
-      let i = (r() * front.length) | 0;
-      for (let t = 0; t < 3; t++) { const j = (r() * front.length) | 0; if (spread && Math.hypot(front[j][0] - cx, (front[j][1] - cy) * 1.6) > Math.hypot(front[i][0] - cx, (front[i][1] - cy) * 1.6)) i = j; }   // reach out toward the envelope's edge
-      const [x, y] = front[i]; front[i] = front[front.length - 1]; front.pop();
-      if (occ[y * w + x]) continue; occ[y * w + x] = 1; cells.push([x, y]); addFront(x, y);
-    }
-    return cells;
-  };
+  const env = (x, y) => { const e = ((x - cx) / (W / 2)) ** 2 + ((y - cy) / (H / 2)) ** 2; return e * 0.85 + (vnoise(x / 3, y / 3, s1) - 0.5) * 0.3 <= 1; };
   const inside = []; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (env(x, y)) inside.push([x, y]);
-  const dom = lerp(0.1, 0.62, dd), nBlobs = Math.round(lerp(26, 8, dd));
-  const all = [];
-  const c0 = inside.reduce((a, p) => (Math.abs(p[0] - cx) + Math.abs(p[1] - cy) < Math.abs(a[0] - cx) + Math.abs(a[1] - cy) ? p : a), inside[0]);
-  all.push(...grow(c0[0], c0[1], Math.round(N * dom)));
-  const rest = N - all.length;
-  for (let b = 1; b < nBlobs && all.length < N; b++) {
-    const [sx, sy] = inside[(r() * inside.length) | 0]; if (occ[sy * w + sx]) continue;
-    let near = false; for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (occ[(sy + dy) * w + sx + dx]) { near = true; break; } if (near && b % 3) continue;
-    const size = Math.max(1, Math.min(N - all.length, Math.round((rest / (nBlobs - 1)) * (0.2 + 1.6 * r() * r() * 1.2))));
-    all.push(...grow(sx, sy, size));
+  // an irregular scatter of small leaf clumps (1-6 px). Dense shrubs overlap and attach into one mass; sparse ones stay apart.
+  const clumps = [], cellAt = new Map(); let total = 0;
+  const hi = P.lean > 0 ? 1.6 : 1, near = (x, y, d) => { for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) if (occ[(y + dy) * w + x + dx]) return true; return false; };
+  for (let tries = 0; total < N && tries < 4000; tries++) {
+    let [sx, sy] = inside[(r() * inside.length) | 0];
+    const e = ((sx - cx) / (W / 2)) ** 2 + ((sy - cy) / (H / 2)) ** 2;
+    if (r() > 1 - 0.5 * e) continue;                                  // fewer clumps at the rim, none missing in the middle
+    const has = near(sx, sy, 2);
+    if (dd > 0.5 ? (!has && total > 12 && r() < 0.8) : (has && r() < 0.65)) continue;    // dense: attach; sparse: keep apart
+    const n = Math.min(N - total, dd > 0.5 ? 1 + Math.floor(r() * r() * 6.5) : 2 + Math.floor(r() * 7)), cells = [];
+    let x = sx, y = sy;
+    for (let k = 0; k < n; k++) {
+      if (!occ[y * w + x] && env(x, y)) { occ[y * w + x] = 1; cells.push([x, y]); }
+      const [dx, dy] = pick(r, [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 0], [-1, 0]]); x += dx; y += dy;
+      if (x < 1 || y < 1 || x >= w - 1 || y >= h - 2) break;
+    }
+    if (cells.length) { clumps.push(cells); total += cells.length; }
   }
-  for (let tries = 0; all.length < N && tries < 400; tries++) {   // top up with small outliers
-    const [sx, sy] = inside[(r() * inside.length) | 0]; if (occ[sy * w + sx]) continue;
-    all.push(...grow(sx, sy, Math.min(N - all.length, 1 + Math.floor(r() * 5))));
-  }
-  const nb4 = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => occ[(y + dy) * w + x + dx]).length;
-  const hi = P.lean > 0 ? 1.6 : 1;
-  for (const [x, y] of all) {
-    const edge = nb4(x, y) < 4, belowOpen = !occ[(y + 1) * w + x];
-    const dark = rn() < (belowOpen ? 0.62 : edge ? 0.42 : 0.2);
-    const c = dark ? 173 : weighted(rn, [[165, 31.5], [167, 12.1], [163, 7 * hi], [168, 4.1], [164, 3.9], [166, 3.5], [162, 0.4 * hi]]);
-    put(sp, x, y, c);
+  for (const cells of clumps) {
+    const has = (x, y) => cells.some(c => c[0] === x && c[1] === y);
+    for (const [x, y] of cells) {
+      const under = !has(x, y + 1), upper = !has(x, y - 1);
+      let c;
+      if (under) c = rn() < 0.5 ? 173 : weighted(rn, [[165, 3], [167, 3], [169, 1], [168, 1]]);        // the darker underside
+      else if (upper) c = weighted(rn, [[163, 13 * hi], [164, 5], [165, 28], [162, 0.8 * hi], [167, 9], [166, 3]]);   // lit yellow-green top
+      else c = weighted(rn, [[165, 30], [167, 14], [164, 4], [166, 4], [168, 3], [173, 4]]);
+      put(sp, x, y, c);
+    }
   }
   return { body: cropSprite(sp, 0) };
 }
