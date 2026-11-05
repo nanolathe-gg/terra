@@ -1380,12 +1380,12 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
 // distance in world px to the drawn waterline (onshore +; the drawn edge sits where the bed is 0.6 under the sea, so the bank's own run is added),
 // the nearest shore point q, a coordinate along the coast that value noise can use, and the bed's slope there (units per px). Beyond SURF_REACH, or where the height is more than a beach
 // above or a surf zone below the sea, x is 1e3. Every term is a function of position, so a chunk replays to the same bytes.
-const SURF_REACH = 86.0;
+const SURF_REACH = 104.0;
 fn surfShore(p: vec2f) -> vec4f {
     let h0 = baseHeight(p) - u.sea;
     let dry = h0 >= 0.0;
     if ((dry && h0 > 12.0) || (!dry && h0 < -16.0)) { return vec4f(1.0e3, 0.0, 0.0, 0.0); }
-    var radii = array<f32, 12>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0, 70.0, 86.0);
+    var radii = array<f32, 13>(1.5, 3.0, 5.0, 8.0, 12.0, 17.0, 24.0, 33.0, 44.0, 56.0, 70.0, 86.0, 104.0);
     var best = SURF_REACH;
     var q = p;
     for (var k = 0; k < 8; k++) {
@@ -1393,7 +1393,7 @@ fn surfShore(p: vec2f) -> vec4f {
         let dir = vec2f(cos(a), sin(a));
         var lastR = 0.0;
         var lastH = h0;
-        for (var i = 0; i < 12; i++) {
+        for (var i = 0; i < 13; i++) {
             let r = radii[i];
             if (lastR >= best) { break; }
             let hr = baseHeight(p + dir * r) - u.sea;
@@ -1418,10 +1418,17 @@ fn surfBerm(e: f32) -> f32 { return 14.0 + 34.0 * e; }
 fn surfCuspX(x: f32, q: vec2f, e: f32) -> f32 {
     return x + 3.5 * e * surfBeach(e) * (0.5 + 0.5 * valueNoise(q / 13.0 + vec2f(5.1, 2.7))) * (1.0 - smoothstep(surfBerm(e) * 0.7, surfBerm(e) * 1.1, x));
 }
-// Sand to the berm and a little past it, its inland edge ragged, where the pixel is dry.
+// The beach's sand as a share (0..1, thick at the water, thinning inland) that sandCoverAt draws through, as the deposits' sand is drawn: the edge is a scatter of
+// clumps with the grass regrowing through it, not a line. Where the share ends wanders along the coast (headlands of sand and bays of grass, 41 and 17 px), its
+// width changes (12 to 36 px), and position noise at 14 and 6 px sends grass tongues into the sand and sand patches into the grass. It ends before SURF_REACH, past which
+// surfShore knows no shore.
 fn surfSand(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
-    let veg = smoothstep(-0.1, 0.15, (surfCuspX(x, q, e) - (surfBerm(e) + 20.0)) / 30.0 + 0.3 * valueNoise(p / 24.0) + 0.15 * valueNoise(p / 11.0));
-    return (1.0 - veg) * step(0.0, x) * surfBeach(e);
+    let along = valueNoise(q / 41.0 + vec2f(3.3, 8.1)) * 0.5 + 0.5;
+    let near = valueNoise(q / 17.0 + vec2f(1.7, 6.2)) * 0.5 + 0.5;
+    let ragged = 9.0 * valueNoise(p / 14.0 + vec2f(5.0, 1.0)) + 4.0 * valueNoise(p / 6.0 + vec2f(2.0, 9.0));
+    let end = min(surfBerm(e) + 26.0 + 28.0 * along + 8.0 * near + ragged, SURF_REACH - 6.0);
+    let width = 12.0 + 20.0 * (valueNoise(q / 61.0 + vec2f(8.8, 2.2)) * 0.5 + 0.5);
+    return clamp((end - surfCuspX(x, q, e)) / width, 0.0, 1.0) * step(0.0, x) * surfBeach(e);
 }
 // The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
 fn surfWet(x: f32, q: vec2f, e: f32) -> f32 {
@@ -1454,8 +1461,8 @@ fn sandWeathered() -> vec3f {
     return select(weathered, u.sandBase.rgb, u.sandBase.a > 0.5);
 }
 // How much of a pixel the sand covers, from the sand's share there (0..1): over the thinning edge a scatter of clumps 3 to 8 px across,
-// with the ground's grass and moss regrowing through it in tufts. The deposits' sand and the surf's beach draw through it.
-fn sandCoverAt(sand: f32, p: vec2f) -> f32 {
+// with the ground's grass and moss regrowing through it in tufts (regrowth scales them: 1 for the deposits, less on the surf's beach near the water). The deposits' sand and the surf's beach draw through it.
+fn sandCoverAt(sand: f32, p: vec2f, regrowth: f32) -> f32 {
     let speck = terrainNoise(p * 6.0 + vec2f(17.0, 29.0)).b;
     // Over the thinning edge sand is a scatter of clumps 3 to 8 px across, more of them the thicker it is, not a line: each clump
     // takes the sand where the sand's share beats the clump's own threshold; deep sand covers every clump, as before.
@@ -1471,7 +1478,7 @@ fn sandCoverAt(sand: f32, p: vec2f) -> f32 {
     // Where the sand thins toward its edge the ground shows through in tufts: the thinner, the more the tufts decide and the
     // more of the patch's own regrowth pushes through (the edge is a scatter 3 to 8 px across, not a line).
     let thin = 1.0 - smoothstep(0.35, 0.95, sand);
-    let regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + thin * 0.42 + (tuft - 0.5) * (0.3 + 0.7 * thin)) * u.sandGrass;
+    let regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + thin * 0.42 + (tuft - 0.5) * (0.3 + 0.7 * thin)) * u.sandGrass * regrowth;
     return cover * (1.0 - regrow);
 }
 fn sandMaterialAt(scatter: vec2f) -> vec3f {
@@ -1860,7 +1867,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // grass blades (a per-pixel threshold against fine noise), then
             // sand covers the ground.
             material = mix(material, weathered, smoothstep(0.0, 0.6, sand) * u.sandDust * 0.6);
-            material = mix(material, sandMaterial, sandCoverAt(sand, p));
+            material = mix(material, sandMaterial, sandCoverAt(sand, p, 1.0));
         }
     }
     // Baked boulders take rock material, lit by the same surface.
@@ -1990,7 +1997,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Card P27: the surf's beach is drawn last over the material, so the bake's cracks, chips and stones do not mark it: sand with its own fine
     // grain (colour the world's Sand), the shading eased toward level, then the wet sand to the last uprush and the wrack lines.
     if (surfE > 0.0 && surfX < 900.0 && surfX >= 0.0) {
-        let cover = surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope)) * (1.0 - exposed * 0.7);
+        let cover = sandCoverAt(surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope + 0.2 * valueNoise(p / 5.0 + 17.0) + 0.15 * valueNoise(p / 13.0 + 43.0))) * (1.0 - exposed * 0.7), p, smoothstep(surfBerm(surfE) * 0.5, surfBerm(surfE) * 1.6, surfX));
         let cell = floor(grainPixel(pixel));
         let grain = 1.0 + 0.12 * (shelfHash(cell + 11.0) - 0.5) + 0.06 * valueNoise(p / 5.0) + 0.05 * valueNoise(p / 17.0);
         let sandColour = select(sandWeathered() * grain, beachColour(pixel), u.beach != 0);
