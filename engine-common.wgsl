@@ -610,13 +610,18 @@ fn coverSite(broad: vec2f, tm: TimeMaps) -> vec2f {
     let shade = clamp(1.0 - light, -0.6, 1.0);
     return vec2f(clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0), light);
 }
+// Soil depth at a point (0 bare, 1 deep): thin on steep and convex ground and where water wore the rock, deep in hollows and where water laid deposit.
+// The seven classes read it as a window, and a tabled world's slope cover reads it as the share of thin soil (engine-frag.wgsl).
+fn coverSoil(slope: f32, top: f32, tm: TimeMaps, moist: f32) -> f32 {
+    let c1 = cvr(1u);
+    return clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
+}
 // The seven classes' covers at a point (groundCover in engine-frag.wgsl draws from them; looseStones in engine-bake places plants by them).
 fn coverAt(slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32) -> array<f32, 7> {
-    let c0 = cvr(0u); let c1 = cvr(1u);
     let site = coverSite(broad, tm);
     let moist = site.x;
     let light = site.y;
-    let soil = clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
+    let soil = coverSoil(slope, top, tm, moist);
     let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
     var cover: array<f32, 7>;
     for (var k = 0u; k < 7u; k++) {
