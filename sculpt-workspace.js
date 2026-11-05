@@ -59,23 +59,25 @@ export function mountCurveDock(){
 function compactControl(row){
   const source=row.querySelector(':scope > input[type=range]'),label=row.querySelector(':scope > label');
   if(!source||!label||row.dataset.compact)return;
-  row.dataset.compact='true';const title=label.cloneNode(true);title.querySelector('output')?.remove();
-  const name=title.textContent.trim(),scrub=element('div','scrub');scrub.tabIndex=0;scrub.setAttribute('role','slider');scrub.setAttribute('aria-label',name);scrub.dataset.source=source.id;
-  const input=element('input','scrub-entry');input.type='number';input.setAttribute('aria-label',name);input.hidden=true;
-  row.insertBefore(scrub,label);scrub.append(label,input);source.classList.add('scrub-native');source.tabIndex=-1;
-  let pointer=null,editing=false,original=0;
+  row.dataset.compact='true';
+  const scrub=element('div','scrub');scrub.tabIndex=0;scrub.setAttribute('role','slider');scrub.dataset.source=source.id;
+  const input=element('input','scrub-entry');input.type='number';input.hidden=true;
+  row.insertBefore(scrub,label);scrub.append(label,input);source.classList.add('scrub-native');source.tabIndex=-1;source.setAttribute('aria-hidden','true');
+  let pointer=null,editing=false;
   const disabled=()=>source.matches(':disabled');
-  const sync=()=>{const lo=Number(source.min),hi=Number(source.max),v=Number(source.value);scrub.style.setProperty('--fill',`${100*(v-lo)/(hi-lo||1)}%`);scrub.setAttribute('aria-valuemin',lo);scrub.setAttribute('aria-valuemax',hi);scrub.setAttribute('aria-valuenow',v);scrub.setAttribute('aria-valuetext',label.querySelector('output')?.textContent||String(v));scrub.setAttribute('aria-disabled',String(disabled()));scrub.tabIndex=disabled()?-1:0;input.min=source.min;input.max=source.max;input.step=source.step;};
-  const apply=v=>{const step=Number(source.step)||1,lo=Number(source.min),hi=Number(source.max);source.value=String(Math.max(lo,Math.min(hi,lo+Math.round((v-lo)/step)*step)));source.dispatchEvent(new Event('input',{bubbles:true}));sync();};
+  const sync=()=>{const lo=Number(source.min),hi=Number(source.max),v=Number(source.value),title=label.cloneNode(true);title.querySelector('output')?.remove();const name=title.textContent.trim();scrub.setAttribute('aria-label',name);input.setAttribute('aria-label',name);scrub.style.setProperty('--fill',`${100*(v-lo)/(hi-lo||1)}%`);scrub.setAttribute('aria-valuemin',lo);scrub.setAttribute('aria-valuemax',hi);scrub.setAttribute('aria-valuenow',v);scrub.setAttribute('aria-valuetext',label.querySelector('output')?.textContent||String(v));scrub.setAttribute('aria-disabled',String(disabled()));scrub.tabIndex=disabled()?-1:0;input.min=source.min;input.max=source.max;input.step=source.step;input.disabled=disabled();if(disabled()&&editing)finish(true);};
+  // A no-op must not emit input: the renderer pauses weathering until change.
+  const apply=v=>{if(disabled())return false;const before=source.value,step=Number(source.step)||1,lo=Number(source.min),hi=Number(source.max);source.value=String(Math.max(lo,Math.min(hi,lo+Math.round((v-lo)/step)*step)));if(source.value===before)return false;source.dispatchEvent(new Event('input',{bubbles:true}));sync();return true;};
   const commit=()=>source.dispatchEvent(new Event('change',{bubbles:true}));
-  const type=()=>{editing=true;original=Number(source.value);input.hidden=false;input.value=source.value;input.focus();input.select();};
-  const finish=cancel=>{if(!editing)return;editing=false;if(!cancel&&input.value.trim()&&Number.isFinite(input.valueAsNumber)){apply(input.valueAsNumber);if(Number(source.value)!==original)commit();}input.hidden=true;scrub.focus({preventScroll:true});};
-  scrub.addEventListener('pointerdown',e=>{if(e.target===input||disabled()||e.button!==0)return;e.preventDefault();pointer={id:e.pointerId,x:e.clientX,value:Number(source.value),moved:false};scrub.setPointerCapture(e.pointerId);scrub.focus({preventScroll:true});});
-  scrub.addEventListener('pointermove',e=>{if(pointer?.id!==e.pointerId)return;const dx=e.clientX-pointer.x;if(!pointer.moved&&Math.abs(dx)<4)return;pointer.moved=true;const span=Number(source.max)-Number(source.min);apply(pointer.value+dx*span/240*(e.shiftKey?.1:1));});
-  const end=e=>{if(pointer?.id!==e.pointerId)return;const p=pointer;pointer=null;if(scrub.hasPointerCapture(e.pointerId))scrub.releasePointerCapture(e.pointerId);if(p.moved){if(e.type==='pointercancel')apply(p.value);commit();}else if(e.type==='pointerup')type();};
+  const type=()=>{if(disabled())return;editing=true;scrub.removeAttribute('role');input.hidden=false;input.value=source.value;input.focus();input.select();};
+  const finish=(cancel,focus=false)=>{if(!editing)return;editing=false;if(!cancel&&!disabled()&&input.value.trim()&&Number.isFinite(input.valueAsNumber)&&apply(input.valueAsNumber))commit();input.hidden=true;scrub.setAttribute('role','slider');if(focus)scrub.focus({preventScroll:true});};
+  scrub.addEventListener('pointerdown',e=>{if(e.target===input||disabled()||e.button!==0)return;e.preventDefault();pointer={id:e.pointerId,x:e.clientX,raw:Number(source.value),moved:false,changed:false};scrub.setPointerCapture(e.pointerId);scrub.focus({preventScroll:true});});
+  scrub.addEventListener('pointermove',e=>{if(pointer?.id!==e.pointerId)return;const dx=e.clientX-pointer.x;if(!pointer.moved&&Math.abs(dx)<4)return;pointer.moved=true;pointer.x=e.clientX;const lo=Number(source.min),hi=Number(source.max);pointer.raw=Math.max(lo,Math.min(hi,pointer.raw+dx*(hi-lo)/240*(e.shiftKey?.1:1)));pointer.changed=apply(pointer.raw)||pointer.changed;});
+  // Cancellation finishes the last visible value, just like a native range.
+  const end=e=>{if(pointer?.id!==e.pointerId)return;const p=pointer;pointer=null;if(scrub.hasPointerCapture(e.pointerId))scrub.releasePointerCapture(e.pointerId);if(p.changed)commit();else if(!p.moved&&e.type==='pointerup')type();};
   scrub.addEventListener('pointerup',end);scrub.addEventListener('pointercancel',end);scrub.addEventListener('lostpointercapture',end);
-  scrub.addEventListener('keydown',e=>{if(e.target===input||disabled())return;const step=Number(source.step)||1,delta={ArrowRight:step,ArrowUp:step,ArrowLeft:-step,ArrowDown:-step,PageUp:step*10,PageDown:-step*10}[e.key];if(delta!==undefined||['Home','End'].includes(e.key)){e.preventDefault();e.stopPropagation();apply(e.key==='Home'?Number(source.min):e.key==='End'?Number(source.max):Number(source.value)+delta);commit();}else if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();type();}});
-  input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(false);}if(e.key==='Escape'){e.preventDefault();finish(true);}});input.addEventListener('blur',()=>finish(false));
+  scrub.addEventListener('keydown',e=>{if(e.target===input||disabled())return;const step=Number(source.step)||1,delta={ArrowRight:step,ArrowUp:step,ArrowLeft:-step,ArrowDown:-step,PageUp:step*10,PageDown:-step*10}[e.key];if(delta!==undefined||['Home','End'].includes(e.key)){e.preventDefault();e.stopPropagation();if(apply(e.key==='Home'?Number(source.min):e.key==='End'?Number(source.max):Number(source.value)+delta))commit();}else if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();type();}});
+  input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(false,true);}if(e.key==='Escape'){e.preventDefault();finish(true,true);}});input.addEventListener('blur',()=>finish(false));
   source.addEventListener('input',sync);source.addEventListener('change',sync);
   new MutationObserver(sync).observe(label,{childList:true,subtree:true,characterData:true});new MutationObserver(sync).observe(source,{attributes:true,attributeFilter:['disabled','min','max','step']});sync();
 }
