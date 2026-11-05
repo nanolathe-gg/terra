@@ -1598,13 +1598,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
     var slopeBased = vec3f(0.0);
-    // Card P30: a world with a ground-cover table has no slope ramp: its slope cover is the share of thin soil (the table's soil depth, which
-    // is what bares and dries the ground there), and the slope texture is read wherever the soil is not full.
+    // A world with a ground-cover table has no slope ramp and no Sampled slope texture: the table decides its slope cover (groundCover below).
+    // It reads the slope texture only where a consumer can be: the faces' moss, and the rock that shows (a face, wear's outcrops from slope .3).
     let tabled = cvr(0u).x > 0.5;
-    var thinSoil = 0.0;
-    if (tabled) { thinSoil = 1.0 - smoothstep(0.1, 0.5, coverSoil(slope, place.top, timeMaps, coverSite(broad, timeMaps).x)); }
-    // A tabled world reads it wherever a consumer can be: the thin soil, the faces' moss, and the rock that shows (a face, wear's outcrops from slope .3).
-    let slopeTexWanted = select(slope > u.slopeProfile.x, thinSoil > 0.0 || place.face > 0.0 || place.exposed > 0.0 || (u.outcrop > 0.0 && slope > 0.3), tabled);
+    let slopeTexWanted = select(slope > u.slopeProfile.x, place.face > 0.0 || place.exposed > 0.0 || (u.outcrop > 0.0 && slope > 0.3), tabled);
     if (slopeTexWanted || u.paintOn != 0 || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
@@ -1614,7 +1611,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
         var slopeGrass = slopeBased;
-        var slopeCover = select(smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h), thinSoil, tabled);
+        var slopeCover = select(smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h), 0.0, tabled);
         drawMineralMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
