@@ -1433,9 +1433,11 @@ fn surfSand(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
     return clamp((end - surfCuspX(x, q, e)) / width, 0.0, 1.0) * step(0.0, x) * surfSandAmt(e);
 }
 // The wet sand up to the last uprush (1 where wet). The band is the world's wet band, at least 1 px, grown with Surf to half the berm.
-fn surfWet(x: f32, q: vec2f, e: f32) -> f32 {
+fn surfWet(x: f32, q: vec2f, p: vec2f, e: f32) -> f32 {
     let reach = (0.5 + 0.25 * valueNoise(q / 30.0)) * surfBerm(e) * surfBeach(e) + 1.0;
-    return (1.0 - smoothstep(reach - 1.5, reach + 1.0, surfCuspX(x, q, e))) * step(0.0, x);
+    // The last uprush dries out gradually (over a quarter of the reach) along a ragged line (the swash leaves tongues and dry flecks), not a 2 px step.
+    let ragged = 0.18 * reach * valueNoise(p / 7.0 + vec2f(4.4, 1.1));
+    return (1.0 - smoothstep(reach - 1.5 - 0.25 * reach, reach + 1.0, surfCuspX(x, q, e) + ragged)) * step(0.0, x);
 }
 // Foam at a pixel, static (hashed per art pixel): on the water a lace at the waterline and, with Surf, a broken breaker line along an isobath
 // with spray behind it; on the wet sand a 1 px swash front. depth is the bed under the sea (0 on land).
@@ -1725,7 +1727,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfSlope = shore.w;
         // Painted rock (a rock coast's, from coastBeach, or the artist's) takes the beach away, by its ragged edge: Surf falls to almost nothing (a wet line and a lace).
         if (u.paintOn != 0) { surfE = mix(surfE, 0.02, smoothstep(0.3, 0.7, painted.x)); }
-        if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, surfE)); }
+        if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, p, surfE)); }
     }
     var material = mix(grass, rock, exposed);
     if (u.beach != 0 && h > u.sea - 1.0) {
@@ -2011,15 +2013,24 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (surfE > 0.0 && surfX < 900.0 && surfX >= 0.0) {
         let cover = sandCoverAt(surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope + 0.2 * valueNoise(p / 5.0 + 17.0) + 0.15 * valueNoise(p / 13.0 + 43.0))) * (1.0 - exposed * 0.7), p, smoothstep(surfBerm(surfE) * 0.5, surfBerm(surfE) * 1.6, surfX));
         let cell = floor(grainPixel(pixel));
-        let grain = 1.0 + 0.12 * (shelfHash(cell + 11.0) - 0.5) + 0.06 * valueNoise(p / 5.0) + 0.05 * valueNoise(p / 17.0);
-        let sandColour = select(sandWeathered() * grain, beachColour(pixel), u.beach != 0);
+        // Dry sand varies in tone: patches of 20 and 7 px lighter and darker, and a slow drift between a warmer and a cooler sand.
+        let toneBlot = 0.11 * valueNoise(p / 21.0 + vec2f(9.2, 3.1)) + 0.07 * valueNoise(p / 7.0 + vec2f(1.4, 7.7));
+        let drift = valueNoise(p / 43.0 + vec2f(2.6, 6.4));
+        let grain = 1.0 + 0.12 * (shelfHash(cell + 11.0) - 0.5) + 0.06 * valueNoise(p / 5.0) + 0.05 * valueNoise(p / 17.0) + toneBlot;
+        let sandColour = select(sandWeathered() * grain, beachColour(pixel), u.beach != 0) * mix(vec3f(0.97, 0.99, 1.03), vec3f(1.03, 1.0, 0.95), 0.5 + 0.5 * drift);
         material = mix(material, sandColour, cover);
         shading = mix(shading, mix(shading, 1.0, 0.6), cover);
-        material *= mix(vec3f(1.0), vec3f(0.68, 0.62, 0.52), surfWet(surfX, surfQ, surfE));
+        let wet = surfWet(surfX, surfQ, p, surfE);
+        material *= mix(vec3f(1.0), vec3f(0.68, 0.62, 0.52), wet);
         let wrackAt = surfBerm(surfE) * 0.78 + 2.5 * valueNoise(surfQ / 40.0 + vec2f(5.0, 5.0));
         let wrack = (1.0 - smoothstep(0.35, 1.0, abs(surfCuspX(surfX, surfQ, surfE) - wrackAt))) * step(shelfHash(cell + 63.0), 0.65)
                   * smoothstep(-0.2, 0.2, valueNoise(surfQ / 25.0 + vec2f(7.0, 3.0))) * cover;
         material = mix(material, vec3f(0.33, 0.30, 0.20), wrack * 0.6 * surfE);
+        // A few pebbles (2 x 2 px, the world's rock a little lighter or darker), more near the wrack line and the berm, none on the wet sand.
+        let stoneAt = floor(grainPixel(pixel) * 0.5);
+        let nearLine = 1.0 - smoothstep(2.0, 14.0, abs(surfCuspX(surfX, surfQ, surfE) - wrackAt));
+        let pebble = step(shelfHash(stoneAt + 91.0), (0.004 + 0.03 * nearLine) * smoothstep(-0.3, 0.4, valueNoise(p / 15.0 + vec2f(3.0, 8.0)))) * cover * (1.0 - wet);
+        material = mix(material, rock * (0.75 + 0.5 * shelfHash(stoneAt + 92.0)), pebble * 0.85);
     }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
