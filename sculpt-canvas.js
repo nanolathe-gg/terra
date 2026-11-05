@@ -230,7 +230,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     ink.restore();
   }
   function coarseSample(x,y) { return coarseH[Math.round(clamp(y/(map.height-1),0,1)*(CH-1))*CW+Math.round(clamp(x/(map.width-1),0,1)*(CW-1))]; }
-  function paint(entry,v=state()) { const k=entry.scale??1;g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.drawImage(entry.bitmap,(entry.x-v.x)*scale,(entry.y-v.y)*scale,entry.bitmap.width*k*scale,entry.bitmap.height*k*scale); }
+  // A tile's edges snap to whole canvas pixels. At a fractional offset (a fractional scroll on a 2x screen, or a zoom that is not
+  // a whole number) two neighboring tiles each cover only part of their shared pixel, and the coarse picture underneath showed
+  // through as a 1 px line. Neighbors round the same edge the same way, so they meet exactly.
+  function paint(entry,v=state()) { const k=entry.scale??1,x0=Math.round((entry.x-v.x)*scale),y0=Math.round((entry.y-v.y)*scale),x1=Math.round((entry.x+entry.bitmap.width*k-v.x)*scale),y1=Math.round((entry.y+entry.bitmap.height*k-v.y)*scale);g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.drawImage(entry.bitmap,x0,y0,x1-x0,y1-y0); }
   function presentView() {
     const repaint=paintedView!==viewEpoch||cache.size===0;
     drawCoarse(repaint);
