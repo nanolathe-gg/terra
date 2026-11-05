@@ -4,9 +4,10 @@
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {encodePNG, decodePNG} from './feature_gen_png.mjs';
+import {pathToFileURL} from 'node:url';
 import {generateFeature, generateVariants, pickVariant, paintDeposit, paintVent, drawFeature, toRGBA, rng, CONTROLS} from '../sculpt-feature-gen.js';
 
-const [out, groundPath, tablePath] = process.argv.slice(2);
+const [out, groundPath, tablePath, r1Path, r2Before, r2After] = process.argv.slice(2);
 const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 const img = join(out, 'img'); mkdirSync(img, {recursive: true});
 const ground0 = decodePNG(readFileSync(groundPath));
@@ -26,8 +27,8 @@ paintVent(scene, 200, 70, {size: 1.1}, 5, ctx);
 const sets = {
   broad: generateVariants('tree', 5, {species: 'broadleaf', height: 68}, 100, ctx),
   conif: generateVariants('tree', 4, {species: 'conifer', height: 61, width: 0.5}, 200, ctx),
-  burnt: generateVariants('burnt', 2, {}, 300, ctx),
-  shrub: generateVariants('shrub', 4, {}, 400, ctx),
+  burnt: [...generateVariants('burnt', 1, {}, 300, ctx), ...generateVariants('burnt', 1, {species: 'conifer', height: 56, width: 0.5}, 310, ctx)],
+  shrub: [...generateVariants('shrub', 3, {density: 0.12, width: 33, height: 26}, 400, ctx), ...generateVariants('shrub', 2, {density: 0.6, width: 27, height: 20}, 410, ctx)],
   rock: [...generateVariants('rock', 3, {cells: '1x1', size: 1}, 500, ctx), ...generateVariants('rock', 2, {cells: '2x2'}, 510, ctx), ...generateVariants('rock', 1, {cells: '3x3'}, 520, ctx)],
   smudge: generateVariants('scar', 3, {type: 'smudge'}, 600, ctx), stain: generateVariants('scar', 2, {type: 'stain', size: 0.9}, 610, ctx),
 };
@@ -61,8 +62,8 @@ function featureRow(title, note, list, w, h, ax, ay, tag) {
 }
 featureRow('Broadleaf trees', 'Ten forms from ten seeds, all with the default controls.', generateVariants('tree', 10, {species: 'broadleaf'}, 1000, ctx), 100, 96, 38, 86, 'broad');
 featureRow('Conifers', 'Narrow teardrop, drooping tiers, brown branch pixels in the lower half.', generateVariants('tree', 6, {species: 'conifer', height: 61, width: 0.5}, 2000, ctx).map((f, i) => f), 80, 88, 30, 80, 'conif');
-featureRow('Burnt trees', 'Skeletons, the same generator the burn sequence ends on.', generateVariants('burnt', 4, {}, 3000, ctx), 80, 76, 30, 68, 'burnt');
-featureRow('Shrubs', 'No shadow. Dark undersides next to lit leaf pixels.', generateVariants('shrub', 6, {}, 4000, ctx), 52, 40, 25, 32, 'shrub');
+featureRow('Burnt trees', 'Broadleaf skeletons (left three) and sparse conifer needle skeletons (right three); the burn sequences end on these.', [...generateVariants('burnt', 3, {}, 3000, ctx), ...generateVariants('burnt', 3, {species: 'conifer', height: 56, width: 0.5}, 3100, ctx)], 80, 76, 30, 68, 'burnt');
+featureRow('Shrubs', 'No shadow. Three sparse (Shrub3 type, density 0.12) and three dense masses (Shrub1/2 type).', [...generateVariants('shrub', 3, {density: 0.12, width: 33, height: 26}, 4000, ctx), ...generateVariants('shrub', 3, {density: 0.6, width: 27, height: 20}, 4100, ctx)], 52, 40, 25, 32, 'shrub');
 featureRow('Rocks', 'Small (1x1), 2x2, 3x3 and 4x3 classes; metal tracks footprint.', [...generateVariants('rock', 3, {cells: '1x1'}, 5000, ctx), ...generateVariants('rock', 2, {cells: '2x2'}, 5100, ctx), generateFeature('rock', {cells: '3x3'}, 5200, ctx), generateFeature('rock', {cells: '3x2'}, 5300, ctx), generateFeature('rock', {cells: '4x3'}, 5400, ctx)], 96, 80, 40, 24, 'rock');
 featureRow('Scars', 'Smudges (50% blend body) and rock stains (stipple shadow plus pebbles).', [...generateVariants('scar', 2, {type: 'smudge'}, 6000, ctx), ...generateVariants('scar', 2, {type: 'stain', size: 0.9}, 6100, ctx)], 80, 60, 40, 30, 'scar');
 
@@ -82,7 +83,7 @@ function paintedRow(title, note, fn, vals, tag, W, H, kindKey) {
   const items = vals.map((v, i) => { const g0 = patch(GX + 30 + i * 13, GY + 40, W, H), g = patch(GX + 30 + i * 13, GY + 40, W, H); const r = fn(g, W / 2, H / 2, v, 700 + i); extraStats[kindKey].push(diffStats(g0, g)); return {im: save(`${tag}-${i}`, W, H, g.rgba), cap: r.cap}; });
   rows.push({title, note, items, w: W, h: H});
 }
-paintedRow('Metal deposits', 'Painted into the ground, never a sprite. Metal sets the chunk count.', (g, x, y, v, s) => { const r = paintDeposit(g, x, y, {metal: v}, s, ctx); return {cap: `metal ${v}, ${r.chunks} chunks<br>indestructible, 3x3 cells`}; }, [86, 127, 187, 223], 'dep', 96, 96, 'deposit');
+paintedRow('Metal deposits', 'Painted into the ground, never a sprite. Metal sets the chunk count.', (g, x, y, v, s) => { const r = paintDeposit(g, x, y, {metal: v}, s, ctx); return {cap: `metal ${v}, ${r.chunks} main chunks, ${Math.round(r.dominant * 100)}% in the big one<br>indestructible, 3x3 cells`}; }, [86, 127, 187, 223], 'dep', 96, 96, 'deposit');
 paintedRow('Geothermal vents', 'Crack decals painted into the ground; the game draws the steam.', (g, x, y, v, s) => { paintVent(g, x, y, v, s, ctx); return {cap: `size ${v.size}, forks ${v.forks}<br>geothermal, indestructible, 1x1`}; }, [{size: 0.8, forks: 3}, {size: 1.2, forks: 4}, {size: 1.5, forks: 3}], 'vent', 96, 96, 'vent');
 const avg = (a, f) => a.reduce((s, v) => s + f(v), 0) / a.length;
 const dep = extraStats.deposit, vt = extraStats.vent;
@@ -112,13 +113,39 @@ ctrl.pop();
 }
 ctrlRow('Rock angularity (round to faceted)', 'rock', 'angular', [0, 0.5, 1], {cells: '2x2'}, 96, 80, 40, 24, 'c-ang');
 ctrlRow('Rock footprint class', 'rock', 'cells', ['1x1', '2x2', '3x3'], {}, 96, 80, 40, 24, 'c-cells');
-ctrlRow('Shrub density', 'shrub', 'density', [0.1, 0.5, 0.95], {}, 52, 40, 25, 32, 'c-shrub');
+ctrlRow('Shrub density (sparse scatter to dense mass)', 'shrub', 'density', [0.1, 0.35, 0.7], {width: 30, height: 22}, 52, 40, 25, 32, 'c-shrub');
 ctrlRow('Smudge density', 'scar', 'density', [0.2, 0.55, 1], {type: 'smudge'}, 60, 44, 30, 22, 'c-scar');
 {
   const items = [86, 150, 223].map((m, i) => { const g = patch(GX + 30, GY + 40, 96, 96); const r = paintDeposit(g, 48, 48, {metal: m}, 77, ctx); return {im: save(`c-dep-${i}`, 96, 96, g.rgba), cap: `metal = ${m} (${r.chunks} chunks)`}; });
   ctrl.push({title: 'Deposit metal value', items, w: 96, h: 96});
 }
 
+// round 1 vs round 2: the same seeds drawn by the round-1 module and by this one
+const r1 = r1Path ? await import(pathToFileURL(r1Path).href) : null;
+const compare = [];
+if (r1) {
+  const before = (kind, params, seed) => r1.generateFeature(kind, params, seed, ctx);
+  const pair = (title, note, specs, w, h, ax, ay, tag) => {
+    const items = [];
+    specs.forEach(([kind, p1, p2, seed], i) => {
+      items.push({im: tile(`${tag}-${i}-r1`, before(kind, p1, seed), w, h, ax, ay), cap: `round 1, seed ${seed}`});
+      items.push({im: tile(`${tag}-${i}-r2`, generateFeature(kind, p2, seed, ctx), w, h, ax, ay), cap: `<b>round 2</b>`});
+    });
+    compare.push({title, note, items});
+  };
+  pair('Broadleaf trees: no white specks, bright leaf clumps upper left', 'Same seeds. Retail has 37/38 at 20-25% of pixels in 32-36 clumps and no pale non-green pixel.', [1000, 1007, 1014, 1021].map(sd => ['tree', {}, {}, sd]), 100, 96, 38, 86, 'r-broad');
+  pair('Conifers: no pale specks', 'Retail conifers have no pixel brighter than luma 123.', [2000, 2007].map(sd => ['tree', {species: 'conifer', height: 61, width: 0.5}, {species: 'conifer', height: 61, width: 0.5}, sd]), 80, 88, 30, 80, 'r-conif');
+  pair('Rocks: warm tonal planes', 'Cream/tan, pink and white planes up-left (38% of pixels), gray body, shade lower right.', [['1x1', 5000], ['2x2', 5100], ['3x3', 5200], ['4x3', 5400]].map(([c, sd]) => ['rock', {cells: c}, {cells: c}, sd]), 96, 80, 40, 24, 'r-rock');
+  const depItems = [];
+  [[86, 701], [150, 702], [223, 703]].forEach(([m, sd], i) => {
+    const g1 = patch(GX + 30 + i * 13, GY + 40, 100, 100), g2 = patch(GX + 30 + i * 13, GY + 40, 100, 100);
+    r1.paintDeposit(g1, 50, 50, {metal: m}, sd, ctx); paintDeposit(g2, 50, 50, {metal: m}, sd, ctx);
+    depItems.push({im: save(`r-dep-${i}-r1`, 100, 100, g1.rgba), cap: `round 1, metal ${m}`}, {im: save(`r-dep-${i}-r2`, 100, 100, g2.rgba), cap: `<b>round 2</b>, metal ${m}`});
+  });
+  compare.push({title: 'Metal deposits: four angular two-tone chunks, one dominant', note: 'Blob style; the owner wants a scratch style later (round 3). Lilac-white, pink-lilac and steel-blue/gray, 3-6 px moss halo.', items: depItems});
+  pair('Burnt conifers: sparse needle skeleton', 'Round 1 had one forked stick for every tree.', [3000, 3005, 3010].map(sd => ['burnt', {}, {species: 'conifer', height: 56, width: 0.5}, sd]), 80, 76, 30, 68, 'r-burnt');
+  pair('Shrubs: dense mass and sparse scatter', 'Left pair dense (Shrub1/2 fill 0.36-0.39), right pair sparse (Shrub3 fill 0.17).', [['shrub', {}, {density: 0.6, width: 27, height: 20}, 4101], ['shrub', {}, {density: 0.6, width: 27, height: 20}, 4102], ['shrub', {}, {density: 0.12, width: 33, height: 26}, 4103], ['shrub', {}, {density: 0.12, width: 33, height: 26}, 4104]], 52, 40, 25, 32, 'r-shrub');
+}
 // burn strips
 const t0 = generateFeature('tree', {species: 'broadleaf'}, 1000, ctx), seq = t0.burn;
 let cw = 0, ch = 0, bax = 0, bay = 0;
@@ -144,7 +171,39 @@ const table = tablePath && existsSync(tablePath) ? JSON.parse(readFileSync(table
 if (table) table.rows.push(...extraRows);
 const esc = s => String(s);
 const cell = it => `<figure><div class="p1" style="width:${it.im.w}px"><img src="img/${it.im.name}" width="${it.im.w}" height="${it.im.h}"></div><div class="p3" style="width:${it.im.w * 3}px"><img src="img/${it.im.name}" width="${it.im.w * 3}" height="${it.im.h * 3}"></div><figcaption>${it.cap}</figcaption></figure>`;
+function gapRows(b, a) {
+  const f = v => (typeof v === 'number' ? (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2)) : v);
+  const inR = (v, lo, hi) => v >= lo && v <= hi;
+  const rows = [
+    ['1 trees', 'pale non-green pixels per sprite, broadleaf', '0', b['tree-broadleaf'].nearWhite, a['tree-broadleaf'].nearWhite, 0, 0.5],
+    ['1 trees', 'pale non-green pixels per sprite, conifer', '0', b['tree-conifer'].nearWhite, a['tree-conifer'].nearWhite, 0, 0.5],
+    ['2 broadleaf', 'share of index 37/38', '0.20 to 0.25', b['tree-broadleaf'].share3738, a['tree-broadleaf'].share3738, 0.2, 0.25],
+    ['2 broadleaf', 'bright clumps (4 px or more)', '32 to 36', b['tree-broadleaf'].clumps, a['tree-broadleaf'].clumps, 32, 36],
+    ['2 broadleaf', 'lit pixels in the left half', '0.65 to 0.73', b['tree-broadleaf'].litLeft, a['tree-broadleaf'].litLeft, 0.65, 0.73],
+    ['3 rocks', 'highlight share (cream/tan + pink + white)', '0.38', b.rock.highlight, a.rock.highlight, 0.34, 0.42],
+    ['3 rocks', 'cream/tan 64-70', '0.171', b.rock.cream, a.rock.cream, 0.14, 0.2],
+    ['3 rocks', 'pink 16-22', '0.110', b.rock.pink, a.rock.pink, 0.09, 0.13],
+    ['3 rocks', 'white 255, 81-84', '0.102', b.rock.white, a.rock.white, 0.08, 0.12],
+    ['3 rocks', 'shade pixels in the lower-right quadrant', '0.55', b.rock.shadeLR, a.rock.shadeLR, 0.45, 0.75],
+    ['4 deposits', 'main chunks (8 px or more)', '4', b.deposit.all.chunks, a.deposit.all.chunks, 3.5, 4.5],
+    ['4 deposits', 'dominant chunk share of stone', '0.54 to 0.86', b.deposit.all.dominant, a.deposit.all.dominant, 0.54, 0.86],
+    ['4 deposits', 'median moss distance to a chunk, px', '2.8 to 3.6', b.deposit.all.mossMedianDist, a.deposit.all.mossMedianDist, 2.8, 3.6],
+    ['5 burnt conifer', 'fill of bbox', '0.35 to 0.38', b['burnt-conifer'].fill, a['burnt-conifer'].fill, 0.35, 0.38],
+    ['5 burnt conifer', 'isolated pixels', '0.14 to 0.21', b['burnt-conifer'].isolated, a['burnt-conifer'].isolated, 0.14, 0.21],
+    ['5 burnt conifer', 'green-hued share', '0.52 to 0.60', b['burnt-conifer'].green, a['burnt-conifer'].green, 0.52, 0.6],
+    ['5 burnt conifer', 'gray share', '0.22 to 0.26', b['burnt-conifer'].gray, a['burnt-conifer'].gray, 0.22, 0.26],
+    ['6 shrub dense', 'fill of bbox', '0.36 to 0.39', b['shrub-dense'].fill, a['shrub-dense'].fill, 0.33, 0.4],
+    ['6 shrub dense', 'largest blob share', '0.75 to 0.77', b['shrub-dense'].largestShare, a['shrub-dense'].largestShare, 0.7, 0.8],
+    ['6 shrub dense', 'blobs', '7 to 8', b['shrub-dense'].blobs, a['shrub-dense'].blobs, 6, 9],
+    ['6 shrub sparse', 'fill of bbox', '0.17', b['shrub-sparse'].fill, a['shrub-sparse'].fill, 0.15, 0.2],
+    ['6 shrub sparse', 'blobs', '24', b['shrub-sparse'].blobs, a['shrub-sparse'].blobs, 20, 28],
+    ['fire', 'flame height mean px (tree burn)', '77', 63.3, 77.5, 70, 84],
+    ['fire', 'shrub burn last frame, share of index 208', '0.26', 0, 0.31, 0.2, 0.32],
+  ];
+  return `<table><tr><th>gap</th><th>measure</th><th>spec</th><th>round 1</th><th>round 2</th><th>round 2 in range</th></tr>${rows.map(([k, m, sp, x, y, lo, hi]) => `<tr class="${inR(y, lo, hi) ? 'ok' : 'bad'}"><td>${k}</td><td>${m}</td><td>${sp}</td><td>${f(x)}</td><td>${f(y)}</td><td>${inR(y, lo, hi) ? 'yes' : 'no'}</td></tr>`).join('')}</table>`;
+}
 const rowHtml = r => `<section><h3>${r.title}</h3>${r.note ? `<p class="n">${r.note}</p>` : ''}<div class="scroll"><div class="row">${r.items.map(cell).join('')}</div></div></section>`;
+const gapTable = (r2Before && r2After) ? gapRows(JSON.parse(readFileSync(r2Before, 'utf8')), JSON.parse(readFileSync(r2After, 'utf8'))) : '';
 const verdictHtml = readFileSync(new URL('./feature_gen_verdict.html', import.meta.url), 'utf8');
 const tableHtml = table ? `<table><tr><th>kind</th><th>metric</th><th>spec (retail range)</th><th>ours (mean of ${table.n || 12})</th><th>in range</th></tr>${table.rows.map(r => `<tr class="${r.ok ? 'ok' : 'bad'}"><td>${r.kind}</td><td>${r.metric}</td><td>${r.spec}</td><td>${r.ours}</td><td>${r.ok ? 'yes' : 'no'}</td></tr>`).join('')}</table>` : '';
 const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Generated Green map features</title>
@@ -169,6 +228,10 @@ table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #333;paddin
 <h2>Same scene at 3x</h2>
 <div class="scroll"><img src="img/scene.png" width="${SW * 3}" height="${SH * 3}"></div>
 ${verdictHtml}
+<h2>Round 1 versus round 2 (same seeds; 1x above, 3x below each tile)</h2>
+${compare.map(rowHtml).join('')}
+<h3>Round 2 gaps, measured (spec section 15)</h3>
+${gapTable}
 <h2>2. One row per kind (1x above, 3x below each tile)</h2>
 ${rows.map(rowHtml).join('')}
 <h2>3. Burning, burnt</h2>

@@ -802,12 +802,15 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const bw = 100, bh = 100, ox = Math.round(cx) - 50, oy = Math.round(cy) - 50;
   const chunkId = new Int8Array(bw * bh).fill(-1);
   const polyMask = (px, py, rad, nv, aspect, rot) => {
-    const vr = []; for (let i = 0; i < nv; i++) vr.push(0.7 + r() * 0.5);
-    const pts = [];
-    for (let y = Math.floor(py - rad * 2); y <= Math.ceil(py + rad * 2); y++) for (let x = Math.floor(px - rad * 2); x <= Math.ceil(px + rad * 2); x++) {
-      const dx = x - px, dy = y - py, c = Math.cos(rot), sn = Math.sin(rot), u = (dx * c + dy * sn) / aspect, v = -dx * sn + dy * c;
-      const th = Math.atan2(v, u), f = ((th / TAU + 4) % 1) * nv, i = Math.floor(f), t = f - i;
-      if (Math.hypot(u, v) < rad * lerp(vr[i % nv], vr[(i + 1) % nv], t)) pts.push([x, y]);
+    // straight-edged polygon: nv corners at jittered angles and radii (angular, flat faces)
+    const V = [];
+    for (let i = 0; i < nv; i++) { const a = (i + (r() - 0.5) * 0.6) / nv * TAU, rr = rad * (0.55 + r() * 0.6); V.push([Math.cos(a) * rr * aspect, Math.sin(a) * rr]); }
+    const c = Math.cos(rot), sn = Math.sin(rot), pts = [];
+    const P2 = V.map(([u, v]) => [u * c - v * sn, u * sn + v * c]);
+    for (let y = Math.floor(py - rad * 2.2); y <= Math.ceil(py + rad * 2.2); y++) for (let x = Math.floor(px - rad * 2.2); x <= Math.ceil(px + rad * 2.2); x++) {
+      const X = x - px, Y = y - py; let inside = false;
+      for (let i = 0, j = nv - 1; i < nv; j = i++) { const [xi, yi] = P2[i], [xj, yj] = P2[j]; if ((yi > Y) !== (yj > Y) && X < (xj - xi) * (Y - yi) / (yj - yi) + xi) inside = !inside; }
+      if (inside) pts.push([x, y]);
     }
     return pts;
   };
@@ -819,30 +822,30 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     let px = cx + layout[ci][0], py = cy + layout[ci][1], pts = [];
     if (ci === 0 && mt > 0.45) {     // a ragged cluster of 2-4 touching facets
       const k = 2 + Math.round(mt * 2 * r() + mt), per = areas[0] / (k * 0.8), seen = new Set();
-      for (let j = 0; j < k; j++) for (const p of sized(px + (r() - 0.5) * Math.sqrt(per) * 1.1, py + (r() - 0.5) * Math.sqrt(per) * 1.1, per, 4 + Math.floor(r() * 3), 1 + r() * 0.5, r() * TAU)) { const key = p[1] * 4096 + p[0]; if (!seen.has(key)) { seen.add(key); pts.push(p); } }
-    } else pts = sized(px, py, areas[ci], 4 + Math.floor(r() * 3), 1 + r() * (ci === 0 ? 0.6 : 0.8), r() * TAU);
+      for (let j = 0; j < k; j++) for (const p of sized(px + (r() - 0.5) * Math.sqrt(per) * 1.1, py + (r() - 0.5) * Math.sqrt(per) * 1.1, per, 4 + Math.floor(r() * 2), 1 + r() * 0.5, r() * TAU)) { const key = p[1] * 4096 + p[0]; if (!seen.has(key)) { seen.add(key); pts.push(p); } }
+    } else pts = sized(px, py, areas[ci], 4 + Math.floor(r() * 2), 1 + r() * (ci === 0 ? 0.6 : 0.8), r() * TAU);
     chunks.push(pts);
     // two-tone facets inside the chunk: 2-4 planes, each a tone class
     const nf = ci === 0 ? 2 + Math.floor(r() * 3) : 2, seeds = [];
     const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length, my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
-    for (let f = 0; f < nf; f++) seeds.push({ x: mx + (r() - 0.5) * 12, y: my + (r() - 0.5) * 10, cls: f === 0 ? 0 : f === 1 ? 2 : weighted(r, [[0, 0.29], [1, 0.22], [2, 0.49]]) });
+    for (let f = 0; f < nf; f++) { const cls = f === 0 ? 0 : f === 1 ? 2 : weighted(r, [[0, 0.29], [1, 0.22], [2, 0.49]]); seeds.push({ x: mx + (r() - 0.5) * 12, y: my + (r() - 0.5) * 10, cls, fav: [weighted(r, STONE_CLASSES[cls].ramp), weighted(r, STONE_CLASSES[cls].ramp)] }); }
     for (const [x, y] of pts) {
       const bx = x - ox, by = y - oy; if (bx < 0 || by < 0 || bx >= bw || by >= bh) continue;
       let b = 0, bd = 1e9; seeds.forEach((sd, i) => { const d = Math.hypot(sd.x - x, sd.y - y) + (vnoise(x / 2.5, y / 2.5, seed + ci * 7 + i) - 0.5) * 3; if (d < bd) { bd = d; b = i; } });
       const cls = rn() < 0.12 ? weighted(rn, [[0, 0.29], [1, 0.22], [2, 0.49]]) : seeds[b].cls;
       chunkId[by * bw + bx] = ci;
-      setGround(ground, x, y, palette[weighted(rn, STONE_CLASSES[cls].ramp)]);
+      setGround(ground, x, y, palette[cls === seeds[b].cls && rn() < 0.82 ? seeds[b].fav[rn() < 0.6 ? 0 : 1] : weighted(rn, STONE_CLASSES[cls].ramp)]);
     }
   }
   // moss halo: a 3-6 px feathered rim hugging every chunk, merging between neighbors
   const stonePts = chunks.flat(), s1 = (r() * 1e6) | 0;
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     if (chunkId[y * bw + x] >= 0) continue;
-    const X = x + ox, Y = y + oy; let d = 99;
-    for (const p of stonePts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 14) d = Math.min(d, Math.hypot(p[0] - X, p[1] - Y)); }
-    if (d > 11) continue;
-    const ring = 3.6 + 4.6 * fbm(X / 4, Y / 4, s1, 2);
-    const pr = d <= 2 ? 0.97 : clamp((ring - d) / 2.4, 0, 1) * 0.92 + 0.04 * (d < ring + 1);
+    const X = x + ox, Y = y + oy; let d = 99, big = true;
+    chunks.forEach((pts, ci) => { for (const p of pts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 16) { const e = Math.hypot(p[0] - X, p[1] - Y) - (ci === 0 ? 0 : 1.5); if (e < d) { d = e; big = ci === 0; } } } });
+    if (d > 12) continue;
+    const ring = (big ? 3.8 : 5) + 3.2 * fbm(X / 4, Y / 4, s1, 2);
+    const pr = d <= 3 ? 0.98 : clamp((ring - d) / 2.2, 0, 1) * 0.95;
     if (rn() > pr) continue;
     const base = getGround(ground, X, Y), m = palette[weighted(rn, MOSS_WEIGHTS)], tint = 0.18 + 0.12 * rn();
     setGround(ground, X, Y, palette[q(lerp(m[0], base[0] * 0.62, tint), lerp(m[1], base[1] * 0.62, tint), lerp(m[2], base[2] * 0.62, tint))]);
