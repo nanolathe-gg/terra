@@ -805,25 +805,36 @@ function groundMean(g, cx, cy, rad) {
 function setGround(g, x, y, rgb) { if (x < 0 || y < 0 || x >= g.w || y >= g.h) return; const k = (y * g.w + x) * 4; g.rgba[k] = rgb[0]; g.rgba[k + 1] = rgb[1]; g.rgba[k + 2] = rgb[2]; g.rgba[k + 3] = 255; }
 function getGround(g, x, y) { const k = (clamp(y, 0, g.h - 1) * g.w + clamp(x, 0, g.w - 1)) * 4; return [g.rgba[k], g.rgba[k + 1], g.rgba[k + 2]]; }
 
-export const DEPOSIT_DEFAULTS = { metal: 127, style: 'blob' };   // style: 'blob' (four angular chunks in a moss halo); a scratch style is planned
+export const DEPOSIT_DEFAULTS = { metal: 127, style: 'retail', look: 'auto' };   // style 'retail' (angular plates) or 'pebbles' (round-1 round pebbles, an artist option); look 'auto' | 'cluster' | 'plates'
 const STONE_CLASSES = [
   { w: 0.29, ramp: [[216, 3], [224, 3], [145, 4], [114, 5], [130, 2]] },        // pale: lilac-white, pink-lilac, pale blue
   { w: 0.22, ramp: [[115, 8], [131, 3], [147, 3], [217, 3], [148, 3], [87, 3]] }, // light and mid
   { w: 0.49, ramp: [[116, 17], [117, 5], [89, 9], [88, 8], [219, 4], [87, 2]] },  // steel blue and gray
 ];
 const MOSS_WEIGHTS = [[170, 20], [168, 8.3], [61, 7.8], [169, 7.5], [238, 7.2], [60, 5.3], [73, 4.7], [172, 4], [62, 3.2], [90, 3], [167, 2.6]];
+// Stone pixels track metal as retail's four deposits do (spec 16.1): 86 -> 198, 127 -> 564, 187 -> 806, 223 -> 886, linear between.
+const STONE_BY_METAL = [[86, 198], [127, 564], [187, 806], [223, 886]];
+export function stonePixelsFor(metal) {
+  const t = STONE_BY_METAL; if (metal <= t[0][0]) return t[0][1] * metal / t[0][0]; if (metal >= t[3][0]) return t[3][1] + (metal - t[3][0]) * 2;
+  for (let i = 0; i < 3; i++) if (metal <= t[i + 1][0]) return lerp(t[i][1], t[i + 1][1], (metal - t[i][0]) / (t[i + 1][0] - t[i][0]));
+}
+// Retail's two looks: RockMetal and RockMetal3 are one dominant ragged cluster of touching facets (solidity about 0.6, 8-12 thin arms)
+// plus a few small wedges; RockMetal1 and RockMetal2 are separate plates, one large and three smaller. Each chunk is two-tone
+// (pale lilac-white/pink-lilac next to steel blue/gray) in a tight dark moss halo; the halos merge into one patch.
 export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
-  const P = { ...DEPOSIT_DEFAULTS, ...params }, palette = ctx.palette, q = paletteSearch(palette);
+  const P = { ...DEPOSIT_DEFAULTS, ...params };
+  if (P.style === 'pebbles') return paintDepositPebbles(ground, cx, cy, P, seed, ctx);
+  const palette = ctx.palette, q = paletteSearch(palette);
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
-  // four main chunks: one dominant (54-86% of the stone pixels), three small wedges
-  const total = lerp(200, 880, mt) * (0.9 + 0.2 * r()), dom = clamp(lerp(0.54, 0.86, mt) + (r() - 0.5) * 0.08, 0.5, 0.88);
-  const small = [0, 0, 0].map(() => 0.4 + r()), ss = small.reduce((a, b) => a + b, 0);
+  const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
+  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.78 : 1);
+  const dom = look === 'cluster' ? clamp(lerp(0.66, 0.86, mt) + (r() - 0.5) * 0.05, 0.62, 0.88) : clamp(0.54 + (r() - 0.5) * 0.06, 0.5, 0.6);
+  const small = [0, 0, 0].map(() => 0.5 + r()), ss = small.reduce((a, b) => a + b, 0);
   const areas = [total * dom, ...small.map(v => Math.max(15, total * (1 - dom) * v / ss))];
-  const bw = 100, bh = 100, ox = Math.round(cx) - 50, oy = Math.round(cy) - 50;
+  const bw = 120, bh = 120, ox = Math.round(cx) - 60, oy = Math.round(cy) - 60;
   const chunkId = new Int8Array(bw * bh).fill(-1);
   const polyMask = (px, py, rad, nv, aspect, rot) => {
-    // straight-edged polygon: nv corners at jittered angles and radii (angular, flat faces)
     const V = [];
     for (let i = 0; i < nv; i++) { const a = (i + (r() - 0.5) * 0.6) / nv * TAU, rr = rad * (0.55 + r() * 0.6); V.push([Math.cos(a) * rr * aspect, Math.sin(a) * rr]); }
     const c = Math.cos(rot), sn = Math.sin(rot), pts = [];
@@ -836,17 +847,28 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     return pts;
   };
   const sized = (px, py, area, nv, aspect, rot) => { let rad = Math.sqrt(area / Math.PI / 0.85), pts = polyMask(px, py, rad, nv, aspect, rot); for (let it = 0; it < 3; it++) { rad *= Math.sqrt(area / Math.max(pts.length, 1)); pts = polyMask(px, py, rad, nv, aspect, rot); } return pts; };
-  const chunks = [];
-  const layout = [[0, 0]];
-  for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = Math.sqrt(areas[0] / Math.PI / 0.85) * 0.75 + 11 + r() * 8; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
+  const union = lists => { const seen = new Set(), out = []; for (const l of lists) for (const p of l) { const k = p[1] * 4096 + p[0]; if (!seen.has(k)) { seen.add(k); out.push(p); } } return out; };
+  const chunks = [], layout = [[0, 0]];
+  const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
+  for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = rDom * (look === 'cluster' ? 1.05 : 0.8) + 10 + r() * 7; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
   for (let ci = 0; ci < 4; ci++) {
-    let px = cx + layout[ci][0], py = cy + layout[ci][1], pts = [];
-    if (ci === 0 && mt > 0.45) {     // a ragged cluster of 2-4 touching facets
-      const k = 2 + Math.round(mt * 2 * r() + mt), per = areas[0] / (k * 0.8), seen = new Set();
-      for (let j = 0; j < k; j++) for (const p of sized(px + (r() - 0.5) * Math.sqrt(per) * 1.1, py + (r() - 0.5) * Math.sqrt(per) * 1.1, per, 4 + Math.floor(r() * 2), 1 + r() * 0.5, r() * TAU)) { const key = p[1] * 4096 + p[0]; if (!seen.has(key)) { seen.add(key); pts.push(p); } }
-    } else pts = sized(px, py, areas[ci], 4 + Math.floor(r() * 2), 1 + r() * (ci === 0 ? 0.6 : 0.8), r() * TAU);
+    const px = cx + layout[ci][0], py = cy + layout[ci][1];
+    let pts;
+    if (ci === 0 && look === 'cluster') {                // ragged cluster of 2-4 touching facets (solidity about 0.6)
+      const k = 3 + (r() < 0.5 ? 1 : 0), per = areas[0] / (k * 0.75), rad = Math.sqrt(per / Math.PI), parts = [];
+      let ang = r() * TAU;
+      for (let j = 0; j < k; j++) { ang += 1.3 + r() * 1.2; const d = rad * (0.9 + 0.5 * r()); parts.push(sized(px + Math.cos(ang) * d, py + Math.sin(ang) * d, per, 4 + Math.floor(r() * 2), 1 + r() * 0.5, r() * TAU)); }
+      pts = union(parts);
+      const arms = [];                                    // 8-12 short thin arms off the cluster rim
+      const edge = pts.filter(([x, y]) => !pts.some(([u, v]) => u === x + 1 && v === y) || !pts.some(([u, v]) => u === x - 1 && v === y));
+      const nArm = 8 + Math.floor(r() * 5);
+      for (let j = 0; j < nArm && edge.length; j++) {
+        const [sx, sy] = edge[(r() * edge.length) | 0]; let a = Math.atan2(sy - py, sx - px) + (r() - 0.5) * 0.9; const len = 3 + Math.floor(r() * 4);
+        for (let t = 1; t <= len; t++) { a += (r() - 0.5) * 0.5; arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t)]); if (r() < 0.2) arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t) + 1]); }
+      }
+      pts = union([pts, arms]);
+    } else pts = sized(px, py, areas[ci], 4 + Math.floor(r() * 2), 1 + r() * (ci === 0 ? 0.5 : 0.9), r() * TAU);
     chunks.push(pts);
-    // two-tone facets inside the chunk: 2-4 planes, each a tone class
     const nf = ci === 0 ? 2 + Math.floor(r() * 3) : 2, seeds = [];
     const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length, my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
     for (let f = 0; f < nf; f++) { const cls = f === 0 ? 0 : f === 1 ? 2 : weighted(r, [[0, 0.29], [1, 0.22], [2, 0.49]]); seeds.push({ x: mx + (r() - 0.5) * 12, y: my + (r() - 0.5) * 10, cls, fav: [weighted(r, STONE_CLASSES[cls].ramp), weighted(r, STONE_CLASSES[cls].ramp)] }); }
@@ -858,21 +880,95 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       setGround(ground, x, y, palette[cls === seeds[b].cls && rn() < 0.82 ? seeds[b].fav[rn() < 0.6 ? 0 : 1] : weighted(rn, STONE_CLASSES[cls].ramp)]);
     }
   }
-  // moss halo: a 3-6 px feathered rim hugging every chunk, merging between neighbors
-  const stonePts = chunks.flat(), s1 = (r() * 1e6) | 0;
+  // moss: one merged patch. The patch covers about stone / 0.15 pixels (retail: stone is 9-18% of the painted pixels), found by growing
+  // the halo distance until the area is reached; a 3-6 px feathered rim.
+  const stonePts = chunks.flat(), s1 = (r() * 1e6) | 0, dmap = new Float32Array(bw * bh).fill(99);
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
-    if (chunkId[y * bw + x] >= 0) continue;
-    const X = x + ox, Y = y + oy; let d = 99, big = true;
-    chunks.forEach((pts, ci) => { for (const p of pts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 16) { const e = Math.hypot(p[0] - X, p[1] - Y) - (ci === 0 ? 0 : 1.5); if (e < d) { d = e; big = ci === 0; } } } });
-    if (d > 12) continue;
-    const ring = (big ? 3.8 : 5) + 3.2 * fbm(X / 4, Y / 4, s1, 2);
-    const pr = d <= 3 ? 0.98 : clamp((ring - d) / 2.2, 0, 1) * 0.95;
+    if (chunkId[y * bw + x] >= 0) { dmap[y * bw + x] = 0; continue; }
+    const X = x + ox, Y = y + oy; let d = 99;
+    for (const p of stonePts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 40) { const e = Math.hypot(p[0] - X, p[1] - Y); if (e < d) d = e; } }
+    dmap[y * bw + x] = d + (fbm(X / 5, Y / 5, s1, 2) - 0.5) * 5;
+  }
+  const targetPainted = Math.min(stonePts.length / 0.15, 4400), dsorted = Array.from(dmap).filter(v => v < 60).sort((a, b) => a - b);
+  const T = dsorted[Math.min(dsorted.length - 1, Math.round(targetPainted))] ?? 8;
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const k = y * bw + x; if (chunkId[k] >= 0) continue;
+    const d = dmap[k]; if (d > T + 1) continue;
+    const pr = d <= T - 3.5 ? 0.97 : clamp((T - d) / 3.5, 0, 1) * 0.95 + 0.03;
     if (rn() > pr) continue;
-    const base = getGround(ground, X, Y), m = palette[weighted(rn, MOSS_WEIGHTS)], tint = 0.18 + 0.12 * rn();
+    const X = x + ox, Y = y + oy, base = getGround(ground, X, Y), m = palette[weighted(rn, MOSS_WEIGHTS)], tint = 0.18 + 0.12 * rn();
     setGround(ground, X, Y, palette[q(lerp(m[0], base[0] * 0.62, tint), lerp(m[1], base[1] * 0.62, tint), lerp(m[2], base[2] * 0.62, tint))]);
   }
-  return { cx, cy, metal: P.metal, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
+  return { cx, cy, metal: P.metal, look, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
 }
+// Round 1's round-pebble deposit, kept as an artist option (style 'pebbles').
+
+function paintDepositPebbles(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
+  const P = { ...DEPOSIT_DEFAULTS, ...params }, palette = ctx.palette, q = paletteSearch(palette), L = lightOf(ctx);
+  const r = rng(seed), rn = rng(mix32(seed, 2));
+  const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
+  const nChunks = Math.round(lerp(7, 22, mt) + (r() - 0.5) * 2);
+  const gm = groundMean(ground, cx, cy, 40);
+  // chunks
+  const chunks = [];
+  const R = 19;
+  for (let tries = 0; chunks.length < nChunks && tries < 500; tries++) {
+    const a = r() * TAU, rr = Math.sqrt(r()) * R * 0.95;
+    const area = chunks.length === 0 ? lerp(40, 83, mt * 0.6 + r() * 0.4) : lerp(9, 60, Math.pow(r(), 1.4));
+    const rad = Math.sqrt(area / Math.PI);
+    const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.95;
+    if (chunks.every(c => Math.hypot(c.x - x, c.y - y) > c.rad + rad + 2.2)) chunks.push({ x, y, rad, area, tone: r() });
+  }
+  const bw = 80, bh = 80, ox = Math.round(cx) - 40, oy = Math.round(cy) - 40;
+  const halo = new Float32Array(bw * bh), chunkId = new Int16Array(bw * bh).fill(-1);
+  const s1 = (r() * 1e6) | 0;
+  // halo field: soft union of discs round the chunks plus a mossy core
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const X = x + ox, Y = y + oy; let f = -1;
+    for (const c of chunks) { const d = Math.hypot(X - c.x, Y - c.y), reach = c.rad + 7 + c.rad * 0.15; f = Math.max(f, 1 - d / reach); }
+    f += (fbm(X / 5, Y / 5, s1, 3) - 0.5) * 0.7 - 0.02;
+    halo[y * bw + x] = f;
+  }
+  // chunk polygons
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const c = chunks[ci], nv = 5 + Math.floor(r() * 3), vr = []; for (let i = 0; i < nv; i++) vr.push(0.72 + r() * 0.5);
+    const ph = r() * TAU;
+    for (let y = -Math.ceil(c.rad * 1.5); y <= Math.ceil(c.rad * 1.5); y++) for (let x = -Math.ceil(c.rad * 1.5); x <= Math.ceil(c.rad * 1.5); x++) {
+      const th = Math.atan2(y, x) - ph, f = ((th / TAU + 4) % 1) * nv, i = Math.floor(f), t = f - i;
+      const lim = c.rad * lerp(vr[i % nv], vr[(i + 1) % nv], t) * 1.08;
+      if (Math.hypot(x, y * 1.05) < lim) { const bx = Math.round(c.x + x) - ox, by = Math.round(c.y + y) - oy; if (bx >= 0 && by >= 0 && bx < bw && by < bh) { chunkId[by * bw + bx] = ci; } }
+    }
+    c.fac = [Math.cos(r() * TAU), Math.sin(r() * TAU)];
+  }
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const k = y * bw + x, X = x + ox, Y = y + oy, ci = chunkId[k];
+    if (ci >= 0) {
+      const c = chunks[ci];
+      // facet shade: lit upper left, darker lower right, two facets per chunk
+      const rx = (X - c.x) / Math.max(c.rad, 1), ry = (Y - c.y) / Math.max(c.rad, 1);
+      const fac = (rx * c.fac[0] + ry * c.fac[1] > 0.1) ? 0.12 : -0.12;
+      const lit = 0.5 + 0.5 * (-rx * -L.x * -1 * -1 * 1 + (-ry) * -L.y * -1 * -1 * 1) * -1 * -1 * 0 + 0.4 * (-(rx * -L.x) * -1 * 0) + (rx * L.x + ry * L.y) * -0.35 + fac + (rn() - 0.5) * 0.28;
+      const ramp = c.tone < 0.12 ? [116, 115, 67, 66, 65, 64] : c.tone < 0.28 ? [68, 67, 66, 82, 81, 255] : c.tone < 0.36 ? [20, 18, 17, 66, 65] : [68, 67, 66, 65, 64, 82, 81];
+      const idx = ramp[clamp(Math.floor(lit * ramp.length), 0, ramp.length - 1)];
+      let idx2 = idx;
+      // a dark edge facet on the lower right
+      if (rx * L.x + ry * L.y > 0.55 && rn() < 0.5) idx2 = pick(rn, [68, 67, 115, 116]);
+      setGround(ground, X, Y, palette[idx2]);
+      continue;
+    }
+    const f = halo[k];
+    if (f <= -0.02) continue;
+    // moss: solid inside, feathered out to ~5 px
+    if (f < 0.12 && rn() > f / 0.12 * 0.9 + 0.05) continue;
+    const base = getGround(ground, X, Y);
+    const m = pick(rn, MOSS_RGB), shade = 0.8 + (rn() - 0.5) * 1.1 + (fbm(X / 3, Y / 3, s1 + 8, 2) - 0.5) * 0.9;
+    const tint = 0.3 + 0.2 * rn();
+    const rgb = [0, 1, 2].map(i => lerp(m[i] * shade, base[i] * 0.62, tint));
+    setGround(ground, X, Y, palette[q(rgb[0], rgb[1], rgb[2])]);
+  }
+  return { cx, cy, metal: P.metal, chunks: chunks.length, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
+}
+
 
 export const VENT_DEFAULTS = { size: 1, forks: 3 };
 export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
