@@ -608,14 +608,15 @@ function flamePixels(frameSeed, stage, o, canvas) {
   const T = [];
   for (let i = 0; i < tongues; i++) {
     const f = tongues === 1 ? 0.5 : i / (tongues - 1);
-    T.push({ x: cx + (f - 0.5) * width * (0.9 + 0.25 * r()), h: height * stage * (0.45 + 0.55 * Math.pow(r(), 0.7)), w: width * (o.narrow ?? 1) * (0.17 + 0.12 * r()) });
+    const by = base - Math.round(Math.pow(r(), 1.3) * (o.rise ?? 0));   // tongues start at different heights: crown and trunk, no flat base line
+    T.push({ by, x: cx + (f - 0.5) * width * (0.9 + 0.25 * r()), h: height * stage * (0.45 + 0.55 * Math.pow(r(), 0.7)), w: width * (o.narrow ?? 1) * (0.17 + 0.12 * r()) });
   }
   for (let y = base; y > base - height - 4; y--) {
     for (let x = Math.floor(cx - width); x <= cx + width; x++) {
-      const up = base - y;
       let cover = 0, heat = 0;
       for (const t of T) {
-        if (up > t.h) continue;
+        const up = t.by - y;
+        if (up > t.h || up < 2 * vnoise(x / 1.6, y / 1.6, n1 + 7) - 0.4) continue;
         const f = up / t.h, hw = t.w * Math.pow(1 - f, 0.62) + 0.5;
         const dx = Math.abs(x - t.x) + (vnoise(x / 2.3, y / 2.3, n1) - 0.5) * 3.4;
         if (dx < hw) { cover = 1; heat = Math.max(heat, (1 - f) * 0.7 + (1 - dx / hw) * 0.4); }
@@ -669,7 +670,7 @@ function burnSequence(tree, burnt, seed, nFrames = 96) {
     const stage = Math.min(grow, die) * (0.92 + 0.12 * Math.sin(i * 0.9) + (rng(mix32(seed, i))() - 0.5) * 0.15);
     const fl = newSprite(w, h, ax, ay);
     const mixed = Math.min(1, 0.4 + p * 2);
-    flamePixels(mix32(seed, i * 977 + 13), stage, { cx: ax - 1 + (rng(mix32(seed, i + 5))() - 0.5) * 2, base: ay - Math.round(crownH * 0.12), width: crownW * 0.5, height: Math.round(78 * mixed * 0.95 + 4), tongues: 7, hole: 0.4, narrow: 0.72 }, fl);
+    flamePixels(mix32(seed, i * 977 + 13), stage, { cx: ax - 1 + (rng(mix32(seed, i + 5))() - 0.5) * 2, base: ay - Math.round(crownH * 0.1), rise: Math.round(crownH * 0.5), width: crownW * 0.5, height: Math.round(78 * mixed * 0.95 + 4), tongues: 7, hole: 0.4, narrow: 0.72 }, fl);
     for (let k = 0; k < w * h; k++) if (fl.a[k]) { cv.idx[k] = fl.idx[k]; cv.a[k] = 1; }
     frames.push(cropSprite(cv));
   }
@@ -681,8 +682,8 @@ function shrubBurn(shrub, seed, nFrames = 42) {
   for (let i = 0; i < nFrames; i++) {
     const cv = newSprite(w, h, ax, ay), p = i / (nFrames - 1);
     const stage = clamp(Math.min(i / 6, (nFrames - 1 - i) / 10), 0.05, 1) * (0.9 + 0.2 * rng(mix32(seed, i))());
-    if (i === nFrames - 1) { const rr = rng(mix32(seed, 99)); for (let k = 0; k < 90; k++) put(cv, ax + Math.round((rr() - 0.5) * 8), ay - Math.round(rr() * 7), weighted(rr, [[205, 30], [206, 24], [207, 20], [214, 14], [215, 12]])); frames.push(cropSprite(cv)); continue; }
-    flamePixels(mix32(seed, i * 313 + 7), stage, { cx: ax, base: ay, width: 7, height: 34, tongues: 3, hole: 0.34 }, cv);
+    if (i === nFrames - 1) { const rr = rng(mix32(seed, 99)); for (let k = 0; k < 260; k++) put(cv, ax + Math.round((rr() - 0.5) * 11), ay - Math.round(rr() * 8), weighted(rr, [[208, 26], [195, 14], [194, 11], [209, 9], [210, 8], [193, 6], [196, 5], [192, 3], [205, 3]])); frames.push(cropSprite(cv)); continue; }
+    flamePixels(mix32(seed, i * 313 + 7), stage, { cx: ax, base: ay, rise: 5, width: 7, height: 34, tongues: 3, hole: 0.34 }, cv);
     const rc = rng(mix32(seed, i * 17 + 3)); // charred twigs and embers at the foot
     for (let k = 0; k < 40 + 40 * (1 - Math.abs(p - 0.4)); k++) { const x = ax + Math.round((rc() - 0.5) * 12), y = ay - Math.round(rc() * rc() * 9); if (!cv.a[y * w + x]) put(cv, x, y, charColor(rc)); }
     frames.push(cropSprite(cv));
