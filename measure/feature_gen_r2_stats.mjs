@@ -86,7 +86,7 @@ for (const [name, params] of [['burnt-broadleaf', {}], ['burnt-conifer', {specie
   R[name] = Object.fromEntries(Object.keys(rows[0]).map(k => [k, fx(mean(rows.map(r => r[k])))]));
 }
 // shrubs
-for (const [name, params] of [['shrub-dense', {density: 0.6}], ['shrub-sparse', {density: 0.12}]]) {
+for (const [name, params] of [['shrub-dense', {density: 0.6, width: 27, height: 20}], ['shrub-sparse', {density: 0.12, width: 33, height: 26}]]) {
   const rows = [];
   for (let i = 0; i < 12; i++) {
     const s = mod.generateFeature('shrub', params, 400 + i * 9).body, o = {}, n = drawn(s), a = s.a;

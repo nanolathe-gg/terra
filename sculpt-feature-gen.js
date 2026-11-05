@@ -421,40 +421,55 @@ function burntFrame(P, seed, ctx) {
 }
 
 // ---- shrubs ----------------------------------------------------------------------------------------------------
-const SHRUB_DEFAULTS = { width: 29, height: 22, density: 0.5, lean: 0, energy: [20, 20] };
+const SHRUB_DEFAULTS = { width: 28, height: 19, density: 0.55, lean: 0, energy: [20, 20] };
+// Spec 15 B4: density 0.12 is the sparse Shrub3 (fill 0.17, about 24 small blobs); density 0.5 and up is the dense
+// Shrub1/2 (fill 0.36-0.39, one mass holding 75% of the pixels). Texture is single-pixel speckle of 6-7 greens
+// with the dark 173 as the under-leaf shade on every edge.
 function shrubFrame(P, seed, ctx) {
-  const r = rng(seed);
-  const W = Math.round(P.width), H = Math.round(P.height), w = W + 4, h = H + 4;
-  const ay = h - 4, ax = Math.round(w / 2) + (r() < 0.5 ? 0 : -1);
-  const sp = newSprite(w, h, ax, ay);
-  const nClumps = Math.round(lerp(14, 36, P.density) * (W / 29));
-  const used = new Uint8Array(w * h);
-  const clumps = [];
-  const px = [];
-  const hi = P.lean > 0 ? [163, 162, 164, 165] : [165, 164, 163, 167];
-  for (let c = 0; c < nClumps; c++) {
-    const a = r() * TAU, rr = Math.sqrt(r());
-    const cx = ax + Math.cos(a) * rr * W * 0.46, cy = ay - H * 0.5 + Math.sin(a) * rr * H * 0.42 - 1;
-    // a clump: a 3-8 px cluster, lit pixels on top and to the left, a dark underside
-    const n = 3 + Math.floor(r() * 6);
-    const cells = [[0, 0]];
-    while (cells.length < n) { const [bx, by] = pick(r, cells), d = pick(r, [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 0], [-1, 0]]); if (!cells.some(q => q[0] === bx + d[0] && q[1] === by + d[1])) cells.push([bx + d[0], by + d[1]]); }
-    for (const [dx, dy] of cells) {
-      const x = Math.round(cx + dx), y = Math.round(cy + dy);
-      if (!inb(sp, x, y) || used[y * w + x]) continue;
-      used[y * w + x] = 1;
-      const below = cells.some(q => q[0] === dx && q[1] === dy + 1), above = cells.some(q => q[0] === dx && q[1] === dy - 1);
-      let col;
-      if (!below) col = weighted(r, [[173, 62], [169, 10], [167, 16], [165, 12]]);              // underside
-      else if (!above) col = weighted(r, [[165, 34], [163, 22], [164, 18], [162, 6], [167, 20]]);   // lit top
-      else col = weighted(r, [[167, 30], [166, 20], [165, 34], [168, 10], [173, 6]]);
-      if (r() < 0.04) col = pick(r, hi);
-      px.push([x, y, col]);
+  const r = rng(seed), rn = rng(mix32(seed, 6));
+  const W = Math.round(P.width), H = Math.round(P.height), w = W + 6, h = H + 8, cx = w / 2, cy = (h - 6) / 2 + 1;
+  const ax = Math.round(cx) + (r() < 0.5 ? 0 : -1), ay = h - 5;
+  const sp = newSprite(w, h, ax, ay), occ = new Uint8Array(w * h);
+  const dd = clamp(P.density / 0.5, 0, 1), fill = lerp(0.135, 0.4, dd), N = Math.round(fill * W * H);
+  const s1 = (r() * 1e6) | 0;
+  const env = (x, y) => { const e = ((x - cx) / (W / 2)) ** 2 + ((y - cy) / (H / 2)) ** 2; return e * 0.88 + (vnoise(x / 3, y / 3, s1) - 0.5) * 0.35 <= 1; };
+  const spread = true;
+  const grow = (sx, sy, n) => {
+    const cells = [[sx, sy]]; occ[sy * w + sx] = 1; let front = [];
+    const addFront = (x, y) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if ((dx || dy) && nx >= 0 && ny >= 0 && nx < w && ny < h && !occ[ny * w + nx] && env(nx, ny)) front.push([nx, ny]); } };
+    addFront(sx, sy);
+    while (cells.length < n && front.length) {
+      let i = (r() * front.length) | 0;
+      for (let t = 0; t < 3; t++) { const j = (r() * front.length) | 0; if (spread && Math.hypot(front[j][0] - cx, (front[j][1] - cy) * 1.6) > Math.hypot(front[i][0] - cx, (front[i][1] - cy) * 1.6)) i = j; }   // reach out toward the envelope's edge
+      const [x, y] = front[i]; front[i] = front[front.length - 1]; front.pop();
+      if (occ[y * w + x]) continue; occ[y * w + x] = 1; cells.push([x, y]); addFront(x, y);
     }
+    return cells;
+  };
+  const inside = []; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (env(x, y)) inside.push([x, y]);
+  const dom = lerp(0.1, 0.62, dd), nBlobs = Math.round(lerp(26, 8, dd));
+  const all = [];
+  const c0 = inside.reduce((a, p) => (Math.abs(p[0] - cx) + Math.abs(p[1] - cy) < Math.abs(a[0] - cx) + Math.abs(a[1] - cy) ? p : a), inside[0]);
+  all.push(...grow(c0[0], c0[1], Math.round(N * dom)));
+  const rest = N - all.length;
+  for (let b = 1; b < nBlobs && all.length < N; b++) {
+    const [sx, sy] = inside[(r() * inside.length) | 0]; if (occ[sy * w + sx]) continue;
+    let near = false; for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (occ[(sy + dy) * w + sx + dx]) { near = true; break; } if (near && b % 3) continue;
+    const size = Math.max(1, Math.min(N - all.length, Math.round((rest / (nBlobs - 1)) * (0.2 + 1.6 * r() * r() * 1.2))));
+    all.push(...grow(sx, sy, size));
   }
-  for (const [x, y, c] of px) put(sp, x, y, c);
-  // pull a few darks next to bright ones (a leaf underside)
-  for (const [x, y, c] of px) if ((c === 163 || c === 164 || c === 162) && !at(sp, x, y + 1) && r() < 0.8) put(sp, x, y + 1, 173);
+  for (let tries = 0; all.length < N && tries < 400; tries++) {   // top up with small outliers
+    const [sx, sy] = inside[(r() * inside.length) | 0]; if (occ[sy * w + sx]) continue;
+    all.push(...grow(sx, sy, Math.min(N - all.length, 1 + Math.floor(r() * 5))));
+  }
+  const nb4 = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => occ[(y + dy) * w + x + dx]).length;
+  const hi = P.lean > 0 ? 1.6 : 1;
+  for (const [x, y] of all) {
+    const edge = nb4(x, y) < 4, belowOpen = !occ[(y + 1) * w + x];
+    const dark = rn() < (belowOpen ? 0.62 : edge ? 0.42 : 0.2);
+    const c = dark ? 173 : weighted(rn, [[165, 31.5], [167, 12.1], [163, 7 * hi], [168, 4.1], [164, 3.9], [166, 3.5], [162, 0.4 * hi]]);
+    put(sp, x, y, c);
+  }
   return { body: cropSprite(sp, 0) };
 }
 
