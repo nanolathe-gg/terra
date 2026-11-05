@@ -41,15 +41,15 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
  assert.match(requirement('grooveSpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
- assert.match(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:0}),/Joint depth or Gully depth/);
- assert.equal(requirement('grooveRun',{rockOrder:1,jointDepth:2}),'');
- assert.equal(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:4}),'');   // Green cuts gullies and no joints
- assert.match(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:0}),/Joint depth, Gully depth or Rib tilt/);
- assert.equal(requirement('grooveSpacing',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),'');   // ribs stand between the lines
- assert.match(requirement('grooveRun',{rockOrder:1,jointDepth:0,gullyDepth:0,ribTilt:.2}),/Joint depth or Gully depth/);   // a rib cuts nothing
- assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,jointDepth:2}),/Follow terrain/);
- assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:0}),/Joint depth/);
- assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,jointDepth:2}),'');
+ assert.match(requirement('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0}),/Open joints or Gully depth/);
+ assert.equal(requirement('grooveRun',{rockOrder:1,rockJoint:2,rockOpen:1}),'');
+ assert.equal(requirement('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:4}),'');   // Green cuts gullies and no joints
+ assert.match(requirement('grooveSpacing',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,ribTilt:0}),/Open joints, Gully depth or Rib tilt/);
+ assert.equal(requirement('grooveSpacing',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,ribTilt:.2}),'');   // ribs stand between the lines
+ assert.match(requirement('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,ribTilt:.2}),/Open joints or Gully depth/);   // a rib cuts nothing
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,rockJoint:2,rockOpen:1}),/Follow terrain/);
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:0,rockOpen:1}),/joint lines/);
+ assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:2,rockOpen:1}),'');
  assert.equal(requirement('looseSize',{looseSupply:0}),'','painted scatter still uses size when the world Supply is zero');
  assert.equal(requirement('bandSoftness',{banding:0}),'','painted banding still uses the riser share when the world strength is zero');
 });
@@ -79,8 +79,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('rockScale',{rockOrder:1,rockCells:1});
  assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
  assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledge above zero/);
- shows('bedSpacing',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
- assert.match(requirement('cliffRise',{rockOrder:1,jointDepth:2,cliffFollow:1,cliffStagger:.5}),/Ledge above zero/,'the rise is relief only');
+ shows('bedSpacing',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
+ assert.match(requirement('cliffRise',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5}),/Ledge above zero/,'the rise is relief only');
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  // strata: bands and caps need a column and the strata switch
  assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);

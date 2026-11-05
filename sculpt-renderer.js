@@ -1108,7 +1108,6 @@ export class TerrainRenderer {
     set('uRockOrder', number('rockOrder', 0));
     set('uBedVary', number('bedVary', 0.5));
     set('uBedLedge', number('bedLedge', 0.5));
-    set('uJointDepth', number('jointDepth', 2));
     set('uGrooveSpacing', number('grooveSpacing', 36));
     set('uGrooveAngle', number('grooveAngle', 0));
     set('uGrooveRun', number('grooveRun', 120));
@@ -1137,6 +1136,8 @@ export class TerrainRenderer {
       set('uRockVary', rv('vary', 0.5)); set('uRockCrev', rv('crev', 2)); set('uRockCrevW', rv('crevW', 1.1));
       set('uRockChip', rv('chip', 0.25)); set('uRockChipSize', rv('chipSize', 5)); set('uRockGrit', rv('grit', 0.35));
       set('uRockAge', number('rockAge', 0.5));
+      // Open joints scales the preset's two openings: the joint lines' depth and the cell creases' darkness.
+      set('uJointDepth', rv('joint', 2) * number('rockOpen', 1)); set('uBlockSeam', rv('seam', 0.5) * number('rockOpen', 1));
     }
     set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
     set('uBandSoftness', number('bandSoftness', 0.35));
@@ -1163,7 +1164,6 @@ export class TerrainRenderer {
     set('uCliffStagger', number('cliffStagger', 0));
     set('uCliffDomain', number('cliffDomain', 90));
     {
-      set('uBlockSeam', number('blockSeam', .5));
       set('uHillBlocks', number('hillBlocks', 0));
     }
     this.setColumn();

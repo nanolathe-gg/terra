@@ -37,7 +37,7 @@ KNOB_DEFAULTS = dict(
     crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackDark=.75,
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it, and the cracks of ordered rock are lit relief, not ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
-    jointDepth=2, grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
+    grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
     craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
     crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
     crystalVariation=.5, crystalTiers=0,
@@ -116,7 +116,7 @@ KNOB_DEFAULTS.update(desertCapFlat=0)
 KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
                      gullyDepth=0, gullyWidth=14, gullyShade=0, ribTilt=0,
                      bedPunch=0,
-                     rockScale=1, rockAge=.5)
+                     rockScale=1, rockAge=.5, rockOpen=1)
 # E11 (shallow water round 2): every default is the earlier look. shelfWander (depth units) moves
 # the hard step's depth with broad noise so the band's width and outline vary along the shore;
 # bedFlat lights the lit bed by its own relief only (no slope shading across the shelf).
@@ -196,7 +196,6 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # beds that repeat upward, materials/<world>.json) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
 # with erosion 1, wear). The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
-KNOB_DEFAULTS.update(blockSeam=.5)
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
 KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
@@ -214,7 +213,7 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 # lightens and thins those lines toward retail's soft dashes.
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
-    'green': dict(blockSeam=1.6, rockAge=.1, jointDepth=0, gullyDepth=4,
+    'green': dict(rockAge=.1, gullyDepth=4,
                   rockMoss=.4, hillBlocks=.5,
                   terraceBreak=0, terraceCalm=0, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
@@ -242,7 +241,7 @@ WORLD_KNOBS = {
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
                   rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
-                  bedLedge=.4, grooveAngle=-20, jointDepth=3,
+                  bedLedge=.4, grooveAngle=-20,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
@@ -308,7 +307,7 @@ WORLD_KNOBS = {
     'red': dict(crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackSpacing=28, rockOrder=1, bedLedge=0,
-                jointDepth=3, grooveSpacing=30, grooveAngle=-10, grooveRun=160,
+                grooveSpacing=30, grooveAngle=-10, grooveRun=160,
                 # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
                 # rock on level ground fades into plain broken rock. Red has no beds.
                 cliffFollow=1, cliffReach=40,
@@ -412,7 +411,7 @@ WORLD_KNOBS = {
                    # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
                    # the strata colours replace the face material.
                    rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1,
-                   jointDepth=3, grooveSpacing=30, faceFill=0, ambient=.3,
+                   grooveSpacing=30, faceFill=0, ambient=.3,
                    # G2: joints run down the fall line (its beds are height contours already, kept on the grid's own heights
                    # so the lit ledges stay with the strata colours: cliffBed 0).
                    cliffFollow=1, cliffReach=40, cliffBed=0,
@@ -670,7 +669,7 @@ WORLD_VARIANTS = {
                        material=dict(stoneSort=.7,
                        # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
                        rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
-                                 chip=.12, chipSize=4, grit=.3),
+                                 chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6),
                        groundCover=dict(
                            # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
                            # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
@@ -785,7 +784,7 @@ def apply_variant(config, biome, variant):
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
     if v.get('material', {}).get('rock'):
-        out['defaults']['rockCells'] = str(int(v['material']['rock'].get('size', 0) > 0))
+        out['defaults'].update({k: str(x) for k, x in rock_flags(v['material']['rock']).items()})
     # A variant's own knobs beat the world's engine preset (modern Green's rockAge over Green's).
     out['engineDefaults'] = {k: x for k, x in out.get('engineDefaults', {}).items() if k not in v.get('knobs', {})}
     if v.get('river'):
@@ -809,12 +808,18 @@ SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIA
 SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 
 
+def rock_flags(rock):
+    """What the rock preset cuts, for the panel's reasons: rockCells (it cuts blocks: Size and Age need it) and rockJoint (its joint
+    lines' depth, units; Open joints needs it or the blocks' crevices)."""
+    return dict(rockCells=int(rock.get('size', 0) > 0), rockJoint=rock.get('joint', 2))
+
+
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
-    knobs['rockCells'] = int(config['material'].get('rock', {}).get('size', 0) > 0)   # whether the rock preset cuts blocks (Size and Age need it)
+    knobs.update(rock_flags(config['material'].get('rock', {})))
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)
