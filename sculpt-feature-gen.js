@@ -609,26 +609,56 @@ const FLAME_RANK_SUM = FLAME_RANK.reduce((a, [, w]) => a + w, 0);
 function drawFlame(cv, o, rr) {
   const { ax, ay, half, top, coreH, coreHW, deep } = o, th = (o.phase || 0) * TAU, S = o.coreSeed || 1;
   const nz = (x, y, sc, off, amp = 2.3) => vnoise(x / sc + amp * Math.cos(th) + off, y / sc + amp * Math.sin(th), S + off * 7);
-  const baseUp = dx => dx <= 5 ? -deep : dx <= 9 ? -deep + (dx - 5) * 1.0 : Math.max(0, (dx - 8) * 1.9);
+  const cxF = ax + (o.lump ? 0 : Math.round((nz(0, 0, 9, 21, 1.8) - 0.5) * 11));     // the flame sways off the trunk instead of standing as one centered column
+  const baseUp = dx => dx <= 4 ? -deep : Math.max(-deep + (dx - 4) * 1.25, (dx - 8) * 1.9);
   const topAt = (xe, dx, lump) => {
     if (lump) { const u = clamp(dx / o.wl, 0, 1); return top * Math.sqrt(Math.max(0, 1 - u * u)) * (0.85 + 0.3 * nz(xe, 3, 5, 3)); }
-    const env = Math.exp(-Math.pow(dx / (half * 0.85), 2)), n = nz(xe, 0, 6.5, 0), ridge = Math.pow(clamp((n - 0.2) / 0.6, 0, 1), 1.15);
-    return Math.min(top + 3, top * 1.1 * env * (0.1 + 1.0 * ridge));
+    const env = Math.exp(-Math.pow(dx / (half * 0.95), 2)), n = nz(xe, 0, 6.5, 0), ridge = Math.pow(clamp((n - 0.2) / 0.6, 0, 1), 1.15);
+    const flank = 0.6 * Math.exp(-Math.pow((dx - half * 0.7) / (half * 0.3), 2)) * Math.pow(clamp((nz(xe, 3, 4.5, 17) - 0.25) / 0.5, 0, 1), 1.1);   // tongues that climb the crown's flanks
+    return Math.min(top + 3, top * 1.1 * Math.max(env * (0.1 + 1.0 * ridge), flank));
   };
   const pts = [], heat = [];
-  for (let y = ay + deep + 1; y >= ay - top - 6; y--) for (let x = Math.floor(ax - half - 6); x <= ax + half + 6; x++) {
+  for (let y = ay + deep + 1; y >= ay - top - 6; y--) for (let x = Math.floor(ax - half - 9); x <= ax + half + 9; x++) {
     const dx = Math.abs(x - ax), up = ay - y;
     if (up < baseUp(dx)) continue;
     const xe = x + (o.lump ? 0 : 2.6 * up / Math.max(top, 1) + 2.4 * Math.sin(up / 6.5 + th * 2));
-    let tp = topAt(xe, Math.abs(xe - ax), o.lump);
-    if (!o.lump) for (const d of [-3.5, -1.8, 1.8, 3.5]) tp = Math.max(tp, topAt(xe + d, Math.abs(xe + d - ax), false) * (1 - 0.06 * Math.abs(d)));   // tongue tips are 5-7 px wide, not needles
+    let tp = topAt(xe, Math.abs(xe - cxF), o.lump);
+    if (!o.lump) for (const d of [-3.5, -1.8, 1.8, 3.5]) tp = Math.max(tp, topAt(xe + d, Math.abs(xe + d - cxF), false) * (1 - 0.06 * Math.abs(d)));   // tongue tips are 5-7 px wide, not needles
     const coreP = coreH * Math.max(0, 1 - Math.pow(dx / (coreHW + 2 * (nz(x, y, 4, 5) - 0.5)), 2));
     const rag = (nz(x, y, 3.4, 9) - 0.5) * 8;
     if (up > Math.max(tp, coreP) + rag) continue;
     if (dx > 18 && !o.lump && hash2(x, y >> 3, S) < 0.5) continue;       // far flank: gaps
     const loc = Math.max(tp, coreP) + 1;
-    const h = 0.9 - 0.34 * Math.pow(clamp(up / loc, 0, 1.2), 0.95) - 0.3 * Math.pow(dx / Math.max(half, 6), 1.2) + 0.95 * (nz(x, y, 4.2, 11, 1.1) - 0.5) + 0.25 * (nz(x, y, 2, 13, 0.8) - 0.5);
+    const h = 0.9 - 0.2 * Math.pow(clamp(up / loc, 0, 1.2), 0.95) - 0.3 * Math.pow(dx / Math.max(half, 6), 1.2) + 0.95 * (nz(x, y, 4.2, 11, 1.1) - 0.5) + 0.25 * (nz(x, y, 2, 13, 0.8) - 0.5);
     pts.push(y * cv.w + x); heat.push(h);
+  }
+  // ragged edges: high-frequency erosion at the rim, holes inside, then detached fragments and thin wisps (retail frames are busier than a clean outline)
+  { const W0 = cv.w, set0 = new Set(pts), keep = [];
+    for (let i = 0; i < pts.length; i++) {
+      const k = pts[i], x = k % W0, y = (k / W0) | 0, miss = [k - 1, k + 1, k - W0, k + W0].filter(q => !set0.has(q)).length;
+      const hf = nz(x, y, 1.5, 31, 2.8);
+      let drop = false;
+      if (!o.lump || true) { if (miss > 0 && hf > 0.56 - 0.1 * miss) drop = true; else if (miss === 0 && hf > 0.88) drop = true; }
+      if (!drop) keep.push(i);
+    }
+    const np = keep.map(i => pts[i]), nh = keep.map(i => heat[i]); pts.length = 0; heat.length = 0; pts.push(...np); heat.push(...nh);
+    const set1 = new Set(pts), colTopOf = new Map();
+    for (const k of pts) { const x = k % W0, y = (k / W0) | 0; if (!colTopOf.has(x) || colTopOf.get(x) > y) colTopOf.set(x, y); }
+    const add = (x, y, h) => { const k = y * W0 + x; if (x >= 1 && y >= 1 && x < W0 - 1 && y < cv.h - 1 && !set1.has(k)) { set1.add(k); pts.push(k); heat.push(h); } };
+    const cols = [...colTopOf.keys()];
+    const nFrag = o.lump ? 2 : 6 + Math.floor(rr() * 5);
+    for (let f = 0; f < nFrag && cols.length; f++) {                        // detached licks floating above and beside the body
+      const cx0 = cols[(rr() * cols.length) | 0], ty = colTopOf.get(cx0), side = rr() < 0.55 ? 1 : -1;
+      let x = cx0 + side * Math.round(rr() * 6), y = ty - 3 - Math.round(rr() * (o.lump ? 4 : 12));
+      const n = 2 + Math.floor(rr() * 6);
+      for (let t = 0; t < n; t++) { add(x, y, 0.2 + 0.2 * rr()); const d = pick(rr, [[1, 0], [-1, 0], [0, -1], [0, -1], [0, 1]]); x += d[0]; y += d[1]; }
+    }
+    const nW = o.lump ? 0 : 2 + Math.floor(rr() * 3);
+    for (let f = 0; f < nW && cols.length; f++) {                           // thin wisps off the tips
+      const cx0 = cols[(rr() * cols.length) | 0]; let x = cx0, y = colTopOf.get(cx0) - 1;
+      const len = 4 + Math.floor(rr() * 8), lean = -0.3 + (rr() - 0.5) * 0.8;
+      for (let t = 0; t < len; t++) { add(Math.round(x), y, 0.15 + 0.1 * rr()); y -= 1; x += lean + (rr() - 0.5) * 0.8; }
+    }
   }
   const inF = new Set(pts), has = k => inF.has(k);
   const edge = i => { const k = pts[i]; return !(has(k - 1) && has(k + 1) && has(k - cv.w) && has(k + cv.w)); };
@@ -670,8 +700,8 @@ function burnSequence(tree, burnt, seed, nFrames = 96, conifer = false) {
   for (let y = 0; y < body.h; y++) for (let x = 0; x < body.w; x++) if (body.a[y * body.w + x]) put(living, x + ox, y + oy, body.idx[y * body.w + x]);
   const skel = newSprite(w, h, ax, ay);
   for (let y = 0; y < b.h; y++) for (let x = 0; x < b.w; x++) if (b.a[y * b.w + x]) put(skel, x - b.ax + ax, y - b.ay + ay, b.idx[y * b.w + x]);
-  const flameHalf = conifer ? Math.round(cw * 0.46) : Math.round(cw * 0.33), top0 = Math.min(padT + body.ay - 4, conifer ? 72 : 76);
-  const base = { ax, ay, half: flameHalf, top: top0, coreH: conifer ? 22 : 30, coreHW: conifer ? 6.5 : 8, deep: conifer ? 5 : 3, sparks: 9, coreSeed: (seed * 7) & 1023, phase: 0 };
+  const flameHalf = conifer ? Math.round(cw * 0.4) : Math.round(cw * 0.33), top0 = Math.min(padT + body.ay - 4, conifer ? 72 : 76);
+  const base = { ax, ay, half: flameHalf, top: top0, coreH: conifer ? 22 : 30, coreHW: conifer ? 5.5 : 6.5, deep: conifer ? 5 : 3, sparks: 9, coreSeed: (seed * 7) & 1023, phase: 0 };
   const compose = (under, flameO, fseed, extra) => {
     const cv = cloneSprite(under), fl = newSprite(w, h, ax, ay);
     drawFlame(fl, flameO, rng(fseed));
@@ -698,8 +728,8 @@ function burnSequence(tree, burnt, seed, nFrames = 96, conifer = false) {
       for (let k = 0; k < last.w * last.h; k++) if (last.a[k] && re() < 0.16) last.idx[k] = weighted(re, [[205, 30], [200, 18], [203, 14], [204, 14], [211, 8], [210, 8], [206, 8]]);
       frames[f] = last; continue;
     }
-    const dieK = f >= 91 ? [0.85, 0.7, 0.5, 0.3, 0.2][f - 91] : 1;
-    frames[f] = cropSprite(compose(crown, { ...base, half: Math.round(flameHalf * wide), top: Math.max(14, Math.round(top0 * (0.95 + 0.1 * Math.sin(f)) * (f >= 91 ? 0.5 + 0.5 * dieK : 1))), coreH: Math.max(10, Math.round(base.coreH * (1 + 0.5 * (1 - t)) * dieK)), coreHW: (base.coreHW + 2) * (0.5 + 0.5 * dieK), phase: (f % 14) / 14 }, mix32(seed, 1100 + f)));
+    const dieK = f >= 91 ? [0.8, 0.65, 0.42, 0.2, 0.1][f - 91] : 1, dk = Math.pow(dieK, 1.4);   // the flame fades over the last 4 frames (retail fire share 77, 74, 61, 34, 16 percent)
+    frames[f] = cropSprite(compose(crown, { ...base, half: Math.max(5, Math.round(flameHalf * wide * (0.35 + 0.65 * dk))), top: Math.max(10, Math.round(top0 * (0.95 + 0.1 * Math.sin(f)) * (f >= 91 ? 0.25 + 0.75 * dk : 1))), coreH: Math.max(6, Math.round(base.coreH * (1 + 0.5 * (1 - t)) * dk)), coreHW: Math.max(2.5, (base.coreHW + 2) * (0.35 + 0.65 * dk)), phase: (f % 14) / 14 }, mix32(seed, 1100 + f)));
   }
   return frames;
 }
