@@ -1953,6 +1953,7 @@
   "depositSpread": 0.65
  },
  "water": {
+  "riverBedRGB": [108, 100, 87],
   "shallowRGB": [
    96,
    138,

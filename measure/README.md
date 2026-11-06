@@ -22,6 +22,8 @@ stay outside Git.
 | `lit_lab.py` | Tries lit numbers on one prepared image: image beside the engine's swatch at 1x, 2x and the quarter level, with the numbers |
 | `lit_fit.py` | Pattern search for a lit material's numbers on swatches rendered in one Chrome session (`material_fit.py --lit` runs it) |
 | `material_swatches.py` | Each prepared image beside the engine's generated layer, at 1x, 2x and quarter resolution, with the numbers |
+| `river_retail.py` | Retail TA rivers from their 16-px heights: width, sinuosity and offset from the chord over 4 and 8 widths, bend wavelength and amplitude (the table is in its header) |
+| `river_band.mjs` | The same numbers on the River preset's stroke-time migration (`sculpt-river.js`), on a straight line, a gentle curve and an S, per Wander |
 
 Renders with heights come from `capture/capture.mjs` scenes that set
 `"heights": true`. Pass `ours <label> <stem>...` (stems without `.png`),

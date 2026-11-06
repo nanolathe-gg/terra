@@ -1891,8 +1891,19 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let sand = bakedFields(p).a * place.deposits;
         if (sand > 0.0) {
             // Weathered rock and its grains (sandMaterialAt): a biome's sand follows its own rock.
-            let weathered = sandWeathered();
-            let sandMaterial = sandMaterialAt(scatter);
+            var weathered = sandWeathered();
+            var sandMaterial = sandMaterialAt(scatter);
+            // riverfix: where a braided river's bed lies (mask plane 19) the sand is its gravel and silt instead, the world's river-bed colour (or its rock's,
+            // darkened) with the sand's grain and a mottle of pebble-sized flecks; the pebbles themselves are the loose-stone scatter the bed paints denser.
+            let bed = max(textureSampleLevel(masksTex, linearClamp, maskUv(p), 4, 0.0).a, 0.0);
+            if (bed > 0.0) {
+                let tone = select(u.rockTexMean * vec3f(0.78, 0.74, 0.68), u.riverBed.rgb, u.riverBed.a > 0.5);
+                let fleck = valueNoise(pixel / 1.4 + 7.0) * 0.5 + valueNoise(pixel / 2.9 + 41.0) * 0.3 + valueNoise(pixel / 9.0 + 3.0) * 0.2;
+                let gravel = saturate(tone * (1.0 + 0.22 * fleck));
+                let on = min(bed * 8.0, 1.0);   // any bed at all: its edges keep the sand cover's own scatter, not a blend toward the world's sand
+                weathered = mix(weathered, tone, on);
+                sandMaterial = mix(sandMaterial, gravel, on);
+            }
             // Three stages, so sand thins into the ground over tens of
             // pixels: fines tint what is there, then grains appear between
             // grass blades (a per-pixel threshold against fine noise), then

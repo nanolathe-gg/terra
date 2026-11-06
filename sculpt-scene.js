@@ -34,12 +34,15 @@ export const LANDFORM_TOOLS={
   valleyU:valley('lfValleyU'),
   valleyT:valley('lfValleyV',{terraces:4,ledge:55,terraceJitter:30}),
   // A river: Width is the channel (the section reaches 6 channel half widths each side), Wander the migration steps in 4s; the floodplain sits 3 above the sea.
-  river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:76,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}},
-  // A braided river: the same preset with a belt of threads (its form) and no migration unless Wander is raised.
+  // Wander is the band the channel may stray in, in px (at most four channel widths). 96 (two widths at 48 px): over 8 widths of course the bends give a median
+  // sinuosity of about 1.1 and stray about 1.4 widths from the chord, against retail TA rivers' 1.03 to 1.20 (median 1.12) and 0.4 to 1.6 (measure/river_band.mjs,
+  // measure/river_retail.py).
+  river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:96,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}},
+  // A braided river: the same preset with a braided bed (its form: dry bars, thin threads, engine-shape.wgsl braidedBelt) and no migration unless Wander is raised.
+  braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}},
   // lfcrater: the Crater button. A bowl dug 20 below the ground it lands on with a rim .42 of that above it (the lfCrater section), 360 px foot to foot (a 200 px
   // rim), three secondaries, so a drag aims the impact (sculpt-shape-presets.js impactPath): Roughness 35 as Wander and Height variation.
   crater:{diameter:360,lean:100,heightReference:2,elevation:-20,combine:2,cracks:30,wander:20,widthVary:10,heightVary:2,varySize:95,varyFoot:100,varyMiddle:100,ejecta:0,secondaries:3,curve:{form:'lfCrater',knots:FORMS.lfCrater().knots}},
-  braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}},
   // lfcrystal: Crystals (the palette's Faceted forms) is a landform broken into prisms by its Facet shape: a click is a cluster round the point, a drag
   // rows along the path. The section is the old cluster's falloff (each prism stood 1 - .45 x its distance share lower toward the rim), the rise its Height.
   crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:60,facetForm:2,iceFacetSize:36,
@@ -99,9 +102,10 @@ export const LANDFORM_KEYS=['stepReference','heightReference','elevation','combi
 // the shore edge, is no longer written; shallow-to-deep edge, bed; +127 hard /
 // lit bed, -127 faded / noise water), painted ground lumps (+127 more, -127
 // fewer) and the cracked-bed flag.
-// Planes 0-18 are in use (14-17 are the override planes, 18 a water stroke's Surf, 0..127 of 1); 19-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
+// Planes 0-19 are in use (14-17 are the override planes, 18 a water stroke's Surf, 0..127 of 1, 19 a braided river's bed, 0..127 of 1, which the draw lays as
+// the world's river-bed gravel); 20-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
-export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','free19','fu','fv','s1','s2','s3'];
+export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','fu','fv','s1','s2','s3'];
 export const MASK_SHAPES=['crater','landform'];
 export const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 export const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
@@ -134,7 +138,7 @@ export const SHAPE_FIELDS=[
   ['elevation','lf-elevation','Elevation (height units)',['landform'],-335,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
   ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
   ['routeSmooth','lf-route-smooth','Smooth route',['landform'],0,100,5,100,'Keep the center of this landform clear of surface relief, cracks and debris, and protect its grade from weathering. The shoulders fade into the surrounding terrain.'],
-  ['wander','lf-wander','Wander (px)',['landform'],0,120,2,1,'How far the outline moves in and out around the sides and ends, in waves as long as the Variation size. The drawn crest stays in place.'],
+  ['wander','lf-wander','Wander (px)',['landform'],0,200,2,1,'How far the outline moves in and out around the sides and ends, in waves as long as the Variation size. The drawn crest stays in place.'],
   ['widthVary','lf-width-vary','Width variation',['landform'],0,100,5,100,'How much the section widens and narrows along the path (100: from half to twice its width).'],
   ['heightVary','lf-height-vary','Height variation (units)',['landform'],0,40,1,1,'How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet.'],
   // P1: branching gullies on the raised faces, steered down the stroke's own fall line (engine-shape.wgsl landformGullies).

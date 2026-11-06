@@ -28,6 +28,7 @@ struct Uniforms {
     light: vec3f,
     // Draw (sculpt-frag.wgsl).
     shallowColor: vec3f,
+    riverBed: vec4f,       // riverfix: the braided bed's gravel colour (materials/<world>.json water.riverBedRGB), a = 1 when the world gives one
     deepColor: vec3f,
     waterMean: vec3f,
     rockMean: vec3f,
