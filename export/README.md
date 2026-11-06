@@ -84,8 +84,9 @@ Their order becomes `StartPos1` through `StartPosN`, and `numplayers` matches.
 
 Feature x/z are top-left anchor **cells**, rather than pixel positions. Every
 full footprint must lie inside the play area, without overlapping another.
-The name must appear in the prepared world's catalogue and its mounted TDF;
-footprints are checked against that TDF. A deterministic sorted name table
+The name must appear in the prepared world's catalogue (`--features-root`),
+whose footprints `map-features` read from the game's feature TDFs; the export
+itself reads no game content when it is given `--catalog-file`. A deterministic sorted name table
 supplies anchor indices, with `0xFFFE` in each remaining footprint cell.
 The terrain image must not contain feature sprites.
 

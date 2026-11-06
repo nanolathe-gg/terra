@@ -103,19 +103,20 @@ func run() error {
 		}
 		roots = append(roots, filepath.Join(home, "TotalAnnihilation"))
 	}
-	fs := vfs.New()
-	defer fs.Close()
-	if err := fs.MountGameDirectories(roots); err != nil {
-		return err
-	}
-	// A saved catalogue lets a content root without the retail maps export
-	// with the same climate and sea-level medians.
+	// A saved catalogue gives the same climate and sea-level medians without
+	// the game content, so an export with one reads none (the browser's
+	// exporter, this program built for WebAssembly, has none to read).
 	var catalog catalog
 	if *catalogFile != "" {
 		if err := mapdata.ReadJSON(*catalogFile, &catalog); err != nil {
 			return err
 		}
 	} else {
+		fs := vfs.New()
+		defer fs.Close()
+		if err := fs.MountGameDirectories(roots); err != nil {
+			return err
+		}
 		var err error
 		if catalog, err = readCatalog(fs); err != nil {
 			return err
@@ -131,7 +132,7 @@ func run() error {
 	if err := refuseRootOutput(*out, roots); err != nil {
 		return err
 	}
-	allowed, err := readExportFeatures(fs, *featuresRoot, req, catalog)
+	allowed, err := readExportFeatures(*featuresRoot, req, catalog)
 	if err != nil {
 		return err
 	}
