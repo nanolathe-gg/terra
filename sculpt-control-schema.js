@@ -1,4 +1,5 @@
 import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater} from './sculpt-shape-presets.js';
+import {isRiver} from './sculpt-river.js';
 // Presentation names and applicability belong to features, never to worlds.
 // Historical persistence keys are compatibility identifiers for existing v4-v6
 // recipes, not world-gated algorithms. All presentation uses feature names.
@@ -45,6 +46,8 @@ export function shapeControlAvailable(key,kind,p){
   // Talus rests on ground the stroke raises, so it works with the plain Raise choice only.
   if(key==='talus')return Math.round(Number(p.combine||0))===0;
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
+  // A river's path is its channel, carried by its migration; an impact would read that path as its track (lfcrater).
+  if(['ejecta','secondaries'].includes(key))return !isRiver(p);
  }
 
  const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;

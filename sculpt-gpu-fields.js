@@ -1,7 +1,7 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, impactOn, impactSetup, impactPath, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -57,7 +57,9 @@ const NODE_FIELDS = [
     'sBreak', 'elev', 'lfRiver', 'lfBraid', 'lfFront', 'lfBack', 'lfWander', 'lfWidth', 'lfHeight', 'lfSize', 'lfFoot', 'lfMid', 'lfTaper', 'lfRoute', 'gully', 'gullySize', 'talusReach', 'talusTan',
     'coSurf'].map(k => [k, 'f']), ...['coBeach'].map(k => [k, 'u']),
   // lfcrater: a landform's Ground height reference (its elevation an offset from the ground under each cell) and a signed section (a knot below 0).
-  ...['lfGround', 'lfSigned'].map(k => [k, 'u'])];
+  ...['lfGround', 'lfSigned'].map(k => [k, 'u']),
+  // lfcrater: the ejecta (height at the rim, the rim's distance from the path on each side) and the impact's spread (downrange, asymmetry, forbidden zones, wings).
+  ...['ejAmt', 'ejPeakF', 'ejPeakB', 'imX', 'imY', 'ejAsym', 'ejFz', 'ejWing', 'ejDz'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -184,6 +186,36 @@ function craterRim(q, seed) {
   for (let k = 0; k < G; k++) gaps.push(gphase + tau * (k + (rnd(k, 5) - .5) * .4) / G);
   return {sect: sect.map(c => ({...c, rel: c.a - sect[0].a})), gaps, hw: clamp(q.rimGapWidth, 10, 180) * Math.PI / 360};
 }
+// lfcrater: the ejecta's uniforms. Their height is Ejecta x .3 of the shape's relief at the rim (the old crater's was .16 of its depth), thinning as the cube of the
+// distance (McGetchin et al. 1973), from the section's peak (landformPeak; a section that peaks on its path throws from its foot); the spread is the impact's.
+function impactUniforms(q, sd, imp, c) {
+  const pk = landformPeak(q), relief = Math.abs(Math.round(q.heightReference || 0) === 2 ? q.elevation : landformElevation(q, c.sea) - (c.baseHeight ?? 0)), sp = impactSpread(imp.angle);
+  return {ejAmt: .3 * clamp(q.ejecta || 0, 0, 2) * relief, ejPeakF: pk > 0 ? (1 - pk) * sd.front : sd.front, ejPeakB: pk > 0 ? (1 - pk) * sd.back : sd.back,
+    imX: imp.dx, imY: imp.dy, ejAsym: sp.asym, ejFz: sp.fz, ejWing: sp.wing, ejDz: sp.dz};
+}
+// lfcrater: the secondaries: small copies of the stroke (its section, Height reference and options, its relief scaled with its width,
+// no ejecta or secondaries of their own; a tenth to a quarter of its width), thrown beyond the ejecta blanket (1.6 to 3.2 rim radii from the path) at azimuths drawn from the impact's spread, so an
+// oblique impact's land downrange and a grazing one's to the sides. About a third start a chain of one or two smaller ones farther out along the same ray.
+function secondaryNodes(n, q, imp, seed, geom, c) {
+  const count = Math.round(clamp(q.secondaries, 0, 12)), sd = landformSides(q), pk = landformPeak(q), rp = pk > 0 ? (1 - pk) * Math.max(sd.front, sd.back) : Math.max(sd.front, sd.back);
+  const sp = impactSpread(imp.angle), world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => rand01(seed ^ 0x51ec, k, a), out = [];
+  const path = impactPath({...q}, shapePaths(n)[0].map(i => n.points[i])), down = Math.atan2(imp.dy, imp.dx), aimed = imp.dx !== 0 || imp.dy !== 0;
+  const ref = Math.round(q.heightReference || 0), lift = (k) => ref === 2 ? q.elevation * k : (landformElevation(q, c.sea) - c.baseHeight) * k + c.baseHeight - (ref === 1 ? c.sea : 0);
+  for (let k = 0; k < count; k++) {
+    // the azimuth: up to 16 draws, the first the spread accepts
+    let phi = 0;
+    for (let j = 0; j < 16; j++) { phi = (rnd(k, 10 + j) * 2 - 1) * Math.PI; if (rnd(k, 40 + j) * 1.9 < impactWeight(sp, phi) || j === 15) break; }
+    const at = path.length > 1 ? pathPoint(path, rnd(k, 3)) : path[0], ang = aimed ? down + phi : phi;
+    const dist = rp * (1.6 + 1.6 * Math.pow(rnd(k, 5), .7)), size = (.1 + .16 * rnd(k, 6)), chain = rnd(k, 7) < .35 ? 1 + (rnd(k, 8) < .5 ? 1 : 0) : 0;
+    for (let m = 0; m <= chain; m++) {
+      const f = 1 + .28 * m, k2 = size * Math.pow(.7, m), spot = {x: clamp(at.x + Math.cos(ang + (rnd(k, 20 + m) - .5) * .12) * dist * f, 0, world - 1), y: clamp(at.y + Math.sin(ang + (rnd(k, 20 + m) - .5) * .12) * dist * f, 0, world - 1)};
+      out.push(prepareNode({kind: 'landform', satellite: true, points: [spot], frame: n.frame, seed: (seed + (k * 3 + m + 1) * 2654435761) >>> 0,
+        params: {...n.params, radius: q.radius * k2, elevation: lift(Math.min(1, k2 * 1.6)), ejecta: 0, secondaries: 0, spurCount: 0, gullies: 0, talus: 0, along: undefined, wander: (q.wander || 0) * k2, varySize: Math.max(20, (q.varySize || 140) * k2)}}, geom, c));
+    }
+  }
+  return out;
+}
+const pathPoint = (path, t) => { const cum = [0]; for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y)); const d = t * cum[cum.length - 1]; let k = 1; while (k < path.length - 1 && cum[k] < d) k++; const f = (d - cum[k - 1]) / Math.max(cum[k] - cum[k - 1], 1e-9); return {x: path[k - 1].x + (path[k].x - path[k - 1].x) * f, y: path[k - 1].y + (path[k].y - path[k - 1].y) * f}; };
 // ---- node preparation ----
 // What the passes draw: every kind in KIND with at least one point (and the ground node). prepareNode returns {skip:true} for any other node,
 // which draws nothing, and for a node that writes nothing, else {op:'ground'|'stamp', ...}. `c` is the host's context (see shapeContext in sculpt.js).
@@ -223,6 +255,7 @@ export function prepareNode(n, geom, c) {
   };
   const fx = naturalPlateau ? F_COAST_X : F_X, fy = naturalPlateau ? F_COAST_Y : F_Y;
   const segs = [], extra = [];
+  let impact = null;
   const reads = kind === 'crater' ? [{x: allPoints[0].x, y: allPoints[0].y}] : [];
   const dab = (p, e, f0, f1) => segs.push({px: p.x, py: p.y, ex: (e || p).x, ey: (e || p).y, f0, f1, nx: sampleNoise(fx, p.x, p.y), ny: sampleNoise(fy, p.x, p.y)});
   // Prepare paths independently, then submit their capsules as one shape.
@@ -271,6 +304,8 @@ export function prepareNode(n, geom, c) {
     // H27 landform: the path is the crest, swept as segments that carry the length before them, their own and the whole path's (the rows the along
     // curve reads), the side the back is on, and which ends close the section round them. A click is a tiny segment closed at both ends.
     let path = simplifyPath(pts, Math.max(1, radius * .04)).filter((p, k, a) => !k || Math.hypot(p.x - a[k - 1].x, p.y - a[k - 1].y) >= 1e-4);
+    // lfcrater: a stroke with impact features reads its path as the impact's track (impactPath): round at the drag's midpoint, or spanning a longer drag.
+    if (impactOn(q)) { if (pathNo === 0) impact = impactSetup({...q, radius}, path); path = impactPath({...q, radius}, path); }
     if (path.length < 2) path = [path[0], {x: path[0].x + .01, y: path[0].y}];
     const cum = [0];
     for (let k = 1; k < path.length; k++) cum.push(cum[k - 1] + Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y));
@@ -356,7 +391,9 @@ export function prepareNode(n, geom, c) {
       // P17 Talus: cones below the Gullies' chutes, as long as the reach (world px) at the repose of the world's talusAngle; only where Gullies cut and the stroke raises.
       talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusTan: c.repose ?? .84,
       lfGround: Math.round(q.heightReference || 0) === 2 ? 1 : 0, lfSigned: landformSigned(q) ? 1 : 0});
+    if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));
   }
+  if (kind === 'landform' && impact && Math.round(q.secondaries || 0) >= 1 && !n.satellite) return {multi: [main, ...secondaryNodes(n, q, impact, seed, geom, c)]};
   if (kind !== 'crater' || n.satellite) return main;
   // The craterlets: small craters round the rim, each its own seed and noise, read after the main crater and the earlier ones (addCraterlets, craterletSpot).
   const count = Math.round(q.craterlets || 0), centre = allPoints[paths[0][paths[0].length >> 1]], world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => { let x = Math.imul((seed >>> 0) + k * 7919 + a * 104729, 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; return (x >>> 0) / 4294967296; };

@@ -679,6 +679,48 @@ fn lfCraterCover(q: f32, c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
   if (cap && e > 0.0) { w = mix(fw, bw, 0.5 + 0.5 * back / max(r, 1e-5)); }
   return max(clamp(q, 0.0, 1.0), clamp(1.0 - r / w, 0.0, 1.0));
 }
+// lfcrater: the impact's spread at azimuth phi from downrange (c, sn: its cosine and sine), as impactWeight in sculpt-shape-presets.js: the blanket gathers
+// downrange (ejAsym), an uprange forbidden zone opens (ejFz, half angle), and a grazing impact throws to the sides (ejWing) with a downrange gap (ejDz).
+fn lfCraterSpread(c: f32, sn: f32) -> f32 {
+  let down = abs(atan2(sn, c)); let up = 3.14159265 - down;
+  var w = (1.0 + 0.85 * u.ejAsym * c) * (1.0 - u.ejWing) + u.ejWing * pow(abs(sn), 1.5);
+  if (u.ejFz > 0.0) { w = w * sm(0.6 * u.ejFz, 1.4 * u.ejFz, up); }
+  if (u.ejDz > 0.0) { w = w * sm(0.6 * u.ejDz, 1.4 * u.ejDz, down); }
+  return w;
+}
+// lfcrater: the ejecta beyond a landform's peak (its rim), added to the ground or the shape: a thin continuous blanket that thins as the cube of the distance
+// (McGetchin et al. 1973) to about 1.8 rim radii from the path, and ragged radial tongues that run from the rim a third to most of a rim radius farther, curling
+// as they go (retail Moon's craters: a fringe of short, curly ridges round a crisp rim). The tongues and their lengths are functions of the place on the rim a
+// cell's ray leaves from (in the shape's frame), so they run outward and every tile computes the same value. Tongues sit at least 8 px apart, so they read at 1x.
+fn lfCraterEjecta(wx: f32, wy: f32, trunk: u32) -> vec2f {
+  let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u];
+  let a = s0.xy; let d = s0.zw - s0.xy; let p = vec2f(wx, wy);
+  let t = clamp(dot(p - a, d) / max(dot(d, d), 1e-8), 0.0, 1.0);
+  let o = p - (a + d * t); let r = length(o);
+  if (r < 1e-3) { return vec2f(0.0, 1.0); }
+  let rh = o / r;
+  let rp = select(u.ejPeakF, u.ejPeakB, (o.x * d.y - o.y * d.x) * s1.w > 0.0);
+  if (rp <= 0.0) { return vec2f(0.0, 1.0); }
+  let sr = r / rp;
+  var w = 1.0;
+  if (u.imX != 0.0 || u.imY != 0.0) { w = lfCraterSpread(rh.x * u.imX + rh.y * u.imY, u.imX * rh.y - u.imY * rh.x); }
+  // An oblique impact lowers its rim where it throws little (Herrick and Forsberg-Taylor 2003: the uprange rim first, then the downrange one).
+  let lip = mix(1.0, 0.4 + 0.6 * clamp(w, 0.0, 1.0), sm(0.0, 0.3, u.ejFz + u.ejDz));
+  if (sr < 0.8 || sr > 2.6 || w <= 0.0) { return vec2f(0.0, lip); }
+  let lt = max(8.0, 0.2 * rp);
+  let wig = 0.6 * lt * vnoise(r / 15.0, f32(trunk) * 7.3 + 0.37 * dot(rh, vec2f(13.1, 7.7)), u.seed ^ 0x2c61u);
+  let rim = a + d * t + rh * rp + vec2f(-rh.y, rh.x) * wig;
+  var lr = rim; var lp = p;
+  if (u.framed != 0u) { lr = vec2f(u.inv0 * rim.x + u.inv2 * rim.y + u.inv4, u.inv1 * rim.x + u.inv3 * rim.y + u.inv5); lp = vec2f(u.inv0 * wx + u.inv2 * wy + u.inv4, u.inv1 * wx + u.inv3 * wy + u.inv5); }
+  let ray = vnoise(lr.x / lt, lr.y / lt, u.seed ^ 0x3a71u);
+  let len = vnoise(lr.x / (0.6 * lt), lr.y / (0.6 * lt), u.seed ^ 0x5e13u);
+  let hum = vnoise(lp.x / 7.0, lp.y / 7.0, u.seed ^ 0x1f37u);
+  let tip = 1.0 + (0.35 + 0.3 * (len + 1.0)) * (0.75 + 0.25 * min(w, 1.8));
+  let along = clamp((sr - 1.0) / (tip - 1.0), 0.0, 1.0);
+  let tongue = sm(0.05, 0.6, ray) * sm(0.95, 1.08, sr) * pow(1.0 - along, 0.6) * select(1.0, 0.0, sr >= tip);
+  let blanket = sm(0.85, 1.05, sr) * pow(sr, -3.0) * (1.0 - sm(1.5, 1.9, sr));
+  return vec2f(u.ejAmt * w * (0.5 * blanket + tongue) * (0.8 + 0.4 * hum), lip);
+}
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
 fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec3f {
@@ -955,8 +997,11 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   // P17: the talus cones, where Gullies cut the faces (the chutes are theirs) and the stroke raises. Beyond the footprint the cone is all there is.
   var talus = 0.0;
   if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen)); }
+  var ej = 0.0; var lipK = 1.0;
+  if (u.ejAmt > 0.0 && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, trunk); ej = ev.x; lipK = ev.y; }
   if (!seen) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); }
+    if (ej > 0.0) { F[PH * cells + i] = clamp(F[PH * cells + i] + ej, u.minH, u.maxH); }
     return;
   }
   // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
@@ -966,6 +1011,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (talus > 0.0) { value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  if (ej > 0.0 || lipK < 1.0) { F[PH * cells + i] = clamp(select(value, base + (value - base) * lipK, value > base) + ej, u.minH, u.maxH); }
   // P28 point bar: its sand goes to the cover plane, as a Sand brush's does, and draws through the painted-sand path.
   if (pick.z > 0.0) { let vb = F[PV * cells + i]; F[PV * cells + i] = vb + (1.0 - vb) * pick.z; }
   // The influence: how much of the section the cell stands in, where the stroke moved the height (a unit or more is all of it). Masks, routes, protection and

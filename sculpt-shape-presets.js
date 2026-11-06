@@ -130,8 +130,65 @@ export function landformBackSide(lean, turn, dx, dy) {
 // variation at its largest weight, the wander, and the spurs. The segment boxes and nodeBounds both use it.
 export function landformReach(q, scale = 1, widthMul = 1) {
   const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1);
-  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0);
+  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0) + impactReach(q) * widthMul;
 }
+
+// ---- lfcrater: the impact features (Ejecta, Secondaries) and the impact the drawn path describes ----
+// Ejecta and secondaries are landform features: any landform throws them (a crater's bowl, a mound's foot). A stroke that throws them reads its path as the
+// impact's track: the direction from the path's start to its end is downrange, and the drag's length L against the diameter D sets the impact angle,
+// tan(angle) = tan(12 deg) D / L. A click is a vertical impact; a drag of a fifth of the diameter is 47 deg, where the ejecta begin to gather downrange
+// (Herrick and Forsberg-Taylor 2003, the Moon: asymmetric below about 45 deg); two fifths is 28 deg, where an uprange forbidden zone opens (theirs:
+// about 25 deg); a drag as long as the diameter is 12 deg, where craters elongate and the ejecta take a butterfly pattern (theirs: fly-wing below about
+// 10 deg; Gault and Wedekind 1978: craters round above about 20 deg, forbidden zone and butterfly at grazing angles). A drag shorter than the diameter
+// leaves the shape round at the drag's midpoint; a longer one spans the drag, foot to foot, along the drawn path.
+export const IMPACT_TAN = Math.tan(12 * Math.PI / 180);
+export const impactOn = q => (q?.ejecta || 0) > 0 || Math.round(q?.secondaries || 0) >= 1;
+const pathLength = path => { let L = 0; for (let k = 1; k < path.length; k++) L += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y); return L; };
+const pointAlong = (path, d) => {
+  let k = 1, acc = 0;
+  for (; k < path.length; k++) { const l = Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y); if (acc + l >= d || k === path.length - 1) { const f = l > 0 ? clamp((d - acc) / l, 0, 1) : 0; return {k, p: {x: path[k - 1].x + (path[k].x - path[k - 1].x) * f, y: path[k - 1].y + (path[k].y - path[k - 1].y) * f}}; } acc += l; }
+  return {k: 1, p: {...path[0]}};
+};
+// The impact a drawn path describes: the downrange unit vector (0, 0 for a click), the drag length and the angle from the horizontal (degrees).
+export function impactSetup(q, path) {
+  const D = 2 * (q.radius || 1), L = path.length > 1 ? pathLength(path) : 0, a = path[0], b = path[path.length - 1], cl = Math.hypot(b.x - a.x, b.y - a.y);
+  if (L < .5 || cl < .5) return {dx: 0, dy: 0, L: 0, D, angle: 90};
+  return {dx: (b.x - a.x) / cl, dy: (b.y - a.y) / cl, L, D, angle: Math.atan(IMPACT_TAN * D / L) * 180 / Math.PI};
+}
+// The path a stroke with impact features sweeps: its midpoint (a point) when the drag is no longer than the diameter, else the drag less half the diameter
+// at each end, so the footprint spans the drag.
+export function impactPath(q, path) {
+  if (!impactOn(q) || path.length < 2) return path;
+  const D = 2 * (q.radius || 1), L = pathLength(path);
+  if (L <= D) return [pointAlong(path, L / 2).p];
+  const s = pointAlong(path, D / 2), e = pointAlong(path, L - D / 2);
+  return [s.p, ...path.slice(s.k, e.k), e.p];
+}
+const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+// How the ejecta and the secondaries spread round the impact at angle (degrees), as weights of the azimuth from downrange: the downrange share of the
+// blanket (asym), the uprange forbidden zone's half angle (fz, radians), the butterfly's cross-range wings (wing) and its downrange gap (dz, radians).
+export function impactSpread(angle) {
+  return {asym: sstep(45, 25, angle), fz: Math.PI / 3 * sstep(28, 10, angle), wing: sstep(14, 6, angle), dz: Math.PI / 4 * sstep(11, 4, angle)};
+}
+// The weight at azimuth phi (radians from downrange); the shader's lfCraterSpread is the same arithmetic.
+export function impactWeight(sp, phi) {
+  const c = Math.cos(phi), up = Math.PI - Math.abs(Math.atan2(Math.sin(phi), c)), down = Math.abs(Math.atan2(Math.sin(phi), c));
+  const base = (1 + .85 * sp.asym * c) * (1 - sp.wing) + sp.wing * Math.pow(Math.abs(Math.sin(phi)), 1.5);
+  return base * (sp.fz > 0 ? sstep(.6 * sp.fz, 1.4 * sp.fz, up) : 1) * (sp.dz > 0 ? sstep(.6 * sp.dz, 1.4 * sp.dz, down) : 1);
+}
+// Where a section stands highest: its share of the half width from the foot (0) to the path (1), on the side the shape rises (a crater's rim, below 0
+// for a cut; a mound's path). Ejecta start there, or at the foot of a section that peaks on its path.
+export function landformPeak(q) {
+  const knots = strokeKnots('landform', q).knots, up = Math.round(q.heightReference || 0) === 2 ? Math.sign(q.elevation || 0) || 1 : 1;
+  const sign = Math.round(q.combine || 0) === 1 || (Math.round(q.heightReference || 0) === 2 && q.elevation < 0) ? -1 : up;
+  const tab = sampleKnots(knots); let best = -Infinity, at = 1;
+  for (let j = 1; j <= CV_N + 1; j++) { const v = sign * tab[j]; if (v > best + 1e-6) { best = v; at = (j - 1) / CV_N; } }
+  return at >= .9 ? 0 : at;
+}
+// How far past the footprint the impact features reach (px): the secondaries and their chains (5.2 peak distances from the path, a quarter of the width for their own
+// size) take in the ejecta's ragged edge (3.6).
+export const impactReach = q => { if (!impactOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 5.2 * share + .25 - 1); };
+
 // P17: a landform lays talus cones where it raises ground and Gullies cut its faces (the cones' chutes are the gullies' widest valleys).
 export const talusOn = q => (q.talus || 0) > 0 && (q.gullies || 0) > 0 && !(q.combine > 0);
 // The along-the-path knots a landform carries (the elevation's share along the path, 0 to 1.2), flat at 1 until edited.
