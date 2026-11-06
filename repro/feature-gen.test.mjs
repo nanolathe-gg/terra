@@ -38,3 +38,13 @@ test('rocks have no highlight pixels in the shaded lower right', () => {
     for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) { const k = y * r.w + x, d = ((x - cx) * 0.62 + (y - cy) * 0.7) / (r.w * 0.35 + r.h * 0.35); if (r.a[k] && d > 0.45) { const c = r.idx[k]; assert.ok(!(c === 255 || (c >= 81 && c <= 84) || (c >= 64 && c <= 67)), `bright pixel ${c} at ${x},${y}`); } }
   }
 });
+
+test('no grass pixel falls inside a deposit plate', () => {
+  for (const metal of [86, 127, 187, 223]) {
+    const W = 128, g = {w: W, h: W, rgba: new Uint8ClampedArray(W * W * 4)}; for (let i = 0; i < W * W; i++) { g.rgba[i * 4] = 70; g.rgba[i * 4 + 1] = 110; g.rgba[i * 4 + 2] = 40; g.rgba[i * 4 + 3] = 255; }
+    paintDeposit(g, 64, 64, {metal}, 700 + metal, {palette});
+    const isGrass = i => g.rgba[i * 4] === 70 && g.rgba[i * 4 + 1] === 110 && g.rgba[i * 4 + 2] === 40;
+    const isStone = i => { const r = g.rgba[i * 4], gg = g.rgba[i * 4 + 1], b = g.rgba[i * 4 + 2]; return !isGrass(i) && 0.299 * r + 0.587 * gg + 0.114 * b >= 100 && !(gg > r + 8 && gg > b + 8); };
+    for (let y = 2; y < W - 2; y++) for (let x = 2; x < W - 2; x++) { const i = y * W + x; if (isStone(i)) continue; let n = 0; for (const d of [1, -1, W, -W]) if (isStone(i + d)) n++; assert.ok(n < 4, `grass or moss enclosed by a plate at ${x},${y} (metal ${metal})`); }
+  }
+});

@@ -907,7 +907,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
   const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
-  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.8 : 1);
+  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.66 : 1);
   const dom = look === 'cluster' ? clamp(lerp(0.66, 0.86, mt) + (r() - 0.5) * 0.05, 0.62, 0.88) : clamp(0.54 + (r() - 0.5) * 0.06, 0.5, 0.6);
   const small = [0, 0, 0].map(() => 0.5 + r()), ss = small.reduce((a, b) => a + b, 0);
   const areas = [total * dom, ...small.map(v => Math.max(15, total * (1 - dom) * v / ss))];
@@ -953,8 +953,12 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     const ang = Math.atan2(layout[ci][1], layout[ci][0]); px += Math.cos(ang) * 2.5; py += Math.sin(ang) * 2.5;
     }
     { const set = new Set(pts.map(p => p[1] * 4096 + p[0])), out = [];
-      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if ((nb === 4 && !(look === 'cluster' && r() < 0.2)) || (nb < 4 && r() > 0.14)) out.push(p); }
+      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if (nb === 4 || r() > 0.14) out.push(p); }   // interior pixels are always stone: moss belongs only around the plates
       for (const p of pts) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (p[1] + dy) * 4096 + p[0] + dx; if (!set.has(k) && r() < 0.03) { set.add(k); out.push([p[0] + dx, p[1] + dy]); } }
+      { const have = new Set(out.map(p => p[1] * 4096 + p[0]));   // close one-pixel notches so no moss or grass sits inside a plate
+        for (let pass = 0; pass < 2; pass++) { const add = [];
+          for (const p of out) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const x = p[0] + dx, y = p[1] + dy, k = y * 4096 + x; if (have.has(k)) continue; let n = 0; for (const [ex, ey] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (have.has((y + ey) * 4096 + x + ex)) n++; if (n >= 3) { have.add(k); add.push([x, y]); } }
+          out.push(...add); } }
       pts = out; }
     chunks.push(pts);
     const nf = ci === 0 ? 2 + Math.floor(r() * 3) : 2, seeds = [];
@@ -964,26 +968,30 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       const bx = x - ox, by = y - oy; if (bx < 0 || by < 0 || bx >= bw || by >= bh) continue;
       let b = 0, bd = 1e9; seeds.forEach((sd, i) => { const d = Math.hypot(sd.x - x, sd.y - y) + (vnoise(x / 2.5, y / 2.5, seed + ci * 7 + i) - 0.5) * 3; if (d < bd) { bd = d; b = i; } });
       chunkId[by * bw + bx] = ci;
-      const base = [0.8, 0.52, 0.2][seeds[b].cls] + (vnoise(x / 2.2, y / 2.2, seed + 40 + ci) - 0.5) * 0.45, tone = clamp(base + (rn() - 0.5) * 0.3, 0, 1);
-      setGround(ground, x, y, palette[STONE_RAMP[clamp(Math.round(tone * (STONE_RAMP.length - 1) + (rn() + rn() - 1) * 1.6), 0, STONE_RAMP.length - 1)]]);
+      // brushed metal: horizontal streaks (each row has its own tone offset and runs of 3-6 px), a noisier grain, and specular glints in short bright runs
+      const rowOff = (hash2(y, ci + 3, seed) - 0.5) * 0.36 + (hash2(y >> 1, ci + 9, seed) - 0.5) * 0.2, run = vnoise(x / 4.2, y * 7.3 + ci * 13, seed + 40 + ci);
+      const base = [0.74, 0.5, 0.2][seeds[b].cls] + rowOff + (run - 0.5) * 0.6 + (vnoise(x / 2.2, y / 2.2, seed + 50 + ci) - 0.5) * 0.18;
+      let tone = clamp(base + (rn() - 0.5) * 0.22, 0, 1), c = STONE_RAMP[clamp(Math.round(tone * (STONE_RAMP.length - 1) + (rn() + rn() - 1) * 1.3), 0, STONE_RAMP.length - 1)];
+      if (hash2(x >> 2, y, seed + ci * 5 + 11) < 0.075) c = rn() < 0.14 ? 255 : pick(rn, [224, 216, 130, 114, 224]);          // a glint
+      setGround(ground, x, y, palette[c]);
     }
   }
   // moss: one merged patch. The patch covers about stone / 0.15 pixels (retail: stone is 9-18% of the painted pixels), found by growing
   // the halo distance until the area is reached; a 3-6 px feathered rim.
-  const stonePts = chunks.flat(), s1 = (r() * 1e6) | 0, dmap = new Float32Array(bw * bh).fill(99);
+  const stonePts = chunks.flat(), s1 = (r() * 1e6) | 0, dmap = new Float32Array(bw * bh).fill(99), rawD = new Float32Array(bw * bh).fill(99);
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     if (chunkId[y * bw + x] >= 0) { dmap[y * bw + x] = 0; continue; }
     const X = x + ox, Y = y + oy; let d = 99;
     for (const p of stonePts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 40) { const e = Math.hypot(p[0] - X, p[1] - Y); if (e < d) d = e; } }
-    dmap[y * bw + x] = d + (fbm(X / 5, Y / 5, s1, 2) - 0.5) * 5;
+    rawD[y * bw + x] = d; dmap[y * bw + x] = d + (fbm(X / 5, Y / 5, s1, 2) - 0.5) * 5;
   }
   const T = 4.6;   // a tight 3-6 px speckled rim that merges between neighbors (retail: median 2.8-3.6 px from a chunk, 90% within 6-8)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     const k = y * bw + x; if (chunkId[k] >= 0) continue;
-    const d = dmap[k]; if (d > T + 1) continue;
-    const pr = d <= 1.6 ? 0.97 : clamp((T + 1.4 - d) / 3.6, 0, 1) * 0.93;
+    const d = dmap[k], near = rawD[k] <= 2.3; if (d > T + 1 && !near) continue;
+    const pr = near || d <= 2.6 ? 1 : clamp((T + 1.4 - d) / 3.6, 0, 1) * 0.93;   // no grass ever shows inside or against a plate
     if (rn() > pr) continue;
-    const X = x + ox, Y = y + oy, base = getGround(ground, X, Y), m = palette[weighted(rn, MOSS_WEIGHTS)], tint = 0.12 + 0.12 * rn();
+    const X = x + ox, Y = y + oy, base = getGround(ground, X, Y), m = palette[weighted(rn, MOSS_WEIGHTS)], tint = 0.05 + 0.07 * rn();
     setGround(ground, X, Y, palette[q(lerp(m[0], base[0] * 0.5, tint), lerp(m[1], base[1] * 0.5, tint), lerp(m[2], base[2] * 0.5, tint))]);
   }
   return { cx, cy, metal: P.metal, look, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
