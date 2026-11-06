@@ -10,6 +10,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
+import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {applyRiver,isRiver,pointsSignature,RIVER_MIN_WIDTH} from './sculpt-river.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -1144,7 +1145,7 @@ const sculptRegion={
   setViewFocus:v=>regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing}),
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
-  sketch,loadSketch:(s,id)=>loadSketchFile(s,false,id),maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
+  sketch,loadSketch:s=>loadSketchFile(s,false),maskKeys:MASK_KEYS,stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuTransientBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:(commit=true)=>endRegionalStroke(commit,$('simplify-strokes').checked),beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
@@ -1481,7 +1482,8 @@ async function takePendingSketch(token) {
     return data?.format==='nanolathe-sketch-handoff' && data.token===token?data.sketch:null;
   } catch (_) { return null; }
 }
-async function loadSketchFile(s,commit=true,documentId=null) {
+let leavingForWorld=false,openingShared=false;   // set while a load hands the map to another world's page; the second marks a shared map
+async function loadSketchFile(s,commit=true) {
   if(!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || !Array.isArray(s.nodes) || s.nodes.some(n=>!n || n.kind==='raster'))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
@@ -1500,7 +1502,8 @@ async function loadSketchFile(s,commit=true,documentId=null) {
     try { await stashPendingSketch(token,s); }
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
-    goToWorld(biome,null,{pendingSketch:token,variant,document:documentId,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    leavingForWorld=true;
+    goToWorld(biome,null,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
     return false;
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
@@ -1599,6 +1602,67 @@ $('file').addEventListener('change',async () => {
   try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
+// Share link: the save, gzipped the same way every time, goes to the save-link service; the link is this page with ?map=<id>.
+// Opening such a link keeps the visitor's own map in the one "previous map" slot first, and offers to bring it back.
+const shareMessage=text => { $('share-message').textContent=text; };
+function showPrevious() { $('share-previous').hidden=takePrevious(localStorage)===null; }
+$('share-menu').addEventListener('toggle',async () => {
+  if (!$('share-menu').open) return;
+  showPrevious();
+  if (shareOpenedByLoad) { shareOpenedByLoad=false; return; }
+  $('share-result').hidden=true;
+  const service=mapsService(services);
+  if (!service.url) { shareMessage(service.reason); return; }
+  if (!ready || loading || stroke) { shareMessage('The map is still loading. Try again in a moment.'); return; }
+  shareMessage('Making your link…');
+  try {
+    const id=await postMap(service.url,await gzipText(shareText(sketch())));
+    $('share-url').value=shareUrl(location.href,id); $('share-result').hidden=false;
+    shareMessage('Anyone with this link opens a copy of your map. Later edits are not included.');
+    $('share-url').select();
+  } catch (err) { shareMessage(err.message); }
+});
+let shareOpenedByLoad=false;
+$('share-copy').addEventListener('click',async () => {
+  $('share-url').select();
+  try { await navigator.clipboard.writeText($('share-url').value); shareMessage('Link copied.'); } catch (_) { shareMessage('Press Ctrl+C (Cmd+C on a Mac) to copy the selected link.'); }
+});
+$('share-restore').addEventListener('click',async () => {
+  const text=takePrevious(localStorage); if (text===null || stroke || loading) return;
+  loading=true; $('editor').disabled=true;
+  try {
+    const previous=JSON.parse(text);
+    dropPrevious(localStorage);
+    leavingForWorld=false;
+    const done=await loadSketchFile(previous);
+    if (done) { showPrevious(); shareMessage('Your previous map is back.'); }
+    else if (!leavingForWorld) keepPrevious(localStorage,text);   // the load failed: the slot stays
+  } catch (err) { keepPrevious(localStorage,text); error(err.message); }
+  finally { loading=false; $('editor').disabled=false; updateControls(); }
+});
+function announceShared() {
+  status('Opened a shared map.'); shareMessage('Opened a shared map.'); showPrevious();
+  if (!$('share-previous').hidden) { shareOpenedByLoad=true; $('share-menu').open=true; }
+}
+// Called once the editor is ready: a ?map=<id> address opens that shared map.
+async function openSharedMap() {
+  const id=mapIdFromSearch(location.search); if (id===null || experiment.has('pendingSketch')) return;
+  const service=mapsService(services);
+  if (!service.url) { error(service.reason); return; }
+  loading=true; $('editor').disabled=true;
+  try {
+    status('Opening the shared map…');
+    const shared=await getMap(service.url,id);
+    if (nodes.some(n => n.kind!=='ground')) keepPrevious(localStorage,JSON.stringify(workingCopy()));   // the visitor's own map, before it is replaced
+    openingShared=true; leavingForWorld=false;
+    const opened=await loadSketchFile(shared); openingShared=false;
+    if (opened) {
+      window.history.replaceState(null,'',withoutMap(location.href));
+      announceShared(); persistLater();
+    }
+  } catch (err) { error(err.message); }
+  finally { loading=false; $('editor').disabled=false; updateControls(); }
+}
 $('export').addEventListener('click',async () => {
   if (!canExport()) return;
   try { await mapCanvas.idle(); canvas.toBlob(blob => { if (blob) download(blob,'terrain-view.png'); else error('PNG export is unavailable for this view.'); },'image/png'); }
@@ -1736,7 +1800,7 @@ function editColumn(value){
   if(JSON.stringify(next)===JSON.stringify(columnOverride))return;
   restoreColumn(next);columnEditing=true;schedule();queueWeather();persistLater();
 }
-function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();mapCanvas.saveDocument().catch(()=>{});}
+function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}
 function defaultColor(key) {
   const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
   const m=renderer.means,w=config.water||{},mat=config.material||{};
@@ -1941,10 +2005,11 @@ async function bootMap() {
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   const pending=await takePendingSketch(experiment.get('pendingSketch'));
-  if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
+  if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); if (experiment.get('shared')) { window.history.replaceState(null,'',(u => (u.searchParams.delete('shared'),u.toString()))(new URL(location.href))); announceShared(); } } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
   $('one').click();   // every page load starts at 1x, centered on the map
+  await openSharedMap();
 }
 async function boot() {
   try {

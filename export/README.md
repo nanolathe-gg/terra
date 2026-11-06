@@ -59,8 +59,16 @@ distance, with the lowest index winning ties. There is no noise or dithering.
 Only exact indexed 32×32 tiles are shared. Unique tiles are numbered by their
 first appearance in the complete row-major tile grid, so changing chunk
 dimensions, the browser's GPU budget or the exporter's spill budget does not
-change TNT bytes. More than 65536 unique tiles is refused cleanly; phase 3
-does not merge or approximate tiles. The 252×252 minimap follows
+change TNT bytes. A map with at most 65536 unique tiles is exact. With more,
+the exporter merges tiles before numbering them (`merge.go`): weighted median
+cut over each tile's 8x8 grid of mean palette colors (one per 4x4 pixel block), at most 65536 clusters,
+each drawn with its member nearest the cluster centroid. A tile used by many
+slots resists merging, one-off grit merges first, and the result is
+deterministic. The export result then carries a `merge` object (distinct tiles
+before, kept, merged, slots changed, mean, 99th percentile and worst per-tile
+RMS RGB error, the worst slots, milliseconds); `uniqueTiles` is the count before
+merging. A map under the limit never reaches this code and exports the same
+bytes as before. The 252×252 minimap follows
 `research/formats/tnt.md` "Minimap": fit the play area to its long side and
 fill the unused short axis with palette index `0x64`. Each used pixel averages
 all indexed-art RGB values in its source block. Blocks use truncated integer
@@ -185,26 +193,3 @@ JSON commands on stdin: `{op:"chunk",x,y,width,height,path:"local.png"}`,
 `{op:"finish"}` or `{op:"cancel"}`. Each chunk gets one progress reply;
 finish gets one result. EOF cancels an unfinished export. `--work` is optional
 and otherwise temporary files use the OS temporary directory.
-
-## Incremental server documents
-
-`MapDocument` stores authored documents below `<assets-root>/documents/`.
-
-- `PUT /map-document?id=ID` takes the raw JSON metadata object: the stroke
-  graph, feature placements, starts, OTA settings and sparse chunk references.
-  `GET` returns `{id,document,revision,chunks:[{key,bytes,sha256}]}`.
-- `PUT /map-document/chunk?id=ID&key=KEY` saves opaque field-plane bytes
-  independently (32 MiB maximum). The reply is
-  `{id,key,bytes,sha256,changed,revision}`. Saving identical bytes leaves the
-  chunk file and revision untouched. `GET` streams those bytes and supplies
-  their SHA-256 as an ETag.
-- `DELETE /map-document/chunk?id=ID&key=KEY` removes one chunk;
-  `DELETE /map-document?id=ID` removes the metadata and its referenced chunks.
-
-Ids and keys are 1–128 ASCII letters, digits, underscores, hyphens or single
-dots, beginning with a letter, digit, underscore or hyphen. Path separators
-and `..` are refused. Metadata and changed chunks are fsynced and replaced
-atomically. Content-addressed chunk filenames let a metadata replacement
-switch versions without exposing a partially written chunk. Upload field
-chunks before metadata that references them. Reload reads the stored graph
-and chunk bytes; it does not require a full-map field blob.

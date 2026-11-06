@@ -4,6 +4,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js',)}
+    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -870,7 +871,6 @@ def world_configs(biomes):
 STATIC_SERVICES = {
     'export': 'Export needs the map exporter and the installed game content, which the online editor does not have. Run the editor locally with sculpt.py to export a playable map.',
     'features': 'The retail feature catalog is not part of the online editor, so no features can be placed. Run the editor locally with sculpt.py to place them.',
-    'documents': 'The online editor has no server to save to. Use Save and Load to keep a map recipe as a file.',
 }
 
 
@@ -884,10 +884,14 @@ def site_data(biomes, configs, catalogue, services):
     return {name: json.dumps(data).encode() for name, data in files.items()}
 
 
-def build_site(out, biomes, configs, catalogue):
+MAPS_URL = 'https://terraform-savelinks.danielgtaylor.workers.dev/maps'   # the live save-link Worker's maps endpoint (deploy/worker/)
+
+
+def build_site(out, biomes, configs, catalogue, maps_url=MAPS_URL):
     """Write the static site: out/index.html (opens the current build) and out/b/<content hash>/ (the page, its sources, the worlds' tables,
     ui-previews/ and the generated files). A build folder never changes once written, so a deploy cannot mix new scripts with cached old shaders."""
-    services = {'defaultWorld': biomes[0], 'worlds': biomes, **{name: {'available': False, 'reason': reason} for name, reason in STATIC_SERVICES.items()}}
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, **{name: {'available': False, 'reason': reason} for name, reason in STATIC_SERVICES.items()},
+                'maps': {'available': True, 'url': maps_url}}
     files = {name: path.read_bytes() for name, path in SOURCES.items()}
     for leaf in sorted((HERE / 'ui-previews').iterdir()):
         if leaf.suffix in ('.png', '.json'):
@@ -915,11 +919,12 @@ def main():
     parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert,crystal,ice',
                         help='comma-separated biomes to serve; the first is the default world')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
-                        help='where exports, saved documents and the map and feature catalogues live; the worlds themselves need nothing here')
+                        help='where exports, save links and the map and feature catalogues live; the worlds themselves need nothing here')
     parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export)')
     parser.add_argument('--feature-tool', type=Path, help='Card D feature catalogue binary (default <assets-root>/bin/map-features)')
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
     parser.add_argument('--prepared', action='store_true', help='read the saved map-catalog.json and feature catalogues in the assets root instead of the retail sources (BUNDLE.md); worlds never read retail sources')
+    parser.add_argument('--maps-url', default=os.environ.get('TERRAFORM_MAPS_URL') or MAPS_URL, help='with --build-site: the save-link service the static page uses (default: $TERRAFORM_MAPS_URL, else the live Worker)')
     parser.add_argument('--build-site', type=Path, metavar='DIR', help='write the static site into DIR (index.html and b/<version>/) and exit; serve it with any static host')
     args = parser.parse_args()
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
@@ -928,15 +933,13 @@ def main():
     # A world has features to offer when its catalogue is saved (prepared) or the helper that makes it is built.
     features_installed = lambda world: (args.assets_root / 'features' / world / 'catalog.json').is_file() or (not args.prepared and feature_tool.is_file())
     if args.build_site:
-        print(build_site(args.build_site, biomes, configs, catalogue))
+        print(build_site(args.build_site, biomes, configs, catalogue, args.maps_url))
         return
     from sculpt_export import MapExport
-    from sculpt_document import MapDocument
     map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
-    map_document = MapDocument(args.assets_root / 'documents')
     from sculpt_maps import SavedMaps
     saved_maps = SavedMaps(args.assets_root)
-    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'export': {'available': True}, 'features': {'available': True}, 'documents': {'available': True}}
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'export': {'available': True}, 'features': {'available': True}, 'maps': {'available': True, 'url': 'api/maps'}}
     generated = site_data(biomes, configs, catalogue, services)
 
     class Handler(BaseHTTPRequestHandler):
@@ -950,7 +953,7 @@ def main():
                 map_export.reply(self, {'world': parts[2], 'features': [], 'unavailable': 'This server has no feature catalogue installed, so no features can be placed; start positions remain editable.'})
                 return
             try:
-                if map_document.get(self, self.path) or map_export.get(self, self.path):
+                if map_export.get(self, self.path):
                     return
             except (OSError, ValueError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)
@@ -997,16 +1000,9 @@ def main():
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)
 
-        def do_PUT(self):
-            try:
-                if not map_document.put(self, self.path):
-                    self.send_error(404)
-            except (OSError, ValueError, KeyError, TypeError) as err:
-                map_export.reply(self, {'error': str(err)}, 400)
-
         def do_DELETE(self):
             try:
-                if not map_document.delete(self, self.path) and not map_export.delete(self, self.path):
+                if not map_export.delete(self, self.path):
                     self.send_error(404)
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)

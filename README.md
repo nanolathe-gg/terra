@@ -162,13 +162,11 @@ and tile coordinates, so cache size and renderer chunk boundaries do not change
 the result. Weather is lazy in the view; exports await it for both art and TNT
 corner heights. Field, weather and upload reservations share the page budget.
 
-**Save to server** writes graph/settings/objects and changed sparse mask chunks
-under `<assets-root>/documents/documents/<id>/`; **Reload document** restores that
-world/size/sea canvas. Field chunks use stable coordinate keys. Stored flow planes use immutable
-content keys and bounded encoded chunks; the recipe is published last so an
-interrupted save leaves its previous flow bake readable. Reload and sketch
-import check decoded bake memory before allocating it. Sketch files remain an
-alternative to server documents.
+**Share link** gzips the save (a fixed header, so the same map is the same link), posts it to the
+save-link service (`maps` in `services.json`: `/api/maps` here, the Worker in `deploy/worker/` for the
+static build) and shows `?map=<id>`. Opening such a link keeps your own map in one "previous map"
+slot and offers to restore it. The working copy autosaves in the browser; **Save** and **Load**
+write and read a file.
 
 Export streams one tile-aligned PNG at a time to the helper. The helper keeps
 hashes, tile indices and attributes in memory, spills tile bytes under its own

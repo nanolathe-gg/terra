@@ -878,17 +878,6 @@ export function createGpuFields(opts) {
     replayDetail: () => Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     stats, active: () => true,
-    maskChunks: () => {
-      if (!planes || !valid) return [];
-      const out = [], T = 256;
-      for (let ty = 0; ty < worldGrid; ty += T) for (let tx = 0; tx < worldGrid; tx += T) {
-        const r = {x0: tx, y0: ty, x1: Math.min(tx + T, worldGrid) - 1, y1: Math.min(ty + T, worldGrid) - 1}, c = crop({x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1});
-        if (!maskKeys.some(k => c.fields[k].some(v => v !== 0))) continue;
-        out.push({key: [r.x0, r.y0, r.x1, r.y1].join('_'), rect: c.rect, gridWidth: c.gridWidth, gridHeight: c.gridHeight, gridOrigin: c.gridOrigin, gridSpacing: spacing, revision, version: revision,
-          planes: maskKeys.map(k => c.fields[k]), masks: Object.fromEntries(maskKeys.map(k => [k, c.fields[k]]))});
-      }
-      return out;
-    },
     planes: () => planes, engine: () => engine,
     // H6b: the engine's whole-map buffers (the h p r c v x planes, the packed masks) for the passes that read them in place. Await ready() first.
     gpuBuffers: () => gpuValid && engine ? {planes: engine.planes, masks: engine.masks, grid: worldGrid, spacing, revision: submittedRevision} : null,
@@ -1334,18 +1323,6 @@ export function createPagedFields(opts) {
     replayDetail: () => Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }, subscribeSubmit(fn) { submitListeners.add(fn); return () => submitListeners.delete(fn); },
     stats, active: () => true,
-    maskChunks: async () => {
-      const out = [], T = 256;
-      for (let ty = 0; ty < worldGrid; ty += T) for (let tx = 0; tx < worldGrid; tx += T) {
-        // Saving scans the map, including pages far outside the camera. Yield
-        // between reads so it cannot evict the visible working set mid-fill.
-        while (foregroundPending()) await new Promise(r => setTimeout(r, 50));
-        const r = {x0: tx, y0: ty, x1: Math.min(tx + T, worldGrid) - 1, y1: Math.min(ty + T, worldGrid) - 1}, c = await readRect(r, {weather: false});
-        if (!maskKeys.some(k => c.fields[k].some(v => v !== 0))) continue;
-        out.push({key: [r.x0, r.y0, r.x1, r.y1].join('_'), rect: c.rect, gridWidth: c.gridWidth, gridHeight: c.gridHeight, gridOrigin: c.gridOrigin, gridSpacing: spacing, revision, version: revision, planes: maskKeys.map(k => c.fields[k]), masks: Object.fromEntries(maskKeys.map(k => [k, c.fields[k]]))});
-      }
-      return out;
-    },
     planes: () => null, engine: () => engine, gpuBuffers: () => null,
     gpuReady: () => Promise.resolve(), gpuQuiet: () => Promise.resolve(), gpuPending: () => false,
     settle,

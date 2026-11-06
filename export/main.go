@@ -58,6 +58,7 @@ type exportResult struct {
 	WidthCells    int           `json:"widthCells"`
 	HeightCells   int           `json:"heightCells"`
 	UniqueTiles   int           `json:"uniqueTiles"`
+	Merge         *mergeSummary `json:"merge,omitempty"`
 	TileSlots     int           `json:"tileSlots"`
 	ExactPixels   int           `json:"exactPixels"`
 	NearestPixels int           `json:"nearestPixels"`

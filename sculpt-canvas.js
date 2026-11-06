@@ -9,8 +9,6 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
 const intersects=(a,b)=>a.x<b.x+b.width && b.x<a.x+a.width && a.y<b.y+b.height && b.y<a.y+a.height;
 const number=(q,key,fallback,min,max)=>clamp(Number(q.get(key))||fallback,min,max);
-function hash(bytes) { let h=2166136261; for (const b of bytes) h=Math.imul(h^b,16777619); return (h>>>0).toString(16); }
-async function json(url,options={}) { const response=await fetch(url,options),data=await response.json(); if (!response.ok) throw new Error(data.error||`Request failed (${response.status})`); return data; }
 
 // The DOM scroll area describes the whole map; both displayed canvases cover
 // only the viewport. Full-resolution chunk images are expendable cache entries.
@@ -43,19 +41,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const navigationDelay=180;
   const navigating=()=>Boolean(pan||navigationPointer!==null||navigationTimer!==null);
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let heldSince=null,pan=null,space=false,gesture=null,hover=null,pointerTurn=true,optionsKey='',saveTimer=null,saving=false,documentLoading=false,saveAgain=false,lastMetadata='',docId=query.get('document')||'map-'+crypto.randomUUID();
+  let heldSince=null,pan=null,space=false,gesture=null,hover=null,pointerTurn=true,optionsKey='';
   let hoveredNode=-1;
-  let maskVersions=new Map(),lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
+  let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(128,128),cg=coarse.getContext('2d');
   const panel=document.createElement('section'); panel.className='section files';
   panel.innerHTML=`<h3>Memory budgets</h3><label class="control" style="display:block">Terrain GPU budget (MiB)<input data-gpu type="number" min="128" max="4096" step="128" value="${gpuBudget/MB}"></label><label class="control" style="display:block">Page heap budget (MiB)<input data-heap type="number" min="128" max="8192" step="128" value="${heapBudget/MB}"></label><p class="small" data-memory></p><p class="small" data-drainage></p>`;
   $('graphics-host').append(panel);
   $('minimap-host').innerHTML='<canvas data-nav width="200" height="200" tabindex="0" aria-label="Minimap: drag to pan, or use arrow keys"></canvas>';
-  const documentHost=$('document-controls');
-  documentHost.innerHTML='<label>Server document<input data-document aria-label="Server document name"></label><div class="row"><button data-save disabled>Save to server</button><button data-load disabled>Reload</button></div><p class="small" data-save-state>Changes save incrementally on this local server.</p>';
   const find=s=>document.querySelector(s),navigatorCanvas=find('[data-nav]'),ng=navigatorCanvas.getContext('2d');
-  find('[data-document]').value=docId;
-  if (config.services?.documents?.available===false) find('[data-save-state]').textContent=config.services.documents.reason;
   function state() { return {x:viewport.scrollLeft/(scale||1),y:viewport.scrollTop/(scale||1),width:canvas.width/(scale||1),height:canvas.height/(scale||1),scale,overview}; }
   const sourceSample=api.sample;
   function heightSample(x,y){for(const e of cache.values()){const r=e.heightPatch;if(e.weathered===weatheredView&&r&&x>=r.gridOrigin[0]&&y>=r.gridOrigin[1]&&x<=r.gridOrigin[0]+(r.gridWidth-1)*r.gridSpacing&&y<=r.gridOrigin[1]+(r.gridHeight-1)*r.gridSpacing)return sampleField(r,x,y);}return null;}
@@ -260,7 +254,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(drawing){if(paintedView!==viewEpoch)presentView();rerun=true;return;}
       presentView();
       drawing=rendering=true;
-      updateDocumentControls();
       const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
       // H7 2b: while the Time pass is running, a bake would read the unweathered height and be redone when the weather lands.
       // The pass is submitted first (it starts with the edit) and chunks wait for it, for at most 8 s so a failed pass cannot hide the map.
@@ -450,7 +443,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     preview(event);refreshHover(event);if(gesture?.id===event.pointerId)schedule();overlays();
   });
   overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
-  const end=event=>{if(pan?.id===event.pointerId){pan=null;navigationChanged();}if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();queueSave();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
+  const end=event=>{if(pan?.id===event.pointerId){pan=null;navigationChanged();}if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
   document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture){event.preventDefault();end({pointerId:gesture.id,type:'pointercancel'});}});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
   window.addEventListener('blur',()=>{space=false;pan=null;navigationPointer=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});schedule();});
@@ -472,44 +465,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     await idle();const size=chunkSize(),total=Math.ceil(map.width/size)*Math.ceil(map.height/size);let index=0;
     for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height);tile.getContext('2d').drawImage(entry.bitmap,0,0);entry.bitmap.close?.();const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
-  function updateDocumentControls(){const locked=config.services?.documents?.available===false||!api.ready()||busy||documentLoading||Boolean(gesture);find('[data-save]').disabled=locked||saving;find('[data-load]').disabled=locked||saving;find('[data-document]').disabled=locked||saving;}
-  async function saveDocument() {
-    if(!api.ready()||busy||gesture||documentLoading){find('[data-save-state]').textContent='Wait for the editor to finish loading or editing.';return;}
-    if(saving){saveAgain=true;return;}saving=true;updateDocumentControls();find('[data-save-state]').textContent='Saving to server…';
-    try {
-      const id=find('[data-document]').value.trim();if(!/^[A-Za-z0-9_-]{1,100}$/.test(id))throw new Error('Use letters, numbers, hyphens and underscores for the document name.');if(id!==docId){docId=id;maskVersions.clear();lastMetadata='';}
-      const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
-      const sketch=api.sketch(),body={format:'nanolathe-map-document',version:1,sketch,mapData:api.mapData(),map,biome:config.biomeId,seaLevel:config.seaLevel};
-      const chunks=(await api.maskChunks?.())||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
-      const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
-      find('[data-save-state]').textContent='Saved to server · '+id;
-    }catch(err){find('[data-save-state]').textContent=err.message;throw err;}finally{saving=false;updateDocumentControls();if(saveAgain){saveAgain=false;queueSave();}}
-  }
-  async function loadDocument() {
-    if(!api.ready()||busy||gesture||documentLoading)throw new Error('Wait for the editor to finish loading or editing.');
-    documentLoading=true;updateDocumentControls();
-    try {
-    clearTimeout(saveTimer);while(saving)await tick();clearTimeout(saveTimer);
-    const id=find('[data-document]').value.trim(),data=await json('map-document?'+new URLSearchParams({id}));
-    const documentData=data.document??data.metadata??data;
-    if(documentData.biome!==config.biomeId||documentData.map?.unitsX!==map.unitsX||documentData.map?.unitsY!==map.unitsY||documentData.seaLevel!==config.seaLevel)throw new Error('Open a canvas with the document’s world, dimensions and sea level before loading it.');
-    const sketch=documentData.sketch;
-    if(await api.loadSketch(sketch,id)===false)return;api.restoreMapData(documentData.mapData);api.checkpoint();docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
-    }finally{documentLoading=false;updateDocumentControls();}
-  }
-  function queueSave(){clearTimeout(saveTimer);if(config.services?.documents?.available===false||gesture||busy||documentLoading)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
-  find('[data-save]').onclick=()=>saveDocument().catch(()=>{});find('[data-load]').onclick=()=>loadDocument().catch(err=>{find('[data-save-state]').textContent=err.message;});
   // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
   const invalidate=change=>clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
-  api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);queueSave();});
-  function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;find('[data-load]').disabled=on||saving;if(!on){if(resizePending)resize();else schedule();}}
-  features=await mountMapFeatures({config,host:$('feature-tool-host'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();queueSave();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
-  metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();queueSave();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
+  api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
+  function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
+  features=await mountMapFeatures({config,host:$('feature-tool-host'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
+  metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   function minimumBytes(){const size=canonicalSize,e=renderer.estimate(renderer.requiredRegion({x:Math.floor(renderer.size/2),y:Math.floor(renderer.size/2),width:size,height:size}),size,size,api.maskKeys?.length);return fixedGPU(false)+size*size*8+e.retainedBytes+e.workingBytes+8*MB;}
-  const result={renderer,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,saveDocument,loadDocument,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),seq:e.seq,scale:e.scale,input:e.input}))};
+  const result={renderer,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),seq:e.seq,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

@@ -58,7 +58,7 @@ func (s *tileStore) append(tile []byte) error {
 	return nil
 }
 
-func (s *tileStore) read(index uint16, out []byte) error {
+func (s *tileStore) read(index uint32, out []byte) error {
 	at := int(index) * 1024
 	if at+1024 <= len(s.memory) {
 		copy(out, s.memory[at:at+1024])
@@ -88,13 +88,15 @@ type terrainStream struct {
 	heights        []byte
 	features       []uint16
 	names          []string
-	indices        []uint16
+	indices        []uint32 // per tile slot: the distinct tile's number in order of discovery, until finish renumbers it
 	covered        []uint64
 	received       int
 	lastX, lastY   int
-	hashes         map[[32]byte][]uint16
+	hashes         map[[32]byte][]uint32
 	store          tileStore
-	order          []uint16
+	order          []uint32
+	tileLimit      int
+	merge          *mergeSummary
 	quantize       *quantizer
 	palette        [256][3]byte
 	mini           [252 * 252][4]uint64
@@ -133,7 +135,7 @@ func newTerrainStream(ctx context.Context, req exportRequest, catalog catalog, o
 	}
 	req.Heights, req.Chunks = nil, nil
 	s := &terrainStream{ctx: ctx, req: req, world: world, starts: starts, width: w, height: h, heights: heights, features: features, names: names,
-		indices: make([]uint16, (w/2)*(h/2)), covered: make([]uint64, ((w/2)*(h/2)+63)/64), hashes: make(map[[32]byte][]uint16),
+		indices: make([]uint32, (w/2)*(h/2)), covered: make([]uint64, ((w/2)*(h/2)+63)/64), hashes: make(map[[32]byte][]uint32), tileLimit: maxTiles,
 		store: tileStore{budget: tileBudget, dir: work}, quantize: newQuantizer(catalog.Palette), palette: catalog.Palette,
 		out: out, work: work, begin: time.Now(), lastX: -1, lastY: -1}
 	// [fmt tnt] "Minimap": long-side fit of the play area, excluding
@@ -215,7 +217,7 @@ func (s *terrainStream) add(chunk preparedChunk) error {
 				}
 			}
 			hash := sha256.Sum256(tile[:])
-			var index uint16
+			var index uint32
 			found := false
 			for _, candidate := range s.hashes[hash] {
 				if err := s.store.read(candidate, compare[:]); err != nil {
@@ -227,10 +229,8 @@ func (s *terrainStream) add(chunk preparedChunk) error {
 				}
 			}
 			if !found {
-				if s.store.count >= 1<<16 {
-					return fmt.Errorf("more than 65536 distinct tiles cannot fit TNT's u16 tile indices; exact export stopped (tile merging belongs to phase 4)")
-				}
-				index = uint16(s.store.count)
+				// Past the u16 limit the tiles keep coming; finish merges them (merge.go).
+				index = uint32(s.store.count)
 				if err := s.store.append(tile[:]); err != nil {
 					return err
 				}
@@ -324,7 +324,7 @@ func runStream(ctx context.Context, req exportRequest, catalog catalog, out, wor
 		case "chunk":
 			err = s.add(preparedChunk{chunk: chunk{X: command.X, Y: command.Y, Path: command.Path}, Width: command.Width, Height: command.Height})
 			if err == nil {
-				err = encoder.Encode(map[string]any{"receivedTiles": s.received, "totalTiles": len(s.indices), "uniqueTiles": s.store.count})
+				err = encoder.Encode(map[string]any{"receivedTiles": s.received, "totalTiles": len(s.indices), "uniqueTiles": s.store.count, "tileLimit": s.tileLimit})
 			}
 		case "finish":
 			var result *exportResult
