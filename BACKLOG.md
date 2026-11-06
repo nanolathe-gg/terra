@@ -227,8 +227,7 @@ branches and the projection fix below, so re-render before judging.
 11. **Every control does something, or says why not.** A card that adds,
     moves, merges or removes a control, a requirement line or a table
     default runs `node measure/world_controls.mjs --out <dir>` before the
-    hand-off, next to `measure/shape_controls.mjs`: it starts its own
-    audit host (`repro/audit/server.py`) and `--jobs` browsers, moves every
+    hand-off, next to `measure/shape_controls.mjs`: it moves every
     row the panel shows enabled in each of the nine worlds, every stroke
     option on each kind that shows it and the visible page sliders from
     low to high on fixtures that hold the features, and exits 1 on an
@@ -244,7 +243,10 @@ branches and the projection fix below, so re-render before judging.
     or dead and removed whole. There is no `OPEN` list (H25 removed it): a
     reading of 0 is settled one of those ways, or on `ALLOWED`, or it fails
     the sweep.
-    About 22 minutes with three browsers.
+    It runs under Node on Dawn by default, about 70 s per world (measured
+    on desert and ice). `--chrome --audit-port <yours>` sweeps the page
+    instead, through its own audit host (`repro/audit/server.py`) and
+    `--jobs` browsers, and also checks the panel's own rows.
 
 ## Card A: editor correctness (no visual judgement)
 
