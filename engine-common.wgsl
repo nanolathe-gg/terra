@@ -17,6 +17,7 @@ struct Uniforms {
     size: f32,
     base: f32,
     sea: f32,
+    pool: f32,             // card tilepool: level ground repeats every pool px (a multiple of 512), so its 32-px tiles come from (pool / 32)^2
     materialWeathering: f32,
     materialReady: i32,
     rockyCoasts: i32,
@@ -123,6 +124,7 @@ struct Uniforms {
     shallowLayer: i32,
     groundLayer: i32,      // H14b: the generated layer that is the plain's quilted image, or -1 (the plain is the sampled image or the tiles)
     groundTiles: i32,
+    tileShift: f32,        // the export's TNT tile grid starts this many screen rows down: floor(base height / 2), the TA projection's offset (sculpt-chunk-renderer.js requiredRegion)
     sandGrain: f32,
     // Bake (relief-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
@@ -404,6 +406,60 @@ fn valueNoise(q: vec2f) -> f32 {
     let e = cellHash(c + vec2f(1.0, 1.0)).x;
     return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
 }
+
+// Card tilepool: TA stores a map's art as 32-px tiles and can index 65,536 of them; retail maps use a few thousand, because level
+// ground repeats its tiles. Here level ground repeats with the world's pool period (u.pool px, a multiple of 512, so the 512-px noise
+// texture repeats with it): the fine detail a plain carries (lumps, grain and specks, cover patches, plants, the dither) is hashed on
+// lattices whose coordinates wrap with the period, so a level plain is made of (pool / 32)^2 tiles at most and joins without seams
+// (the pattern is continuous; it only repeats). A lattice of spacing s px has poolCells(s) cells a period, so s is rounded to
+// pool / poolCells(s).
+fn poolCells(s: f32) -> f32 { return max(1.0, round(u.pool / s)); }
+fn poolWrap(c: vec2f, n: f32) -> vec2f { return c - n * floor(c / n); }
+// The position within its period. The fields of level ground are evaluated here rather than at p: p and p + pool then give the same
+// numbers to the last bit (p * s at a map's coordinates rounds differently a period apart, which flipped plants and palette pixels).
+fn poolPos(p: vec2f) -> vec2f { return p - u.pool * floor(p / u.pool); }
+// The pixel's lattice coordinate (1 px cells), wrapped: the per-pixel hashes of level ground read it in place of floor(p).
+fn poolPixel(p: vec2f) -> vec2f { return poolWrap(floor(p), u.pool); }
+// A pseudo-random permutation of 0..n-1: a bijection on the next power of two (odd multiplies, xor-shifts and a key), walked until it
+// lands below n.
+fn poolPerm(x: u32, n: u32, key: u32) -> u32 {
+    let bits = firstLeadingBit(max(n, 2u) - 1u) + 1u;
+    let mask = (1u << bits) - 1u;
+    let half = max(1u, bits / 2u);
+    var v = x;
+    for (var k = 0; k < 24; k++) {
+        v = (v * 0x2c1b3c6du + key) & mask; v ^= v >> half; v = (v * 0x297a2d39u) & mask; v ^= v >> half;
+        if (v < n) { break; }
+    }
+    return min(v, n - 1u);
+}
+// A cell's index on a lattice of n cells a period: a Latin square, so every row and every column of the period holds each of the n
+// indices once. Scattered features drawn from it (the plants, the flowers' dots) come in the same numbers in every row and column of a
+// repeat; hashed by the cell, their chance excesses stacked into stripes a period apart at overview. salt keeps two lattices apart.
+fn poolIndex(c: vec2f, n: f32, salt: u32) -> u32 {
+    let w = vec2u(poolWrap(c, n));
+    let m = u32(n);
+    return (w.x + poolPerm(w.y, m, salt ^ 0x2b7du)) % m;   // row j turned by a shuffled offset; what is drawn from it hashes the index
+}
+// Anything drawn from a cell's Latin index alone (a scattered feature's place, size, tone, whether it is there) comes in the same
+// numbers in every row and column of a repeat: a hash of the index stands in for a hash of the cell.
+fn poolCellHash(c: vec2f, n: f32, salt: u32) -> vec2f { return cellHash(vec2f(f32(poolIndex(c, n, salt)), f32(salt & 0xffffu))); }
+// valueNoise on a lattice of n cells a period (q in cells). Its lattice is hashed, not balanced: the noise fields' share of the banding
+// at overview was small (modern Green's row range 0.77 -> 0.73 balanced) and a balanced lattice cost the relief bake a fifth more.
+fn wrapNoise(q: vec2f, n: f32) -> f32 {
+    let c = floor(q);
+    let f = fract(q);
+    let fade = f * f * (3.0 - 2.0 * f);
+    let a = cellHash(poolWrap(c, n)).x;
+    let b = cellHash(poolWrap(c + vec2f(1.0, 0.0), n)).x;
+    let d = cellHash(poolWrap(c + vec2f(0.0, 1.0), n)).x;
+    let e = cellHash(poolWrap(c + vec2f(1.0, 1.0), n)).x;
+    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+// valueNoise(p / s + o) with the period's lattice: the same field at a scale rounded to a divisor of the period.
+fn poolNoise(p: vec2f, s: f32, o: f32) -> f32 { let n = poolCells(s); return wrapNoise(poolPos(p) * (n / u.pool) + o, n); }
+// A terrainNoise(p * m) frequency rounded so that the 512-px noise texture repeats with the pool.
+fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * k)) / k; }
 
 // H2 rock column: the bed coordinate, in height units, at world point p for a
 // rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both
@@ -772,7 +828,7 @@ fn surfaceHeight(p: vec2f) -> f32 {
 }
 
 fn surfaceGradient(p: vec2f) -> vec2f {
-    const e = 1.4;
+    const e = 1.40625;   // 90/64 px: on a position held to 1/64 px (engine-frag.wgsl) the taps stay exact at any map size (card tilepool)
     return vec2f(surfaceHeight(p + vec2f(e, 0.0)) - surfaceHeight(p - vec2f(e, 0.0)),
                  surfaceHeight(p + vec2f(0.0, e)) - surfaceHeight(p - vec2f(0.0, e))) / (2.0 * e);
 }

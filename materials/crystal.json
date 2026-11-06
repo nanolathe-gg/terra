@@ -1490,6 +1490,7 @@
   "quilt"
  ],
  "material": {
+  "groundPool": 1024,
   "midDepth": 50,
   "shallowDepth": 22,
   "deepDepth": 72,

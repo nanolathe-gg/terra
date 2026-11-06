@@ -2,7 +2,7 @@
 /*COMMON*/
 @vertex
 fn vertexMain(@location(0) aPosition: vec2f) -> VertexOut {
-    let p = aPosition * (u.size - 1.0);
+    let p = round(aPosition * (u.size - 1.0) * 64.0) / 64.0;   // card tilepool: exact for the final mesh's even pixels at any map size
     let height = surfaceHeight(p);
     // Orthographic oblique view, with explicit depth ordering at folded faces.
     let visible = max(u.sea, height);

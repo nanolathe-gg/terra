@@ -118,8 +118,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(![x,y,width,height].every(Number.isInteger)||width<1||height<1)throw new Error('nanolathe: chunk bounds must be integer pixels');
     const shift=request.exportArt?Math.floor(this.config.baseHeight/2):0;
     const reach=this.reaches(options.quality??'full',request.heightBounds);
-    const resolution=Math.ceil((size-1)/((options.quality==='preview'?1023/192:1023/512)*(options.meshScale??1)));
-    const step=(size-1)/resolution;
+    const nominal=(options.quality==='preview'?1023/192:1023/512)*(options.meshScale??1);
+    // Card tilepool: a final mesh's vertices stand on world pixels a power of two apart (2 px at 1x), so the relief the vertices carry into the
+    // projection repeats with the world's pool and a level plain's tiles repeat exactly; a step of (size - 1) / 512 drifted against it.
+    const step=options.quality==='preview'?(size-1)/Math.ceil((size-1)/nominal):2**Math.round(Math.log2(nominal));
+    const resolution=Math.ceil((size-1)/step);
     const col0=clamp(Math.floor(x/step)-1,0,resolution),col1=clamp(Math.ceil((x+width)/step)+1,0,resolution);
     const row0=clamp(Math.floor((y+shift+reach.projection[0])/step)-1,0,resolution),row1=clamp(Math.ceil((y+shift+height+reach.projection[1])/step)+1,0,resolution);
     const fieldsX=clamp(Math.floor(col0*step-reach.draw)-1,0,size-1),fieldsY=clamp(Math.floor(row0*step-reach.draw)-1,0,size-1);
@@ -132,7 +135,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     return {x:gx0*spacing,y:gy0*spacing,width:(gx1-gx0)*spacing,height:(gy1-gy0)*spacing,
       gridOrigin:[gx0*spacing,gy0*spacing],gridWidth:gx1-gx0+1,gridHeight:gy1-gy0+1,gridSpacing:spacing,worldSize:size,worldGrid:grid,
       fieldsX,fieldsY,fieldsWidth:fieldsEndX-fieldsX+1,fieldsHeight:fieldsEndY-fieldsY+1,
-      screenOrigin:[x,y+shift],mesh:{col0,col1,row0,row1,resolution},reach};
+      screenOrigin:[x,y+shift],mesh:{col0,col1,row0,row1,resolution,step,span:size-1},reach};
   }
   // Relief and cached output use scale s. Color is evaluated at up to four
   // native samples per output pixel, then filtered after shading and palette mapping.
@@ -223,9 +226,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(!reuse)this.bindGroups={};this.fieldsDirty=true;
     this.recordMemory();return {gw,gh,fw,fh};
   }
-  regionMesh({col0,col1,row0,row1,resolution}) {
+  regionMesh({col0,col1,row0,row1,step,span}) {
     const cols=col1-col0,rows=row1-row0,points=new Float32Array((cols+1)*(rows+1)*2),indices=new Uint32Array(cols*rows*6);
-    let at=0;for(let y=row0;y<=row1;y++)for(let x=col0;x<=col1;x++){points[at++]=x/resolution;points[at++]=y/resolution;}
+    let at=0;for(let y=row0;y<=row1;y++)for(let x=col0;x<=col1;x++){points[at++]=Math.min(x*step,span)/span;points[at++]=Math.min(y*step,span)/span;}
     at=0;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const a=y*(cols+1)+x,b=a+cols+1;indices.set([a,b,a+1,a+1,b,b+1],at);at+=6;}
     this.cpuWorkingBytes=points.byteLength+indices.byteLength;this.cpuUploadBytes=this.cpuWorkingBytes;this.recordMemory();
     const buffer=(data,usage)=>{if(data.byteLength>this.device.limits.maxBufferSize)throw new Error('nanolathe: chunk mesh exceeds the device buffer limit');const b=this.track(this.device.createBuffer({label:'chunk mesh',size:Math.max(4,data.byteLength),usage:usage|GPUBufferUsage.COPY_DST}),'chunk mesh',Math.max(4,data.byteLength),'mesh');if(data.byteLength)this.device.queue.writeBuffer(b,0,data);return b;};

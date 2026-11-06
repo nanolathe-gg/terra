@@ -15,7 +15,8 @@ and the rock otherwise. A layer whose image is an earlier layer's names that
 material again in `order` (Moon: slopeGrass, rock, rock, rock). The file keeps
 what is already in it (a fitted `model`, a `placement` block) and rewrites
 `measured`, `order`, `ground`, and the config's `material` and `water` blocks,
-the numbers that were only in the uncommitted config.json.
+the numbers that were only in the uncommitted config.json. Of the `material`
+block it keeps the keys the table itself owns (TABLE_MATERIAL_KEYS: the pool period).
 
 Per material:
   ramp      RGB at 16 luma quantiles: the mean colour of each sixteenth of the
@@ -61,6 +62,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import material_lit as ml
 
 LUMA = np.array([.299, .587, .114])
+# `material` keys the table owns (config.json never held them), kept when the block is rewritten: the ground's pool period.
+TABLE_MATERIAL_KEYS = ('groundPool',)
 KNOTS = 16
 SIGMAS = [0.0] + [0.7 * 2 ** k for k in range(7)]    # 0, .7, 1.4 ... 44.8
 DRAWS = {'ground': 'plain ground (the 16 tiles, groundTile)', 'slopeGrass': 'cover on slopes (generated layer 0)',
@@ -227,7 +230,9 @@ def main():
                          'tiles': [''.join(letter(index[tuple(strip[y, 32 * t + x])]) for y in range(32) for x in range(32)) for t in range(16)]}
     # What config.json held that no committed file did: the world's material and water numbers (measured means, depths, authored
     # coverage and relief values). The server overlays them on the page's config (sculpt.py, world_knobs).
-    old['material'] = config['material']
+    # Numbers the table owns that config.json never held survive a rewrite: the ground's pool period (card tilepool), which the draw
+    # needs (repro/ground-pool.test.mjs fails without it).
+    old['material'] = {**config['material'], **{k: v for k, v in old.get('material', {}).items() if k in TABLE_MATERIAL_KEYS}}
     # `deep` and `shallow` name the two water materials (measure/water_numbers.py); a rewrite keeps them.
     old['water'] = {**config['water'], **{k: v for k, v in old.get('water', {}).items() if k in ('deep', 'shallow')}}
     out.write_text(json.dumps(old, indent=1) + '\n')

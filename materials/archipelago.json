@@ -1700,6 +1700,7 @@
   "quilt"
  ],
  "material": {
+  "groundPool": 1024,
   "rockSlope": 0.98,
   "rockFeather": 0.5,
   "rockCurvature": 0.28,
