@@ -991,9 +991,15 @@ def main():
     parser.add_argument('--prepared', action='store_true', help='read the saved map-catalog.json and feature catalogues in the assets root instead of the retail sources (BUNDLE.md); worlds never read retail sources')
     parser.add_argument('--maps-url', default=os.environ.get('TERRAFORM_MAPS_URL') or MAPS_URL, help='with --build-site: the save-link service the static page uses (default: $TERRAFORM_MAPS_URL, else the live Worker)')
     parser.add_argument('--build-site', type=Path, metavar='DIR', help='write the static site into DIR (index.html and b/<version>/) and exit; serve it with any static host')
+    parser.add_argument('--dump-configs', type=Path, metavar='DIR', help='write the generated files the page loads (config/<world>.json, config/catalog.json, services.json) into DIR and exit: the headless renderer (repro/render.mjs) reads them with the checkout\'s sources, with no server')
     args = parser.parse_args()
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
     configs, catalogue = world_configs(biomes)
+    if args.dump_configs:
+        for name, body in site_data(biomes, configs, catalogue, {'defaultWorld': biomes[0], 'worlds': biomes}).items():
+            (args.dump_configs / name).parent.mkdir(parents=True, exist_ok=True)
+            (args.dump_configs / name).write_bytes(body)
+        return
     feature_tool = args.feature_tool or args.assets_root / 'bin' / 'map-features'
     # A world has features to offer when its catalogue is saved (prepared) or the helper that makes it is built.
     features_installed = lambda world: (args.assets_root / 'features' / world / 'catalog.json').is_file() or (not args.prepared and feature_tool.is_file())
