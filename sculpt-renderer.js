@@ -6,11 +6,11 @@
 import {materialRows,tablePlacementRows,groundCoverRows,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
+import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
 
 // Layers of the masks texture array (4 planes each): the plane count divided by 4. Planes 0-17 are in use, 18-24 are unused (see MASK_KEYS in sculpt.js).
 const MASK_PLANE_COUNT = 25;
-const NO_WEBGPU = 'This terrain editor needs WebGPU: current Chrome or Edge, Safari 26, or Firefox with WebGPU.';
 
 // sRGB 0..255 to OKLab (Ottosson 2020), as engine-palette.wgsl does on the GPU: the palette's colours are converted once here.
 function oklab(rgb) {
@@ -150,8 +150,7 @@ export class TerrainRenderer {
   }
 
   async initialize() {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) throw new Error(NO_WEBGPU + ' No WebGPU adapter is available (is hardware acceleration off?).');
+    const adapter = await requestAdapter();
     // The draw reads 16 textures in its fragment stage, WebGPU's guaranteed
     // default per stage, as the WebGL renderer used all 16 texture units. The
     // weather and material-field grids share one array texture (gridTexture)

@@ -1,3 +1,4 @@
+import {requestAdapter} from './sculpt-webgpu.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
@@ -1947,6 +1948,7 @@ async function bootMap() {
 }
 async function boot() {
   try {
+    await requestAdapter();   // a browser without WebGPU, or an adapter below the engine's limits, gets a plain message before anything loads
     services=await (await fetch('services.json')).json();   // which server-side services this host has (export, features, saving to a server)
     const response=await fetch(configUrl(experiment.get('biome')||services.defaultWorld,experiment.get('variant'))); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json(); config.services=services;
     defaultColumn=config.column;
