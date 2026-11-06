@@ -123,11 +123,13 @@ export async function openScene(scene, search, {strokes = scene.strokes} = {}) {
   const fields = paged
     ? fieldsModule.createPagedFields({...common, budget: () => ({total: gpuMB * MB, minimum: 96 * MB}), foregroundPending: () => false, apron: Number(settings.get('timeApron') || 128), forceRing: Number(settings.get('pageRing') || 0)})
     : fieldsModule.createGpuFields(common);
-  nodes = engine.sceneNodes(config, strokes, {ground: scene.ground !== false, seed, settings});
-  fields.changed();
+  // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
+  const play = (list, {ground = true} = {}) => { nodes = engine.sceneNodes(config, list, {ground, seed, settings}); if (scene_) scene_.nodes = nodes; fields.changed(); return nodes.length; };
+  let scene_ = null;
+  play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
   const sliders = engine.surfaceSliders(config, settings);
-  const scene_ = {config, settings, renderer, canvas, fields, nodes, errors, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged,
+  scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
     dispose() { fields.destroy?.(); scene_.time?.drainage?.retire?.(); renderer.dispose(); }};
   return scene_;

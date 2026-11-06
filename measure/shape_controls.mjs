@@ -1,14 +1,15 @@
 // H15: does every shape control do something on a landform (the one kind with a section since the specialized tools retired)? One stroke per case on the
 // real engine, each control moved from its default; the number is the mean height change (units) over the cells either render raises or lowers by at least
 // one unit. A control the panel offers that prints 0.00 is dead.
-//   node measure/shape_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR]
-// Writes DIR/shape-controls.json; prints one row per control. Exit 1 on a console error.
+//   node measure/shape_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--chrome] [--configs DIR]
+// Writes DIR/shape-controls.json; prints one row per control. Exit 1 on a console error. The heights are the authored fields, so the engine runs
+// under Node on Dawn (repro/headless.mjs) by default, from this checkout or --server; --chrome plays each case in the page on --server and --port.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {shapeControlAvailable} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-const server = opt('--server', 'http://127.0.0.1:8885'), port = Number(opt('--port', 9685)), out = opt('--out', 'shape-controls');
+const server = opt('--server', 'http://127.0.0.1:8885'), port = Number(opt('--port', 9685)), out = opt('--out', 'shape-controls'), inChrome = args.includes('--chrome');
 const STEP = 4, W = 1000, H = 600, YC = 500, Y0 = YC - H / 2, path = [[420, YC], [560, YC], [700, YC]];
 const CARD = {diameter: 280, amount: 80, roughness: 40, softness: 50, cracks: 0};
 // H27: a landform stands at an elevation (170: 71 above this 4x4 map's plain of 99), raised to it, with no variation until a row turns it on.
@@ -43,27 +44,11 @@ const CONTROLS = {
 // The panel's own test: the control is shown to this kind (sculpt.js SHAPE_FIELDS kinds, all landform here, then shapeControlAvailable).
 const shown = (key, kind, card) => kind === 'landform' && shapeControlAvailable(key, kind, {faceVariation: 80, ...card, lean: card.lean / 100, terraces: card.terraces || 0, ledge: .6, terraceJitter: .35});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-await cdpPortFree(port);
 mkdirSync(out, {recursive: true});
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
-  `--user-data-dir=${out}/.profile-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const only = opt('--kinds', '').split(',').filter(Boolean);   // H27: only these kinds (a landform run does not repeat the others)
 const rows = [], logs = [];
-try {
-  let ws; for (let i = 0; i < 100 && !ws; i++) { try { const p = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(x => x.type === 'page'); if (p) ws = new WebSocket(p.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(200); }
-  await new Promise(r => ws.onopen = r);
-  let id = 0; const wait = new Map();
-  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && wait.has(m.id)) { wait.get(m.id)(m); wait.delete(m.id); } if (m.method === 'Runtime.exceptionThrown') logs.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text); if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map(a => a.value ?? a.description).join(' ').slice(0, 300)); };
-  const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
-  const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result.result.value; };
-  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(120); if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) return true; } throw new Error('never ready ' + logs.join('|')); };
-  await send('Runtime.enable'); await send('Page.enable');
-  await send('Page.navigate', {url: `${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=ctl${Date.now()}&gpuMB=512&heapMB=1536`}); await ready();
-  const heights = async (kind, card) => {
-    await ev(`sculptDebug.scene(${JSON.stringify([[kind, path, {card}]])},{ground:false})`); await ready(); await ev('sculptCanvas.idle()');
-    return ev(`(() => { const o = []; for (let y = 0; y < ${H}; y += ${STEP}) for (let x = 0; x < ${W}; x += ${STEP}) o.push(sculptDebug.corner(x, y + ${Y0}).authored); return o; })()`);
-  };
-  const moved = (a, b) => { const g = a[0]; let s = 0, n = 0; for (let i = 0; i < a.length; i++) { if (Math.abs(a[i] - g) < 1 && Math.abs(b[i] - g) < 1) continue; s += Math.abs(a[i] - b[i]); n++; } return n ? s / n : 0; };
+const moved = (a, b) => { const g = a[0]; let s = 0, n = 0; for (let i = 0; i < a.length; i++) { if (Math.abs(a[i] - g) < 1 && Math.abs(b[i] - g) < 1) continue; s += Math.abs(a[i] - b[i]); n++; } return n ? s / n : 0; };
+async function sweep(heights) {
   for (const [name, d] of Object.entries(KINDS)) for (const [variant, face] of [['open', {}]]) {
     if (only.length && !only.includes(name)) continue;
     const kind = d.kind || name, card = {...CARD, ...(d.extra || {}), ...face}, cache = new Map();
@@ -73,8 +58,41 @@ try {
       rows.push({kind: name, variant, control: key, shown: show, moved: moved(await at(base), await at({...base, ...c.set}))});
     }
   }
+}
+const page = `biome=green&mapX=4&mapY=4&scratch=ctl${Date.now()}&gpuMB=512&heapMB=1536`;
+if (!inChrome) {
+  // The page's scene, as sculptDebug.scene plays it, on one engine: each case replaces the map's nodes and reads the authored heights back.
+  const headless = await import('../repro/headless.mjs');
+  await headless.openHost({server: args.includes('--server') ? server : '', configs: opt('--configs', '')});
+  const s = await headless.openScene({biome: 'green', strokes: []}, page);
+  try {
+    await sweep(async (kind, card) => {
+      s.play([[kind, path, {card}]], {ground: false}); await s.fields.ready();
+      const o = []; for (let y = 0; y < H; y += STEP) for (let x = 0; x < W; x += STEP) o.push(s.fields.sample(x, y + Y0)); return o;
+    });
+    logs.push(...s.errors);
+  } finally { s.dispose(); }
+} else {
+await cdpPortFree(port);
+const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  `--user-data-dir=${out}/.profile-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
+try {
+  let ws; for (let i = 0; i < 100 && !ws; i++) { try { const p = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(x => x.type === 'page'); if (p) ws = new WebSocket(p.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(200); }
+  await new Promise(r => ws.onopen = r);
+  let id = 0; const wait = new Map();
+  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && wait.has(m.id)) { wait.get(m.id)(m); wait.delete(m.id); } if (m.method === 'Runtime.exceptionThrown') logs.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text); if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map(a => a.value ?? a.description).join(' ').slice(0, 300)); };
+  const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
+  const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result.result.value; };
+  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(120); if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) return true; } throw new Error('never ready ' + logs.join('|')); };
+  await send('Runtime.enable'); await send('Page.enable');
+  await send('Page.navigate', {url: `${server}/sculpt.html?${page}`}); await ready();
+  await sweep(async (kind, card) => {
+    await ev(`sculptDebug.scene(${JSON.stringify([[kind, path, {card}]])},{ground:false})`); await ready(); await ev('sculptCanvas.idle()');
+    return ev(`(() => { const o = []; for (let y = 0; y < ${H}; y += ${STEP}) for (let x = 0; x < ${W}; x += ${STEP}) o.push(sculptDebug.corner(x, y + ${Y0}).authored); return o; })()`);
+  });
   ws.close();
 } finally { chrome.kill(); }
+}
 writeFileSync(`${out}/shape-controls.json`, JSON.stringify({rows, console: logs.slice(0, 10)}));
 const names = Object.keys(KINDS), keys = Object.keys(CONTROLS);
 for (const variant of ['open']) {
