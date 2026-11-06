@@ -577,9 +577,10 @@ function renderSolid(S) {
   const zMax = SE * S.sMax + CE * S.uMax + 1, zMin = SE * S.sMin - 1, F = S.F, out = new Array(w * h).fill(null);
   let sun = S.sun;
   const normal = (E, Sn, U) => { const e = 0.5, gx = F(E + e, Sn, U) - F(E - e, Sn, U), gy = F(E, Sn + e, U) - F(E, Sn - e, U), gz = F(E, Sn, U + e) - F(E, Sn, U - e), m = Math.hypot(gx, gy, gz) || 1; return [gx / m, gy / m, gz / m]; };
-  const sunVis = (E, Sn, U, k = 6) => {   // soft shadow toward the sun: 0 blocked .. 1 open
+  // soft shadow toward the sun: 0 blocked .. 1 open; only near passes soften it (a far body's distance is a bound, not exact)
+  const sunVis = (E, Sn, U, k = 6) => {
     let t = 1.2, vis = 1;
-    for (let i = 0; i < 64 && t < 220; i++) { const d = F(E + sun[0] * t, Sn + sun[1] * t, U + sun[2] * t); if (d < 0.02) return 0; vis = Math.min(vis, k * d / t); t += clamp(d, 0.4, 6); if (U + sun[2] * t > S.uMax + 2) break; }
+    for (let i = 0; i < 64 && t < 220; i++) { const d = F(E + sun[0] * t, Sn + sun[1] * t, U + sun[2] * t); if (d < 0.02) return 0; if (d < 4) vis = Math.min(vis, k * d / t); t += clamp(d, 0.6, 8); if (U + sun[2] * t > S.uMax + 2) break; }
     return clamp(vis, 0, 1);
   };
   for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
@@ -595,7 +596,11 @@ function renderSolid(S) {
   sun = S.shadowSun || S.sun;
   const reach = sun[2] > 0.05 ? S.uMax / sun[2] : 0, sE0 = Math.min(S.eMin, S.eMin - sun[0] * reach), sE1 = Math.max(S.eMax, S.eMax - sun[0] * reach), sS0 = Math.min(S.sMin, S.sMin - sun[1] * reach), sS1 = Math.max(S.sMax, S.sMax - sun[1] * reach);
   const sox = Math.ceil(-sE0) + pad, soy = Math.ceil(-CE * sS0) + pad, sw = Math.ceil(sE1 - sE0) + pad * 2 + 1, sh = Math.ceil(CE * (sS1 - sS0)) + pad * 2 + 1, shadow = new Float32Array(sw * sh);
-  if (sun[2] > 0.05) for (let py = 0; py < sh; py++) for (let px = 0; px < sw; px++) { const E = px + 0.5 - sox, Sn = (py + 0.5 - soy) / CE; shadow[py * sw + px] = 1 - sunVis(E, Sn, 0.3, 12); }
+  // on a 2 px grid (the shadow is a stipple), each cell's cover shared by its four pixels
+  if (sun[2] > 0.05) for (let py = 0; py < sh; py += 2) for (let px = 0; px < sw; px += 2) {
+    const E = px + 1 - sox, Sn = (py + 1 - soy) / CE, c = 1 - sunVis(E, Sn, 0.3, 12);
+    for (let dy = 0; dy < 2 && py + dy < sh; dy++) for (let dx = 0; dx < 2 && px + dx < sw; dx++) shadow[(py + dy) * sw + px + dx] = c;
+  }
   return { w, h, ox, oy, px: out, shadow: { w: sw, h: sh, ox: sox, oy: soy, cover: shadow } };
 }
 // The ground shadow as a sprite: solid where the sun is blocked, stippled in the penumbra; the body's anchor (ax, ay) in the
@@ -659,7 +664,13 @@ function rockSolid(P, r) {
     if (b.amp > 0) f += b.amp * (0.24 * (vnoise3(qe / (b.a * 0.7 + 2), qs / (b.a * 0.7 + 2), qu / (b.a * 0.7 + 2), b.s1 + 2) - 0.5) + 0.14 * (vnoise3(qe / (b.a * 0.3 + 2), qs / (b.a * 0.3 + 2), qu / (b.a * 0.3 + 2), b.s1) - 0.5) + 0.05 * (vnoise3(qe / 2.6, qs / 2.6, qu / 2.6, b.s1 + 1) - 0.5));
     return f;
   };
-  const F = (E, S, U) => { let f = Infinity; for (const b of bodies) f = Math.min(f, bodyF(b, E, S, U)); return Math.max(f, -U); };
+  // each body's bounding sphere: a far body costs one distance (a safe lower bound for the march), not its whole shape
+  for (const b of bodies) { b.bc = b.hgt * 0.5; b.br = Math.hypot(Math.max(b.a, b.b) * 1.35, b.hgt * 0.62) + b.amp * 0.3 + 2; }
+  const F = (E, S, U) => {
+    let f = Infinity;
+    for (const b of bodies) { const bound = Math.hypot(E - b.e, S - b.s, U - b.bc) - b.br; if (bound >= f) continue; f = bound > 4 ? Math.min(f, bound) : Math.min(f, bodyF(b, E, S, U)); }
+    return Math.max(f, -U);
+  };
   const ext = bodies.reduce((o, b) => ({ e0: Math.min(o.e0, b.e - b.a * 1.25), e1: Math.max(o.e1, b.e + b.a * 1.25), s0: Math.min(o.s0, b.s - b.b * 1.25), s1: Math.max(o.s1, b.s + b.b * 1.25), u: Math.max(o.u, b.hgt * 1.15) }), { e0: 0, e1: 0, s0: 0, s1: 0, u: 0 });
   return { F, W, D, hgt, ext, bodies };
 }
