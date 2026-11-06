@@ -254,7 +254,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(drawing){if(paintedView!==viewEpoch)presentView();rerun=true;return;}
       presentView();
       drawing=rendering=true;
-      updateDocumentControls();
       const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
       // H7 2b: while the Time pass is running, a bake would read the unweathered height and be redone when the weather lands.
       // The pass is submitted first (it starts with the edit) and chunks wait for it, for at most 8 s so a failed pass cannot hide the map.
