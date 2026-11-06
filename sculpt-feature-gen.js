@@ -104,7 +104,7 @@ function nearestExtra(lumaTarget) {
 }
 function lumaOfLevel(lev) { const i = clamp(lev, 0, 10), a = Math.floor(i), b = Math.min(10, a + 1); return lerp(LUMA_GREEN[a], LUMA_GREEN[b], i - a); }
 // lean: -1 olive and yellow-green, 0 retail, +1 lush and bright. zone is a smooth 0..1 field that clusters the lean.
-function broadColor(lev, r, lean, zone) {
+function broadColor(lev, r, lean, zone, inClump = true) {   // inClump: bright flecks only appear inside a bright clump, never as isolated pixels
   const L = clamp(lev, 0, 10.49), li = Math.round(L);
   const darkness = clamp((3.6 - L) / 3.6, 0, 1);
   if (darkness > 0 && r() < 0.6 * darkness + 0.1 * (L < 4.5 ? 1 : 0)) {
@@ -115,9 +115,9 @@ function broadColor(lev, r, lean, zone) {
   let ramp = G;
   if (lean < 0 && zone < -lean * 0.9) ramp = IDX.YELLOW_GREEN;
   const x = r();
-  if (L > 6.2 && x < 0.05) return pick(r, [233, 234, 54, 35, 53]);          // bright yellow-green flecks on the lit lobes
-  if (x < 0.1) return nearestExtra(lumaOfLevel(L) + (r() - 0.5) * 40);
-  if (x < 0.105) return pick(r, [233, 234, 35, 53, 52]);   // saturated or gray-green flecks, never white, gray or pink
+  if (inClump && L > 6.2 && x < 0.16) return pick(r, [233, 234, 54, 35, 53]);          // bright yellow-green flecks grouped on the lit lobes
+  if (x < 0.1) return nearestExtra(Math.min(lumaOfLevel(L) + (r() - 0.5) * 40, inClump ? 200 : 92));
+  if (x < 0.105) return inClump ? pick(r, [233, 234, 35, 53, 52]) : pick(r, [171, 237, 236]);   // saturated or gray-green flecks, never white, gray or pink
   if (x < 0.12 && L < 7) return IDX.OLIVE[clamp(Math.round(L * 0.6), 0, 6)];
   if (lean > 0 && L > 7 && r() < lean * 0.5) return pick(r, [36, 35, 34]);
   return ramp[li];
@@ -279,7 +279,7 @@ function treeFrame(P, seed, ctx) {
   };
   const body = newSprite(w, h, ax, ay);
   const amb = L.ambient;
-  const mid = conifer ? 3.4 : 4.9, lamGain = conifer ? 3.0 : 4.0, gxGain = conifer ? 2.6 : 1.3, gyGain = conifer ? 0.3 : 0.9;
+  const mid = conifer ? 3.4 : 4.9, lamGain = conifer ? 3.0 : 3.3, gxGain = conifer ? 2.6 : 1.0, gyGain = conifer ? 0.3 : 0.9;
   const sigma = conifer ? 2.3 : 5.0;
   // bright leaf bunches (spec 15 B6): about 34 rounded 3-6 px clumps that lean to the upper-left lobes
   const clumpList = [];
@@ -288,11 +288,11 @@ function treeFrame(P, seed, ctx) {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x] === 1 && dist[y * w + x] >= 2) inside.push([x, y]);
     // bright pixels follow the light: a bunch can only sit where the crown's surface faces the sun (lit lobes and sun-facing rims)
     const lamAt = (x, y) => { const zx = zf(x + 1, y) - zf(x - 1, y), zy = zf(x, y + 1) - zf(x, y - 1), nn = Math.hypot(zx, zy, 2); return (-zx / nn) * L.v[0] + (-zy / nn) * L.v[1] + (2 / nn) * L.v[2]; };
-    for (let tries = 0; clumpList.length < Math.round(P.clumps ?? 72) && tries < 40000 && inside.length; tries++) {
+    for (let tries = 0; clumpList.length < Math.round(P.clumps ?? 84) && tries < 40000 && inside.length; tries++) {
       const [x, y] = inside[(r() * inside.length) | 0];
       if (r() > Math.pow(clamp((lamAt(x, y) - 0.55) * 2.6, 0, 1), 1.3)) continue;
       if (clumpList.some(c => Math.hypot(c.x - x, c.y - y) < 3.5)) continue;
-      clumpList.push({ x, y, rad: 1.2 + r() * 1.3, str: 4 + r() * 2.5 });
+      clumpList.push({ x, y, rad: 1.1 + r() * 1.2, str: 3.6 + r() * 2.6 });
     }
   }
   const clumpBoost = (x, y) => { let b = 0; for (const c of clumpList) { const d2 = ((x - c.x) ** 2 + (y - c.y) ** 2) / (c.rad * c.rad); if (d2 < 1.6) b = Math.max(b, c.str * (1 - d2 / 1.6)); } return b; };
@@ -327,7 +327,7 @@ function treeFrame(P, seed, ctx) {
       col = coniferColor(lev, rn, P.lean, zone, brownP);
     } else {
       const brownP = tt > 0.55 && dist[k] > 1 ? 0.16 * Math.max(0, vnoise(x / 3, y / 3, s2 + 7) - 0.4) * 3 : 0;
-      col = rn() < brownP ? pick(rn, [61, 62, 60, 59]) : broadColor(lev, rn, P.lean, zone);
+      col = rn() < brownP ? pick(rn, [61, 62, 60, 59]) : broadColor(lev, rn, P.lean, zone, clumpBoost(x, y) > 1.0);
     }
     put(body, x, y, col);
   }
