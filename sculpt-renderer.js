@@ -336,6 +336,8 @@ export class TerrainRenderer {
     this.i('uShapeCoverage', variant.get('coverage') === 'form');
     this.i('uLedgeCoverage', variant.get('coverage') === 'ledge');
     this.v('uShallowColor', (this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
+    const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
+    this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
     this.v('uDeepColor', (this.config.water?.deepRGB || [16, 57, 133]).map(v => v / 255));
     this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
     this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));

@@ -86,9 +86,10 @@ export const LANDFORM_KEYS=['stepReference','heightReference','elevation','combi
 // the shore edge, is no longer written; shallow-to-deep edge, bed; +127 hard /
 // lit bed, -127 faded / noise water), painted ground lumps (+127 more, -127
 // fewer) and the cracked-bed flag.
-// Planes 0-18 are in use (14-17 are the override planes, 18 a water stroke's Surf, 0..127 of 1); 19-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
+// Planes 0-19 are in use (14-17 are the override planes, 18 a water stroke's Surf, 0..127 of 1, 19 a braided river's bed, 0..127 of 1, which the draw lays as
+// the world's river-bed gravel); 20-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
-export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','free19','fu','fv','s1','s2','s3'];
+export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','fu','fv','s1','s2','s3'];
 export const MASK_SHAPES=['crater','landform'];
 export const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 export const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];

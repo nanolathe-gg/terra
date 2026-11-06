@@ -1640,7 +1640,9 @@ fn bake(p: vec2f) -> vec4f {
     sand *= 1.0 - paintGround;
     // Only sand deep enough to cover the ground buries relief and stones;
     // painted sand bars (sandCrown) bury theirs too.
-    let buried = max(smoothstep(0.10, 0.90, sand), paintSand * u.sandCrown);
+    // riverfix: a braided river's bed (mask plane 19) is gravel, not sand: its pebbles stay on top and it takes no ripples.
+    let gravelBed = min(max(textureSampleLevel(masksTex, linearClamp, maskUv(p), 4, 0.0).a, 0.0) * 8.0, 1.0);
+    let buried = max(smoothstep(0.10, 0.90, sand), paintSand * u.sandCrown) * (1.0 - gravelBed);
     // Sand ripples (card P18): asymmetric crests with defects, coarse grains on the crests, and sand shadows behind the scatter's big stones.
     // They lie on the buried ground, so they go in after the sand buries relief. Height is lambda / 9 at the default Ripple height (1.4).
     var drift = 0.0;
@@ -1650,8 +1652,8 @@ fn bake(p: vec2f) -> vec4f {
         // Ripples need sand deep enough to hold them: thin sand at a painted edge stays flat, over a band several px wide whose width wanders.
         let paintDeep = smoothstep(0.55, 0.98, sandBlur.y + 0.4 * sandBreak) * paintSand;
         let deep = max(smoothstep(0.5, 0.95, sandWeathered), select(0.0, paintDeep * (1.0 - paintGround), u.hasBeach == 0));
-        drift = (rp.x * u.rippleHeight * u.ripple / (9.0 * 1.4) + rp.z) * deep;
-        crestTone = rp.y * deep;
+        drift = (rp.x * u.rippleHeight * u.ripple / (9.0 * 1.4) + rp.z) * deep * (1.0 - gravelBed);
+        crestTone = rp.y * deep * (1.0 - gravelBed);
     }
     // Sand buries relief beneath it.
     height *= 1.0 - 0.8 * buried;
