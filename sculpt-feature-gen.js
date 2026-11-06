@@ -653,8 +653,8 @@ function drawFlame(cv, o, rr) {
       const hf = nz(x, y, 2.6, 31, 2.8), streak = vnoise(x / 2.2 + Math.cos(th) * 2, y / 10 + Math.sin(th) * 2, S + 77), up = ay - y;
       let drop = false;
       if (miss > 0 && (hf > 0.6 - 0.08 * miss || (streak > 0.62 && up > 8))) drop = true;
-      else if (miss > 0 && rr() < 0.36 + 0.1 * miss) drop = true;                      // torn single-pixel nibbles along the rim
-      else if (up < 7 && !o.lump && rr() < 0.3) drop = true;                          // the foot dissolves into specks   // notches only at the rim; the main mass stays solid (retail's main blob has about 0.3 boundary per pixel of area)
+      else if (miss > 0 && hash2(x, y, S + Math.round((o.phase || 0) * 7)) < 0.36 + 0.1 * miss) drop = true;                      // torn single-pixel nibbles along the rim
+      else if (up < 7 && !o.lump && hash2(x, y, S + 5 + Math.round((o.phase || 0) * 7)) < 0.3) drop = true;                          // the foot dissolves into specks   // notches only at the rim; the main mass stays solid (retail's main blob has about 0.3 boundary per pixel of area)
       if (!drop) keep.push(i);
     }
     const np = keep.map(i => pts[i]), nh = keep.map(i => heat[i]); pts.length = 0; heat.length = 0; pts.push(...np); heat.push(...nh);
