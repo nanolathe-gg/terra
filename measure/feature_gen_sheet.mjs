@@ -123,7 +123,7 @@ ctrlRow('Smudge density', 'scar', 'density', [0.2, 0.55, 1], {type: 'smudge'}, 6
   ctrl.push({title: 'Deposit metal value', items, w: 96, h: 96});
 }
 
-// round 7 versus round 8: the same seeds drawn by the round-2 module and by this one
+// round 8 versus round 9: the same seeds drawn by the round-2 module and by this one
 const r1 = r1Path ? await import(pathToFileURL(r1Path).href) : null;
 const compare = [];
 if (r1) {
@@ -131,28 +131,24 @@ if (r1) {
   const pair = (title, note, specs, w, h, ax, ay, tag) => {
     const items = [];
     specs.forEach(([kind, p1, p2, seed], i) => {
-      items.push({im: tile(`${tag}-${i}-r7`, before(kind, p1, seed), w, h, ax, ay), cap: `round 7, seed ${seed}`});
-      items.push({im: tile(`${tag}-${i}-r8`, generateFeature(kind, p2, seed, ctx), w, h, ax, ay), cap: `<b>round 8</b>`});
+      items.push({im: tile(`${tag}-${i}-r8`, before(kind, p1, seed), w, h, ax, ay), cap: `round 8, seed ${seed}`});
+      items.push({im: tile(`${tag}-${i}-r9`, generateFeature(kind, p2, seed, ctx), w, h, ax, ay), cap: `<b>round 9</b>`});
     });
     compare.push({title, note, items});
   };
-  pair('Burnt broadleaf: heavier trunk at mid height', 'Round 7 trunk.', [3000, 3007, 3014].map(sd => ['burnt', {}, {}, sd]), 80, 76, 30, 68, 'z-burnt');
-  pair('Burnt conifer: sparser, grayer, thin trunk showing through', '', [3000, 3005, 3010].map(sd => ['burnt', {species: 'conifer', height: 56, width: 0.5}, {species: 'conifer', height: 56, width: 0.5}, sd]), 80, 76, 30, 68, 'z-burntc');
-  pair('Rocks: stronger shading, no highlight lower right', 'Round 7: no shade control, highlights could sit lower right.', [['1x1', 5000], ['2x2', 5100], ['3x3', 5200], ['4x3', 5400]].map(([c, sd]) => ['rock', {cells: c}, {cells: c}, sd]), 96, 80, 40, 24, 'z-rock');
-  pair('Shrubs: scatter of small yelloz-green clumps, no ring', 'Dense (left two) and sparse (right two).', [['shrub', {density: 0.6, width: 27, height: 20}, {density: 0.6, width: 27, height: 20}, 4101], ['shrub', {density: 0.6, width: 27, height: 20}, {density: 0.6, width: 27, height: 20}, 4102], ['shrub', {density: 0.12, width: 33, height: 26}, {density: 0.12, width: 33, height: 26}, 4103], ['shrub', {density: 0.12, width: 33, height: 26}, {density: 0.12, width: 33, height: 26}, 4104]], 52, 40, 25, 32, 'z-shrub');
-  pair('Broadleaf trees: taper, peaks, light-placed bright leaves', '', [1000, 1007, 1014].map(sd => ['tree', {}, {}, sd]), 100, 96, 38, 86, 'z-broad');
+  pair('Rocks: a darker front face below the lit top', 'Round 8: no front face.', [['1x1', 5000], ['2x2', 5100], ['3x3', 5200], ['4x3', 5400]].map(([c, sd]) => ['rock', {cells: c}, {cells: c}, sd]), 96, 80, 40, 24, 'v-rock');
+  pair('Broadleaf trees: crown tops with points', '', [1000, 1007, 1014].map(sd => ['tree', {}, {}, sd]), 100, 96, 38, 86, 'v-broad');
   const depItems = [];
   [[86, 701], [127, 702], [187, 703], [223, 704]].forEach(([m, sd], i) => {
     const g1 = patch(GX + 30 + i * 13, GY + 40, 120, 120), g2 = patch(GX + 30 + i * 13, GY + 40, 120, 120);
     r1.paintDeposit(g1, 60, 60, {metal: m}, sd, ctx); paintDeposit(g2, 60, 60, {metal: m}, sd, ctx);
-    depItems.push({im: save(`z-dep-${i}-r7`, 120, 120, g1.rgba), cap: `round 7, metal ${m}`}, {im: save(`z-dep-${i}-r8`, 120, 120, g2.rgba), cap: `<b>round 8</b>, metal ${m}`});
+    depItems.push({im: save(`v-dep-${i}-r8`, 120, 120, g1.rgba), cap: `round 8, metal ${m}`}, {im: save(`v-dep-${i}-r9`, 120, 120, g2.rgba), cap: `<b>round 9</b>, metal ${m}`});
   });
-  compare.push({title: 'Metal deposits: the retail look (plates and ragged cluster), one merged moss patch', note: 'Unchanged since round 7.', items: depItems});
+  compare.push({title: 'Metal deposits: the retail look (plates and ragged cluster), one merged moss patch', note: 'Unchanged since round 8.', items: depItems});
   // fire: key frames of the round-2 and round-3 tree burn
   const fireStrip = (frames, picks, name) => { const sel = picks.map(i => frames[i]); let bx = 0, by = 0, cw2 = 0, ch2 = 0; for (const f of sel) { bx = Math.max(bx, f.ax); by = Math.max(by, f.ay); } for (const f of sel) { cw2 = Math.max(cw2, bx + f.w - f.ax); ch2 = Math.max(ch2, by + f.h - f.ay); } const W = cw2 * sel.length, buf = new Uint8ClampedArray(W * ch2 * 4); sel.forEach((f, n) => { const rgba = toRGBA(f, palette); for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) { const k = (y * f.w + x) * 4; if (!rgba[k + 3]) continue; const o = ((by - f.ay + y) * W + n * cw2 + bx - f.ax + x) * 4; buf.set(rgba.subarray(k, k + 4), o); } }); return save(name, W, ch2, buf); };
   const f2 = before('tree', {}, 1000).burn, f3 = generateFeature('tree', {}, 1000, ctx).burn;
   const picks = [0, 4, 8, 9, 15, 40, 82, 90, 95];
-  compare.push({title: 'Tree burn: round 7 (top) against round 8 (bottom), frames 0, 4, 8, 9, 15, 40, 82, 90, 95', note: 'Round 8: slimmer taller column with blunt tips, hard-edged color patches with pixel jitter, 2 px licks, steadier tail.', fire: [fireStrip(f2, picks, 'z-fire-r7'), fireStrip(f3, picks, 'z-fire-r8')]});
 }
 // burn strips
 const t0 = generateFeature('tree', {species: 'broadleaf'}, 1000, ctx), seq = t0.burn;
@@ -217,7 +213,7 @@ function gapRows(b, a) {
     ['deposits', 'stone pixels at metal 223', '886', dep(223, b), dep(223, a), 780, 990],
     ['deposits', 'stone share of painted pixels', '0.09 to 0.18', b.deposit.all.stoneShare, a.deposit.all.stoneShare, 0.09, 0.18],
   ];
-  return `<table><tr><th>item</th><th>measure</th><th>spec</th><th>round 7</th><th>round 8</th><th>round 8 in range</th></tr>${rows.map(([k, m, sp, x, y, lo, hi]) => { const ok = typeof y === 'number' ? inR(y, lo, hi) : null; return `<tr class="${ok === null ? '' : ok ? 'ok' : 'bad'}"><td>${k}</td><td>${m}</td><td>${sp}</td><td>${f(x)}</td><td>${f(y)}</td><td>${ok === null ? '' : ok ? 'yes' : 'no'}</td></tr>`; }).join('')}</table>`;
+  return `<table><tr><th>item</th><th>measure</th><th>spec</th><th>round 8</th><th>round 9</th><th>round 9 in range</th></tr>${rows.map(([k, m, sp, x, y, lo, hi]) => { const ok = typeof y === 'number' ? inR(y, lo, hi) : null; return `<tr class="${ok === null ? '' : ok ? 'ok' : 'bad'}"><td>${k}</td><td>${m}</td><td>${sp}</td><td>${f(x)}</td><td>${f(y)}</td><td>${ok === null ? '' : ok ? 'yes' : 'no'}</td></tr>`; }).join('')}</table>`;
 }
 const rowHtml = r => r.fire ? `<section><h3>${r.title}</h3><p class="n">${r.note}</p><div class="scroll">${r.fire.map(im => `<img src="img/${im.name}" width="${im.w * 2}" height="${im.h * 2}" style="margin-bottom:6px;background:#46702a">`).join('')}</div></section>` : (r => `<section><h3>${r.title}</h3>${r.note ? `<p class="n">${r.note}</p>` : ''}<div class="scroll"><div class="row">${r.items.map(cell).join('')}</div></div></section>`)(r);
 const gapTable = (r2Before && r2After) ? gapRows(JSON.parse(readFileSync(r2Before, 'utf8')), JSON.parse(readFileSync(r2After, 'utf8'))) : '';
@@ -245,9 +241,9 @@ table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #333;paddin
 <h2>Same scene at 3x</h2>
 <div class="scroll"><img src="img/scene.png" width="${SW * 3}" height="${SH * 3}"></div>
 ${verdictHtml}
-<h2>Round 7 versus round 8 (same seeds; 1x above, 3x below each tile)</h2>
+<h2>Round 8 versus round 9 (same seeds; 1x above, 3x below each tile)</h2>
 ${compare.map(rowHtml).join('')}
-<h3>Round 8, measured against spec sections 15-17</h3>
+<h3>Round 9, measured against spec sections 15-17</h3>
 ${gapTable}
 <h2>2. One row per kind (1x above, 3x below each tile)</h2>
 ${rows.map(rowHtml).join('')}
