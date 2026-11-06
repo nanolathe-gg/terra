@@ -11,6 +11,16 @@ test('a landform takes angular facets unless its coast pass is on',()=>{
  assert.equal(available('iceFacets','landform',{stepReference:0,terraces:4}),true);
 });
 test('faceted forms and shoreline materials keep their own dependent controls',()=>{
+ // lfcrystal: a landform's Facet shape and each shape's rows show once facets are on, by the shape (never by the world or the stroke's palette entry).
+ assert.equal(available('facetForm','landform',{iceFacets:0}),false);
+ assert.equal(available('facetForm','landform',{iceFacets:.6}),true);
+ assert.equal(available('crystalStep','landform',{iceFacets:.6,facetForm:1}),true);
+ assert.equal(available('crystalStep','landform',{iceFacets:.6,facetForm:2}),false);
+ assert.equal(available('crystalTop','landform',{iceFacets:.6,facetForm:2}),true);
+ assert.equal(available('crystalTop','landform',{iceFacets:0,facetForm:2}),false);
+ assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:0}),false);
+ assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:2}),true);
+ assert.equal(available('bergRough','landform',{iceFacets:.6,facetForm:2,stepReference:1,terraces:4}),false);
  assert.equal(available('crystalTiers','crystal',{crystalForm:0}),false);
  assert.equal(available('crystalTiers','crystal',{crystalForm:1}),true);
  assert.equal(available('crystalCount','crystal',{crystalForm:1}),false);

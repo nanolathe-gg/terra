@@ -23,7 +23,7 @@
 // since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
 // --set puts values in before the sweep, to probe a row under a gate.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
-import {worldControlRequirement, shapeControlAvailable, PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
+import {worldControlRequirement, shapeControlAvailable, PARKED_WORLD_CONTROLS, LANDFORM_FACET_KEYS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -57,13 +57,14 @@ if (args.includes('--recheck')) {
 }
 const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
-const KIND_AT = {crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
+// lfcrystal: the Crystals button draws a landform (its facet rows are swept on the landform's stroke); the old crystal kind only loads from old saves.
+const KIND_AT = {crater: [630, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
 // The retired tools' strokes as the landforms the shape buttons draw (sea-relative, about as tall above this map's plain as the old fixtures' Rise).
 const PLATEAU = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, wander: 40, widthVary: 30, ...card}}];
 const RIDGE = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, lean: 100, wander: 8, widthVary: 0, ...card}, curve: {form: 'lfMountain'}}];
 const WATER = (pts, card = {}, picks = {}) => ['landform', pts, {card: {heightReference: 1, elevation: -55, combine: 1, cracks: 0, wander: 30, widthVary: 30, varySize: 210, ...card}, curve: {form: 'lfShore'}, ...picks}];
 // The panel hides these until their switch is above 0 (updateControls in sculpt.js).
-const GATE = {gullySize: 'gullies', talus: 'gullies', layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerSize: 'fingers',
+const GATE = {gullySize: 'gullies', talus: 'gullies', layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', facetForm: 'iceFacets', fingerSize: 'fingers',
   spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
@@ -432,6 +433,8 @@ try {
       if (key.startsWith('berg') || key === 'crystalAlign') Object.assign(p, {crystalForm: 2, crystalSize: 200, crystalCount: 3, bergTilt: .3});
       if (key.startsWith('crystalCrater') || key === 'craterFacets') p.craterFacets = .7;
       if (key === 'iceFacetSize' || key === 'iceFacets') p.iceFacets = .7;
+      // lfcrystal: a landform's Facet shape rows, with facets on and the shape that shows them (Level tops on columns).
+      if (kind === 'landform' && (key === 'facetForm' || LANDFORM_FACET_KEYS.includes(key))) Object.assign(p, {iceFacets: .7, facetForm: ['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar'].includes(key) ? 1 : 2, iceFacetSize: 40});
       if (key === 'facing') p.lean = 3;
       if (key === 'gullySize' || key === 'talus') p.gullies = 1;
       if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
