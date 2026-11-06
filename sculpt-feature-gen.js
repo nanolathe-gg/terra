@@ -463,9 +463,9 @@ function shrubFrame(P, seed, ctx) {
     for (const [x, y] of cells) {
       const under = !has(x, y + 1), upper = !has(x, y - 1);
       let c;
-      if (under) c = rn() < 0.5 ? 173 : weighted(rn, [[165, 3], [167, 3], [169, 1], [168, 1]]);        // the darker underside
-      else if (upper) c = weighted(rn, [[163, 13 * hi], [164, 5], [165, 28], [162, 0.8 * hi], [167, 9], [166, 3]]);   // lit yellow-green top
-      else c = weighted(rn, [[165, 30], [167, 14], [164, 4], [166, 4], [168, 3], [173, 4]]);
+      if (under) c = rn() < 0.36 ? 173 : weighted(rn, [[165, 4], [167, 3], [164, 2], [169, 1], [168, 1]]);        // the darker underside
+      else if (upper) c = weighted(rn, [[163, 22 * hi], [164, 11], [165, 34], [162, 2 * hi], [167, 7], [166, 2]]);   // lit yellow-green top
+      else c = weighted(rn, [[165, 34], [167, 10], [164, 8], [163, 8], [166, 3], [168, 2], [173, 4]]);
       put(sp, x, y, c);
     }
   }
