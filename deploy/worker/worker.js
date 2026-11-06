@@ -129,7 +129,9 @@ async function route(request, env) {
     if (!ID_RE.test(id)) throw new Refusal(404, 'No saved map has this id.');
     const object = await env.MAPS.get(key(id));
     if (!object) throw new Refusal(404, 'No saved map has this id.');
-    return new Response(request.method === 'HEAD' ? null : object.body, {headers: {
+    // The stored bytes are already gzip: encodeBody 'manual' stops the Workers runtime from compressing them a second
+    // time because of the Content-Encoding header (a browser would then decode one layer and get gzip, not JSON).
+    return new Response(request.method === 'HEAD' ? null : object.body, {encodeBody: 'manual', headers: {
       'Content-Type': 'application/json', 'Content-Encoding': 'gzip',
       'Cache-Control': 'public, max-age=31536000, immutable', ETag: `"${id}"`,
     }});
@@ -154,9 +156,9 @@ export async function handle(request, env) {
     if (!(err instanceof Refusal)) { console.error(err); response = json({error: 'The server could not handle this request.'}, 500); }
     else response = json({error: err.message}, err.status);
   }
-  const headers = new Headers(response.headers);
-  for (const [k, v] of Object.entries(cors)) headers.set(k, v);
-  return new Response(response.body, {status: response.status, headers});
+  // Add CORS to the response itself: rebuilding it would drop encodeBody 'manual' and gzip a stored save twice.
+  for (const [k, v] of Object.entries(cors)) response.headers.set(k, v);
+  return response;
 }
 
 export default {fetch: handle};
