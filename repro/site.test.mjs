@@ -28,7 +28,7 @@ test('every world and variant has a config file, and the services are declared',
   assert.ok(JSON.parse(read('config/catalog.json')).worlds.green);
   assert.equal(services.maps.available, true);
   assert.match(services.maps.url, /^https:\/\/terraform-savelinks\.[a-z0-9-]+\.workers\.dev\/maps$/);
-  assert.equal(services.features.available, false); assert.ok(services.features.reason.length > 20);
+  assert.equal(services.features, undefined);   // features are generated in the page; there is no feature service
   assert.equal(services.export, undefined, 'export runs in the page everywhere: no service to declare');
 });
 

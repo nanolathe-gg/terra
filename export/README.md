@@ -26,7 +26,7 @@ Export a local manifest:
 /private/tmp/nanolathe-map-editor/agent-D/map-export \
   --input /private/tmp/editor-export/manifest.json \
   --out /private/tmp/editor-export/maps \
-  --features-root /private/tmp/nanolathe-map-editor/agent-D/features
+  --features-root /private/tmp/nanolathe-map-editor/agent-D/features   # holds pack.json
 ```
 
 ```json
@@ -39,7 +39,7 @@ Export a local manifest:
   "seaLevel": 32,
   "heights": [40, 40],
   "chunks": [{"x": 0, "y": 0, "path": "art.png"}],
-  "features": [{"name": "RockMetal1", "x": 24, "z": 24}],
+  "features": [{"name": "TFab12cdMetal127", "x": 24, "z": 24}],
   "starts": [{"x": 256, "z": 256}, {"x": 1792, "z": 1792}],
   "settings": {"minWind": 500, "maxWind": 4500, "tidal": 25, "solar": 20, "gravity": 112, "surfaceMetal": 3, "mohoMetal": 40, "lava": false}
 }
@@ -84,11 +84,17 @@ Their order becomes `StartPos1` through `StartPosN`, and `numplayers` matches.
 
 Feature x/z are top-left anchor **cells**, rather than pixel positions. Every
 full footprint must lie inside the play area, without overlapping another.
-The name must appear in the prepared world's catalogue (`--features-root`),
-whose footprints `map-features` read from the game's feature TDFs; the export
-itself reads no game content when it is given `--catalog-file`. A deterministic sorted name table
-supplies anchor indices, with `0xFFFE` in each remaining footprint cell.
-The terrain image must not contain feature sprites.
+Every name must be defined in the map's feature pack: `<features-root>/pack.json`,
+which the page writes (`sculpt-features.js`). The pack holds the map's generated
+feature sections and the frames of their sequences; `featurepack.go` checks it
+(a `TF` prefix and bank, names of at most 31 characters, the keys a generated
+feature sets and their ranges, every sequence and successor present) and writes
+what the placed features reach as `features/<bank>/<bank>.tdf` and
+`anims/<bank>.gaf` in the archive. Painted deposits and vents are features whose
+only frame is one transparent pixel, as retail's `Geothermal`. A deterministic
+sorted name table supplies anchor indices, with `0xFFFE` in each remaining
+footprint cell. The terrain image must not contain feature sprites; deposits and
+vents are painted into it by the page.
 
 A supplied settings object contains every field shown above. Integer values
 are nonnegative signed-32-bit OTA values, with minimum wind no greater than
@@ -96,29 +102,8 @@ maximum wind; surface metal additionally fits the engine's byte store
 (0–255). `lava` is boolean. These are format/store bounds, not retail maxima.
 Starts and settings use the same OTA keys as `internal/mapgen/ota.go`.
 
-Prepare a private feature catalogue before exporting placed features:
-
-```sh
-go build -o /private/tmp/nanolathe-map-editor/agent-D/bin/map-features ./tools/map-editor/features
-/private/tmp/nanolathe-map-editor/agent-D/map-export --catalog > /private/tmp/nanolathe-map-editor/agent-D/map-catalog.json
-/private/tmp/nanolathe-map-editor/agent-D/bin/map-features \
-  --catalog /private/tmp/nanolathe-map-editor/agent-D/map-catalog.json \
-  --world green --out /private/tmp/nanolathe-map-editor/agent-D/features
-```
-
-The helper also accepts repeated `--root` flags. It writes
-`<out>/<world>/catalog.json`, first-frame PNGs and optional shadow PNGs,
-with authored GAF offsets and transparency. It counts TNT play-area anchors
-across the world's source maps, following `mapgenSource`; classification and
-deposit selection follow `mapgenFeatures`. Unlike that generator, the editor
-retains every drawn member instead of eight per vegetation category. Missing
-optional shadow sequences produce `null`; composite children retain their
-common anchor. A destination-dependent alternate child returns an explicit
-error, since one transparent PNG cannot represent it. All derived files
-stay outside the checkout and the content roots.
-
 The command writes `<name>.ufo` with stored HPI entries
-`maps/<name>.ota` and `maps/<name>.tnt`, plus `<name>-indexed.png` for image
+`maps/<name>.ota` and `maps/<name>.tnt` (and the feature pack's TDF and GAF), plus `<name>-indexed.png` for image
 comparison. Before publishing, it reopens the staged archive through
 `vfs.NewArchive` (via `MountArchiveReader`), lists and reads both files,
 compares every TNT cell, feature record, tile and minimap byte, and parses
@@ -189,8 +174,7 @@ export.
 The worker passes `--catalog-file` with the page's world defaults
 (`config/catalog.json`, committed in `materials/<world>.json`), the palette
 (`materials/palette.json`) and no installed map names, and, when features are
-placed, `--features-root` with a catalogue of just their names and footprints
-from the page's feature tool. It reads no game content. The result's
+placed, `--features-root` with the map's feature pack from the page. It reads no game content. The result's
 `peakRSSBytes` is the size of the module's linear memory, which never shrinks,
 so it is the peak (the worker reads it; Go's own `MemStats.Sys` counts
 reserved address space and reads more than twice as high).

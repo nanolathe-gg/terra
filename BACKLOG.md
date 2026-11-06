@@ -32,11 +32,11 @@ branches and the projection fix below, so re-render before judging.
 
    ```
    R=/private/tmp/nanolathe-map-editor
-   mkdir -p $R/agent-<card> && ln -s $R/features $R/map-catalog.json $R/agent-<card>/
+   mkdir -p $R/agent-<card> && ln -s $R/map-catalog.json $R/agent-<card>/
    cd ../terraform-wt-<card>
    /Users/daniel/src/terraform/.venv/bin/python sculpt.py \
      --port <server> --assets-root $R/agent-<card> --prepared \
-     --export-tool $R/map-export --feature-tool $R/bin/map-features \
+     --export-tool $R/map-export \
      > $R/agent-<card>/server.log 2>&1 &
    ```
 
