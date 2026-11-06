@@ -540,6 +540,11 @@ function rockFrame(P, seed, ctx) {
     if (y > h * 0.78) t -= ((y / h - 0.78) / 0.22) * 0.05;                            // moderately dark base
     if (dist[k] <= 1) t -= lowerRight(k) ? 0.5 : 0.38;                                   // a dark one-pixel rim all round, stronger on the shadow side
     { const dd = ((x - cx) * -L.x + (y - cy) * -L.y) / (Wh * 0.7 + Hh * 0.7); t -= P.shade * 0.5 * Math.max(0, dd - 0.1); }   // the shade side falls off harder with the shading control
+    { // a darker vertical front face below the lit top: the side facing the viewer, with a soft ridge where the top face ends
+      const yb = cy + (0.06 + 0.2 * vnoise(x / 7, 3, seed + 91) + 0.1 * vnoise(x / 2.5, 5, seed + 92)) * Hh, below = (y - yb) / (0.4 * Hh);
+      if (below > 0) t -= 0.24 * Math.min(1, below) * (0.7 + 0.3 * P.shade);
+      else if (below > -0.12) t += 0.04;      // the lit edge of the top face
+    }
     if (t < 0.45) t = 0.45 + (t - 0.45) * 0.45;                                             // the shade never goes to black over the whole base
     tone[k] = t + planeOff(x, y) + (rn() - 0.5) * 0.02; hasPx.push(k);
   }
