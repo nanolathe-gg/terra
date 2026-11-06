@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {riverCurvature, isBraided, BRAIDED_SPAN, migrateRiver, applyRiver, pointsSignature, riverSteps, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT} from '../sculpt-river.js';
+import {riverCurvature, isBraided, BRAIDED_SPAN, migrateRiver, applyRiver, pointsSignature, riverSteps, riverWidth, isRiver, RIVER_MIN_WIDTH, riverBelt} from '../sculpt-river.js';
 import {landformSides, landformReach} from '../sculpt-shape-presets.js';
 
 const wave = (n = 40, step = 20) => Array.from({length: n}, (_, i) => ({x: 100 + i * step, y: 400 + 30 * Math.sin(i * 0.5) + (i % 3)}));
@@ -13,22 +13,38 @@ test('the same line, width, steps and seed give the same path', () => {
   assert.ok(a.path.length > 20);
 });
 
-test('migration moves the line, zero steps keeps it, and a bend that closes leaves an oxbow (pinned seed)', () => {
+test('migration moves the line, zero steps keeps it, and a loop that closes leaves an oxbow', () => {
   const none = migrateRiver(wave(), {width: 40, steps: 0, seed: 7}), many = migrateRiver(wave(), {width: 40, steps: 300, seed: 7, bounds: {w: 1200, h: 800}});
   assert.ok(none.path.every(p => near(none.drawn, p) < 1e-6));
   assert.ok(many.path.some(p => near(many.drawn, p) > 20));
-  // Pinned: this line at 32 px and 300 steps cuts one neck off with this seed. The oxbow keeps a plug of silt at each end, so it never touches the river.
-  const long = Array.from({length: 7}, (_, i) => ({x: i * 1000 / 6, y: 1500 + (i % 2 ? 30 : -30)}));
-  const ox = migrateRiver(long, {width: 32, steps: 300, seed: 2 * 7919, bounds: {w: 4096, h: 4096}});
+  // A loop drawn closed (its neck 40 px, inside 1.1 widths) is cut off at the first step and kept as an oxbow, with a plug of silt at each end, so it never
+  // touches the river.
+  const loop = [];
+  for (let x = 100; x <= 400; x += 25) loop.push({x, y: 600});
+  const r = Math.hypot(20, 100), a0 = Math.atan2(100, -20), a1 = Math.atan2(100, 20) - 2 * Math.PI;
+  for (let k = 1; k < 48; k++) { const a = a0 + (a1 - a0) * k / 48; loop.push({x: 420 + r * Math.cos(a), y: 500 + r * Math.sin(a)}); }
+  for (let x = 440; x <= 800; x += 25) loop.push({x, y: 600});
+  const ox = migrateRiver(loop, {width: 40, steps: 4, seed: 7, bounds: {w: 1200, h: 900}});
   assert.equal(ox.oxbows.length, 1);
-  assert.ok(ox.oxbows[0].points.length >= 4 && ox.oxbows[0].age >= 0 && ox.oxbows[0].age <= 1);
-  // the loop is frozen when it is cut, two samples in from each end, so its ends stand clear of the neck (the river may move on and meet it later)
+  assert.ok(ox.oxbows[0].points.length >= 8 && ox.oxbows[0].age >= 0 && ox.oxbows[0].age <= 1);
   const o = ox.oxbows[0].points; assert.ok(Math.hypot(o[0].x - o.at(-1).x, o[0].y - o.at(-1).y) > 8);
+  assert.ok(ox.path.every(p => p.y > 560));   // the river runs on along the line, past the neck
 });
 
-test('a bend never outgrows the belt or the map', () => {
-  const W = 40, r = migrateRiver(wave(), {width: W, steps: 1000, seed: 11, bounds: {w: 1200, h: 800}});
-  for (const p of r.path) { assert.ok(near(r.drawn, p) <= RIVER_BELT * W + 1e-6); assert.ok(p.x >= 0 && p.y >= 0 && p.x <= 1199 && p.y <= 799); }
+test('a bend never leaves the band about the drawn line, or the map', () => {
+  assert.equal(riverBelt(48), 96); assert.equal(riverBelt(200), 256);   // two widths, at most 256 px
+  for (const W of [32, 48, 96, 200]) for (const seed of [3, 11, 2701]) {
+    const r = migrateRiver(wave(), {width: W, steps: 480, seed, bounds: {w: 1200, h: 800}});
+    for (const p of r.path) { assert.ok(near(r.drawn, p) <= riverBelt(W) + 1e-6); assert.ok(p.x >= 0 && p.y >= 0 && p.x <= 1199 && p.y <= 799); }
+  }
+  // An S stays an S: at the preset's 48 px and Wander 80 the channel stays within two widths of the drawn S, and its length grows by a sixth at most.
+  const S = Array.from({length: 33}, (_, i) => { const t = i / 32; return {x: 200 + 1650 * t, y: 1088 + 260 * Math.sin(2 * Math.PI * t)}; });
+  const len = p => p.slice(1).reduce((s, q, i) => s + Math.hypot(q.x - p[i].x, q.y - p[i].y), 0);
+  for (const seed of [2701, 2701 + 7919, 2701 + 2 * 7919]) {
+    const m = migrateRiver(S, {width: 48, steps: riverSteps(80), seed, bounds: {w: 2080, h: 2176}});
+    assert.ok(Math.max(...m.path.map(p => near(m.drawn, p))) <= 96 + 1e-6);
+    assert.ok(len(m.path) / len(m.drawn) < 1.17, 'got ' + len(m.path) / len(m.drawn));
+  }
 });
 
 test('the width is at least 32 px', () => {

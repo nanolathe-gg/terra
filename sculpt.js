@@ -240,7 +240,7 @@ function updateControls() {
   // P28: on a river, Wander is the migration (how many steps the drawn line is carried), not an outline noise in px; once the path is edited by hand it cannot be migrated again.
   { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
     $('lf-wander-control').querySelector('label').firstChild.nodeValue=riv?'Wander (bends) ':'Wander (px) ';
-    $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far the line you drew is carried by the river\'s own rule, as migration steps (4 a unit): 0 keeps it as drawn, more grows meander bends that travel downstream and leave oxbow lakes where a neck closes. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
+    $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far the river\'s own rule grows meander bends, as migration steps (4 a unit): 0 keeps the line as drawn, more grows bends that travel downstream. However high, the channel stays within two channel widths (at most 256 px) of the line you drew; a loop drawn closed is cut off and left as an oxbow lake. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
     $('lf-wander').disabled=stale;$('lf-wander').title=stale?why:''; }
   $('section-preview-control').hidden=featureActive||kind!=='landform';
   if (!$('section-preview-control').hidden) drawSection();

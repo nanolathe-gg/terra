@@ -34,7 +34,9 @@ export const LANDFORM_TOOLS={
   valleyU:valley('lfValleyU'),
   valleyT:valley('lfValleyV',{terraces:4,ledge:55,terraceJitter:30}),
   // A river: Width is the channel (the section reaches 6 channel half widths each side), Wander the migration steps in 4s; the floodplain sits 3 above the sea.
-  river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:76,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}},
+  // Wander 80: over 8 widths of course the bends give a median sinuosity of 1.10 and stray 1.35 widths from the chord, against retail TA rivers' 1.03 to 1.20
+  // (median 1.12) and 0.4 to 1.6 (measure/river_band.mjs, measure/river_retail.py).
+  river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:80,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}},
   // A braided river: the same preset with a belt of threads (its form) and no migration unless Wander is raised.
   braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}}
 };
