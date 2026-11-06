@@ -313,7 +313,7 @@ fn plantTuft(p: vec2f, cellPx: f32, r0: f32, r1: f32, ht: f32, which: i32, salt:
     for (var j = 0; j <= 1; j++) {
         for (var i = 0; i <= 1; i++) {
             let cc = b + vec2i(i, j);
-            let h0 = lsHash(vec2i(poolWrap(vec2f(cc), n)), salt);
+            let h0 = lsPcg(poolIndex(vec2f(cc), n, salt) ^ lsPcg(salt));   // card tilepool: from the cell's Latin index, so every row and column of a repeat holds the same tufts
             let h1 = lsPcg(h0 ^ 0x68e31da4u);
             let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.9) * cell;
             let d = pw - c;
@@ -356,7 +356,7 @@ fn plantShrub(p: vec2f, scale: f32) -> vec2f {
         for (var i = 0; i <= 1; i++) {
             let cc = b + vec2i(i, j);
             let cw = poolWrap(vec2f(cc), n);
-            let h0 = lsHash(vec2i(cw), 0x5e7bu);
+            let h0 = lsPcg(poolIndex(cw, n, 0x5e7bu) ^ lsPcg(0x5e7bu));
             let h1 = lsPcg(h0 ^ 0x68e31da4u); let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
             let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.85) * cell;
             let d = pw - c;

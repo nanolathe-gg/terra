@@ -233,16 +233,18 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
 // drawn into the first row of the ground texture at startup.
 // The grid is the export's: its rows start tileShift screen rows down (TA's projection offset), so a tile of the plain is one TNT tile
 // (16 on a bare Green map, where a grid on the screen's rows cut every TNT tile across two of them and made 256).
-fn groundHash(q: vec3i) -> f32 {
-    var n = u32(q.x) * 374761393u + u32(q.y) * 668265263u + u32(q.z) * 2246822519u;
-    n = (n ^ (n >> 13u)) * 1274126177u;
-    return f32(n ^ (n >> 16u)) / 4294967295.0;
-}
 fn groundTile(world: vec2f) -> vec3f {
     let pixel = grainPixel(world - vec2f(0.0, u.tileShift));
     let cell = vec2i(floor(pixel / 32.0));
     let local = vec2i(glslMod(floor(pixel), 32.0));
-    let tile = min(i32(groundHash(vec3i(vec2i(poolWrap(vec2f(cell), u.pool / 32.0)), 7)) * f32(u.groundTiles)), 15);   // card tilepool: the placement repeats with the pool
+    // Card tilepool: the placement repeats with the pool, and every row and every column of cells in a period holds each tile equally
+    // often (row j is one shuffled sequence turned by a shuffled offset: a Latin square), so no column or row of a repeat is lighter
+    // than another. A hashed pick repeated with the pool stacked its chance excesses into stripes at overview (Lava's column means
+    // ranged 0.76 luma against main's 0.42).
+    let n = u32(u.pool / 32.0);
+    let c = vec2u(poolWrap(vec2f(cell), f32(n)));
+    let k = poolPerm((c.x + poolPerm(c.y, n, 0x5bd1u)) % n, n, 0x68e3u);
+    let tile = min(i32(k % u32(max(u.groundTiles, 1))), 15);
     return textureLoad(grassTex, vec2i(tile * 32 + local.x, local.y), 0).rgb;
 }
 
@@ -435,7 +437,7 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
 #endif
     let px = poolPixel(p);
     let blk = floor(px * 0.5);
-    let hb = cellHash(blk + vec2f(83.1, 17.7));
+    let hb = poolCellHash(blk, u.pool * 0.5, 0x83u);   // card tilepool: by the block's Latin index (the same dots in every row and column of a repeat)
     if (hb.x >= dens * 4.0) { return vec4f(0.0); }
     let share = (cover[3] + 0.7 * cover[4] + 0.15 * cover[6] + 0.1 * cover[2]) / max(total, 1e-4);
     let sun = mix(0.15, 1.0, smoothstep(0.6, 1.0, light));
@@ -444,13 +446,13 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
     let chance = dens * 4.0 * clump * clump * clump * share * sun * lush * gate * fade;
     if (hb.x >= chance) { return vec4f(0.0); }
     // The dot: one pixel of the block, or two side by side.
-    let ho = cellHash(blk + vec2f(5.3, 61.9));
+    let ho = poolCellHash(blk, u.pool * 0.5, 0x53u);
     let o = floor(ho * 2.0);
     let at = px - 2.0 * blk;
     let wide = hb.y < 0.4;
     if (!(all(at == o) || (wide && at.y == o.y))) { return vec4f(0.0); }
     // Its colour: one species to a clump, by the palette's weights.
-    let pick = cellHash(poolWrap(floor(poolPos(p) * (poolCells(22.0) / u.pool)), poolCells(22.0)) + vec2f(41.3, 9.1)).x;
+    let pick = poolCellHash(floor(poolPos(p) * (poolCells(22.0) / u.pool)), poolCells(22.0), 0x41u).x;
     var wsum = 0.0;
     for (var k = 0u; k < 4u; k++) { wsum += cvr(40u + k).w; }
     var acc = 0.0;

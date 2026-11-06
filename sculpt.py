@@ -669,7 +669,7 @@ WORLD_VARIANTS = {
         'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
-                       material=dict(stoneSort=.7,
+                       material=dict(stoneSort=.7, groundPool=2048,
                        # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
                        rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
                                  chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6, curtain=.6, lichen=1.5),
