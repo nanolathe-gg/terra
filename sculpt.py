@@ -863,6 +863,8 @@ def main():
     from sculpt_document import MapDocument
     map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
     map_document = MapDocument(args.assets_root / 'documents')
+    from sculpt_maps import SavedMaps
+    saved_maps = SavedMaps(args.assets_root)
     biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
     configs = {b: biome_config(b) for b in biomes}
     # What the page reads of the map catalogue is committed with the worlds; only an export reads the installed content.
@@ -882,6 +884,8 @@ def main():
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if saved_maps.get(self, self.path):
+                return
             path = urlsplit(self.path).path
             if path == '/map-catalog.json':
                 map_export.reply(self, catalogue)
@@ -947,6 +951,8 @@ def main():
                 pass
 
         def do_POST(self):
+            if saved_maps.post(self, self.path):
+                return
             try:
                 if not map_export.post(self, self.path):
                     self.send_error(404)
