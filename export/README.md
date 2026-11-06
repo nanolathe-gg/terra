@@ -193,26 +193,3 @@ JSON commands on stdin: `{op:"chunk",x,y,width,height,path:"local.png"}`,
 `{op:"finish"}` or `{op:"cancel"}`. Each chunk gets one progress reply;
 finish gets one result. EOF cancels an unfinished export. `--work` is optional
 and otherwise temporary files use the OS temporary directory.
-
-## Incremental server documents
-
-`MapDocument` stores authored documents below `<assets-root>/documents/`.
-
-- `PUT /map-document?id=ID` takes the raw JSON metadata object: the stroke
-  graph, feature placements, starts, OTA settings and sparse chunk references.
-  `GET` returns `{id,document,revision,chunks:[{key,bytes,sha256}]}`.
-- `PUT /map-document/chunk?id=ID&key=KEY` saves opaque field-plane bytes
-  independently (32 MiB maximum). The reply is
-  `{id,key,bytes,sha256,changed,revision}`. Saving identical bytes leaves the
-  chunk file and revision untouched. `GET` streams those bytes and supplies
-  their SHA-256 as an ETag.
-- `DELETE /map-document/chunk?id=ID&key=KEY` removes one chunk;
-  `DELETE /map-document?id=ID` removes the metadata and its referenced chunks.
-
-Ids and keys are 1–128 ASCII letters, digits, underscores, hyphens or single
-dots, beginning with a letter, digit, underscore or hyphen. Path separators
-and `..` are refused. Metadata and changed chunks are fsynced and replaced
-atomically. Content-addressed chunk filenames let a metadata replacement
-switch versions without exposing a partially written chunk. Upload field
-chunks before metadata that references them. Reload reads the stored graph
-and chunk bytes; it does not require a full-map field blob.
