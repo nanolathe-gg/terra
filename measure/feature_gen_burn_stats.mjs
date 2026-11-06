@@ -9,6 +9,7 @@ const px = (f, x, y) => (x >= 0 && y >= 0 && x < f.w && y < f.h && f.a[y * f.w +
 function treeStats(frames, burnt) {
   const o = {};
   const sh = f => { let d = 0, n = 0; for (let k = 0; k < f.w * f.h; k++) if (f.a[k]) { d++; if (fire(f.idx[k])) n++; } return n / Math.max(d, 1); };
+  o.tail91to95 = frames.slice(91, 96).map(f => +sh(f).toFixed(2));
   o.cycleIdentical = frames.slice(9, 80).every((f, i) => sig(f) === sig(frames[9 + (i % 14)]));
   o.uniqueFrames = new Set(frames.map(sig)).size;
   o.fireShare = {lead: frames.slice(1, 9).map(f => +sh(f).toFixed(2)), cycleMean: +mean(frames.slice(9, 23).map(sh)).toFixed(3), cycleMin: +Math.min(...frames.slice(9, 23).map(sh)).toFixed(2), cycleMax: +Math.max(...frames.slice(9, 23).map(sh)).toFixed(2), tail: +mean(frames.slice(80, 90).map(sh)).toFixed(2)};
