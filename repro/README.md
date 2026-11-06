@@ -46,9 +46,18 @@ the retail crops stay outside git.
 4. Render and compare:
 
    ```
-   node repro/render.mjs repro/scenes/<world>.json <dir> --server http://127.0.0.1:8801 --port 9450
+   node repro/render.mjs repro/scenes/<world>.json <dir>
    python repro/pair.py <dir>
    ```
+
+   `render.mjs` runs the editor's engine under Node on Dawn
+   (`headless.mjs`: no server, no browser, about a second a scene); it
+   needs Dawn's Node binding, npm's `webgpu`, installed outside the
+   repository (`TERRAFORM_WEBGPU` names its `node_modules`, default
+   `/private/tmp/nanolathe-map-editor/node-webgpu/node_modules`). The
+   pixels and heights are the page's: `--chrome --server <yours> --port
+   <cdp>` renders the same scene in headless Chrome and writes the same
+   bytes.
 
    `pair.png` is retail | ours at full size; `layout.png` compares the height
    reliefs, to check the strokes follow the retail layout before judging

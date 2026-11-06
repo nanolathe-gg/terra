@@ -122,12 +122,22 @@ branches and the projection fix below, so re-render before judging.
 
    ```
    PY=/Users/daniel/src/terraform/.venv/bin/python
-   REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/before http://127.0.0.1:<server> <cdp>
+   REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/before
    # ...change something...
-   REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/after-<n> http://127.0.0.1:<server> <cdp>
+   REPRO_CROPS=$R/repro-r7 sh repro/all.sh $R/agent-<card>/out/after-<n>
    $PY repro/compare.py $R/agent-<card>/out/before $R/agent-<card>/out/after-<n> <guard from the table>
    $PY repro/triptych.py $R/agent-<card>/out/before $R/agent-<card>/out/after-<n> $R/agent-<card>/out/review-<n>
    ```
+
+   The render checks (`all.sh`, `render.mjs`, `regional.mjs`,
+   `measure/shape_controls.mjs`) run the engine under Node on Dawn
+   (`repro/headless.mjs`) from your checkout: no server and no browser, about
+   a second a scene, with the same pixels and heights as the page. Add
+   `http://127.0.0.1:<server>` to read from your server instead, or
+   `--chrome` (with your server and CDP port) to render in the page as
+   before. The checks of the UI (`smoke.mjs`, `features.mjs`,
+   `workspace.mjs`, `perf.mjs`, `world_controls.mjs`, `tilecount.mjs`) run
+   in Chrome.
 
    `compare.py` must exit 0. Look at `review-<n>/<world>.png` (retail |
    before | after for each window) and each window's `layout.png` before
