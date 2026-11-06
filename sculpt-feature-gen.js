@@ -641,6 +641,8 @@ export const CONTROLS = {
 };
 const NAMES = { tree: 'Tree', burnt: 'TreeDead', shrub: 'Shrub', rock: 'Rock', scar: 'Smudge' };
 
+// ctx.bodyOnly skips the burn sequence and the burnt successor (the editor's view needs only body and shadow; export needs them all).
+// Body, shadow and gameplay do not depend on it: each draws from its own seeded stream.
 export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   const P = { ...DEFAULTS[kind], ...params };
   const rr = rng(mix32(seed, 0xBEEF));
@@ -652,8 +654,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     body = T.body;
     shadow = makeShadow(body, { side: L.shadowSide, shx: conifer ? 0.62 : 0.5, up: conifer ? 0.7 : 0.66, colors: TREE_SHADOW_COLORS, soften: 2 }, rng(mix32(seed, 41)));
     const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.78)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
-    burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
-    burn = treeBurn(body, burnt.body, seed, conifer);
+    if (!ctx.bodyOnly) { burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx); burn = treeBurn(body, burnt.body, seed, conifer); }   // the view draws only body and shadow
     const sizeFrac = clamp((P.height - 55) / 17, 0, 1);
     gameplay = { energy: pickValue(P.energy, sizeFrac, rr), metal: 0, blocking: true, reclaimable: true, flamable: true, burnTicks: 192, spreadChance: conifer ? 30 : 90 };
   } else if (kind === 'burnt') {
@@ -663,7 +664,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     gameplay = { energy: pickValue(P.energy, undefined, rr), metal: 0, blocking: true, reclaimable: true, flamable: false };
   } else if (kind === 'shrub') {
     body = shrubFrame(P, seed, ctx).body;
-    burn = shrubBurn(body, seed);
+    if (!ctx.bodyOnly) burn = shrubBurn(body, seed);
     gameplay = { energy: pickValue(P.energy, undefined, rr), metal: 0, blocking: false, reclaimable: true, flamable: true, burnTicks: 84, spreadChance: 30 };
   } else if (kind === 'rock') {
     const R = rockFrame(P, seed, ctx);
