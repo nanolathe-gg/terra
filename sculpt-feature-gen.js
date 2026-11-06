@@ -1,11 +1,14 @@
 // Procedural map features for Green: trees, burning and burnt trees, shrubs, rocks, scars, metal deposits, vents.
 // Plain ES module, no dependencies, same bytes in Node and in the browser. Everything is built in the game's
 // 256-color index space (the indices below are the game palette's; `palette` is only needed to turn indices
-// into RGBA or to fit deposits and vents to a ground picture). Built from the written spec only.
+// into RGBA or to fit deposits and vents to a ground picture). Built from the written spec only. The burn sequences (fire)
+// are in sculpt-feature-fire.js.
 //
 // A sprite is {w,h,ax,ay,idx:Uint8Array,a:Uint8Array}: palette index per pixel, a=1 where drawn, (ax,ay) the anchor
 // pixel inside the sprite (the foot of a plant, the middle of a rock).
 // A feature is {kind,name,seed,params,footprint,body,shadow,shadowBlend,bodyBlend,burn,burnt,gameplay}.
+
+import { treeBurn, shrubBurn } from './sculpt-feature-fire.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -615,198 +618,6 @@ function scarFrame(P, seed, ctx) {
   return { body: cropSprite(sp, 0), translucent: true };
 }
 
-// ---- fire (spec 16.2) --------------------------------------------------------------------------------------------
-// Retail's tree burn: a unique 9-frame lead-in (flame grows from the foot, crown still green), the crown cut to charred
-// gray at frame 9, a 14-frame flame cycle that repeats byte for byte, and a 16-frame burn-out tail that ends on the burnt
-// tree's exact size and anchor with glowing embers on it. The flame base is an arch (to the ground only near the trunk,
-// climbing the crown's flanks), tongues are redrawn around a stable core, sparks are isolated dark-red pixels, no smoke.
-const FLAME_GROUPS = {
-  wy: [[195, 48], [194, 25], [193, 14], [196, 13]], py: [[197, 45], [198, 30], [199, 25]], by: [[208, 72], [209, 14], [210, 10], [211, 4]],
-  or: [[200, 50], [201, 15], [202, 15], [203, 20]], dr: [[204, 35], [205, 45], [206, 20]], ot: [[192, 25], [207, 10], [212, 25], [213, 15], [214, 10], [215, 10], [216, 5]],
-};
-const FLAME_THIRDS = [   // base, middle, tip: [group, share]
-  [['wy', 38], ['py', 12], ['by', 18], ['or', 6], ['dr', 3], ['ot', 23]],
-  [['wy', 23], ['py', 8], ['by', 28], ['or', 7], ['dr', 4], ['ot', 29]],
-  [['wy', 7], ['py', 8], ['by', 43], ['or', 16], ['dr', 11], ['ot', 14]],
-];
-const FLAME_EDGE = [[200, 30], [210, 22], [211, 20], [209, 10], [203, 10], [197, 5], [201, 3]];
-const SPARK_COLORS = [[205, 29], [208, 14], [200, 10], [210, 9], [203, 6], [209, 6], [211, 5], [204, 5], [194, 4], [197, 4], [195, 4], [196, 4]];
-const flameColor = (r, f) => weighted(r, FLAME_GROUPS[weighted(r, FLAME_THIRDS[f < 0.34 ? 0 : f < 0.67 ? 1 : 2])]);
-// Round 4: the flame is a smooth heat field, not noise. A wide lumpy column with a stable core, tongues that are the ridges of a slowly
-// moving noise (it loops over the 14-frame cycle, so neighbors overlap about 0.57 and distant frames about 0.4), colored by ranking the
-// heat so every frame carries retail's index shares as contiguous 2-6 px patches (pale core, yellow body, orange and red only at the rim and tips).
-const FLAME_RANK = [[193, 4], [194, 7], [195, 13], [208, 22], [209, 10], [196, 4], [197, 5], [210, 12], [198, 3.5], [199, 2], [211, 4], [200, 5], [212, 1], [203, 2], [204, 1.5], [205, 3], [192, 0.5], [207, 0.5]];
-const FLAME_RANK_SUM = FLAME_RANK.reduce((a, [, w]) => a + w, 0);
-function drawFlame(cv, o, rr) {
-  const { ax, ay, half, top, coreH, coreHW, deep } = o, th = (o.phase || 0) * TAU, S = o.coreSeed || 1;
-  const nz = (x, y, sc, off, amp = 1.7) => vnoise(x / sc + amp * Math.cos(th) + off, y / sc + amp * Math.sin(th), S + off * 7);
-  const cxF = ax + (o.lump ? 0 : Math.round((nz(0, 0, 9, 21, 1.8) - 0.5) * 11));     // the flame sways off the trunk instead of standing as one centered column
-  const baseUp = dx => dx <= 4 ? -deep : Math.max(-deep + (dx - 4) * 1.25, (dx - 8) * 1.9);
-  const topAt = (xe, dx, lump) => {
-    if (lump) { const u = clamp(dx / o.wl, 0, 1); return top * Math.sqrt(Math.max(0, 1 - u * u)) * (0.85 + 0.3 * nz(xe, 3, 5, 3)); }
-    const env = Math.exp(-Math.pow(dx / (half * 0.72), 2)), n = nz(xe, 0, 6.5, 0), ridge = Math.pow(clamp((n - 0.2) / 0.6, 0, 1), 1.7);
-    const flank = 0.42 * Math.exp(-Math.pow((dx - half * 0.7) / (half * 0.3), 2)) * Math.pow(clamp((nz(xe, 3, 4.5, 17) - 0.25) / 0.5, 0, 1), 1.1);   // tongues that climb the crown's flanks
-    return Math.min(top + 3, top * 1.25 * Math.max(env * (0.1 + 1.0 * ridge), flank, 0.42 * Math.exp(-Math.pow(dx / (half * 0.45), 2)) * (0.8 + 0.4 * nz(xe, 5, 5, 71))));
-  };
-  // a broken mass: 2-3 lobes side by side (uneven, off the trunk) with gaps between them where the charred crown shows
-  const nLb = o.lump ? 1 : 2 + (nz(5, 5, 8, 44) > 0.75 ? 1 : 0), lobes = [];
-  for (let i = 0; i < nLb; i++) {
-    const hwL = coreHW * (0.8 + 0.6 * nz(i * 3, 2, 7, 41 + i)), off = (i - (nLb - 1) / 2) * hwL * 1.75 + (nz(i * 5, 3, 6, 47 + i) - 0.5) * 6 + (cxF - ax);
-    lobes.push({ x: ax + off, hw: hwL, h: coreH * (0.55 + 0.8 * nz(i * 2, 1, 5, 53 + i)) });
-  }
-  const pts = [], heat = [];
-  for (let y = ay + deep + 1; y >= ay - top - 6; y--) for (let x = Math.floor(ax - half - 9); x <= ax + half + 9; x++) {
-    const dx = Math.abs(x - ax), up = ay - y;
-    if (up < baseUp(dx)) continue;
-    const xe = x + (o.lump ? 0 : 2.6 * up / Math.max(top, 1) + 2.4 * Math.sin(up / 6.5 + th * 2));
-    let tp = topAt(xe, Math.abs(xe - cxF), o.lump);
-    if (!o.lump) for (const d of [-4.5, -3, -1.5, 1.5, 3, 4.5]) tp = Math.max(tp, topAt(xe + d, Math.abs(xe + d - cxF), false) * (1 - 0.045 * Math.abs(d)));   // tongue tips are 5-7 px wide, not needles
-    let coreP = 0;
-    if (o.lump) coreP = coreH * Math.max(0, 1 - Math.pow(dx / (coreHW + 2 * (nz(x, y, 4, 5) - 0.5)), 2));
-    else for (const lb of lobes) coreP = Math.max(coreP, lb.h * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x - lb.x) / (lb.hw + 2 * (nz(x, y, 4, 5) - 0.5)), 2)), 0.75));
-    const rag = (nz(x, y, 3.6, 9) - 0.5) * 8;
-    if (up > Math.max(tp, coreP) + rag) continue;
-    if (dx > 18 && !o.lump && nz(x, y, 7, 61) < 0.42) continue;       // far flank: gaps
-    const loc = Math.max(tp, coreP) + 1;
-    const h = 0.9 - 0.1 * Math.pow(clamp(up / loc, 0, 1.2), 0.95) - 0.3 * Math.pow(dx / Math.max(half, 6), 1.2) + 0.8 * (nz(x, y, 4.2, 11, 1.1) - 0.5) + 0.3 * (nz(x, y, 2, 13, 0.8) - 0.5);
-    pts.push(y * cv.w + x); heat.push(Math.round(h * 6) / 6 + (rr() - 0.5) * 0.14);   // hard-edged color patches plus pixel-level jitter, not a smooth gradient
-  }
-  // ragged edges: high-frequency erosion at the rim, holes inside, then detached fragments and thin wisps (retail frames are busier than a clean outline)
-  { const W0 = cv.w, set0 = new Set(pts), keep = [];
-    for (let i = 0; i < pts.length; i++) {
-      const k = pts[i], x = k % W0, y = (k / W0) | 0, miss = [k - 1, k + 1, k - W0, k + W0].filter(q => !set0.has(q)).length;
-      const hf = nz(x, y, 2.6, 31, 2.8), streak = vnoise(x / 2.2 + Math.cos(th) * 2, y / 10 + Math.sin(th) * 2, S + 77), up = ay - y;
-      let drop = false;
-      if (miss > 0 && (hf > 0.6 - 0.08 * miss || (streak > 0.62 && up > 8))) drop = true;
-      else if (miss > 0 && hash2(x, y, S + Math.round((o.phase || 0) * 7)) < 0.44 + 0.1 * miss) drop = true;                      // torn single-pixel nibbles along the rim
-      else if (up < 7 && !o.lump && hash2(x, y, S + 5 + Math.round((o.phase || 0) * 7)) < 0.3) drop = true;                          // the foot dissolves into specks   // notches only at the rim; the main mass stays solid (retail's main blob has about 0.3 boundary per pixel of area)
-      if (!drop) keep.push(i);
-    }
-    const np = keep.map(i => pts[i]), nh = keep.map(i => heat[i]); pts.length = 0; heat.length = 0; pts.push(...np); heat.push(...nh);
-    if (!o.lump) {      // blunt tongue tips: widen each column's top 8 rows by 2 px each side (retail tips are 5-7 px wide, not needles)
-      const topX = new Map(); for (const k of pts) { const x = k % W0, y = (k / W0) | 0; if (!topX.has(x) || topX.get(x) > y) topX.set(x, y); }
-      const have = new Set(pts), extra = [];
-      for (const k of pts) { const x = k % W0, y = (k / W0) | 0; if (y - topX.get(x) > 8) continue; for (const dxx of [-2, -1, 1, 2]) { const kk = y * W0 + x + dxx; if (!have.has(kk) && (Math.abs(dxx) === 1 || hash2(x, y, S + 3) < 0.7)) { have.add(kk); extra.push([kk, heat[pts.indexOf(k)] - 0.1]); } } }
-      for (const [kk, hh] of extra) { pts.push(kk); heat.push(hh); }
-    }
-    const set1 = new Set(pts), colTopOf = new Map();
-    for (const k of pts) { const x = k % W0, y = (k / W0) | 0; if (!colTopOf.has(x) || colTopOf.get(x) > y) colTopOf.set(x, y); }
-    const add = (x, y, h) => { const k = y * W0 + x; if (x >= 1 && y >= 1 && x < W0 - 1 && y < cv.h - 1 && !set1.has(k)) { set1.add(k); pts.push(k); heat.push(h); } };
-    const cols = [...colTopOf.keys()];
-    const nFrag = o.lump ? 2 : 30 + Math.floor(rr() * 8);
-    for (let f = 0; f < nFrag && cols.length; f++) {                        // detached licks floating above and beside the body
-      const cx0 = cols[(rr() * cols.length) | 0], ty = colTopOf.get(cx0), side = rr() < 0.55 ? 1 : -1;
-      let x = cx0 + side * (3 + Math.round(rr() * 7)), y = ty + 3 + Math.round(rr() * 14) - Math.round(rr() * (o.lump ? 3 : 6)) + (side > 0 ? 0 : 2);
-      const n = 3 + Math.floor(rr() * 8);
-      for (let t = 0; t < n; t++) { add(x, y, 0.2 + 0.2 * rr()); const d = pick(rr, [[1, 0], [-1, 0], [0, -1], [0, -1], [0, 1]]); x += d[0]; y += d[1]; }
-    }
-    const nLk = o.lump ? 1 : 4 + Math.floor(rr() * 4);
-    for (let f = 0; f < nLk && cols.length; f++) {                          // licks: 2 px wide curling tongues off the tips and flanks
-      const cx0 = cols[(rr() * cols.length) | 0]; let x = cx0 + (rr() < 0.5 ? -1 : 1) * Math.round(rr() * 3), y = colTopOf.get(cx0) + Math.round(rr() * 10);
-      const len = 5 + Math.floor(rr() * 9); let lean = (rr() - 0.5) * 0.9;
-      for (let t = 0; t < len; t++) { const hot = 0.28 + 0.1 * rr(); add(Math.round(x), y, hot); if (t < len * 0.6) add(Math.round(x) + 1, y, hot - 0.05); y -= 1; lean += (rr() - 0.5) * 0.5; x += lean; if (t > len - 4) x += (lean > 0 ? 1 : -1) * 0.7; }
-    }
-    const nW = o.lump ? 0 : Math.floor(rr() * 2);
-    for (let f = 0; f < nW && cols.length; f++) {                           // thin wisps off the tips
-      const cx0 = cols[(rr() * cols.length) | 0]; let x = cx0, y = colTopOf.get(cx0) - 1;
-      const len = 3 + Math.floor(rr() * 5), lean = -0.3 + (rr() - 0.5) * 0.8;
-      for (let t = 0; t < len; t++) { add(Math.round(x), y, 0.15 + 0.1 * rr()); y -= 1; x += lean + (rr() - 0.5) * 0.8; }
-    }
-  }
-  const inF = new Set(pts), has = k => inF.has(k);
-  const edge = i => { const k = pts[i]; return !(has(k - 1) && has(k + 1) && has(k - cv.w) && has(k + cv.w)); };
-  for (let i = 0; i < pts.length; i++) if (edge(i)) heat[i] -= 0.17 + 0.1 * rr();             // a red rim at the edge and the tongue tips
-  const order = pts.map((k, i) => i).sort((a, b) => heat[b] - heat[a]), N = order.length;
-  let acc = 0, ri = 0;
-  order.forEach((i, rank) => {
-    while (ri < FLAME_RANK.length - 1 && rank >= (acc + FLAME_RANK[ri][1]) / FLAME_RANK_SUM * N) { acc += FLAME_RANK[ri][1]; ri++; }
-    const k = pts[i], x = k % cv.w, y = (k / cv.w) | 0;
-    put(cv, x, y, FLAME_RANK[clamp(ri + (rr() < 0.06 ? (rr() < 0.5 ? -1 : 1) : 0), 0, FLAME_RANK.length - 1)][0]);
-  });
-  const nSp = Math.round(o.sparks * (0.6 + 0.8 * rr()));
-  for (let i = 0; i < nSp; i++) {
-    const x = ax + Math.round((rr() - 0.5) * (half * 2 + 8)), y = ay - Math.round(rr() * top * 0.85), k = y * cv.w + x;
-    if (has(k) || has(k - 1) || has(k + 1) || has(k - cv.w) || has(k + cv.w)) continue;
-    put(cv, x, y, weighted(rr, SPARK_COLORS));
-  }
-  return N;
-}
-function charColor(r) { return weighted(r, [[95, 28], [47, 24], [93, 17], [94, 14], [62, 6], [61, 5], [92, 3], [89, 2], [91, 1]]); }
-const CHAR_CROWN = [[93, 24], [91, 11], [90, 7], [92, 8], [87, 1.5], [95, 8], [94, 5], [61, 1], [62, 1], [245, 1.5]];
-// Tree burn: frames 0-8 lead-in, 9-79 repeating 14-frame cycle, 80-95 tail ending on the burnt successor.
-function burnSequence(tree, burnt, seed, nFrames = 96, conifer = false) {
-  const body = tree.body, b = burnt.body, r = rng(mix32(seed, 31));
-  const padT = 38, padS = 14, w = body.w + padS * 2, h = body.h + padT + 6, ox = padS, oy = padT;
-  const ax = body.ax + ox, ay = body.ay + oy, cw = body.w;
-  const at2 = (x, y) => (x >= 0 && y >= 0 && x < body.w && y < body.h && body.a[y * body.w + x]) ? body.idx[y * body.w + x] : -1;
-  // charred crown: one cut at frame 9. The shape stays but loses about 3 columns each side; old shade stays as dark greens.
-  const charred = newSprite(w, h, ax, ay), rc = rng(mix32(seed, 77));
-  for (let y = 0; y < body.h; y++) {
-    let x0 = body.w, x1 = -1; for (let x = 0; x < body.w; x++) if (body.a[y * body.w + x]) { x0 = Math.min(x0, x); x1 = x; }
-    for (let x = 0; x < body.w; x++) {
-      const k = y * body.w + x; if (!body.a[k] || x < x0 + 3 || x > x1 - 3 || (y < body.h - 8 && rc() < 0.04)) continue;
-      const i = body.idx[k], dark = i >= 44 && i <= 47 || (i >= 90 && i <= 95) || (i >= 55 && i <= 62);
-      put(charred, x + ox, y + oy, dark && rc() < 0.6 ? weighted(rc, [[43, 3], [44, 4], [45, 5], [46, 3], [47, 2]]) : weighted(rc, CHAR_CROWN));
-    }
-  }
-  const living = newSprite(w, h, ax, ay);
-  for (let y = 0; y < body.h; y++) for (let x = 0; x < body.w; x++) if (body.a[y * body.w + x]) put(living, x + ox, y + oy, body.idx[y * body.w + x]);
-  const skel = newSprite(w, h, ax, ay);
-  for (let y = 0; y < b.h; y++) for (let x = 0; x < b.w; x++) if (b.a[y * b.w + x]) put(skel, x - b.ax + ax, y - b.ay + ay, b.idx[y * b.w + x]);
-  const flameHalf = conifer ? Math.round(cw * 0.36) : Math.round(cw * 0.28), top0 = Math.min(padT + body.ay - 4, conifer ? 88 : 82);
-  const base = { ax, ay, half: flameHalf, top: top0, coreH: conifer ? 20 : 30, coreHW: conifer ? 3.4 : 4.0, deep: conifer ? 5 : 3, sparks: 9, coreSeed: (seed * 7) & 1023, phase: 0 };
-  const compose = (under, flameO, fseed, extra) => {
-    const cv = cloneSprite(under), fl = newSprite(w, h, ax, ay);
-    drawFlame(fl, flameO, rng(fseed));
-    for (let k = 0; k < w * h; k++) if (fl.a[k]) { cv.idx[k] = fl.idx[k]; cv.a[k] = 1; }
-    if (extra) extra(cv);
-    return cv;
-  };
-  const leadTop = [27, 40, 43, 51, 48, 76, 75, 76], leadN = [2, 3, 3, 4, 4, 5, 5, 5];
-  const cycleN = [5, 5, 4, 4, 2, 4, 6, 6, 5, 3, 7, 4, 4, 2];
-  const frames = new Array(nFrames), cycle = [];
-  frames[0] = cropSprite(living);
-  const leadWl = [8.5, 10, 11.5, 12.5, 13];
-  for (let f = 1; f <= 8; f++) frames[f] = cropSprite(compose(living, f <= 5 ? { ...base, lump: true, wl: leadWl[f - 1], top: leadTop[f - 1], coreH: 0, half: 12, phase: f / 14 } : { ...base, top: Math.min(leadTop[f - 1], top0), coreH: Math.round(base.coreH * f / 8), phase: f / 14 }, mix32(seed, 500 + f)));
-  for (let c = 0; c < 14; c++) cycle.push(cropSprite(compose(charred, { ...base, top: Math.round(top0 * (0.93 + 0.1 * Math.sin(c / 14 * TAU * 2))), phase: c / 14 }, mix32(seed, 700 + c))));
-  for (let f = 9; f <= 79; f++) frames[f] = cycle[(f - 9) % 14];                   // the same bytes every repeat
-  for (let f = 80; f < nFrames; f++) {
-    const t = (f - 80) / (nFrames - 80), die = f >= 91 ? (nFrames - 1 - f) / 5 : 1;
-    const crown = cloneSprite(charred), vr = rng(mix32(seed, 60 + f));
-    for (let k = 0; k < w * h; k++) if (crown.a[k] && (hash2(k % w, (k / w) | 0, seed) < Math.min(1.05, t * 3.4 + 0.1))) crown.a[k] = 0;
-    for (let k = 0; k < w * h; k++) if (skel.a[k] && !crown.a[k]) { crown.idx[k] = skel.idx[k]; crown.a[k] = 1; }
-    const wide = 1 + 0.35 * (1 - Math.abs(t - 0.4));
-    if (f === nFrames - 1) {            // the burnt successor's exact size and anchor, with about 16% glowing embers
-      const last = cloneSprite(b), re = rng(mix32(seed, 4242));
-      for (let k = 0; k < last.w * last.h; k++) if (last.a[k] && re() < 0.16) last.idx[k] = weighted(re, [[205, 30], [200, 18], [203, 14], [204, 14], [211, 8], [210, 8], [206, 8]]);
-      frames[f] = last; continue;
-    }
-    const dieK = f >= 91 ? (conifer ? [0.8, 0.75, 0.5, 0.22, 0.1] : [0.92, 0.88, 0.64, 0.24, 0.1])[f - 91] : 1, dk = Math.pow(dieK, conifer ? 2.0 : 1.4);   // the flame fades over the last 4 frames (retail fire share 77, 74, 61, 34, 16 percent)
-    frames[f] = cropSprite(compose(crown, { ...base, half: Math.max(5, Math.round(flameHalf * wide * (0.35 + 0.65 * dk))), top: Math.max(10, Math.round(top0 * (f >= 91 ? 0.25 + 0.75 * dk : 0.95 + 0.1 * Math.sin(f)))), coreH: Math.max(6, Math.round(base.coreH * (1 + 0.5 * (1 - t)) * dk)), coreHW: Math.max(2.5, (base.coreHW + 2) * (0.35 + 0.65 * dk)), phase: f >= 91 ? 0.35 + 0.015 * (f - 91) : (f % 14) / 14 }, mix32(seed, 1100 + f)));
-  }
-  return frames;
-}
-// Shrub burn: 42 frames, flame only: 2 lead-in frames, a 14-frame cycle repeated through frame 41. Last frame ember.
-function shrubBurn(shrub, seed, nFrames = 42) {
-  const W = 30, H = 44, ax = 15, ay = H - 4, mk = (c, small) => {
-    const cv = newSprite(W, H, ax, ay);   // a rounded teardrop 11-18 px wide, 18-34 px tall, tip leaning
-    drawFlame(cv, { ax, ay, half: 8, lump: true, wl: small ? 4.5 : 6.2 + 1.2 * Math.sin(c / 14 * TAU * 2), top: small ? 14 : 29 + Math.round(5 * Math.sin(c / 14 * TAU)), coreH: 0, coreHW: 5, deep: 1, sparks: 1, coreSeed: seed & 1023, phase: c / 14 }, rng(mix32(seed, 40 + c)));
-    const rch = rng(mix32(seed, 800 + c)); for (let k = 0; k < 2; k++) { const x = ax + Math.round((rch() - 0.5) * 12), y = ay - Math.round(rch() * 3); if (!cv.a[y * W + x]) put(cv, x, y, charColor(rch)); }
-    return cropSprite(cv);
-  };
-  const frames = [], cycle = []; for (let c = 0; c < 14; c++) cycle.push(mk(c));
-  frames.push(mk(1, true), mk(2, true));
-  for (let f = 2; f < nFrames - 1; f++) frames.push(cycle[(f - 2) % 14]);
-  const last = newSprite(16, 24, 8, 21), rr = rng(mix32(seed, 99));      // a dying pale-yellow ember of flame fragments (spec 15)
-  for (let y = 0; y < 19; y++) for (let x = 0; x < 11; x++) {
-    const dx = (x - 5) / 5, dy = (y - 9) / 9.5, e = dx * dx * 1.3 + dy * dy;
-    if (e < 1 && rr() < 0.62 - 0.25 * e) put(last, 3 + x, 2 + y, weighted(rr, [[208, 26], [195, 14], [194, 11], [209, 9], [210, 8], [193, 6], [196, 4], [197, 3], [205, 5], [200, 2]]));
-  }
-  for (let k = 0; k < 5; k++) put(last, 8 + Math.round((rr() - 0.5) * 8), 20 - Math.round(rr() * 2), charColor(rr));
-  frames.push(cropSprite(last));
-  return frames;
-}
-
 // ---- gameplay ------------------------------------------------------------------------------------------------------
 function pickValue(range, sizeFrac, r) {
   // a [lo, hi] range: the value tracks size where size is known, else uniform; a fixed range gives the fixed value
@@ -842,7 +653,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     shadow = makeShadow(body, { side: L.shadowSide, shx: conifer ? 0.62 : 0.5, up: conifer ? 0.7 : 0.66, colors: TREE_SHADOW_COLORS, soften: 2 }, rng(mix32(seed, 41)));
     const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.78)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
     burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
-    burn = burnSequence({ body }, { body: burnt.body }, seed, 96, conifer);
+    burn = treeBurn(body, burnt.body, seed, conifer);
     const sizeFrac = clamp((P.height - 55) / 17, 0, 1);
     gameplay = { energy: pickValue(P.energy, sizeFrac, rr), metal: 0, blocking: true, reclaimable: true, flamable: true, burnTicks: 192, spreadChance: conifer ? 30 : 90 };
   } else if (kind === 'burnt') {
