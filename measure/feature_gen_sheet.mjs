@@ -120,7 +120,7 @@ ctrlRow('Smudge density', 'scar', 'density', [0.2, 0.55, 1], {type: 'smudge'}, 6
   ctrl.push({title: 'Deposit metal value', items, w: 96, h: 96});
 }
 
-// round 4 versus round 5: the same seeds drawn by the round-2 module and by this one
+// round 5 versus round 6: the same seeds drawn by the round-2 module and by this one
 const r1 = r1Path ? await import(pathToFileURL(r1Path).href) : null;
 const compare = [];
 if (r1) {
@@ -128,28 +128,28 @@ if (r1) {
   const pair = (title, note, specs, w, h, ax, ay, tag) => {
     const items = [];
     specs.forEach(([kind, p1, p2, seed], i) => {
-      items.push({im: tile(`${tag}-${i}-r4`, before(kind, p1, seed), w, h, ax, ay), cap: `round 4, seed ${seed}`});
-      items.push({im: tile(`${tag}-${i}-r5`, generateFeature(kind, p2, seed, ctx), w, h, ax, ay), cap: `<b>round 5</b>`});
+      items.push({im: tile(`${tag}-${i}-r5`, before(kind, p1, seed), w, h, ax, ay), cap: `round 5, seed ${seed}`});
+      items.push({im: tile(`${tag}-${i}-r6`, generateFeature(kind, p2, seed, ctx), w, h, ax, ay), cap: `<b>round 6</b>`});
     });
     compare.push({title, note, items});
   };
-  pair('Burnt broadleaf: thinner, more numerous limbs, trunk narrowing upward', 'Round 4: a heavy trunk with a few thick limbs.', [3000, 3007, 3014].map(sd => ['burnt', {}, {}, sd]), 80, 76, 30, 68, 'w-burnt');
-  pair('Burnt conifer: sparser, grayer, thin trunk showing through', '', [3000, 3005, 3010].map(sd => ['burnt', {species: 'conifer', height: 56, width: 0.5}, {species: 'conifer', height: 56, width: 0.5}, sd]), 80, 76, 30, 68, 'w-burntc');
-  pair('Rocks: one smooth, lumpy, tilted oblong', 'Round 4 was too round, with confetti pink.', [['1x1', 5000], ['2x2', 5100], ['3x3', 5200], ['4x3', 5400]].map(([c, sd]) => ['rock', {cells: c}, {cells: c}, sd]), 96, 80, 40, 24, 'w-rock');
-  pair('Shrubs: scatter of small yellow-green clumps, no ring', 'Dense (left two) and sparse (right two).', [['shrub', {density: 0.6, width: 27, height: 20}, {density: 0.6, width: 27, height: 20}, 4101], ['shrub', {density: 0.6, width: 27, height: 20}, {density: 0.6, width: 27, height: 20}, 4102], ['shrub', {density: 0.12, width: 33, height: 26}, {density: 0.12, width: 33, height: 26}, 4103], ['shrub', {density: 0.12, width: 33, height: 26}, {density: 0.12, width: 33, height: 26}, 4104]], 52, 40, 25, 32, 'w-shrub');
-  pair('Broadleaf trees: more bright clumps', '', [1000, 1007, 1014].map(sd => ['tree', {}, {}, sd]), 100, 96, 38, 86, 'w-broad');
+  pair('Burnt broadleaf: heavier trunk at mid height', 'Round 5: thinner limbs on a narrowing trunk.', [3000, 3007, 3014].map(sd => ['burnt', {}, {}, sd]), 80, 76, 30, 68, 'x-burnt');
+  pair('Burnt conifer: sparser, grayer, thin trunk showing through', '', [3000, 3005, 3010].map(sd => ['burnt', {species: 'conifer', height: 56, width: 0.5}, {species: 'conifer', height: 56, width: 0.5}, sd]), 80, 76, 30, 68, 'x-burntc');
+  pair('Rocks: lumpy angular oblongs', 'Round 5 outlines were near-circles.', [['1x1', 5000], ['2x2', 5100], ['3x3', 5200], ['4x3', 5400]].map(([c, sd]) => ['rock', {cells: c}, {cells: c}, sd]), 96, 80, 40, 24, 'x-rock');
+  pair('Shrubs: scatter of small yellox-green clumps, no ring', 'Dense (left two) and sparse (right two).', [['shrub', {density: 0.6, width: 27, height: 20}, {density: 0.6, width: 27, height: 20}, 4101], ['shrub', {density: 0.6, width: 27, height: 20}, {density: 0.6, width: 27, height: 20}, 4102], ['shrub', {density: 0.12, width: 33, height: 26}, {density: 0.12, width: 33, height: 26}, 4103], ['shrub', {density: 0.12, width: 33, height: 26}, {density: 0.12, width: 33, height: 26}, 4104]], 52, 40, 25, 32, 'x-shrub');
+  pair('Broadleaf trees: more bright clumps', '', [1000, 1007, 1014].map(sd => ['tree', {}, {}, sd]), 100, 96, 38, 86, 'x-broad');
   const depItems = [];
   [[86, 701], [127, 702], [187, 703], [223, 704]].forEach(([m, sd], i) => {
     const g1 = patch(GX + 30 + i * 13, GY + 40, 120, 120), g2 = patch(GX + 30 + i * 13, GY + 40, 120, 120);
     r1.paintDeposit(g1, 60, 60, {metal: m}, sd, ctx); paintDeposit(g2, 60, 60, {metal: m}, sd, ctx);
-    depItems.push({im: save(`w-dep-${i}-r4`, 120, 120, g1.rgba), cap: `round 4, metal ${m}`}, {im: save(`w-dep-${i}-r5`, 120, 120, g2.rgba), cap: `<b>round 5</b>, metal ${m}`});
+    depItems.push({im: save(`x-dep-${i}-r5`, 120, 120, g1.rgba), cap: `round 5, metal ${m}`}, {im: save(`x-dep-${i}-r6`, 120, 120, g2.rgba), cap: `<b>round 6</b>, metal ${m}`});
   });
-  compare.push({title: 'Metal deposits: the retail look (plates and ragged cluster), one merged moss patch', note: 'Distinct plates with moss gaps, crisper edges, brighter stone.', items: depItems});
+  compare.push({title: 'Metal deposits: the retail look (plates and ragged cluster), one merged moss patch', note: 'RockMetal3 look: a bigger ragged cluster with thin arms.', items: depItems});
   // fire: key frames of the round-2 and round-3 tree burn
   const fireStrip = (frames, picks, name) => { const sel = picks.map(i => frames[i]); let bx = 0, by = 0, cw2 = 0, ch2 = 0; for (const f of sel) { bx = Math.max(bx, f.ax); by = Math.max(by, f.ay); } for (const f of sel) { cw2 = Math.max(cw2, bx + f.w - f.ax); ch2 = Math.max(ch2, by + f.h - f.ay); } const W = cw2 * sel.length, buf = new Uint8ClampedArray(W * ch2 * 4); sel.forEach((f, n) => { const rgba = toRGBA(f, palette); for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) { const k = (y * f.w + x) * 4; if (!rgba[k + 3]) continue; const o = ((by - f.ay + y) * W + n * cw2 + bx - f.ax + x) * 4; buf.set(rgba.subarray(k, k + 4), o); } }); return save(name, W, ch2, buf); };
   const f2 = before('tree', {}, 1000).burn, f3 = generateFeature('tree', {}, 1000, ctx).burn;
   const picks = [0, 4, 8, 9, 15, 40, 82, 90, 95];
-  compare.push({title: 'Tree burn: round 4 (top) against round 5 (bottom), frames 0, 4, 8, 9, 15, 40, 82, 90, 95', note: 'Round 5: the heat-field flame now has torn edges, holes, detached licks, thin wisps and tongues spilling over the crown.', fire: [fireStrip(f2, picks, 'w-fire-r4'), fireStrip(f3, picks, 'w-fire-r5')]});
+  compare.push({title: 'Tree burn: round 5 (top) against round 6 (bottom), frames 0, 4, 8, 9, 15, 40, 82, 90, 95', note: 'Round 6: a broken mass of 2-3 lobes with gaps where the crown shows, off the trunk, no stray black dots, patchy yellow base.', fire: [fireStrip(f2, picks, 'x-fire-r5'), fireStrip(f3, picks, 'x-fire-r6')]});
 }
 // burn strips
 const t0 = generateFeature('tree', {species: 'broadleaf'}, 1000, ctx), seq = t0.burn;
@@ -214,7 +214,7 @@ function gapRows(b, a) {
     ['deposits', 'stone pixels at metal 223', '886', dep(223, b), dep(223, a), 780, 990],
     ['deposits', 'stone share of painted pixels', '0.09 to 0.18', b.deposit.all.stoneShare, a.deposit.all.stoneShare, 0.09, 0.18],
   ];
-  return `<table><tr><th>item</th><th>measure</th><th>spec</th><th>round 4</th><th>round 5</th><th>round 5 in range</th></tr>${rows.map(([k, m, sp, x, y, lo, hi]) => { const ok = typeof y === 'number' ? inR(y, lo, hi) : null; return `<tr class="${ok === null ? '' : ok ? 'ok' : 'bad'}"><td>${k}</td><td>${m}</td><td>${sp}</td><td>${f(x)}</td><td>${f(y)}</td><td>${ok === null ? '' : ok ? 'yes' : 'no'}</td></tr>`; }).join('')}</table>`;
+  return `<table><tr><th>item</th><th>measure</th><th>spec</th><th>round 5</th><th>round 6</th><th>round 6 in range</th></tr>${rows.map(([k, m, sp, x, y, lo, hi]) => { const ok = typeof y === 'number' ? inR(y, lo, hi) : null; return `<tr class="${ok === null ? '' : ok ? 'ok' : 'bad'}"><td>${k}</td><td>${m}</td><td>${sp}</td><td>${f(x)}</td><td>${f(y)}</td><td>${ok === null ? '' : ok ? 'yes' : 'no'}</td></tr>`; }).join('')}</table>`;
 }
 const rowHtml = r => r.fire ? `<section><h3>${r.title}</h3><p class="n">${r.note}</p><div class="scroll">${r.fire.map(im => `<img src="img/${im.name}" width="${im.w * 2}" height="${im.h * 2}" style="margin-bottom:6px;background:#46702a">`).join('')}</div></section>` : (r => `<section><h3>${r.title}</h3>${r.note ? `<p class="n">${r.note}</p>` : ''}<div class="scroll"><div class="row">${r.items.map(cell).join('')}</div></div></section>`)(r);
 const gapTable = (r2Before && r2After) ? gapRows(JSON.parse(readFileSync(r2Before, 'utf8')), JSON.parse(readFileSync(r2After, 'utf8'))) : '';
@@ -242,9 +242,9 @@ table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #333;paddin
 <h2>Same scene at 3x</h2>
 <div class="scroll"><img src="img/scene.png" width="${SW * 3}" height="${SH * 3}"></div>
 ${verdictHtml}
-<h2>Round 4 versus round 5 (same seeds; 1x above, 3x below each tile)</h2>
+<h2>Round 5 versus round 6 (same seeds; 1x above, 3x below each tile)</h2>
 ${compare.map(rowHtml).join('')}
-<h3>Round 5, measured against spec sections 15-17</h3>
+<h3>Round 6, measured against spec sections 15-17</h3>
 ${gapTable}
 <h2>2. One row per kind (1x above, 3x below each tile)</h2>
 ${rows.map(rowHtml).join('')}
