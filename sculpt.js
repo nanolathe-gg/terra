@@ -46,7 +46,7 @@ const HELP = {
   braided:'Draw a braided river: a wide belt of gravel bars cut by threads of water that split and rejoin, on a level floodplain. Width is the scale of a thread (at least 32 px). Wander migrates the line you draw first, as for a river (0 keeps it as drawn).',
   valleyT:'Draw a landform that starts as a terraced valley: a V valley whose walls climb in flat treads, the levels a river left as it cut down.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
-  crystal:'Grow a cluster of faceted crystals along the stroke: their sides, size, count, how flat their tops are and how much they lean are brush options. Height sets the tallest.',
+  crystal:'Draw a landform broken into crystal facets: a click grows a cluster round the point, a drag a row or ridge of them along the path. The section and along curves set how high they stand across and along it, and Facet shape picks prisms or stepped columns; their size, coverage, sides and tops are in Facets.',
   sand:'Paint sand cover: the ground under the brush becomes sand (on slopes too, so a hill set in sand has sandy feet). Heights do not change.',
   grass:'Paint ground cover: clears sand (painted or weathered) back to the world\'s own ground, such as grass. Heights do not change.',
   paint:'Paint a material over the ground, or a scatter density: rock showing through, snow or ice, wet (dark) ground and moss take the world\'s own materials; denser or sparser scatter multiplies the World panel\'s Boulders and Debris (at 0 nothing shows). Strength is how fully it paints, Softness the edge. Heights do not change.',
@@ -73,7 +73,7 @@ let tool='plateau', seed=DEFAULT_SEED, varySeed=true, refinementSeed=DEFAULT_SEE
 const randomSeed=current=>{const next=(Math.random()*4294967296)>>>0;return next===current?(next+1)>>>0:next;};
 let history=[], historyIndex=-1, historySerial=0;
 let revision=0, autosaveTimer, ready=false;
-const TOOL_NAMES={plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley',river:'River',braided:'Braided river'};
+const TOOL_NAMES={crystal:'Faceted forms',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley',river:'River',braided:'Braided river'};
 const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],softness:['softness',0,100]};
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldSetting=key => worldSettingIn(config,experiment,key);

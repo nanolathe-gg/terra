@@ -66,7 +66,7 @@ export const FORMS = {
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
 export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river']];
 // The palette entry a landform's section form belongs to (the Tool preset menu restyles a selected landform as that entry); a shore is deep water when it cuts.
-export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided',
+export const landformTool = p => p?.iceFacets > 0 && Math.round(p?.facetForm || 0) > 0 ? 'crystal' : ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided',
   lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).
 export const defaultForm = kind => kind === 'spurs' ? 'mountain' : kind === 'landform' ? 'lfPlateau' : 'plateau';

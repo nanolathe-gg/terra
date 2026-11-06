@@ -36,7 +36,11 @@ export const LANDFORM_TOOLS={
   // A river: Width is the channel (the section reaches 6 channel half widths each side), Wander the migration steps in 4s; the floodplain sits 3 above the sea.
   river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:76,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}},
   // A braided river: the same preset with a belt of threads (its form) and no migration unless Wander is raised.
-  braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}}
+  braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}},
+  // lfcrystal: Crystals (the palette's Faceted forms) is a landform broken into prisms by its Facet shape: a click is a cluster round the point, a drag
+  // rows along the path. The section is the old cluster's falloff (each prism stood 1 - .45 x its distance share lower toward the rim), the rise its Height.
+  crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:60,facetForm:2,iceFacetSize:36,
+    crystalSides:5,crystalTop:80,crystalVariation:50,crystalAlign:0,crystalTiers:100,bergJitter:20,bergBreak:0,bergRough:0,curve:{form:'lfHill',knots:[[0,0],[.03,.55],[1,1]],back:[[0,0],[.03,.55],[1,1]]}}
 };
 // A palette entry's stroke kind: the shape buttons all draw landforms.
 export const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
@@ -47,8 +51,12 @@ export const TOOL_PRESETS={
   desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
   // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
   moon:{crater:{roughness:65,softness:45},hill:{wander:42,widthVary:30,heightVary:9,varySize:60,varyMiddle:150},mountain:{wander:24,widthVary:5},deep:{wander:34,widthVary:35}},
-  crystal:{crystal:{amount:140,diameter:480,roughness:40},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
-  ice:{crystal:{amount:155,diameter:120,roughness:20},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
+  // lfcrystal: Crystal's Crystals draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's (1 - r^2)^1.2
+  // dome, the edge noise as wander. Ice's draw one flat-topped ice block a click (Height 155; four sides, top .45 of the base, 220 px), a row of them a drag.
+  crystal:{crystal:{diameter:480,elevation:140,wander:67,varySize:168,facetForm:1,iceFacets:65,iceFacetSize:32,crystalStep:14,crystalTiers:100,crystalFacet:70,crystalSizeVar:70,
+    curve:{form:'lfHill',knots:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]],back:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]]}},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
+  ice:{crystal:{diameter:220,elevation:155,iceFacets:100,iceFacetSize:220,crystalSides:4,crystalTop:45,crystalVariation:0,crystalTiers:100,bergJitter:12,
+    curve:{form:'lfPlateau',knots:[[0,0],[.04,1],[1,1]],back:[[0,0],[.04,1],[1,1]]}},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks, as shoreline steps and lobes.
   lava:{mountain:{wander:6},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70}},
