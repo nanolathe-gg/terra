@@ -408,7 +408,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function refreshHover(event){
     if(gesture||pan||busy||features?.active||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
     const q=screen(event),hit=hitSelection(geometry(api.selection()),{x:q.x,y:q.z},api.pathEditing?.());
-    hoveredNode=api.pickAt(localPoint(event));
+    const feature=!hit&&!api.pathEditing?.()&&features?.hitAt?.(q);
+    hoveredNode=feature?-1:api.pickAt(localPoint(event));
+    if(feature){overlay.style.cursor='move';return;}
     overlay.style.cursor=hit?.action==='rotate'?'grab':hit?.action==='scale'?'nwse-resize':hit?.action==='point'?'crosshair':hoveredNode>=0||hit?'move':'default';
   }
   overlay.addEventListener('pointerdown',event=>{
@@ -416,6 +418,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
     if(features?.active)return;
     const p=localPoint(event),start=performance.now();hover=[p.x,p.y];
+    // Select (V) picks a generated feature before a shape, unless a selected shape's handle is under the pointer (sculpt-features.js).
+    if(api.currentTool()==='move'&&api.drawMode?.()!=='add'&&!api.pathEditing?.()&&!api.pathAdding?.()){const q=screen(event);if(!hitSelection(geometry(api.selection()),{x:q.x,y:q.z})&&features?.pointerSelect(event,q)){schedule();return;}}
     if(api.pathAdding?.()){api.addPathPoint(p);schedule();return;}
     if(api.currentTool()==='move'&&api.drawMode?.()!=='add'){
       const screenPoint=screen(event),selected=api.selection(),handles=geometry(selected);

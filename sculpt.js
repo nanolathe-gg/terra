@@ -375,9 +375,12 @@ function updateControls() {
   $('transform-mode').setAttribute('aria-pressed',String(!pathEditing&&drawMode!=='add'));
   $('selection-panel').classList.toggle('path-mode',pathEditing);
   const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
-  $('selection-empty').hidden=hasSelection;
+  // Generated features share the Select tool (sculpt-features.js): their values replace the shape's transform rows while any is selected.
+  const featureSelection=!featureActive&&tool==='move'&&(mapFeatures?.selectionCount||0)>0;
+  $('feature-selection').hidden=!featureSelection;$('selection-mode-buttons').hidden=$('shape-selection-actions').hidden=featureSelection;
+  $('selection-empty').hidden=hasSelection||featureSelection;
   $('path-actions').hidden=!pathEditing||!hasSelection;
-  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';$('path-help').hidden=drawMode==='add';
+  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';$('path-help').hidden=drawMode==='add'||featureSelection;
   $('selection-hud').hidden=!selectionActive;
   $('selection-hud').classList.toggle('path-mode',pathEditing);
   $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path':pathAdding?'Extend / branch':pathEditing?'Edit paths':'Transform'} · ${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
@@ -1199,7 +1202,7 @@ function pickNode(p) {
 function selectNode(i) {
   if(selected!==i){pathPoint=-1;pathIndex=0;}
   pathAdding=false;drawMode='select';selected=i;
-  const n=nodes[i];
+  const n=nodes[i];if(n)mapFeatures?.clearSelection?.(false);
   if (n && n.params && (HELP[n.kind]||n.kind==='landform')) {
     if (tool!=='move') { rememberTool(); tool='move'; }
     mapFeatures?.deactivate();
