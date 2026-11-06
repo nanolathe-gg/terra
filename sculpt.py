@@ -847,6 +847,8 @@ def biome_config(biome):
               'material': table['material'], 'water': table['water'], **world}
     if 'river' in table:
         config['river'] = table['river']   # the river variant's material and water numbers (WORLD_VARIANTS)
+    if 'features' in table:
+        config['features'] = table['features']   # the generated feature kinds the world has (trees, shrubs, rocks, scars); every world has deposits and vents
     return world_knobs(biome, config)
 
 

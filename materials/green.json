@@ -1985,6 +1985,24 @@
   "deep": "water",
   "shallow": "shallow"
  },
+ "features": {
+  "note": "The kinds sculpt-feature-gen.js draws for this world, as tuned for Green (prototype/fgen, approved November 6). A type's share is its retail use share on the Green maps (measure/feature_tables/green_gameplay.json on prototype/faudit): broadleaf Tree1-3 43,227 of 65,018 tree uses, conifers Tree4-7 the rest; the sparse Shrub3 34,188 of 41,323 shrub uses; rocks by footprint 474, 276, 118, 113 and 87 of 1,068; rock stains 1,179 and smudges 538 of the scars. Each type's vary ranges are the retail sizes (spec sections 5, 6). Gameplay: every tree 250 energy; rock metal 25 for the smallest footprint to 100 for 3x3 and larger.",
+  "tree": {"count": 7, "taper": 0.5, "peaks": 0.5, "energy": [250, 250], "types": [
+   {"share": 0.665, "params": {"species": "broadleaf"}, "vary": {"height": [66, 71], "width": [0.68, 0.73]}},
+   {"share": 0.335, "params": {"species": "conifer"}, "vary": {"height": [57, 64], "width": [0.44, 0.62]}}]},
+  "shrub": {"count": 3, "types": [
+   {"share": 0.827, "params": {"density": 0.12, "width": 33, "height": 26}},
+   {"share": 0.173, "params": {"density": 0.6, "width": 27, "height": 20}}]},
+  "rock": {"count": 10, "shade": 0.6, "metal": [25, 100], "types": [
+   {"share": 0.444, "params": {"cells": "1x1"}},
+   {"share": 0.258, "params": {"cells": "2x2"}},
+   {"share": 0.11, "params": {"cells": "3x3"}},
+   {"share": 0.106, "params": {"cells": "3x2"}},
+   {"share": 0.081, "params": {"cells": "4x3"}}]},
+  "scar": {"count": 6, "types": [
+   {"share": 0.687, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}},
+   {"share": 0.313, "params": {"type": "smudge"}}]}
+ },
  "world": {
   "defaults": {
    "coverage": "form",
