@@ -61,7 +61,7 @@ first appearance in the complete row-major tile grid, so changing chunk
 dimensions, the browser's GPU budget or the exporter's spill budget does not
 change TNT bytes. A map with at most 65536 unique tiles is exact. With more,
 the exporter merges tiles before numbering them (`merge.go`): weighted median
-cut over each tile's 4x4 grid of mean palette colors, 65536 clusters at most,
+cut over each tile's 8x8 grid of mean palette colors (one per 4x4 pixel block), at most 65536 clusters,
 each drawn with its member nearest the cluster centroid. A tile used by many
 slots resists merging, one-off grit merges first, and the result is
 deterministic. The export result then carries a `merge` object (distinct tiles
