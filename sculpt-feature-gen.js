@@ -279,7 +279,7 @@ function treeFrame(P, seed, ctx) {
   };
   const body = newSprite(w, h, ax, ay);
   const amb = L.ambient;
-  const mid = conifer ? 3.4 : 4.9, lamGain = conifer ? 3.0 : 3.3, gxGain = conifer ? 2.6 : 1.0, gyGain = conifer ? 0.3 : 0.9;
+  const mid = conifer ? 3.4 : 5.1, lamGain = conifer ? 3.0 : 3.3, gxGain = conifer ? 2.6 : 1.0, gyGain = conifer ? 0.3 : 0.9;
   const sigma = conifer ? 2.3 : 5.0;
   // bright leaf bunches (spec 15 B6): about 34 rounded 3-6 px clumps that lean to the upper-left lobes
   const clumpList = [];
