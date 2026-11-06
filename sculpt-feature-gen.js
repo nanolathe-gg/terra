@@ -478,7 +478,7 @@ function shrubFrame(P, seed, ctx) {
 }
 
 // ---- rocks -----------------------------------------------------------------------------------------------------
-const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.8, lean: 0, metal: null };
+const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.8, shade: 0.6, lean: 0, metal: null };   // shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 const ROCK_CELLS = { '1x1': [1, 1], '2x2': [2, 2], '3x2': [3, 2], '3x3': [3, 3], '4x3': [4, 3] };
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9));
@@ -526,13 +526,14 @@ function rockFrame(P, seed, ctx) {
     t += 0.2 * (L.x * (x - cx) / Wh) + 0.03 * (L.y * (y - cy) / Hh);                       // broad fall-off from the sun side
     if (y > h * 0.78) t -= ((y / h - 0.78) / 0.22) * 0.05;                            // moderately dark base
     if (dist[k] <= 1) t -= lowerRight(k) ? 0.5 : 0.38;                                   // a dark one-pixel rim all round, stronger on the shadow side
+    { const dd = ((x - cx) * -L.x + (y - cy) * -L.y) / (Wh * 0.7 + Hh * 0.7); t -= P.shade * 0.5 * Math.max(0, dd - 0.1); }   // the shade side falls off harder with the shading control
     if (t < 0.45) t = 0.45 + (t - 0.45) * 0.45;                                             // the shade never goes to black over the whole base
     tone[k] = t + planeOff(x, y) + (rn() - 0.5) * 0.02; hasPx.push(k);
   }
   const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.1;
   const bright = (list, u) => list[clamp(Math.floor((1 - u) * list.length), 0, list.length - 1)];
   const CREAM = [64, 64, 64, 65, 65, 66], PINKS = [17, 18, 18, 19, 20, 21], WHITES = [255, 81, 82, 83, 84];   // no olive-dark tans (68-70): retail rocks have no yellow-green specks
-  const hiEnd = 0.383, litEnd = hiEnd + 0.18, midEnd = litEnd + 0.245;
+  const hiEnd = 0.383 - 0.08 * (P.shade - 0.5), litEnd = hiEnd + 0.18, midEnd = litEnd + 0.245 + 0.04 * (P.shade - 0.5);
   // the mottling field: pink where a soft noise is high (about 39% of the non-white highlight)
   const mott = k => vnoise((k % w) / 2.2, ((k / w) | 0) / 2.2, seed + 77) * 0.7 + fbm((k % w) / 9, ((k / w) | 0) / 9, seed + 78, 2) * 0.6;   // soft areas of pink inside the cream, not confetti
   const hiList = ranked.slice(0, Math.round(N * hiEnd)).filter((k, i) => i >= Math.round(N * hiEnd * 0.27)).map(k => mott(k)).sort((a, b) => a - b);
@@ -547,6 +548,8 @@ function rockFrame(P, seed, ctx) {
     } else if (u < litEnd) { c = bright([85, 86, 87, 88, 89], 1 - (u - hiEnd) / (litEnd - hiEnd) + (rn() - 0.5) * 0.3); if (mott(k) + (rn() - 0.5) * 0.1 < pinkCut * 0.8) c = bright([17, 18, 18, 20], 1 - (u - hiEnd) / (litEnd - hiEnd)); }   // a subtle pink wash through the lit gray
     else if (u < midEnd) c = bright([92, 91, 90], (u - litEnd) / (midEnd - litEnd) + (rn() - 0.5) * 0.4);
     else { const f = (u - midEnd) / (1 - midEnd); c = rn() < 0.1 ? weighted(rn, [[127, 3], [125, 1]]) : bright([93, 94, 95], 1 - f + (rn() - 0.5) * 0.3); }
+    { const dd = (((k % w) - cx) * -L.x + (((k / w) | 0) - cy) * -L.y) / (Wh * 0.7 + Hh * 0.7);
+      if (dd > 0.28 && (c === 255 || (c >= 81 && c <= 84) || (c >= 64 && c <= 67) || (c >= 17 && c <= 21) || (c >= 85 && c <= 88))) c = pick(rn, [90, 91, 92, 91, 93]); }   // never a bright or highlight pixel in the shaded lower right
     if (dist[k] > 1 && k / w > h * 0.82 && (c === 93 || c === 94 || c === 95 || c === 127 || c === 125) && rn() < 0.75) c = pick(rn, [91, 90, 92, 89, 91]);   // a moderately dark base, not black
     put(sp, k % w, (k / w) | 0, c);
   });
@@ -802,7 +805,7 @@ export const CONTROLS = {
   tree: [['species', 'broadleaf|conifer', null, 'broadleaf', 'leafy crown or narrow conifer'], ['height', 55, 72, 68, 'size in px (broadleaf 66-71, conifer 57-64 in retail)'], ['width', 0.42, 0.74, 0.7, 'width over height'], ['crown', 0, 1, 0.6, 'smooth to lobed, ragged silhouette'], ['density', 0, 1, 0.6, 'solid to holey and sparse'], ['taper', 0, 1, 0.5, 'broadleaf crown: round top to narrowing toward the top (biome knob)'], ['peaks', 0, 1, 0.5, 'broadleaf crown: smooth top to irregular peaks (biome knob)'], ['lean', -1, 1, 0, 'olive and yellow, to lush and bright'], ['energy', '[lo,hi]', null, '[250,250]', 'gameplay energy range; tracks height inside the range']],
   burnt: [['height', 50, 66, 58, 'size in px'], ['width', 0.4, 0.75, 0.55, 'width over height'], ['forks', 2, 5, 3, 'branch forks off the trunk'], ['ash', 0, 1, 0.5, 'amount of pale ash pixels']],
   shrub: [['width', 20, 36, 29, 'width in px'], ['height', 14, 28, 22, 'height in px'], ['density', 0, 1, 0.5, 'sparse scatter to full clump'], ['lean', -1, 1, 0, 'brightness of the leaf highlights']],
-  rock: [['cells', '1x1|2x2|3x2|3x3|4x3', null, '2x2', 'footprint class, sets the pixel size and the metal'], ['size', 0.7, 1.15, 1, 'scale inside the class'], ['angular', 0, 1, 0.6, 'round boulder to faceted block']],
+  rock: [['cells', '1x1|2x2|3x2|3x3|4x3', null, '2x2', 'footprint class, sets the pixel size and the metal'], ['shade', 0, 1, 0.6, 'soft to strong shading away from the sun'], ['size', 0.7, 1.15, 1, 'scale inside the class'], ['angular', 0, 1, 0.6, 'round boulder to faceted block']],
   scar: [['type', 'smudge|stain', null, 'smudge', 'scorch blot or rock stain'], ['size', 0.3, 1.3, 1, 'size'], ['density', 0, 1, 0.55, 'stipple density']],
   deposit: [['metal', 86, 223, 127, 'metal value; sets the chunk count (7 to 23) and the halo']],
   vent: [['size', 0.6, 1.6, 1, 'crack length and thickness'], ['forks', 2, 4, 3, 'how often the crack forks']],

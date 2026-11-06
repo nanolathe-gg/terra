@@ -31,3 +31,10 @@ test('burnt trees carry no embers or fire colors (only the burn-out frame does)'
     assert.ok(fire > 0);   // the last burn frame keeps its embers
   }
 });
+
+test('rocks have no highlight pixels in the shaded lower right', () => {
+  for (const seed of [3, 4, 5]) {
+    const r = generateFeature('rock', {cells: '3x3'}, seed).body, cx = r.w / 2, cy = r.h / 2;
+    for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) { const k = y * r.w + x, d = ((x - cx) * 0.62 + (y - cy) * 0.7) / (r.w * 0.35 + r.h * 0.35); if (r.a[k] && d > 0.45) { const c = r.idx[k]; assert.ok(!(c === 255 || (c >= 81 && c <= 84) || (c >= 64 && c <= 67)), `bright pixel ${c} at ${x},${y}`); } }
+  }
+});
