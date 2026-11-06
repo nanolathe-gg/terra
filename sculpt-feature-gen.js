@@ -554,7 +554,9 @@ function rockFrame(P, seed, ctx) {
   const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.1;
   const bright = (list, u) => list[clamp(Math.floor((1 - u) * list.length), 0, list.length - 1)];
   const CREAM = [64, 64, 64, 65, 65, 66], PINKS = [17, 18, 18, 19, 20, 21], WHITES = [255, 81, 82, 83, 84];   // no olive-dark tans (68-70): retail rocks have no yellow-green specks
-  const hiEnd = 0.383 - 0.08 * (P.shade - 0.5), litEnd = hiEnd + 0.18, midEnd = litEnd + 0.245 + 0.04 * (P.shade - 0.5);
+  // Shading sets how much of the rock the highlight and lit tones cover (colors go by rank of tone). Retail Green's 0.6 is as
+  // approved; away from it the shares move three times faster than before, so the control shows at 1x (measure/feature_controls.mjs).
+  const hiEnd = 0.375 - 0.24 * (P.shade - 0.6), litEnd = hiEnd + 0.18, midEnd = litEnd + 0.249 + 0.12 * (P.shade - 0.6);
   // the mottling field: pink where a soft noise is high (about 39% of the non-white highlight)
   const mott = k => vnoise((k % w) / 2.2, ((k / w) | 0) / 2.2, seed + 77) * 0.7 + fbm((k % w) / 9, ((k / w) | 0) / 9, seed + 78, 2) * 0.6;   // soft areas of pink inside the cream, not confetti
   const hiList = ranked.slice(0, Math.round(N * hiEnd)).filter((k, i) => i >= Math.round(N * hiEnd * 0.27)).map(k => mott(k)).sort((a, b) => a - b);
