@@ -1941,6 +1941,37 @@ fn lfCrystalEnv(w: vec2f, cells: u32) -> vec2f {
   let h = select(b, Sc[CRR * cells + j], Sc[CW * cells + j] > 0.0);
   return vec2f(h, h - b);
 }
+// The envelope's rise at a seed over the ground `base`: the landform's own section evaluated there (lfEval: the curves, the along curve, the variation, the
+// terraces), so an element as wide as the whole stroke needs no read of the result beyond its own cell. sc is the seed in the path's coordinates.
+fn lfCrystalSeedRise(w: vec2f, sc: vec2f, k0: u32, base: f32, cells: u32) -> f32 {
+  var k = k0;
+  for (var n = 0u; n < u.nseg; n++) {
+    let s1 = Seg[(u.segBase + k) * 4u + 1u]; let flags = u32(Seg[(u.segBase + k) * 4u + 2u].x);
+    if (sc.x >= s1.x || (flags & 1u) != 0u || k == 0u) { break; }
+    k = k - 1u;
+  }
+  for (var n = 0u; n < u.nseg; n++) {
+    let s1 = Seg[(u.segBase + k) * 4u + 1u]; let flags = u32(Seg[(u.segBase + k) * 4u + 2u].x);
+    if (sc.x < s1.x + s1.y || (flags & 2u) != 0u || k + 1u >= u.nseg) { break; }
+    k = k + 1u;
+  }
+  let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
+  var lx = w.x; var ly = w.y;
+  if (u.framed != 0u) { lx = u.inv0 * w.x + u.inv2 * w.y + u.inv4; ly = u.inv1 * w.x + u.inv3 * w.y + u.inv5; }
+  var nA = 0.0; var nB = 0.0; var nC = 0.0;
+  let sz = max(u.lfSize, 8.0);
+  if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+  if (u.lfWidth > 0.0) { nB = noiseValue(5u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+  if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
+  let x = clamp(i32(floor(w.x / u.spacing + 0.5)), 0, i32(u.grid) - 1); let y = clamp(i32(floor(w.y / u.spacing + 0.5)), 0, i32(u.grid) - 1);
+#ifdef PAGES
+  let i = 0u;   // the terraces' noise is evaluated directly on a page (nzF reads no table)
+#else
+  let i = u32(y) * u.grid + u32(x);
+#endif
+  let cand = lfEval(s0, s1, s2, w.x, w.y, base, nA, nB, nC, clamp(sc.x / max(s1.z, 1e-4), 0.0, 1.0), x, y, i, cells);
+  return select(0.0, cand.x - base, cand.y > 0.0);
+}
 // The column width a seed takes (0, 1 or 2 of SZL) where Size variation mixes three: smaller in patches and where the envelope stands highest.
 fn lfCrystalLevel(w: vec2f, share: f32) -> i32 {
   if (!(u.cgSizeVar > 0.0)) { return 0; }
@@ -2027,8 +2058,7 @@ fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
     let R = 0.5 * L * (1.0 + u.cgVar * (cgRnd(ii, j, 24u) - 0.5) * 1.2);
     let q = pc.xy - sd;
     if (dot(q, q) > 2.6 * R * R) { continue; }
-    let env = lfCrystalEnv(lfCrystalPoint(sd, k0), cells);
-    let H = env.y * (1.0 + u.cgVar * (cgRnd(ii, j, 25u) - 0.5));
+    let H = lfCrystalSeedRise(lfCrystalPoint(sd, k0), sd, k0, base, cells) * (1.0 + u.cgVar * (cgRnd(ii, j, 25u) - 0.5));
     if (H <= 1.0) { continue; }
     let n = u32(clamp(round(u.lfcSides + u.cgVar * (cgRnd(ii, j, 26u) - 0.5) * 2.4), 3.0, 12.0));
     let rot = (1.0 - clamp(u.lfcAlign, 0.0, 1.0)) * cgRnd(ii, j, 27u) * 6.2831853;
@@ -2044,9 +2074,9 @@ fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
       m = min(m, (R * (0.55 + 0.35 * cgRnd(ii, j, 120u + e)) - dot(q, vec2f(cos(a), sin(a)))) / inr);
     }
     if (m <= 0.0) { continue; }
-    var h = min(H, H / max(1.0 - u.cTop, 0.05) * m);
-    // Level tops below 100 bring the top toward the envelope under the cell, so a sloping section tilts it.
-    h = min(h, mix(here, H, clamp(u.cgTiers, 0.0, 1.0)));
+    // The faces climb at the slope that brings the seed's height in over the outer (1 - Flat tops) of the prism; the top is that height, or with
+    // Level tops below 100 moves toward the envelope under the cell, so a sloping or stepped section shapes it.
+    let h = min(H / max(1.0 - u.cTop, 0.05) * m, mix(here, H, clamp(u.cgTiers, 0.0, 1.0)));
     if (h <= 0.0) { continue; }
     best = max(best, h);
   } }

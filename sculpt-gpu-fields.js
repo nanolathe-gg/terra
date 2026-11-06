@@ -410,8 +410,8 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
   const {grid, spacing, refSpacing = spacing} = geom;
   if (facet) {
     // Crater and mountain facets: a pass over the node's own result. The seeds of the 3 x 3 lattice neighbours lie within 2 widths of a cell, and read 3 cells round themselves.
-    // lfcrystal: a faceted structure's elements read the envelope at seeds up to about three element widths away (prisms: the 5 x 5 sites round a cell).
-    const L = facet === 1 ? (q.crystalCraterPx > 0 ? q.crystalCraterPx : clamp(radius * .36, 14, 36)) : lfcL || clamp(q.iceFacetSize, 16, 640), mF = Math.ceil((lfcL ? 3.1 : 2.1) * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
+    // lfcrystal: columns read the envelope at seeds up to about two widths away; prisms evaluate the section at their seeds and read only their own cell.
+    const L = facet === 1 ? (q.crystalCraterPx > 0 ? q.crystalCraterPx : clamp(radius * .36, 14, 36)) : lfcL || clamp(q.iceFacetSize, 16, 640), mF = lfcL && Math.round(q.facetForm) === 2 ? 2 : Math.ceil((lfcL ? 2.2 : 2.1) * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
     return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, lfc: lfcL > 0, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, sideR: 0, extra: [],
       u: {fcMode: facet, fcL: L, fcStrength: clamp(q.craterFacets, 0, 1), fcStep: q.crystalCraterStep ?? 0, fcSkin: q.crystalCraterSkin >= .5 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
   }

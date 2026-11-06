@@ -605,8 +605,8 @@ function regionalReadApron(n) {
     cells+=Math.max(0,2*B+1+Math.ceil(1.12*Rc/spacing)+2-(Math.ceil(coastLayerReach(q)/spacing)+2));
   }
   // G6: a facet plane is fitted at its center, up to half a facet away and three cells either side of it, in the stroke's frame.
-  // lfcrystal: a faceted structure's element reads the envelope at seeds up to about three element widths away, and a prism stands a width past the footprint.
-  if(n.kind==='landform'&&q.iceFacets>0){const f=n.frame??IDENTITY,lfc=Math.round(q.facetForm||0)>0,L=lfc?lfcWidth(q):clamp(q.iceFacetSize,16,640);cells+=Math.ceil((lfc?4.2:1.95)*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+4;}
+  // lfcrystal: stepped columns read the envelope at seeds up to about two widths away (a prism evaluates the section at its seed and reads only its own cell).
+  if(n.kind==='landform'&&q.iceFacets>0&&Math.round(q.facetForm||0)!==2){const f=n.frame??IDENTITY,lfc=Math.round(q.facetForm||0)===1,L=lfc?lfcWidth(q):clamp(q.iceFacetSize,16,640);cells+=Math.ceil((lfc?2.3:1.95)*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+(lfc?6:4);}
   if(n.kind==='crater'&&q.craterFacets>0){const f=n.frame??IDENTITY,L=craterFacetWidth(q);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+3;}
   if (n.kind==='landform' && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
   return cells;
