@@ -667,7 +667,7 @@ fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> vec2f 
   let d = sqrt(c * c + e * e);
   if (d > B + 6.0) { return vec2f(fl, 0.0); }
   let sea = u.sea;
-  let cc = select(-1.0, 1.0, c >= 0.0) * d;
+  let cc = c;   // across the path; past an end the bed runs straight on (sAlong goes on past it) and the rim rounds it off, so no thread rings the end
   let LX = BR_LEN * W; let LY = BR_ACROSS * W;
   // The active tract: a band about 1.5 widths either side of a line that wanders 2.2 widths across the path, over about 9 widths along it.
   let mid = 2.2 * W * vnoise(sAlong / (9.0 * W), 0.37, u.seed ^ 0x95u);
@@ -753,7 +753,7 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   var value = base + (crest - base) * qt;
   var bar = 0.0;
   if (u.lfRiver > 0.0 && !spur) {
-    if (u.lfBraid > 0.0) { let bb = braidedBelt(value, c, e, share * s1.z, wx, wy); value = bb.x; bar = bb.y; }
+    if (u.lfBraid > 0.0) { let bb = braidedBelt(value, c, e, share * s1.z + select(-e, e, share > 0.5), wx, wy); value = bb.x; bar = bb.y; }
     else { let ch = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); value = ch.x; bar = ch.y; }
   }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
