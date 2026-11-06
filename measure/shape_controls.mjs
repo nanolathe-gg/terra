@@ -48,6 +48,21 @@ const CONTROLS = {
   curveSigned: {base: {combine: 2}, set: {combine: 2, curve: {form: 'lfHill', knots: [[0, 0], [.15, -.15], [.3, 0], [.58, .45], [.82, .86], [1, 1]]}}},
   ejecta: {base: {secondaries: 1}, set: {ejecta: 100}},
   secondaries: {base: {ejecta: 5}, set: {secondaries: 6}},
+  // lfcrystal: the faceted structure (Facet shape) and each shape's rows, with facets on and that shape chosen; the size and coverage on prisms.
+  facetForm: {base: {iceFacets: 65}, set: {facetForm: 1}},
+  crystalStep: {base: {iceFacets: 65, facetForm: 1, crystalStep: 0}, set: {crystalStep: 32}},
+  crystalTiers: {base: {iceFacets: 65, facetForm: 1, crystalTiers: 0}, set: {crystalTiers: 100}},
+  crystalFacet: {base: {iceFacets: 65, facetForm: 1, crystalFacet: 0}, set: {crystalFacet: 100}},
+  crystalSizeVar: {base: {iceFacets: 65, facetForm: 1, crystalSizeVar: 0}, set: {crystalSizeVar: 100}},
+  iceFacets: {base: {iceFacets: 20, facetForm: 2}, set: {iceFacets: 90}},
+  iceFacetSize: {base: {iceFacets: 60, facetForm: 2, iceFacetSize: 24}, set: {iceFacetSize: 96}},
+  crystalSides: {base: {iceFacets: 60, facetForm: 2, crystalSides: 3}, set: {crystalSides: 8}},
+  crystalTop: {base: {iceFacets: 60, facetForm: 2, crystalTop: 0}, set: {crystalTop: 90}},
+  crystalVariation: {base: {iceFacets: 60, facetForm: 2, crystalVariation: 0}, set: {crystalVariation: 100}},
+  crystalAlign: {base: {iceFacets: 60, facetForm: 2, crystalAlign: 0}, set: {crystalAlign: 100}},
+  bergJitter: {base: {iceFacets: 60, facetForm: 2, bergJitter: 0}, set: {bergJitter: 100}},
+  bergBreak: {base: {iceFacets: 60, facetForm: 2, bergBreak: 0}, set: {bergBreak: 6}},
+  bergRough: {base: {iceFacets: 60, facetForm: 2, bergRough: 0}, set: {bergRough: 20}},
 };
 // The panel's own test: the control is shown to this kind (sculpt.js SHAPE_FIELDS kinds, all landform here, then shapeControlAvailable).
 const shown = (key, kind, card) => kind === 'landform' && shapeControlAvailable(key, kind, {faceVariation: 80, ...card, lean: card.lean / 100, terraces: card.terraces || 0, ledge: .6, terraceJitter: .35});

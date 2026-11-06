@@ -39,7 +39,11 @@ export const LANDFORM_TOOLS={
   // lfcrater: the Crater button. A bowl dug 20 below the ground it lands on with a rim .42 of that above it (the lfCrater section), 360 px foot to foot (a 200 px
   // rim), three secondaries, so a drag aims the impact (sculpt-shape-presets.js impactPath): Roughness 35 as Wander and Height variation.
   crater:{diameter:360,lean:100,heightReference:2,elevation:-20,combine:2,cracks:30,wander:20,widthVary:10,heightVary:2,varySize:95,varyFoot:100,varyMiddle:100,ejecta:0,secondaries:3,curve:{form:'lfCrater',knots:FORMS.lfCrater().knots}},
-  braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}}
+  braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}},
+  // lfcrystal: Crystals (the palette's Faceted forms) is a landform broken into prisms by its Facet shape: a click is a cluster round the point, a drag
+  // rows along the path. The section is the old cluster's falloff (each prism stood 1 - .45 x its distance share lower toward the rim), the rise its Height.
+  crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:60,facetForm:2,iceFacetSize:36,
+    crystalSides:5,crystalTop:80,crystalVariation:50,crystalAlign:0,crystalTiers:100,bergJitter:20,bergBreak:0,bergRough:0,curve:{form:'lfHill',knots:[[0,0],[.03,.55],[1,1]],back:[[0,0],[.03,.55],[1,1]]}}
 };
 // lfcrater: a crater with no rim in its heights (retail Red and Crystal: rim/depth -.12..0), a .06 lip for the art and a wide bowl.
 export const CRATER_BOWL=[[0,0],[.25,-.02],[.4,-.06],[.5,.04],[.6,.3],[.72,.58],[.83,.82],[.93,.97],[1,1]];
@@ -52,8 +56,12 @@ export const TOOL_PRESETS={
   desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{roughness:55,softness:55,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
   // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
   moon:{crater:{wander:37,heightVary:4,secondaries:6,ejecta:70},hill:{wander:42,widthVary:30,heightVary:9,varySize:60,varyMiddle:150},mountain:{wander:24,widthVary:5},deep:{wander:34,widthVary:35}},
-  crystal:{crater:{curve:{form:'lfCrater',knots:CRATER_BOWL},iceFacets:100,iceFacetSize:16},crystal:{amount:140,diameter:480,roughness:40},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
-  ice:{crystal:{amount:155,diameter:120,roughness:20},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
+  // lfcrystal: Crystal's Crystals draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's (1 - r^2)^1.2
+  // dome, the edge noise as wander. Ice's draw one flat-topped ice block a click (Height 155; four sides, top .45 of the base, 220 px), a row of them a drag.
+  crystal:{crater:{curve:{form:'lfCrater',knots:CRATER_BOWL},iceFacets:100,iceFacetSize:16},crystal:{diameter:480,elevation:140,wander:67,varySize:168,facetForm:1,iceFacets:65,iceFacetSize:32,crystalStep:14,crystalTiers:100,crystalFacet:70,crystalSizeVar:70,
+    curve:{form:'lfHill',knots:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]],back:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]]}},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
+  ice:{crystal:{diameter:220,elevation:155,iceFacets:100,iceFacetSize:220,crystalSides:4,crystalTop:45,crystalVariation:0,crystalTiers:100,bergJitter:12,
+    curve:{form:'lfPlateau',knots:[[0,0],[.04,1],[1,1]],back:[[0,0],[.04,1],[1,1]]}},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks, as shoreline steps and lobes.
   lava:{mountain:{wander:6},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70}},
@@ -176,22 +184,22 @@ export const SHAPE_FIELDS=[
   ['plateMaterial','plate-material','Plate material (1 rock slabs, 2 frost crystals)',['landform'],1,2,1,1,'2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
   ['frostNeedles','frost-needles','Frost needle share (plate material 2)',['landform'],0,100,5,100,'Frost crystals: the share of patches that carry needles at all; the rest of the band is plain ice. Needles in a patch are also dropped at random, so lines are sparse, fine and of varied length.'],
   ['crystalForm','crystal-form','Form (0 crystals, 1 column mound, 2 berg)',['crystal'],0,2,1,1,'Crystals: separate faceted crystals (shards, or big blocks as on Ice). Column mound: a mound tiled with flat polygonal columns (Crystal world). Berg: a rough ice block with an uneven outline, broken corners and rough faces that take the world\'s own slope relief (Ice); Sides, Width, Height and Variation apply.'],
-  ['crystalTiers','crystal-tiers','Stepped column tops',['crystal'],0,100,5,100,'Remove the mound incline from each column top so its height steps distinctly from its neighbors.'],
-  ['crystalSides','crystal-sides','Sides',['crystal'],3,10,1,1,'Sides of each crystal\'s footprint (crystals form; columns are Voronoi, mostly 5-6 sides).'],
+  ['crystalTiers','crystal-tiers','Stepped column tops',['crystal','landform'],0,100,5,100,'Facets: how level each column or prism top stands. 100: level at the height of the shape at the element\'s center, so its height steps distinctly from its neighbors. 0: the top follows the slope of the shape under it (a lean or a sloping section tilts it).'],
+  ['crystalSides','crystal-sides','Sides',['crystal','landform'],3,10,1,1,'Prisms: the sides of each prism\'s outline (Variation mixes a few more and fewer). Columns are Voronoi cells, mostly 5 or 6 sides.'],
   ['crystalSize','crystal-size','Crystal width (px)',['crystal'],6,640,2,1,'Crystals: typical base width. Column mound: column top width (retail ~15).'],
-  ['crystalStep','crystal-step','Column step',['crystal'],0,64,1,1,'Column mound: how far a column top steps up or down from its neighbors (retail ~16; ~40% flush).'],
+  ['crystalStep','crystal-step','Column step',['crystal','landform'],0,64,1,1,'Stepped columns: how far a column top steps up or down from the shape\'s height at its center, in height units (retail Crystal ~16; about 40% stay flush).'],
   ['crystalCount','crystal-count','Crystals per cluster',['crystal'],1,40,1,1,'How many crystals a click grows; a longer stroke grows more.'],
-  ['crystalTop','crystal-top','Flat tops',['crystal'],0,95,5,100,'0: pointed; higher cuts the tops level (a flat-topped prism).'],
+  ['crystalTop','crystal-top','Flat tops',['crystal','landform'],0,95,5,100,'Prisms: the share of each prism that is its flat top. 0: pointed; higher cuts the tops level, with shorter, steeper faces (an ice block).'],
   ['crystalLean','crystal-lean','Lean',['crystal'],0,100,5,100,'How far each apex leans off its base center.'],
-  ['crystalVariation','crystal-variation','Variation',['crystal'],0,100,5,100,'Spread of sizes, heights and side counts.'],
+  ['crystalVariation','crystal-variation','Variation',['crystal','landform'],0,100,5,100,'Prisms: the spread of their sizes, heights and side counts, and how far each strays from its place in the rows. 0: even rows of equal prisms.'],
   // Water looks (card E1): each stroke may keep the world's choice (0) or set its own.
   ['waterDeep','water-deep','Shallow-to-deep edge',['landform'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
   ['waterBed','water-bed','Shallow water look',['landform'],0,3,1,1,'World default keeps the World panel\'s Lit bed. Lit bed: the ground under the water, lit by the same sun and tinted (retail). Noise water: the earlier flat noise texture. Cracked bed: lit bed over cracked rock-like ground, tinted (Red\'s shelf shallows).',[[0,'World default'],[1,'Lit bed'],[2,'Noise water'],[3,'Cracked bed']]],
-  ['crystalAlign','crystal-align','Align faces to the frame (berg)',['crystal'],0,100,5,100,'Berg: 0 turns each block at random, 100 sets its faces square to the shape\'s frame (four sides then make an axis-aligned box).'],
+  ['crystalAlign','crystal-align','Align faces to the frame (berg)',['crystal','landform'],0,100,5,100,'Prisms: 0 turns each prism at random, 100 sets its faces square to the path (four sides then make boxes in a row along it).'],
   ['bergFace','berg-face','Face steepness (berg, units per px)',['crystal'],20,200,5,100,'Berg: how fast the faces rise, in height units per px (shown in percent: 90% is 0.9 units per px). Each face varies by Outline jitter.'],
-  ['bergJitter','berg-jitter','Outline jitter (berg)',['crystal'],0,100,5,100,'Berg: how far the face angles, distances and steepness stray from a regular polygon, and how much each face wavers along its length.'],
-  ['bergBreak','berg-break','Broken corners (berg)',['crystal'],0,8,1,1,'Berg: extra planes of their own steepness that cut corners off the block.'],
-  ['bergRough','berg-rough','Face roughness (berg, units)',['crystal'],0,30,1,1,'Berg: fractal roughness added to the height, from 40 px lumps to 4 px grain.'],
+  ['bergJitter','berg-jitter','Outline jitter (berg)',['crystal','landform'],0,100,5,100,'Prisms: how far each face\'s angle and distance stray from a regular polygon.'],
+  ['bergBreak','berg-break','Broken corners (berg)',['crystal','landform'],0,8,1,1,'Prisms: extra planes that cut corners off each prism.'],
+  ['bergRough','berg-rough','Face roughness (berg, units)',['crystal','landform'],0,30,1,1,'Prisms: fractal roughness added to the height, from 40 px lumps to 4 px grain, so the faces read as rough ice and take the world\'s own slope relief and light. 0 keeps clean crystal faces in the world\'s crystal color.'],
   ['bergTilt','berg-tilt','Top tilt (berg, 1% = 1 unit per 100 px)',['crystal'],0,60,1,100,'Berg: the slope of the ramp that brings the top down away from the Tilt direction (the top is level toward it, at Height).'],
   ['bergFlat','berg-flat','Level top toward the tilt (berg, share of radius)',['crystal'],-80,80,5,100,'Berg: how far from the center, toward the tilt direction, the top stays level before it ramps down (negative: the ramp starts on the far side of the center).'],
   ['bergTiltDir','berg-tilt-dir','Tilt direction (berg, degrees, 90 = south)',['crystal'],0,359,1,1,'Berg: the direction the top rises toward, turning with the shape\'s frame.'],
@@ -199,8 +207,8 @@ export const SHAPE_FIELDS=[
   // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Override: vegetation',MASK_SHAPES,-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
   // E7
-  ['crystalFacet','crystal-facet','Facet tilt (column mound)',['crystal'],0,100,5,100,'Column mound: tilts each column\'s top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops.'],
-  ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal'],0,100,5,100,'Column mound: the mound mixes three column widths (Column width, about half and about a third of it), the small ones where the mound is highest and in patches. 0 keeps one width.'],
+  ['crystalFacet','crystal-facet','Facet tilt (column mound)',['crystal','landform'],0,100,5,100,'Stepped columns: tilts each column\'s top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops.'],
+  ['crystalSizeVar','crystal-size-var','Size variation (column mound)',['crystal','landform'],0,100,5,100,'Stepped columns: mixes three column widths (Facet width, about half and about a third of it), the small ones where the shape stands highest and in patches. 0 keeps one width.'],
   ['crystalSmooth','crystal-smooth','Smooth hill between crystals (column mound)',['crystal'],0,100,5,100,'Column mound: the share of the widest columns (and some of the middle ones) left as smooth hill with no flat top, taking the world\'s hill relief. 0 tiles the whole mound.'],
   ['craterFacets','crater-facets','Crystal facets',['crater'],0,100,5,100,'Crater: tiles the bowl, rim and apron with polygonal facets (planes fitted to the crater\'s own surface, stepped a few units from each other), so its contours are straight-edged like crystal. 0 keeps the smooth crater.'],
   // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
@@ -216,8 +224,10 @@ export const SHAPE_FIELDS=[
   ['plateVary','plate-vary','Rock slab variety (share of slabs broken into fine mesh)',['landform'],0,100,5,100,'Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole.'],
   ['crystalShoreSeam','crystal-shore-seam','Rock slab seam mark (crystal shores)',['landform'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
   // G6 (Ice): angular facets on a raised landform.
-  ['iceFacets','ice-facets','Angular facets',['landform'],0,100,5,100,'Breaks part of the raised shape into angular facets: tilted planes fitted to the shape\'s own surface, a little steeper, stepped a few units off their neighbors and partly buried where the ground rises past them. They share the shape\'s material and light, so they stand out of the snow as part of it. 0 keeps the smooth surface. A landform with shore features keeps those instead.'],
-  ['iceFacetSize','ice-facet-size','Facet size (px)',['landform'],16,96,2,1,'Ice facets: the typical width of one facet.'],
+  ['iceFacets','ice-facets','Angular facets',['landform'],0,100,5,100,'Breaks the raised shape into facets of the Facet shape, each standing as high as the shape at its center, so the section and along curves shape the cluster or ridge they make. This sets how much of it: angular facets and columns cover this share of the surface (the rest stays smooth), prisms stand on this share of their places. 0 keeps the smooth surface. A landform with shore features keeps those instead.'],
+  // lfcrystal: what the facets are (the Crystals tool's three forms, as one landform feature that any raised landform can take).
+  ['facetForm','lf-facet-form','Facet shape',['landform'],0,2,1,1,'Angular facets: tilted planes fitted to the shape\'s own surface, a little steeper, stepped a few units off their neighbors (the shape\'s own material). Stepped columns: the surface tiled with flat polygonal columns of crystal, stepped up and down, with dark seams (retail Crystal\'s mounds). Prisms: separate polygonal prisms standing on the ground in rows along the path, or round a click: crystal shards, or with Face roughness rough blocks of ice.',[[0,'Angular facets'],[1,'Stepped columns'],[2,'Prisms']]],
+  ['iceFacetSize','ice-facet-size','Facet size (px)',['landform'],8,640,2,1,'Facets: the typical width of one facet, column or prism, and the spacing of their rows. A prism as wide as the shape stands alone.'],
   // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
   ['lavaCircleVary','lava-circle-vary','Circle variety (circular layers)',['landform'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
   ['lavaSpread','lava-spread','Layer width spread',['landform'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
@@ -226,6 +236,8 @@ export const E7_KEYS=['crystalFacet','crystalSizeVar','crystalSmooth','craterFac
 export const G7_KEYS=['crystalCraterPx','crystalCraterStep','crystalCraterSkin','crystalShoreSeam','plateVary'];
 // G6 (Ice): the mountain facets' options, wired beside E7's (the card the stroke builds and strokeParams).
 export const G6_KEYS=['iceFacets','iceFacetSize'];
+// lfcrystal: the faceted structure's own option (the rest reuse the Crystals tool's keys, wired above).
+export const CRYSTAL_KEYS=['facetForm'];
 export const worldDefault=(config,key) => { const v=Number(config?.defaults?.[key]); return Number.isFinite(v)?v:0; };
 // Values a replayed shape uses for options it was drawn without.
 // Owner ruling (H10): fingers always join the coast as thumbs. The JS engine, which H12 deletes, still reads the two retired knobs, so they are fixed here.
@@ -242,7 +254,7 @@ export function toolDefaults(config,entry,preset=config?.biomeId||'green') {
 }
 export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS,...SPUR_OUTLINE_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,softness:s.softness,craterlets:s.craterlets,craterEjecta:s.craterEjecta,lean:s.lean,facing:s.facing,fingers:s.fingers,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,styleVegetation:s.styleVegetation,waterDeep:s.waterDeep,waterBed:s.waterBed,crystalForm:s.crystalForm,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalSize:s.crystalSize,crystalCount:s.crystalCount,crystalTop:s.crystalTop,crystalLean:s.crystalLean,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),...Object.fromEntries(CRATER_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
-  ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS].map(k => [k,s[k]]))}; }
+  ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS,...CRYSTAL_KEYS].map(k => [k,s[k]]))}; }
 // Capture tools rebuild a map from strokes: [kind, [[x,y],...], options],
 // each starting from the brush card's defaults for this world. options.card
 // overrides card values (diameter, amount, roughness ... in card units); any

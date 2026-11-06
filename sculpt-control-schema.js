@@ -23,13 +23,16 @@ const LABELS={plainRelief:'Ground bumps',lumpRelief:'Painted ground bumps',rockO
  moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
  iceSlate:'Slate faces',iceCrystal:'Straight face fibres',iceCrest:'Cap lumps',iceSoft:'Rounded lighting',iceSnow:'Snow on level caps',iceFall:'Slope fibres',iceApron:'Hatched foot apron',iceFrost:'Needle hairlines',
  crystalForm:'Form',crystalSize:'Element width (px)',crystalCount:'Elements per cluster',crystalSides:'Polygon sides',crystalTop:'Flat top share',crystalLean:'Apex lean',
- crystalTiers:'Stepped column tops',crystalAlign:'Align blocks to shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
+ crystalTiers:'Level tops',crystalAlign:'Align to the path',crystalStep:'Step height',crystalFacet:'Top tilt',crystalSizeVar:'Size mix',facetForm:'Facet shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
  craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
- iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
+ iceFacets:'Facets',iceFacetSize:'Facet width (px)',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
  fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerSize:'Lobe size',
  styleVegetation:'Local vegetation',
 };
 export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
+// lfcrystal: the Crystals tool's options a landform's Facet shape takes, by shape (0 angular facets, 1 stepped columns, 2 prisms); Level tops serves both.
+const FACET_SHAPE_KEYS=[[],['crystalStep','crystalFacet','crystalSizeVar'],['crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']];
+export const LANDFORM_FACET_KEYS=['crystalTiers',...FACET_SHAPE_KEYS.flat()];
 export function shapeControlAvailable(key,kind,p){
  // A landform has its own width (the diameter), softness-free presets and variation (card H27).
  if(kind==='landform'&&['softness','faceVariation'].includes(key))return false;
@@ -74,8 +77,10 @@ export function shapeControlAvailable(key,kind,p){
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
  if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  // A landform's coast pass and its facets are one pass over its result; shore features take it.
- if(kind==='landform'&&['iceFacets','iceFacetSize'].includes(key)&&landformShore(landformSteps(p)))return false;
- if(key==='iceFacetSize')return p.iceFacets>0;
+ if(kind==='landform'&&['iceFacets','iceFacetSize','facetForm',...LANDFORM_FACET_KEYS].includes(key)&&landformShore(landformSteps(p)))return false;
+ if(['iceFacetSize','facetForm'].includes(key))return p.iceFacets>0;
+ // lfcrystal: each facet shape's own rows show once facets are on and that shape is chosen (columns and prisms both have tops to level).
+ if(kind==='landform'&&LANDFORM_FACET_KEYS.includes(key)){const fs=Math.round(Number(p.facetForm)||0);return p.iceFacets>0&&(key==='crystalTiers'?fs>=1:FACET_SHAPE_KEYS[fs].includes(key));}
  return true;
 }
 

@@ -61,7 +61,9 @@ const NODE_FIELDS = [
   // lfcrater: the ejecta (height at the rim, the rim's distance from the path on each side) and the impact's spread (downrange, asymmetry, forbidden zones, wings).
   ...['ejAmt', 'ejPeakF', 'ejPeakB', 'imX', 'imY', 'ejAsym', 'ejFz', 'ejWing', 'ejDz'].map(k => [k, 'f']),
   // lfcrater: where a signed section peaks (its share of the half width from the foot), for spurs rooted on that peak; 0 elsewhere.
-  ...['lfPeak'].map(k => [k, 'f'])];
+  ...['lfPeak'].map(k => [k, 'f']),
+  // lfcrystal: a landform's faceted structure (Facet shape, the share of sites with an element, its polygon's sides, how square it turns to the path, corner cuts).
+  ...['lfcForm'].map(k => [k, 'u']), ...['lfcShare', 'lfcSides', 'lfcAlign', 'lfcBreak'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -379,7 +381,13 @@ export function prepareNode(n, geom, c) {
   // lfcrater: a landform that digs into the ground it lands on (Height reference Ground, below 0) fits its facets to its own surface up and down, the pass a
   // crater's Bowl facets ran (mode 1), at its Facet size, with the world's facet step and skin; a raised one keeps the angular facets (mode 2).
   const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : q.iceFacets > 0 && kind === 'landform' && !landformShore(q) ? (landformGround(q) && q.elevation < 0 ? 1 : 2) : 0;
-  if ((shoreShape || facetMode) && region) { const co = coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
+  // lfcrystal: Facet shape (1 stepped columns, 2 prisms) breaks the landform's envelope into elements on the same pass; prisms stand past the footprint by up to their own width.
+  const lfc = facetMode === 2 ? clamp(Math.round(q.facetForm || 0), 0, 2) : 0, lfcL = lfc ? lfcWidth(q) * frameScale : 0;
+  if (lfc === 2 && region) main.region = region = expand(region, Math.ceil(.9 * lfcL / spacing) + 2, grid);
+  if ((shoreShape || facetMode) && region) { const co = coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facetMode, lfcL); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
+  if (lfc) Object.assign(main.u, {lfcForm: lfc, lfcShare: clamp(q.iceFacets, 0, 1), lfcSides: clamp(Math.round(q.crystalSides ?? 6), 3, 12), lfcAlign: clamp(q.crystalAlign ?? 0, 0, 1), lfcBreak: clamp(Math.round(q.bergBreak ?? 0), 0, 8),
+    cgSize: lfcL, cgFacet: clamp(q.crystalFacet ?? 0, 0, 1), cgSizeVar: clamp(q.crystalSizeVar ?? 0, 0, 1), cgSmooth: 1 - clamp(q.iceFacets, 0, 1), cgTiers: clamp(q.crystalTiers ?? 0, 0, 1), cgStep: Math.max(0, q.crystalStep ?? 0),
+    cgVar: clamp(q.crystalVariation ?? 0, 0, 1), bgRough: Math.max(0, q.bergRough ?? 0), bgJit: clamp(q.bergJitter ?? 0, 0, 1)});
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.
   const cv = strokeCurve(kind, q);
   const put = t => { const at = main.extra.length; for (let j = 0; j < t.length; j += 4) main.extra.push([t[j], t[j + 1] ?? 0, t[j + 2] ?? 0, t[j + 3] ?? 0]); return at; };
@@ -442,7 +450,7 @@ const coastLayerReach = q => {
 // The shared coast pass of a shape with shore features, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
 // beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
 // size of the circular bites' lattice.
-function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0) {
+function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0, lfcL = 0) {
   const fingers = shoreShape && q.fingers > 0, layers = shoreShape && Math.round(q.shoreLayers) >= 1;
   const beach = shoreShape && landformBeach(q);
   const plWater = Math.max(0, q.plateWaterPx || 0), plLand = Math.max(0, q.plateLandPx || 0), plates = q.shorePlates > 0 && Math.max(plWater, plLand) > 0;
@@ -450,8 +458,9 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
   const {grid, spacing, refSpacing = spacing} = geom;
   if (facet) {
     // Crater and mountain facets: a pass over the node's own result. The seeds of the 3 x 3 lattice neighbours lie within 2 widths of a cell, and read 3 cells round themselves.
-    const L = facet === 1 && !shoreShape ? (q.crystalCraterPx > 0 ? q.crystalCraterPx : clamp(radius * .36, 14, 36)) : clamp(q.iceFacetSize, 16, 96), mF = Math.ceil(2.1 * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
-    return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, sideR: 0, extra: [],
+    // lfcrystal: columns read the envelope at seeds up to about two widths away; prisms evaluate the section at their seeds and read only their own cell.
+    const L = facet === 1 && !shoreShape ? (q.crystalCraterPx > 0 ? q.crystalCraterPx : clamp(radius * .36, 14, 36)) : lfcL || clamp(q.iceFacetSize, 16, 640), mF = lfcL && Math.round(q.facetForm) === 2 ? 2 : Math.ceil((lfcL ? 2.2 : 2.1) * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
+    return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, lfc: lfcL > 0, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, sideR: 0, extra: [],
       u: {fcMode: facet, fcL: L, fcStrength: clamp(shoreShape ? q.iceFacets : q.craterFacets, 0, 1), fcStep: q.crystalCraterStep ?? 0, fcSkin: q.crystalCraterSkin >= .5 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
   }
   const fReach = .5 * radius, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, beach ? BEACH_REACH : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
@@ -486,6 +495,8 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
   };
 }
 
+// lfcrystal: the width of a faceted structure's elements (Facet width, px in the shape's own frame).
+export const lfcWidth = q => clamp(q.iceFacetSize, 4, 1200);
 const expand = (r, m, grid) => ({x0: Math.max(0, r.x0 - m), y0: Math.max(0, r.y0 - m), x1: Math.min(grid - 1, r.x1 + m), y1: Math.min(grid - 1, r.y1 + m)});
 const intersect = (a, b) => { const r = {x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1)}; return r.x0 > r.x1 || r.y0 > r.y1 ? null : r; };
 
@@ -522,7 +533,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'stampColumns', 'stampBerg', 'packPlane'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampCrater', 'stampFissure', 'stampCrystal', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'stampColumns', 'stampBerg', 'packPlane', 'lfCrystalApply'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse', 'pointRead'] : [])]);
   // A point-read window is always evaluated with the pages variant (it is a target of its own, with direct noise): the pages engine's own pipelines, or a second set made when first needed.
   let pipesW = null;
@@ -604,7 +615,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (!wide) return;
       add('coastInit', wide, node);
       emitBody(p, {...node, coPutW: 1}, wide, ex, noise);
-      if (c.facet) { add('facetSnap', wide, node); const fb = intersect(wide, p.region); if (fb) add('facetApply', fb, node); return; }
+      if (c.facet) { add('facetSnap', wide, node); const fb = intersect(wide, p.region); if (fb) add(c.lfc ? 'lfCrystalApply' : 'facetApply', fb, node); return; }
       const field = (moved = 1) => {
         const N = Math.max(1, Math.ceil(Math.log2(c.maxCells + 1)));
         add('coastSeed', wide, {...node, coSrc: 0, coMoved: moved});
