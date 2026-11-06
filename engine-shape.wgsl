@@ -1916,8 +1916,9 @@ fn lfCrystalCoord(p: vec2f) -> vec3f {
   }
   return sc;
 }
-// The world point at (s, c) of the path the trunk segment k0 belongs to: the segment of that path holding s (walking along its own segments only).
-fn lfCrystalPoint(sc: vec2f, k0: u32) -> vec2f {
+// The world point at (s, c) of the path the trunk segment k0 belongs to (xy), and the way that segment runs (zw): the segment of that path holding s
+// (walking along its own segments only). An element is laid out in its own segment's frame from there, so it keeps its shape round a bend.
+fn lfCrystalPoint(sc: vec2f, k0: u32) -> vec4f {
   var k = k0;
   for (var n = 0u; n < u.nseg; n++) {
     let s1 = Seg[(u.segBase + k) * 4u + 1u]; let flags = u32(Seg[(u.segBase + k) * 4u + 2u].x);
@@ -1931,8 +1932,10 @@ fn lfCrystalPoint(sc: vec2f, k0: u32) -> vec2f {
   }
   let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
   let d = s0.zw - s0.xy; let ax = d / max(length(d), 1e-4);
-  return s0.xy + ax * (sc.x - s1.x) + vec2f(ax.y, -ax.x) * sc.y;
+  return vec4f(s0.xy + ax * (sc.x - s1.x) + vec2f(ax.y, -ax.x) * sc.y, ax);
 }
+// A world offset q in a segment's frame (along, across), as (s, c) run.
+fn lfCrystalLocal(q: vec2f, ax: vec2f) -> vec2f { return vec2f(dot(q, ax), q.x * ax.y - q.y * ax.x); }
 // The envelope at a world point, as (its height, its height over the prefix): R inside the footprint, the prefix elsewhere (fcAt's clamped read).
 fn lfCrystalEnv(w: vec2f, cells: u32) -> vec2f {
   let gx = i32(floor(w.x / u.spacing + 0.5)); let gy = i32(floor(w.y / u.spacing + 0.5));
@@ -1999,21 +2002,21 @@ fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
   for (var lv = 0; lv < levels; lv++) {
     let Ll = u.cgSize * SZL[lv]; let ci = i32(floor(lx / Ll)); let cj = i32(floor(ly / Ll));
     for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let cl = cgPoint(ii, j, Ll, 0.9, u32(lv) * 16u);
-      if (levels > 1) { let cw = lfCrystalPoint(cl, k0); if (lfCrystalLevel(cw, lfCrystalEnv(cw, cells).y / lfCrystalRise()) != lv) { continue; } }
-      let d = length(vec2f(lx, ly) - cl);
+      let cl = cgPoint(ii, j, Ll, 0.9, u32(lv) * 16u); let cw = lfCrystalPoint(cl, k0).xy;
+      if (levels > 1) { if (lfCrystalLevel(cw, lfCrystalEnv(cw, cells).y / lfCrystalRise()) != lv) { continue; } }
+      let d = length(vec2f(wx, wy) - cw);
       if (d < d1) { d2 = d1; d1 = d; bl = lv; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
     } }
   }
   if (bl < 0) {
     let ci = i32(floor(lx / u.cgSize)); let cj = i32(floor(ly / u.cgSize));
     for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let d = length(vec2f(lx, ly) - cgPoint(ii, j, u.cgSize, 0.9, 0u));
+      let d = length(vec2f(wx, wy) - lfCrystalPoint(cgPoint(ii, j, u.cgSize, 0.9, 0u), k0).xy);
       if (d < d1) { d2 = d1; d1 = d; bl = 0; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
     } }
   }
   let o = u32(bl) * 16u;
-  let cl = cgPoint(bi, bj, u.cgSize * SZL[bl], 0.9, o); let cw = lfCrystalPoint(cl, k0);
+  let cl = cgPoint(bi, bj, u.cgSize * SZL[bl], 0.9, o); let cp = lfCrystalPoint(cl, k0); let cw = cp.xy;
   let env = lfCrystalEnv(cw, cells);
   if (env.y <= 1.0) { return; }
   // The uncovered share (1 - Facet coverage, the widest columns most) keeps the envelope's own smooth surface.
@@ -2030,7 +2033,7 @@ fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
     let h0 = cgRnd(bi, bj, 6u + o) * 6.2831853; let h1 = h0 + 3.1415927 * (0.5 + cgRnd(bi, bj, 7u + o));
     let m0 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 8u + o)); var m1 = 0.0;
     if (!(cgRnd(bi, bj, 9u + o) < 0.3)) { m1 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 10u + o)); }
-    let ox = lx - cl.x; let oy = ly - cl.y;
+    let ol = lfCrystalLocal(vec2f(wx, wy) - cw, cp.zw); let ox = ol.x; let oy = ol.y;
     let pa = cos(h0) * m0 * ox + sin(h0) * m0 * oy; let pb = cos(h1) * m1 * ox + sin(h1) * m1 * oy;
     if (cgRnd(bi, bj, 11u + o) < 0.5) { top = top + min(pa, pb); } else { top = top + max(pa, pb); }
   }
@@ -2056,9 +2059,11 @@ fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
     if (cgRnd(ii, j, 21u) >= u.lfcShare) { continue; }
     let sd = vec2f((f32(ii) + (cgRnd(ii, j, 22u) - 0.5) * jit) * L, (f32(j) + (cgRnd(ii, j, 23u) - 0.5) * jit) * L);
     let R = 0.5 * L * (1.0 + u.cgVar * (cgRnd(ii, j, 24u) - 0.5) * 1.2);
-    let q = pc.xy - sd;
+    let qs = pc.xy - sd;
+    if (dot(qs, qs) > 10.0 * R * R) { continue; }   // far in the path's coordinates (they only shrink on the outside of a bend)
+    let sp = lfCrystalPoint(sd, k0); let q = lfCrystalLocal(vec2f(wx, wy) - sp.xy, sp.zw);
     if (dot(q, q) > 2.6 * R * R) { continue; }
-    let H = lfCrystalSeedRise(lfCrystalPoint(sd, k0), sd, k0, base, cells) * (1.0 + u.cgVar * (cgRnd(ii, j, 25u) - 0.5));
+    let H = lfCrystalSeedRise(sp.xy, sd, k0, base, cells) * (1.0 + u.cgVar * (cgRnd(ii, j, 25u) - 0.5));
     if (H <= 1.0) { continue; }
     let n = u32(clamp(round(u.lfcSides + u.cgVar * (cgRnd(ii, j, 26u) - 0.5) * 2.4), 3.0, 12.0));
     let rot = (1.0 - clamp(u.lfcAlign, 0.0, 1.0)) * cgRnd(ii, j, 27u) * 6.2831853;
