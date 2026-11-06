@@ -114,7 +114,7 @@ export const SHAPE_FIELDS=[
   ['terraceJitter','sec-terrace-jitter','Step variation',['landform'],0,100,5,100,'How much riser positions and step heights wander along the outline.'],
   ['breakup','sec-breakup','Step breakup',['landform'],0,100,5,100,'How many stretches of the terraces lose their shelf, so the steps no longer run unbroken round the shape (100: most stretches lose it, and short ledges survive). 0 keeps the terraces whole.'],
   // Landform (card H27): the elevation, how it combines, and the variation weighted by the place on the section.
-  ['heightReference','lf-height-reference','Height reference',['landform'],0,1,1,1,'Fixed elevation uses map height units. Sea level measures above or below the current sea; negative heights are below water.',[[0,'Fixed elevation'],[1,'Sea level']]],
+  ['heightReference','lf-height-reference','Height reference',['landform'],0,2,1,1,'Fixed elevation uses map height units. Sea level measures above or below the current sea; negative heights are below water. Ground measures from the ground under each place the shape covers, so the shape follows the ground it lands on, slopes included: negative heights dig into it (a crater\'s bowl), and a section that dips below 0 rises above it (the crater\'s rim).',[[0,'Fixed elevation'],[1,'Sea level'],[2,'Ground']]],
   ['elevation','lf-elevation','Elevation (height units)',['landform'],-335,300,1,1,'The height of the crest, in height units. The section canvas marks the plain (the map\'s base height) and the sea. Combine decides what the landform does to the ground it meets.'],
   ['combine','lf-combine','Combine',['landform'],0,2,1,1,'Raise to keeps the higher of the ground and the landform. Cut to keeps the lower. Flatten to sets the ground to the landform wherever it reaches, up or down.',[[0,'Raise to'],[1,'Cut to'],[2,'Flatten to']]],
   ['routeSmooth','lf-route-smooth','Smooth route',['landform'],0,100,5,100,'Keep the center of this landform clear of surface relief, cracks and debris, and protect its grade from weathering. The shoulders fade into the surrounding terrain.'],
@@ -225,7 +225,7 @@ export const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
 // A palette entry's starting settings in a world (a landform kind starts as the plateau). A sea-level preset keeps its elevation above the sea.
 export function toolDefaults(config,entry,preset=config?.biomeId||'green') {
   const shape=entry==='landform'?'plateau':entry,kind=strokeKind(shape);
-  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_TOOLS[shape]}:{}),...TOOL_PRESETS[preset]?.[shape]},sea=Math.round(starting.heightReference||0)===1;
+  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_TOOLS[shape]}:{}),...TOOL_PRESETS[preset]?.[shape]},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
   return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(config,key)*scale),lo,hi)])),cracks:{crater:30}[kind]??0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...starting,
     elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }

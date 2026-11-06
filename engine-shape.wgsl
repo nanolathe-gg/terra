@@ -668,6 +668,17 @@ fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> f32 {
   let bed = bar - w * (bar - (sea - 0.18 * W));
   return min(fl, mix(bed, fl, edge));
 }
+// A signed section (a knot below 0, u.lfSigned): the part of the section beyond the ground (a rim or levee beside a cut, a moat round a raise) is part of the
+// landform, so a cell counts as covered by how far inside the foot it stands (0 at the foot, 1 at the path), not by the section's value, which is below 0
+// there. A section that stays within 0..1 keeps its value as its coverage. The widths are lfShare's.
+fn lfCraterCover(q: f32, c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
+  if (u.lfSigned == 0u) { return clamp(q, 0.0, 1.0); }
+  let back = c * side; let r = sqrt(c * c + e * e);
+  let fw = max(u.lfFront * wm, 0.5); let bw = max(u.lfBack * wm, 0.5);
+  var w = select(fw, bw, back > 0.0);
+  if (cap && e > 0.0) { w = mix(fw, bw, 0.5 + 0.5 * back / max(r, 1e-5)); }
+  return max(clamp(q, 0.0, 1.0), clamp(1.0 - r / w, 0.0, 1.0));
+}
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
 fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec3f {
@@ -699,7 +710,8 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   }
   let q = lfShare(cc, ee, cap, s1.w, wm);
   let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
-  let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
+  let lfB = select(u.baseH, base, u.lfGround != 0u); let lfE = select(u.elev, base + u.elev, u.lfGround != 0u);
+  let crest = lfB + (lfE - lfB) * along * hm;   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
   var value = base + (crest - base) * qt;
   var bar = 0.0;
@@ -708,7 +720,7 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
     else { let ch = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); value = ch.x; bar = ch.y; }
   }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
-  return vec3f(value, clamp(q, 0.0, 1.0), bar);
+  return vec3f(value, lfCraterCover(q, cc, ee, cap, s1.w, wm), bar);
 }
 // ---- P1 gullies: a slope-aligned stripe filter (ported from the research lab's gully filter, docs/research/lab/lib.wgsl on the research branch) ----
 // The four nearest jittered cells of a 1/f lattice, smoothstep weights, (cos, sin) of the phase across `dir` summed and normalised: stripes whose crests
@@ -832,7 +844,7 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u]; let s2 = Seg[(u.segBase + trunk) * 4u + 2u];
   let ro = lfRun(s0, s1, s2, wx, wy, nA, nB, share);
   if (ro.x <= -u.talusReach) { return 0.0; }
-  let relief = u.elev - base;
+  let relief = select(u.elev, base + u.elev, u.lfGround != 0u) - base;   // with Height reference Ground the crest stands elev over this cell's ground
   if (relief <= 0.0) { return 0.0; }
   // The steepest the stroke's section gets (its curve table, on this side, over the relief and the run), against the repose.
   let table = select(u.curveBase, u.backBase, ro.z > 0.5);

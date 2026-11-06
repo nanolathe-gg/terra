@@ -158,6 +158,12 @@ export function sectionPreview(kind, q, n = 160) {
 // Resolve the authored height only at evaluation/preview time, so the same
 // sea-relative stroke follows the map's sea level without rewriting its recipe.
 export const landformElevation = (q, sea) => q.elevation + (Math.round(q.heightReference || 0) === 1 ? sea : 0);
+// lfcrater: Height reference Ground (2) makes the elevation an offset from the ground under each cell, so a shape follows the ground it lands on (a crater
+// on a slope, a levee beside a channel); its "plain" is that ground, 0.
+export const landformGround = q => Math.round(q?.heightReference || 0) === 2;
+// A signed section: a knot below 0 reaches past the ground, away from the elevation (a rim beside a bowl, a levee beside a channel, a moat round a mound).
+// Those cells are part of the shape (engine-shape.wgsl lfCraterCover); they show where Combine keeps them (Flatten to; Raise to keeps a rim, Cut to a moat).
+export const landformSigned = q => { const k = strokeKnots('landform', q); return k.knots.some(p => p[1] < 0) || (k.back ?? []).some(p => p[1] < 0); };
 
 // One authored step count/ledge/variation set; choose the coordinate system.
 // Resolve to the existing shared profile or coastline pass, never both.

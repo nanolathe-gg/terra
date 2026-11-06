@@ -6,7 +6,7 @@ import {controlRow} from './sculpt-workspace.js';
 import {copyColumn} from './sculpt-column.js';
 import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
-import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
+import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,TOOL_PRESETS,SPUR_OUTLINE_KEYS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,FIELD_KEYS,regionalCheck,repeatCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
@@ -102,8 +102,8 @@ function buildShapeOptions() {
   for (const [key,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => {
     if(key==='heightReference'&&curveKind()==='landform'){
       const previous=nodes[selected]?.params||toolSettings[tool]||{},next=shapeValue('heightReference');
-      const height=landformElevation({elevation:shapeValue('elevation'),heightReference:previous.heightReference},config.seaLevel);
-      heightControlRange({heightReference:next});$('lf-elevation').value=height-(next===1?config.seaLevel:0);
+      const datum=r => Math.round(r||0)===1?config.seaLevel:Math.round(r||0)===2?config.baseHeight:0,height=shapeValue('elevation')+datum(previous.heightReference);   // a Ground offset converts as if over the plain
+      heightControlRange({heightReference:next});$('lf-elevation').value=height-datum(next);
     }
     if(key==='stepReference')stepControlRange(curveKind(),{stepReference:shapeValue('stepReference')});
     rememberTool(true); updateControls(); schedule(); persistLater();
@@ -136,7 +136,9 @@ function rememberTool(custom=false) {
   toolSettings[tool]=state;
 }
 function heightControlRange(p={}) {
-  const offset=Math.round(p.heightReference||0)===1?(config?.seaLevel||0):0;
+  const ref=Math.round(p.heightReference||0),offset=ref===1?(config?.seaLevel||0):0;
+  // A Ground offset digs or rises at most as far as a fixed elevation can from the plain.
+  if(ref===2){$('lf-elevation').min='-160';$('lf-elevation').max='160';return;}
   $('lf-elevation').min=String(-80-offset);$('lf-elevation').max=String(300-offset);
 }
 function stepControlRange(kind,p={}) {
@@ -206,7 +208,7 @@ function updateControls() {
   const activeTool=tool,entry=tool==='move'?(nodes[selected]?.params?nodes[selected].kind:'move'):tool,kind=strokeKind(entry);
   {
   heightControlRange({heightReference:shapeValue('heightReference')});stepControlRange(kind,{stepReference:shapeValue('stepReference')});
-  $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':'Elevation (height units) ';
+  $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':shapeValue('heightReference')===2?'Height above ground (units) ':'Elevation (height units) ';
   const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='crystal'?'Height':kind==='crater' || kind==='fissure'?'Depth':'Rise';
@@ -319,9 +321,11 @@ function mirrorSides() { const c=curveContext(),b=backKnots(c); if (!c.land || !
 function setLean(ratio) { const el=$('lean'); el.value=String(clamp(Math.round(ratio*20)*5,25,400)); el.dispatchEvent(new Event('input',{bubbles:true})); }
 // The height axis of a landform's canvases: the plain, the sea and the elevation, with room for an along curve up to 1.2.
 function heightAxis(c) {
-  const plain=config.baseHeight,sea=config.seaLevel,E=landformElevation(c.q,sea),span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain,top=plain+span*1.2;
-  let lo=Math.min(sea,plain,E,top),hi=Math.max(sea,plain,E,top); const pad=Math.max(5,(hi-lo)*.1); lo-=pad; hi+=pad;
-  return {plain,sea,E,span,lo,hi};
+  const ground=landformGround(c.q),plain=ground?0:config.baseHeight,sea=ground?null:config.seaLevel,E=landformElevation(c.q,config.seaLevel),span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain,top=plain+span*1.2;
+  // A signed section (lfcrater) reaches past the ground, away from the elevation: room for its lowest knot.
+  const lip=plain+span*Math.min(0,...frontKnots(c).map(k => k[1]),...(backKnots(c)||[]).map(k => k[1]));
+  let lo=Math.min(sea??plain,plain,E,top,lip),hi=Math.max(sea??plain,plain,E,top,lip); const pad=Math.max(5,(hi-lo)*.1); lo-=pad; hi+=pad;
+  return {plain,sea,E,span,lo,hi,ground};
 }
 function sectionLayout(c) {
   const cv=$('section-preview'),W=cv.width,H=cv.height,ratio=leanRatio(c.kind,c.q),xL=CV_PAD,xR=W-CV_PAD,xc=xL+(xR-xL)*ratio/(1+ratio),top=CV_PAD+2,bottom=H-CV_PAD-2,L={W,H,ratio,xL,xR,xc,top,bottom,land:c.land};
@@ -369,13 +373,14 @@ function drawSection() {
   const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{ys,back}=sectionPreview(c.kind,c.q),n=ys.length-1;
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
   const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); if (label) { g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); } };
-  if (c.land) { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
+  if (c.land && L.ground) { rule(L.yH(0),'#8b9b87','ground'); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E>0?'+':''}${L.E}`); }
+  else if (c.land) { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
   else { rule(L.yv(0),'#465344'); rule(L.yv(1),'#465344'); }
   const base=L.yv(0),trace=() => { for (let k=0;k<=n;k++) g.lineTo(L.xL+(L.xc-L.xL)*k/n,L.yv(back[k])); for (let k=n;k>=0;k--) g.lineTo(L.xc+(L.xR-L.xc)*(n-k)/n,L.yv(ys[k])); };
   g.beginPath(); g.moveTo(L.xL,base); trace(); g.lineTo(L.xR,base); g.closePath(); g.fillStyle='rgba(180,213,137,.25)'; g.fill();
   g.beginPath(); g.moveTo(L.xL,L.yv(back[0])); trace(); g.strokeStyle='#b4d589'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
   // The map's own sections across the selected landform, at five places along it and at the place picked below, in height units.
-  const node=c.land?selectedLandform():null;
+  const node=c.land&&!L.ground?selectedLandform():null;
   if (node && regionalFields) {
     const lp=landformPath(node),px=a => L.xc+a*(a<0?L.xc-L.xL:L.xR-L.xc)/(a<0?lp.back:lp.front),line=(t,color,w) => { g.beginPath(); landformCut(lp,t).forEach(([a,h],j) => g[j?'lineTo':'moveTo'](px(a),L.yH(h))); g.strokeStyle=color; g.lineWidth=w; g.stroke(); };
     for (const t of [.1,.3,.5,.7,.9]) line(t,'rgba(160,200,255,.38)',1);
@@ -408,8 +413,9 @@ function drawAlong(c) {
   const cv=$('along-preview'),g=cv.getContext('2d'),L=alongLayout(c),knots=alongKnots(c.q),f=knotCurve(knots);
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
   const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); };
-  rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`);
-  const node=selectedLandform(),N=48;
+  if (L.ground) { rule(L.yH(0),'#8b9b87','ground'); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E>0?'+':''}${L.E}`); }
+  else { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
+  const node=L.ground?null:selectedLandform(),N=48;
   if (node && regionalFields) {
     // The crest wanders, so the line takes the extreme toward the elevation (the highest for a ridge, the lowest for a cut below the plain) near the path.
     const lp=landformPath(node),reach=Math.max(0,c.q.wander||0)*1.2+4,dir=L.E<L.plain?-1:1;
@@ -425,7 +431,7 @@ function curveEditorEvents() {
   const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
   const hit=(c,L,p) => { let best=null,d=8; for (const h of sectionHandles(c,L)) { const dd=Math.hypot(h.X-p.px,h.Y-p.py); if (dd<d) { d=dd; best=h; } } return best; };
   const distShare=(L,side,px) => clamp(1-Math.abs(px-L.xc)/(side==='back'?L.xc-L.xL:L.xR-L.xc),0,1);
-  const vOf=(c,L,py) => clamp(L.vy(py),0,1.5);
+  const vOf=(c,L,py) => clamp(L.vy(py),c.land?-1:0,1.5);   // a landform's knot may dip below 0: a signed section (lfcrater)
   const finish=() => { if (drag) { drag=null; if (selected>=0) { checkpoint(); queueWeather(); } } };
   const remove=(c,h) => { const list=(h.edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); if (h.i>0 && h.i<list.length-1 && list.length>2) { list.splice(h.i,1); h.edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c)); return true; } return false; };
   cv.addEventListener('contextmenu',e => e.preventDefault());
