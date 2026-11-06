@@ -57,7 +57,18 @@ the retail crops stay outside git.
    `/private/tmp/nanolathe-map-editor/node-webgpu/node_modules`). The
    pixels and heights are the page's: `--chrome --server <yours> --port
    <cdp>` renders the same scene in headless Chrome and writes the same
-   bytes.
+   bytes. `--chrome` needs `--server`: no script that runs under Node by
+   default falls back to a server of its own.
+
+   The same runner carries the other checks that need only the engine:
+   `regional.mjs`, `shapecheck.mjs`, `export-bytes.mjs` (the page's
+   WebAssembly exporter in a Node context, `export-node.mjs`, against the
+   native one), `measure/shape_controls.mjs`, `measure/world_controls.mjs`
+   (the page's knob path, `sculpt-knobs.js`), `measure/tilecount.mjs` and
+   `measure/geology_controls.mjs`. Each takes `--chrome` for the page.
+   `export-bytes.mjs` and `tilecount.mjs` play the scripted layouts of
+   `layouts.mjs`; placed features (`--features`) need `--chrome`, since the
+   page paints deposits and vents into the art with a 2D canvas.
 
    `pair.png` is retail | ours at full size; `layout.png` compares the height
    reliefs, to check the strokes follow the retail layout before judging
