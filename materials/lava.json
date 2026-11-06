@@ -1032,6 +1032,7 @@
   ]
  },
  "material": {
+  "groundPool": 1024,
   "shallowDepth": 0,
   "deepDepth": 10,
   "rockSlope": 2.4,

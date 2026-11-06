@@ -17,6 +17,7 @@ struct Uniforms {
     size: f32,
     base: f32,
     sea: f32,
+    pool: f32,             // card tilepool: level ground repeats every pool px (a multiple of 512), so its 32-px tiles come from (pool / 32)^2
     materialWeathering: f32,
     materialReady: i32,
     rockyCoasts: i32,
@@ -405,6 +406,32 @@ fn valueNoise(q: vec2f) -> f32 {
     let e = cellHash(c + vec2f(1.0, 1.0)).x;
     return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
 }
+
+// Card tilepool: TA stores a map's art as 32-px tiles and can index 65,536 of them; retail maps use a few thousand, because level
+// ground repeats its tiles. Here level ground repeats with the world's pool period (u.pool px, a multiple of 512, so the 512-px noise
+// texture repeats with it): the fine detail a plain carries (lumps, grain and specks, cover patches, plants, the dither) is hashed on
+// lattices whose coordinates wrap with the period, so a level plain is made of (pool / 32)^2 tiles at most and joins without seams
+// (the pattern is continuous; it only repeats). A lattice of spacing s px has poolCells(s) cells a period, so s is rounded to
+// pool / poolCells(s).
+fn poolCells(s: f32) -> f32 { return max(1.0, round(u.pool / s)); }
+fn poolWrap(c: vec2f, n: f32) -> vec2f { return c - n * floor(c / n); }
+// The pixel's lattice coordinate (1 px cells), wrapped: the per-pixel hashes of level ground read it in place of floor(p).
+fn poolPixel(p: vec2f) -> vec2f { return poolWrap(floor(p), u.pool); }
+// valueNoise on a lattice of n cells a period (q in cells).
+fn wrapNoise(q: vec2f, n: f32) -> f32 {
+    let c = floor(q);
+    let f = fract(q);
+    let fade = f * f * (3.0 - 2.0 * f);
+    let a = cellHash(poolWrap(c, n)).x;
+    let b = cellHash(poolWrap(c + vec2f(1.0, 0.0), n)).x;
+    let d = cellHash(poolWrap(c + vec2f(0.0, 1.0), n)).x;
+    let e = cellHash(poolWrap(c + vec2f(1.0, 1.0), n)).x;
+    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+// valueNoise(p / s + o) with the period's lattice: the same field at a scale rounded to a divisor of the period.
+fn poolNoise(p: vec2f, s: f32, o: f32) -> f32 { let n = poolCells(s); return wrapNoise(p * (n / u.pool) + o, n); }
+// A terrainNoise(p * m) frequency rounded so that the 512-px noise texture repeats with the pool.
+fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * k)) / k; }
 
 // H2 rock column: the bed coordinate, in height units, at world point p for a
 // rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both

@@ -45,6 +45,15 @@ fn vnoise(x: f32, y: f32, s: u32) -> f32 {
   let a = hashi(ix, iy, s); let b = hashi(ix + 1, iy, s); let c = hashi(ix, iy + 1, s); let d = hashi(ix + 1, iy + 1, s);
   return (a + (b - a) * tx) * (1.0 - ty) + (c + (d - c) * tx) * ty;
 }
+// vnoise on a lattice of n cells a period (x, y in cells): card tilepool's undulation, which repeats with the world's pool.
+fn vnoiseWrap(x: f32, y: f32, s: u32, n: f32) -> f32 {
+  let fx = floor(x); let fy = floor(y);
+  let wx = fx - n * floor(fx / n); let wy = fy - n * floor(fy / n);
+  let ix = i32(wx); let iy = i32(wy); let jx = i32(select(wx + 1.0, 0.0, wx + 1.0 >= n)); let jy = i32(select(wy + 1.0, 0.0, wy + 1.0 >= n));
+  let tx = sm(0.0, 1.0, x - fx); let ty = sm(0.0, 1.0, y - fy);
+  let a = hashi(ix, iy, s); let b = hashi(jx, iy, s); let c = hashi(ix, jy, s); let d = hashi(jx, jy, s);
+  return (a + (b - a) * tx) * (1.0 - ty) + (c + (d - c) * tx) * ty;
+}
 fn noiseValue(f: u32, s: u32, x: f32, y: f32) -> f32 {
   let w = NZ[f]; let k = NS[f];
   return w.y * vnoise(x / w.x, y / w.x, s ^ k.x) + w.w * vnoise(x / w.z, y / w.z, s ^ k.y);
@@ -420,10 +429,15 @@ fn ground(@builtin(global_invocation_id) g: vec3u) {
   if (h <= u.sea + 1.0) { return; }
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   let wave = u.gWave; let s = u.seed;
-  let v = 0.6 * vnoise(wx / wave, wy / wave, s ^ 0x51a3u) + 0.3 * vnoise(wx * 2.1 / wave, wy * 2.1 / wave, s ^ 0x2b7du)
-        + 0.1 * vnoise(wx * 4.3 / wave, wy * 4.3 / wave, s ^ 0x6c11u);
+  // Card tilepool: the undulation repeats with the world's pool (gPool px), so level ground's light and its detail repeat together;
+  // each octave's wavelength is rounded to a divisor of the period.
+  let n1 = max(1.0, round(u.gPool / wave)); let n2 = max(1.0, round(u.gPool * 2.1 / wave)); let n3 = max(1.0, round(u.gPool * 4.3 / wave));
+  let nb = max(1.0, round(u.gPool / (wave * 3.2)));
+  let k = 1.0 / u.gPool;
+  let v = 0.6 * vnoiseWrap(wx * n1 * k, wy * n1 * k, s ^ 0x51a3u, n1) + 0.3 * vnoiseWrap(wx * n2 * k, wy * n2 * k, s ^ 0x2b7du, n2)
+        + 0.1 * vnoiseWrap(wx * n3 * k, wy * n3 * k, s ^ 0x6c11u, n3);
   let threshold = (0.5 - u.gCover) * 1.2;
-  let blotch = sm(threshold - 0.15, threshold + 0.15, vnoise(wx / (wave * 3.2), wy / (wave * 3.2), s ^ 0x7f4bu));
+  let blotch = sm(threshold - 0.15, threshold + 0.15, vnoiseWrap(wx * nb * k, wy * nb * k, s ^ 0x7f4bu, nb));
   let next = h + u.gAmp * v * blotch * (1.0 - F[PP * cells + i]) * sm(u.sea + 1.0, u.sea + 8.0, h);
   F[PH * cells + i] = clamp(max(next, min(h, u.sea + 1.5)), u.minH, u.maxH);
 }

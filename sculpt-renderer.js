@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
@@ -1006,6 +1006,7 @@ export class TerrainRenderer {
     this.i('uGroundLayer', this.materialData ? this.materialData.order.indexOf('quilt') : -1);   // H14b: a table's quilted plain is the layer after the others
     this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
     this.f('uTileShift', Math.floor(this.config.baseHeight / 2));   // the export's tile grid in screen rows (TA's projection offset; requiredRegion's shift)
+    this.f('uPool', groundPool(this.config.material));   // card tilepool: the period level ground repeats with
     this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
     this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
@@ -1147,7 +1148,7 @@ export class TerrainRenderer {
     const v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const set = (name, value) => this.set(name, Number(value));
-    set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0);
+    set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0); set('uPool', groundPool(this.config.material));
     {
       set('uWeatherMaps', this.weatherMaps ? 1 : 0);
       for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['lushness', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8]])

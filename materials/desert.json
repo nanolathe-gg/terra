@@ -1219,6 +1219,7 @@
   ]
  },
  "material": {
+  "groundPool": 1024,
   "rockSlope": 0.96,
   "rockFeather": 0.48,
   "rockCurvature": 0.28,

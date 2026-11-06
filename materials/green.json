@@ -1926,6 +1926,7 @@
   ]
  },
  "material": {
+  "groundPool": 1024,
   "grassSlopes": true,
   "rockSlope": 1.145,
   "rockFeather": 0.43,

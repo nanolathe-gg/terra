@@ -18,7 +18,7 @@
 const TAU = 6.28318530718;
 
 // Returns (value, d/dx, d/dy) in the octave's own coordinates.
-fn gullies(q: vec2f, dir: vec2f) -> vec3f {
+fn gullies(q: vec2f, dir: vec2f, n: f32) -> vec3f {
     let cell = floor(q);
     let local = fract(q);
     var sum = vec3f(0.0);
@@ -26,12 +26,12 @@ fn gullies(q: vec2f, dir: vec2f) -> vec3f {
     for (var j = -2; j <= 1; j++) {
         for (var i = -2; i <= 1; i++) {
             let o = vec2f(f32(i), f32(j));
-            let jitter = cellHash(cell - o);
+            let jitter = cellHash(poolWrap(cell - o, n));
             let point = local + o - jitter * 0.5;
             let w = exp(-dot(point, point) * 2.0);
             // A random phase and wavelength per kernel keep ribs on a straight
             // face from settling into evenly spaced teeth.
-            let extra = cellHash(cell - o + 91.7);
+            let extra = cellHash(poolWrap(cell - o, n) + 91.7);
             let freq = TAU * mix(1.0, 0.6 + 0.9 * extra.x, u.reliefJitter);
             let phase = dot(point, dir) * freq + extra.y * TAU * u.reliefJitter;
             sum += vec3f(cos(phase), -sin(phase) * dir * freq) * w;
@@ -302,13 +302,16 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
 // 1 and 2 world px per pixel, shrubs between 2 and 4: finer than a pixel they would alias.
 // One lattice per tuft size (cell, radius range). `which` 0 is the fine lattice (turf and dry grass); 1 the coarse one, where a candidate is a meadow clump
 // or a moss cushion by the shares at its centre.
-fn plantTuft(p: vec2f, cell: f32, r0: f32, r1: f32, ht: f32, which: i32, salt: u32) -> vec2f {
+fn plantTuft(p: vec2f, cellPx: f32, r0: f32, r1: f32, ht: f32, which: i32, salt: u32) -> vec2f {
+    // Card tilepool: the lattice repeats with the pool (its cell rounded to a divisor of the period, its cells hashed by their wrapped coordinate).
+    let n = poolCells(cellPx);
+    let cell = u.pool / n;
     let b = vec2i(floor(p / cell - 0.5));
     var best = 0.0; var tone = 0.0;
     for (var j = 0; j <= 1; j++) {
         for (var i = 0; i <= 1; i++) {
             let cc = b + vec2i(i, j);
-            let h0 = lsHash(cc, salt);
+            let h0 = lsHash(vec2i(poolWrap(vec2f(cc), n)), salt);
             let h1 = lsPcg(h0 ^ 0x68e31da4u);
             let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.9) * cell;
             let d = p - c;
@@ -326,7 +329,7 @@ fn plantTuft(p: vec2f, cell: f32, r0: f32, r1: f32, ht: f32, which: i32, salt: u
                 if (lsU(lsPcg(h3 ^ 0x7f4a7c15u)) * share >= wm) { dome = 1.0; star = 0.0; hs = 0.65; }
             }
             // Tufts gather in patches of about 14 px: the thinner ground between lets the soil's own colour through.
-            share *= mix(0.55, 1.0, smoothstep(-0.3, 0.5, valueNoise(c / 14.0 + 3.0 * f32(which))));
+            share *= mix(0.55, 1.0, smoothstep(-0.3, 0.5, poolNoise(c, 14.0, 3.0 * f32(which))));
             if (lsU(lsPcg(h2 ^ 0x2545f491u)) >= share) { continue; }
             let t = 1.0 - l / r;
             let blades = 5.0 + 3.0 * lsU(lsPcg(h1));
@@ -342,12 +345,14 @@ fn plantTuft(p: vec2f, cell: f32, r0: f32, r1: f32, ht: f32, which: i32, salt: u
 }
 fn plantShrub(p: vec2f, scale: f32) -> vec2f {
     let cell = 16.0;
+    let n = poolCells(cell);
     let b = vec2i(floor(p / cell - 0.5));
     var best = 0.0; var tone = 0.0;
     for (var j = 0; j <= 1; j++) {
         for (var i = 0; i <= 1; i++) {
             let cc = b + vec2i(i, j);
-            let h0 = lsHash(cc, 0x5e7bu);
+            let cw = poolWrap(vec2f(cc), n);
+            let h0 = lsHash(vec2i(cw), 0x5e7bu);
             let h1 = lsPcg(h0 ^ 0x68e31da4u); let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
             let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.85) * cell;
             let d = p - c;
@@ -355,7 +360,7 @@ fn plantShrub(p: vec2f, scale: f32) -> vec2f {
             if (l > 5.4) { continue; }
             let sc = looseMask[lsCell(c) + 1u].z;
             if (sc <= 0.0) { continue; }
-            let clump = smoothstep(-0.35, 0.55, valueNoise(c / 75.0 + 11.0));
+            let clump = smoothstep(-0.35, 0.55, poolNoise(c, 75.0, 11.0));
             let lam = sc * mix(1.0, 2.6 * clump * clump, 0.8) * cvr(39u).z;
             if (lsU(lsPcg(h2 ^ 0x2545f491u)) >= lam) { continue; }
             let R = mix(2.4, 4.4, lsU(h3)) * (0.75 + 0.4 * sc);
@@ -363,7 +368,7 @@ fn plantShrub(p: vec2f, scale: f32) -> vec2f {
             let re = R * (1.0 + 0.16 * sin(3.0 * a + lsU(lsPcg(h1)) * TAU) + 0.1 * sin(5.0 * a + lsU(lsPcg(h2)) * TAU));
             let q = l / re;
             if (q >= 1.0) { continue; }
-            let leaf = 0.5 + 0.5 * valueNoise((p + vec2f(cc) * 37.0) / 1.4);
+            let leaf = 0.5 + 0.5 * poolNoise(p + cw * 37.0, 1.4, 0.0);
             let hv = scale * re * sqrt(1.0 - q * q) * (0.78 + 0.4 * leaf);
             // A canopy is dark inside, its leaf clumps lighter at the top.
             if (hv > best) { best = hv; tone = (1.0 - q) * leaf * 1.4 - 0.7; }
@@ -1499,19 +1504,19 @@ fn bake(p: vec2f) -> vec4f {
     }
     var plain = 0.0;
     if (u.plainRelief > 0.0 && h > u.sea + 1.0) {
-        plain = (valueNoise(p / 13.0 + 41.0) * 0.6 + valueNoise(p / 29.0 + 7.0) * 0.4) * (u.plainRelief * lumpGain) * 1.6
+        plain = (poolNoise(p, 13.0, 41.0) * 0.6 + poolNoise(p, 29.0, 7.0) * 0.4) * (u.plainRelief * lumpGain) * 1.6
               * (1.0 - smoothstep(0.1, 0.4, slope));
     }
     // Painted lumps are retail's small lit bumps (8-14 px, in patches), finer than the
     // world's own broad lumps, so they carry their own scales.
     if (lumpAdd > 0.0 && h > u.sea + 1.0) {
-        plain += (valueNoise(p / 8.0 + 17.0) * 0.6 + valueNoise(p / 14.0 + 53.0) * 0.4) * lumpAdd * 1.6
+        plain += (poolNoise(p, 8.0, 17.0) * 0.6 + poolNoise(p, 14.0, 53.0) * 0.4) * lumpAdd * 1.6
                * (1.0 - smoothstep(0.1, 0.4, slope));
     }
     // The bed under shallow water carries its own faint lumps, lit with the
     // rest (card E1); the relief clamp below keeps it under the water plane.
     if (u.bedRelief > 0.0 && h <= u.sea + 1.0) {
-        plain = (valueNoise(p / 11.0 + 71.0) * 0.55 + valueNoise(p / 23.0 + 5.0) * 0.45) * u.bedRelief * 1.6
+        plain = (poolNoise(p, 11.0, 71.0) * 0.55 + poolNoise(p, 23.0, 5.0) * 0.45) * u.bedRelief * 1.6
               * (1.0 - smoothstep(0.1, 0.4, slope));
     }
     // Level crests and graded routes stay smooth; relief grows with slope.
@@ -1539,7 +1544,8 @@ fn bake(p: vec2f) -> vec4f {
 
     var acc = vec3f(0.0);
     var amplitude = 1.0;
-    var frequency = 1.0 / u.reliefScale;
+    var cells = poolCells(u.reliefScale);   // the first octave's lattice cells a pool period (card tilepool)
+    var frequency = cells / u.pool;
     var total = 0.0;
     var firstOctave = 0.0;
     for (var k = 0; k < 6; k++) {
@@ -1555,25 +1561,27 @@ fn bake(p: vec2f) -> vec4f {
         // ledges, diagonal facets and a few ribs mix.
         if (u.faceStreak > 0.0 && len > 1e-5) {
             let turnBy = u.faceStreak * smoothstep(u.faceStreakFrom, u.faceStreakFrom + 0.35, slope)
-                       * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + f32(k) * 5.3 + 71.0), 0.0, 1.0);
+                       * clamp(0.75 + 0.6 * poolNoise(p, 37.0, f32(k) * 5.3 + 71.0), 0.0, 1.0);
             dir = normalize(mix(dir, vec2f(-dir.y, dir.x), turnBy));
         }
         // Domain warp varies rib spacing and width so faces are not combed.
-        let warp = vec2f(valueNoise(p / 48.0 + f32(k) * 3.7), valueNoise(p / 48.0 + 11.3 + f32(k) * 3.7)) * u.reliefWarp;
+        let warp = vec2f(poolNoise(p, 48.0, f32(k) * 3.7), poolNoise(p, 48.0, 11.3 + f32(k) * 3.7)) * u.reliefWarp;
         let q = (p + warp) * frequency + vec2f(f32(k) * 17.31, f32(k) * 9.13);
-        var e = gullies(q, dir);
+        var e = gullies(q, dir, cells);
         // Lumps keep faces from reading as combed stripes.
-        let lump = valueNoise(q * 1.7 + 3.1);
+        let lumpCells = round(1.7 * cells);
+        let lump = wrapNoise(q * (lumpCells / cells) + 3.1, lumpCells);
         e.x = mix(e.x, lump, u.reliefLumps);
         acc += vec3f(e.x, e.yz * frequency) * amplitude;
         if (k == 0) { firstOctave = e.x; }
         total += amplitude;
         amplitude *= u.reliefGain;
         frequency *= 2.0;
+        cells *= 2.0;
     }
     let value = acc.x / max(total, 1e-5);
     // Steeper ground carries proportionally taller ribs.
-    let patchy = mix(1.0, 0.35 + 1.3 * (valueNoise(p / 90.0 + 5.0) * 0.5 + 0.5), u.reliefPatchy);
+    let patchy = mix(1.0, 0.35 + 1.3 * (poolNoise(p, 90.0, 5.0) * 0.5 + 0.5), u.reliefPatchy);
     // Height scales with slope, with a floor so gentle lumps are visible.
     var height = value * u.reliefAmount * max(clamp(faceSlope, 0.0, 2.5), 0.25 * u.gentleRelief) * u.reliefScale * gain * patchy * styleScale(style.x);
     height += plain;

@@ -1293,6 +1293,7 @@
   ]
  },
  "material": {
+  "groundPool": 1024,
   "midDepth": 10,
   "shallowDepth": 0,
   "deepDepth": 25,

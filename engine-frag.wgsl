@@ -242,7 +242,7 @@ fn groundTile(world: vec2f) -> vec3f {
     let pixel = grainPixel(world - vec2f(0.0, u.tileShift));
     let cell = vec2i(floor(pixel / 32.0));
     let local = vec2i(glslMod(floor(pixel), 32.0));
-    let tile = min(i32(groundHash(vec3i(cell, 7)) * f32(u.groundTiles)), 15);
+    let tile = min(i32(groundHash(vec3i(vec2i(poolWrap(vec2f(cell), u.pool / 32.0)), 7)) * f32(u.groundTiles)), 15);   // card tilepool: the placement repeats with the pool
     return textureLoad(grassTex, vec2i(tile * 32 + local.x, local.y), 0).rgb;
 }
 
@@ -411,8 +411,8 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
 // Patchiness is a constant: 0 to 1 moves under 4% of any class's blocks on modern Green (measure/impact.py, card P30), below what a control must move.
 const COVER_PATCHINESS = 0.8;
 fn coverZ(p: vec2f, scale: f32) -> f32 {
-    let zp = (valueNoise(p / scale + 17.0) + 0.5 * valueNoise(p / (0.45 * scale) + 31.0) + 0.25 * valueNoise(p / (0.2 * scale) + 47.0)) / 0.46;
-    let c = floor(p);
+    let zp = (poolNoise(p, scale, 17.0) + 0.5 * poolNoise(p, 0.45 * scale, 31.0) + 0.25 * poolNoise(p, 0.2 * scale, 47.0)) / 0.46;
+    let c = poolPixel(p);
     let pixel = (cellHash(c).x + cellHash(c + 7.3).x + cellHash(c + 19.1).y - 1.5) * 2.0;
     return sqrt(COVER_PATCHINESS) * zp + sqrt(1.0 - COVER_PATCHINESS) * pixel;
 }
@@ -433,14 +433,14 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
 #else
     let fade = 1.0;
 #endif
-    let px = floor(p);
+    let px = poolPixel(p);
     let blk = floor(px * 0.5);
     let hb = cellHash(blk + vec2f(83.1, 17.7));
     if (hb.x >= dens * 4.0) { return vec4f(0.0); }
     let share = (cover[3] + 0.7 * cover[4] + 0.15 * cover[6] + 0.1 * cover[2]) / max(total, 1e-4);
     let sun = mix(0.15, 1.0, smoothstep(0.6, 1.0, light));
     let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
-    let clump = smoothstep(0.35, 0.85, valueNoise(p / 9.0 + 7.0) * 0.5 + 0.5);
+    let clump = smoothstep(0.35, 0.85, poolNoise(p, 9.0, 7.0) * 0.5 + 0.5);
     let chance = dens * 4.0 * clump * clump * clump * share * sun * lush * gate * fade;
     if (hb.x >= chance) { return vec4f(0.0); }
     // The dot: one pixel of the block, or two side by side.
@@ -450,7 +450,7 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
     let wide = hb.y < 0.4;
     if (!(all(at == o) || (wide && at.y == o.y))) { return vec4f(0.0); }
     // Its colour: one species to a clump, by the palette's weights.
-    let pick = cellHash(floor(p / 22.0) + vec2f(41.3, 9.1)).x;
+    let pick = cellHash(poolWrap(floor(p * (poolCells(22.0) / u.pool)), poolCells(22.0)) + vec2f(41.3, 9.1)).x;
     var wsum = 0.0;
     for (var k = 0u; k < 4u; k++) { wsum += cvr(40u + k).w; }
     var acc = 0.0;
@@ -475,7 +475,7 @@ fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, veget
     var klass = 6u;
     for (var k = 0u; k < 7u; k++) { acc += cover[k]; if (pick < acc) { klass = k; break; } }
     let col = cvr(4u + 5u * klass);
-    let grain = (cellHash(floor(p) + 3.7).y - 0.5) * 2.0 * col.w;
+    let grain = (cellHash(poolPixel(p) + 3.7).y - 0.5) * 2.0 * col.w;
     let ratio = grass / max(cvr(3u).rgb, vec3f(0.01));
     let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
     let ground = col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
@@ -501,14 +501,15 @@ fn markHash(c: vec2i) -> vec4f {
 }
 // The two nearest points of a lattice of jittered cells, at q in cell units: each cell of the 3 x 3 around q has its point at the cell's centre plus
 // `jit` of a cell, from markHash(cell + salt). Returns the nearest's and second's hash, the nearest's cell, its offset from q's point, and both distances.
+// With wrap above 0 the cells are hashed by their coordinate modulo wrap (card tilepool: a lattice that repeats with the pool).
 struct MarkCells { id: vec4f, id2: vec4f, home: vec2i, off: vec2f, d1: f32, d2: f32 }
-fn markCells(q: vec2f, salt: vec2i, jit: f32) -> MarkCells {
+fn markCells(q: vec2f, salt: vec2i, jit: f32, wrap: f32) -> MarkCells {
     let cell = vec2i(floor(q));
     let at = fract(q);
     var m = MarkCells(vec4f(0.0), vec4f(0.0), cell, vec2f(0.0), 8.0, 8.0);
     for (var j = -1; j <= 1; j++) {
         for (var i = -1; i <= 1; i++) {
-            let h = markHash(cell + vec2i(i, j) + salt);
+            let h = markHash(select(cell + vec2i(i, j), vec2i(poolWrap(vec2f(cell + vec2i(i, j)), wrap)), wrap > 0.0) + salt);
             let pt = vec2f(f32(i), f32(j)) + 0.5 + (h.xy - 0.5) * jit - at;
             let d = length(pt);
             if (d < m.d1) { m.d2 = m.d1; m.id2 = m.id; m.d1 = d; m.id = h; m.off = -pt; m.home = cell + vec2i(i, j); }
@@ -721,7 +722,7 @@ fn moonFolds(p: vec2f, base: f32, slope: f32, spacing: f32) -> f32 {
 // shallow, as the window's strokes run); the strokes break into segments. Domains
 // are the nearest of a jittered lattice's points. Returns 0..1, 1 on a stroke.
 fn iceHatch(pixel: vec2f) -> f32 {
-    let m = markCells(pixel / 36.0, vec2i(17, 53), 0.7);
+    let m = markCells(pixel / 36.0, vec2i(17, 53), 0.7, 0.0);
     let id = m.id;
     let home = m.home;
     // Steep leaning right (72 degrees) in 45% of domains, steep leaning left (110) in 40%, shallow (29) in 15%.
@@ -789,7 +790,7 @@ fn iceNearness(p: vec2f) -> f32 {
 // directions over a domain ~44 px across, the runs 8-34 px long with gaps; some domains are bare.
 // `keep` is the share of domains that carry lines (1 at the coast, less inland). Returns 0..1, 1 on a line.
 fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
-    let m = markCells(pixel / 44.0, vec2i(83, 29), 0.7);
+    let m = markCells(pixel / 44.0, vec2i(83, 29), 0.7, 0.0);
     let id = m.id;
     let home = m.home;
     let angle = select(select(0.5, 1.92, id.z < 0.8), 1.26, id.z < 0.4) + (id.w - 0.5) * 0.2;
@@ -875,8 +876,8 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
 fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: f32) -> vec3f {
     let size = max(u.crystalShallowPx, 4.0);
     // Two scales, as retail's mosaic has: a share of the water keeps cells 2.2 times as wide, the rest the fine ones.
-    let big = markCells(p / (size * 2.2), vec2i(7919, 0), 0.9);
-    var c = markCells(p / size, vec2i(0), 0.9);
+    let big = markCells(p / (size * 2.2), vec2i(7919, 0), 0.9, 0.0);
+    var c = markCells(p / size, vec2i(0), 0.9, 0.0);
     var px = size;
     if (big.id.y < 0.4) { c = big; px = size * 2.2; }
     let seam = 1.0 - smoothstep(0.3, 1.2, (c.d2 - c.d1) * 0.5 * px);
@@ -909,7 +910,7 @@ fn craterSkin(p: vec2f, m: f32) -> f32 {
 fn craterWeb(p: vec2f) -> vec2f {
     let size = max(u.crystalCraterWebPx, 6.0);
     let warp = (terrainNoise(p * 0.25).rg - 0.5) * 2.0 * u.crystalCraterWobble;
-    let m = markCells((p + warp) / size, vec2i(0), 0.9);
+    let m = markCells((p + warp) / size, vec2i(0), 0.9, 0.0);
     let edge = (m.d2 - m.d1) * 0.5 * size;
     let w = fract((m.id.z + m.id2.z) * 7.31);
     let drawn = smoothstep(u.crystalCraterGap, u.crystalCraterGap + 0.08, w);
@@ -1564,7 +1565,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let n = terrainNoise(p);
     let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let fringeVariation = u.ringVariation / 0.75;
-    let drift = ((terrainNoise(p * 0.65 + vec2f(133.0, 71.0)).rg - 0.5) * 66.0 + (n.gb - 0.5) * 16.0) * fringeVariation;
+    let drift = ((terrainNoise(p * poolScale(0.65) + vec2f(133.0, 71.0)).rg - 0.5) * 66.0 + (n.gb - 0.5) * 16.0) * fringeVariation;
     let brokenSediments = select(sediments, materialFieldAt(((p + drift) / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let materialWeather = select(0.0, u.materialWeathering, u.materialReady != 0);
     let weather = weatherAt(p / (u.size - 1.0)).rg;
@@ -1698,8 +1699,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.rockLayers != 0 && h > 18.0) {
         // Broad material regions vary actual native mineral structure. No
         // repeated whole cliff, colour-only variants or fresh pixel noise.
-        let formation = terrainNoise(p * 0.35 + vec2f(43.0, 87.0)).r;
-        let moss = terrainNoise(p * 0.70 + vec2f(173.0, 91.0)).g + weather.g * 0.30;
+        let formation = terrainNoise(p * poolScale(0.35) + vec2f(43.0, 87.0)).r;
+        let moss = terrainNoise(p * poolScale(0.70) + vec2f(173.0, 91.0)).g + weather.g * 0.30;
         let fractured = fracturedSource(pixel);
         let weathered = weatheredSource(pixel);
         rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
@@ -1792,7 +1793,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.rockMoss > 0.0 && exposed > 0.02) {
         let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
         let ledge = smoothstep(0.1, 0.7, place.top);
-        let clump = valueNoise(p / 5.0 + 91.0) * 0.5 + 0.5;
+        let clump = poolNoise(p, 5.0, 91.0) * 0.5 + 0.5;
         // Card P30: with a ground-cover table the flecks are the table's moss class, in its colour and where its moisture and light windows are
         // open (the table's own placement, so they follow Lushness, the wet swaths and the sun as the moss on the ground does); without one they
         // keep the old rule, the vegetation plane and the wetness (H5 3a: moss grows where water runs).
@@ -1808,7 +1809,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             mossColour = saturate(moss.rgb * clamp(dot(ratio, vec3f(0.299, 0.587, 0.114)), 0.7, 1.3));
         }
         // A wall's flecks are drawn in screen pixels, or each dash would be stretched into a streak down it.
-        let ticket = mix(cellHash(vec2f(floor(p.x * 0.5), floor(p.y)) + 311.0).x, cellHash(vec2f(floor(pixel.x * 0.5), floor(pixel.y)) + 311.0).x, faceRelief);
+        // Card tilepool: the dashes repeat with the pool, as the rest of level ground does.
+        let pw = poolPixel(p); let sw = poolPixel(pixel);
+        let ticket = mix(cellHash(vec2f(floor(pw.x * 0.5), pw.y) + 311.0).x, cellHash(vec2f(floor(sw.x * 0.5), sw.y) + 311.0).x, faceRelief);
         let fleck = step(ticket, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
         material = mix(material, mossColour, fleck);
         // Card P10, lichen: rosettes of 1 to 4 px radius on the faces that look at the sun and at the sky (the lit normal, relief included), off the
@@ -1817,9 +1820,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let lichen = u.rockMoss * u.rockLichen * (0.4 + 0.6 * clamp(u.rockAge, 0.0, 1.0)) * clamp(place.vegetation, 0.0, 2.0);
         if (lichen > 0.0) {
             let lq = select(p, pixel, faceRelief > 0.5);
-            let rosette = markCells(lq / 8.0, vec2i(433, 71), 1.0);
+            let rosette = markCells(lq / 8.0, vec2i(433, 71), 1.0, u.pool / 8.0);
             let lit = smoothstep(0.25, 0.65, dot(normal, u.light)) * smoothstep(0.35, 0.75, normal.z);
-            let radius = (0.6 + 3.4 * rosette.id.x) * sqrt(min(lichen, 1.5)) * (1.0 + 0.3 * (cellHash(floor(lq) + 5.0).x - 0.5));
+            let radius = (0.6 + 3.4 * rosette.id.x) * sqrt(min(lichen, 1.5)) * (1.0 + 0.3 * (cellHash(poolPixel(lq) + 5.0).x - 0.5));
             let onRosette = step(rosette.id.y, lichen * 1.2) * step(rosette.d1 * 8.0, radius) * lit * (1.0 - crevice) * exposed;
             var tint = vec3f(150.0, 158.0, 120.0) / 255.0;   // grey-green
             if (rosette.id.z > 0.4) { tint = vec3f(196.0, 192.0, 168.0) / 255.0; }   // pale crust
@@ -2309,7 +2312,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.chunkScale > 1.0) { fc = floor(vec2f(pixel.x, u.size - pixel.y)); }
         if (u.chunkScale < 1.0) { fc = floor(fragCoord / u.chunkScale); }
 #endif
-        let ign = fract(52.9829189 * fract(dot(fc, vec2f(0.06711056, 0.00583715))));
+        // Card tilepool: the threshold repeats with the pool, as level ground does, so it does not make every tile of a plain differ.
+        let ign = fract(52.9829189 * fract(dot(poolWrap(fc, u.pool), vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.
         // The hard step's lit bed takes no palette dither (where a world draws lit bumps there, they replace its noise).
         let ditherStrength = select(u.dither * u.landDither, u.dither * (1.0 - shoalWeight), h < u.sea + 1.0);

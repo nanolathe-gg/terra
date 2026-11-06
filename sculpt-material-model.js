@@ -7,6 +7,9 @@ export const COVER_ROW = PLACEMENT_ROW + 10;
 export const COVER_ROWS = 44;
 // Card P31: how far past the pixels it covers a plant's scatter reads: a shrub's candidate (cell 16, jitter .85) up to 23 px away, the mask's height taps 8 px past that, and 15 px of apron.
 export const PLANT_REACH = 46;
+// Card tilepool: the period level ground repeats with, in world px: the table's material.groundPool, rounded to a multiple of 512 so the
+// 512-px noise texture repeats with it (1024 where a table sets none). A level plain's 32-px tiles come from (period / 32)^2 at most.
+export const groundPool = material => Math.max(512, Math.round((Number(material?.groundPool) || 1024) / 512) * 512);
 // The rows engine-materials.wgsl makes the layers from: MM_ROWS per layer, in the table's order. A material named twice in the order
 // (a layer that shares its image with an earlier one) takes the same rows and its own layer's noise.
 export function materialRows(table) {
