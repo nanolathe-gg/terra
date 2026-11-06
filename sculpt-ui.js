@@ -50,7 +50,7 @@ export function groupToolControls(fields,buildRow){
  ['shorePlates','Shore plates',['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary']],
  [null,'Water appearance',['waterDeep','waterBed']],
  [null,'Surf',['surf']],
- [null,'Crest variation',['crestVary','crestTaper']],
+ [null,'Crest variation',['crestTaper']],
  ['iceFacets','Facets',['iceFacets','facetForm','iceFacetSize','crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']]
  ];
  function wire(d,controls,master=null){

@@ -419,7 +419,7 @@ try {
     await host.scene(strokeFixture(0), true);
     const nodeKinds = await host.kinds();   // a ground node leads only where the world's undulation is on
     const ctxFor = (key, kind) => {
-      const p = {shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestVary: 0, crestTaper: 0, iceFacets: 0};
+      const p = {shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestTaper: 0, iceFacets: 0};
       if (['terraces', 'ledge', 'terraceJitter', 'breakup'].includes(key)) p.terraces = 4;
       if (['ledge', 'terraceJitter'].includes(key)) p.ledge = .55;
       if (key.startsWith('spur') || key.startsWith('crest')) p.spurCount = 4;

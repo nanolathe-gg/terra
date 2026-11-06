@@ -12,7 +12,7 @@ async function run(name,fn){stop=false;log.textContent=name+'\n';for(const b of 
 $('stop').onclick=()=>{stop=true;};
 $('scenes').onclick=()=>run('Reference scene capture',async()=>{const rows=[];const names=Object.keys(scenes).sort();$('progress').max=names.length;for(const [i,name] of names.entries()){if(i<Number($('start').value))continue;if(stop||i>=Number($('start').value)+Number($('limit').value))break;const s=scenes[name];line('Loading '+name);const api=await load(s.biome,s.query||'');const t=performance.now();api.scene(s.strokes,{ground:s.ground!==false});line('Rendering '+name);const result=await Promise.race([api.capture(),delay(90000).then(()=>{throw Error('Capture timeout '+name);})]);await png(`${$('label').value}/${name}/ours.png`,result.canvas);await save(`${$('label').value}/${name}/ours-heights.json`,await api.heights());rows.push({scene:name,ms:performance.now()-t,captureMs:result.ms,stats:api.stats()});await save(`${$('label').value}/${name}/stats.json`,rows.at(-1));await save(`${$('label').value}/scenes.json`,rows);line(`${i+1}/${names.length} ${name} ${(performance.now()-t).toFixed(0)} ms`);$('progress').value=i+1;}});
 function shapeContext(key,kind){
- const p={shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,crestVary:0,crestTaper:0,iceFacets:0};
+ const p={shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,crestTaper:0,iceFacets:0};
  if(['terraces','ledge','terraceJitter','faceVariation'].includes(key))Object.assign(p,{curve:{form:'mesa'},lean:1,terraces:4,ledge:.55});
  if(key.startsWith('spur')||key.startsWith('crest'))p.spurCount=4;
  if(key.startsWith('fissureBranch'))p.fissureBranches=3;
