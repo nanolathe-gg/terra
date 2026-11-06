@@ -1529,7 +1529,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
 #else
     let fragCoord = vec2f(v.position.x, u.size - v.position.y);
 #endif
-    let p = v.world;
+    // Card tilepool: the interpolated world position is held to 1/64 px. Past 8,192 px (a 16x16 map's far side) f32 rounding moved it
+    // by about 1e-3 px against the same ground a pool period nearer the origin, enough to flip palette pixels and make its tiles unique.
+    let p = round(v.world * 64.0) / 64.0;
     // TA's fixed camera permits a native-pixel material grain. World-XY
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.

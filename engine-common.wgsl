@@ -828,7 +828,7 @@ fn surfaceHeight(p: vec2f) -> f32 {
 }
 
 fn surfaceGradient(p: vec2f) -> vec2f {
-    const e = 1.4;
+    const e = 1.40625;   // 90/64 px: on a position held to 1/64 px (engine-frag.wgsl) the taps stay exact at any map size (card tilepool)
     return vec2f(surfaceHeight(p + vec2f(e, 0.0)) - surfaceHeight(p - vec2f(e, 0.0)),
                  surfaceHeight(p + vec2f(0.0, e)) - surfaceHeight(p - vec2f(0.0, e))) / (2.0 * e);
 }
