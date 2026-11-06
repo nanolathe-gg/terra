@@ -481,12 +481,12 @@ function rockFrame(P, seed, ctx) {
   const [fw, fh] = ROCK_CELLS[P.cells] || [2, 2];
   let W, H;
   if (fw === 1) { W = Math.round(lerp(8, 21, clamp(P.size, 0, 1.4) / 1.4)); H = Math.round(W * (0.82 + r() * 0.15)); }
-  else { W = Math.round(fw * 16 * (0.94 + 0.1 * r()) * P.size); H = Math.round(W * (0.74 + r() * 0.22)); }
+  else { W = Math.round(fw * 16 * (0.94 + 0.1 * r()) * P.size); H = Math.round(W * (0.62 + r() * 0.2)); }
   const w = W + 6, h = H + 6, cx = w / 2, cy = h / 2 + 0.5;
   const ax = Math.round(cx + (r() - 0.5) * 3), ay = Math.round(3 + H * (0.18 + r() * 0.2));
   const sp = newSprite(w, h, ax, ay);
-  const nv = Math.round(lerp(11, 5, P.angular));
-  const verts = []; for (let i = 0; i < nv; i++) verts.push(0.95 + r() * 0.2);
+  const nv = Math.round(lerp(11, 6, P.angular));
+  const verts = []; for (let i = 0; i < nv; i++) verts.push(0.98 + r() * 0.3);   // a lumpy angular polygon: flat-ish sides and corners
   const ph = r() * TAU, f1 = r() * TAU, f2 = r() * TAU, a2 = 0.05 + 0.07 * r(), a3 = 0.04 * r();
   const radial = th => {
     const f = (th / TAU + 4) % 1 * nv, i = Math.floor(f), t = f - i;
@@ -494,12 +494,13 @@ function rockFrame(P, seed, ctx) {
     const smooth = 1 + a2 * Math.cos(2 * th + f1) + a3 * Math.cos(3 * th + f2);
     return lerp(smooth, poly, P.angular);
   };
+  const PV = []; for (let i = 0; i < nv; i++) { const a = (i + (r() - 0.5) * 0.55) / nv * TAU + ph, rr0 = verts[i] * 1.0; PV.push([Math.cos(a) * rr0 * 1.13, Math.sin(a) * rr0 * 1.13]); }
   const Wh = W / 2, Hh = H / 2, mask = new Uint8Array(w * h), tilt0 = (r() < 0.5 ? -1 : 1) * (0.15 + 0.3 * r());
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const ux = (x - cx) / Wh, uy = (y - cy) / Hh, dx = ux * Math.cos(tilt0) + uy * Math.sin(tilt0), dy = -ux * Math.sin(tilt0) + uy * Math.cos(tilt0);   // a tilted oval
-    const th = Math.atan2(dy, dx) - ph, e = 2.3;
-    const rr = Math.pow(Math.pow(Math.abs(dx), e) + Math.pow(Math.abs(dy), e), 1 / e);
-    if (rr < radial(th) * (1 + 0.1 * (fbm(x / 4, y / 4, seed) - 0.5)) && (rr > 0 || true)) mask[y * w + x] = 1;
+    let inside = false;      // true polygon: chords between corners, not a rounded blend
+    for (let i = 0, j = nv - 1; i < nv; j = i++) { const [xi, yi] = PV[i], [xj, yj] = PV[j]; if ((yi > dy) !== (yj > dy) && dx < (xj - xi) * (dy - yi) / (yj - yi) + xi) inside = !inside; }
+    if (inside && (1 + 0.1 * (fbm(x / 4, y / 4, seed) - 0.5)) > 0.9) mask[y * w + x] = 1;
   }
   const dist = edgeDist(w, h, mask);
   // One smoothly shaded, slightly lumpy, tilted oblong (spec 15 B1, round 3): light falls off continuously from the sun side to a dark
@@ -518,9 +519,10 @@ function rockFrame(P, seed, ctx) {
     const k = y * w + x; if (!mask[k]) continue;
     const zx = zf(x + 1, y) - zf(x - 1, y), zy = zf(x, y + 1) - zf(x, y - 1), nn = Math.hypot(zx, zy, 2);
     let t = (-zx / nn) * L.v[0] + (-zy / nn) * L.v[1] + (2 / nn) * L.v[2];
-    t += 0.1 * (L.x * (x - cx) / Wh + L.y * (y - cy) / Hh * 0.45);                       // broad fall-off from the sun side
+    t += 0.2 * (L.x * (x - cx) / Wh) + 0.03 * (L.y * (y - cy) / Hh);                       // broad fall-off from the sun side
     if (y > h * 0.78) t -= ((y / h - 0.78) / 0.22) * 0.05;                            // moderately dark base
-    if (dist[k] <= 1) t -= lowerRight(k) ? 0.55 : 0.3;                                   // a dark one-pixel rim all round, stronger on the shadow side
+    if (dist[k] <= 1) t -= lowerRight(k) ? 0.5 : 0.38;                                   // a dark one-pixel rim all round, stronger on the shadow side
+    if (t < 0.45) t = 0.45 + (t - 0.45) * 0.45;                                             // the shade never goes to black over the whole base
     tone[k] = t + planeOff(x, y) + (rn() - 0.5) * 0.02; hasPx.push(k);
   }
   const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.045;
@@ -538,9 +540,10 @@ function rockFrame(P, seed, ctx) {
       const v = u / hiEnd;
       if (v < 0.4) c = bright(WHITES, 1 - v / 0.4 * 0.8 - 0.1 + (rn() - 0.5) * 0.2);                                      // the broad highlight
       else { const f = (v - 0.4) / 0.6, pinkish = mott(k) + (rn() - 0.5) * 0.08 < pinkCut * 0.9; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : (rn() < 0.35 ? bright(WHITES.slice(1), rn()) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12)); }
-    } else if (u < litEnd) c = bright([85, 86, 87, 88, 89], 1 - (u - hiEnd) / (litEnd - hiEnd) + (rn() - 0.5) * 0.3);
+    } else if (u < litEnd) { c = bright([85, 86, 87, 88, 89], 1 - (u - hiEnd) / (litEnd - hiEnd) + (rn() - 0.5) * 0.3); if (mott(k) + (rn() - 0.5) * 0.1 < pinkCut * 0.8) c = bright([17, 18, 18, 20], 1 - (u - hiEnd) / (litEnd - hiEnd)); }   // a subtle pink wash through the lit gray
     else if (u < midEnd) c = bright([92, 91, 90], (u - litEnd) / (midEnd - litEnd) + (rn() - 0.5) * 0.4);
     else { const f = (u - midEnd) / (1 - midEnd); c = rn() < 0.1 ? weighted(rn, [[127, 3], [125, 1]]) : bright([93, 94, 95], 1 - f + (rn() - 0.5) * 0.3); }
+    if (dist[k] > 1 && k / w > h * 0.82 && (c === 93 || c === 94 || c === 95 || c === 127 || c === 125) && rn() < 0.75) c = pick(rn, [91, 90, 92, 89, 91]);   // a moderately dark base, not black
     put(sp, k % w, (k / w) | 0, c);
   });
   const body = sp;
