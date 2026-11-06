@@ -525,12 +525,12 @@ function rockFrame(P, seed, ctx) {
     if (t < 0.45) t = 0.45 + (t - 0.45) * 0.45;                                             // the shade never goes to black over the whole base
     tone[k] = t + planeOff(x, y) + (rn() - 0.5) * 0.02; hasPx.push(k);
   }
-  const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.045;
+  const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.1;
   const bright = (list, u) => list[clamp(Math.floor((1 - u) * list.length), 0, list.length - 1)];
   const CREAM = [64, 64, 64, 65, 65, 66], PINKS = [17, 18, 18, 19, 20, 21], WHITES = [255, 81, 82, 83, 84];   // no olive-dark tans (68-70): retail rocks have no yellow-green specks
   const hiEnd = 0.383, litEnd = hiEnd + 0.18, midEnd = litEnd + 0.245;
   // the mottling field: pink where a soft noise is high (about 39% of the non-white highlight)
-  const mott = k => vnoise((k % w) / 4.5, ((k / w) | 0) / 4.5, seed + 77) * 0.55 + fbm((k % w) / 9, ((k / w) | 0) / 9, seed + 78, 2) * 0.75;   // soft areas of pink inside the cream, not confetti
+  const mott = k => vnoise((k % w) / 2.2, ((k / w) | 0) / 2.2, seed + 77) * 0.7 + fbm((k % w) / 9, ((k / w) | 0) / 9, seed + 78, 2) * 0.6;   // soft areas of pink inside the cream, not confetti
   const hiList = ranked.slice(0, Math.round(N * hiEnd)).filter((k, i) => i >= Math.round(N * hiEnd * 0.27)).map(k => mott(k)).sort((a, b) => a - b);
   const pinkCut = hiList[Math.floor(hiList.length * 0.39)] ?? 0.5;
   ranked.forEach((k, i) => {
@@ -539,7 +539,7 @@ function rockFrame(P, seed, ctx) {
     if (u < hiEnd) {
       const v = u / hiEnd;
       if (v < 0.4) c = bright(WHITES, 1 - v / 0.4 * 0.8 - 0.1 + (rn() - 0.5) * 0.2);                                      // the broad highlight
-      else { const f = (v - 0.4) / 0.6, pinkish = mott(k) + (rn() - 0.5) * 0.08 < pinkCut * 0.9; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : (rn() < 0.35 ? bright(WHITES.slice(1), rn()) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12)); }
+      else { const f = (v - 0.4) / 0.6, pinkish = mott(k) + (rn() - 0.5) * 0.3 < pinkCut * 0.9; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : (rn() < 0.35 ? bright(WHITES.slice(1), rn()) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12)); }
     } else if (u < litEnd) { c = bright([85, 86, 87, 88, 89], 1 - (u - hiEnd) / (litEnd - hiEnd) + (rn() - 0.5) * 0.3); if (mott(k) + (rn() - 0.5) * 0.1 < pinkCut * 0.8) c = bright([17, 18, 18, 20], 1 - (u - hiEnd) / (litEnd - hiEnd)); }   // a subtle pink wash through the lit gray
     else if (u < midEnd) c = bright([92, 91, 90], (u - litEnd) / (midEnd - litEnd) + (rn() - 0.5) * 0.4);
     else { const f = (u - midEnd) / (1 - midEnd); c = rn() < 0.1 ? weighted(rn, [[127, 3], [125, 1]]) : bright([93, 94, 95], 1 - f + (rn() - 0.5) * 0.3); }
