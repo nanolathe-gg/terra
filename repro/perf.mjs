@@ -1,6 +1,6 @@
 // Card H7 item 1: where the time goes between an edit or a load and the final picture.
 //   node repro/perf.mjs <map4|map8|map16|map40> --scene repro/scenes/green-2.json --out <dir>
-//        [--server http://127.0.0.1:8867] [--port 9667] [--no-export] [--label name] [--viewport 1000x800]
+//        [--server http://127.0.0.1:8867] [--port 9667] [--no-export] [--label name] [--viewport 1000x800] [--features <density %>]
 // Opens a fresh headless Chrome, installs timing hooks before the page runs (no page source is edited), then scripts:
 //   load      scene applied, zoomed to 1x: first picture, weather ready, every visible chunk at final
 //   drag      a stroke drag with real mouse events: rAF frame intervals
@@ -262,6 +262,10 @@ try {
     writeFileSync(`${out}/${mode}-events-load.json`, JSON.stringify({t0, events, draws: draws.length}));
   }
 
+  // --features <density %> fills the 1x view with trees before the drag (fillRegion, on either feature path), so every later frame draws them.
+  const featureDensity = Number(opt2('--features', 0));
+  if (featureDensity) { result.features = await ev(`(async () => { const f = sculptCanvas.features, v = sculptCanvas.view(), r = {type: 'lasso', points: [[v.x, v.y], [v.x + v.width, v.y], [v.x + v.width, v.y + v.height], [v.x, v.y + v.height]]};
+    f.fillRegion('tree', r, {density: ${featureDensity}, margin: 0, gap: 0}); await f.settled?.(); await sculptCanvas.idle(); return {count: f.serialize().features.length}; })()`); await stable(1500); }
   if (only === 'load') throw new Error('stopped after load (--only)');
   console.error('phase drag'); flush();
   // ------------------------------------------------------------ drag: a stroke with real mouse events
