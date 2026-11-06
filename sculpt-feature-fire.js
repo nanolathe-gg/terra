@@ -109,7 +109,8 @@ function makeLayer(w, h, ay, P, seed) {
           const kl = ti * w + x, lf = lift[kl] + (lift[kl + w] - lift[kl]) * tf;
           const vy = vRow[y] * (P.buoy0 + P.buoy1 * H[y * w + x]) * (1 - P.lift + 2 * P.lift * lf) * dt;
           const kt = ti * w + x, tu = turb[kt] + (turb[kt + w] - turb[kt]) * tf;
-          const ux = u + (2 * tu - 1) * turbRow[y] * dt + (hash2(x, y, sj + ((t * 613) | 0)) - 0.5) * P.jitter;
+          // the convection never carries a parcel sideways faster than it rises: flames bend and curl, they do not stream out sideways
+          const ux = clamp(u, -P.swayMax * vy, P.swayMax * vy) + (2 * tu - 1) * turbRow[y] * dt + (hash2(x, y, sj + ((t * 613) | 0)) - 0.5) * P.jitter;
           // whole cells move, rounded at random (no interpolation: it would blur the lumps away step by step)
           const sy = y + Math.floor(vy + hash2(x, y, sj + ((t * 389) | 0))), sx = x - Math.floor(ux + hash2(x, y, sj + ((t * 211) | 0)));
           let v = sy < h && sx >= 0 && sx < w ? H[sy * w + sx] : 0;
@@ -244,6 +245,25 @@ function pulseTrain(seed, lo, hi, dip, nFrames, phase = 0) {
   };
 }
 
+// A smooth periodic wave (period 1, range -1..1) from arithmetic only: a shaped triangle, within 1% of a sine.
+const wave = p => { p -= Math.floor(p); const tr = p < 0.25 ? 4 * p : p < 0.75 ? 2 - 4 * p : 4 * p - 4; return tr * (1.5 - 0.5 * tr * tr); };
+// Convection: the sideways velocity of the gas (px/frame) per row at time t. A steady lean (retail's flames bend left, as if the
+// wind came from the right) plus a few waves of sideways motion that travel up the flame more slowly than the gas, each waxing
+// and waning on its own, so the column bends into S-curves that ride upward, tongues curl and puffs drift sideways as they
+// rise. Zero at the foot (it stays on the ground at the trunk), full from C.full px up. C.waves: [wavelength px, upward speed
+// px/frame, amplitude px/frame].
+function convection(sway, ay, t, C, seed) {
+  for (let y = 0; y < sway.length; y++) {
+    const up = ay - y, g = smooth(clamp((up - C.from) / (C.full - C.from), 0, 1));
+    let u = C.lean;
+    for (let k = 0; k < C.waves.length; k++) {
+      const [len, speed, amp] = C.waves[k];
+      u += amp * (0.5 + noise1(t / C.vary + k * 13.7, seed + k)) * wave((up - speed * t) / len + hash2(k, 0, seed));
+    }
+    sway[y] = g * u;
+  }
+}
+
 // ---- tree burn -------------------------------------------------------------------------------------------------------
 const CHAR_CROWN = [[93, 24], [91, 11], [90, 7], [92, 8], [87, 1.5], [95, 8], [94, 5], [61, 1], [62, 1], [245, 1.5]];
 // Tree burn, 96 frames: 0 the living tree; 1-8 the fire starts on the ground at the trunk and climbs into the green crown;
@@ -281,8 +301,8 @@ export function treeBurn(body, burntBody, seed, conifer = false, nFrames = 96) {
   // the fire: retail's numbers this is tuned to are in the header and in the ffire notes (column top 36-76 px, mean 55, pulse
   // every ~7 frames, puffs live 1-3 frames, gas rising about 2, 2-4 and 5-7 px/frame at 0-20, 20-40 and 40-60 px)
   const P = {
-    v0: 2.0, v1: conifer ? 10.5 : 10, v2: conifer ? 8.5 : 8, hAcc: Hc * 0.58, hSlow: Hc * 0.4, cool: 0.005, coolLow: 0.03, lump: 2.5, pocket: 0.62, lumpX: 5, lumpT: 3.2, bandX: 16, bandT: 1.5, band: 0.6, bandMix: 0.6, bandFrom: Hc * 0.42, bandRamp: Hc * 0.2, coolTop: 0.3, topFrom: Hc * 0.95, topRamp: Hc * 0.3, topVar: 30, diffuse: 0.05, erode: 0.1, bLo: 0.4, bHi: 0.95, bRad: 3.5, grain: 0.02, buoy0: 0.6, buoy1: 0.8, jitter: 1.6, lift: 0.45, liftX: 3.5, liftT: 2.5, wave: 2.2,
-    turb: 2.6, turbX: 5, turbT: 2.5, hole: 0.15, holeUp: 0.07, fuelX: 3, fuelT: 1.5, zCap: 0.5, dip: 0, footMin: 0.4, lag: 4, inject: 0.4, cap: 1.15, frames: nFrames,
+    v0: 2.0, v1: conifer ? 10.5 : 10, v2: conifer ? 8.5 : 8, hAcc: Hc * 0.58, hSlow: Hc * 0.4, cool: 0.005, coolLow: 0.03, swayMax: 0.5, lump: 2.5, pocket: 0.62, lumpX: 5, lumpT: 3.2, bandX: 16, bandT: 1.5, band: 0.6, bandMix: 0.6, bandFrom: Hc * 0.42, bandRamp: Hc * 0.2, coolTop: 0.3, topFrom: Hc * 0.95, topRamp: Hc * 0.3, topVar: 30, diffuse: 0.05, erode: 0.1, bLo: 0.4, bHi: 0.95, bRad: 3.5, grain: 0.02, buoy0: 0.6, buoy1: 0.8, jitter: 1.6, lift: 0.45, liftX: 3.5, liftT: 2.5,
+    turb: 1.8, turbX: 5, turbT: 2.5, hole: 0.15, holeUp: 0.07, fuelX: 3, fuelT: 1.5, zCap: 0.5, dip: 0, footMin: 0.4, lag: 4, inject: 0.4, cap: 1.15, frames: nFrames,
   };
   const footHalf = conifer ? 8 : 10, depth = conifer ? 4 : 3, ign = conifer ? -0.3 : -1.5, climb = conifer ? 8 : 10, period = conifer ? 6.5 : 7.5;
   const pulseF = pulseTrain(mix32(seed, 201), period - 1.5, period + 1.5, P.dip, nFrames);
@@ -297,6 +317,8 @@ export function treeBurn(body, burntBody, seed, conifer = false, nFrames = 96) {
     return { x: Math.round(ccx + (hash2(i, n, seed + 63) * 2 - 1) * wide * 0.6), up, rad: P.bRad + 1.8 * hash2(i, n, seed + 64) }; };
   const stamp = (list, sp, s) => { const R = Math.ceil(sp.rad); for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) if (dx * dx + dy * dy <= sp.rad * sp.rad) list.put((Math.round(ay - sp.up) + dy) * w + sp.x + dx, s * (1 - 0.35 * (dx * dx + dy * dy) / (sp.rad * sp.rad))); };
   const swS = mix32(seed, 301), sway = new Float32Array(h);
+  const wa = clamp(half / 20, 0.6, 1.2);   // a narrow crown sways less
+  const CT = { lean: -0.2 * wa, from: 4, full: Hc * 0.55, vary: 6, waves: [[Hc * 0.2, 2.5, 2.6 * wa], [Hc * 0.3, 3.2, 2.8 * wa], [Hc * 0.45, 4, 1.6 * wa]] };
   const plan = t => {
     const age = t - ign, reach = 10 + age * climb;                                   // the burning climbs about 10 px/frame (retail's flame top 27, 40, 43, 51, 48, 76 at frames 1-6)
     const tail = clamp((t - 80) / 6, 0, 1), die = clamp((t - 89.5) / 5.5, 0, 1);    // crown consumed from 80; the fire dies over 90-94
@@ -310,7 +332,7 @@ export function treeBurn(body, burntBody, seed, conifer = false, nFrames = 96) {
       for (let up = -depth; up <= zTop + 4; up++) {
         // a ragged outline: the half-width wobbles with height and time, the top is uneven and round-shouldered
         const u = clamp(up / Math.max(zTop, 1), 0, 1.2), wob = 0.55 + 0.9 * noise2(up / 6, t / 2, seed + 71);
-        const hz = fw * wob * (u < 0.5 ? 1 - 0.1 * u : Math.max(0, 0.95 - (u - 0.5) * 1.3)), sh = (noise2(up / 8, t / 2.5, seed + 72) - 0.5) * 8 * clamp(up / 12, 0, 1);
+        const hz = fw * wob * (u < 0.5 ? 1 - 0.1 * u : Math.max(0, 0.95 - (u - 0.5) * 1.3)), sh = (noise2(up / 8, t / 2.5, seed + 72) - 0.5) * 4 * clamp(up / 12, 0, 1);
         const s = (up < 0 ? 0.45 : 1 - 0.3 * up / Hc) * (up < 4 ? 1 - clamp(die * 1.7, 0, 1) : 1 - die * 0.85);
         const catching = up > 3 && age < 10;   // while the fire takes hold (the lead-in) the fuel it reaches burns at once: a rounded lump that grows
         for (let x = Math.floor(ax + sh - hz - 1); x <= Math.ceil(ax + sh + hz + 1); x++) {
@@ -327,11 +349,7 @@ export function treeBurn(body, burntBody, seed, conifer = false, nFrames = 96) {
       }
       if (tail > 0) for (let i = 0; i < 8 * tail * (1 - die); i++) { const at = where(100 + i, Math.floor(t)); at.rad = 2.5; at.up *= 0.75; stamp(bs, at, 0.65 * (1 - die)); }   // burn-out: the whole tree burns, behind its bare limbs
     }
-    for (let y = 0; y < h; y++) {                 // sway: the flame leans and waves above its anchored foot, a little to the left
-      // a sideways wave that travels up with the gas: tongues bend into S-curves and curl, not straight spikes
-      const up = clamp((ay - y) / Hc, 0, 1);
-      sway[y] = up * (P.wave * (2 * noise1(t * 0.3 - (ay - y) / 14, swS) - 1) + 0.6 * (2 * noise1(t * 0.12, swS + 1) - 1) - 0.25);
-    }
+    convection(sway, ay, t, CT, swS);
     return { src: [bs, fs], sway, cool: die * 0.3 };   // and as it dies, what is left above cools fast: it shrinks from the top
   };
   const { snaps, texs } = runFire([back, front], plan, -3, nFrames - 1);
@@ -380,10 +398,11 @@ const CHAR = [[95, 28], [47, 24], [93, 17], [94, 14], [62, 6], [61, 5], [92, 3],
 export function shrubBurn(shrub, seed, nFrames = 42) {
   const W = 32, H = 48, ax = 16, ay = H - 5;
   const halfB = clamp(shrub.w * 0.22, 4.5, 6.5), zH = clamp(shrub.h + 2, 15, 22);
-  const L = makeLayer(W, H, ay, { v0: 1.2, v1: 3.2, v2: 2.2, hAcc: 24, hSlow: 10, cool: 0.004, coolLow: 0.02, lump: 1.2, pocket: 0.62, lumpX: 3.5, lumpT: 3, bandX: 10, bandT: 2, band: 0.6, bandMix: 0.7, bandFrom: 8, bandRamp: 6, coolTop: 0.2, topFrom: 24, topRamp: 10, topVar: 10,
+  const L = makeLayer(W, H, ay, { v0: 1.2, v1: 3.2, v2: 2.2, hAcc: 24, hSlow: 10, cool: 0.004, coolLow: 0.02, swayMax: 0.6, lump: 1.2, pocket: 0.62, lumpX: 3.5, lumpT: 3, bandX: 10, bandT: 2, band: 0.6, bandMix: 0.7, bandFrom: 8, bandRamp: 6, coolTop: 0.2, topFrom: 24, topRamp: 10, topVar: 10,
     diffuse: 0.05, erode: 0.12, grain: 0.03, buoy0: 0.45, buoy1: 1.1, jitter: 1.2, lift: 0.4, liftX: 3, liftT: 2.5, turb: 1.2, turbX: 4, turbT: 3, hole: 0.25, holeUp: 0.08,
     inject: 0.35, cap: 1.15, fuelX: 3, fuelT: 1.5, frames: nFrames }, mix32(seed, 101));
   const pulse = pulseTrain(mix32(seed, 201), 5, 8, 0.25, nFrames), swS = mix32(seed, 301), sway = new Float32Array(H);
+  const CS = { lean: -0.9, from: 2, full: 18, vary: 6, waves: [[9, 1.2, 0.7], [14, 1.6, 0.8], [20, 2, 0.6]] };
   // the burning shrub: a narrow foot and a rounded body of fuel above it, both pulsing; at the end the fuel runs low
   const plan = t => {
     const s = sources(), grow = clamp((t + 2.5) / 5, 0.3, 1), die = t > nFrames - 3 ? 0.4 : 1;
@@ -394,7 +413,7 @@ export function shrubBurn(shrub, seed, nFrames = 42) {
         s.put((ay - up) * W + x, (up < 2 ? Math.max(p, 0.45) : p) * clamp(hz + 0.5 - Math.abs(x - ax), 0, 1), up >= 2);
       }
     }
-    for (let y = 0; y < H; y++) { const up = clamp((ay - y) / 30, 0, 1); sway[y] = up * (1.4 * (2 * noise1(t * 0.3 - (ay - y) / 10, swS) - 1) - 0.12); }
+    convection(sway, ay, t, CS, swS);
     return { src: [s], sway, cool: die < 1 ? 0.3 : 0 };
   };
   const { snaps, texs } = runFire([L], plan, -3, nFrames);
