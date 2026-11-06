@@ -20,23 +20,23 @@ function oklab(rgb) {
   return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
 }
 
-// The plain's tiles as a 512 x 32 picture: tile t at x = 32 t, entry letters looked up in the colour list (H3).
-async function groundTileBitmap({entries, tiles}) {
-  const data = new ImageData(512, 32);
+// The plain's tiles as a 512 x 32 RGBA picture: tile t at x = 32 t, entry letters looked up in the colour list (H3). Plain bytes, uploaded
+// with writeTexture: no image decode or canvas stands between the table and the texture, so every host uploads the same texels.
+function groundTilePixels({entries, tiles}) {
+  const data = new Uint8Array(512 * 32 * 4);
   tiles.forEach((tile, t) => { for (let i = 0; i < 1024; i++) {
     const k = tile.charCodeAt(i), c = entries[k >= 97 ? k - 97 : k - 39], at = ((i >> 5) * 512 + t * 32 + (i & 31)) * 4;
-    data.data.set([c[0], c[1], c[2], 255], at);
+    data.set([c[0], c[1], c[2], 255], at);
   } });
-  return createImageBitmap(data, {colorSpaceConversion: 'none', premultiplyAlpha: 'none'});
+  return {width: 512, height: 32, data};
 }
 
-// Average colour of an image (0..1 RGB), from a 64x64 reduction.
-function meanColor(bitmap) {
-  const canvas = new OffscreenCanvas(64, 64), g = canvas.getContext('2d');
-  g.drawImage(bitmap, 0, 0, 64, 64);
-  const d = g.getImageData(0, 0, 64, 64).data, sum = [0, 0, 0];
-  for (let i = 0; i < d.length; i += 4) { sum[0] += d[i]; sum[1] += d[i + 1]; sum[2] += d[i + 2]; }
-  return sum.map(v => v / (d.length / 4) / 255);
+// Average colour of an RGBA picture (0..1 RGB): the mean of every pixel. It was the mean of a 64 x 64 canvas reduction, which depended on the
+// browser's resampling filter.
+function meanColor({data}) {
+  const sum = [0, 0, 0];
+  for (let i = 0; i < data.length; i += 4) { sum[0] += data[i]; sum[1] += data[i + 1]; sum[2] += data[i + 2]; }
+  return sum.map(v => v / (data.length / 4) / 255);
 }
 
 // The shaders keep their GLSL origins' structure: the common source is
@@ -282,10 +282,9 @@ export class TerrainRenderer {
     // and the world's mean ground colour is the quilt's.
     const groundTable = await this.groundTable(this.groundSource().groundTable);
     this.groundTiled = Boolean(groundTable.ground);
-    const tiles = this.groundTiled ? await groundTileBitmap(groundTable.ground) : await createImageBitmap(new ImageData(1, 1));
+    const tiles = this.groundTiled ? groundTilePixels(groundTable.ground) : {width: 1, height: 1, data: new Uint8Array(4)};
     this.means.ground = this.groundTiled ? meanColor(tiles) : this.materialData.measured.quilt.meanRGB.map(v => v / 255);
     this.textures.grass = this.materialTexture('grass', [tiles], {minFilter: 'nearest', magFilter: 'nearest', mipmaps: false});
-    tiles.close();
     // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
     this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
     this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
@@ -351,7 +350,7 @@ export class TerrainRenderer {
     return this.samplers.get(key);
   }
 
-  // An RGBA8 material from one image per layer, with its sampler. Filters
+  // An RGBA8 material from one image per layer ({width, height, data}: RGBA bytes, row by row), with its sampler. Filters
   // follow the WebGL renderer: repeat, the given min/mag filters, and
   // trilinear between generated levels where the material has them.
   materialTexture(label, images, {minFilter, magFilter, mipmaps}) {
@@ -359,8 +358,8 @@ export class TerrainRenderer {
     const mipLevelCount = mipmaps ? Math.floor(Math.log2(Math.max(width, height))) + 1 : 1;
     const texture = this.device.createTexture({label, size: [width, height, layers], format: 'rgba8unorm', mipLevelCount,
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT});
-    images.forEach((source, layer) => this.device.queue.copyExternalImageToTexture({source},
-      {texture, origin: [0, 0, layer], premultipliedAlpha: false}, [width, height]));
+    images.forEach((source, layer) => this.device.queue.writeTexture({texture, origin: [0, 0, layer]}, source.data,
+      {bytesPerRow: width * 4, rowsPerImage: height}, [width, height]));
     if (mipmaps) this.generateMipmaps(texture, layers, mipLevelCount);
     return {texture, view: texture.createView({dimension: layers > 1 ? '2d-array' : '2d'}),
       sampler: this.sampler({minFilter, magFilter, mipmapFilter: mipmaps ? 'linear' : 'nearest', addressModeU: 'repeat', addressModeV: 'repeat'})};
