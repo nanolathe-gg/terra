@@ -19,8 +19,6 @@
 @group(0) @binding(5) var<storage, read> Seg: array<vec4f>;
 @group(0) @binding(6) var<storage, read> MW: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> Out: array<u32>;
-// H6c: point reads (the prefix height a node reads at its points), one f32 each, written by pointRead and read by stampN (PT: PR is the routes plane).
-@group(0) @binding(8) var<storage, read_write> PT: array<f32>;
 
 const PH = 0u; const PP = 1u; const PR = 2u; const PC = 3u; const PV = 4u; const PX = 5u;
 
@@ -186,8 +184,6 @@ fn terraced(c: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
   let intact = sm(bar - 0.12, bar + 0.12, ticket + 0.12);
   return mix(c, terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g), intact);
 }
-// The height lumps: the stroke's height wanders by rough times its two noise fields (nCW, nDet) at the host's weights hgtA and hgtB.
-fn lumps(nCW: f32, nDet: f32) -> f32 { return 1.0 + u.rough * (u.hgtA * nCW + u.hgtB * nDet); }
 // How far a cell lies toward the side the stroke leans (0..1: the cosine between the stroke's bearing and the direction from the stroke to the cell, never
 // below 0). The lean side is a map bearing (bearX, bearY) or, with leanSide, the left (+1) or right (-1) of the drawn direction (none on a point).
 fn leanToward(ddx: f32, ddy: f32, sx: f32, sy: f32, span2: f32) -> f32 {
@@ -207,65 +203,12 @@ fn shapeMasks(i: u32, f: f32) {
     maskSet(i, pl, i32(floor(b + (mw.y - b) * k + 0.5)));
   }
 }
-// H9 ridge piece: the height multiplier at t along a piece (h0 -> h1), then the jagged crest (ridgeRise in sculpt.js).
-fn craterLobe(R: f32, rough: f32, seed: u32, lx: f32, ly: f32) -> f32 {
-  let sc = max(R * 0.55, 8.0);
-  return 1.0 + rough * (0.38 * vnoise(lx / (R * 0.95), ly / (R * 0.95), seed ^ 0x4a7u) + 0.22 * vnoise(lx / sc, ly / sc, seed ^ 0x1c3u) + 0.1 * vnoise(lx / (sc * 0.6), ly / (sc * 0.6), seed ^ 0x2d9u));
-}
-fn ridgeRise(h0: f32, h1: f32, jag: f32, t: f32, lx: f32, ly: f32, wx: f32, wy: f32) -> f32 {
-  var h = h0 + (h1 - h0) * t;
-  // A crater's spurs fade out toward the bowl: none start inside the rim (u.hole: the crater's centre, radius, roughness and seed).
-  if (u.hole != 0u) { let rr = sqrt((wx - u.hx) * (wx - u.hx) + (wy - u.hy) * (wy - u.hy)) / (u.hR * craterLobe(u.hR, u.hRough, u.hSeed, lx, ly)); h = h * sm(0.92, 1.2, rr); }
-  if (jag > 0.0) {
-    let R = u.radius;
-    let n = 0.6 * vnoise(lx / (R * 0.28), ly / (R * 0.28), u.seed ^ 0x6b1u) + 0.4 * vnoise(lx / (R * 0.11), ly / (R * 0.11), u.seed ^ 0x1d7u);
-    h = h * (1.0 - jag * 0.6 * (0.5 - 0.5 * n));
-  }
-  return h;
-}
-// H9 crater rim sectors and gaps (rimSetup/rimFactors in sculpt.js): the sectors' [angle, height, width, angle relative to the first] and the gaps' angles
-// are in MW after the node's mask writes; returns (height factor, width factor) at the angle `ang` round the ring.
-fn rimFactors(ang: f32) -> vec2f {
-  let tau = 6.283185307179586; let n = u.nSect; let base = u.mwBase + u.nwrites;
-  var h = 1.0; var w = 1.0;
-  if (n > 1u) {
-    let a0 = MW[base].x;
-    let d = ((ang - a0) % tau + tau) % tau;
-    var i = 0u; while (i < n - 1u && MW[base + i + 1u].w <= d) { i = i + 1u; }
-    let j = (i + 1u) % n;
-    var nextRel = tau; if (i < n - 1u) { nextRel = MW[base + i + 1u].w; }
-    let span = nextRel - MW[base + i].w; let t = sm(0.0, 1.0, (d - MW[base + i].w) / max(span, 1e-6));
-    h = MW[base + i].y + (MW[base + j].y - MW[base + i].y) * t; w = MW[base + i].z + (MW[base + j].z - MW[base + i].z) * t;
-  }
-  for (var g = 0u; g < u.nGap; g++) {
-    let ga = MW[base + n + g].x;
-    let dist = abs((((ang - ga + 3.141592653589793) % tau) + tau) % tau - 3.141592653589793);
-    h = h * (0.08 + 0.92 * sm(0.5 * u.gapHw, u.gapHw, dist));
-  }
-  return vec2f(h, w);
-}
 fn nzF(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
 #ifdef PAGES
   return nzCell(f, x, y, i, cells);
 #else
   return Nz[f * cells + i];
 #endif
-}
-
-// H9 outline displacement of a crater's spurs: baseVary (Desert's ragged feet) and moonLobes (Moon's folded outline) are one function with two
-// parameter sets (u.ol*). It returns the shift of r in radius units; the caller divides by width. Window: smoothstep(olLo, olHi, r).
-fn outlineShift(r: f32, lx: f32, ly: f32) -> f32 {
-  if (u.olAmp <= 0.0) { return 0.0; }
-  let win = sm(u.olLo, u.olHi, r);
-  var n = u.olW0 * vnoise(lx / u.olL0, ly / u.olL0, u.seed ^ u.olS0) + u.olW1 * vnoise(lx / u.olL1, ly / u.olL1, u.seed ^ u.olS1);
-  if (u.olW2 > 0.0) { n = n + u.olW2 * vnoise(lx / u.olL2, ly / u.olL2, u.seed ^ u.olS2); }
-  return u.olAmp * win * n;
-}
-// baseBump: lumps on the apron and lower face of a crater's spurs (Desert's foot bumps).
-fn baseBump(lx: f32, ly: f32, w: f32) -> f32 {
-  if (u.bpAmp <= 0.0) { return 0.0; }
-  return u.bpAmp * sm(0.03, 0.12, w) * (1.0 - sm(0.12, 0.3, w))
-    * (0.55 * vnoise(lx / 30.0, ly / 30.0, u.seed ^ 0x4c91u) + 0.3 * vnoise(lx / 13.0, ly / 13.0, u.seed ^ 0x1a77u) + 0.25 * vnoise(lx / 6.5, ly / 6.5, u.seed ^ 0x63d9u));
 }
 
 @compute @workgroup_size(8, 8)
@@ -280,9 +223,9 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  // Paint (kind 0) and erase (1): the coast noise fields.
   let kind = u.kind;
-  let coastal = kind == 0u || kind == 1u;
-  let fxF = select(0u, 3u, coastal); let fyF = select(1u, 4u, coastal);
+  let fxF = 3u; let fyF = 4u;
 #ifdef PAGES
   let nzx = nzCell(fxF, x, y, i, cells); let nzy = nzCell(fyF, x, y, i, cells);
   let nCW = nzCell(5u, x, y, i, cells); let nDet = nzCell(2u, x, y, i, cells);
@@ -305,42 +248,29 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var ex = nzx; var ey = nzy;
     if (span2 > 0.0) { ex = nzx - sampleN(fxF, cx, cy); ey = nzy - sampleN(fyF, cx, cy); }
     else { ex = nzx - s2.x; ey = nzy - s2.y; }
-    // A ridge piece scales the outline wobble by its mean width (dab(): amp * pc.mean).
-    var ampK = u.amp; if (u.ridge != 0u) { ampK = u.amp * (s1.x + s1.y) * 0.5; }
-    let dx = wx - cx + ampK * (u.rotX * ex - u.rotY * ey);
-    let dy = wy - cy + ampK * (u.rotY * ex + u.rotX * ey);
+    let dx = wx - cx + u.amp * (u.rotX * ex - u.rotY * ey);
+    let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
-    var reach = radius * width;
-    if (u.ridge != 0u) { reach = reach * (s1.x + (s1.y - s1.x) * t); }
-    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): a spur's reach stretches, a brush's shoulder widens.
+    let reach = radius * width;
+    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): the brush's shoulder widens.
     var leaned = 1.0;
     if (u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
-    if (kind >= 2u) { reach = reach * leaned; }
-    var r = sqrt(dx * dx + dy * dy) / reach;
-    if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / width; }
+    let r = sqrt(dx * dx + dy * dy) / reach;
     if (r >= 1.0) { continue; }
-    // The curve's raw value c: a lip is c above 1, split off after the loop (w = clamp(c), the rest lifts the value).
-    var c = 0.0;
-    if (kind == 0u || kind == 1u) {
-      // Plateau-like edge: a broad-scale face-width variation, the north foreshortening term, then the shoulder.
-      let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
-      let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
-      c = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
-    } else {
-      c = curveAt(u.curveBase, 1.0 - r);
-    }
+    // The curve's value c. Plateau-like edge: a broad-scale face-width variation, the north foreshortening term, then the shoulder.
+    let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
+    let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
+    let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
+    var c = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
     c = terraced(c, x, y, i, cells);
-    if (u.ridge != 0u) { c = c * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
-    if (kind == 4u) { c = keepLip(c * lumps(nCW, nDet)); }
     if (c <= best || c == 0.0) { continue; }
     best = c; bc = c; visited = true;
   }
   if (!visited) { return; }
-  let w = clamp(bc, 0.0, 1.0); let ex = bc - w;
+  let w = clamp(bc, 0.0, 1.0);
   let base = F[PH * cells + i];
-  var value = base; var lift = 0.0;
+  var value = base;
   let pbase = F[PP * cells + i];
   if (kind == 0u) {
     let f = w * u.amountPct;
@@ -348,7 +278,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
       maskSet(i, pl, i32(floor(b + (mw.y - b) * f * mw.z + 0.5)));
     }
-  } else if (kind == 1u) {
+  } else {
     value = base + (u.baseH - base) * w;
     F[PC * cells + i] = F[PC * cells + i] * (1.0 - w);
     F[PV * cells + i] = F[PV * cells + i] * (1.0 - w);
@@ -357,11 +287,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
       maskSet(i, pl, i32(floor(b + (mw.y - b) * w * mw.z + 0.5)));
     }
-  } else {
-    value = base + u.amount * w + baseBump(lx, ly, w);
-    lift = u.amount * ex;
   }
-  value = value + lift;
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   // Routes open where the height changed; protection follows the kind (a cover brush leaves it alone).
   if (kind != 0u && w > 0.0) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
@@ -1121,23 +1047,6 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, inf * 1.6) * u.crackAmt); }
 }
 
-#ifdef PAGES
-// The prefix height at the world point (qx, qy), bilinear as sample() of sculpt.js, from the window the host just evaluated (a target whose cells include the
-// 2 x 2 stencil); the value goes to PT[preIdx] for the node that reads it.
-@compute @workgroup_size(1)
-fn pointRead() {
-  let top = f32(u.grid - 1u);
-  let gx = clamp(u.qx / u.spacing, 0.0, top); let gy = clamp(u.qy / u.spacing, 0.0, top);
-  let ix = i32(floor(gx)); let iy = i32(floor(gy));
-  let jx = min(ix + 1, i32(u.grid) - 1); let jy = min(iy + 1, i32(u.grid) - 1);
-  let fx = gx - f32(ix); let fy = gy - f32(iy);
-  let c = pcells();
-  let a = F[PH * c + lidx(ix, iy)]; let b = F[PH * c + lidx(jx, iy)];
-  let d = F[PH * c + lidx(ix, jy)]; let e = F[PH * c + lidx(jx, jy)];
-  PT[u.preIdx] = (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (d * (1.0 - fx) + e * fx) * fy;
-}
-#endif
-
 // H6c smooth: the prefix height of the cells the box blur will read, copied to scratch plane 0 (blurH and blurV then run on it with blurR = the node's radius).
 @compute @workgroup_size(8, 8)
 fn smoothCopy(@builtin(global_invocation_id) g: vec3u) {
@@ -1149,88 +1058,6 @@ fn smoothCopy(@builtin(global_invocation_id) g: vec3u) {
   let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
 #endif
   Sc[i] = F[PH * cells + i];
-}
-
-@compute @workgroup_size(8, 8)
-fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let n = u.grid; let cells = pcells(); let i = lidx(x, y);
-  let nDet = nzCell(2u, x, y, i, cells);
-#else
-  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
-  let nDet = Nz[2u * cells + i];
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var lx = wx; var ly = wy;
-  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
-  let radius = u.radius; let rough = u.rough; let soft = u.softness; let amount = u.amount; let seed = u.seed;
-  let base = F[PH * cells + i];
-  let baseline = PT[u.preIdx];
-  let sc = max(radius * 0.55, 8.0);
-  let n0 = vnoise(lx / (radius * 0.95), ly / (radius * 0.95), seed ^ 0x4a7u);
-  let n1 = vnoise(lx / sc, ly / sc, seed ^ 0x1c3u);
-  let n2 = vnoise(lx / (sc * 0.6), ly / (sc * 0.6), seed ^ 0x2d9u);
-  let lobe = 1.0 + rough * (0.38 * n0 + 0.22 * n1 + 0.1 * n2);
-  var best = 0.0; var bestValue = base; var visited = false;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u];
-    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
-    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
-    let px = s0.x; let py = s0.y; let sx = s0.z - px; let sy = s0.w - py; let span2 = sx * sx + sy * sy;
-    var t = 0.0;
-    if (span2 > 0.0) { t = clamp(((wx - px) * sx + (wy - py) * sy) / span2, 0.0, 1.0); }
-    let cx = px + sx * t; let cy = py + sy * t;
-    let dx = wx - cx - u.cOffX * radius * 0.32 * rough; let dy = wy - cy - u.cOffY * radius * 0.32 * rough;
-    let rr = sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / (radius * lobe);
-    let rb = sqrt(dx * dx + dy * dy) / (radius * lobe);
-    if (rr >= 1.9) { continue; }
-    let influence = 1.0 - rr / 1.9;
-    if (influence <= best) { continue; }
-    best = influence; visited = true;
-    let floorEdge = 0.25 + 0.45 * (1.0 - soft);
-    let rimNoise = vnoise(lx / (sc * 0.8), ly / (sc * 0.8), seed ^ 0x3e1u);
-    var rimHeight = amount * u.rimH * clamp(1.1 * (rimNoise * 0.5 + 0.5) + 0.5 * n0 * rough - 0.15 * rough, 0.0, 1.5);
-    let rimWidth0 = (0.16 + 0.2 * soft) * (1.0 + 0.35 * n2);
-    var rimWidth = rimWidth0; var outerK = 2.4;
-    if (u.nSect > 1u || u.nGap > 0u) { let rf = rimFactors(atan2(wy - cy, wx - cx) - atan2(u.rotY, u.rotX)); rimHeight = rimHeight * rf.x; rimWidth = rimWidth * rf.y; outerK = 1.4; }
-    var bowl = 0.0;
-    if (rb < 1.0) { bowl = 1.0 - sm(floorEdge, 1.0, rb); }
-    let apronReach = 1.0 - sm(1.15 + 0.35 * n1, 1.85, rr);
-    var rim = 0.0;
-    if (rr < 1.0) { let q = (rr - 1.0) / rimWidth; rim = exp(-(q * q)); }
-    else { let q = (rr - 1.0) / (rimWidth0 * outerK); rim = exp(-(q * q)) * apronReach; }
-    var lumpGate = 0.0;
-    if (rr < 1.3) { lumpGate = 1.0; }
-    let lumps = rough * (6.0 * n2 + 3.0 * n1 + 2.0 * nDet) * lumpGate;
-    var ejecta = 0.0;
-    if (u.ejecta > 0.0 && rr > 0.8) {
-      let e1 = vnoise(lx / (sc * 0.32), ly / (sc * 0.32), seed ^ 0x6e7u);
-      let e2 = vnoise(lx / (sc * 0.14), ly / (sc * 0.14), seed ^ 0x1b5u);
-      let reach = 1.25 + 0.45 * (n0 * 0.5 + 0.5);
-      ejecta = u.ejecta * amount * 0.16 * sm(-0.05, 0.45, e1 * 0.7 + e2 * 0.3) * (1.0 - sm(1.0, reach + 0.25, rr)) * sm(0.8, 1.0, rr) * (0.6 + 0.4 * e2);
-    }
-    let floorH = max(baseline - amount, min(baseline, u.sea + 4.0));
-    let tgt = baseline + rimHeight * rim - (baseline - floorH) * bowl + lumps * (0.4 + 0.6 * bowl);
-    let blend = sm(0.0, 0.15, 1.0 - rr);
-    var value = base + rimHeight * rim + lumps * 0.3 * apronReach;
-    if (rr < 1.0) {
-      var extra = 0.0;
-      if (rr >= 0.85) { extra = (rimHeight * rim + lumps * 0.4) * (1.0 - blend); }
-      value = base + (tgt - base) * blend + extra;
-    }
-    value = value + ejecta;
-    bestValue = clamp(select(value, max(value, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
-  }
-  if (!visited) { return; }
-  if (u.coPutW != 0u) { Sc[4u * cells + i] = best; }   // H10: the footprint the crater facets are limited to
-  F[PH * cells + i] = bestValue;
-  if (u.nwrites > 0u) { shapeMasks(i, best); }
-  let sw = sm(0.0, 0.3, best);
-  F[PP * cells + i] = F[PP * cells + i] * (1.0 - sw);
-  F[PR * cells + i] = F[PR * cells + i] * (1.0 - sw);
-  if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, best * 1.6) * u.crackAmt); }
 }
 
 // H6c fissure: fissureCell() of sculpt.js over the pieces the host lists (a = s0.xy, b = s0.zw; width multipliers r0 r1 in s1.xy, depth multipliers h0 h1 in s1.zw).
@@ -1308,41 +1135,6 @@ fn stampFissure(@builtin(global_invocation_id) g: vec3u) {
     let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
     maskSet(i, pl, i32(floor(b + (mw.y - b) * (sw * u.fDark) * mw.z + 0.5)));
   }
-}
-
-// H6c crystals (the pyramid form): stampCrystals(). A crystal is a segment of the host's list: centre in s0.xy, R and height in s0.zw, lean in s1.xy, its side count and
-// where its edges start (vec4 nx, ny, d per edge, after the node's mask writes) in s1.zw. Each crystal's square box limits the cells it reaches.
-@compute @workgroup_size(8, 8)
-fn stampCrystal(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let cells = pcells(); let i = lidx(x, y);
-#else
-  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var best = 0.0;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
-    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
-    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
-    let qx = wx - s0.x; let qy = wy - s0.y;
-    var m = 3.0e38;
-    let sides = u32(s1.z); let at = u.mwBase + u.nwrites + u32(s1.w);
-    for (var e = 0u; e < sides; e++) {
-      let ed = MW[at + e];
-      let rise = ed.z - (s1.x * ed.x + s1.y * ed.y);
-      m = min(m, (ed.z - (qx * ed.x + qy * ed.y)) / max(rise, ed.z * 0.2));
-    }
-    if (m <= 0.0) { continue; }
-    let h = min(s0.w, s0.w / (1.0 - u.cTop) * m);
-    if (h > best) { best = h; }
-  }
-  if (best <= 0.0) { return; }
-  F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
-  F[PP * cells + i] = 1.0;
-  F[PX * cells + i] = max(F[PX * cells + i], sm(0.2, 1.5, best));
 }
 
 // ---- H10: the coast pass (Lava's shore layers and fingers) ----
@@ -1838,27 +1630,6 @@ fn cgRnd(i: i32, j: i32, a: u32) -> f32 {
   x = x ^ (x >> 15u); x = x * 2246822519u; x = x ^ (x >> 13u);
   return f32(x) / 4294967296.0;
 }
-fn cgMound(x: f32, y: f32) -> f32 {
-  var d = 3.0e38;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u];
-    let a = s0.xy; let dd = s0.zw - s0.xy; let l2 = dot(dd, dd);
-    var t = 0.0;
-    if (l2 > 0.0) { t = clamp(dot(vec2f(x, y) - a, dd) / l2, 0.0, 1.0); }
-    d = min(d, length(vec2f(x, y) - a - dd * t));
-  }
-  let edge = u.radius * (1.0 + u.rough * 0.35 * vnoise(x / (u.radius * 0.7), y / (u.radius * 0.7), u.seed ^ 0x2c1u));
-  let r = d / edge;
-  if (r >= 1.0) { return 0.0; }
-  return u.amount * pow(1.0 - r * r, 1.2);
-}
-fn cgLevel(x: f32, y: f32, m: f32) -> i32 {
-  if (!(u.cgSizeVar > 0.0)) { return 0; }
-  let f = 0.5 + 0.32 * vnoise(x / 64.0, y / 64.0, u.seed ^ 0x51au) + 0.18 * vnoise(x / 27.0, y / 27.0, u.seed ^ 0x2e7u) + 0.3 * (m / u.amount - 0.5);
-  if (f > 1.17 - 0.4 * u.cgSizeVar) { return 2; }
-  if (f > 0.84 - 0.3 * u.cgSizeVar) { return 1; }
-  return 0;
-}
 // The jittered point of cell (i, j) of size L in the shape's frame (hash salts 1 + o and 2 + o, jit of a cell around its centre), and a point of the frame in the world.
 fn cgPoint(i: i32, j: i32, L: f32, jit: f32, o: u32) -> vec2f {
   return vec2f((f32(i) + 0.5 + (cgRnd(i, j, 1u + o) - 0.5) * jit) * L, (f32(j) + 0.5 + (cgRnd(i, j, 2u + o) - 0.5) * jit) * L);
@@ -1869,115 +1640,6 @@ fn cgWorld(l: vec2f) -> vec2f {
   let a = u.inv3 / det; let b = -u.inv1 / det; let c = -u.inv2 / det; let d = u.inv0 / det;
   let e = -(a * u.inv4 + c * u.inv5); let f = -(b * u.inv4 + d * u.inv5);
   return vec2f(a * l.x + c * l.y + e, b * l.x + d * l.y + f);
-}
-
-@compute @workgroup_size(8, 8)
-fn stampColumns(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let cells = pcells(); let i = lidx(x, y);
-#else
-  let cells = u.grid * u.grid; let i = u32(y) * u.grid + u32(x);
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var lx = wx; var ly = wy;
-  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
-  let levels = select(1, 3, u.cgSizeVar > 0.0);
-  var d1 = 3.0e38; var d2 = 3.0e38; var bl = -1; var bi = 0; var bj = 0;
-  // The nearest column centre of any width in use here.
-  for (var lv = 0; lv < levels; lv++) {
-    let Ll = u.cgSize * SZL[lv]; let ci = i32(floor(lx / Ll)); let cj = i32(floor(ly / Ll));
-    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let cl = cgPoint(ii, j, u.cgSize * SZL[lv], 0.9, u32(lv) * 16u); let cw = cgWorld(cl);
-      if (levels > 1 && cgLevel(cw.x, cw.y, cgMound(cw.x, cw.y)) != lv) { continue; }
-      let d = length(vec2f(lx, ly) - cl);
-      if (d < d1) { d2 = d1; d1 = d; bl = lv; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
-    } }
-  }
-  if (bl < 0) {
-    // No width in use is near: the widest columns, whatever they asked for.
-    let ci = i32(floor(lx / u.cgSize)); let cj = i32(floor(ly / u.cgSize));
-    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let d = length(vec2f(lx, ly) - cgPoint(ii, j, u.cgSize, 0.9, 0u));
-      if (d < d1) { d2 = d1; d1 = d; bl = 0; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
-    } }
-  }
-  let o = u32(bl) * 16u;
-  let cl = cgPoint(bi, bj, u.cgSize * SZL[bl], 0.9, o); let cw = cgWorld(cl);
-  let m = cgMound(cw.x, cw.y);
-  if (m <= 1.0) { return; }
-  let base = F[PH * cells + i];
-  // A bare column is the mound's own smooth hill: no flat top, no crystal mark, no protection.
-  if (u.cgSmooth > 0.0 && cgRnd(bi, bj, 12u + o) < u.cgSmooth * SZB[bl]) {
-    let hill = cgMound(wx, wy);
-    if (hill > 0.5) { F[PH * cells + i] = clamp(base + hill, u.minH, u.maxH); }
-    return;
-  }
-  let e = 2.0;
-  let gx = (cgMound(cw.x + e, cw.y) - cgMound(cw.x - e, cw.y)) / (2.0 * e); let gy = (cgMound(cw.x, cw.y + e) - cgMound(cw.x, cw.y - e)) / (2.0 * e);
-  var step = 0.0;
-  if (!(cgRnd(bi, bj, 3u + o) < 0.4)) { step = (cgRnd(bi, bj, 4u + o) - 0.35) * 2.0 * u.cgStep * (0.5 + u.cgVar) * SZS[bl]; }
-  let shade = 0.8 + 0.2 * cgRnd(bi, bj, 5u + o);
-  let incline = gx * (wx - cw.x) + gy * (wy - cw.y);
-  var top = m + step;
-  if (u.cgTiers > 0.0) { top = top + incline * (1.0 - clamp(u.cgTiers, 0.0, 1.0)); } else { top = top + incline; }
-  if (u.cgFacet > 0.0) {
-    let fa = u.cgFacet;
-    let h0 = cgRnd(bi, bj, 6u + o) * 6.2831853; let h1 = h0 + 3.1415927 * (0.5 + cgRnd(bi, bj, 7u + o));
-    let m0 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 8u + o)); var m1 = 0.0;
-    if (!(cgRnd(bi, bj, 9u + o) < 0.3)) { m1 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 10u + o)); }
-    let ox = lx - cl.x; let oy = ly - cl.y;
-    let pa = cos(h0) * m0 * ox + sin(h0) * m0 * oy; let pb = cos(h1) * m1 * ox + sin(h1) * m1 * oy;
-    if (cgRnd(bi, bj, 11u + o) < 0.5) { top = top + min(pa, pb); } else { top = top + max(pa, pb); }
-  }
-  let h = max(0.0, top);
-  if (h <= 0.5) { return; }
-  F[PH * cells + i] = clamp(base + h, u.minH, u.maxH); F[PP * cells + i] = 1.0;
-  F[PX * cells + i] = select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
-}
-
-// Bergs: per block the lowest of its face planes and broken-corner planes, each outline waving along its face, a tilted top and roughness; the highest block wins.
-// Seg k: (x, y, R, height), (index, faces, planes, first plane in the extra table), box.
-@compute @workgroup_size(8, 8)
-fn stampBerg(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let cells = pcells(); let i = lidx(x, y);
-#else
-  let cells = u.grid * u.grid; let i = u32(y) * u.grid + u32(x);
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var best = 0.0;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
-    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
-    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
-    let qx = wx - s0.x; let qy = wy - s0.y; let R = s0.z; let height = s0.w;
-    let reach = R * 1.55; let wave = R * (0.02 + 0.12 * u.bgJit);
-    var m = (reach - length(vec2f(qx, qy))) * u.bgFace;
-    if (m <= 0.0) { continue; }
-    let idx = i32(s1.x); let nf = u32(s1.y); let np = u32(s1.z); let at = u.mwBase + u.nwrites + u32(s1.w);
-    for (var e = 0u; e < np; e++) {
-      let p = MW[at + e];
-      var salt = u.seed ^ (0x6a1u + e * 977u);
-      if (e >= nf) { salt = u.seed ^ (0x9b3u + (e - nf) * 1301u); }
-      let along = -qx * p.y + qy * p.x; let d = p.z + wave * vnoise(along / (R * 0.45), f32(idx) * 7.3, salt);
-      m = min(m, (d - (qx * p.x + qy * p.y)) * p.w);
-      if (m <= 0.0) { break; }
-    }
-    if (m <= 0.0) { continue; }
-    var h = min(m, height - u.bgTilt * max(0.0, R * u.bgFlat - (qx * u.bgTx + qy * u.bgTy)));
-    if (h <= 0.0) { continue; }
-    if (u.bgRough > 0.0) {
-      let f = vnoise(wx / 40.0, wy / 40.0, u.seed ^ 0x2a1u) * 0.3 + vnoise(wx / 17.0, wy / 17.0, u.seed ^ 0x4c7u) * 0.3 + vnoise(wx / 8.0, wy / 8.0, u.seed ^ 0x6e3u) * 0.28 + vnoise(wx / 4.0, wy / 4.0, u.seed ^ 0x8f9u) * 0.18;
-      h = h + u.bgRough * f * sm(0.0, 4.0, h);
-    }
-    if (h > best) { best = h; }
-  }
-  if (best <= 0.0) { return; }
-  F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
 }
 
 // ---- H10: crater and mountain facets, a pass over the node's own result ----
