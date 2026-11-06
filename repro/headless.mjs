@@ -91,7 +91,10 @@ const json = async path => { const r = await fetch(path); if (!r.ok) throw new E
 
 // A scene opened as a page opens it (sculpt.js boot and bootMap): the world's config for the page's address, the map, the renderer, the fields,
 // and the scene's nodes in them. `search` is the page's query (without '?'), as render.mjs and regional.mjs build it.
-export async function openScene(scene, search, {strokes = scene.strokes} = {}) {
+// The map view of the Chrome window this runner stands in for: render.mjs --chrome's (1500 x 1200; the page's terrain canvas when a scene starts,
+// measured). The paged fields' budget keeps room for the view's canvases (sculpt-scene.js pagedBudget), so the pages take the same ring.
+export const VIEW = {width: 1108, height: 841};
+export async function openScene(scene, search, {strokes = scene.strokes, view = VIEW} = {}) {
   await openHost();
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
@@ -122,7 +125,7 @@ export async function openScene(scene, search, {strokes = scene.strokes} = {}) {
   const common = {worldSize, worldGrid, baseHeight: config.baseHeight, keys: engine.FIELD_KEYS, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context, gesture: () => false};
   const paged = worldGrid > 1168 || settings.get('gpuPages') === 'force';
   const fields = paged
-    ? fieldsModule.createPagedFields({...common, budget: () => ({total: gpuMB * MB, minimum: 96 * MB}), foregroundPending: () => false, apron: Number(settings.get('timeApron') || 128), forceRing: Number(settings.get('pageRing') || 0)})
+    ? fieldsModule.createPagedFields({...common, budget: () => engine.pagedBudget({gpuMB, renderer, chunk: Math.min(512, renderer.chunkSize()), maskCount: engine.MASK_KEYS.length, view}), foregroundPending: () => false, apron: Number(settings.get('timeApron') || 128), forceRing: Number(settings.get('pageRing') || 0)})
     : fieldsModule.createGpuFields(common);
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
   const play = (list, {ground = true} = {}) => { nodes = engine.sceneNodes(config, list, {ground, seed, settings}); if (scene_) scene_.nodes = nodes; fields.changed(); return nodes.length; };
