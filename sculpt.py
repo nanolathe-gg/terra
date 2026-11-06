@@ -307,7 +307,10 @@ WORLD_KNOBS = {
     # grooves (ordered rock) .5 px wide on 28-px blocks at depth .3, and thin long
     # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
     # Red's faces show none).
-    'red': dict(crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
+    # Red's plain is level, as Green's is (card E1): the share of a retail window's 16-px cells at its most common height is .36 / .52 /
+    # .20 in red-1..3 (Green's .35 / .20 / .44); the default undulation (10) gave .21 / .21 / .18, none gives .67 / .52 / .26. The plain's
+    # lumps (plainRelief) keep its soft mottle. A level plain also repeats its tiles (card tilepool).
+    'red': dict(undulation=0, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackSpacing=28, rockOrder=1, bedLedge=0,
                 grooveSpacing=30, grooveAngle=-10, grooveRun=160,
