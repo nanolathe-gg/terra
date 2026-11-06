@@ -7,7 +7,7 @@ const sig = s => s ? `${s.w}x${s.h}@${s.ax},${s.ay}:` + Buffer.from(s.idx).toStr
 test('palette has 256 indexed colors', () => assert.equal(palette.length, 256));
 for (const [kind, params] of [['tree', {}], ['tree', {species: 'conifer', height: 61, width: 0.5}], ['burnt', {}], ['burnt', {species: 'conifer', height: 56, width: 0.5}], ['shrub', {}], ['rock', {cells: '3x3'}], ['scar', {type: 'smudge'}], ['scar', {type: 'stain'}]]) {
   test(`${kind} ${params.species || params.cells || params.type || ''} is deterministic and palette-only`, () => {
-    const a = generateFeature(kind, params, 77), b = generateFeature(kind, params, 77), c = generateFeature(kind, params, 78);
+    const a = generateFeature(kind, params, 77, {palette}), b = generateFeature(kind, params, 77, {palette}), c = generateFeature(kind, params, 78, {palette});
     assert.equal(sig(a.body), sig(b.body)); assert.equal(sig(a.shadow), sig(b.shadow));
     assert.notEqual(sig(a.body), sig(c.body));
     for (let k = 0; k < a.body.w * a.body.h; k++) if (a.body.a[k]) assert.ok(a.body.idx[k] < 256 && a.body.idx[k] !== IDX.KEY);
@@ -25,7 +25,7 @@ test('deposits and vents paint the same bytes twice', () => {
 
 test('burnt trees carry no embers or fire colors (only the burn-out frame does)', () => {
   for (const params of [{}, {species: 'conifer', height: 56, width: 0.5}]) for (const seed of [1, 7, 99]) {
-    const b = generateFeature('burnt', params, seed).body, t = generateFeature('tree', params.species ? {species: 'conifer', height: 61, width: 0.5} : {}, seed);
+    const b = generateFeature('burnt', params, seed, {palette}).body, t = generateFeature('tree', params.species ? {species: 'conifer', height: 61, width: 0.5} : {}, seed, {palette});
     for (const sp of [b, t.burnt.body]) for (let k = 0; k < sp.w * sp.h; k++) if (sp.a[k]) assert.ok(sp.idx[k] < 192 || sp.idx[k] > 216);
     const last = t.burn[95]; let fire = 0; for (let k = 0; k < last.w * last.h; k++) if (last.a[k] && last.idx[k] >= 192 && last.idx[k] <= 216) fire++;
     assert.ok(fire > 0);   // the last burn frame keeps its embers
@@ -34,7 +34,7 @@ test('burnt trees carry no embers or fire colors (only the burn-out frame does)'
 
 test('rocks have no highlight pixels in the shaded lower right', () => {
   for (const seed of [3, 4, 5]) {
-    const r = generateFeature('rock', {cells: '3x3'}, seed).body, cx = r.w / 2, cy = r.h / 2;
+    const r = generateFeature('rock', {cells: '3x3'}, seed, {palette}).body, cx = r.w / 2, cy = r.h / 2;
     for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) { const k = y * r.w + x, d = ((x - cx) * 0.62 + (y - cy) * 0.7) / (r.w * 0.35 + r.h * 0.35); if (r.a[k] && d > 0.45) { const c = r.idx[k]; assert.ok(!(c === 255 || (c >= 81 && c <= 84) || (c >= 64 && c <= 67)), `bright pixel ${c} at ${x},${y}`); } }
   }
 });

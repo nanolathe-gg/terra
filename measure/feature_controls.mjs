@@ -23,7 +23,7 @@ function picture(kind, params, seed) {
   const dx = 0, AY = ANCHOR[kind];
   const g = {w: W, h: H, rgba: new Uint8ClampedArray(W * H * 4)}, drawn = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) g.rgba.set([...ground, 255], i * 4);
-  const f = generateFeature(kind, params, seed, {light, bodyOnly: true});
+  const f = generateFeature(kind, params, seed, {light, bodyOnly: true, palette});
   drawFeature(g, f, AX + dx, AY, palette);
   for (const s of [f.body, f.shadow]) if (s) for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (s.a[y * s.w + x]) { const X = AX + dx + x - s.ax, Y = AY + y - s.ay; if (X >= 0 && Y >= 0 && X < W && Y < H) drawn[Y * W + X] = 1; }
   return {g, drawn, body: f.body};

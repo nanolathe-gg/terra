@@ -1,6 +1,8 @@
 // Burn-sequence statistics against spec 15/16 (lead-in, repeating cycle, tail, flame arch, tongues, sparks, colors).
 //   node measure/feature_gen_burn_stats.mjs [module]
+import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 const mod = await import(process.argv[2] ? pathToFileURL(process.argv[2]).href : '../sculpt-feature-gen.js');
 const fire = i => i >= 192 && i <= 216;
 const mean = a => a.reduce((s, v) => s + v, 0) / (a.length || 1);
@@ -40,10 +42,10 @@ function treeStats(frames, burnt) {
 }
 const out = {};
 for (const [name, params] of [['broadleaf', {}], ['conifer', {species: 'conifer', height: 61, width: 0.5}]]) {
-  const t = mod.generateFeature('tree', params, 1000);
+  const t = mod.generateFeature('tree', params, 1000, {palette});
   out[name] = treeStats(t.burn, t.burnt.body);
 }
-const s = mod.generateFeature('shrub', {}, 4001), sb = s.burn;
+const s = mod.generateFeature('shrub', {}, 4001, {palette}), sb = s.burn;
 const sf = f => { let d = 0, n = 0; for (let k = 0; k < f.w * f.h; k++) if (f.a[k]) { d++; if (fire(f.idx[k])) n++; } return n / Math.max(d, 1); };
 out.shrub = {frames: sb.length, fireShareMean: +mean(sb.slice(2, 41).map(sf)).toFixed(2), lastFireShare: +sf(sb[41]).toFixed(2), width: +mean(sb.slice(2, 41).map(f => f.w)).toFixed(1), cycleIdentical: sb.slice(2, 41).every((f, i) => sig(f) === sig(sb[2 + (i % 14)]))};
 console.log(JSON.stringify(out, null, 1));

@@ -5,6 +5,7 @@ import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {encodePNG} from './feature_gen_png.mjs';
 import {generateFeature, paintDeposit, toRGBA} from '../sculpt-feature-gen.js';
+const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 const out = process.argv[2], palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 mkdirSync(out, {recursive: true}); mkdirSync(join(out, 'fire'), {recursive: true});
 const save = (dir, name, s, sh) => {
@@ -14,7 +15,7 @@ const save = (dir, name, s, sh) => {
   meta.idx = Array.from(s.idx).map((v, k) => (s.a[k] ? v : -1)); meta.w = s.w;     // palette indices, so statistics need no color lookup (the palette has duplicate colors)
   writeFileSync(join(dir, name + '.json'), JSON.stringify(meta));
 };
-const F = (kind, params, seed) => generateFeature(kind, params, seed);
+const F = (kind, params, seed) => generateFeature(kind, params, seed, {palette});
 const list = [
   ['Tree1', F('tree', {}, 1000)], ['Tree2', F('tree', {}, 1007)], ['Tree3', F('tree', {}, 1014)],
   ['Tree4', F('tree', {species: 'conifer', height: 64, width: 0.44}, 2000)], ['Tree5', F('tree', {species: 'conifer', height: 60, width: 0.62}, 2007)], ['Tree6', F('tree', {species: 'conifer', height: 59, width: 0.54}, 2014)],
