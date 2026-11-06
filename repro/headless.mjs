@@ -113,7 +113,8 @@ export async function openScene(scene, search, {strokes = scene.strokes} = {}) {
   const canvas = new HeadlessCanvas(), renderer = await TerrainRenderer.createChunked(canvas, config), errors = [];
   renderer.onerror = message => errors.push(message);   // WebGPU validation and device errors arrive after the call that caused them
   fieldsModule.setFailureHandler(error => errors.push('shape fields: ' + (error?.message ?? String(error))));   // a failed shape run leaves the base height
-  renderer.setColors(engine.rendererColors(engine.openingColors(config, settings)));
+  const ownColors = config.baseColors || config.colors || {};   // sculpt.js activeWorld: a world opens with its base colors as its own
+  renderer.setColors(engine.rendererColors(engine.worldHexColors(config, settings, ownColors)));
   const seed = engine.DEFAULT_SEED, refinementSeed = seed;
   let nodes = [];
   const context = () => engine.shapeContext({config, settings, seed, talusAngle: renderer.variantNumber('talusAngle', 40), minH, maxH});
@@ -129,7 +130,7 @@ export async function openScene(scene, search, {strokes = scene.strokes} = {}) {
   play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
   const sliders = engine.surfaceSliders(config, settings);
-  scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged,
+  scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
     dispose() { fields.destroy?.(); scene_.time?.drainage?.retire?.(); renderer.dispose(); }};
   return scene_;
@@ -139,7 +140,10 @@ export async function openScene(scene, search, {strokes = scene.strokes} = {}) {
 // drainage plane handed to the pass is the one for these fields.
 export async function weather(s) {
   const {renderer, fields, config, engine, worldGrid: grid, worldSize: size, spacing} = s;
+  // A pass again replaces the last one's results (sculpt.js dropGpuWeather): nothing reads them once this returns.
+  if (s.time) { s.time.drainage?.retire?.(); if (!s.time.paged) { s.time.weather.destroy(); s.time.maps.forEach(m => m.destroy()); s.time.field?.destroy(); } s.time = null; }
   if (!(renderer.variantNumber('erosion', 0) > 0)) return s.time = null;
+  s.material = engine.materialKnobs(s.sliders, s.refinementSeed, renderer.variant.get('transition'));   // as runFedWeather reads them, when the pass runs
   const {computeDrainage} = await import('../sculpt-drainage.js');
   if (s.paged) {
     await fields.coarseSettled();
@@ -206,4 +210,39 @@ export async function windowHeights(s, {x = 0, y = 0, samples = 512, step = 2} =
   }
   for (let j = 0; j < samples; j++) for (let i = 0; i < samples; i++) out[j * samples + i] = sample(x + step * i, y + step * j);
   return out;
+}
+
+// The page's edits, as its handlers make them, then the shape and the Time pass they ask for (the page's own steps run as an edit settles; here
+// at once). A world knob (sculpt.js setKnob and the audit host's knob): sculpt-knobs.js applyKnob, the code the page runs.
+export async function knob(s, key, value, {weatherKeys = []} = {}) {
+  const {applyKnob} = await import('../sculpt-knobs.js');
+  const next = applyKnob({key, value, settings: s.settings, renderer: s.renderer, nodes: s.nodes, seed: s.seed});
+  if (next.reload) throw new Error(`the world knob ${key} reloads the page: open the scene again with it in the address`);
+  if (next.evaluate !== undefined) s.fields.changed();
+  if (next.weather || weatherKeys.includes(key)) await weather(s);
+}
+// A surface slider (sculpt.js: an input event on the slider): it redraws, and the material field's two run the Time pass again.
+export async function slider(s, id, value) {
+  s.sliders[id] = Number(value);
+  if (s.engine.TIME_SLIDER_IDS.includes(id)) await weather(s);
+}
+// A selected stroke's settings (sculpt.js changeSelected): a node without a path (the ground) is not edited.
+export async function edit(s, i, values) {
+  const n = s.nodes[i]; if (!n?.points) return;
+  n.params = {...n.params, ...values};
+  s.fields.changed(); await weather(s);
+}
+// A scripted scene (sculpt.js scriptedScene) with its Time pass.
+export async function scene(s, list, {ground = true} = {}) { s.play(list, {ground}); await s.fields.ready(); return weather(s); }
+// A Colors panel row picked (a hex) or cleared (null): sculpt-knobs.js pickWorldColor, as the panel's row applies it.
+export async function pickColor(s, key, hex) {
+  const {pickWorldColor} = await import('../sculpt-knobs.js');
+  s.ownColors = pickWorldColor(s.config, s.ownColors, key, hex);
+  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors)));
+}
+// What the World panel enables a row by (sculpt-knobs.js worldPanelValues), with Weathering on as the page opens.
+export async function panelValues(s) {
+  const {worldPanelValues} = await import('../sculpt-knobs.js');
+  const colors = s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors));
+  return worldPanelValues({config: s.config, renderer: s.renderer, nodes: s.nodes, colors, weathering: s.renderer.variantNumber('erosion', 0) > 0, materialWeathering: s.sliders['material-weathering']});
 }
