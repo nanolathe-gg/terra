@@ -474,7 +474,7 @@ function shrubFrame(P, seed, ctx) {
 }
 
 // ---- rocks -----------------------------------------------------------------------------------------------------
-const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.55, lean: 0, metal: null };
+const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.8, lean: 0, metal: null };
 const ROCK_CELLS = { '1x1': [1, 1], '2x2': [2, 2], '3x2': [3, 2], '3x3': [3, 3], '4x3': [4, 3] };
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9));
@@ -486,7 +486,7 @@ function rockFrame(P, seed, ctx) {
   const ax = Math.round(cx + (r() - 0.5) * 3), ay = Math.round(3 + H * (0.18 + r() * 0.2));
   const sp = newSprite(w, h, ax, ay);
   const nv = Math.round(lerp(11, 5, P.angular));
-  const verts = []; for (let i = 0; i < nv; i++) verts.push(0.84 + r() * 0.28);
+  const verts = []; for (let i = 0; i < nv; i++) verts.push(0.95 + r() * 0.2);
   const ph = r() * TAU, f1 = r() * TAU, f2 = r() * TAU, a2 = 0.05 + 0.07 * r(), a3 = 0.04 * r();
   const radial = th => {
     const f = (th / TAU + 4) % 1 * nv, i = Math.floor(f), t = f - i;
@@ -499,7 +499,7 @@ function rockFrame(P, seed, ctx) {
     const ux = (x - cx) / Wh, uy = (y - cy) / Hh, dx = ux * Math.cos(tilt0) + uy * Math.sin(tilt0), dy = -ux * Math.sin(tilt0) + uy * Math.cos(tilt0);   // a tilted oval
     const th = Math.atan2(dy, dx) - ph, e = 2.3;
     const rr = Math.pow(Math.pow(Math.abs(dx), e) + Math.pow(Math.abs(dy), e), 1 / e);
-    if (rr < radial(th) * (1 + 0.04 * (fbm(x / 4, y / 4, seed) - 0.5)) && (rr > 0 || true)) mask[y * w + x] = 1;
+    if (rr < radial(th) * (1 + 0.1 * (fbm(x / 4, y / 4, seed) - 0.5)) && (rr > 0 || true)) mask[y * w + x] = 1;
   }
   const dist = edgeDist(w, h, mask);
   // One smoothly shaded, slightly lumpy, tilted oblong (spec 15 B1, round 3): light falls off continuously from the sun side to a dark
@@ -510,22 +510,25 @@ function rockFrame(P, seed, ctx) {
     const dome = Math.sqrt(Math.max(0.02, 1 - (ex * ex + ey * ey) * 0.9));
     return (dome + (fbm(x / 7, y / 7, seed + 3, 3) - 0.5) * (0.2 + 0.3 * P.angular) + (fbm(x / 3.2, y / 3.2, seed + 5, 2) - 0.5) * 0.04) * Hh * 1.15;
   };
+  // a few broad tonal planes: soft offsets of the tone so the shading has flat areas, not a smooth dome
+  const planes = []; for (let i = 0; i < 3 + Math.round(P.angular * 2); i++) planes.push({ x: cx + (r() - 0.5) * W * 0.8, y: cy + (r() - 0.5) * H * 0.8, o: (r() - 0.5) * 0.3 });
+  const planeOff = (x, y) => { let b = 0, bd = 1e9; planes.forEach((p, i) => { const d = Math.hypot(p.x - x, p.y - y) + (vnoise(x / 4, y / 4, seed + i) - 0.5) * 4; if (d < bd) { bd = d; b = i; } }); return planes[b].o; };
   const tone = new Float32Array(w * h), lowerRight = k => { const x = k % w, y = (k / w) | 0; return (x - cx) * -L.x + (y - cy) * -L.y > 0; };
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const k = y * w + x; if (!mask[k]) continue;
     const zx = zf(x + 1, y) - zf(x - 1, y), zy = zf(x, y + 1) - zf(x, y - 1), nn = Math.hypot(zx, zy, 2);
     let t = (-zx / nn) * L.v[0] + (-zy / nn) * L.v[1] + (2 / nn) * L.v[2];
-    t += 0.1 * (L.x * (x - cx) / Wh + L.y * (y - cy) / Hh);                       // broad fall-off from the sun side
-    if (y > h * 0.75) t -= ((y / h - 0.75) / 0.25) * 0.15;                            // moderately dark base
+    t += 0.1 * (L.x * (x - cx) / Wh + L.y * (y - cy) / Hh * 0.45);                       // broad fall-off from the sun side
+    if (y > h * 0.78) t -= ((y / h - 0.78) / 0.22) * 0.05;                            // moderately dark base
     if (dist[k] <= 1) t -= lowerRight(k) ? 0.55 : 0.3;                                   // a dark one-pixel rim all round, stronger on the shadow side
-    tone[k] = t + (rn() - 0.5) * 0.02; hasPx.push(k);
+    tone[k] = t + planeOff(x, y) + (rn() - 0.5) * 0.02; hasPx.push(k);
   }
   const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.045;
   const bright = (list, u) => list[clamp(Math.floor((1 - u) * list.length), 0, list.length - 1)];
-  const CREAM = [64, 65, 66, 67, 68, 69, 70], PINKS = [16, 17, 18, 19, 20, 21, 22], WHITES = [255, 81, 82, 83, 84];
+  const CREAM = [64, 64, 64, 65, 65, 66], PINKS = [17, 18, 18, 19, 20, 21], WHITES = [255, 81, 82, 83, 84];   // no olive-dark tans (68-70): retail rocks have no yellow-green specks
   const hiEnd = 0.383, litEnd = hiEnd + 0.18, midEnd = litEnd + 0.245;
   // the mottling field: pink where a soft noise is high (about 39% of the non-white highlight)
-  const mott = k => vnoise((k % w) / 1.7, ((k / w) | 0) / 1.7, seed + 77) * 0.8 + fbm((k % w) / 10, ((k / w) | 0) / 10, seed + 78, 2) * 0.5;   // fine grain, not blotches
+  const mott = k => vnoise((k % w) / 4.5, ((k / w) | 0) / 4.5, seed + 77) * 0.55 + fbm((k % w) / 9, ((k / w) | 0) / 9, seed + 78, 2) * 0.75;   // soft areas of pink inside the cream, not confetti
   const hiList = ranked.slice(0, Math.round(N * hiEnd)).filter((k, i) => i >= Math.round(N * hiEnd * 0.27)).map(k => mott(k)).sort((a, b) => a - b);
   const pinkCut = hiList[Math.floor(hiList.length * 0.39)] ?? 0.5;
   ranked.forEach((k, i) => {
@@ -533,8 +536,8 @@ function rockFrame(P, seed, ctx) {
     let c;
     if (u < hiEnd) {
       const v = u / hiEnd;
-      if (v < 0.27) c = bright(WHITES, 1 - v / 0.27 * 0.8 - 0.1 + (rn() - 0.5) * 0.2);                                      // the broad highlight
-      else { const f = (v - 0.27) / 0.73, pinkish = mott(k) + (rn() - 0.5) * 0.25 < pinkCut; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12); }
+      if (v < 0.4) c = bright(WHITES, 1 - v / 0.4 * 0.8 - 0.1 + (rn() - 0.5) * 0.2);                                      // the broad highlight
+      else { const f = (v - 0.4) / 0.6, pinkish = mott(k) + (rn() - 0.5) * 0.08 < pinkCut * 0.9; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : (rn() < 0.35 ? bright(WHITES.slice(1), rn()) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12)); }
     } else if (u < litEnd) c = bright([85, 86, 87, 88, 89], 1 - (u - hiEnd) / (litEnd - hiEnd) + (rn() - 0.5) * 0.3);
     else if (u < midEnd) c = bright([92, 91, 90], (u - litEnd) / (midEnd - litEnd) + (rn() - 0.5) * 0.4);
     else { const f = (u - midEnd) / (1 - midEnd); c = rn() < 0.1 ? weighted(rn, [[127, 3], [125, 1]]) : bright([93, 94, 95], 1 - f + (rn() - 0.5) * 0.3); }
