@@ -253,7 +253,7 @@ const LEAF = {
 function treeSolid(P, r) {
   const conifer = P.species === 'conifer', Hs = P.height, W = Hs * P.width, a = W / 2, b = a * 0.92;
   const trunkVis = conifer ? 3 : 2, Hc = Hs - trunkVis - 2, c = Math.sqrt(Math.max(9, (Hc / 2) ** 2 - (CE * b) ** 2)) / SE, Uc = (Hc / 2 + trunkVis) / SE;
-  const U0 = Uc - c, Utop = Uc + c, crown = clamp(P.crown, 0, 1), dens = clamp(P.density, 0, 1), taper = clamp(P.taper, 0, 1), peaks = clamp(P.peaks, 0, 1);
+  const U0 = Uc - c, Utop = Uc + c, branches = [], clusters = clamp(P.clusters ?? 0, 0, 1), crown = clamp(P.crown, 0, 1), dens = clamp(P.density, 0, 1), taper = clamp(P.taper, 0, 1), peaks = clamp(P.peaks, 0, 1);
   const s1 = (r() * 1e6) | 0, s2 = (r() * 1e6) | 0, s3 = (r() * 1e6) | 0;
   const narrow = U => 1 - taper * 0.62 * smoothstep(Uc - c * 0.5, Utop, U);              // the crown narrows toward the top
   let envelope, crownF;
@@ -270,8 +270,15 @@ function treeSolid(P, r) {
     };
   } else {
     // lobes on the envelope, mostly on the side the view sees (south and up), smaller toward the top; peaks reach up from the top
-    const lobes = [], nL = Math.round(30 + 14 * crown);
-    for (let i = 0; i < nL * 6 && lobes.length < nL; i++) {
+    const lobes = [], nL = Math.round(30 + 14 * crown), K = clusters > 0 ? 3 + Math.round(4 * clusters + r()) : 0;
+    // clusters (Archipelago's trees): the leaves gather in K clusters at the ends of branches, open between them
+    for (let i = 0; i < K; i++) {
+      let d; do { const u = 0.15 + 0.85 * r(), ph = r() * TAU, sq = Math.sqrt(1 - u * u); d = [sq * Math.cos(ph), sq * Math.sin(ph), u]; } while (d[1] * SE + d[2] * CE < -0.1);
+      const cen = [a * d[0] * 0.78, b * d[1] * 0.78, Uc + c * d[2] * 0.45 - c * 0.25], m = 6 + Math.round(4 * r());
+      branches.push(cen);
+      for (let j = 0; j < m; j++) lobes.push([cen[0] + (r() - 0.5) * a * 0.42, cen[1] + (r() - 0.5) * b * 0.42, cen[2] + (r() - 0.5) * c * 0.3, a * (0.11 + 0.08 * r()), 1]);
+    }
+    for (let i = 0; K === 0 && i < nL * 6 && lobes.length < nL; i++) {
       const u = 2 * r() - 1, ph = r() * TAU, sq = Math.sqrt(1 - u * u), d = [sq * Math.cos(ph), sq * Math.sin(ph), u];
       if (d[1] * SE + d[2] * CE < -0.25) continue;
       const rad = a * (0.22 + 0.12 * r() + 0.06 * crown) * (1 - 0.25 * Math.max(0, d[2])), k = 1 - rad / a * 0.85 - 0.06 * r(), U = Uc + c * d[2] * k, n = narrow(U);
@@ -279,17 +286,25 @@ function treeSolid(P, r) {
     }
     const nPk = Math.round(peaks * 5 * (0.6 + 0.8 * r()));
     for (let i = 0; i < nPk; i++) { const e = (r() - 0.5) * 1.3, U = Utop - c * (0.12 + 0.12 * r()), n = narrow(U); lobes.push([a * e * n * 0.8, b * (r() - 0.4) * 0.6 * n, U + c * 0.1 * peaks, a * (0.16 + 0.08 * r()), 1.6 + 0.8 * peaks]); }
-    const core = [a * 0.74, b * 0.74, c * 0.76];
-    envelope = (E, S, U) => { const n = narrow(U); return (Math.hypot(E / (a * n), S / (b * n), (U - Uc) / c) - 1) * Math.min(a, c) * 0.9; };
+    const core = K ? null : [a * 0.74, b * 0.74, c * 0.76];
+    const ek = K ? 0.86 : 1;   // clustered leaves sit inside the crown's outline: their shade is measured from their own depth
+    envelope = (E, S, U) => { const n = narrow(U) * ek; return (Math.hypot(E / (a * n), S / (b * n), (U - Uc) / (c * ek)) - 1) * Math.min(a, c) * 0.9; };
     crownF = (E, S, U) => {
       const n = narrow(U);
-      let f = (Math.hypot(E / (core[0] * n), S / (core[1] * n), (U - Uc) / core[2]) - 1) * Math.min(core[0], core[2]) * 0.9;
+      let f = core ? (Math.hypot(E / (core[0] * n), S / (core[1] * n), (U - Uc) / core[2]) - 1) * Math.min(core[0], core[2]) * 0.9 : 1e9;
       for (const [x, y, z, rad, st] of lobes) { const dz = (U - z) / st; f = smin(f, Math.hypot(E - x, S - y, dz) - rad, 2.2); }
       return f + (0.8 + 0.9 * crown) * (vnoise3(E / 1.4, S / 1.4, U / 1.5, s2) - 0.5) * 2 + 2.4 * crown * (vnoise3(E / 3.6, S / 3.6, U / 4, s2 + 9) - 0.5) * 2 + (1 - dens) * 5 * Math.max(0, vnoise3(E / 1.9, S / 1.9, U / 2.1, s3) - 0.6);
     };
   }
-  const rt = conifer ? 1.6 : 2.4, trunkTop = U0 + c * (conifer ? 0.5 : 0.35), jx = (r() - 0.5) * 1.5;
-  const trunkF = (E, S, U) => { const t = clamp(U / trunkTop, 0, 1); return Math.max(Math.hypot(E - jx * t, S) - rt * (1.15 - 0.4 * t) - (U < 3 ? (3 - U) * 0.45 : 0), -U, U - trunkTop); };
+  const rt = conifer ? 1.6 : 2.4, trunkTop = U0 + c * (conifer ? 0.5 : clusters > 0 ? 0.08 : 0.35), jx = (r() - 0.5) * 1.5;
+  const capsule = (E, S, U, A, B, r0, r1) => { const ab = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], ap = [E - A[0], S - A[1], U - A[2]], t = clamp((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1), 0, 1); return Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t) - lerp(r0, r1, t); };
+  const fork = [jx, 0, trunkTop];
+  const trunkF = (E, S, U) => {
+    const t = clamp(U / trunkTop, 0, 1);
+    let f = Math.max(Math.hypot(E - jx * t, S) - rt * (1.15 - 0.4 * t) - (U < 3 ? (3 - U) * 0.45 : 0), -U, U - trunkTop);
+    for (const cen of branches) f = Math.min(f, capsule(E, S, U, fork, cen, rt * 0.62, rt * 0.3));   // the branches out to the leaf clusters
+    return f;
+  };
   const F = (E, S, U) => Math.max(Math.min(crownF(E, S, U), trunkF(E, S, U)), -U);
   return { F, crownF, trunkF, envelope, a, b, c, Uc, U0, Utop, W, conifer, ext: { e0: -a * 1.35, e1: a * 1.35, s0: -b * 1.35, s1: b * 1.35, u: Utop + c * 0.4 * peaks + 3 } };
 }
@@ -329,6 +344,57 @@ function byQuantile(table, v) { // table of [value, weight], ordered; v in 0..1 
   for (const [i, w] of table) { x -= w; if (x < 0) return i; }
   return table[table.length - 1][0];
 }
+// ---- ground plants: tendrils from a bulb ------------------------------------------------------------------------------------
+// Retail Red's Mars plants (MarsPlant01-08, 2x2): a few pale bulbs on the ground and `arms` tendrils that wander out `reach` px,
+// curling (`curl`), thick at the bulb and thin at the tips, lying on the ground and shiny along their length. The same solid in the
+// burnt ramp is the burnt plant (retail's MarsPlant..Crisp keeps the living plant's shape).
+const TENDRIL_GOLD = ['#441000', '#671400', '#6b2709', '#684f1e', '#745b22', '#91772e', '#b39453', '#d1b979'];
+const CHAR_RAMP = ['#0c0c0c', '#0e0f13', '#17130f', '#18140f', '#1f1f1f', '#1f1f1f', '#282727', '#343434'];   // retail MarsPlant..Crisp by luma octile
+function tendrilSolid(P, r) {
+  const arms = Math.round(clamp(P.arms ?? 7, 3, 12)), reach = P.reach ?? P.height * 1.2, thick = P.thick ?? 1.6, curl = clamp(P.curl ?? 0.6, 0, 1);
+  const segs = [], bulbs = [];
+  for (let i = 0; i < 2 + Math.floor(r() * 2); i++) bulbs.push([(r() - 0.5) * 7, (r() - 0.5) * 6, 3.6 + r() * 1.4, 3.8 + r() * 1.8]);
+  for (let i = 0; i < arms; i++) {
+    let ang = (i + 0.6 * (r() - 0.5)) / arms * TAU, x = (r() - 0.5) * 4, y = (r() - 0.5) * 4, z = 3, turn = (r() - 0.5) * 0.25;
+    const len = reach * (0.55 + 0.6 * r()), steps = Math.max(4, Math.round(len / 3));
+    for (let k = 0; k < steps; k++) {
+      const t = k / steps, t1 = (k + 1) / steps, rad0 = thick * (1 - 0.72 * t), rad1 = thick * (1 - 0.72 * t1);
+      turn = turn * 0.6 + (r() - 0.5) * 0.5 * curl; ang += turn + (r() - 0.5) * 0.7 * curl;      // kinks, but outward: the bend does not build up into loops
+      const nx = x + Math.cos(ang) * 3, ny = y + Math.sin(ang) * 3 * 0.95, nz = rad1 + 0.3 + 1.2 * (1 - t1) * (1 - t1);
+      segs.push([x, y, z, nx, ny, nz, rad0, rad1]); x = nx; y = ny; z = nz;
+    }
+  }
+  // a coarse grid of the segments near each 8 px cell, so the distance is cheap to evaluate
+  let e0 = 0, e1 = 0, s0 = 0, s1 = 0; for (const g of segs) { e0 = Math.min(e0, g[0], g[3]); e1 = Math.max(e1, g[0], g[3]); s0 = Math.min(s0, g[1], g[4]); s1 = Math.max(s1, g[1], g[4]); }
+  const C = 8, pad = thick + 6, gx0 = Math.floor((e0 - pad) / C), gy0 = Math.floor((s0 - pad) / C), gw = Math.ceil((e1 + pad) / C) - gx0 + 1, gh = Math.ceil((s1 + pad) / C) - gy0 + 1, grid = Array.from({ length: gw * gh }, () => []);
+  const reachOf = C * 0.71 + 4 + thick;
+  segs.forEach((g, i) => { for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) { const cx = (gx + gx0 + 0.5) * C, cy = (gy + gy0 + 0.5) * C, ab = [g[3] - g[0], g[4] - g[1]], t = clamp(((cx - g[0]) * ab[0] + (cy - g[1]) * ab[1]) / (ab[0] ** 2 + ab[1] ** 2 || 1), 0, 1); if (Math.hypot(cx - g[0] - ab[0] * t, cy - g[1] - ab[1] * t) < reachOf) grid[gy * gw + gx].push(i); } });
+  const F = (E, S, U) => {
+    let f = 4;                                                       // a safe step where no segment is near
+    for (const [x, y, z, rad] of bulbs) f = Math.min(f, Math.hypot(E - x, S - y, U - z) - rad);
+    const gx = Math.floor(E / C) - gx0, gy = Math.floor(S / C) - gy0;
+    if (gx >= 0 && gy >= 0 && gx < gw && gy < gh) for (const i of grid[gy * gw + gx]) {
+      const [x0, y0, z0, x1, y1, z1, r0, r1] = segs[i], ab = [x1 - x0, y1 - y0, z1 - z0], ap = [E - x0, S - y0, U - z0], t = clamp((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2), 0, 1);
+      f = Math.min(f, Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t) - lerp(r0, r1, t));
+    }
+    return Math.max(f, -U);
+  };
+  return { F, ext: { e0: e0 - thick - 2, e1: e1 + thick + 2, s0: s0 - thick - 2, s1: s1 + thick + 2, u: 10 }, W: e1 - e0 };
+}
+function tendrilFrame(P, seed, ctx, burnt = false) {
+  const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 77)), sun = worldSun(L), T = tendrilSolid(P, r);
+  const R = renderSolid({ F: T.F, eMin: T.ext.e0, eMax: T.ext.e1, sMin: T.ext.s0, sMax: T.ext.s1, uMax: T.ext.u, sun, shadowSun: flatSun(sun) }), view = [0, SE, CE], list = [];
+  for (let k = 0; k < R.w * R.h; k++) {
+    const p = R.px[k]; if (!p) continue;
+    const n = p.n, nl = n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2], direct = Math.max(0, nl) * p.vis;
+    const rf = [2 * nl * n[0] - sun[0], 2 * nl * n[1] - sun[1], 2 * nl * n[2] - sun[2]], spec = Math.pow(Math.max(0, rf[0] * view[0] + rf[1] * view[1] + rf[2] * view[2]), 9) * p.vis;
+    list.push({ k, t: 0.5 * direct + 0.3 * Math.max(0, n[2]) + (burnt ? 0.2 : 0.8) * spec + (rn() - 0.5) * 0.08, direct });
+  }
+  const c = newCanvas(R.w, R.h, R.ox, R.oy), ramp = burnt ? CHAR_RAMP : (P.colors || TENDRIL_GOLD);
+  list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => paintRGB(c, q.k % R.w, (q.k / R.w) | 0, rampAt(ramp, (i + 0.5) / list.length), q.direct));
+  return { body: quantize(c, ctx, 5, mix32(seed, 32)), R, W: Math.round(T.W), H: R.h };
+}
+
 const BURNT_TABLE = [[245, 1.5], [63, 1.5], [79, 1], [47, 12.5], [46, 6.7], [45, 6.8], [95, 14.7], [94, 9.1], [62, 6], [61, 4], [172, 3], [173, 2.5], [175, 1], [60, 2], [93, 9.3], [92, 3.5], [59, 2], [91, 3], [90, 2.2], [89, 1.2], [88, 0.6], [87, 0.4], [57, 0.6], [55, 0.4], [44, 1], [43, 0.5]];
 // ---- burnt trees (skeletons) ------------------------------------------------------------------------------------
 const BURNT_DEFAULTS = { species: 'broadleaf', height: 53, width: 0.62, forks: 3, ash: 0.5, energy: [50, 50] };
@@ -435,7 +501,8 @@ function burntFrame(P, seed, ctx) {
 }
 
 // ---- shrubs ----------------------------------------------------------------------------------------------------
-const SHRUB_DEFAULTS = { width: 28, height: 19, density: 0.55, lean: 0, energy: [20, 20] };
+// colors: the shrub's ramp (retail Green's Shrub1-3 by luma octile); flecks: second hues among its light leaves (Archipelago's fronds)
+const SHRUB_DEFAULTS = { width: 28, height: 19, density: 0.55, lean: 0, colors: ['#0f2700', '#0f2700', '#163705', '#2a6c18', '#3a8a25', '#43972b', '#459b2b', '#58b236'], flecks: [], energy: [20, 20] };
 // Spec 15 B4: density 0.12 is the sparse Shrub3 (fill 0.17, about 24 small blobs); density 0.5 and up is the dense
 // Shrub1/2 (fill 0.36-0.39, one mass holding 75% of the pixels). Texture is single-pixel speckle of 6-7 greens
 // with the dark 173 as the under-leaf shade on every edge.
@@ -443,7 +510,7 @@ function shrubFrame(P, seed, ctx) {
   const r = rng(seed), rn = rng(mix32(seed, 6));
   const W = Math.round(P.width), H = Math.round(P.height), w = W + 6, h = H + 8, cx = w / 2, cy = (h - 6) / 2 + 1;
   const ax = Math.round(cx) + (r() < 0.5 ? 0 : -1), ay = h - 5;
-  const sp = newSprite(w, h, ax, ay), occ = new Uint8Array(w * h);
+  const sp = newSprite(w, h, ax, ay), occ = new Uint8Array(w * h), c = newCanvas(w, h, ax, ay), L = lightOf(ctx), fl = (P.flecks || []).map(([hex, share]) => [rampOf([hex])[0], share]);
   const dd = clamp(P.density / 0.5, 0, 1), fill = lerp(0.15, 0.43, dd), N = Math.round(fill * W * H);
   const s1 = (r() * 1e6) | 0;
   const env = (x, y) => { const e = ((x - cx) / (W / 2)) ** 2 + ((y - cy) / (H / 2)) ** 2; return e * 0.85 + (vnoise(x / 3, y / 3, s1) - 0.5) * 0.3 <= 1; };
@@ -470,14 +537,16 @@ function shrubFrame(P, seed, ctx) {
     const has = (x, y) => cells.some(c => c[0] === x && c[1] === y);
     for (const [x, y] of cells) {
       const under = !has(x, y + 1), upper = !has(x, y - 1);
-      let c;
-      if (under) c = rn() < 0.42 ? 173 : weighted(rn, [[165, 5], [167, 2], [164, 3], [163, 2], [169, 1]]);        // the darker underside
-      else if (upper) c = weighted(rn, [[163, 32 * hi], [164, 14], [165, 32], [162, 4 * hi], [167, 4], [166, 1]]);   // lit yellow-green top
-      else c = weighted(rn, [[165, 34], [167, 10], [164, 8], [163, 8], [166, 3], [168, 2], [173, 4]]);
-      put(sp, x, y, c);
+      // ramp position: the underside dark, the lit top light (toward the sun's side a little lighter), speckled leaf by leaf
+      const side = clamp(-((x - cx) * L.x + (y - cy) * L.y) / (W / 2), -1, 1) * 0.08;
+      let u = under ? 0.04 + 0.4 * rn() : upper ? 0.6 + 0.4 * rn() * hi : 0.3 + 0.48 * rn();
+      u = clamp(u + side, 0, 1);
+      let col = rampAt(P.colors, u);
+      if (u > 0.35 && fl.length) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(q => q * Math.min(1.2, f)); break; } acc += share; } }
+      paintRGB(c, x, y, col, upper ? 0.8 : under ? 0.15 : 0.5);
     }
   }
-  return { body: cropSprite(sp, 0) };
+  return { body: cropSprite(quantize(c, ctx, 4, mix32(seed, 8)), 0) };
 }
 
 // ---- solids: a small ray marcher in TA's view ---------------------------------------------------------------------------
@@ -555,11 +624,12 @@ function rockSolid(P, r) {
   let W, D;
   if (fw === 1 && fh === 1) { W = lerp(8, 21, clamp(P.size, 0, 1.4) / 1.4); D = W * (0.72 + 0.15 * r()); }
   else { W = fw * 16 * (0.86 + 0.12 * r()) * P.size; D = fh * 16 * (0.7 + 0.12 * r()) * P.size; }
-  const hgt = W * (0.34 + 0.34 * r() + 4.2 * tall * tall);
+  const hgt = W * (0.34 + 0.34 * r() + 2.1 * tall * tall);   // retail spires stand about 2.5 times their width (Lava, Crystal)
   const bodies = [{ e: 0, s: 0, a: W / 2, b: D / 2, hgt }];
   for (let i = 1; i < Math.round(clamp(P.pieces, 1, 8)); i++) {
     const sc = 0.3 + 0.32 * r(), th = r() * TAU;
-    bodies.push({ e: Math.cos(th) * W * 0.46, s: Math.sin(th) * D * 0.42 + D * 0.1, a: W / 2 * sc, b: D / 2 * sc * (0.85 + 0.3 * r()), hgt: hgt * sc * (0.8 + 0.4 * r()) });
+    const far = 0.46 + 0.4 * r();   // some stones touch the main one, some lie apart (Desert's boulders)
+    bodies.push({ e: Math.cos(th) * W * far, s: Math.sin(th) * D * far * 0.9 + D * 0.1, a: W / 2 * sc, b: D / 2 * sc * (0.85 + 0.3 * r()), hgt: hgt * sc * (0.8 + 0.4 * r()) });
   }
   for (const b of bodies) {
     b.s1 = (r() * 1e6) | 0; b.rot = r() * TAU; b.co = Math.cos(b.rot); b.si = Math.sin(b.rot);
@@ -718,12 +788,17 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   let body, shadow = null, bodyBlend = 1, burn = null, burnt = null, gameplay = {}, footprint = [1, 1];
   const L = lightOf(ctx);
   if (kind === 'tree') {
-    const conifer = P.species === 'conifer';
-    const T = treeFrame(P, seed, ctx);
+    const conifer = P.species === 'conifer', tendril = P.species === 'tendril';
+    const T = tendril ? tendrilFrame(P, seed, ctx) : treeFrame(P, seed, ctx);
     body = cropSprite(T.body);
     shadow = tintSprite(shadowSprite(T.R, T.body.ax, T.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 41)), 0.72), ctx, 0);   // the solid's own shadow, from the map's sun
+    footprint = cellsOf(P.cells || '1x1');
     const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.78)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
-    if (!ctx.bodyOnly) { burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx); burn = treeBurn(body, burnt.body, seed, conifer); }   // the view draws only body and shadow
+    if (!ctx.bodyOnly) {   // the view draws only body and shadow
+      if (tendril) { const B = tendrilFrame(P, seed, ctx, true); burnt = { body: cropSprite(B.body), shadow: tintSprite(shadowSprite(B.R, B.body.ax, B.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 42)), 0.72), ctx, 0), gameplay: { energy: 25, metal: 0, blocking: true, reclaimable: true, flamable: false } }; }
+      else burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
+      burn = treeBurn(body, burnt.body, seed, conifer);
+    }
     const sizeFrac = clamp((P.height - 55) / 17, 0, 1);
     gameplay = { energy: pickValue(P.energy, sizeFrac, rr), metal: 0, blocking: true, reclaimable: true, flamable: true, burnTicks: 192, spreadChance: conifer ? 30 : 90 };
   } else if (kind === 'burnt') {

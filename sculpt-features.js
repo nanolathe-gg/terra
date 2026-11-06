@@ -777,9 +777,9 @@ export async function mountMapFeatures(api) {
       const f=await full(p.kind,v.params,v.seed),g=f.gameplay,[fw,fz]=v.footprint;
       if (p.kind==='tree') {
         const dead=await smudge(),burn=f.burn.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4)
-        def(n,[['description','Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['seqnameburn',seq(`${b}t${i}b`,burn)],
+        def(n,[['description','Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['seqnameburn',seq(`${b}t${i}b`,burn)],
           ['energy',g.energy],['featureburnt',`${n}B`],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','TreeBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',1]]);
-        def(`${n}B`,[['description','Burnt Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}x`,[frameOf(f.burnt.body)])],['seqnameshad',seq(`${b}t${i}xs`,[frameOf(f.burnt.shadow)])],
+        def(`${n}B`,[['description','Burnt Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}x`,[frameOf(f.burnt.body)])],['seqnameshad',seq(`${b}t${i}xs`,[frameOf(f.burnt.shadow)])],
           ['energy',f.burnt.gameplay.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);
       } else if (p.kind==='shrub') {
         const dead=await smudge();   // retail shrubs burn to nothing and die to a smudge
@@ -787,8 +787,8 @@ export async function mountMapFeatures(api) {
           ['energy',g.energy],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','ShrubBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',0]]);
       } else if (p.kind==='rock') {
         const dead=await stain();
-        def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
-          ['metal',g.metal],['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',1],['blocking',1]]);
+        def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',v.params.tall>0.4?60:rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
+          ['metal',g.metal],['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',v.params.reclaimable===false?0:1],['blocking',1]]);
       } else if (p.kind==='scar') {
         const smudgeType=v.params.type!=='stain';
         def(n,[['description',smudgeType?'Scorch Mark':'Rock Stain'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}c${i}`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}c${i}s`,[frameOf(f.shadow)])]]:[]),
