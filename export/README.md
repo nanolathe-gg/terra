@@ -84,8 +84,9 @@ Their order becomes `StartPos1` through `StartPosN`, and `numplayers` matches.
 
 Feature x/z are top-left anchor **cells**, rather than pixel positions. Every
 full footprint must lie inside the play area, without overlapping another.
-The name must appear in the prepared world's catalogue and its mounted TDF;
-footprints are checked against that TDF. A deterministic sorted name table
+The name must appear in the prepared world's catalogue (`--features-root`),
+whose footprints `map-features` read from the game's feature TDFs; the export
+itself reads no game content when it is given `--catalog-file`. A deterministic sorted name table
 supplies anchor indices, with `0xFFFE` in each remaining footprint cell.
 The terrain image must not contain feature sprites.
 
@@ -140,49 +141,26 @@ time between arriving chunks. Temporary bytes include the private job files
 and staged outputs, excluding the final files' hard links. Output filenames
 are basenames. Errors go to stderr with a nonzero exit status.
 
-## Streamed HTTP export
+## Streamed export
 
-The editor bridge keeps one Go helper per active export. It accepts one
-finished PNG at a time and removes it after quantisation; it never accumulates
-the map's PNGs or a complete map image.
+The exporter accepts one finished PNG at a time and forgets it after
+quantisation; it never accumulates the map's PNGs or a complete map image.
+Chunks must arrive in row order, increasing y then x, covering every tile
+exactly once; positions and dimensions align to 32 px.
 
-1. `POST /map-export/start`, JSON containing the manifest metadata above,
-   without `chunks`. Returns `{id,width,height,maxChunkSide}` in pixels.
-2. `POST /map-export/chunk?id=ID&x=X&y=Y&width=W&height=H`, with an opaque
-   PNG body. All four coordinates are integers; dimensions and positions
-   align to 32 px. Send chunks in row order, increasing y then x, covering
-   every tile exactly once. Each reply contains
-   `{id,receivedTiles,totalTiles,uniqueTiles}`.
-3. `POST /map-export/finish?id=ID`, with an empty body, returns the normal
-   export result after checks and publication.
-4. `DELETE /map-export?id=ID` cancels the helper and removes its exact
-   temporary filenames. The id expires on finish, error or cancellation.
+The default unique-tile memory budget is 16 MiB. Pass `--tile-budget-mb N`
+(0..64); zero spills immediately. Only tile hashes, the tile index and
+attribute maps, minimap accumulators and the bounded tile cache remain in
+memory between chunks. Hash collisions are checked against the actual tile
+bytes. Chunks are immediately quantised and deduplicated.
 
-`POST /map-export` still accepts the original JSON/base64 `chunks` array
-(1–25 chunks) and runs the same writer. Large maps use the streamed API.
-Export ids are random 32-character lowercase hex strings. Metadata requests
-are capped at 16 MiB; a PNG upload is capped at 64 MiB, and its declared
-dimensions are checked before decoding.
+`--work` names the private directory for temporary files (default the OS
+temporary directory); a work directory named `export-<32 hex digits>` gives
+the output stages exact `.map-export-ID-*.tmp` names. Complete output files
+appear by exclusive hard links after checks. The archive is published before
+the preview, so a crash cannot leave a preview without a complete archive.
 
-The default unique-tile memory budget is 16 MiB. Set
-`NANOLATHE_EXPORT_TILE_BUDGET_MB=0..64` for the HTTP bridge, or pass
-`--tile-budget-mb N` to the command; zero spills immediately. Only tile hashes,
-the tile index and attribute maps, minimap accumulators and the bounded tile
-cache remain in memory between chunks. Hash collisions are checked against
-the actual tile bytes. Chunks are immediately quantised and deduplicated.
-
-Private jobs use `nanolathe-map-export-jobs/export-ID/` under the OS temporary
-directory. `TMPDIR=/private/tmp/nanolathe-map-editor/agent-D/tmp` selects the
-card's diagnostic storage. The bridge records its process id and output
-directory in each job's owner file. On startup it cleans jobs belonging to
-the same output directory whose owner process has exited, preserving live
-jobs and unknown filenames. Cleanup unlinks exact names and removes only
-empty directories. Output stages have exact `.map-export-ID-*.tmp` names;
-complete output files appear by exclusive hard links after checks. The
-archive is published before the preview, so a crash cannot leave a preview
-without a complete archive. The server calls `MapExport.close()` at shutdown.
-
-The command-line streaming equivalent is:
+Run it so:
 
 ```sh
 map-export --stream --input metadata.json --out exports --work PRIVATE_DIR
@@ -193,3 +171,32 @@ JSON commands on stdin: `{op:"chunk",x,y,width,height,path:"local.png"}`,
 `{op:"finish"}` or `{op:"cancel"}`. Each chunk gets one progress reply;
 finish gets one result. EOF cancels an unfinished export. `--work` is optional
 and otherwise temporary files use the OS temporary directory.
+
+## In the browser
+
+The editor runs this same program in the page, on `sculpt.py` and on the
+static site alike: `GOOS=js GOARCH=wasm go build ./export` (sculpt.py builds
+it, with `-trimpath -buildvcs=false -ldflags=-s -w`; nothing built is
+committed), in a Web Worker (`sculpt-export-worker.js`), in stream mode with
+the commands above. The worker plays the shell's part: it writes each chunk
+PNG where the program reads it and hands the reply lines to the page. Go's
+js/wasm port reaches files through a Node-style `fs`; the worker's keeps them
+in the browser's Origin Private File System through synchronous access
+handles, so the tile store spills there past its budget, and the two outputs
+stay there as disk-backed files the page offers as downloads until the next
+export.
+
+The worker passes `--catalog-file` with the page's world defaults
+(`config/catalog.json`, committed in `materials/<world>.json`), the palette
+(`materials/palette.json`) and no installed map names, and, when features are
+placed, `--features-root` with a catalogue of just their names and footprints
+from the page's feature tool. It reads no game content. The result's
+`peakRSSBytes` is the size of the module's linear memory, which never shrinks,
+so it is the peak (the worker reads it; Go's own `MemStats.Sys` counts
+reserved address space and reads more than twice as high).
+
+The WebAssembly and the native exporter write the same bytes for the same
+chunks. Tile merging converts every summed product explicitly, because Go may
+fuse `x*y+z` into one rounding on arm64 and WebAssembly never does;
+`TestMergeTilesPinned` pins a merge and passes both ways
+(`GOOS=js GOARCH=wasm PATH="$PATH:$(go env GOROOT)/lib/wasm" go test ./export`).

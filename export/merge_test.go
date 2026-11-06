@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"reflect"
@@ -151,5 +155,36 @@ func TestMergeTilesIgnoresTheOrderTilesWereDiscovered(t *testing.T) {
 		if x != y {
 			t.Fatalf("slot %d draws different art when the tiles were discovered in another order", i)
 		}
+	}
+}
+
+// The merge's result is pinned: the native exporter and the browser's (this
+// package built for WebAssembly) must choose the same tiles and report the
+// same errors. Go may fuse x*y+z into one rounding on arm64, which
+// WebAssembly never does; merge.go converts each product explicitly, which
+// the language forbids fusing. Run it both ways:
+//
+//	go test ./export
+//	GOOS=js GOARCH=wasm PATH="$PATH:$(go env GOROOT)/lib/wasm" go test ./export
+func TestMergeTilesPinned(t *testing.T) {
+	s := noisyStream(t, 3000, 100, 80, 500)
+	for i := range s.indices {
+		if i%5 != 0 {
+			s.indices[i] = uint32((i*i/7)%2997 + 3) // uneven use, so merged tiles carry weights other than 1
+		}
+	}
+	summary, err := s.mergeTiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	slots := make([]byte, 0, 4*len(s.indices))
+	for _, id := range s.indices {
+		slots = binary.LittleEndian.AppendUint32(slots, id)
+	}
+	got := fmt.Sprintf("%x kept %d merged %d replaced %d mean %x all %x p99 %x worst %x", sha256.Sum256(slots), summary.KeptTiles, summary.MergedTiles, summary.ReplacedSlots,
+		math.Float64bits(summary.MeanRMS), math.Float64bits(summary.MeanRMSAll), math.Float64bits(summary.P99RMS), math.Float64bits(summary.WorstRMS))
+	const want = "7e40e64d810581e8506d0da3392269d66d7924fc72ab1fe5eae7ded880f7a8c9 kept 500 merged 1328 replaced 3245 mean 400e916b81e3d129 all 3ff8cc5f372218b8 p99 400fcfdbc999e97d worst 4013d5b9b8bba9c3"
+	if got != want {
+		t.Fatalf("merge result\n got %s\nwant %s", got, want)
 	}
 }

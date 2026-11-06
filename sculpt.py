@@ -7,6 +7,8 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -16,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js',)}
+    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -871,7 +873,6 @@ def world_configs(biomes):
 # What the page loads from a static host or from this server, by the same relative paths: the world configs (config/<world>.json and
 # config/<world>--<variant>.json), the map catalog and services.json (which server-side services exist). Everything else is a source file.
 STATIC_SERVICES = {
-    'export': 'Export needs the map exporter and the installed game content, which the online editor does not have. Run the editor locally with sculpt.py to export a playable map.',
     'features': 'The retail feature catalog is not part of the online editor, so no features can be placed. Run the editor locally with sculpt.py to place them.',
 }
 
@@ -889,6 +890,66 @@ def site_data(biomes, configs, catalogue, services):
 MAPS_URL = 'https://terraform-savelinks.danielgtaylor.workers.dev/maps'   # the live save-link Worker's maps endpoint (deploy/worker/)
 
 
+# The map exporter the page runs (sculpt-export-worker.js): export/ built for WebAssembly from source, and the wasm_exec.js of the Go
+# that built it. Nothing built is committed; the static build and the dev server each build it with the installed Go.
+EXPORTER_SOURCES = ('export', 'mapdata', 'internal')
+GO_MISSING = ('Export needs the map exporter, which this editor builds from its Go sources (export/) with Go. Go was not found on PATH '
+              'or in /usr/local/go/bin. Install Go (go.dev/dl) and export again.')
+
+
+def go_tool():
+    """The go command: on PATH, or where the official installer puts it (a plain nohup shell may not have it on PATH)."""
+    return shutil.which('go') or next((p for p in ('/usr/local/go/bin/go', '/opt/homebrew/bin/go') if os.access(p, os.X_OK)), None)
+
+
+def exporter_digest():
+    """A hash of everything the exporter is built from: its Go sources and the module files (go.mod names the Go toolchain)."""
+    digest = hashlib.sha256()
+    for path in sorted([HERE / 'go.mod', HERE / 'go.sum', *(p for d in EXPORTER_SOURCES for p in (HERE / d).rglob('*.go'))]):
+        digest.update(str(path.relative_to(HERE)).encode() + b'\0' + path.read_bytes())
+    return digest.hexdigest()
+
+
+def build_exporter():
+    """{'map-export.wasm': bytes, 'wasm_exec.js': bytes}, built now; ValueError says why it could not be. -trimpath and -buildvcs=false
+    make the bytes depend only on the sources and the toolchain, so the static build's content hash moves only when they do."""
+    go = go_tool()
+    if not go:
+        raise ValueError(GO_MISSING)
+    handle, target = tempfile.mkstemp(suffix='.wasm')
+    os.close(handle)
+    try:
+        done = subprocess.run([go, 'build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w', '-o', target, './export'], cwd=HERE,
+                              env={**os.environ, 'GOOS': 'js', 'GOARCH': 'wasm'}, capture_output=True, text=True, timeout=900)
+        if done.returncode:
+            raise ValueError('The map exporter (export/) did not build for WebAssembly: ' + (done.stderr.strip() or f'go build exited {done.returncode}'))
+        wasm = Path(target).read_bytes()
+    finally:
+        os.unlink(target)
+    root = Path(subprocess.run([go, 'env', 'GOROOT'], cwd=HERE, capture_output=True, text=True, timeout=300).stdout.strip())
+    support = next((p for p in (root / 'lib' / 'wasm' / 'wasm_exec.js', root / 'misc' / 'wasm' / 'wasm_exec.js') if p.is_file()), None)
+    if support is None:
+        raise ValueError(f'The Go at {go} has no wasm_exec.js under {root}.')
+    return {'map-export.wasm': wasm, 'wasm_exec.js': support.read_bytes()}
+
+
+class Exporter:
+    """The dev server's copy of the exporter files: built when the server starts and again on the next request after a Go source
+    changes (the digest is checked on every request, so a stale build is never served). A failed build is retried on the next request."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.digest = None
+        self.files = None
+
+    def get(self, name):
+        with self.lock:
+            digest = exporter_digest()
+            if digest != self.digest:
+                self.files = build_exporter()
+                self.digest = digest
+            return self.files[name]
+
+
 def build_site(out, biomes, configs, catalogue, maps_url=MAPS_URL):
     """Write the static site: out/index.html (opens the current build) and out/b/<content hash>/ (the page, its sources, the worlds' tables,
     ui-previews/ and the generated files). A build folder never changes once written, so a deploy cannot mix new scripts with cached old shaders."""
@@ -899,6 +960,7 @@ def build_site(out, biomes, configs, catalogue, maps_url=MAPS_URL):
         if leaf.suffix in ('.png', '.json'):
             files['ui-previews/' + leaf.name] = leaf.read_bytes()
     files.update(site_data(biomes, configs, catalogue, services))
+    files.update(build_exporter())
     digest = hashlib.sha256()
     for name in sorted(files):
         digest.update(name.encode() + b'\0' + hashlib.sha256(files[name]).digest())
@@ -922,7 +984,7 @@ def main():
                         help='comma-separated biomes to serve; the first is the default world')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
                         help='where exports, save links and the map and feature catalogues live; the worlds themselves need nothing here')
-    parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export)')
+    parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export); only reads the world catalogue from installed content without --prepared (the page exports by itself)')
     parser.add_argument('--feature-tool', type=Path, help='Card D feature catalogue binary (default <assets-root>/bin/map-features)')
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
     parser.add_argument('--prepared', action='store_true', help='read the saved map-catalog.json and feature catalogues in the assets root instead of the retail sources (BUNDLE.md); worlds never read retail sources')
@@ -935,14 +997,25 @@ def main():
     # A world has features to offer when its catalogue is saved (prepared) or the helper that makes it is built.
     features_installed = lambda world: (args.assets_root / 'features' / world / 'catalog.json').is_file() or (not args.prepared and feature_tool.is_file())
     if args.build_site:
-        print(build_site(args.build_site, biomes, configs, catalogue, args.maps_url))
+        try:
+            print(build_site(args.build_site, biomes, configs, catalogue, args.maps_url))
+        except ValueError as err:
+            parser.exit(1, f'sculpt.py --build-site: {err}\n')
         return
     from sculpt_export import MapExport
     map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
     from sculpt_maps import SavedMaps
     saved_maps = SavedMaps(args.assets_root)
-    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'export': {'available': True}, 'features': {'available': True}, 'maps': {'available': True, 'url': 'api/maps'}}
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'features': {'available': True}, 'maps': {'available': True, 'url': 'api/maps'}}
     generated = site_data(biomes, configs, catalogue, services)
+    exporter = Exporter()
+
+    def warm():   # build at start, so the first export need not wait for Go
+        try:
+            exporter.get('wasm_exec.js')
+        except (OSError, ValueError, subprocess.SubprocessError) as err:
+            print(f'Map exporter not built: {err}', flush=True)
+    threading.Thread(target=warm, daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -962,7 +1035,14 @@ def main():
                 return
             content_type = 'text/plain; charset=utf-8'
             name = path.strip('/')
-            if name in generated:
+            if name in ('map-export.wasm', 'wasm_exec.js'):
+                try:
+                    body = exporter.get(name)
+                except (OSError, ValueError, subprocess.SubprocessError) as err:
+                    map_export.reply(self, {'error': str(err)}, 503)
+                    return
+                content_type = 'application/wasm' if name.endswith('.wasm') else 'text/javascript; charset=utf-8'
+            elif name in generated:
                 body = generated[name]
                 content_type = 'application/json'
             else:
@@ -994,20 +1074,8 @@ def main():
                 pass
 
         def do_POST(self):
-            if saved_maps.post(self, self.path):
-                return
-            try:
-                if not map_export.post(self, self.path):
-                    self.send_error(404)
-            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
-                map_export.reply(self, {'error': str(err)}, 400)
-
-        def do_DELETE(self):
-            try:
-                if not map_export.delete(self, self.path):
-                    self.send_error(404)
-            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
-                map_export.reply(self, {'error': str(err)}, 400)
+            if not saved_maps.post(self, self.path):
+                self.send_error(404)
 
         def log_message(self, fmt, *args):
             if args and str(args[1]) not in ('200', '304'):
@@ -1020,7 +1088,6 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        map_export.close()
         server.server_close()
 
 

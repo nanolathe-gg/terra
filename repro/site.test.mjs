@@ -1,4 +1,5 @@
-// The static build (python3 sculpt.py --build-site): a versioned folder, the page's files at relative paths, every world's configs, services.
+// The static build (python3 sculpt.py --build-site, which needs Go): a versioned folder, the page's files at relative paths, every world's configs,
+// services and the map exporter.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
@@ -27,7 +28,15 @@ test('every world and variant has a config file, and the services are declared',
   assert.ok(JSON.parse(read('config/catalog.json')).worlds.green);
   assert.equal(services.maps.available, true);
   assert.match(services.maps.url, /^https:\/\/terraform-savelinks\.[a-z0-9-]+\.workers\.dev\/maps$/);
-  for (const name of ['export', 'features']) assert.equal(services[name].available, false), assert.ok(services[name].reason.length > 20);
+  assert.equal(services.features.available, false); assert.ok(services.features.reason.length > 20);
+  assert.equal(services.export, undefined, 'export runs in the page everywhere: no service to declare');
+});
+
+test('the build carries the map exporter, built from export/ for WebAssembly', () => {
+  const wasm = readFileSync(join(folder, 'map-export.wasm'));
+  assert.deepEqual([...wasm.subarray(0, 4)], [0, 0x61, 0x73, 0x6d], 'a WebAssembly module');
+  assert.ok(read('wasm_exec.js').includes('globalThis.Go'), "Go's wasm_exec.js");
+  assert.ok(read('sculpt-export-worker.js').includes("importScripts('wasm_exec.js')"));
 });
 
 test('the page and its modules fetch by relative paths', () => {

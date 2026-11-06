@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/png"
@@ -73,22 +74,30 @@ func prepareChunks(requests []chunk, manifestDir string, w, h int) ([]preparedCh
 }
 
 func readChunk(chunk preparedChunk) (image.Image, error) {
+	// One read of the whole PNG (at most 64 MiB) rather than the decoder's
+	// many small ones: each read is a system call natively, and in the browser
+	// a crossing from WebAssembly to the worker's file system.
 	f, err := os.Open(chunk.Path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	config, err := png.DecodeConfig(io.LimitReader(f, 64<<20))
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	data := make([]byte, min(info.Size(), 64<<20))
+	if _, err := io.ReadFull(f, data); err != nil {
+		return nil, fmt.Errorf("chunk %s: %w", chunk.Path, err)
+	}
+	config, err := png.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("chunk %s: %w", chunk.Path, err)
 	}
 	if config.Width != chunk.Width || config.Height != chunk.Height {
 		return nil, fmt.Errorf("chunk %s dimensions differ from its declared %dx%d", chunk.Path, chunk.Width, chunk.Height)
 	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, err
-	}
-	img, err := png.Decode(io.LimitReader(f, 64<<20))
+	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("chunk %s: %w", chunk.Path, err)
 	}
@@ -102,6 +111,13 @@ type quantizer struct {
 	palette [256][3]byte
 	exact   map[uint32]byte
 	nearest map[uint32]byte
+	recent  [1 << 12]recentColor // the last answer per hashed color: maps are slow per pixel, above all in WebAssembly
+}
+
+type recentColor struct {
+	key          uint32
+	index        byte
+	exact, known bool
 }
 
 func newQuantizer(palette [256][3]byte) *quantizer {
@@ -119,6 +135,16 @@ func rgbKey(r, g, b byte) uint32 { return uint32(r)<<16 | uint32(g)<<8 | uint32(
 
 func (q *quantizer) index(r, g, b byte) (byte, bool) {
 	key := rgbKey(r, g, b)
+	slot := &q.recent[(key*2654435761)>>20]
+	if slot.known && slot.key == key {
+		return slot.index, slot.exact
+	}
+	index, exact := q.lookup(key, r, g, b)
+	*slot = recentColor{key: key, index: index, exact: exact, known: true}
+	return index, exact
+}
+
+func (q *quantizer) lookup(key uint32, r, g, b byte) (byte, bool) {
 	if index, ok := q.exact[key]; ok {
 		return index, true
 	}

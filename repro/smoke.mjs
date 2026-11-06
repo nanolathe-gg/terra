@@ -1,7 +1,8 @@
 // Smoke run: for each world, open the default editor (/sculpt with no map size, the 4x4 map), paint one stroke with every brush,
 // undo it, and export. With --page8 it also opens one 8x8 map per world in --worlds8 (default green; which pages), paints one stroke and undoes it.
 //   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export] [--shore]
-// Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console.
+// Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console. The export runs in
+// the page (export/ built for WebAssembly, in a worker), so this works on sculpt.py and on a static build alike; it must pass its self-check.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
@@ -91,7 +92,7 @@ for (const world of worlds) {
           for (let i = 0; i < 400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);   // the Time pass after the last undo
           const name = `Smoke${world}${Date.now() % 100000}`;
           await ev(`window.smokeExport={done:false};sculptMap.export(${JSON.stringify(name)}).then(x=>window.smokeExport={done:true,x},e=>window.smokeExport={done:true,error:e.message});true`);
-          for (let i = 0; i < 1200; i++) { const q = await ev('window.smokeExport'); if (q?.done) { r.export = q.error ? 'FAILED: ' + q.error : 'ok'; r.exportResult = JSON.stringify(q.x ?? null).slice(0, 200); break; } await sleep(250); }
+          for (let i = 0; i < 1200; i++) { const q = await ev('window.smokeExport'); if (q?.done) { const check = q.x?.selfCheck; r.export = q.error ? 'FAILED: ' + q.error : check?.tnt && check.ota && check.archive && q.x.archiveBytes > 0 ? 'ok' : 'FAILED: self-check ' + JSON.stringify(check); r.exportResult = JSON.stringify(q.x ?? null).slice(0, 200); break; } await sleep(250); }
           r.export ??= 'FAILED: timed out';
           if (r.export !== 'ok') bad++;
         }
