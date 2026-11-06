@@ -62,11 +62,15 @@ export const FORMS = {
   lfBraided: () => ({knots: [[0, 0], [.15, .06], [.3, .3], [.42, .75], [.5, 1], [1, 1]]}),
   // A ramp's travel strip: a level center, rounded shoulders.
   lfRamp: () => ({knots: [[0, 0], [.2, .1], [.45, .7], [.6, 1], [1, 1]]}),
+  // lfcrater: a crater, a signed section dug into the ground it lands on (Height reference Ground, Flatten to): the outer flank rises from the foot to a rim
+  // .42 of the depth above the ground at .4 of the half width (1.1 rim radii, the foot at 1.8), the wall falls past the ground at .53 to the floor, flat from .93.
+  // Measured from retail Moon's 80-120 px craters (16-px heights: rim .32-.43 of the depth, flank down by 1.4-1.8 rim radii); Red's and Crystal's carry no rim.
+  lfCrater: () => ({knots: [[0, 0], [.12, -.06], [.26, -.16], [.36, -.36], [.4, -.42], [.46, -.3], [.53, -.06], [.7, .4], [.84, .8], [.93, .97], [1, 1]]}),
 };
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
-export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river']];
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river'], ['lfCrater', 'Crater']];
 // The palette entry a landform's section form belongs to (the Tool preset menu restyles a selected landform as that entry); a shore is deep water when it cuts.
-export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided',
+export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided', lfCrater: 'crater',
   lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).
 export const defaultForm = kind => kind === 'spurs' ? 'mountain' : kind === 'landform' ? 'lfPlateau' : 'plateau';
