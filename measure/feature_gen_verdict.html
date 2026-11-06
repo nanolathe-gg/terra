@@ -1,8 +1,9 @@
-<h2>Verdict, round 9 (trees, rocks, deposits; fire is being rebuilt elsewhere)</h2>
-<p>Round 9 follows the owner's notes on round 8. Compared directly with retail on my machine (sheets are local).</p>
-<ul>
-<li><b>Deposits.</b> Noisier brushed metal: finer per-pixel grain, wider ramp jitter, run length and phase different on every row so the streaks break up, a few off-tone specks. Stone pixel counts are unchanged (218 / 650 / 863 / 870 at metal 86 / 127 / 187 / 223; retail 198 / 564 / 806 / 886). By eye retail's glints are still denser.</li>
-<li><b>Trees.</b> The crown top is built from 2-6 upward-reaching leaf and branch clusters with points, leaning toward the sun (count and height follow the peaks control; taper and peaks keep their retail Green defaults of 0.5). Broadleaf height 72 (retail 67-71), width 49 (47-52), fill 0.61 (0.55-0.65). The per-sprite scalar table matches fewer broadleaf metrics than before (7 of 14, was 10) because the outline changed; by eye the tops now have points but retail's are still more irregular.</li>
-<li><b>Rocks.</b> A darker vertical front face below the lit top with a faint ridge line, scaled by the shade control. Bottom-row delta -67 (retail -46 to -58), rim -48 (retail -43 to -71), fill 0.73. No highlight in the shaded lower right (tested).</li>
-<li>Fire, burnt trees, shrubs, conifers, vents and scars were not touched this round.</li>
-</ul>
+<h2>Verdict, round 10 (trees only)</h2>
+<p>Owner's note: retail highlights cluster bright pixels together; ours were spread out. Every bright-pixel source is now tied to the bright clumps (flecks only appear inside a clump, there are no free-floating bright greens), the lit base is calmer and the clumps are smaller and more numerous. Measured on index 37/38 (12 generated sprites, retail Tree1-3):</p>
+<table><tr><th>measure</th><th>retail</th><th>round 9</th><th>round 10</th></tr>
+<tr><td>clumps of 4 px or more</td><td>34.7</td><td>33.2</td><td>33.2</td></tr>
+<tr><td>median clump size</td><td>6.2</td><td>7.3</td><td>6.7</td></tr>
+<tr><td>largest clump</td><td>29.7</td><td>67.8</td><td>34</td></tr>
+<tr><td>bright pixels with no bright neighbor</td><td>0.068</td><td>0.042</td><td>0.056</td></tr>
+<tr><td>bright pixels inside clumps of 4 or more</td><td>0.60</td><td>0.79</td><td>0.70</td></tr></table>
+<p>By eye the bright flecks now sit with the bright greens on the sun-facing lobes; retail still has more of them on the upper left. Nothing else changed this round.</p>
