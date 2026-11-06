@@ -185,5 +185,7 @@ the map exporter: `map-export.wasm`, built then from `export/` with Go, and that
 version is a hash of the contents, so a deploy never mixes new scripts with cached old shaders. Any static host serves it
 (`cd <dir>/b/<version> && python3 -m http.server`, then open `/sculpt.html`). `sculpt.py` serves the same relative paths for development;
 it builds the exporter when it starts and again after a Go source changes; without Go, an export says so in the Export pane.
-`services.json` says which server services exist (the retail feature catalog, saving to a server); on the static site the feature catalog is
-off and its controls say why. `.github/workflows/pages.yml` checks, builds and deploys the site to GitHub Pages.
+`services.json` lists the worlds and where share links are saved (the save-link Worker on the static site, `api/maps` under `sculpt.py`); map
+features are generated in the page, so there is no feature service. `.github/workflows/pages.yml` checks, builds and deploys the site to
+GitHub Pages. Measured on November 6: a static build served by `python3 -m http.server` passes `repro/smoke.mjs --page8` and
+`repro/features.mjs`.
