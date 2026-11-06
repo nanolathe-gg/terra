@@ -59,7 +59,13 @@ export function mountMapExport(api) {
     $('map-export-state').textContent='Sampling TNT cell corners…';
     const sampled=await api.stream.sampleHeights(signal);
     const warning=sampled.clipped?`Warning: ${sampled.clipped} cell heights clamped to 0–255. `:'';
-    const metadata={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(sampled.heights),settings,features:[],starts:placements.starts};   // generated features are packed into the archive by a later card
+    // The map's generated features (sculpt-features.js): their pack for the archive, their placements by name, and the deposits and
+    // vents painted into the art, each anchored on these heights.
+    $('map-export-state').textContent=warning+'Drawing the map’s features…';
+    const drawn=await api.features?.()?.exportFeatures?.({name,heights:sampled.heights,width:map.widthCells,bakeArt:api.stream.bakeArt,signal})??{pack:null,placements:[],stamps:[]};
+    const stamps=drawn.stamps.map(s => { const c=new OffscreenCanvas(128,128); c.getContext('2d').putImageData(new ImageData(s.rgba,128,128),0,0); return {...s,canvas:c}; });
+    const paint=(context,rect) => { for (const s of stamps) if (s.ox<rect.x+rect.width && s.ox+128>rect.x && s.oy<rect.y+rect.height && s.oy+128>rect.y) context.drawImage(s.canvas,s.ox-rect.x,s.oy-rect.y); };
+    const metadata={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(sampled.heights),settings,features:drawn.placements,starts:placements.starts};
     $('map-export-state').textContent=warning+'Loading the map exporter…';
     const palette=await fetch('materials/palette.json').then(r => r.json()).then(data => data.indexed);
     const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),b => b.toString(16).padStart(2,'0')).join('');
@@ -67,7 +73,7 @@ export function mountMapExport(api) {
     const worker=exporter(); signal.addEventListener('abort',worker.stop,{once:true});
     try {
       // The tile store's largest budget: a map within the TNT's 65,536 tiles keeps every tile in memory, and only a larger one spills to OPFS.
-      await worker.call({op:'start',job:id,metadata,catalog:{worlds:catalogue.worlds,palette,installedNames:[]},features:api.features?.()?.exportCatalogue?.()??null,budgetMB:64});
+      await worker.call({op:'start',job:id,metadata,catalog:{worlds:catalogue.worlds,palette,installedNames:[]},features:drawn.pack,budgetMB:64});
       await api.stream.exportChunks(async (chunk,index,total) => {
         signal.throwIfAborted(); if (api.revision()!==token) throw new Error('Map changed during export.');
         const png=await chunk.png.arrayBuffer();
@@ -75,7 +81,7 @@ export function mountMapExport(api) {
         // Projected from the slots received so far; a dense map reads within 10% of its final count after 5% of the slots.
         const projected=result.receivedTiles>=result.totalTiles/20?Math.round(result.uniqueTiles/result.receivedTiles*result.totalTiles):0;
         $('map-export-state').textContent=warning+`Baking and encoding ${index+1} / ${total} chunks · ${result.uniqueTiles} unique tiles`+(projected>TILE_LIMIT?` · about ${projected.toLocaleString('en-US')} expected, over ${TILE_LIMIT.toLocaleString('en-US')}: similar tiles will be merged`:'');
-      },signal);
+      },signal,paint);
       $('map-export-state').textContent=warning+'Checking TNT, OTA and archive…';
       const {result,archive,indexed}=await worker.call({op:'finish'});
       return {...result,archiveBytes:archive.size,indexedBytes:indexed.size,files:{archive,indexed},clampedCells:sampled.clipped};
@@ -92,7 +98,7 @@ export function mountMapExport(api) {
     busy=true; abort=new AbortController(); $('map-cancel').hidden=false; $('map-cancel').disabled=false; update(); $('map-controls').disabled=true; api.busy(true); $('map-download').replaceChildren(); endJob();
     try {
       const result=await streamedExport(name,description,settings,placements,token);
-      $('map-export-state').textContent=(result.clampedCells?`Warning: ${result.clampedCells} cell heights clamped to 0–255. `:'')+(result.merge?`${result.merge.distinctTiles} distinct tiles merged into ${result.merge.keptTiles}: ${(100*result.merge.replacedSlots/result.tileSlots).toFixed(1)}% of ${result.tileSlots} slots use a similar tile instead (about ${(result.merge.meanRMS/Math.sqrt(3)).toFixed(1)} of 255 apart per color). `:`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. `)+`Self-check passed. ${result.starts.length} starts; generated features are not in exported maps yet.`;
+      $('map-export-state').textContent=(result.clampedCells?`Warning: ${result.clampedCells} cell heights clamped to 0–255. `:'')+(result.merge?`${result.merge.distinctTiles} distinct tiles merged into ${result.merge.keptTiles}: ${(100*result.merge.replacedSlots/result.tileSlots).toFixed(1)}% of ${result.tileSlots} slots use a similar tile instead (about ${(result.merge.meanRMS/Math.sqrt(3)).toFixed(1)} of 255 apart per color). `:`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. `)+`Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
       for (const [label,key] of [['Download .ufo','archive'],['Indexed terrain image','indexed']]) { const a=document.createElement('a'); a.textContent=label; a.href=URL.createObjectURL(result.files[key]); job.urls.push(a.href); a.download=result[key]; a.style.display='block'; $('map-download').append(a); }
       return result;
     } catch (err) {

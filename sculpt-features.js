@@ -732,6 +732,74 @@ export async function mountMapFeatures(api) {
     }
     ink.restore(); if (mode) canvas.style.cursor=space?'grab':'crosshair';
   }
+  // ---- export: the map's feature pack (export/featurepack.go) and its painted deposits and vents ----
+  // Names carry a prefix of the map's own: TF and six base-36 digits of a hash of everything the pack's bytes depend on, the map's
+  // name included, so two maps never share a name with different bytes (a feature lookup takes the first definition it finds).
+  const base64=bytes => { let text=''; for (let i=0;i<bytes.length;i+=0x8000) text+=String.fromCharCode(...bytes.subarray(i,i+0x8000)); return btoa(text); };
+  const frameOf=(s,duration=10) => ({width:s.w,height:s.h,x:s.ax,y:s.ay,duration,pixels:base64(s.idx),opaque:base64(s.a)});
+  const hashText=text => { let h=0x811c9dc5; for (let i=0;i<text.length;i++) h=hash32(h,text.charCodeAt(i)); return h; };
+  const rockHeight=([fw,fz]) => fw*fz===1?10:fw*fz<=4?15:20;   // retail rocks: 7-20 by size (spec section 4)
+  function exportNames(prefix) {
+    const P=prefix,counts={tree:'Tree',shrub:'Shrub',rock:'Rock',scar:'Scar'};
+    return p => p.kind==='deposit'?`${P}Metal${p.metal}`:p.kind==='vent'?`${P}Vent`:`${P}${counts[p.kind]}${p.v+1}`;
+  }
+  async function featurePack(name) {
+    const sun=light(); if (!sun) throw new Error('Wait for the terrain to draw before exporting its features.');
+    const used=[...new Map(placements.map(p => [p.kind+'|'+(p.kind==='deposit'?p.metal:GROUND_KINDS.includes(p.kind)?'':p.v),p])).values()].sort(ordered);
+    const prefix='TF'+(hashText(JSON.stringify({name,world:config.biomeId,variant:config.variant||'',set,sun,used:used.map(p => [p.kind,p.v,p.metal??null])}))).toString(36).padStart(6,'0').slice(-6);
+    const P=prefix,b=prefix.toLowerCase(),nameOf=exportNames(P),defs=[],sequences=[];
+    const def=(n,keys) => defs.push({name:n,keys:[...keys,['filename',b]].map(([k,v]) => [k,String(v)])});
+    const seq=(n,frames) => { sequences.push({name:n,frames}); return n; };
+    const full=(kind,params,seed) => work({type:'full',kind,params,seed,light:sun});
+    const successors={};
+    const smudge=async () => successors.smudge??=(async () => { const f=await full('scar',{type:'smudge'},hash32(set.scar?.seed??4783,0x5d06e));
+      def(`${P}Smudge`,[['description','Scorch Mark'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}sm`,[frameOf(f.body)])],['animtrans',1],['reclaimable',0],['blocking',0],['featuredead',`${P}Smudge`]]); return `${P}Smudge`; })();
+    const stain=async () => successors.stain??=(async () => { const f=await full('scar',{type:'stain',size:1},hash32(set.scar?.seed??4783,0x57a1));
+      def(`${P}Stain`,[['description','Rock Rubble'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}st`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}sts`,[frameOf(f.shadow)])]]:[]),['shadtrans',1],['damage',20000],['reclaimable',0],['blocking',0],['featuredead',`${P}Stain`]]); return `${P}Stain`; })();
+    let voidSeq=null;
+    const transparent=() => voidSeq??=seq(`${b}v`,[{width:1,height:1,x:0,y:0,duration:10,pixels:base64(new Uint8Array([9])),opaque:base64(new Uint8Array([0]))}]);
+    for (const p of used) {
+      const n=nameOf(p),v=variantOf(p),i=p.v+1;
+      if (p.kind==='deposit') { def(n,[['description','Metal'],['footprintx',3],['footprintz',3],['height',4],['seqname',transparent()],['metal',p.metal],['damage',32009],['indestructible',1],['reclaimable',0],['blocking',0],['shadtrans',1]]); continue; }
+      if (p.kind==='vent') { def(n,[['description','Thermal Vent'],['footprintx',1],['footprintz',1],['height',0],['seqname',transparent()],['animating',1],['geothermal',1],['indestructible',1],['blocking',0]]); continue; }
+      const f=await full(p.kind,v.params,v.seed),g=f.gameplay,[fw,fz]=v.footprint;
+      if (p.kind==='tree') {
+        const dead=await smudge(),burn=f.burn.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4)
+        def(n,[['description','Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['seqnameburn',seq(`${b}t${i}b`,burn)],
+          ['energy',g.energy],['featureburnt',`${n}B`],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','TreeBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',1]]);
+        def(`${n}B`,[['description','Burnt Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}x`,[frameOf(f.burnt.body)])],['seqnameshad',seq(`${b}t${i}xs`,[frameOf(f.burnt.shadow)])],
+          ['energy',f.burnt.gameplay.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);
+      } else if (p.kind==='shrub') {
+        const dead=await smudge();   // retail shrubs burn to nothing and die to a smudge
+        def(n,[['description','Shrub'],['footprintx',1],['footprintz',1],['height',4],['seqname',seq(`${b}h${i}`,[frameOf(f.body)])],['seqnameburn',seq(`${b}h${i}b`,f.burn.map(s => frameOf(s,2)))],
+          ['energy',g.energy],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','ShrubBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',0]]);
+      } else if (p.kind==='rock') {
+        const dead=await stain();
+        def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
+          ['metal',g.metal],['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',1],['blocking',1]]);
+      } else if (p.kind==='scar') {
+        const smudgeType=v.params.type!=='stain';
+        def(n,[['description',smudgeType?'Scorch Mark':'Rock Stain'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}c${i}`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}c${i}s`,[frameOf(f.shadow)])]]:[]),
+          ['animtrans',smudgeType?1:0],['shadtrans',1],['damage',smudgeType?0:20000],['reclaimable',0],['blocking',0],['featuredead',n]]);
+      }
+    }
+    return {pack:{prefix,defs,sequences},nameOf};
+  }
+  // Everything the export needs of the features: the pack, the placements by name, and each deposit's and vent's painted pixels at
+  // its place in the export art (anchored on the exported heights, painted on clean export art, in the order the view draws them).
+  async function exportFeatures({name,heights,width,bakeArt,signal}) {
+    if (!placements.length) return {pack:null,placements:[],stamps:[]};
+    const {pack,nameOf}=await featurePack(name),out=[];
+    for (const p of placements.filter(q => GROUND_KINDS.includes(q.kind)).sort(drawOrder)) {
+      signal?.throwIfAborted();
+      const at=(x,z) => heights[z*width+x],origin=originOf(p,[at(p.x,p.z),at(p.x+1,p.z),at(p.x,p.z+1),at(p.x+1,p.z+1)]),g=grounds.get(origin.ox+','+origin.oy),rect=patchRect(origin);
+      let rgba=g?.rgba && !g.stale?g.rgba.slice():null;
+      if (!rgba) { const art=rect && await bakeArt(rect); if (rect && !art) throw new Error('The map changed while its deposits were painted; export again.'); rgba=art?patchOf(origin,rect,art.data):flatGround(); }
+      out.push({ox:origin.ox,oy:origin.oy,rgba:await paint(p,rgba)});
+    }
+    return {pack,placements:placements.map(p => ({name:nameOf(p),x:p.x,z:p.z})).sort(ordered),stamps:out};
+  }
+
   // Resolves when every requested sprite and stamp is drawn and no ground waits to be read (tests and captures).
   async function settled() {
     const frame=() => new Promise(resolve => requestAnimationFrame(resolve));
@@ -746,7 +814,7 @@ export async function mountMapFeatures(api) {
 
   status(kinds.length>2?'Features ready.':'This world has generated deposits and vents only.'); update();
   return {serialize,load,draw,deactivate,activate,addFeature,removeFeature,removeSelected,rerollSelected,setSelectedMetal,moveSelected,changeSet,addStart,moveStart,removeStart,setFill,fillRegion,
-    pointerSelect,hitAt,clearSelection,fitGround,viewPoint:index => placements[index]?viewPoint(placements[index]):null,selected:() => [...selection].map(p => placements.indexOf(p)).sort((a,b) => a-b),select:list => { selection=new Set(list.map(i => placements[i]).filter(Boolean)); selectionChanged(); },groundChanged,settled,
+    pointerSelect,hitAt,clearSelection,fitGround,exportFeatures,viewPoint:index => placements[index]?viewPoint(placements[index]):null,selected:() => [...selection].map(p => placements.indexOf(p)).sort((a,b) => a-b),select:list => { selection=new Set(list.map(i => placements[i]).filter(Boolean)); selectionChanged(); },groundChanged,settled,
     stats:() => ({imageBytes:[...sprites.values()].reduce((n,e) => n+(e.body?e.body.w*e.body.h*4:0)+(e.shadow?e.shadow.w*e.shadow.h*4:0),0)+[...stamps.values()].filter(s => s.bitmap).length*PATCH*PATCH*4,
       sprites:sprites.size,stamps:stamps.size,grounds:{fitted:[...grounds.values()].filter(g => g.rgba && !g.stale).length,waiting:[...grounds.values()].filter(g => g.stale && !g.failed).length,failed:[...grounds.values()].filter(g => g.failed).length}}),
     anchors:() => placements.filter(p => GROUND_KINDS.includes(p.kind)).map(p => ({kind:p.kind,x:p.x,z:p.z,origin:exactOrigin(p)})),

@@ -1,6 +1,6 @@
 // Interaction regression for generated map features (sculpt-features.js), with real pointer and key input: the Features tool's
 // set and placement, the Select tool's feature selection (select, Shift-add, drag on the cell grid, metal, re-roll, Delete), undo,
-// an old save's retail placements, and a world without generated trees. Writes screenshots to --out.
+// the export of the placed features, an old save's retail placements, and a world without generated trees. Writes screenshots to --out.
 //   node repro/features.mjs --server http://127.0.0.1:8941 --port 9803 --out /tmp/features-e2e
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -83,6 +83,10 @@ try {
   const rock = list.find(p => p.kind === 'rock'), at = await screenOf('deposit', back.x, back.z); await click(at);
   const target = await screenOf('rock', rock.x, rock.z); await drag(at, target);
   assert.deepEqual((({x, z}) => [x, z])((await placements()).find(p => p.kind === 'deposit')), [back.x, back.z]);
+  // The export packs them: every placed feature in the archive's TNT, its sections and sprite bank in the archive, the self-check passed.
+  for (let i = 0; i < 2400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);
+  const exported = await ev(`sculptMap.export('Features Test '+Date.now()%1e6).then(r => ({count: r.featureCount, check: r.selfCheck, placed: sculptCanvas.features.serialize().features.length}), e => ({error: e.message}))`);
+  assert.equal(exported.error, undefined); assert.equal(exported.count, exported.placed); assert.equal(exported.check.archive, true); report.export = `${exported.count} features exported, self-check passed`;
   // An old save's retail placements load without them and say so.
   const loaded = await ev(`(async()=>{const s=sculptRegion.sketch();s.mapData={...s.mapData,features:[{name:'Tree1',x:5,z:5},...s.mapData.features]};sculptRegion.loadSketch(s);await sculptCanvas.idle();return {n:sculptCanvas.features.serialize().features.length,status:document.getElementById('status').textContent};})()`);
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 retail feature was left out/); report.oldSave = loaded.status;
