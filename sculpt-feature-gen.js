@@ -621,7 +621,7 @@ function drawFlame(cv, o, rr) {
     if (lump) { const u = clamp(dx / o.wl, 0, 1); return top * Math.sqrt(Math.max(0, 1 - u * u)) * (0.85 + 0.3 * nz(xe, 3, 5, 3)); }
     const env = Math.exp(-Math.pow(dx / (half * 0.72), 2)), n = nz(xe, 0, 6.5, 0), ridge = Math.pow(clamp((n - 0.2) / 0.6, 0, 1), 1.7);
     const flank = 0.42 * Math.exp(-Math.pow((dx - half * 0.7) / (half * 0.3), 2)) * Math.pow(clamp((nz(xe, 3, 4.5, 17) - 0.25) / 0.5, 0, 1), 1.1);   // tongues that climb the crown's flanks
-    return Math.min(top + 3, top * 1.25 * Math.max(env * (0.1 + 1.0 * ridge), flank));
+    return Math.min(top + 3, top * 1.25 * Math.max(env * (0.1 + 1.0 * ridge), flank, 0.42 * Math.exp(-Math.pow(dx / (half * 0.45), 2)) * (0.8 + 0.4 * nz(xe, 5, 5, 71))));
   };
   // a broken mass: 2-3 lobes side by side (uneven, off the trunk) with gaps between them where the charred crown shows
   const nLb = o.lump ? 1 : 2 + (nz(5, 5, 8, 44) > 0.75 ? 1 : 0), lobes = [];
@@ -644,7 +644,7 @@ function drawFlame(cv, o, rr) {
     if (dx > 18 && !o.lump && nz(x, y, 7, 61) < 0.42) continue;       // far flank: gaps
     const loc = Math.max(tp, coreP) + 1;
     const h = 0.9 - 0.1 * Math.pow(clamp(up / loc, 0, 1.2), 0.95) - 0.3 * Math.pow(dx / Math.max(half, 6), 1.2) + 0.8 * (nz(x, y, 4.2, 11, 1.1) - 0.5) + 0.3 * (nz(x, y, 2, 13, 0.8) - 0.5);
-    pts.push(y * cv.w + x); heat.push(h);
+    pts.push(y * cv.w + x); heat.push(Math.round(h * 6) / 6 + (rr() - 0.5) * 0.14);   // hard-edged color patches plus pixel-level jitter, not a smooth gradient
   }
   // ragged edges: high-frequency erosion at the rim, holes inside, then detached fragments and thin wisps (retail frames are busier than a clean outline)
   { const W0 = cv.w, set0 = new Set(pts), keep = [];
@@ -674,6 +674,12 @@ function drawFlame(cv, o, rr) {
       let x = cx0 + side * (3 + Math.round(rr() * 7)), y = ty + 3 + Math.round(rr() * 14) - Math.round(rr() * (o.lump ? 3 : 6)) + (side > 0 ? 0 : 2);
       const n = 3 + Math.floor(rr() * 8);
       for (let t = 0; t < n; t++) { add(x, y, 0.2 + 0.2 * rr()); const d = pick(rr, [[1, 0], [-1, 0], [0, -1], [0, -1], [0, 1]]); x += d[0]; y += d[1]; }
+    }
+    const nLk = o.lump ? 1 : 4 + Math.floor(rr() * 4);
+    for (let f = 0; f < nLk && cols.length; f++) {                          // licks: 2 px wide curling tongues off the tips and flanks
+      const cx0 = cols[(rr() * cols.length) | 0]; let x = cx0 + (rr() < 0.5 ? -1 : 1) * Math.round(rr() * 3), y = colTopOf.get(cx0) + Math.round(rr() * 10);
+      const len = 5 + Math.floor(rr() * 9); let lean = (rr() - 0.5) * 0.9;
+      for (let t = 0; t < len; t++) { const hot = 0.28 + 0.1 * rr(); add(Math.round(x), y, hot); if (t < len * 0.6) add(Math.round(x) + 1, y, hot - 0.05); y -= 1; lean += (rr() - 0.5) * 0.5; x += lean; if (t > len - 4) x += (lean > 0 ? 1 : -1) * 0.7; }
     }
     const nW = o.lump ? 0 : Math.floor(rr() * 2);
     for (let f = 0; f < nW && cols.length; f++) {                           // thin wisps off the tips
@@ -750,7 +756,7 @@ function burnSequence(tree, burnt, seed, nFrames = 96, conifer = false) {
       for (let k = 0; k < last.w * last.h; k++) if (last.a[k] && re() < 0.16) last.idx[k] = weighted(re, [[205, 30], [200, 18], [203, 14], [204, 14], [211, 8], [210, 8], [206, 8]]);
       frames[f] = last; continue;
     }
-    const dieK = f >= 91 ? (conifer ? [0.92, 0.86, 0.66, 0.3, 0.1] : [1, 0.95, 0.72, 0.3, 0.1])[f - 91] : 1, dk = Math.pow(dieK, conifer ? 2.0 : 1.4);   // the flame fades over the last 4 frames (retail fire share 77, 74, 61, 34, 16 percent)
+    const dieK = f >= 91 ? (conifer ? [0.8, 0.75, 0.5, 0.22, 0.1] : [0.92, 0.88, 0.64, 0.24, 0.1])[f - 91] : 1, dk = Math.pow(dieK, conifer ? 2.0 : 1.4);   // the flame fades over the last 4 frames (retail fire share 77, 74, 61, 34, 16 percent)
     frames[f] = cropSprite(compose(crown, { ...base, half: Math.max(5, Math.round(flameHalf * wide * (0.35 + 0.65 * dk))), top: Math.max(10, Math.round(top0 * (f >= 91 ? 0.25 + 0.75 * dk : 0.95 + 0.1 * Math.sin(f)))), coreH: Math.max(6, Math.round(base.coreH * (1 + 0.5 * (1 - t)) * dk)), coreHW: Math.max(2.5, (base.coreHW + 2) * (0.35 + 0.65 * dk)), phase: f >= 91 ? 0.35 + 0.015 * (f - 91) : (f % 14) / 14 }, mix32(seed, 1100 + f)));
   }
   return frames;

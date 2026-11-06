@@ -22,3 +22,12 @@ test('deposits and vents paint the same bytes twice', () => {
   const c = mk(), d = mk(); paintVent(c, 50, 50, {}, 3, {palette}); paintVent(d, 50, 50, {}, 3, {palette});
   assert.deepEqual(c.rgba, d.rgba);
 });
+
+test('burnt trees carry no embers or fire colors (only the burn-out frame does)', () => {
+  for (const params of [{}, {species: 'conifer', height: 56, width: 0.5}]) for (const seed of [1, 7, 99]) {
+    const b = generateFeature('burnt', params, seed).body, t = generateFeature('tree', params.species ? {species: 'conifer', height: 61, width: 0.5} : {}, seed);
+    for (const sp of [b, t.burnt.body]) for (let k = 0; k < sp.w * sp.h; k++) if (sp.a[k]) assert.ok(sp.idx[k] < 192 || sp.idx[k] > 216);
+    const last = t.burn[95]; let fire = 0; for (let k = 0; k < last.w * last.h; k++) if (last.a[k] && last.idx[k] >= 192 && last.idx[k] <= 216) fire++;
+    assert.ok(fire > 0);   // the last burn frame keeps its embers
+  }
+});
