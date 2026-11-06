@@ -21,11 +21,6 @@ test('faceted forms and shoreline materials keep their own dependent controls',(
  assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:0}),false);
  assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:2}),true);
  assert.equal(available('bergRough','landform',{iceFacets:.6,facetForm:2,stepReference:1,terraces:4}),false);
- assert.equal(available('crystalTiers','crystal',{crystalForm:0}),false);
- assert.equal(available('crystalTiers','crystal',{crystalForm:1}),true);
- assert.equal(available('crystalCount','crystal',{crystalForm:1}),false);
- assert.equal(available('bergTiltDir','crystal',{crystalForm:2,bergTilt:0}),false);
- assert.equal(available('bergTiltDir','crystal',{crystalForm:2,bergTilt:.2}),true);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:1}),false);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:2}),true);
  assert.equal(available('crystalShoreSeam','landform',{shorePlates:1,plateMaterial:2}),false);

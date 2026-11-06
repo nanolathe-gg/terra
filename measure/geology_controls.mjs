@@ -43,19 +43,18 @@ const CARD_ONLY = [{world: 'red', knob: 'terraces', from: 7, to: 0}, {world: 're
 // H21: read card limits/scales from the same declarations as toolDefaults. Top-level scriptedScene options use engine units and win over the card.
 const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt-scene.js`, 'utf8').matchAll(/\['(\w+)','[^']*','[^']*',\[([^\]]*)\],([\d.]+),([\d.]+),[\d.]+,([\d.]+)/g)]
   .filter(m => IMPACTS.test(m[1])).map(m => [m[1], {kinds: [...m[2].matchAll(/'([^']+)'/g)].map(x => x[1]), lo: +m[3], hi: +m[4], scale: +m[5]}]));
-// Crater spurs are child hills and inherit the crater's outline parameters (prepareNode); spurCount defaults to zero.
-const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]) || (knob === 'moonLobes' && st[0] === 'crater' && (st[2]?.spurCount ?? st[2]?.card?.spurCount ?? 0) > 0);
+const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]);
 for (const [k, f] of Object.entries(impactFields)) CARD_SCALE[k] = f.scale;
 const family = opt('--family', 'geology');
 const FRACTURES = /^(crack(Severity|Spacing|Major|Minor|Hairline|Blocks|Width|Network|Dark)|groove(Spacing|Angle|Run)|gully(Depth|Width|Shade)|ribTilt|rock(Scale|Age)|rockOpen|hillBlocks)$/;
 const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust|Dusk|Pillow|Veins))$/;
 const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
 // The stroke kinds that carry each shape option (sculpt-scene.js SHAPE_FIELDS), and the scale of the card's unit.
-const KINDS = {crystalForm: ['crystal'], crystalTiers: ['crystal'], crystalSides: ['crystal'], crystalSize: ['crystal'], crystalStep: ['crystal'], crystalCount: ['crystal'], crystalTop: ['crystal'], crystalLean: ['crystal'], crystalVariation: ['crystal'],
-  crystalAlign: ['crystal'], crystalFacet: ['crystal'], crystalSizeVar: ['crystal'], crystalSmooth: ['crystal'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
+const KINDS = {crystalTiers: ['landform'], crystalSides: ['landform'], crystalStep: ['landform'], crystalTop: ['landform'], crystalVariation: ['landform'],
+  crystalAlign: ['landform'], crystalFacet: ['landform'], crystalSizeVar: ['landform'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
   crystalShoreSeam: ['landform'], frostNeedles: ['landform'], iceFacets: ['landform'], iceFacetSize: ['landform']};
 const isWater = st => st[0] === 'landform' && [st[2]?.curve?.form, st[2]?.card?.curve?.form].includes('lfShore');
-const BODY_SCALE = {crystalForm: 1, crystalTiers: 100, crystalSides: 1, crystalSize: 1, crystalStep: 1, crystalCount: 1, crystalTop: 100, crystalLean: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100, crystalSmooth: 100,
+const BODY_SCALE = {crystalTiers: 100, crystalSides: 1, crystalStep: 1, crystalTop: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100,
   crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value
 const scenes = {};   // world -> the three scenes' variants, for the page's own values

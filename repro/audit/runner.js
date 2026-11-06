@@ -12,18 +12,16 @@ async function run(name,fn){stop=false;log.textContent=name+'\n';for(const b of 
 $('stop').onclick=()=>{stop=true;};
 $('scenes').onclick=()=>run('Reference scene capture',async()=>{const rows=[];const names=Object.keys(scenes).sort();$('progress').max=names.length;for(const [i,name] of names.entries()){if(i<Number($('start').value))continue;if(stop||i>=Number($('start').value)+Number($('limit').value))break;const s=scenes[name];line('Loading '+name);const api=await load(s.biome,s.query||'');const t=performance.now();api.scene(s.strokes,{ground:s.ground!==false});line('Rendering '+name);const result=await Promise.race([api.capture(),delay(90000).then(()=>{throw Error('Capture timeout '+name);})]);await png(`${$('label').value}/${name}/ours.png`,result.canvas);await save(`${$('label').value}/${name}/ours-heights.json`,await api.heights());rows.push({scene:name,ms:performance.now()-t,captureMs:result.ms,stats:api.stats()});await save(`${$('label').value}/${name}/stats.json`,rows.at(-1));await save(`${$('label').value}/scenes.json`,rows);line(`${i+1}/${names.length} ${name} ${(performance.now()-t).toFixed(0)} ms`);$('progress').value=i+1;}});
 function shapeContext(key,kind){
- const p={craterlets:0,shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,crestJag:0,crestVary:0,crestTaper:0,craterFacets:0,iceFacets:0,crystalCount:8,crystalSize:110,crystalForm:0};
+ const p={shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,crestVary:0,crestTaper:0,iceFacets:0};
  if(['terraces','ledge','terraceJitter','faceVariation'].includes(key))Object.assign(p,{curve:{form:'mesa'},lean:1,terraces:4,ledge:.55});
  if(key.startsWith('spur')||key.startsWith('crest'))p.spurCount=4;
- if(key.startsWith('rim'))Object.assign(p,{rimSectors:4,rimUnequal:.7,rimGaps:2});
  if(key.startsWith('fissureBranch'))p.fissureBranches=3;
  if(key==='fissureCell')p.fissureNetwork=1;
  if(key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore'))Object.assign(p,{shorePlates:1,plateMaterial:key.startsWith('frost')?2:1,plateWaterPx:100,plateLandPx:120,plateSize:40,plateGap:5,plateHeight:7});
  if(key.startsWith('finger'))Object.assign(p,{fingers:1,fingerSize:1});
  if(key.startsWith('layer')||key.startsWith('lava')||key==='shoreLayers')Object.assign(p,{shoreLayers:5,layerPx:22,layerRiser:4,layerLedge:.7,layerRough:.5,layerVary:.4,layerStyle:key.includes('Circle')||key==='layerCircle'?1:0});
- if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))Object.assign(p,{crystalForm:1,crystalSize:32});
- if(key.startsWith('berg')||key==='crystalAlign')Object.assign(p,{crystalForm:2,crystalSize:200,crystalCount:3,bergTilt:.3});
- if(key.startsWith('crystalCrater')||key==='craterFacets')p.craterFacets=.7;
+ if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar'].includes(key))Object.assign(p,{iceFacets:.7,facetForm:1,iceFacetSize:40});
+ if(key.startsWith('berg')||['crystalSides','crystalTop','crystalVariation','crystalAlign'].includes(key))Object.assign(p,{iceFacets:.7,facetForm:2,iceFacetSize:40});
  if(key==='iceFacetSize'||key==='iceFacets')p.iceFacets=.7;
  return p;
 }
@@ -121,7 +119,7 @@ $('regressions').onclick=()=>run('GPU regression and alternative suite',async()=
  const {GpuErosion:Before}=await import('/audit/erosion-before.js'),{GpuErosion:After}=await import('/sculpt-erosion.js'),{readBuffer}=await import('/sculpt-gpu-fields.js');
  const code=api.renderer.preprocessShader(await (await fetch('/engine-erosion.wgsl')).text()),before=new Before(api.renderer,code),after=new After(api.renderer,code);
  const result={alternative:[],tools:[],basic:[],conditional:[],maskErase:null,shapePerformance:[]};
- const base={...defaults,radius:140,amount:70,rough:.5,softness:.55,cracks:.5,seed:2701,craterlets:0,shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,iceFacets:0,craterFacets:0};
+ const base={...defaults,radius:140,amount:70,rough:.5,softness:.55,cracks:.5,seed:2701,shorePlates:0,fingers:0,shoreLayers:0,spurCount:0,iceFacets:0};
  const ctx={seed:2701,baseHeight:99,sea:75,params:n=>({...base,...n.params}),frost:{gaps:.3,gapSize:11,gapDepth:3,gapReach:.7}};
  const ground={kind:'ground',seed:1337,amplitude:8,wavelength:100,coverage:.8},path=[{x:240,y:310},{x:390,y:340},{x:500,y:300}];
  const hill={kind:'landform',seed:22,points:[{x:330,y:330}],params:{radius:220,elevation:199,combine:0,wander:0,widthVary:0,heightVary:0,curve:{form:'lfHill'}}};

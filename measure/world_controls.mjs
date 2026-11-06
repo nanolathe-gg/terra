@@ -65,7 +65,7 @@ const RIDGE = (pts, rise, card = {}) => ['landform', pts, {card: {heightReferenc
 const WATER = (pts, card = {}, picks = {}) => ['landform', pts, {card: {heightReference: 1, elevation: -55, combine: 1, cracks: 0, wander: 30, widthVary: 30, varySize: 210, ...card}, curve: {form: 'lfShore'}, ...picks}];
 // The panel hides these until their switch is above 0 (updateControls in sculpt.js).
 const GATE = {gullySize: 'gullies', talus: 'gullies', layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', facetForm: 'iceFacets', fingerSize: 'fingers',
-  spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
+  spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
 mkdirSync(out, {recursive: true});
@@ -419,19 +419,15 @@ try {
     await host.scene(strokeFixture(0), true);
     const nodeKinds = await host.kinds();   // a ground node leads only where the world's undulation is on
     const ctxFor = (key, kind) => {
-      const p = {craterlets: 0, shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestJag: 0, crestVary: 0, crestTaper: 0, craterFacets: 0, iceFacets: 0, crystalCount: 8, crystalSize: 110, crystalForm: 0};
+      const p = {shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestVary: 0, crestTaper: 0, iceFacets: 0};
       if (['terraces', 'ledge', 'terraceJitter', 'breakup'].includes(key)) p.terraces = 4;
       if (['ledge', 'terraceJitter'].includes(key)) p.ledge = .55;
       if (key.startsWith('spur') || key.startsWith('crest')) p.spurCount = 4;
-      if (key.startsWith('rim')) Object.assign(p, {rimSectors: 4, rimUnequal: .7, rimGaps: 2});
       if (key.startsWith('fissureBranch')) p.fissureBranches = 3;
       if (key === 'fissureCell') p.fissureNetwork = 1;
       if (key.startsWith('plate') || key === 'shorePlates' || key.startsWith('frost') || key.startsWith('crystalShore')) Object.assign(p, {shorePlates: 1, plateMaterial: key.startsWith('frost') ? 2 : 1, plateWaterPx: 100, plateLandPx: 120, plateSize: 40, plateGap: 5, plateHeight: 7});
       if (key.startsWith('finger')) Object.assign(p, {fingers: 1, fingerSize: 1});
       if (key.startsWith('layer') || key.startsWith('lava') || key === 'shoreLayers') Object.assign(p, {shoreLayers: 5, layerPx: 22, layerRiser: 4, layerLedge: .7, layerRough: .5, layerVary: .4, layerStyle: key.includes('Circle') || key === 'layerCircle' || key === 'lavaCircleVary' ? 1 : 0});
-      if (['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar', 'crystalSmooth'].includes(key)) Object.assign(p, {crystalForm: 1, crystalSize: 32});
-      if (key.startsWith('berg') || key === 'crystalAlign') Object.assign(p, {crystalForm: 2, crystalSize: 200, crystalCount: 3, bergTilt: .3});
-      if (key.startsWith('crystalCrater') || key === 'craterFacets') p.craterFacets = .7;
       if (key === 'iceFacetSize' || key === 'iceFacets') p.iceFacets = .7;
       // lfcrystal: a landform's Facet shape rows, with facets on and the shape that shows them (Level tops on columns).
       if (kind === 'landform' && (key === 'facetForm' || LANDFORM_FACET_KEYS.includes(key))) Object.assign(p, {iceFacets: .7, facetForm: ['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar'].includes(key) ? 1 : 2, iceFacetSize: 40});
@@ -446,10 +442,8 @@ try {
       const ui = {...st.defaults[kind], world: values}; for (const [k, v] of Object.entries(ctx)) ui[k] = v * (scales[k] ?? 1);
       const net = kind === 'fissure' && Number(ui.fissureNetwork) >= .5;
       if (kind === 'fissure' && (net ? ['fissureBranches', 'fissureBranchLen', 'fissureBranchSpread', 'fissureTaper'].includes(key) : key === 'fissureCell')) return false;
-      if (kind === 'crystal' && ['crystalAlign', 'bergFace', 'bergJitter', 'bergBreak', 'bergRough', 'bergTilt', 'bergTiltDir', 'bergFlat'].includes(key) && Number(ui.crystalForm) < 2) return false;
       if (key === 'frostNeedles' && Number(ui.plateMaterial) < 2) return false;
       if (GATE[key] && !(kind==='landform'&&GATE[key]==='shoreLayers') && !(Number(ui[GATE[key]]) > 0)) return false;
-      if (kind === 'crater' && ['crestJag', 'crestVary'].includes(key) && !(Number(ui.spurCount) > 0)) return false;   // on a crater the crest options only shape its spurs
       if (kind!=='landform' && key === 'layerCircle' && Number(ui.layerStyle) !== 1) return false;
       // The shared applicability rule receives engine units, just as updateControls does.
       return shapeControlAvailable(key, kind, {...ui, ...Object.fromEntries(Object.entries(scales).map(([k, scale]) => [k, ui[k] / scale]))});
