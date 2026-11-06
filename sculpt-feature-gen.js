@@ -122,6 +122,34 @@ export function rampAt(stops, t) {
   return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
 }
 const lumaRGB = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+
+// An artist's color for a kind (recolor = {from, to}): every ramp, fleck and mottle the kind draws from moves by the change that
+// takes `from` (the world's color for the kind) to `to`: the hue turned, the saturation shifted and the lightness scaled, so light
+// and shade keep their steps. A grey `from` (a world's grey rocks) gives its grey tones the new hue outright and turns its colored
+// mottles most of the way to it. No recolor, or `to` equal to `from`, leaves every color as it is.
+function toHSL([r, g, b]) {
+  r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  if (d < 1e-6) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1)), h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+function fromHSL([h, s, l]) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2, k = Math.floor(((h % 360) + 360) % 360 / 60);
+  const [r, g, b] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][k];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+const hexOf = c => '#' + c.map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+const recolorCache = new Map();
+function recolorHex(hex, rc) {
+  if (!rc || !rc.to || rc.to === rc.from) return hex;
+  const key = hex + rc.from + rc.to; let out = recolorCache.get(key);
+  if (out) return out;
+  const [hf, sf, lf] = toHSL(rampOf([rc.from])[0]), [ht, st, lt] = toHSL(rampOf([rc.to])[0]), [h, s, l] = toHSL(rampOf([hex])[0]);
+  const turn = d => ((d + 540) % 360) - 180, grey = sf < 0.06, hue = grey ? (s < 0.06 ? ht : h + 0.7 * turn(ht - h)) : h + (ht - hf), sat = clamp(s + (st - sf) * (grey && s >= 0.06 ? 0.5 : 1), 0, 1);
+  out = hexOf(fromHSL([(hue + 360) % 360, sat, clamp(l * clamp(lt / Math.max(lf, 0.01), 0.35, 2.5), 0, 1)]));
+  recolorCache.set(key, out); return out;
+}
+const recolorStops = (stops, rc) => (rc && rc.to && rc.to !== rc.from ? stops.map(h => recolorHex(h, rc)) : stops);
 // ctx.tint = {sun:[r,g,b], sky:[r,g,b] (0..1, white is the grey light), ambient (the world's unlit share), up (the sun's height,
 // world z)}: the renderer's light colors (engine-frag.wgsl): the share of a pixel's light that is sky takes the sky's color and the
 // share that is sun the sun's, divided by the tint of open level ground so the exposure stays. A pixel's `lit` is its direct sun
@@ -324,7 +352,7 @@ function treeFrame(P, seed, ctx) {
   // the gaps: the deepest and darkest share of the crown takes the gap ramp; the rest of the leaves go by rank of tone
   const leaves = info.filter(q => !q.trunk), gapShare = (P.gapShare ?? look.gapShare) * (1.25 - 0.5 * clamp(P.density, 0, 1));
   const gapScore = q => (1 - q.ao) + 0.7 * (1 - q.t) + 0.55 * q.j, byGap = leaves.slice().sort((p, q) => gapScore(q) - gapScore(p) || p.k - q.k), nGap = Math.round(byGap.length * gapShare), gapSet = new Set(byGap.slice(0, nGap).map(q => q.k));
-  const colors = P.colors || look.colors, gap = P.gap || look.gap, flecks = (P.flecks || look.flecks).map(([hex, share]) => [rampOf([hex])[0], share]);
+  const colors = recolorStops(P.colors || look.colors, P.recolor), gap = P.gap || look.gap, flecks = (P.flecks || look.flecks).map(([hex, share]) => [rampOf([recolorHex(hex, P.recolor)])[0], share]);
   const c = newCanvas(w, h, R.ox, R.oy), olive = [92, 107, 42], lean = clamp(P.lean, -1, 1);
   const paintRank = (list, ramp, fl) => list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => {
     let u = clamp((i + 0.5) / list.length + (lean > 0 ? lean * 0.06 : 0), 0, 1), col = rampAt(ramp, u);
@@ -390,7 +418,7 @@ function tendrilFrame(P, seed, ctx, burnt = false) {
     const rf = [2 * nl * n[0] - sun[0], 2 * nl * n[1] - sun[1], 2 * nl * n[2] - sun[2]], spec = Math.pow(Math.max(0, rf[0] * view[0] + rf[1] * view[1] + rf[2] * view[2]), 9) * p.vis;
     list.push({ k, t: 0.5 * direct + 0.3 * Math.max(0, n[2]) + (burnt ? 0.2 : 0.8) * spec + (rn() - 0.5) * 0.08, direct });
   }
-  const c = newCanvas(R.w, R.h, R.ox, R.oy), ramp = burnt ? CHAR_RAMP : (P.colors || TENDRIL_GOLD);
+  const c = newCanvas(R.w, R.h, R.ox, R.oy), ramp = burnt ? CHAR_RAMP : recolorStops(P.colors || TENDRIL_GOLD, P.recolor);
   list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => paintRGB(c, q.k % R.w, (q.k / R.w) | 0, rampAt(ramp, (i + 0.5) / list.length), q.direct));
   return { body: quantize(c, ctx, 5, mix32(seed, 32)), R, W: Math.round(T.W), H: R.h };
 }
@@ -510,7 +538,7 @@ function shrubFrame(P, seed, ctx) {
   const r = rng(seed), rn = rng(mix32(seed, 6));
   const W = Math.round(P.width), H = Math.round(P.height), w = W + 6, h = H + 8, cx = w / 2, cy = (h - 6) / 2 + 1;
   const ax = Math.round(cx) + (r() < 0.5 ? 0 : -1), ay = h - 5;
-  const sp = newSprite(w, h, ax, ay), occ = new Uint8Array(w * h), c = newCanvas(w, h, ax, ay), L = lightOf(ctx), fl = (P.flecks || []).map(([hex, share]) => [rampOf([hex])[0], share]);
+  const sp = newSprite(w, h, ax, ay), occ = new Uint8Array(w * h), c = newCanvas(w, h, ax, ay), L = lightOf(ctx), colors = recolorStops(P.colors, P.recolor), fl = (P.flecks || []).map(([hex, share]) => [rampOf([recolorHex(hex, P.recolor)])[0], share]);
   const dd = clamp(P.density / 0.5, 0, 1), fill = lerp(0.15, 0.43, dd), N = Math.round(fill * W * H);
   const s1 = (r() * 1e6) | 0;
   const env = (x, y) => { const e = ((x - cx) / (W / 2)) ** 2 + ((y - cy) / (H / 2)) ** 2; return e * 0.85 + (vnoise(x / 3, y / 3, s1) - 0.5) * 0.3 <= 1; };
@@ -541,7 +569,7 @@ function shrubFrame(P, seed, ctx) {
       const side = clamp(-((x - cx) * L.x + (y - cy) * L.y) / (W / 2), -1, 1) * 0.08;
       let u = under ? 0.04 + 0.4 * rn() : upper ? 0.6 + 0.4 * rn() * hi : 0.3 + 0.48 * rn();
       u = clamp(u + side, 0, 1);
-      let col = rampAt(P.colors, u);
+      let col = rampAt(colors, u);
       if (u > 0.35 && fl.length) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(q => q * Math.min(1.2, f)); break; } acc += share; } }
       paintRGB(c, x, y, col, upper ? 0.8 : under ? 0.15 : 0.5);
     }
@@ -704,13 +732,13 @@ function rockFrame(P, seed, ctx) {
   }
   // rank of tone -> ramp position; Shading bends the ramp (0.6 is retail Green's); the shade side never takes a highlight
   const ranked = hasPx.slice().sort((a, b) => tone[a] - tone[b] || a - b), N = ranked.length, gamma = Math.pow(2.4, (P.shade - 0.6) * 2.5);
-  const s2 = (r() * 1e6) | 0, mot = (P.mottle || []).map(([hex, share], i) => ({ rgb: rampOf([hex])[0], share, seed: s2 + 11 * i + 3 }));
+  const s2 = (r() * 1e6) | 0, mot = (P.mottle || []).map(([hex, share], i) => ({ rgb: rampOf([recolorHex(hex, P.recolor)])[0], share, seed: s2 + 11 * i + 3 })), ramp = recolorStops(P.colors, P.recolor);
   const c = newCanvas(w, h, 0, 0);
   ranked.forEach((k, i) => {
     const x = k % w, y = (k / w) | 0, dd = ((x + 0.5 - mid[0]) * away[0] + (y + 0.5 - mid[1]) * away[1]) / span;
     let u = Math.pow((i + 0.5) / N, gamma);
     u = Math.min(u, lerp(1, 0.6, smoothstep(0.2, 0.45, dd)));
-    let col = rampAt(P.colors, u);
+    let col = rampAt(ramp, u);
     // second hues: each claims the areas where its own soft noise is highest, by its share, in the mid and light tones
     const on = smoothstep(0.22, 0.42, u) * (1 - smoothstep(0.95, 1, u));
     if (on > 0) {

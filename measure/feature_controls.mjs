@@ -16,8 +16,13 @@ const args = process.argv.slice(2), out = args.includes('--out') ? args[args.ind
 const root = new URL('..', import.meta.url).pathname, table = JSON.parse(readFileSync(root + 'materials/green.json', 'utf8'));
 const palette = JSON.parse(readFileSync(root + 'materials/palette.json', 'utf8')).indexed, config = {features: table.features};
 const ground = table.measured.ground.meanRGB.map(Math.round), light = args.includes("--generator-light") ? {} : {x: -0.623, y: -0.026};   // Green's sun (front lighting) as the editor projects it
-const B = 4, W = 120, H = 110, AX = 50, ANCHOR = {tree: 92, rock: 66};
-const CONTROLS = [['tree', 'taper', 0, 1, v => v.params.species !== 'conifer'], ['tree', 'peaks', 0, 1, v => v.params.species !== 'conifer'], ['rock', 'shade', 0, 1, () => true]];
+const B = 4, W = 120, H = 110, AX = 50, ANCHOR = {tree: 92, shrub: 70, rock: 66};
+// A color control is measured from the world's color (0) to a color an artist might pick (1): autumn leaves, warm rocks; its floor
+// is a 5% mix toward it.
+const mixHex = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
+const recolor = (from, to) => t => (t ? {recolor: {from, to: mixHex(from, to, t)}} : {});
+const CONTROLS = [['tree', 'taper', 0, 1, v => v.params.species !== 'conifer'], ['tree', 'peaks', 0, 1, v => v.params.species !== 'conifer'], ['tree', 'color', 0, 1, () => true, recolor('#11723c', '#b8732a')],
+  ['shrub', 'color', 0, 1, () => true, recolor('#43972b', '#c8a030')], ['rock', 'shade', 0, 1, () => true], ['rock', 'angular', 0, 1, () => true], ['rock', 'color', 0, 1, () => true, recolor('#949494', '#b07a5a')]];
 
 function picture(kind, params, seed) {
   const dx = 0, AY = ANCHOR[kind];
@@ -34,6 +39,9 @@ const rgbOf = i => palette[i], lumaOf = i => { const c = rgbOf(i); return 0.299 
 const PURPOSE = {
   taper: s => { const w = []; for (let y = 0; y < s.h; y++) { let n = 0; for (let x = 0; x < s.w; x++) n += s.a[y * s.w + x]; w.push(n); } const top = w.slice(0, Math.ceil(s.h / 3)); return top.reduce((a, b) => a + b, 0) / top.length / Math.max(...w); },
   peaks: s => { const t = []; for (let x = 0; x < s.w; x++) { let y = 0; while (y < s.h && !s.a[y * s.w + x]) y++; if (y < s.h * 0.6) t.push(y); } let d = 0; for (let i = 1; i < t.length; i++) d += Math.abs(t[i] - t[i - 1]); return d / Math.max(1, t.length - 1); },
+  // angular: the mean luma step between neighbouring body pixels (flat faces meet at sharper creases); color: the body's mean hue in degrees
+  angular: s => { let d = 0, n = 0; for (let y = 0; y < s.h; y++) for (let x = 1; x < s.w; x++) { const k = y * s.w + x; if (s.a[k] && s.a[k - 1]) { d += Math.abs(lumaOf(s.idx[k]) - lumaOf(s.idx[k - 1])); n++; } } return d / Math.max(1, n); },
+  color: s => { let cx = 0, cy = 0; for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) { const [r, g, b] = rgbOf(s.idx[k]), h = Math.atan2(Math.sqrt(3) * (g - b), 2 * r - g - b); cx += Math.cos(h); cy += Math.sin(h); } return (Math.atan2(cy, cx) * 180 / Math.PI + 360) % 360; },
   shade: s => { const l = []; for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) l.push(lumaOf(s.idx[k])); l.sort((a, b) => a - b); const q = Math.floor(l.length / 3); return l.slice(0, q).reduce((a, b) => a + b, 0) / q; },
 };
 const luma = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
@@ -54,12 +62,12 @@ function changed(a, b) {
 
 const set = defaultSet(config), rows = [];
 if (out) mkdirSync(out, {recursive: true});
-for (const [kind, key, lo, hi, applies] of CONTROLS) {
+for (const [kind, key, lo, hi, applies, edit = t => ({[key]: t})] of CONTROLS) {
   const list = variants(kind, {...set, [kind]: {...set[kind], count: 16}}, config).filter(applies);
   let cls = 0, moved = 0, fcls = 0, fmoved = 0, px = 0, pxMoved = 0; const purpose = {lo: 0, hi: 0, step: 0};
   const sheet = out ? {w: W * 2 * list.length, h: H, rgba: new Uint8ClampedArray(W * 2 * list.length * H * 4)} : null;
   list.forEach((v, i) => {
-    const a = picture(kind, {...v.params, [key]: lo}, v.seed), b = picture(kind, {...v.params, [key]: hi}, v.seed), c = picture(kind, {...v.params, [key]: lo + 0.05}, v.seed);
+    const a = picture(kind, {...v.params, ...edit(lo)}, v.seed), b = picture(kind, {...v.params, ...edit(hi)}, v.seed), c = picture(kind, {...v.params, ...edit(lo + 0.05)}, v.seed);
     const m = changed(blocks(a), blocks(b)), f = changed(blocks(a), blocks(c)); cls += m.cls; moved += m.moved; fcls += f.cls; fmoved += f.moved;
     const pa = PURPOSE[key](a.body), pb = PURPOSE[key](b.body), pc = PURPOSE[key](c.body); purpose.lo += pa / list.length; purpose.hi += pb / list.length; purpose.step += Math.abs(pc - pa) / list.length;
     for (let k = 0; k < W * H; k++) if (a.drawn[k] || b.drawn[k]) { px++; if (a.g.rgba[k * 4] !== b.g.rgba[k * 4] || a.g.rgba[k * 4 + 1] !== b.g.rgba[k * 4 + 1] || a.g.rgba[k * 4 + 2] !== b.g.rgba[k * 4 + 2]) pxMoved++; }

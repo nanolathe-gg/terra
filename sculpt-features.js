@@ -355,7 +355,7 @@ export async function mountMapFeatures(api) {
     const [kind,name,end]=input.dataset.setting.split('.'),out=$(input.id+'-value');
     input.addEventListener('input',() => { if (out) out.textContent=Number(input.value).toFixed(2); });
     input.addEventListener('change',() => {
-      const value=Number(input.value); if (!Number.isFinite(value)) { update(); return; }
+      const value=input.type==='color'?input.value:Number(input.value); if (input.type!=='color' && !Number.isFinite(value)) { update(); return; }
       const next=end===undefined?value:Object.assign([...set[kind][name]],{[Number(end)]:value});
       if (!changeSet(kind,{[name]:next})) update();
     });

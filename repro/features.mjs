@@ -58,6 +58,17 @@ try {
   await press('#feature-new-set'); assert.notEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.seed'), seed);
   await press('#undo'); await ready(); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.seed'), seed);
   await settled(); await shot('panel-trees.png', {x: 1137, y: 50, width: 303, height: 700});
+  // The artist colors and rock angularity: an edit is kept in the set, redraws the kind's variants, keeps placements, and undoes.
+  const thumb = () => ev('(()=>{const c=document.querySelector("#feature-variants button[data-variant=\\"0\\"] canvas");return c&&c.dataset.drawn?c.toDataURL():"";})()');
+  const leaf0 = await ev('sculptCanvas.features.serialize().featureSet.tree.color'), before = await thumb();
+  await set('#feature-tree-color', '#b8732a'); await settled();
+  assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.color'), '#b8732a'); assert.equal((await placements()).length, 4);
+  const after = await thumb(); assert.ok(before && after && after !== before, 'the leaf color redraws the variants');
+  await press('#undo'); await ready(); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.color'), leaf0);
+  await set('#feature-kind', 'rock'); await set('#feature-angular', 0.1); await set('#feature-rock-color', '#b07a5a'); await settled();
+  assert.deepEqual(await ev('(({angular,color})=>({angular,color}))(sculptCanvas.features.serialize().featureSet.rock)'), {angular: 0.1, color: '#b07a5a'});
+  await shot('panel-rocks.png', {x: 1137, y: 50, width: 303, height: 700});
+  report.controls = 'leaf color redraws and undoes; rock angularity and color are kept in the set';
   // Select (V): click the deposit, drag it 4 cells right and 2 down, set its metal, re-roll it.
   await key('Escape'); await press('[data-tool="move"]'); await settled();
   await click(await screenOf('deposit', deposit.x, deposit.z));

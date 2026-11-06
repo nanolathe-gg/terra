@@ -48,3 +48,10 @@ test('no grass pixel falls inside a deposit plate', () => {
     for (let y = 2; y < W - 2; y++) for (let x = 2; x < W - 2; x++) { const i = y * W + x; if (isStone(i)) continue; let n = 0; for (const d of [1, -1, W, -W]) if (isStone(i + d)) n++; assert.ok(n < 4, `grass or moss enclosed by a plate at ${x},${y} (metal ${metal})`); }
   }
 });
+
+test('a recolor to the world color changes no byte; another color changes the sprite', () => {
+  for (const [kind, params, ref] of [['rock', {cells: '2x2'}, '#949494'], ['tree', {}, '#11723c'], ['shrub', {density: 0.6}, '#43972b']]) {
+    const a = generateFeature(kind, params, 5, {palette, bodyOnly: true}), b = generateFeature(kind, {...params, recolor: {from: ref, to: ref}}, 5, {palette, bodyOnly: true}), c = generateFeature(kind, {...params, recolor: {from: ref, to: '#b8732a'}}, 5, {palette, bodyOnly: true});
+    assert.equal(sig(a.body), sig(b.body), kind); assert.notEqual(sig(a.body), sig(c.body), kind);
+  }
+});

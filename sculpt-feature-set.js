@@ -21,14 +21,17 @@ const COMMON = {
 const SEEDS = {deposit: 4711, vent: 4723, tree: 4733, shrub: 4751, rock: 4759, scar: 4783};
 // What an artist sets per kind besides the count and the seed: [key, min, max, 'range' for a [lo, hi] pair]. Gameplay ranges (energy,
 // metal) come from the retail table (spec 4) and change the game, not the pixels.
+// 'color' a '#rrggbb' the kind's colors move to (the world's own color for the kind is the default and changes nothing).
 export const SETTINGS = {
-  tree: [['taper', 0, 1], ['peaks', 0, 1], ['energy', 0, 5000, 'range']],
-  rock: [['shade', 0, 1], ['metal', 0, 255, 'range']],
+  tree: [['taper', 0, 1], ['peaks', 0, 1], ['color', 0, 0, 'color'], ['energy', 0, 5000, 'range']],
+  shrub: [['color', 0, 0, 'color']],
+  rock: [['shade', 0, 1], ['angular', 0, 1], ['color', 0, 0, 'color'], ['metal', 0, 255, 'range']],
   deposit: [['metal', 0, 255]],
 };
 
 // The generator's own defaults (retail Green), for a world table that leaves a setting out.
-const FALLBACK = {tree: {taper: 0.5, peaks: 0.5, energy: [250, 250]}, rock: {shade: 0.6, metal: [25, 100]}, deposit: {metal: 127}};
+// Colors: a lit tone of each kind's ramp (sculpt-feature-gen.js: Green's broadleaf leaves, its shrubs, its grey rocks).
+const FALLBACK = {tree: {taper: 0.5, peaks: 0.5, color: '#11723c', energy: [250, 250]}, shrub: {color: '#43972b'}, rock: {shade: 0.6, angular: 0.5, color: '#949494', metal: [25, 100]}, deposit: {metal: 127}};
 
 export function hash32(a, b) {
   let n = Math.imul((a >>> 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((b >>> 0) + 0x7f4a7c15, 0xc2b2ae35);
@@ -65,6 +68,7 @@ export function normalizeSet(value, config) {
     const v = value?.[kind] || {};
     const entry = {count: Math.round(number(v.count, 1, MAX_VARIANTS, b.count)), seed: Number.isInteger(v.seed) && v.seed >= 0 && v.seed <= 4294967295 ? v.seed : b.seed};
     for (const [key, lo, hi, type] of SETTINGS[kind] || []) {
+      if (type === 'color') { entry[key] = typeof v[key] === 'string' && /^#[0-9a-f]{6}$/i.test(v[key]) ? v[key].toLowerCase() : b[key]; continue; }
       if (type === 'range') {
         const pair = Array.isArray(v[key]) ? v[key] : b[key], a = Math.round(number(pair[0], lo, hi, b[key][0])), c = Math.round(number(pair[1], lo, hi, b[key][1]));
         entry[key] = [Math.min(a, c), Math.max(a, c)];
@@ -101,6 +105,9 @@ export function variants(kind, set, config) {
       params[key] = Number.isInteger(lo) && Number.isInteger(hi) ? Math.round(value) : Math.round(value * 100) / 100;
     }
     if (kind === 'tree') Object.assign(params, {taper: entry.taper, peaks: entry.peaks, energy: [...entry.energy]});
+    if (kind === 'rock') params.angular = entry.angular;
+    const ref = data.color ?? FALLBACK[kind]?.color;
+    if (entry.color && ref && entry.color !== ref) params.recolor = {from: ref, to: entry.color};
     let footprint = cellsOf(params.cells) || [1, 1];
     if (kind === 'rock') {
       footprint = cellsOf(params.cells) || [2, 2];

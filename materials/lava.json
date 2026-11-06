@@ -1201,11 +1201,11 @@
  },
  "features": {
   "note": "Round 9, the shared generators in Lava's colors (ramps measured from LavaRock and LavaSpire by luma octile). Shares from retail uses (features/lava/catalog.json): spires 2,218 of about 3,600 rock-like uses (5x4-7x7, no metal, not reclaimable), round boulders the rest (2x2-4x4, metal 75-150). Retail's deposits sit in a dark rim. Lava's crystal nodes are not generated yet.",
-  "rock": {"count": 10, "shade": 0.6, "metal": [75, 150], "types": [
-   {"share": 0.55, "params": {"cells": "6x5", "tall": 1, "angular": 0.3, "lump": 0.8, "grain": 0.8, "colors": ["#000000", "#080404", "#100905", "#140b0d", "#250d11", "#231f13", "#2e1f19", "#3e3525"], "mottle": [["#3b171f", 0.2]], "metal": 0, "reclaimable": false}, "vary": {"size": [0.85, 1.1]}},
-   {"share": 0.2, "params": {"cells": "2x2", "angular": 0.15, "lump": 0.45, "grain": 0.7, "colors": ["#010100", "#1e1010", "#31221b", "#3f3024", "#3f3626", "#473b2b", "#4d3f2f", "#656049"], "mottle": [["#636343", 0.18]]}},
-   {"share": 0.15, "params": {"cells": "4x4", "angular": 0.15, "lump": 0.45, "grain": 0.7, "colors": ["#010100", "#1e1010", "#31221b", "#3f3024", "#3f3626", "#473b2b", "#4d3f2f", "#656049"], "mottle": [["#636343", 0.18]]}},
-   {"share": 0.1, "params": {"cells": "3x3", "angular": 0.15, "lump": 0.45, "grain": 0.7, "colors": ["#010100", "#1e1010", "#31221b", "#3f3024", "#3f3626", "#473b2b", "#4d3f2f", "#656049"], "mottle": [["#636343", 0.18]]}}]},
+  "rock": {"count": 10, "color": "#473b2b", "angular": 0.2, "shade": 0.6, "metal": [75, 150], "types": [
+   {"share": 0.55, "params": {"cells": "6x5", "tall": 1, "lump": 0.8, "grain": 0.8, "colors": ["#000000", "#080404", "#100905", "#140b0d", "#250d11", "#231f13", "#2e1f19", "#3e3525"], "mottle": [["#3b171f", 0.2]], "metal": 0, "reclaimable": false}, "vary": {"size": [0.85, 1.1]}},
+   {"share": 0.2, "params": {"cells": "2x2", "lump": 0.45, "grain": 0.7, "colors": ["#010100", "#1e1010", "#31221b", "#3f3024", "#3f3626", "#473b2b", "#4d3f2f", "#656049"], "mottle": [["#636343", 0.18]]}},
+   {"share": 0.15, "params": {"cells": "4x4", "lump": 0.45, "grain": 0.7, "colors": ["#010100", "#1e1010", "#31221b", "#3f3024", "#3f3626", "#473b2b", "#4d3f2f", "#656049"], "mottle": [["#636343", 0.18]]}},
+   {"share": 0.1, "params": {"cells": "3x3", "lump": 0.45, "grain": 0.7, "colors": ["#010100", "#1e1010", "#31221b", "#3f3024", "#3f3626", "#473b2b", "#4d3f2f", "#656049"], "mottle": [["#636343", 0.18]]}}]},
   "scar": {"count": 3, "types": [
    {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.8, 1.3]}}]},
   "deposit": {"params": {"halo": 0.6, "haloSat": 1}},

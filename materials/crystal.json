@@ -1772,8 +1772,8 @@
  },
  "features": {
   "note": "Round 9, the shared generators in Crystal's colors (ramp measured from CrystalSpire01-11 by luma octile). Its spires are clusters of tall faceted rocks (5x6-8x8, no metal, not reclaimable), from retail uses (features/crystal/catalog.json). Retail's deposits sit in a halo of the ground's own lightness.",
-  "rock": {"count": 6, "shade": 0.6, "metal": [0, 0], "types": [
-   {"share": 1, "params": {"cells": "6x6", "tall": 1, "angular": 0.95, "lump": 0.2, "grain": 0.5, "colors": ["#000000", "#0d070b", "#0d0f17", "#171524", "#2a1f39", "#3d2e53", "#553c69", "#74657c"], "mottle": [["#673b7f", 0.22]], "metal": 0, "reclaimable": false}, "vary": {"pieces": [2, 4], "size": [0.8, 1.1]}}]},
+  "rock": {"count": 6, "color": "#3d2e53", "angular": 0.95, "shade": 0.6, "metal": [0, 0], "types": [
+   {"share": 1, "params": {"cells": "6x6", "tall": 1, "lump": 0.2, "grain": 0.5, "colors": ["#000000", "#0d070b", "#0d0f17", "#171524", "#2a1f39", "#3d2e53", "#553c69", "#74657c"], "mottle": [["#673b7f", 0.22]], "metal": 0, "reclaimable": false}, "vary": {"pieces": [2, 4], "size": [0.8, 1.1]}}]},
   "deposit": {"params": {"halo": 0.97, "haloSat": 1}}
  },
  "world": {

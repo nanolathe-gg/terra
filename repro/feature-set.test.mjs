@@ -74,3 +74,13 @@ test('placements: a retail placement (a name, no kind) is not a generated one; d
   assert.deepEqual(normalizePlacement({kind: 'tree', v: -1, x: 1, z: 2, metal: 7}), {kind: 'tree', v: 0, x: 1, z: 2});
   assert.equal(normalizePlacement({kind: 'tree', x: 1.5, z: 2}), null);
 });
+
+test('the artist colors and rock angularity: bounds, the world default, and a recolor only once a color moves', () => {
+  const set = normalizeSet({tree: {color: '#ABCDEF'}, shrub: {color: 'red'}, rock: {angular: 3, color: '#123'}}, green), d = defaultSet(green);
+  assert.equal(set.tree.color, '#abcdef'); assert.equal(set.shrub.color, d.shrub.color); assert.equal(set.rock.angular, 1); assert.equal(set.rock.color, d.rock.color);
+  for (const kind of ['tree', 'shrub', 'rock']) assert.ok(variants(kind, d, green).every(v => !v.params.recolor), kind);
+  const red = {features: table('red').features};
+  assert.ok(variants('rock', defaultSet(red), red).every(v => !v.params.recolor && v.params.angular === 0.45));
+  assert.deepEqual(variants('tree', {...d, tree: {...d.tree, color: '#b8732a'}}, green)[0].params.recolor, {from: '#11723c', to: '#b8732a'});
+  assert.equal(variants('rock', {...d, rock: {...d.rock, angular: 0.1}}, green)[0].params.angular, 0.1);
+});
