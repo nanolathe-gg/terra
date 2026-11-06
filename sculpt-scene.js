@@ -4,7 +4,7 @@
 // (sculpt.py world_configs) and, where the page's address may override them, the page's settings (pageSettings).
 import {FACING_CHOICES,FORMS} from './sculpt-shape-presets.js';
 import {applyRiver,isRiver} from './sculpt-river.js';
-import {createShapeEngine,readBuffer} from './sculpt-gpu-fields.js';
+import {createShapeEngine,readBuffer,comparePlanes} from './sculpt-gpu-fields.js';
 import {computeDrainage,latticeWidth,DRAIN_STEP} from './sculpt-drainage.js';
 import {erosionOf} from './sculpt-erosion.js';
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -355,6 +355,15 @@ export function bilinearCells(x,y,spacing,grid,cell) {
 
 // The planes a map's fields hold: the six authored planes, then the masks.
 export const FIELD_KEYS=['h','p','r','c','v','x',...MASK_KEYS];
+// The shape's repeat check (sculpt.js shapeCompare; repro/shapecheck.mjs): every plane of the whole map, evaluated again, must be the same.
+// `settle` resolves once the fields' evaluation is done.
+export async function repeatCheck({fields,grid,settle}) {
+  const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
+  const all={x0:0,y0:0,x1:grid-1,y1:grid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,masks:MASK_KEYS.map(k => r.fields[k])});
+  await settle(); const a=copy(grab(fields.readCells(all)));
+  fields.changed(); await settle(); const b=copy(grab(fields.readCells(all)));
+  return {grid,repeat:comparePlanes(a,b,grid,MASK_KEYS)};
+}
 // H12b: the regional check of a scene on a map whose fields are paged (gpuPages=force): each quadrant of the map read from the pages against the same
 // shape engine run directly over that window; every authored plane must match exactly. Quadrant windows, so each window is a regional run on its own.
 // Then (P21) the drainage plane from the pages' coarse lattice against the one from the whole-map engine's heights: the same (area, receiver) in every

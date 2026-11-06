@@ -8,7 +8,7 @@ import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,TOOL_PRESETS,SPUR_OUTLINE_KEYS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
-  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,FIELD_KEYS,regionalCheck,pagedTime} from './sculpt-scene.js';
+  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,FIELD_KEYS,regionalCheck,repeatCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -1717,12 +1717,8 @@ async function boot() {
 function replayDetail() { flushEval(); return regionalFields.replayDetail(); }
 // Repeat check (repro/shapecheck.mjs): two GPU evaluations of this page's scene give identical planes.
 async function shapeCompare() {
-  const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
   const idle=async () => { for (let i=0;i<4000 && regionalFields.pending?.();i++) await new Promise(r => setTimeout(r,10)); };
-  const all={x0:0,y0:0,x1:worldGrid-1,y1:worldGrid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,masks:MASK_KEYS.map(k => r.fields[k])});
-  await idle(); const a=copy(grab(regionalFields.readCells(all)));
-  regionalFields.changed(); await idle(); const b=copy(grab(regionalFields.readCells(all)));
-  return {grid:worldGrid,repeat:comparePlanes(a,b,worldGrid,MASK_KEYS)};
+  return repeatCheck({fields:regionalFields,grid:worldGrid,settle:idle});
 }
 // H12b: the regional check on the map (sculpt-scene.js regionalCheck; repro/regional.mjs): the paged fields (gpuPages=force) against the shape engine.
 function gpuRegionalCheck() {
