@@ -125,6 +125,7 @@ export async function openScene(scene, search, {strokes = scene.strokes} = {}) {
     : fieldsModule.createGpuFields(common);
   nodes = engine.sceneNodes(config, strokes, {ground: scene.ground !== false, seed, settings});
   fields.changed();
+  if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
   const sliders = engine.surfaceSliders(config, settings);
   const scene_ = {config, settings, renderer, canvas, fields, nodes, errors, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
@@ -139,7 +140,7 @@ export async function weather(s) {
   if (!(renderer.variantNumber('erosion', 0) > 0)) return s.time = null;
   const {computeDrainage} = await import('../sculpt-drainage.js');
   if (s.paged) {
-    await fields.startCoarse(); await fields.coarseSettled();
+    await fields.coarseSettled();
     const c = fields.coarseLattice(), plane = await computeDrainage(renderer.device, {heights: c.heights, width: c.width, sea: config.seaLevel});
     fields.setTime(engine.pagedTime({config, renderer, size, spacing, material: s.material, drainage: () => plane}));
     return s.time = {paged: true, drainage: plane};

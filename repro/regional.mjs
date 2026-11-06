@@ -1,5 +1,8 @@
-// Compare every authored field with four regional replays in an owned browser.
-//   node regional.mjs <scene.json> [--server http://127.0.0.1:8801] [--port 9450]
+// Compare every authored field with four regional replays (sculpt-scene.js regionalCheck): under Node on Dawn (repro/headless.mjs, the default), or
+// in an owned headless browser with --chrome.
+//   node regional.mjs <scene.json> [--server http://127.0.0.1:8801] [--port 9450] [--chrome] [--configs DIR]
+// Under Node the engine's files come from --server, or with no --server from this checkout (world configs from sculpt.py --dump-configs, or
+// --configs DIR), and --port is not used. With --chrome the server defaults to the owner's (8801): pass your own.
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
@@ -7,14 +10,15 @@ import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-const usage = 'Usage: node repro/regional.mjs <scene.json> [--server http://127.0.0.1:8801] [--port 9450]';
+const usage = 'Usage: node repro/regional.mjs <scene.json> [--server http://127.0.0.1:8801] [--port 9450] [--chrome] [--configs DIR]';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function argumentsFor(args) {
-  const options = {server: 'http://127.0.0.1:8801', port: 9450}, seen = new Set();
+  const options = {server: 'http://127.0.0.1:8801', port: 9450, chrome: false, configs: ''}, seen = new Set();
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') return null;
-    if (arg === '--server' || arg === '--port') {
+    if (arg === '--chrome') { options.chrome = true; continue; }
+    if (arg === '--server' || arg === '--port' || arg === '--configs') {
       if (seen.has(arg) || !args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Expected one value for ${arg}.\n${usage}`);
       seen.add(arg); options[arg.slice(2)] = args[++i];
     } else if (arg.startsWith('-') || options.sceneFile) throw new Error(`Unexpected argument ${arg}.\n${usage}`);
@@ -27,6 +31,7 @@ function argumentsFor(args) {
   try { server = new URL(options.server); } catch { throw new Error(`Invalid server URL ${options.server}.\n${usage}`); }
   if (!['http:', 'https:'].includes(server.protocol) || server.search || server.hash) throw new Error(`Server must be an HTTP(S) base URL without a query or fragment.\n${usage}`);
   options.server = server.href.replace(/\/$/, '') + '/';
+  options.serverGiven = seen.has('--server');
   return options;
 }
 async function freePort(port) {
@@ -89,6 +94,22 @@ async function main() {
   try { scene = JSON.parse(readFileSync(sceneFile, 'utf8')); }
   catch (error) { throw new Error(`Cannot read scene ${sceneFile}: ${error.message}`); }
   if (!scene || typeof scene !== 'object' || typeof scene.biome !== 'string' || !scene.biome.trim() || !Array.isArray(scene.strokes) || (scene.query !== undefined && typeof scene.query !== 'string')) throw new Error(`Invalid scene ${sceneFile}: expected biome, strokes and an optional query string.`);
+  // H12b: the scene runs on a 4x4 map whose fields are paged (gpuPages=force), so the check reads the map's own regional fields.
+  const page = new URLSearchParams({biome: scene.biome, scratch: '1', mapX: '4', mapY: '4', gpuPages: 'force', gpuMB: '512', heapMB: '1536'});
+  for (const [key, value] of new URLSearchParams(scene.query || '')) page.append(key, value);
+  if (!options.chrome) {
+    const headless = await import('./headless.mjs');
+    await headless.openHost({server: options.serverGiven ? server : '', configs: options.configs});
+    const s = await headless.openScene(scene, page.toString());
+    try {
+      const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH});
+      checkResult(result);
+      if (s.errors.length) throw new Error(s.errors.slice(0, 20).join('\n'));
+      console.log(JSON.stringify({scene: sceneFile, biome: scene.biome, nodes: s.nodes.length, ...result, host: 'node'}));
+      if (result.mismatches) throw new Error(`${result.mismatches} regional field samples differ.`);
+    } finally { s.dispose(); }
+    return;
+  }
   await freePort(port);
   const configURL = new URL(`config/${encodeURIComponent(scene.biome)}.json`, server);
   let response;
@@ -97,10 +118,7 @@ async function main() {
   if (!response.ok) throw new Error(`${sceneFile}: world ${scene.biome} is not served (HTTP ${response.status}).`);
   const config = await response.json();
   if (config?.biomeId !== scene.biome) throw new Error(`${sceneFile}: asked for world ${scene.biome}, the server returned ${config?.biomeId}.`);
-  const url = new URL('sculpt.html', server); url.searchParams.set('biome', scene.biome); url.searchParams.set('scratch', '1');
-  // H12b: the scene runs on a 4x4 map whose fields are paged (gpuPages=force), so the check reads the map's own regional fields.
-  for (const [key, value] of [['mapX', '4'], ['mapY', '4'], ['gpuPages', 'force'], ['gpuMB', '512'], ['heapMB', '1536']]) url.searchParams.set(key, value);
-  for (const [key, value] of new URLSearchParams(scene.query || '')) url.searchParams.append(key, value);
+  const url = new URL('sculpt.html?' + page, server);
   let profile, chrome, ws, closed = false, chromeError, endpoint, stderr = '', cleanupPromise, exited;
   const cleanup = () => cleanupPromise ??= (async () => {
     ws?.close();
@@ -158,7 +176,7 @@ async function main() {
     await ready('Scene');
     const result = await evaluate(`(() => { if(typeof sculptDebug.regionalCheck!=='function')throw new Error('This editor does not expose sculptDebug.regionalCheck().'); return sculptDebug.regionalCheck(); })()`);
     checkResult(result); await sleep(0); checkErrors();
-    console.log(JSON.stringify({scene: sceneFile, biome: scene.biome, nodes, ...result}));
+    console.log(JSON.stringify({scene: sceneFile, biome: scene.biome, nodes, ...result, host: 'chrome'}));
     if (result.mismatches) throw new Error(`${result.mismatches} regional field samples differ.`);
   } finally {
     try { await cleanup(); } finally { process.removeListener('SIGINT', onInterrupt); process.removeListener('SIGTERM', onTerminate); }

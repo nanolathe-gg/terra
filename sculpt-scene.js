@@ -353,7 +353,7 @@ export async function regionalCheck({fields,device,nodes,context,config,grid,spa
       }
     }
     {
-      startCoarse();
+      await startCoarse();
       await fields.coarseSettled();
       const c=fields.coarseLattice(),whole=(await engine.run(nodes.slice(),ctx,null)).floats[0],w=latticeWidth(G),heights=new Float32Array(w*w);
       for (let j=0;j<w;j++) for (let i=0;i<w;i++) heights[j*w+i]=whole[j*DRAIN_STEP*G+i*DRAIN_STEP];
