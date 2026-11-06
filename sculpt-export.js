@@ -16,9 +16,12 @@ export function mountMapExport(api) {
   function setSettings(data) { if (!data) return; for (const [key] of SETTINGS) if (Number.isFinite(data[key])) $('map-'+key).value=data[key]; else if (Object.hasOwn(data,key) && (data[key]===null || Number.isNaN(data[key]))) $('map-'+key).value=''; if (typeof data.lava==='boolean') $('map-lava').checked=data.lava; }
   function serialize() { return {name:$('map-name').value,description:$('map-description').value,settings:{...Object.fromEntries(SETTINGS.map(([key]) => [key,$('map-'+key).valueAsNumber])),lava:$('map-lava').checked}}; }
   function load(data={}) { $('map-name').value=typeof data.name==='string'?data.name:'Sculpt map'; $('map-description').value=typeof data.description==='string'?data.description:'Terrain editor prototype'; setSettings(defaults()); loadedSettings=Boolean(data.settings); if (data.settings) setSettings(data.settings); }
+  // TNT numbers tile pictures with 16 bits, so a map keeps at most 65,536 distinct 32x32 tiles; the exporter merges the most alike tiles of a map with more.
+  const TILE_LIMIT=65536,tileSlots=() => map?(map.unitsX*16+1)*(map.unitsY*16+4):0;
+  const tileNote=() => tileSlots()>TILE_LIMIT?` This map has ${tileSlots().toLocaleString('en-US')} tile slots. If more than ${TILE_LIMIT.toLocaleString('en-US')} of them differ, the export merges the most alike tiles; it is invisible at 1x.`:'';
   const update=() => { $('map-export').disabled=busy || !map || !catalogue?.worlds?.[config.biomeId]?.climate || !api.ready(); };
   const readCatalogue=config.exportCatalog?Promise.resolve(config.exportCatalog):fetch('/map-catalog.json').then(async r => { const data=await r.json(); if (!r.ok) throw new Error(data.error||'Catalogue unavailable'); return data; });
-  readCatalogue.then(data => { catalogue=data; const w=data.worlds[config.biomeId]; if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; if (!loadedSettings) setSettings(w?.climate); $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.`:'Export disabled: '+(w?.disabledReason||'no retail planet was established for this world.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
+  readCatalogue.then(data => { catalogue=data; const w=data.worlds[config.biomeId]; if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; if (!loadedSettings) setSettings(w?.climate); $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.${tileNote()}`:'Export disabled: '+(w?.disabledReason||'no retail planet was established for this world.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
   setSettings(defaults());
   for (const id of ['map-name','map-description','map-lava',...SETTINGS.map(([key]) => 'map-'+key)]) $(id).addEventListener('change',() => { loadedSettings=true; api.change?.(); });
   $('map-defaults').onclick=() => { setSettings(defaults()); loadedSettings=false; api.change?.(); };
@@ -42,7 +45,9 @@ export function mountMapExport(api) {
       signal.throwIfAborted(); if (api.revision()!==token) throw new Error('Map changed during export.');
       const query=new URLSearchParams({id:exportId,x:chunk.x,y:chunk.y,width:chunk.width,height:chunk.height});
       const result=await fetch('/map-export/chunk?'+query,{method:'POST',headers:{'Content-Type':'image/png'},body:chunk.png,signal}).then(responseJSON);
-      $('map-export-state').textContent=warning+`Baking and encoding ${index+1} / ${total} chunks · ${result.uniqueTiles} unique tiles`;
+      // Projected from the slots received so far; a dense map reads within 10% of its final count after 5% of the slots.
+      const projected=result.receivedTiles>=result.totalTiles/20?Math.round(result.uniqueTiles/result.receivedTiles*result.totalTiles):0;
+      $('map-export-state').textContent=warning+`Baking and encoding ${index+1} / ${total} chunks · ${result.uniqueTiles} unique tiles`+(projected>TILE_LIMIT?` · about ${projected.toLocaleString('en-US')} expected, over ${TILE_LIMIT.toLocaleString('en-US')}: similar tiles will be merged`:'');
       await new Promise(resolve=>setTimeout(resolve,0));
     },signal);
     $('map-export-state').textContent=warning+'Checking TNT, OTA and archive…';
@@ -76,7 +81,7 @@ export function mountMapExport(api) {
       result=await response.json(); if (!response.ok) throw new Error(result.error||'Map export failed.');
       }
       const completedWarning=api.stream&&result.clampedCells?`Warning: ${result.clampedCells} cell heights clamped to 0–255. `:warning;
-      $('map-export-state').textContent=completedWarning+`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
+      $('map-export-state').textContent=completedWarning+(result.merge?`${result.merge.distinctTiles} distinct tiles merged into ${result.merge.keptTiles}: ${(100*result.merge.replacedSlots/result.tileSlots).toFixed(1)}% of ${result.tileSlots} slots use a similar tile instead (about ${(result.merge.meanRMS/Math.sqrt(3)).toFixed(1)} of 255 apart per color). `:`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. `)+`Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
       for (const [label,key] of [['Download .ufo','archive'],['Indexed terrain image','indexed']]) { if (!result[key]) continue; const a=document.createElement('a'); a.textContent=label; a.href='/map-exports/'+encodeURIComponent(result[key]); a.download=result[key]; a.style.display='block'; $('map-download').append(a); }
       return {...result,clampedCells:result.clampedCells??sampled.clipped};
     } catch (err) { if (exportId) await fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); exportId=null; $('map-export-state').textContent=err.name==='AbortError'?'Export canceled. No partial archive was published.':warning+err.message; throw err; }
