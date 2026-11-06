@@ -245,7 +245,7 @@ function pulseTrain(seed, lo, hi, dip, nFrames, phase = 0) {
   };
 }
 
-// A smooth periodic wave (period 1, range -1..1) from arithmetic only: a shaped triangle, within 1% of a sine.
+// A smooth periodic wave (period 1, range -1..1) from arithmetic only: a shaped triangle, within 0.02 of a sine (measured).
 const wave = p => { p -= Math.floor(p); const tr = p < 0.25 ? 4 * p : p < 0.75 ? 2 - 4 * p : 4 * p - 4; return tr * (1.5 - 0.5 * tr * tr); };
 // Convection: the sideways velocity of the gas (px/frame) per row at time t. A steady lean (retail's flames bend left, as if the
 // wind came from the right) plus a few waves of sideways motion that travel up the flame more slowly than the gas, each waxing
