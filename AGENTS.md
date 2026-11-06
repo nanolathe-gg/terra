@@ -29,7 +29,10 @@ page and an older card disagree, this page wins.
    dependencies. Our own renders of authored fixtures are not retail-derived:
    the hover examples in `ui-previews/` are committed, and
    `repro/ui-previews.mjs` regenerates them when a preset or the renderer
-   changes.
+   changes. One test-only tool is owner-approved: Dawn's Node binding (npm
+   `webgpu`), installed outside the repository (`$TERRAFORM_WEBGPU`, see
+   `repro/headless.mjs`) for the headless checks; the editor and the site
+   never load it.
 
 ## What the editor is
 
@@ -81,17 +84,19 @@ page and an older card disagree, this page wins.
 ## Checks
 
 Run the checks your change touches while you work, and all of them before
-landing.
+landing. The checks that only need the engine run it under Node on Dawn by
+default, with no server and no browser; `--chrome --server <yours>` runs
+them in the page, with the same pixels. The checks of the UI run in Chrome.
 
 | Check | Command | Passes when |
 | --- | --- | --- |
-| Scenes | `repro/all.sh`, then `repro/compare.py` (BACKLOG ground rule 3) | untouched scenes match byte for byte; changed ones are judged on the retail sheets |
-| Regional replay | `node repro/regional.mjs` | no mismatch |
-| Brushes, undo, export | `node repro/smoke.mjs`, and `--page8` for large maps | exit 0 |
+| Scenes | `repro/all.sh` (Node), then `repro/compare.py` (BACKLOG ground rule 3) | untouched scenes match byte for byte; changed ones are judged on the retail sheets |
+| Regional replay | `node repro/regional.mjs` (Node) | no mismatch |
+| Brushes, undo, export | `node repro/smoke.mjs` (Chrome), and `--page8` for large maps | exit 0 |
 | Unit tests | `node --test repro/*.test.mjs` | all pass |
 | World names | `sh repro/gate.sh` | exit 0, and the list is no longer |
-| Controls | `node measure/world_controls.mjs` and `measure/shape_controls.mjs` | for any control added, moved or removed |
+| Controls | `node measure/world_controls.mjs` and `measure/shape_controls.mjs` (Node) | for any control added, moved or removed |
 | Realism | `repro/all.sh`, then `python measure/realism.py --scenes <out>/green-modern-1 <out>/green-modern-2 <out>/green-modern-3` | for any change that moves modern Green: the report gives, before and after, the mean count of statistics in the real range (of 15) and how many windows pass each of the six gates (closed basins, fabric, hilltop roundness, Hack's exponent, hollow and valley shares), and says which moved and why; a slope p90 above 1.62 is the owner's call |
-| Interaction | `node repro/perf.mjs`, alternating runs of the two builds | for anything on the drag or bake path |
+| Interaction | `node repro/perf.mjs` (Chrome), alternating runs of the two builds | for anything on the drag or bake path |
 
 Use American English in all user-visible text.
