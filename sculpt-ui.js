@@ -48,13 +48,13 @@ export function groupToolControls(fields,buildRow){
  ['rimSectors','Rim sectors',['rimSectors','rimUnequal']],['rimGaps','Rim gaps',['rimGaps','rimGapWidth']],
  ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']],
  ['shorePlates','Shore plates',['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary']],
- [null,'Faceted form',['crystalForm','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation']],
- [null,'Column structure',['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth']],
- [null,'Planar block',['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat']],
+ [null,'Faceted form',['crystalForm','crystalSize','crystalCount','crystalLean']],
+ [null,'Column structure',['crystalSmooth']],
+ [null,'Planar block',['bergFace','bergTilt','bergTiltDir','bergFlat']],
  [null,'Water appearance',['waterDeep','waterBed']],
  [null,'Surf',['surf']],
  [null,'Crest variation',['crestJag','crestVary','crestTaper']],
- ['craterFacets','Bowl facets',['craterFacets','crystalCraterPx','crystalCraterStep','crystalCraterSkin']],['iceFacets','Angular facets',['iceFacets','iceFacetSize']]
+ ['craterFacets','Bowl facets',['craterFacets','crystalCraterPx','crystalCraterStep','crystalCraterSkin']],['iceFacets','Facets',['iceFacets','facetForm','iceFacetSize','crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']]
  ];
  function wire(d,controls,master=null){
   const memory=new Map(),box=master?d.querySelector(':scope > summary > input'):undefined;

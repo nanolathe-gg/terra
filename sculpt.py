@@ -163,6 +163,8 @@ KNOB_DEFAULTS.update(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0)
 KNOB_DEFAULTS.update(iceFrost=0)
 # G6, Ice: angular facets on hills and mountains (share of the mountain broken into facets; facet width in px). Off by default everywhere.
 KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
+# lfcrystal: a landform's Facet shape (0 angular facets, as before; 1 stepped columns; 2 prisms).
+KNOB_DEFAULTS.update(facetForm=0)
 # G1 (shallow water round 3): shoalBump is the slope of the lit bumps the shallow bed carries
 # (0: none, the earlier bed), shoalBumpPx their size in screen px.
 KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6)
