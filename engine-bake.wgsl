@@ -306,7 +306,9 @@ fn plantTuft(p: vec2f, cellPx: f32, r0: f32, r1: f32, ht: f32, which: i32, salt:
     // Card tilepool: the lattice repeats with the pool (its cell rounded to a divisor of the period, its cells hashed by their wrapped coordinate).
     let n = poolCells(cellPx);
     let cell = u.pool / n;
-    let b = vec2i(floor(p / cell - 0.5));
+    let pw = poolPos(p);   // the lattice is laid in the period (the same numbers a period apart); `home` puts a centre back on the map
+    let home = p - pw;
+    let b = vec2i(floor(pw / cell - 0.5));
     var best = 0.0; var tone = 0.0;
     for (var j = 0; j <= 1; j++) {
         for (var i = 0; i <= 1; i++) {
@@ -314,13 +316,13 @@ fn plantTuft(p: vec2f, cellPx: f32, r0: f32, r1: f32, ht: f32, which: i32, salt:
             let h0 = lsHash(vec2i(poolWrap(vec2f(cc), n)), salt);
             let h1 = lsPcg(h0 ^ 0x68e31da4u);
             let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.9) * cell;
-            let d = p - c;
+            let d = pw - c;
             let l = length(d);
             if (l >= r1) { continue; }
             let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
             let r = mix(r0, r1, lsU(h3));
             if (l >= r) { continue; }
-            let m = looseMask[lsCell(c) + 1u];
+            let m = looseMask[lsCell(c + home) + 1u];
             var share = m.x * 0.85;
             var dome = 0.0; var star = 1.0; var hs = 1.0;
             if (which == 1) {
@@ -346,7 +348,9 @@ fn plantTuft(p: vec2f, cellPx: f32, r0: f32, r1: f32, ht: f32, which: i32, salt:
 fn plantShrub(p: vec2f, scale: f32) -> vec2f {
     let cell = 16.0;
     let n = poolCells(cell);
-    let b = vec2i(floor(p / cell - 0.5));
+    let pw = poolPos(p);
+    let home = p - pw;
+    let b = vec2i(floor(pw / cell - 0.5));
     var best = 0.0; var tone = 0.0;
     for (var j = 0; j <= 1; j++) {
         for (var i = 0; i <= 1; i++) {
@@ -355,10 +359,10 @@ fn plantShrub(p: vec2f, scale: f32) -> vec2f {
             let h0 = lsHash(vec2i(cw), 0x5e7bu);
             let h1 = lsPcg(h0 ^ 0x68e31da4u); let h2 = lsPcg(h1 ^ 0xb5297a4du); let h3 = lsPcg(h2 ^ 0x1b873593u);
             let c = (vec2f(cc) + 0.5 + (vec2f(lsU(h0), lsU(h1)) - 0.5) * 0.85) * cell;
-            let d = p - c;
+            let d = pw - c;
             let l = length(d);
             if (l > 5.4) { continue; }
-            let sc = looseMask[lsCell(c) + 1u].z;
+            let sc = looseMask[lsCell(c + home) + 1u].z;
             if (sc <= 0.0) { continue; }
             let clump = smoothstep(-0.35, 0.55, poolNoise(c, 75.0, 11.0));
             let lam = sc * mix(1.0, 2.6 * clump * clump, 0.8) * cvr(39u).z;
@@ -368,7 +372,7 @@ fn plantShrub(p: vec2f, scale: f32) -> vec2f {
             let re = R * (1.0 + 0.16 * sin(3.0 * a + lsU(lsPcg(h1)) * TAU) + 0.1 * sin(5.0 * a + lsU(lsPcg(h2)) * TAU));
             let q = l / re;
             if (q >= 1.0) { continue; }
-            let leaf = 0.5 + 0.5 * poolNoise(p + cw * 37.0, 1.4, 0.0);
+            let leaf = 0.5 + 0.5 * poolNoise(pw + cw * 37.0, 1.4, 0.0);
             let hv = scale * re * sqrt(1.0 - q * q) * (0.78 + 0.4 * leaf);
             // A canopy is dark inside, its leaf clumps lighter at the top.
             if (hv > best) { best = hv; tone = (1.0 - q) * leaf * 1.4 - 0.7; }
@@ -1566,7 +1570,7 @@ fn bake(p: vec2f) -> vec4f {
         }
         // Domain warp varies rib spacing and width so faces are not combed.
         let warp = vec2f(poolNoise(p, 48.0, f32(k) * 3.7), poolNoise(p, 48.0, 11.3 + f32(k) * 3.7)) * u.reliefWarp;
-        let q = (p + warp) * frequency + vec2f(f32(k) * 17.31, f32(k) * 9.13);
+        let q = (poolPos(p) + warp) * frequency + vec2f(f32(k) * 17.31, f32(k) * 9.13);
         var e = gullies(q, dir, cells);
         // Lumps keep faces from reading as combed stripes.
         let lumpCells = round(1.7 * cells);

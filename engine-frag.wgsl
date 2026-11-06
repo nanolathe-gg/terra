@@ -450,7 +450,7 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
     let wide = hb.y < 0.4;
     if (!(all(at == o) || (wide && at.y == o.y))) { return vec4f(0.0); }
     // Its colour: one species to a clump, by the palette's weights.
-    let pick = cellHash(poolWrap(floor(p * (poolCells(22.0) / u.pool)), poolCells(22.0)) + vec2f(41.3, 9.1)).x;
+    let pick = cellHash(poolWrap(floor(poolPos(p) * (poolCells(22.0) / u.pool)), poolCells(22.0)) + vec2f(41.3, 9.1)).x;
     var wsum = 0.0;
     for (var k = 0u; k < 4u; k++) { wsum += cvr(40u + k).w; }
     var acc = 0.0;
@@ -1565,7 +1565,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let n = terrainNoise(p);
     let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let fringeVariation = u.ringVariation / 0.75;
-    let drift = ((terrainNoise(p * poolScale(0.65) + vec2f(133.0, 71.0)).rg - 0.5) * 66.0 + (n.gb - 0.5) * 16.0) * fringeVariation;
+    let drift = ((terrainNoise(poolPos(p) * poolScale(0.65) + vec2f(133.0, 71.0)).rg - 0.5) * 66.0 + (n.gb - 0.5) * 16.0) * fringeVariation;
     let brokenSediments = select(sediments, materialFieldAt(((p + drift) / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let materialWeather = select(0.0, u.materialWeathering, u.materialReady != 0);
     let weather = weatherAt(p / (u.size - 1.0)).rg;
@@ -1699,8 +1699,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.rockLayers != 0 && h > 18.0) {
         // Broad material regions vary actual native mineral structure. No
         // repeated whole cliff, colour-only variants or fresh pixel noise.
-        let formation = terrainNoise(p * poolScale(0.35) + vec2f(43.0, 87.0)).r;
-        let moss = terrainNoise(p * poolScale(0.70) + vec2f(173.0, 91.0)).g + weather.g * 0.30;
+        let formation = terrainNoise(poolPos(p) * poolScale(0.35) + vec2f(43.0, 87.0)).r;
+        let moss = terrainNoise(poolPos(p) * poolScale(0.70) + vec2f(173.0, 91.0)).g + weather.g * 0.30;
         let fractured = fracturedSource(pixel);
         let weathered = weatheredSource(pixel);
         rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
@@ -1820,7 +1820,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let lichen = u.rockMoss * u.rockLichen * (0.4 + 0.6 * clamp(u.rockAge, 0.0, 1.0)) * clamp(place.vegetation, 0.0, 2.0);
         if (lichen > 0.0) {
             let lq = select(p, pixel, faceRelief > 0.5);
-            let rosette = markCells(lq / 8.0, vec2i(433, 71), 1.0, u.pool / 8.0);
+            let rosette = markCells(poolPos(lq) / 8.0, vec2i(433, 71), 1.0, u.pool / 8.0);
             let lit = smoothstep(0.25, 0.65, dot(normal, u.light)) * smoothstep(0.35, 0.75, normal.z);
             let radius = (0.6 + 3.4 * rosette.id.x) * sqrt(min(lichen, 1.5)) * (1.0 + 0.3 * (cellHash(poolPixel(lq) + 5.0).x - 0.5));
             let onRosette = step(rosette.id.y, lichen * 1.2) * step(rosette.d1 * 8.0, radius) * lit * (1.0 - crevice) * exposed;
