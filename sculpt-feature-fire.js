@@ -126,9 +126,11 @@ function makeLayer(w, h, ay, P, seed) {
         const r = y * w;
         for (let x = 0; x < w; x++) {
           const k = r + x, n = N[k]; if (n === 0 && (x === 0 || N[k - 1] === 0) && (x === w - 1 || N[k + 1] === 0)) { H[k] = 0; continue; }
-          const l = x > 0 ? N[k - 1] : 0, rr = x < w - 1 ? N[k + 1] : 0, m4 = (l + rr + (y > 0 ? N[k - w] : 0) + (y < h - 1 ? N[k + w] : 0)) / 4;
-          // mix sideways a little; and cold air eats the flame from its edges, so puffs shrink and columns narrow into tongues
-          const v = n * (1 - 2 * b) + b * (l + rr) - dt * P.erode * (n > m4 ? n - m4 : 0);
+          const l = x > 0 ? N[k - 1] : 0, rr = x < w - 1 ? N[k + 1] : 0, u = y > 0 ? N[k - w] : 0, d = y < h - 1 ? N[k + w] : 0, m4 = (l + rr + u + d) / 4;
+          // mix sideways a little; and cold air eats the flame from its edges (only cells beside cold air: the hot core stays
+          // whole), so puffs shrink and columns narrow into tongues
+          const edge = l < 0.05 || rr < 0.05 || u < 0.05 || d < 0.05;
+          const v = n * (1 - 2 * b) + b * (l + rr) - (edge && n > m4 ? dt * P.erode * (n - m4) : 0);
           H[k] = v > 0 ? v : 0;
         }
       }
@@ -284,7 +286,7 @@ export function treeBurn(body, burntBody, seed, conifer = false, nFrames = 96) {
   const footHalf = conifer ? 8 : 10, depth = conifer ? 4 : 3, ign = conifer ? -0.3 : -1.5, climb = conifer ? 8 : 10, period = conifer ? 6.5 : 7.5;
   const pulseF = pulseTrain(mix32(seed, 201), period - 1.5, period + 1.5, P.dip, nFrames);
   const pulseB = t => 1.15 - pulseF(t - P.lag);                         // the flames behind the crown flare when the column's top dips
-  const phaseX = (x, t) => 5 * (noise2(x / 4, t / 6, seed + 73) - 0.5);       // the pulse reaches the columns at slightly different times
+  const phaseX = (x, t) => 3 * (noise2(x / 6, t / 6, seed + 73) - 0.5);       // the pulse reaches the columns at slightly different times
   P.cut = (x, te) => 1 - pulseF(te + phaseX(x, te));
   const front = makeLayer(w, h, ay, P, mix32(seed, 101)), back = makeLayer(w, h, ay, { ...P, cool: 0.02, coolLow: 0.06, v0: 2.4, hole: 0.2, cut: null, bandMix: 0.9 }, mix32(seed, 102));   // the crown's flames: shorter-lived, cut at random
   // the crown's own flames, behind it: spots that flare for a while, then move elsewhere in the crown
@@ -314,7 +316,7 @@ export function treeBurn(body, burntBody, seed, conifer = false, nFrames = 96) {
           // the pulse reaches the columns at slightly different times (no flat-topped puffs); in a dip the fuel above the foot
           // goes out, so the gas of the dip is a cold gap that rises and cuts the column; the foot never quite goes out.
           // Two or three lobes side by side burn harder than the gaps between them.
-          const p = pulseF(t + phaseX(x, t)), lobe = 0.55 + 0.9 * noise2(x / 5.5, t / 4, seed + 74);
+          const p = pulseF(t + phaseX(x, t)), lobe = u < 0.35 ? 1 : 0.55 + 0.9 * noise2(x / 5.5, t / 4, seed + 74);   // lobes only in the upper body
           fs.put((ay - up) * w + x, s * (up < 4 ? Math.max(p, P.footMin) : catching ? 0.85 : p * lobe) * clamp(hz + 0.5 - Math.abs(x - ax - sh), 0, 1), up >= 4 && !catching);
         }
       }
