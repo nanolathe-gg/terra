@@ -36,34 +36,3 @@ export function drawMapBounds(ink,map,config,sample) {
   }
   ink.restore();
 }
-
-export function sampleMapHeights(map,sample) {
-  let clipped=0,low=Infinity,high=-Infinity;
-  const heights=[];
-  for (let y=0;y<map.heightCells;y++) for (let x=0;x<map.widthCells;x++) {
-    const h=sample(x*16,y*16); low=Math.min(low,h); high=Math.max(high,h);
-    if (h<0 || h>255) clipped++;
-    heights.push(Math.round(Math.max(0,Math.min(255,h))));
-  }
-  return {heights,clipped,low,high};
-}
-
-// Art retains the view's full-detail field. Only heights outside the TNT byte
-// range are clamped; the 16px corner samples belong to the attribute map only.
-// The preview is y-(visible-base)/2; TNT art is y-visible/2 [03 §4.1].
-// Copying at base/2 changes only projection, never the material or its noise.
-// Chunks are tile aligned from the beginning, ready for phase 3's streamed bake.
-export async function captureMapChunks(canvas,map,base,chunkSize=1024) {
-  // Indexed art uses whole pixels. At a half-pixel tie choose the north
-  // source row once for the whole image, avoiding per-chunk Canvas rounding.
-  const shift=Math.floor(base/2),chunks=[];
-  for (let y=0;y<map.height;y+=chunkSize) for (let x=0;x<map.width;x+=chunkSize) {
-    const width=Math.min(chunkSize,map.width-x),height=Math.min(chunkSize,map.height-y);
-    const tile=new OffscreenCanvas(width,height),g=tile.getContext('2d'); g.imageSmoothingEnabled=false;
-    g.drawImage(canvas,x,y+shift,width,height,0,0,width,height);
-    const blob=await tile.convertToBlob({type:'image/png'}),bytes=new Uint8Array(await blob.arrayBuffer());
-    let binary=''; for (let i=0;i<bytes.length;i+=32768) binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
-    chunks.push({x,y,png:btoa(binary)});
-  }
-  return chunks;
-}

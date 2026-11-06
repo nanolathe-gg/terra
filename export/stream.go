@@ -8,10 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
-	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/nanolathe-gg/terraform/mapdata"
@@ -25,50 +24,104 @@ type exportMetrics struct {
 	ExportMilliseconds int64 `json:"exportMilliseconds"`
 }
 
+// Past its budget the store keeps tiles in a spill file. It writes them a
+// block at a time, serving the newest from that buffer, and reads a block
+// ahead when reads move forward through the file, as the merge's passes and
+// the TNT's tile section do. A call into the file costs far more in the
+// browser, where it crosses from WebAssembly to the worker's OPFS file system
+// (sculpt-export-worker.js), than natively; blocks keep those calls few.
+const spillBlock = 64 << 10
+
+// The tiles within the budget sit in blocks that never move: growing one
+// slice copies it, and in WebAssembly, whose memory never shrinks, every
+// abandoned copy stays allocated (a 64 MiB budget took 340 MB on a 16x16 map).
+const memoryBlock = 1 << 20
+
 type tileStore struct {
-	memory []byte
-	budget int
-	file   *os.File
-	dir    string
-	count  int
+	memory  [][]byte
+	held    int // bytes in memory
+	budget  int
+	file    *os.File
+	dir     string
+	count   int
+	pending []byte // the newest spilled tiles, not yet written
+	ahead   []byte // spilled tiles read ahead, from byte aheadAt of the file
+	aheadAt int
+	next    int // the byte after the last tile read
 }
 
 func (s *tileStore) append(tile []byte) error {
-	if s.file == nil && len(s.memory)+len(tile) > s.budget {
+	if s.file == nil && s.held+len(tile) > s.budget {
 		f, err := os.CreateTemp(s.dir, "nanolathe-map-tiles-*")
 		if err != nil {
 			return err
 		}
 		s.file = f
-		if _, err = f.Write(s.memory); err != nil {
-			return err
+		for _, block := range s.memory {
+			if _, err = f.Write(block); err != nil {
+				return err
+			}
 		}
 	}
 	if s.file != nil {
-		if _, err := s.file.Write(tile); err != nil {
-			return err
+		s.pending = append(s.pending, tile...)
+		if len(s.pending) >= spillBlock {
+			if _, err := s.file.Write(s.pending); err != nil {
+				return err
+			}
+			s.pending = s.pending[:0]
 		}
 	}
 	// Retain the initial budget as a read cache, since base-ground tiles
 	// commonly recur throughout a map. The rest exists only on disk.
-	if len(s.memory)+len(tile) <= s.budget {
-		s.memory = append(s.memory, tile...)
+	if s.held+len(tile) <= s.budget {
+		if n := len(s.memory); n == 0 || len(s.memory[n-1]) == cap(s.memory[n-1]) {
+			s.memory = append(s.memory, make([]byte, 0, min(memoryBlock, s.budget-s.held)))
+		}
+		last := &s.memory[len(s.memory)-1]
+		*last = append(*last, tile...)
+		s.held += len(tile)
 	}
 	s.count++
 	return nil
 }
 
 func (s *tileStore) read(index uint32, out []byte) error {
-	at := int(index) * 1024
-	if at+1024 <= len(s.memory) {
-		copy(out, s.memory[at:at+1024])
+	at, next := int(index)*1024, s.next
+	s.next = at + 1024
+	if at+1024 <= s.held {
+		copy(out, s.memory[at/memoryBlock][at%memoryBlock:])
 		return nil
 	}
-	if s.file == nil {
+	if s.file == nil || at+1024 > s.count*1024 {
 		return fmt.Errorf("tile %d is absent", index)
 	}
-	_, err := s.file.ReadAt(out, int64(at))
-	return err
+	written := s.count*1024 - len(s.pending)
+	if at >= written {
+		copy(out, s.pending[at-written:])
+		return nil
+	}
+	end := s.aheadAt + len(s.ahead)
+	if at >= s.aheadAt && at+1024 <= end {
+		copy(out, s.ahead[at-s.aheadAt:])
+		return nil
+	}
+	if at != next && (len(s.ahead) == 0 || at < end || at >= end+spillBlock) {
+		// Out of order: this tile alone, keeping the block ahead.
+		_, err := s.file.ReadAt(out, int64(at))
+		return err
+	}
+	if s.ahead == nil {
+		s.ahead = make([]byte, spillBlock)
+	}
+	s.ahead = s.ahead[:min(spillBlock, written-at)]
+	if _, err := s.file.ReadAt(s.ahead, int64(at)); err != nil {
+		s.ahead = s.ahead[:0]
+		return err
+	}
+	s.aheadAt = at
+	copy(out, s.ahead)
+	return nil
 }
 
 func (s *tileStore) close() {
@@ -184,6 +237,17 @@ func (s *terrainStream) add(chunk preparedChunk) error {
 	if err != nil {
 		return err
 	}
+	// PNG decodes to NRGBA or RGBA; their bytes are read directly, which in
+	// WebAssembly is several times faster than a color interface per pixel.
+	// An opaque pixel has the same 8-bit channels either way.
+	var pix []byte
+	var stride int
+	switch m := img.(type) {
+	case *image.NRGBA:
+		pix, stride = m.Pix, m.Stride
+	case *image.RGBA:
+		pix, stride = m.Pix, m.Stride
+	}
 	var compare [1024]byte
 	for ty := 0; ty < chunk.Height; ty += 32 {
 		if err := s.ctx.Err(); err != nil {
@@ -194,11 +258,21 @@ func (s *terrainStream) add(chunk preparedChunk) error {
 			for y := 0; y < 32; y++ {
 				wy := chunk.Y + ty + y
 				for x := 0; x < 32; x++ {
-					r, g, b, a := img.At(tx+x, ty+y).RGBA()
-					if a != 0xffff {
-						return fmt.Errorf("chunk has transparency at (%d,%d); expected opaque final art", tx+x, ty+y)
+					var r, g, b byte
+					if pix != nil {
+						p := pix[(ty+y)*stride+(tx+x)*4:]
+						if p[3] != 0xff {
+							return fmt.Errorf("chunk has transparency at (%d,%d); expected opaque final art", tx+x, ty+y)
+						}
+						r, g, b = p[0], p[1], p[2]
+					} else {
+						r32, g32, b32, a := img.At(tx+x, ty+y).RGBA()
+						if a != 0xffff {
+							return fmt.Errorf("chunk has transparency at (%d,%d); expected opaque final art", tx+x, ty+y)
+						}
+						r, g, b = byte(r32>>8), byte(g32>>8), byte(b32>>8)
 					}
-					index, exact := s.quantize.index(byte(r>>8), byte(g>>8), byte(b>>8))
+					index, exact := s.quantize.index(r, g, b)
 					if exact {
 						s.exact++
 					} else {
@@ -248,15 +322,8 @@ func (s *terrainStream) add(chunk preparedChunk) error {
 }
 
 func (s *terrainStream) measure(paths ...string) {
-	var usage syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) == nil {
-		rss := usage.Maxrss
-		if runtime.GOOS != "darwin" {
-			rss *= 1024
-		}
-		if rss > s.metrics.PeakRSSBytes {
-			s.metrics.PeakRSSBytes = rss
-		}
+	if rss := peakRSS(); rss > s.metrics.PeakRSSBytes {
+		s.metrics.PeakRSSBytes = rss
 	}
 	var disk int64
 	if s.work != "" {

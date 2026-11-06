@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nanolathe-gg/nanolathe/vfs"
 	"github.com/nanolathe-gg/terraform/internal/featuredef"
 	"github.com/nanolathe-gg/terraform/mapdata"
 )
@@ -65,7 +64,11 @@ type featurePlacement struct {
 	Z    int    `json:"z"`
 }
 
-func readExportFeatures(fs vfs.FSOps, root string, req exportRequest, catalog catalog) (map[string]mapdata.Feature, error) {
+// readExportFeatures reads the placed features' names and footprints from the
+// prepared catalogue (map-features writes it from the game's feature TDFs, so
+// the footprints are checked there). The browser's exporter gets a catalogue
+// of the placed features from the page; neither reads game content.
+func readExportFeatures(root string, req exportRequest, catalog catalog) (map[string]mapdata.Feature, error) {
 	if len(req.Features) == 0 {
 		return nil, nil
 	}
@@ -91,22 +94,9 @@ func readExportFeatures(fs vfs.FSOps, root string, req exportRequest, catalog ca
 		}
 		allowed[key] = f
 	}
-	defs, err := featuredef.Read(fs)
-	if err != nil {
-		return nil, err
-	}
 	for _, placed := range req.Features {
-		key := featuredef.Key(placed.Name)
-		f, ok := allowed[key]
-		if !ok {
+		if _, ok := allowed[featuredef.Key(placed.Name)]; !ok {
 			return nil, fmt.Errorf("feature %q is not in world's %s prepared catalogue", placed.Name, req.World)
-		}
-		d := defs[key]
-		if d == nil {
-			return nil, fmt.Errorf("feature %q has no mounted feature TDF definition", placed.Name)
-		}
-		if int(d.FootprintX) != f.FootprintX || int(d.FootprintZ) != f.FootprintZ {
-			return nil, fmt.Errorf("feature %q footprint differs from mounted TDF; prepare the world catalogue again", placed.Name)
 		}
 	}
 	return allowed, nil

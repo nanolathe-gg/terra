@@ -40,6 +40,8 @@ func (s *terrainStream) finish() (*exportResult, error) {
 	if s.received != len(s.indices) {
 		return nil, fmt.Errorf("received %d of %d tiles; include the engine's outer strips", s.received, len(s.indices))
 	}
+	// Deduplication is over; its hashes would only crowd the merge's memory.
+	s.hashes = nil
 	// Past the u16 limit, the least important tiles are replaced by their nearest kept tile first.
 	if s.store.count > s.tileLimit {
 		summary, err := s.mergeTiles()
@@ -62,7 +64,6 @@ func (s *terrainStream) finish() (*exportResult, error) {
 		}
 		s.indices[i] = uint32(remap[old])
 	}
-	s.hashes = nil
 	ota, err := encodeOTA(s.req, s.world, s.starts)
 	if err != nil {
 		return nil, err

@@ -90,7 +90,6 @@ async function main() {
   catch (error) { throw new Error(`Cannot read scene ${sceneFile}: ${error.message}`); }
   if (!scene || typeof scene !== 'object' || typeof scene.biome !== 'string' || !scene.biome.trim() || !Array.isArray(scene.strokes) || (scene.query !== undefined && typeof scene.query !== 'string')) throw new Error(`Invalid scene ${sceneFile}: expected biome, strokes and an optional query string.`);
   await freePort(port);
-  const noExport = (await (await fetch(new URL('services.json', server))).json()).export?.available === false;   // the static site has no exporter: the enabled editor stands in for the export button
   const configURL = new URL(`config/${encodeURIComponent(scene.biome)}.json`, server);
   let response;
   try { response = await fetch(configURL, {signal: AbortSignal.timeout(10000)}); }
@@ -144,7 +143,7 @@ async function main() {
       for (let i = 0; i < 480; i++) {
         checkErrors();
         // A Zhon map cannot export (by design): its editor being enabled stands in for the export button.
-        const state = await evaluate(`(() => { const button=document.getElementById('map-export'), ready=Boolean(window.sculptCanvas&&window.sculptDebug&&((button&&!button.disabled)||(${scene.biome==='zhon'||noExport}&&!document.getElementById('editor')?.disabled))); return {ready,running:false,error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
+        const state = await evaluate(`(() => { const button=document.getElementById('map-export'), ready=Boolean(window.sculptCanvas&&window.sculptDebug&&((button&&!button.disabled)||(${scene.biome==='zhon'}&&!document.getElementById('editor')?.disabled))); return {ready,running:false,error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
         if (state.error) throw new Error(`Editor error: ${state.error}`);
         if (state.ready && !state.running) { checkErrors(); return; }
         await sleep(250);
